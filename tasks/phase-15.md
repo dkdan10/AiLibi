@@ -110,7 +110,7 @@ lands first); `15.8 → 15.10`; `(15.7, 15.8) → 15.11`;
 `(15.10, 15.13, 15.14, 15.15) → 15.16` (files disjoint from 15.15, but the shared bake-off harness
 lands in 15.15 and is consumed read-only — the edge guarantees it exists);
 `(15.8, 15.10, 15.15) → 15.17` (the probe consumes 15.15's committed eval protocol);
-`(15.12, 15.15, 15.16, 15.17) → 15.18`. The critical path is
+`(15.12, 15.13, 15.15, 15.16, 15.17) → 15.18`. The critical path is
 `15.4 → 15.6 → 15.5 → 15.7 → 15.12 → 15.13 → 15.15 → 15.18`. Shared-file overlaps are all covered by
 dependency edges or disjoint-region annotations (`scripts/measure_baseline.py` core/watchability/funnel
 regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `meetings/schemas.py`
@@ -119,7 +119,9 @@ regions; `orchestrator/game.py` — 15.4's registry line + protocol/accessor reg
 entry (serialized by the 15.4 → 15.6 → 15.5 chain), plus the `HeadlessGame` constructor shared by
 15.9's stamp kwarg and 15.8.1's no-replay mode, serialized by 15.8.1's edge on 15.9; `api/replay_loader.py`
 observation-view (15.4.1) vs policy-guard (15.9) regions; `eval/balance_eval.py` stamp-kwarg (15.9) vs
-meeting-runner-kwarg (15.13) regions; `training/env.py` between 15.8/15.8.1;
+meeting-runner-kwarg (15.13) regions; `training/env.py` between 15.8/15.8.1, plus 15.16's
+emergency-canonicalization region (serialized behind 15.16's edge on 15.15; 15.14/15.15 consume env.py
+read-only);
 `training/surrogate/fidelity.py` between 15.11/15.13; `training/bakeoff/es.py` between 15.14/15.15;
 `pyproject.toml` dependencies vs mypy-exclude regions; `.importlinter`'s shared root_packages
 block, serialized by 15.8's edge on 15.6).
@@ -1294,7 +1296,7 @@ atomic PR after the gate passes. A deterministic split rule (e.g. seed mod 5 →
 ### Task 15.13 — The ballot-predictor surrogate MeetingRunner (GO/NO-GO + the fallback ladder)
 **Branch:** `phase-15-ballot-surrogate`
 **Depends on:** 15.11, 15.12
-**Section refs:** audits/post-phase-14-ML-training-signal.md §5 (the rebuild design); orchestrator/game.py:402-422 (the MeetingRunner protocol), :905-943 (result validation); meetings/voting.py:120-213 (tally_ballots); meetings/constants.py (the gate constant home after 15.6); meetings/manager.py:2823 (roster off ballots); eval/balance_eval.py:227 (run_tournament_eval)
+**Section refs:** audits/post-phase-14-ML-training-signal.md §5 (the rebuild design); orchestrator/game.py:420-440 (the MeetingRunner protocol), :942-979 (result validation); meetings/voting.py:120-213 (tally_ballots); meetings/constants.py (the gate constant home after 15.6); meetings/manager.py:2841 (roster off ballots); eval/balance_eval.py:228 (run_tournament_eval)
 **Complexity:** Integration
 
 The $0 inner-loop meeting model, rebuilt on the structural fix: predict each living voter's BALLOT
@@ -1336,10 +1338,12 @@ always uses a real meeting path.
 **Definition of done:**
 - [ ] `SurrogateMeetingRunner` satisfies `isinstance(_, MeetingRunner)`; a full surrogate-driven `HeadlessGame` completes with valid artifacts — trigger echo validated, one ballot per living voter, and the cross-meeting belief fold consumes the result (asserted by test).
 - [ ] The predicted-ballot path feeds the real `tally_ballots` with the explicit constants-home threshold; no re-implemented tally logic exists anywhere in `training/`.
-- [ ] The GO/NO-GO bar is stated in the report and in code BEFORE training (e.g. GO ⇔ held-out top-1 ≥ 0.75 × the honest ceiling AND SKIP-vs-eject ≥ 0.80 — the implementer finalizes the exact bar, but it must be committed before the training run), and the verdict is reported against it with by-game-CV numbers from the 15.11 harness.
+- [ ] The GO/NO-GO bar is stated in the report and in code BEFORE training (e.g. GO ⇔ held-out top-1 ≥ 0.75 × the honest ceiling AND SKIP-vs-eject ≥ 0.80 — the implementer finalizes the exact bar, but it must be committed before the training run), and the verdict is reported against it with the held-out numbers from the 15.11 harness. Two floors on the finalized bar (2026-07-09 mid-wave review): the SKIP-vs-eject bar MUST exceed the scored population's own `always_eject_baseline` (on the corpus test split that trivial constant is ~0.82 — the samples-set 78.4% does not transfer, and 0.80 would sit below it), and the top-1 denominator is the honest ceiling MEASURED ON THE SAME scored population by the 15.11 harness — never the samples-set 70.6% figure quoted for a different population.
 - [ ] The fallback path is exercised by test regardless of verdict: the training env runs under fallback (a) today, proving the bake-off cannot be blocked by a NO-GO.
 - [ ] Surrogate inference is deterministic under a fixed weights artifact (double-run hash test); the fitted weights are COMMITTED under `training/artifacts/surrogate/` with a sha256 sidecar the 15.9 stamp schema can reference, and the bake-off reloads exactly that artifact (a round-trip test loads it and reproduces the reported fidelity numbers).
-- [ ] The staleness cap is real code the bake-off consumes (exceeding it raises), and the re-grounding recipe (record fresh real-LLM meetings, rebuild the table, re-fit, re-measure) is documented step-by-step in the report.
+- [ ] The staleness cap is real code the bake-off consumes (exceeding it raises), with its unit and ownership pinned: a max-use integer committed beside the weights artifact, whose use-counter keys on the weights sha256 and is CUMULATIVE across a bake-off run — constructing a fresh runner instance never resets it. The re-grounding recipe (record fresh real-LLM meetings, rebuild the table, re-fit, re-measure) is documented step-by-step in the report.
+- [ ] Fit/predict leakage is fenced by test: the predictor's side-channel into the 15.11 meeting table (the per-voter rows behind the meeting-collapsed `MeetingView`) reads label columns (`ballot_target`, `ejected_player_id`) ONLY for fit-side seeds; a committed test proves predict on a test meeting never touches a test row's labels, and fit never reads a row from outside the fit-side seed set.
+- [ ] The report includes the surrogate's PREDICTED-ballot calibration (Brier/ECE of the predicted confidences vs whether the named target was ejected) as its own channel — the harness's committed `ballot_brier`/`ballot_ece` are the model-independent RECORDED-ballot reference and are never presented as surrogate calibration.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1454,12 +1458,19 @@ fake-task / reposition-during-cooldown), structurally unable to emit illegal or 
 **MAP-Elites** over the 15.8 behavioral descriptors with competence as cell quality — diversity as
 measured archive coverage. Every ES/QD entrant optimizes the SAME fitness: the tactically-reachable
 side-specific terms + potential shaping, with an anchor-KL penalty toward the frozen FSM (measured as
-divergence from the FSM's choice distribution over the same states); the validity gate and the 15.2
+the anchor cross-entropy — the log-loss of the candidate's choice distribution at the FSM's
+deterministic choice, the piKL-style penalty the hint names; a literal KL against a deterministic
+anchor's delta distribution is degenerate); the validity gate and the 15.2
 referee are SELECTION filters applied to candidates after training — never terms in any fitness. The
 crew side stays the frozen scripted FSM throughout (no co-evolution this wave). Every candidate that
-reaches the report passes the 15.10 determinism harness and the leak-test factory mode; fitness may use
+reaches the report runs the 15.10 determinism harness and the leak-test factory mode THROUGH ITS OWN
+policy factory (the 15.10 `_IdleExploreAgent` reference wrapper runs no encoder and does not count); a
+determinism-harness FAIL does not drop the row — it marks it experiment-tier and carries the full
+`PolicyDeterminismReport` plus an N-repeat metric spread (the seam the 15.17 torch entrant reports
+through); fitness may use
 the 15.13 surrogate within its staleness cap, but every reported number is re-scored on a real meeting
-path (fake-provider meetings on the fixed eval seed set). Also discharge the 15.14 obligation: re-run
+path (fake-provider meetings on the fixed eval seed set — the frozen corpus test split,
+`replays/ml_corpus/9p2i/splits.json` seed % 5 == 4). Also discharge the 15.14 obligation: re-run
 the Goodhart probe under the surrogate meeting path and append the delta to the probe's findings in this
 report.
 
@@ -1483,13 +1494,13 @@ report.
 - training/crew/ (15.16's parallel track)
 
 **Definition of done:**
-- [ ] One harness: every entrant trains and evaluates through `training/bakeoff/harness.py` on the same fixed seed set — entrants carry no private eval loops (asserted structurally: the harness is the only module that computes reported metrics).
-- [ ] Every entrant row in `results-impostor-bakeoff.jsonl` carries the full tuple: validity-gate pass, referee result (score distribution + floor-trip rate + supply floors), inner fitness, anchor-KL, impostor win rate + take-rate (reported, never gated), determinism-harness hash, leak-test pass, surrogate-staleness usage, and wall-clock.
+- [ ] One harness: every entrant trains and evaluates through `training/bakeoff/harness.py` on the same fixed eval seed set — the frozen corpus test split (`replays/ml_corpus/9p2i/splits.json`, seed % 5 == 4), asserted by a test — and entrants carry no private eval loops (ENFORCED, not asserted: a committed test AST-scans `training/bakeoff/{bc,utility_es,policy_es,map_elites}.py` for `eval.watchability`/`eval.validity` imports, the firewall-test pattern; the harness is the only module that computes reported metrics).
+- [ ] Every entrant row in `results-impostor-bakeoff.jsonl` carries the full tuple: validity-gate pass, referee result (score distribution + floor-trip rate + supply floors), inner fitness (surrogate-scored AND real-rescored columns, both, where the two paths were used — divergence is data, never collapsed to one number), anchor-KL, impostor win rate + take-rate (reported, never gated), determinism-harness result (the double-run hash, or an explicit experiment-tier FAIL carrying the full `PolicyDeterminismReport` + N-repeat spread), leak-test pass (through the candidate's own factory), surrogate-staleness usage, and wall-clock.
 - [ ] The BC entrant reports held-out intent agreement with the FSM against its pre-stated bar (≥0.90 top-1 unless the contract PR documents a different bar BEFORE training) and names the encoder gaps if it misses.
 - [ ] The utility-scorer entrant consumes exactly the FSM's option set (a test enumerates the options on fixture states and pins the menu) — the bounded path is real, not aspirational.
 - [ ] The MAP-Elites entrant reports archive coverage over the named descriptors + best-per-cell quality; single-objective entrants report their descriptor footprint for comparison.
 - [ ] No unregularized champion: anchor-KL is computed for every reported candidate; candidates above the documented KL ceiling are flagged in the report, not silently dropped.
-- [ ] The Goodhart probe re-run under the surrogate path is appended with a delta verdict vs the 15.14 baseline.
+- [ ] The Goodhart probe re-run under the surrogate path invokes `run_goodhart_probe(meeting_runner_factory=…)` INCLUDING its forced single-tactic reachability sweep — the committed 15.14 ES budget alone only recovered to baseline (+1.7%); the sweep is what found the exploit — and reports the surrogate's ejection/SKIP rate alongside the verdict (an under-ejecting surrogate can hold the meeting-driven floors for the wrong reason, and a HELD must not be read as exploit-caught in that regime). The delta verdict vs the 15.14 baseline is appended.
 - [ ] The report ends with a ranked recommendation + open risks FOR THE PAUSE — explicitly not a self-declared winner; every quoted number regenerates from the committed CLIs + jsonl.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1548,6 +1559,7 @@ deliverable is a clean measurement of what observable-option learning buys the c
 
 **Files in scope:**
 - training/crew/__init__.py (new)
+- training/env.py (build_action_mask emergency-intent canonicalization region ONLY — close the documented 15.8 exact-equality gap (`eval/leak_test.py:608-616`): the mask's emergency entry carries a default payload while the crew FSM stamps `reason='suspicion_accumulation'`/kill-witness, and `is_submission_legal` compares exact, so a scorer delegating the FSM emergency raises; a mask-legal crew emergency carrying the FSM's `reason` payload must validate as submission-legal; behind this task's 15.15 edge — 15.14/15.15 consume env.py read-only)
 - training/crew/options.py (new: the observable option set + per-option features)
 - training/crew/scorer.py (new: the learned scorer + training entry)
 - training/reports/report-crew-track.md (new)
@@ -1563,9 +1575,10 @@ deliverable is a clean measurement of what observable-option learning buys the c
 
 **Definition of done:**
 - [ ] The option set is proven observable-only: every per-option feature derives from the packet + the crew agent's own memory (a test sweeps committed-corpus packets; the leak-test factory mode passes for the crew wrapper).
-- [ ] Emergency semantics preserved: the learned scorer routes emergency intent through the same `EmergencyPacingTracker` gate the FSM uses — a test proves the tracker's pacing/announce bookkeeping is untouched.
+- [ ] Emergency semantics preserved: the learned scorer routes emergency intent through the same `EmergencyPacingTracker` gate the FSM uses — a test proves the tracker's pacing/announce bookkeeping is untouched — AND the emitted emergency intent (with the FSM's `reason` payload) is proven `submission_legal` under `build_action_mask` by a button-room fixture (the 15.8 exact-equality gap this task's env.py region closes; today's `tests/training/test_env.py` emergency fixture only round-trips the mask's own default-payload object and cannot fail on it).
 - [ ] The trained scorer vs the FSM crew is measured on the fixed eval seed set against the frozen scripted impostor: mis-eject-relevant deltas (meeting-trigger quality, correct-report rate), survival, task-completion pace, win rate — reported with gate/referee/determinism columns in the jsonl, same tuple shape as 15.15.
-- [ ] Anchor-KL to `CrewmatePolicy` reported for every candidate; the FO-8 prior is quoted and the measured delta stated against it.
+- [ ] Anchor-KL to `CrewmatePolicy` (the anchor cross-entropy — log-loss at the FSM's deterministic choice, as 15.15 defines it) reported for every candidate; the FO-8 prior is quoted and the measured delta stated against it.
+- [ ] The crew report DISCLOSES the reward-definition divergence: `training/rewards.py`'s `patrol_coverage` measures co-location with an impostor's ACTUAL room (a deliberate, in-code-documented engine-truth proxy) rather than the doctrine phrase "coverage of last-seen suspects"; the observable-only DoD above governs the POLICY's inputs, not the reward channel, and the leak-test factory mode does not scan rewards — any belief-keyed re-definition of the term is a named ask for the pause, not an edit here.
 - [ ] The report's final section is the crew-surface ask for the pause: the exact observation field proposed (owned-task set), the firewall/leak review it needs, and the expected-gain argument — with this track's measured ceiling as the evidence.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1628,7 +1641,8 @@ region is 15.8's).
 **Definition of done:**
 - [ ] The probe trains an impostor policy through `training.env.TacticalRolloutEnv` + `agents.tactical.features.TacticalFeatureEncoder` (same env, same features — comparability asserted in the report, with any deviation documented).
 - [ ] Results are emitted through 15.15's committed harness protocol on its fixed eval seed config (the harness consumed read-only — asserted by the report naming the harness entrypoint + seed-config artifact it invoked), plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
-- [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement and the student's own tuple row reported.
+- [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement reported against a bar PRE-STATED in the report before distillation (≥0.90 top-1 unless the report documents a different bar and why — mirroring the 15.15 BC bar discipline), and the student's own tuple row reported.
+- [ ] A torch-free committed test binds the wiring: it drives the probe's entrant adapter with a tiny CPU stub policy and asserts it (a) constructs `TacticalRolloutEnv` + `TacticalFeatureEncoder` and (b) is accepted by the 15.15 harness's experiment-tier (determinism-FAIL-tolerant) row path — so `uv run pytest` exercises the comparability plumbing without torch installed.
 - [ ] `pyproject.toml` mypy exclude covers the probe dir; `uv run mypy .` is green WITHOUT torch installed; the test pins that no production package imports the probe.
 - [ ] The report ends with a promotion recommendation for the pause — promote / keep experiment-tier / retire — priced against dependency weight, determinism doctrine, and the measured gain (or its absence), with wall-clock + hardware documented.
 - [ ] `uv run mypy .` passes.
@@ -1655,7 +1669,7 @@ CPU (or the operator's own GPU, documented).
 
 ### Task 15.18 — The pause: mid-phase audit, the seven decisions, and authoring Wave 2
 **Branch:** `phase-15-pause-audit`
-**Depends on:** 15.12, 15.15, 15.16, 15.17
+**Depends on:** 15.12, 15.13, 15.15, 15.16, 15.17
 **Section refs:** audits/post-phase-14-pause.md (the pause-audit shape); tasks/phase-14.md 14.6 (the lock-decision precedent) + the phase-7 wave precedent; tasks/post-phase-14-plan.md (the roadmap the decisions feed); owner decisions 2026-07-05 (deployment + torch deferred to this pause)
 **Complexity:** Integration
 
@@ -1701,11 +1715,11 @@ merge-criteria placeholder with the real criteria for the chosen deployment bran
 
 **Definition of done:**
 - [ ] The audit tabulates every entrant (bake-off, crew, torch, distilled student) on the single metric tuple, with every quoted number regenerated from the committed CLIs/jsonl — zero hand-computed figures (each table cites its source artifact).
-- [ ] The real-LLM finalist evaluation is run; its gate + referee + funnel results are committed as `training/reports/results-finalist-eval.jsonl` and quoted from there (the recording recipe — seeds, config, exact commands — documented in the audit for full re-derivation), and its divergence (if any) from the fake-provider/surrogate numbers is analyzed — the method decision explicitly cites it.
+- [ ] The real-LLM finalist evaluation is run; its gate + referee + funnel results are committed as `training/reports/results-finalist-eval.jsonl` and quoted from there (the recording recipe — seeds, config, exact commands — documented in the audit for full re-derivation), and its divergence (if any) from the fake-provider/surrogate numbers is analyzed — the method decision explicitly cites it. The recipe names the Python seam (`run_tournament_eval(agent_factory=…, tactical_policy_stamp=…)` — `scripts/run_tournament.py` carries a stamp flag but NO agent-factory flag, so the stamp CLI alone cannot drive a learned policy), and the recorded games' `tactical_policy` stamp `weights_sha256` MUST equal the champion artifact's committed sha256 — the machine-checkable proof that the learned factory, not the FSM default wearing a champion label, produced the recorded bytes.
 - [ ] All seven decisions are recorded with owner sign-off and rationale, including the NO paths (what was rejected and why).
 - [ ] The Wave-2 contracts are authored into this file per the chosen branch, `uv run python scripts/validate_task_docs.py` + `uv run python scripts/generate_prompts.py --check` pass with the new contracts, and the STATUS banner + end-of-phase merge criteria reflect the decisions.
-- [ ] The pause explicitly re-verdicts the referee: the Goodhart probe's findings (both runs) either cleared or their floors are contracted into Wave 2 before any champion selection uses the referee.
-- [ ] The Wave-0 close audit's §5 watch items are settled by data, not carried forward: the 4p1i eject-happiness cell is re-measured on the corpus's 4p1i set (funnel + R-gate via the committed CLIs) and the audit states variance-or-shift with the numbers; if a real shift, its Wave-2 implication (if any) is recorded in the decisions.
+- [ ] The pause explicitly re-verdicts the referee: for each channel where EITHER probe run found an exploit, the recommended floor is contracted into Wave 2 before any champion selection uses the referee — "cleared" is available only for channels where neither run found an exploit (the 15.14 raw-geomean D2-separation exploit, 6.51 → 16.62, lands its conversion-coupled floor regardless of the composed referee's HELD).
+- [ ] The Wave-0 close audit's §5 watch items are settled by data, not carried forward: the 4p1i eject-happiness cell is re-measured on the corpus's 4p1i set (funnel + R-gate via the committed CLIs) with a PRE-REGISTERED adjudication — a two-proportion test (corpus-4p1i vs post-15.7 samples ejection accuracy) whose SHIFT verdict requires the 95% CI to exclude the compared value; if the CI excludes neither (the expected outcome at n≈33 ejections), the audit records UNDERPOWERED with the n rather than a judgment call; if a real shift, its Wave-2 implication (if any) is recorded in the decisions.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

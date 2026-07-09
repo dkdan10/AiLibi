@@ -47,7 +47,8 @@ region is 15.8's).
 **Definition of done:**
 - [ ] The probe trains an impostor policy through `training.env.TacticalRolloutEnv` + `agents.tactical.features.TacticalFeatureEncoder` (same env, same features — comparability asserted in the report, with any deviation documented).
 - [ ] Results are emitted through 15.15's committed harness protocol on its fixed eval seed config (the harness consumed read-only — asserted by the report naming the harness entrypoint + seed-config artifact it invoked), plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
-- [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement and the student's own tuple row reported.
+- [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement reported against a bar PRE-STATED in the report before distillation (≥0.90 top-1 unless the report documents a different bar and why — mirroring the 15.15 BC bar discipline), and the student's own tuple row reported.
+- [ ] A torch-free committed test binds the wiring: it drives the probe's entrant adapter with a tiny CPU stub policy and asserts it (a) constructs `TacticalRolloutEnv` + `TacticalFeatureEncoder` and (b) is accepted by the 15.15 harness's experiment-tier (determinism-FAIL-tolerant) row path — so `uv run pytest` exercises the comparability plumbing without torch installed.
 - [ ] `pyproject.toml` mypy exclude covers the probe dir; `uv run mypy .` is green WITHOUT torch installed; the test pins that no production package imports the probe.
 - [ ] The report ends with a promotion recommendation for the pause — promote / keep experiment-tier / retire — priced against dependency weight, determinism doctrine, and the measured gain (or its absence), with wall-clock + hardware documented.
 - [ ] `uv run mypy .` passes.
