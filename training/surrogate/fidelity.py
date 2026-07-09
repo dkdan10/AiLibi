@@ -48,7 +48,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Final, Literal, Protocol, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -874,10 +874,156 @@ def fo6_rebaseline(
     )
 
 
+# ---------------------------------------------------------------------------
+# GO/NO-GO wiring (Task 15.13's region — 15.11 owns everything above).
+# ---------------------------------------------------------------------------
+
+# The GO bar's single relative multiplier, OWNER-RATIFIED (2026-07-09, mid-wave
+# review Q1) and committed BEFORE the surrogate was trained. Every axis of the
+# bar is population-relative — measured by THIS harness on the SAME scored
+# population as the surrogate's own numbers — because every absolute number in
+# this project's history moved when the population changed (FO-6 64% -> 26%;
+# ceiling 65.1 -> 70.6): the samples-set 70.6% ceiling, 78.4% always-eject and
+# 25.7% FO-6 figures do NOT transfer to the corpus test split and are never
+# compared against.
+GO_TOP1_CEILING_RATIO: Final[float] = 0.75
+
+
+class GoNoGoVerdict(BaseModel):
+    """The pre-stated GO/NO-GO verdict for the ballot surrogate (Task 15.13).
+
+    GO ⇔ ALL THREE population-relative axes hold on the held-out scored
+    population, judged by this harness:
+
+    1. ``surrogate_top1 >= GO_TOP1_CEILING_RATIO * ceiling_top1`` — the honest
+       ceiling measured on the SAME scored population (never the samples-set
+       70.6% figure);
+    2. ``surrogate_top1 > baseline_top1`` — the corpus-re-baselined FO-6
+       logistic (never the spike's 64% or the samples-set 25.7%);
+    3. ``surrogate skip-vs-eject accuracy > always_eject_baseline`` — the
+       scored population's OWN trivial constant (never the samples-set 78.4%).
+
+    Pre-committed in the same breath: NO-GO ⇒ fallback (a) — the fake-provider
+    MeetingManager stays the bake-off's training-time runner and the surrogate
+    ships as a DIAGNOSTIC only (its fidelity report still lands; nothing trains
+    against it). ``training_time_runner`` / ``surrogate_role`` encode exactly
+    that mapping so the bake-off consumes the verdict, not a prose reading of
+    it. The staleness cap ships regardless of the verdict.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    replay_set_dir: str
+    surrogate_model_name: str
+    baseline_model_name: str
+    # The shared scored population both reports were measured on.
+    meetings_scored: int
+    ejection_meetings: int
+    # Axis 1 — held-out top-1 against the same-population honest ceiling.
+    surrogate_top1: float
+    ceiling_top1: float
+    top1_bar: float
+    meets_ceiling_bar: bool
+    # Axis 2 — held-out top-1 against the corpus-re-baselined FO-6 prior.
+    baseline_top1: float
+    beats_prior_baseline: bool
+    # Axis 3 — SKIP-vs-eject accuracy against the population's own constant.
+    surrogate_skip_vs_eject_accuracy: float
+    always_eject_baseline: float
+    beats_always_eject: bool
+    verdict: Literal["GO", "NO-GO"]
+    training_time_runner: Literal["surrogate", "fake-provider-meeting-manager"]
+    surrogate_role: Literal["training-time-runner", "diagnostic-only"]
+
+
+def decide_go_no_go(
+    surrogate: SurrogateFidelityReport,
+    prior_baseline: SurrogateFidelityReport,
+) -> GoNoGoVerdict:
+    """Apply the pre-stated bar to two same-population fidelity reports.
+
+    ``surrogate`` is the 15.13 ballot surrogate's report; ``prior_baseline`` is
+    the FO-6 re-baseline (:func:`fo6_rebaseline`) run over the SAME table with
+    the SAME folds. Both must describe one scored population — a bar compared
+    across populations is exactly the absolute-number mistake the ratified
+    wording forbids, so any population mismatch fails loud instead of producing
+    a verdict.
+    """
+
+    mismatches = [
+        name
+        for name, ours, theirs in (
+            ("replay_set_dir", surrogate.replay_set_dir, prior_baseline.replay_set_dir),
+            ("folds", surrogate.folds, prior_baseline.folds),
+            (
+                "meetings_scored",
+                surrogate.meetings_scored,
+                prior_baseline.meetings_scored,
+            ),
+            (
+                "ejection_meetings",
+                surrogate.ejection_meetings,
+                prior_baseline.ejection_meetings,
+            ),
+            ("honest_ceiling", surrogate.honest_ceiling, prior_baseline.honest_ceiling),
+            (
+                "always_eject_baseline",
+                surrogate.always_eject_baseline,
+                prior_baseline.always_eject_baseline,
+            ),
+        )
+        if ours != theirs
+    ]
+    if mismatches:
+        raise ValueError(
+            "GO/NO-GO requires both reports to describe the SAME scored "
+            f"population; fields {mismatches} differ between "
+            f"{surrogate.model_name!r} and {prior_baseline.model_name!r}"
+        )
+    if surrogate.ejection_meetings == 0:
+        raise ValueError(
+            f"{surrogate.replay_set_dir}: the scored population has no ejection "
+            "meetings — top-1 is undefined, so no verdict can be honest"
+        )
+    ceiling_top1 = surrogate.honest_ceiling.max_achievable_top1
+    top1_bar = GO_TOP1_CEILING_RATIO * ceiling_top1
+    meets_ceiling_bar = surrogate.top1 >= top1_bar
+    beats_prior_baseline = surrogate.top1 > prior_baseline.top1
+    beats_always_eject = (
+        surrogate.skip_vs_eject_accuracy > surrogate.always_eject_baseline
+    )
+    is_go = meets_ceiling_bar and beats_prior_baseline and beats_always_eject
+    return GoNoGoVerdict(
+        replay_set_dir=surrogate.replay_set_dir,
+        surrogate_model_name=surrogate.model_name,
+        baseline_model_name=prior_baseline.model_name,
+        meetings_scored=surrogate.meetings_scored,
+        ejection_meetings=surrogate.ejection_meetings,
+        surrogate_top1=surrogate.top1,
+        ceiling_top1=ceiling_top1,
+        top1_bar=top1_bar,
+        meets_ceiling_bar=meets_ceiling_bar,
+        baseline_top1=prior_baseline.top1,
+        beats_prior_baseline=beats_prior_baseline,
+        surrogate_skip_vs_eject_accuracy=surrogate.skip_vs_eject_accuracy,
+        always_eject_baseline=surrogate.always_eject_baseline,
+        beats_always_eject=beats_always_eject,
+        verdict="GO" if is_go else "NO-GO",
+        # The pre-committed fallback mapping: a NO-GO surrogate is a diagnostic,
+        # never a training-time runner — fallback (a) keeps the bake-off unblocked.
+        training_time_runner=(
+            "surrogate" if is_go else "fake-provider-meeting-manager"
+        ),
+        surrogate_role=("training-time-runner" if is_go else "diagnostic-only"),
+    )
+
+
 __all__ = [
     "DEFAULT_CV_FOLDS",
     "FO6_FEATURE_NAMES",
+    "GO_TOP1_CEILING_RATIO",
     "Fo6Logistic",
+    "GoNoGoVerdict",
     "HonestCeiling",
     "MeetingModel",
     "MeetingPrediction",
@@ -885,6 +1031,7 @@ __all__ = [
     "SurrogateFidelityReport",
     "build_meeting_views",
     "compute_honest_ceiling",
+    "decide_go_no_go",
     "fo6_rebaseline",
     "run_surrogate_fidelity",
 ]
