@@ -27,6 +27,7 @@ artifact and the committed 9p2i corpus:
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -453,24 +454,99 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 def test_committed_artifact_round_trips_and_provenance_holds(
     corpus_table: MeetingTable,
 ) -> None:
-    """The committed artifact loads (sha verified), and a refit is byte-identical.
+    """The committed artifact loads (sha verified), and a refit is ULP-equivalent.
 
-    ``fit_corpus_ballot_predictor`` on the corpus reproduces the committed weights
-    file byte-for-byte — provenance (these ARE the reported weights) and
-    determinism (the fit is a pure function of the committed bytes) in one assert.
+    Serialization is byte-stable: loading the committed bytes and re-serializing
+    is the identity, so the sha256 sidecar pins exactly what the bake-off
+    reloads. Refit provenance is parameter-level: ``fit_corpus_ballot_predictor``
+    reproduces every committed parameter to float ULP — numpy's SIMD summation
+    grouping varies by CPU, so a refit is byte-identical only on the recording
+    platform (CI runs on a different one). The committed bytes, never a refit,
+    are the frozen ground truth; the frozen-weights evaluation test below pins
+    that they reproduce the reported numbers.
     """
 
     predictor, sha = load_ballot_predictor_artifact(_ARTIFACT_DIR)
-    assert isinstance(predictor.to_artifact_json(), str)
+    committed_json = (_ARTIFACT_DIR / "ballot-predictor.json").read_text()
+    # Load -> re-serialize is the identity (byte-stable round trip).
+    assert predictor.to_artifact_json() == committed_json
 
     cap = load_staleness_cap(_ARTIFACT_DIR)
     assert cap.weights_sha256 == sha
     assert cap.max_uses == 50_000
     assert cap.unit == "meetings"
 
-    refit_json = fit_corpus_ballot_predictor(corpus_table).to_artifact_json()
-    committed_json = (_ARTIFACT_DIR / "ballot-predictor.json").read_text()
-    assert refit_json == committed_json
+    refit = json.loads(fit_corpus_ballot_predictor(corpus_table).to_artifact_json())
+    committed = json.loads(committed_json)
+    assert refit.keys() == committed.keys()
+    for key, committed_value in committed.items():
+        refit_value = refit[key]
+        if (
+            isinstance(committed_value, list)
+            and committed_value
+            and isinstance(committed_value[0], str)
+            and "0x" in committed_value[0]
+        ):
+            committed_floats = [float.fromhex(item) for item in committed_value]
+            refit_floats = [float.fromhex(item) for item in refit_value]
+            assert refit_floats == pytest.approx(
+                committed_floats, rel=1e-9, abs=1e-12
+            ), key
+        elif isinstance(committed_value, str) and "0x" in committed_value:
+            assert float.fromhex(refit_value) == pytest.approx(
+                float.fromhex(committed_value), rel=1e-9, abs=1e-12
+            ), key
+        else:
+            # Non-float metadata (format marker, feature names, epochs) is exact.
+            assert refit_value == committed_value, key
+
+
+def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
+    corpus_table: MeetingTable,
+) -> None:
+    """The LOADED committed weights reproduce the reported held-out numbers.
+
+    The DoD round-trip in its own words: the bake-off reloads exactly the
+    committed artifact, and evaluating the FROZEN predictor (no refit — the
+    ``predictor`` injection on :class:`BallotSurrogateModel`) over the held-out
+    test views reproduces the report's ranking/decision census and the
+    predicted-ballot calibration channel.
+    """
+
+    predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    frozen = BallotSurrogateModel(corpus_table, predictor=predictor)
+    assert corpus_table.splits is not None
+    test_seeds = frozenset(corpus_table.splits.test)
+    test_views = [
+        view for view in build_meeting_views(corpus_table) if view.seed in test_seeds
+    ]
+    assert len(test_views) == 91
+
+    top1_hits = 0
+    predicted_ejections = 0
+    predicted_skips = 0
+    correct_skips = 0
+    for view in test_views:
+        prediction = frozen.predict(view)
+        if prediction.ejected is None:
+            predicted_skips += 1
+            if view.ejected is None:
+                correct_skips += 1
+        else:
+            predicted_ejections += 1
+        if view.is_ejection and prediction.ranking[0] == view.ejected:
+            top1_hits += 1
+    assert top1_hits == 47
+    assert predicted_ejections == 88
+    assert predicted_skips == 3
+    assert correct_skips == 0
+
+    calibration = frozen.predicted_ballot_calibration(test_views)
+    assert calibration.predicted_ballots == 529
+    assert calibration.predicted_skips == 0
+    # Inference from FIXED committed weights; tolerance covers libm exp variance
+    # across platforms, nothing more.
+    assert calibration.brier == pytest.approx(0.3574025827101143, abs=1e-9)
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -596,6 +672,40 @@ def test_use_counter_raises_at_cap_and_rejects_foreign_sha() -> None:
     )
     with pytest.raises(ValueError, match="keyed on weights sha256"):
         fresh.record_use(weights_sha256="b" * 64)
+
+
+def test_factory_rejects_a_loosened_or_foreign_shared_counter() -> None:
+    """A shared counter may tighten the committed cap, never loosen or re-key it.
+
+    Codex review (PR #241): ``record_use`` only checks the sha, so the factory
+    must refuse a supplied counter whose cap exceeds the committed
+    ``max-uses.json`` (the staleness doctrine would otherwise be silently
+    bypassable) or that is keyed on different weights.
+    """
+
+    _, committed_sha = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    committed_cap = load_staleness_cap(_ARTIFACT_DIR)
+
+    loosened = SurrogateUseCounter(
+        SurrogateStalenessCap(
+            weights_sha256=committed_sha,
+            max_uses=committed_cap.max_uses + 1,
+            unit="meetings",
+        )
+    )
+    with pytest.raises(ValueError, match="never.*loosen"):
+        load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=loosened)
+
+    foreign = SurrogateUseCounter(
+        SurrogateStalenessCap(weights_sha256="a" * 64, max_uses=1, unit="meetings")
+    )
+    with pytest.raises(ValueError, match="never meters two artifacts"):
+        load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=foreign)
+
+    # A TIGHTER shared counter is accepted (the cumulative-metering test relies
+    # on exactly this), and an equal one trivially so.
+    equal = SurrogateUseCounter(committed_cap)
+    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=equal))
 
 
 def _canned_agents(state: WorldState) -> dict[PlayerId, AgentInterface]:

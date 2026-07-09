@@ -335,13 +335,16 @@ class BallotPredictor:
 
         Refuses an empty example set (never install a silent untrained model —
         AGENTS.md "no silent fallbacks"). Deterministic FOR A GIVEN EXAMPLE
-        ORDER: no RNG, zeros init, fixed epochs — but floating-point summation
-        is order-sensitive at the ULP level, so byte-stable artifacts rest on
-        every committed fit path iterating the table's sorted
-        ``(seed, meeting_index, voter)`` row order (``fit_corpus_ballot_
-        predictor`` filters ``table.rows`` directly and the fidelity harness
-        walks seeds sorted then meetings in table order — the same sequence).
-        The round-trip test pins the byte equality of the two paths.
+        ORDER ON A GIVEN PLATFORM: no RNG, zeros init, fixed epochs — but
+        floating-point summation is order-sensitive at the ULP level, both in
+        the example sequence (every committed fit path iterates the table's
+        sorted ``(seed, meeting_index, voter)`` row order) and inside numpy's
+        SIMD reductions, whose grouping varies by CPU. A refit is therefore
+        byte-identical on the recording platform and ULP-equivalent elsewhere
+        (CI runs on a different CPU); the COMMITTED artifact bytes — not a
+        refit — are the frozen ground truth the sha256 sidecar pins, and the
+        round-trip test asserts refit parameter-equivalence plus frozen-weights
+        reproduction of the reported numbers.
         """
 
         usable = [example for example in examples if example.view.candidates]
@@ -716,6 +719,13 @@ class BallotSurrogateModel:
     (``train ∪ val``) when a split is present; under derived K-fold CV it is
     ``None`` and the harness's by-game folds carry the anti-leakage guarantee
     (fit still reads only the rows of the views it was handed).
+
+    ``predictor`` pre-installs an already-fitted (typically artifact-loaded)
+    :class:`BallotPredictor`, so the adapter can evaluate FROZEN committed
+    weights without a refit — the bake-off's reload path and the round-trip
+    test use it (a cross-platform refit reproduces the weights only to float
+    ULP, so frozen-artifact evaluation is the byte-exact path). A subsequent
+    ``fit`` replaces it (the fidelity harness always fits per fold).
     """
 
     def __init__(
@@ -725,6 +735,7 @@ class BallotSurrogateModel:
         fit_seeds: frozenset[int] | None = None,
         epochs: int = DEFAULT_EPOCHS,
         lr: float = DEFAULT_LEARNING_RATE,
+        predictor: BallotPredictor | None = None,
     ) -> None:
         self._rows_by_meeting: dict[tuple[int, str], list[MeetingTableRow]] = (
             defaultdict(list)
@@ -736,7 +747,7 @@ class BallotSurrogateModel:
         self._fit_seeds = fit_seeds
         self._epochs = epochs
         self._lr = lr
-        self._predictor: BallotPredictor | None = None
+        self._predictor: BallotPredictor | None = predictor
 
     @property
     def predictor(self) -> BallotPredictor:
@@ -868,10 +879,13 @@ def fit_corpus_ballot_predictor(
     """The training entry: fit on the committed corpus split's fit side.
 
     Requires a committed split (the 15.12 corpus ships one) — the artifact-fit
-    must be the exact fit the fidelity harness performs for its single
-    ``(train ∪ val, test)`` fold, so the committed weights ARE the weights the
-    reported held-out numbers were produced by (asserted by the round-trip
-    test). Raises on a split-less table rather than inventing a fit side.
+    is the same fit the fidelity harness performs for its single
+    ``(train ∪ val, test)`` fold (same examples, same order), so the committed
+    weights ARE the weights the reported held-out numbers were produced by —
+    asserted by the round-trip test via ULP-level parameter equivalence (a
+    cross-platform refit differs in the last float bits, see :meth:`
+    BallotPredictor.fit`) and by frozen-weights reproduction of the reported
+    numbers. Raises on a split-less table rather than inventing a fit side.
     """
 
     if table.splits is None:

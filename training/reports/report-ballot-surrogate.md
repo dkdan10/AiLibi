@@ -69,8 +69,12 @@ epochs, lr 0.3 — the `Fo6Logistic` deterministic recipe). The ballot **confide
 is a ridge-solved linear head on the chosen target's standardized features, clipped
 to [0, 1]. Weights serialize as **float-hex JSON** (lossless float64, the
 `agents/tactical/features.py::weights_to_hex_json` convention) with a **sha256
-sidecar** — byte-identical on a refit, so the double-run hash and the artifact
-round-trip both pin it.
+sidecar**. Serialization is byte-stable (load → re-serialize is the identity),
+and a refit is byte-identical **on the recording platform**; across CPUs a refit
+agrees only to float ULP (numpy's SIMD summation grouping varies by machine), so
+the **committed bytes are the frozen ground truth** the sha pins and the bake-off
+reloads — the round-trip test asserts refit parameter-equivalence plus
+frozen-weights reproduction of every reported number.
 
 | Head | Features |
 |---|---|
@@ -333,9 +337,11 @@ nothing.
   ```
   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table, run_surrogate_fidelity, fo6_rebaseline; from training.surrogate.fidelity import decide_go_no_go; from training.surrogate.ballots import BallotSurrogateModel; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); s=run_surrogate_fidelity(t, lambda: BallotSurrogateModel(t), model_name='ballot-surrogate.v1'); f=fo6_rebaseline(t); print(decide_go_no_go(s, f).model_dump_json(indent=2))"
   ```
-- **Artifact refit equality** (byte-identical to the committed weights):
+- **Artifact provenance + frozen-weights reproduction** (refit is ULP-equivalent
+  to the committed weights — byte-identical only on the recording platform — and
+  the LOADED artifact reproduces the reported numbers):
   ```
-  uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; from training.surrogate.ballots import fit_corpus_ballot_predictor; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); print(fit_corpus_ballot_predictor(t).to_artifact_json() == Path('training/artifacts/surrogate/ballot-predictor.json').read_text())"
+  uv run pytest tests/training/test_surrogate_runner.py::test_committed_artifact_round_trips_and_provenance_holds tests/training/test_surrogate_runner.py::test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers -q
   ```
 - **Predicted-ballot calibration** (§4, the surrogate's OWN channel):
   ```

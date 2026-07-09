@@ -282,6 +282,12 @@ def load_surrogate_runner_factory(
     ONE :class:`SurrogateUseCounter` (pass ``use_counter`` to share it across
     multiple factories in a bake-off run), so the cap is cumulative across
     games — a fresh runner per game never resets it.
+
+    A supplied ``use_counter`` is VALIDATED against the committed cap (Codex
+    review on PR #241): it must be keyed on exactly these weights and its cap
+    must be no LOOSER than the committed ``max_uses`` — a shared counter may
+    tighten the committed cap (the cumulative-metering tests do), never loosen
+    it, or the doctrine this factory enforces would be silently bypassable.
     """
 
     predictor, weights_sha256 = load_ballot_predictor_artifact(artifact_dir)
@@ -292,6 +298,20 @@ def load_surrogate_runner_factory(
             f"{cap.weights_sha256!r} but the committed weights hash to "
             f"{weights_sha256!r} — the cap and the artifact drifted apart"
         )
+    if use_counter is not None:
+        if use_counter.cap.weights_sha256 != weights_sha256:
+            raise ValueError(
+                "shared use_counter is keyed on weights "
+                f"{use_counter.cap.weights_sha256!r} but {artifact_dir} commits "
+                f"{weights_sha256!r} — one counter never meters two artifacts"
+            )
+        if use_counter.cap.max_uses > cap.max_uses:
+            raise ValueError(
+                f"shared use_counter allows {use_counter.cap.max_uses} uses but "
+                f"the committed cap under {artifact_dir} is {cap.max_uses} — a "
+                "shared counter may tighten the committed staleness cap, never "
+                "loosen it"
+            )
     counter = use_counter if use_counter is not None else SurrogateUseCounter(cap)
 
     def factory() -> SurrogateMeetingRunner:
