@@ -12,7 +12,7 @@ import random
 
 import pytest
 
-from eval.watchability import WatchabilityReport
+from eval.watchability import WatchabilityGameScore, WatchabilityReport
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
     GoodhartProbeReport,
@@ -24,6 +24,7 @@ from training.bakeoff.goodhart import (
     _RefereeAttackEvaluator,
     _SetAggregates,
     _SetEvaluation,
+    _sweep_levers,
     build_probe_selector,
     probe_genome_length,
     run_goodhart_probe,
@@ -31,21 +32,47 @@ from training.bakeoff.goodhart import (
 from training.env import TacticalRolloutEnv
 
 
-def _watchability(*, referee_passed: bool, mean_score: float) -> WatchabilityReport:
+def _watchability(
+    *,
+    referee_passed: bool,
+    mean_score: float,
+    per_game: tuple[WatchabilityGameScore, ...] = (),
+) -> WatchabilityReport:
     """A minimal WatchabilityReport fixture (only the fields _build_exploits reads)."""
 
     return WatchabilityReport(
         replay_set_dir="x",
         baseline_id="baseline-3",
         roster_key="9p2i",
-        games_total=0,
+        games_total=len(per_game),
         integrity_ok=True,
         referee_passed=referee_passed,
         supply_floors_passed=referee_passed,
         supply_gauges=(),
         mean_score=mean_score,
         median_score=mean_score,
-        per_game=(),
+        per_game=per_game,
+    )
+
+
+def _game(score: float) -> WatchabilityGameScore:
+    """A minimal per-game score fixture (only ``score`` matters to aggregates)."""
+
+    return WatchabilityGameScore(
+        seed=0,
+        reason="crew_win_tasks",
+        n_meetings=1,
+        floor_multiplier=1.0,
+        d1_resolution=0.5,
+        d2_deduction=0.1,
+        d3_craft=0.0,
+        d4_arc=0.2,
+        d2_separation_norm=0.1,
+        d2_conversion=0.0,
+        d4_arc_term=0.1,
+        d4_swing_term=0.0,
+        d4_contest_term=0.0,
+        score=score,
     )
 
 
@@ -125,6 +152,7 @@ def test_every_improvement_is_decomposed() -> None:
             "d3",
             "d4",
             "floor",
+            "validity_gate",
             "referee_gate",
         )
         assert improvement.behavioral_cause
@@ -161,13 +189,15 @@ def test_probe_report_round_trips_json() -> None:
     assert restored == report
 
 
-def _champion_eval(*, referee_passed: bool, mean_score: float) -> _SetEvaluation:
+def _champion_eval(
+    *, referee_passed: bool, mean_score: float, validity_passed: bool = True
+) -> _SetEvaluation:
     return _SetEvaluation(
-        fitness=mean_score,
+        fitness=mean_score if validity_passed else -1.0,
         watchability=_watchability(
             referee_passed=referee_passed, mean_score=mean_score
         ),
-        validity_passed=True,
+        validity_passed=validity_passed,
     )
 
 
@@ -289,6 +319,16 @@ def test_distinct_mechanisms_on_same_dimension_are_both_reported() -> None:
         "d2-separation-theater",
         "d2-conversion",
     }
+    # Each mechanism carries ITS OWN recommended floor, not the dimension's.
+    by_mechanism = {exploit.mechanism: exploit for exploit in exploits}
+    assert (
+        "GATE the D2 separation"
+        in by_mechanism["d2-separation-theater"].recommended_floor
+    )
+    assert (
+        "audit HOW the D2 conversions"
+        in by_mechanism["d2-conversion"].recommended_floor
+    )
 
 
 def test_same_mechanism_is_deduped_to_worst_case() -> None:
@@ -351,6 +391,84 @@ def test_non_flip_improvement_keeps_dterm_decomposition() -> None:
     assert improvement.moving_term in ("d1", "d2", "d3", "d4", "floor")
     assert improvement.referee_passed_before is False
     assert improvement.referee_passed_after is False
+    assert improvement.validity_passed_before is True
+    assert improvement.validity_passed_after is True
+
+
+def test_validity_flip_improvement_decomposes_to_validity_gate() -> None:
+    # An improvement out of _INVALID_FITNESS is constraint satisfaction — the
+    # whole gain is the first ADMISSIBLE set's referee score, never a D-term
+    # move, regardless of the D-term deltas alongside it.
+    improvement = _decompose_improvement(
+        1,
+        -1.0,
+        5.0,
+        _champion_eval(referee_passed=False, mean_score=0.0, validity_passed=False),
+        _champion_eval(referee_passed=False, mean_score=5.0),
+    )
+    assert improvement.moving_term == "validity_gate"
+    assert improvement.validity_passed_before is False
+    assert improvement.validity_passed_after is True
+    assert "constraint satisfaction" in improvement.behavioral_cause
+
+    # When validity AND the referee gate flip together, the validity flip wins:
+    # the previous fitness was pinned at _INVALID_FITNESS, so the jump is
+    # admission first (the cause still names the after gate state).
+    both = _decompose_improvement(
+        1,
+        -1.0,
+        1005.0,
+        _champion_eval(referee_passed=False, mean_score=0.0, validity_passed=False),
+        _champion_eval(referee_passed=True, mean_score=5.0),
+    )
+    assert both.moving_term == "validity_gate"
+    assert "referee_passed=True" in both.behavioral_cause
+
+
+class _StubEvaluator:
+    """A stand-in returning one fixed evaluation for every genome."""
+
+    def __init__(self, evaluation: _SetEvaluation) -> None:
+        self._evaluation = evaluation
+
+    def evaluate_set(self, genome: tuple[float, ...] | None) -> _SetEvaluation:
+        return self._evaluation
+
+
+def test_lever_materiality_uses_unrounded_set_mean() -> None:
+    # The referee's report-level mean_score is rounded to 2 decimals: a set whose
+    # per-game mean is 12.4996 reports mean_score=12.5, which against a 10.0
+    # baseline reads as EXACTLY the 25% bar. The sweep must threshold on the
+    # unrounded per-game mean (24.996% — below the bar), so nothing is promoted.
+    games = (_game(12.4996), _game(12.4996))
+    evaluation = _SetEvaluation(
+        fitness=12.5,
+        watchability=_watchability(
+            referee_passed=False, mean_score=12.5, per_game=games
+        ),
+        validity_passed=True,
+    )
+    baseline_aggs = _SetAggregates(*([0.0] * 12))
+    levers, candidates = _sweep_levers(
+        _StubEvaluator(evaluation),  # type: ignore[arg-type]
+        10.0,
+        baseline_aggs,
+    )
+    assert all(candidate.gain < 0.25 for candidate in candidates)
+    exploits, _ = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=baseline_aggs,
+        baseline_referee_passed=False,
+        champion_eval=_champion_eval(referee_passed=False, mean_score=10.0),
+        champion_score=10.0,
+        champion_gain=0.0,
+        lever_candidates=candidates,
+        materiality_bar=0.25,
+        fake_meetings=True,
+    )
+    assert exploits == ()
+    # The display row keeps the referee's own rounded value.
+    assert all(lever.mean_score == 12.5 for lever in levers)
 
 
 def test_evaluator_rejects_duplicate_fitness_seeds() -> None:

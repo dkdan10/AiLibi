@@ -27,7 +27,7 @@ to the PAUSE.
 
 | Roster | Verdict | Baseline `mean_score` | ES champion | Strongest reachable | `referee_passed` (any genome) |
 |---|---|---|---|---|---|
-| **9p2i** (baseline-3 primary substrate) | **EXPLOITS-FOUND** | 6.51 | 6.63 (+1.8%) | **16.62 (+155%)** | **False** — supply-floor gate holds |
+| **9p2i** (baseline-3 primary substrate) | **EXPLOITS-FOUND** | 6.51 | 6.63 (+1.7%) | **16.62 (+155%)** | **False** — supply-floor gate holds |
 | **4p1i** (flat determinism/leak reference) | **HELD** | 1.45 | 1.45 (+0.0%) | 1.45 (+0.0%) | False — supply-floor gate holds |
 
 Materiality bar: a genome is an exploit only if the HARD validity gate passes AND
@@ -77,7 +77,8 @@ Champion `mean_score` per generation (index 0 = the seeded random genome):
 ```
 
 The random-init ES only RECOVERS to ~the scripted-FSM level (6.63 vs 6.51,
-+1.8% — below the bar); it did not converge to the kill-aggression corner within
++1.7% on the unrounded set means — below the bar); it did not converge to the
+kill-aggression corner within
 6×6. Both strict improvements decompose to the SAME mechanism:
 
 | Gen | Moving term | Δ fitness | Behavioral cause |
