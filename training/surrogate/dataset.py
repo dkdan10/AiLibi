@@ -65,7 +65,13 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
@@ -240,6 +246,16 @@ class SurrogateSplits(BaseModel):
     game SEEDS (never meeting ids — by-game CV is the anti-leakage discipline,
     §5.5). Task 15.12 commits this alongside the corpus; the baseline sets ship
     none, so the fidelity harness derives K folds itself.
+
+    The 15.12 recorder (``scripts/record_ml_corpus.sh::write_splits``) emits four
+    audit-metadata keys beside the seed lists — ``set``, ``split_rule``,
+    ``counts``, ``total_games`` — so the committed file documents its own split
+    rule (the frozen corpus files carry all four). They are DECLARED here as
+    typed optional fields rather than ignored: ``extra="forbid"`` stays, so a
+    truly unknown key still fails loud, and present count metadata must agree
+    with the seed lists (a self-inconsistent split file is a corrupted artifact,
+    refused — never silently trusted). Regression pin for PR #240's review
+    finding: the frozen corpus ``splits.json`` files must load unchanged.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -247,6 +263,35 @@ class SurrogateSplits(BaseModel):
     train: tuple[int, ...]
     val: tuple[int, ...] = ()
     test: tuple[int, ...] = ()
+    # 15.12 audit metadata (present on the committed corpus files; absent on the
+    # baseline sets' hand-built fixtures). Documentation of the split's own rule,
+    # cross-checked against the seed lists below — never a substitute for them.
+    set: str | None = None
+    split_rule: str | None = None
+    counts: dict[str, int] | None = None
+    total_games: int | None = None
+
+    @model_validator(mode="after")
+    def _metadata_agrees_with_seed_lists(self) -> "SurrogateSplits":
+        sides = {"train": self.train, "val": self.val, "test": self.test}
+        if self.counts is not None:
+            unknown = sorted(k for k in self.counts if k not in sides)
+            if unknown:
+                raise ValueError(f"splits counts name unknown sides: {unknown}")
+            for name, declared in sorted(self.counts.items()):
+                if declared != len(sides[name]):
+                    raise ValueError(
+                        f"splits counts[{name!r}] = {declared} != "
+                        f"{len(sides[name])} seeds in the {name} list"
+                    )
+        if self.total_games is not None:
+            actual = sum(len(seeds) for seeds in sides.values())
+            if self.total_games != actual:
+                raise ValueError(
+                    f"splits total_games = {self.total_games} != {actual} seeds "
+                    "across train/val/test"
+                )
+        return self
 
 
 class MeetingTable(BaseModel):

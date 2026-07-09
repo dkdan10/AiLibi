@@ -30,12 +30,19 @@ fake-task / reposition-during-cooldown), structurally unable to emit illegal or 
 **MAP-Elites** over the 15.8 behavioral descriptors with competence as cell quality — diversity as
 measured archive coverage. Every ES/QD entrant optimizes the SAME fitness: the tactically-reachable
 side-specific terms + potential shaping, with an anchor-KL penalty toward the frozen FSM (measured as
-divergence from the FSM's choice distribution over the same states); the validity gate and the 15.2
+the anchor cross-entropy — the log-loss of the candidate's choice distribution at the FSM's
+deterministic choice, the piKL-style penalty the hint names; a literal KL against a deterministic
+anchor's delta distribution is degenerate); the validity gate and the 15.2
 referee are SELECTION filters applied to candidates after training — never terms in any fitness. The
 crew side stays the frozen scripted FSM throughout (no co-evolution this wave). Every candidate that
-reaches the report passes the 15.10 determinism harness and the leak-test factory mode; fitness may use
+reaches the report runs the 15.10 determinism harness and the leak-test factory mode THROUGH ITS OWN
+policy factory (the 15.10 `_IdleExploreAgent` reference wrapper runs no encoder and does not count); a
+determinism-harness FAIL does not drop the row — it marks it experiment-tier and carries the full
+`PolicyDeterminismReport` plus an N-repeat metric spread (the seam the 15.17 torch entrant reports
+through); fitness may use
 the 15.13 surrogate within its staleness cap, but every reported number is re-scored on a real meeting
-path (fake-provider meetings on the fixed eval seed set). Also discharge the 15.14 obligation: re-run
+path (fake-provider meetings on the fixed eval seed set — the frozen corpus test split,
+`replays/ml_corpus/9p2i/splits.json` seed % 5 == 4). Also discharge the 15.14 obligation: re-run
 the Goodhart probe under the surrogate meeting path and append the delta to the probe's findings in this
 report.
 
@@ -59,13 +66,13 @@ report.
 - training/crew/ (15.16's parallel track)
 
 **Definition of done:**
-- [ ] One harness: every entrant trains and evaluates through `training/bakeoff/harness.py` on the same fixed seed set — entrants carry no private eval loops (asserted structurally: the harness is the only module that computes reported metrics).
-- [ ] Every entrant row in `results-impostor-bakeoff.jsonl` carries the full tuple: validity-gate pass, referee result (score distribution + floor-trip rate + supply floors), inner fitness, anchor-KL, impostor win rate + take-rate (reported, never gated), determinism-harness hash, leak-test pass, surrogate-staleness usage, and wall-clock.
+- [ ] One harness: every entrant trains and evaluates through `training/bakeoff/harness.py` on the same fixed eval seed set — the frozen corpus test split (`replays/ml_corpus/9p2i/splits.json`, seed % 5 == 4), asserted by a test — and entrants carry no private eval loops (ENFORCED, not asserted: a committed test AST-scans `training/bakeoff/{bc,utility_es,policy_es,map_elites}.py` for `eval.watchability`/`eval.validity` imports, the firewall-test pattern; the harness is the only module that computes reported metrics).
+- [ ] Every entrant row in `results-impostor-bakeoff.jsonl` carries the full tuple: validity-gate pass, referee result (score distribution + floor-trip rate + supply floors), inner fitness (surrogate-scored AND real-rescored columns, both, where the two paths were used — divergence is data, never collapsed to one number), anchor-KL, impostor win rate + take-rate (reported, never gated), determinism-harness result (the double-run hash, or an explicit experiment-tier FAIL carrying the full `PolicyDeterminismReport` + N-repeat spread), leak-test pass (through the candidate's own factory), surrogate-staleness usage, and wall-clock.
 - [ ] The BC entrant reports held-out intent agreement with the FSM against its pre-stated bar (≥0.90 top-1 unless the contract PR documents a different bar BEFORE training) and names the encoder gaps if it misses.
 - [ ] The utility-scorer entrant consumes exactly the FSM's option set (a test enumerates the options on fixture states and pins the menu) — the bounded path is real, not aspirational.
 - [ ] The MAP-Elites entrant reports archive coverage over the named descriptors + best-per-cell quality; single-objective entrants report their descriptor footprint for comparison.
 - [ ] No unregularized champion: anchor-KL is computed for every reported candidate; candidates above the documented KL ceiling are flagged in the report, not silently dropped.
-- [ ] The Goodhart probe re-run under the surrogate path is appended with a delta verdict vs the 15.14 baseline.
+- [ ] The Goodhart probe re-run under the surrogate path invokes `run_goodhart_probe(meeting_runner_factory=…)` INCLUDING its forced single-tactic reachability sweep — the committed 15.14 ES budget alone only recovered to baseline (+1.7%); the sweep is what found the exploit — and reports the surrogate's ejection/SKIP rate alongside the verdict (an under-ejecting surrogate can hold the meeting-driven floors for the wrong reason, and a HELD must not be read as exploit-caught in that regime). The delta verdict vs the 15.14 baseline is appended.
 - [ ] The report ends with a ranked recommendation + open risks FOR THE PAUSE — explicitly not a self-declared winner; every quoted number regenerates from the committed CLIs + jsonl.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
