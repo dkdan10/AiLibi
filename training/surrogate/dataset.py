@@ -402,16 +402,21 @@ class _WindowStats:
 
     ``witnessed_kill`` / ``witnessed_vent`` are the EXACT role-proving eyewitness
     pins from ``KilledEvent`` / vent-event witnesses (Codex review), mapping a
-    KILLER/VENTER to the set of CREW WITNESSES who saw the act. Production only
-    stamps ``action="kill"`` / ``"vent"`` for the WITNESSING agent before that
-    agent's own belief update, so the pin is VOTER-LOCAL: exposed only for a row
-    whose voter is in the witness set. The FLAG sets persist (they record that the
-    voter once held first-hand evidence) and do not reset; the pin's belief DELTA
-    (+1.0 / +0.5 / +0.2) is ingested into the witness's ``BeliefState`` at event
-    time — production's ``apply_observation_rules`` — where the real Rule-5 fold
-    decays it toward 0.5 across later unreinforced meetings (Codex review), so
-    the magnitude lives in ``belief_suspicion``, never re-applied at full
-    strength. All updates read only reconstructed engine truth.
+    KILLER/VENTER to the set of witnesses whose belief takes the pin. Production
+    only stamps ``action="kill"`` / ``"vent"`` for the WITNESSING agent before
+    that agent's own belief update, so the pin is VOTER-LOCAL: exposed only for a
+    row whose voter is in the witness set. The kill pin is CREW witnesses only —
+    the belief rule's §4.7 guard skips a fellow impostor, and the killer is
+    always the witness's teammate there; the VENT pin covers EVERY witness — the
+    production vent rule carries no teammate guard, so an impostor witnessing a
+    teammate's vent takes the +0.5 too (Codex review). The FLAG sets persist
+    (they record that the voter once held first-hand evidence) and do not reset;
+    the pin's belief DELTA (+1.0 / +0.5 / +0.2) is ingested into the witness's
+    ``BeliefState`` at event time — production's ``apply_observation_rules`` —
+    where the real Rule-5 fold decays it toward 0.5 across later unreinforced
+    meetings (Codex review), so the magnitude lives in ``belief_suspicion``,
+    never re-applied at full strength. All updates read only reconstructed
+    engine truth.
 
     ``body_proximity`` is the VOTER-LOCAL §6.3 Rule 1 reconstruction (Codex
     review): production fires the +0.2 bump in agent A's OWN beliefs only on the
@@ -425,9 +430,10 @@ class _WindowStats:
     each observer's rolling same-as-production sighting window, and maps a
     CANDIDATE to the set of observers holding the pin. Like production's
     perception-time bump it persists in the observer's graph, so it does not
-    reset. (The ``observed_actions`` extras production also folds into
-    ``saw_player`` rows are the witnessed kill/vent stamps — carried here as
-    their own first-class pin columns.)
+    reset. The witness-gated kill/vent action stamps production also folds into
+    ``saw_player`` rows feed the SAME sighting log (``event_sightings`` — even
+    when the actor is not currently visible, e.g. hidden in a vent), so they can
+    carry a later Rule-1 pin exactly as ``_recent_co_presence`` allows.
     """
 
     def __init__(self, game_map: Map) -> None:
@@ -467,6 +473,14 @@ class _WindowStats:
                     self.witnessed[pid] += 1
             else:
                 self.isolation[occupants[0]] += 1
+        # Witness-gated kill/vent action stamps ALSO land as ``saw_player`` rows in
+        # production (``_observed_actions_for_agent`` merges them into
+        # ``visible_players`` even when the actor is not currently visible — e.g. a
+        # venting actor hidden in the vent), and ``_recent_co_presence`` reads those
+        # rows for Rule-1 body proximity (Codex review). Collected here and appended
+        # to the sighting log by ``_absorb_body_proximity`` AFTER its body pass, so
+        # the current-tick exclusion holds.
+        event_sightings: list[tuple[PlayerId, RoomId, PlayerId]] = []
         for event in events:
             # Task cadence / movement from ACCEPTED events only (Codex review): a
             # ``TaskProgressed`` / ``TaskCompleted`` is one accepted task-work tick
@@ -479,14 +493,13 @@ class _WindowStats:
             elif isinstance(event, KilledEvent):
                 self._pending_kills.append((event.tick, event.room))
                 # The EXACT witnessed-kill pin (Codex review): production stamps
-                # ``action="kill"`` for the killer's CREW witnesses, who each take
-                # the +1.0 hard pin in their OWN belief before voting
-                # (agents/memory/beliefs.py). Read the witness set straight off
-                # ``event.actor`` + ``event.witnesses`` (crew only — a
-                # fellow-impostor witness generates no crew evidence, §4.7); it is
-                # voter-local, never the co-presence proxy, so a witnessed killer who
-                # moved or was alone is not missed and a bystander is never
-                # mismarked, and the pin does not leak to non-witness voters.
+                # ``action="kill"`` for the event's witnesses; the belief rule
+                # then applies the +1.0 hard pin with the §4.7 teammate guard —
+                # the killer is an impostor, so an impostor witness (its
+                # teammate) accrues nothing and only CREW witnesses take the
+                # pin. Voter-local, never the co-presence proxy: a witnessed
+                # killer who moved or was alone is not missed and a bystander is
+                # never mismarked.
                 crew_witnesses = {
                     w for w in event.witnesses if roles.get(w) == "CREWMATE"
                 }
@@ -500,17 +513,28 @@ class _WindowStats:
                         beliefs[witness].adjust_suspicion(
                             event.actor, delta=WITNESSED_KILL_SUSPICION_DELTA
                         )
+                # The ``saw_player`` stamp itself exists for EVERY witness (the
+                # co-presence teammate filter is applied at read time, as in
+                # production's ``_recent_co_presence``).
+                for witness in event.witnesses:
+                    if witness != event.actor:
+                        event_sightings.append((witness, event.room, event.actor))
             elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
-                # The witnessed-VENT pin (Codex review): a crew member who SAW an
-                # impostor vent takes the +0.5 role-proving pin at perception
+                # The witnessed-VENT pin (Codex review): a witness who SAW the
+                # vent takes the +0.5 role-proving pin at perception
                 # (VENTING_SUSPICION_DELTA), persisting into the pre-meeting graph
                 # even when no grounded ``vent_sighting`` contradiction is spoken.
                 # Witnesses = the source-room ∪ destination-room witness sets the
-                # engine records (:mod:`eval.funnel`), crew only, voter-local.
+                # engine records. Production's vent rule carries NO fellow-
+                # impostor guard (venting is impostor-exclusive; the kill rule's
+                # §4.7 guard exists because teammate kills are routine), so an
+                # IMPOSTOR witnessing a teammate's vent takes the pin too —
+                # crew-only filtering here would drop real production belief
+                # updates from impostor voters' rows (Codex review).
                 vent_witnesses = {
                     w
                     for w in (*event.source_witnesses, *event.destination_witnesses)
-                    if roles.get(w) == "CREWMATE"
+                    if w != event.actor
                 }
                 if vent_witnesses:
                     self.witnessed_vent[event.actor].update(vent_witnesses)
@@ -518,19 +542,30 @@ class _WindowStats:
                         beliefs[witness].adjust_suspicion(
                             event.actor, delta=VENTING_SUSPICION_DELTA
                         )
+                # The vent ``saw_player`` stamp's room mirrors production's
+                # ``_vent_observation_for_agent``: the source room when the
+                # witness saw the entry side, else the destination room.
+                for witness in vent_witnesses:
+                    room = (
+                        event.source_room
+                        if witness in event.source_witnesses
+                        else event.destination_room
+                    )
+                    event_sightings.append((witness, room, event.actor))
         for kill_tick, kill_room in self._pending_kills:
             if 0 <= state.tick - kill_tick <= SEEN_AT_KILL_WINDOW_TICKS:
                 occupants = by_room.get(kill_room, [])
                 if len(occupants) >= 2:
                     for pid in occupants:
                         self.seen_at_kill[pid] = True
-        self._absorb_body_proximity(state, roles, beliefs)
+        self._absorb_body_proximity(state, roles, beliefs, event_sightings)
 
     def _absorb_body_proximity(
         self,
         state: WorldState,
         roles: Mapping[PlayerId, Role],
         beliefs: Mapping[PlayerId, BeliefState],
+        event_sightings: Sequence[tuple[PlayerId, RoomId, PlayerId]] = (),
     ) -> None:
         """§6.3 Rule 1, voter-local (Codex review): first sighting + co-presence.
 
@@ -591,6 +626,15 @@ class _WindowStats:
             for pid in visibility.visible_player_ids:
                 room = state.players[pid].room
                 sightings.setdefault(room, []).append((state.tick, pid))
+        # Witness-gated kill/vent action stamps become ``saw_player`` rows in
+        # production even when the actor is not currently visible (a venting
+        # actor is hidden in the vent), so they feed the SAME co-presence window
+        # (Codex review). Appended after the body pass, like the visible rows.
+        for witness, room, actor in event_sightings:
+            if witness in state.players:
+                self._sightings[witness].setdefault(room, []).append(
+                    (state.tick, actor)
+                )
 
     def reset_window(self) -> None:
         # ``body_proximity`` deliberately survives the reset: production's Rule 1
@@ -723,6 +767,13 @@ def _walk_game(
     stats = _WindowStats(game_map)
     rows: list[MeetingTableRow] = []
     meeting_index = 0
+
+    # The initial tick-0 packet (Codex review): production builds and ingests a
+    # packet from the INITIAL state before collecting the first actions
+    # (orchestrator/game.py `_build_packets` runs at the top of the loop), so the
+    # spawn-tick sightings/co-presence are in every agent's memory before tick 1.
+    # Without this seed the first window is systematically one packet short.
+    stats.absorb_tick(state, (), roles, beliefs=beliefs)
 
     for entry in tick_entries:
         actions = _deserialize_actions(entry.actions)

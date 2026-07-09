@@ -93,10 +93,16 @@ can weight each first-hand-evidence channel independently of its decayed magnitu
 The pins are **voter-local** — production stamps the evidence only into the
 perceiving agent's own beliefs, so a pin (and its belief delta) is exposed only to
 a row whose voter is in the event's witness/observer set; a global flag would leak
-private evidence to every voter and distort the ceiling. The per-agent perception
-is reconstructed through the real `compute_visibility_for_player`, and perception
-timing mirrors the orchestrator exactly: packets are built from the PRE-action
-state each tick, and a meeting-trigger tick's events are delivered on the RESUME
+private evidence to every voter and distort the ceiling. The kill pin is crew
+witnesses only (the belief rule's §4.7 guard — the killer is always an impostor
+witness's teammate); the vent pin covers EVERY witness, impostor teammates
+included, because production's vent rule carries no teammate guard. The per-agent
+perception is reconstructed through the real `compute_visibility_for_player`, and
+perception timing mirrors the orchestrator exactly: the initial tick-0 packet is
+ingested before the first actions, packets are built from the PRE-action
+state each tick, witness-gated kill/vent action stamps land as `saw_player` rows
+that feed the Rule-1 co-presence window (even when the actor is hidden in a
+vent), and a meeting-trigger tick's events are delivered on the RESUME
 tick — so a same-tick witnessed kill never leaks into that meeting's rows. The
 honest ceiling reads the strongest voter's row plus the contradiction lift capped
 at one strong flag's worth (`MEETING_CONTRADICTION_LIFT_CAP`) and applied under
@@ -208,17 +214,18 @@ flag) is not uniquely rankable and correctly counts as unreachable.
 
 | Set | **max achievable top-1** | **voice-driven share** | reachable | flag on target | proximity/eyewitness on target | strict belief-lead |
 |---|---:|---:|---:|---:|---:|---:|
-| **9p2i** | **71.6%** | **28.4%** | 78/109 | 78/109 | 71/109 | 65/109 |
+| **9p2i** | **70.6%** | **29.4%** | 77/109 | 78/109 | 71/109 | 64/109 |
 | **4p1i** | 84.6% | 15.4% | 22/26 | 21/26 | 11/26 | 11/26 |
 
-Read the 9p2i row as: **no physical+belief surrogate can exceed ~72% top-1 on this
-corpus**, and **~28% of ejections are structurally voice-driven** — they formed from
+Read the 9p2i row as: **no physical+belief surrogate can exceed ~71% top-1 on this
+corpus**, and **~29% of ejections are structurally voice-driven** — they formed from
 the current meeting's narrative and cannot be seen without the LLM. (Earlier drafts
-measured 65.1%/34.9% then 73.4%/26.6%; the review-driven fidelity ladder — voter-local
-first-sighting body proximity, the production render ceiling, event-time pin ingest
-with Rule-5 decay, and pre-meeting perception timing at the trigger tick — settled the
-measurement at the production-exact graph.) FO-6's achieved
-**25.7%** sits far below the **71.6%** ceiling: the gap is the belief accumulator and
+measured 65.1%/34.9% then 73.4%/26.6% then 71.6%/28.4%; the review-driven fidelity
+ladder — voter-local first-sighting body proximity, the production render ceiling,
+event-time pin ingest with Rule-5 decay, pre-meeting perception timing at the
+trigger tick, teammate vent pins, the initial tick-0 packet, and event-stamped
+sightings — settled the measurement at the production-exact graph.) FO-6's achieved
+**25.7%** sits far below the **70.6%** ceiling: the gap is the belief accumulator and
 the flag channels FO-6's six raw counts never use (the surrogate's headroom, Task
 15.13), while the ceiling itself is the honest cap the plan does not chase. §5.5's two
 responses follow directly: use the surrogate for the physically-legible component and

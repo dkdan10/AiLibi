@@ -23,7 +23,7 @@ from agents.memory.beliefs import (
 )
 from engine.actions import Action, DoTaskAction, MoveAction
 from engine.entities import BodyState
-from engine.events import KilledEvent
+from engine.events import KilledEvent, VentEnteredEvent
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
@@ -526,6 +526,119 @@ def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> No
     assert beliefs[observer_a].view(leaver_c).suspicion == pytest.approx(0.7)
     assert beliefs[latecomer_d].view(leaver_c).suspicion == pytest.approx(0.5)
     assert beliefs[leaver_c].view(latecomer_d).suspicion == pytest.approx(0.5)
+
+
+def test_teammate_vent_witness_takes_the_production_pin() -> None:
+    """An impostor witnessing a TEAMMATE's vent takes the +0.5 pin (Codex review).
+
+    Production's vent rule carries NO fellow-impostor guard (unlike the kill
+    rule's §4.7 guard): `apply_observation_rules` applies `VENTING_SUSPICION_DELTA`
+    for every witness of the vent stamp. Filtering vent witnesses to crew would
+    drop those real belief updates from impostor voters' pre-meeting rows.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=9, num_impostors=2, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    venter, teammate = sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew_witness = sorted(pid for pid, role in roles.items() if role == "CREWMATE")[0]
+    room = state.players[venter].room
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    vent = VentEnteredEvent(
+        type="VentEntered",
+        tick=1,
+        actor=venter,
+        vent_id="v-1",
+        room=room,
+        source_vent_id="v-1",
+        destination_vent_id="v-2",
+        source_room=room,
+        destination_room=room,
+        traversal_ticks=1,
+        witnesses=(teammate, crew_witness),
+        source_witnesses=(teammate, crew_witness),
+        destination_witnesses=(),
+    )
+    stats.absorb_tick(state, [vent], roles, beliefs=beliefs)
+
+    assert stats.witnessed_vent[venter] == {teammate, crew_witness}
+    # Both witnesses' OWN rows take the production +0.5 (0.5 -> 1.0).
+    assert beliefs[teammate].view(venter).suspicion == pytest.approx(1.0)
+    assert beliefs[crew_witness].view(venter).suspicion == pytest.approx(1.0)
+    # Non-witnesses take nothing (voter-local).
+    non_witness = sorted(pid for pid, role in roles.items() if role == "CREWMATE")[1]
+    assert beliefs[non_witness].view(venter).suspicion == pytest.approx(0.5)
+
+
+def test_vent_stamp_feeds_the_body_proximity_window() -> None:
+    """A witnessed vent's ``saw_player`` stamp feeds Rule-1 co-presence (Codex).
+
+    Production records witness-gated kill/vent action stamps as ``saw_player``
+    rows even when the actor is not currently visible — a venting actor is
+    hidden in the vent — and ``_recent_co_presence`` reads those rows. So a
+    voter who saw a player vent in a room must still pin that player when a
+    body is first seen there within the window.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    venter = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    witness, victim, other = crew
+    room_r = state.players[witness].room
+    room_s = game_map.room_neighbors(room_r)[0]
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+
+    # Tick 1: the venter vents in R, witnessed by `witness` — but the venter is
+    # IN THE VENT at absorb time, so it is absent from visible_player_ids and
+    # only the event stamp can record the sighting.
+    players_t1 = dict(state.players)
+    players_t1[venter] = replace(players_t1[venter], room=room_r, in_vent=True)
+    players_t1[victim] = replace(players_t1[victim], room=room_s)
+    players_t1[other] = replace(players_t1[other], room=room_s)
+    state_t1 = replace(state, tick=1, players=players_t1)
+    vent = VentEnteredEvent(
+        type="VentEntered",
+        tick=1,
+        actor=venter,
+        vent_id="v-1",
+        room=room_r,
+        source_vent_id="v-1",
+        destination_vent_id="v-2",
+        source_room=room_r,
+        destination_room=room_s,
+        traversal_ticks=1,
+        witnesses=(witness,),
+        source_witnesses=(witness,),
+        destination_witnesses=(),
+    )
+    stats.absorb_tick(state_t1, [vent], roles, beliefs=beliefs)
+
+    # Tick 2: the victim's body lies in R; `witness` first-sights it. The venter
+    # must be co-present via the tick-1 vent stamp and take the Rule-1 pin.
+    players_t2 = dict(players_t1)
+    players_t2[victim] = replace(players_t2[victim], alive=False, room=room_r)
+    body = BodyState(
+        id="body-vent-test",
+        player_id=victim,
+        room=room_r,
+        position=(0.0, 0.0),
+        killed_by=venter,
+        discovered_by=None,
+    )
+    state_t2 = replace(state, tick=2, players=players_t2, bodies={body.id: body})
+    stats.absorb_tick(state_t2, [], roles, beliefs=beliefs)
+
+    assert witness in stats.body_proximity.get(venter, set())
 
 
 def test_perception_pins_decay_through_the_real_fold() -> None:
