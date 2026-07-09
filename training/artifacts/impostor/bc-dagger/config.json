@@ -1,0 +1,63 @@
+{
+  "dagger_seed_rounds": [
+    [
+      1020,
+      1021,
+      1022,
+      1025,
+      1026,
+      1027
+    ],
+    [
+      1030,
+      1031,
+      1032,
+      1035,
+      1036,
+      1037
+    ]
+  ],
+  "encoder_version": "v2",
+  "entrant": "bc-dagger",
+  "epochs": 30,
+  "harvest_seeds": [
+    1000,
+    1001,
+    1002,
+    1005,
+    1006,
+    1007,
+    1010,
+    1011,
+    1012,
+    1015,
+    1016,
+    1017
+  ],
+  "head": {
+    "kind_slots": [
+      "kill",
+      "vent",
+      "sabotage",
+      "do_task",
+      "report",
+      "repair_sabotage",
+      "wait"
+    ],
+    "rooms": [
+      "ADMIN",
+      "CAFETERIA",
+      "EAST_HALL",
+      "ENGINEERING",
+      "LABS",
+      "MEDBAY",
+      "REACTOR",
+      "STORAGE",
+      "UPPER_HALL",
+      "WEST_HALL"
+    ]
+  },
+  "hidden": 8,
+  "init_seed": 0,
+  "learning_rate": 0.2
+}

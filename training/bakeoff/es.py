@@ -210,6 +210,54 @@ def _finite_fitness(value: float, *, context: str) -> float:
     return value
 
 
+def derive_stream_seed(master_seed: int, *indices: int) -> int:
+    """A deterministic 64-bit stream seed for ``(master_seed, *indices)`` (15.15).
+
+    The shared-core extension the bake-off entrants ride for every RNG stream
+    that is NOT the ``evolve`` loop's own offspring stream (MAP-Elites parent
+    picks / mutations, BC minibatch shuffles): a pure SHA-256 mix of the master
+    seed and an arbitrary index path, so two runs derive bit-identical streams
+    and two DIFFERENT index paths never collide by construction. Deliberately a
+    NEW payload scheme (``"stream:"`` prefix) rather than a re-export of the
+    internal :func:`_derive_seed` — the internal payload feeds the committed
+    15.14 double-run digests and must never gain callers that could pressure a
+    format change.
+    """
+
+    payload = "stream:" + ":".join(str(index) for index in (master_seed, *indices))
+    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[:8], "big")
+
+
+def mutate_genome(
+    genome: Sequence[float], *, seed: int, sigma: float
+) -> tuple[float, ...]:
+    """Isotropic Gaussian mutation of ``genome`` (Task 15.15 shared-core extension).
+
+    The SAME bit-stable pure-Python operator the ``(1 + λ)`` loop uses
+    internally, exposed so the MAP-Elites entrant mutates genomes through one
+    audited operator instead of re-implementing it. ``sigma`` must be positive.
+    """
+
+    if not sigma > 0.0:
+        raise ValueError(f"sigma must be > 0, got {sigma}")
+    return _mutate(tuple(float(gene) for gene in genome), seed=seed, sigma=sigma)
+
+
+def random_genome(length: int, *, seed: int, scale: float = 0.5) -> tuple[float, ...]:
+    """A seeded Gaussian genome (Task 15.15 shared-core extension).
+
+    The initial-genome draw the ``evolve`` loop performs internally, exposed so
+    entrants that seed their own populations (MAP-Elites, the CI-budget tests)
+    draw through the same bit-stable operator. ``scale`` must be positive.
+    """
+
+    if length < 1:
+        raise ValueError(f"length must be >= 1, got {length}")
+    if not scale > 0.0:
+        raise ValueError(f"scale must be > 0, got {scale}")
+    return _random_genome(length, seed=seed, scale=scale)
+
+
 def evolve(
     fitness: FitnessFn,
     *,
@@ -298,6 +346,9 @@ __all__ = [
     "ESResult",
     "FitnessFn",
     "SeedFitnessFn",
+    "derive_stream_seed",
     "evolve",
     "k_seed_mean",
+    "mutate_genome",
+    "random_genome",
 ]

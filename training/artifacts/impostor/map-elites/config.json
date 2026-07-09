@@ -1,0 +1,64 @@
+{
+  "anchor_weight": 1.0,
+  "axes": [
+    "kill_count",
+    "witness_exposure_rate",
+    "vent_usage"
+  ],
+  "edges": {
+    "kill_count": [
+      0.5,
+      1.5,
+      2.5,
+      3.5,
+      4.5
+    ],
+    "vent_usage": [
+      0.5,
+      2.5,
+      5.5
+    ],
+    "witness_exposure_rate": [
+      1e-09,
+      0.25,
+      0.5
+    ]
+  },
+  "encoder_version": "v2",
+  "entrant": "map-elites",
+  "fitness_seeds": [
+    1000,
+    1001,
+    1002,
+    1005
+  ],
+  "head": {
+    "kind_slots": [
+      "kill",
+      "vent",
+      "sabotage",
+      "do_task",
+      "report",
+      "repair_sabotage",
+      "wait"
+    ],
+    "rooms": [
+      "ADMIN",
+      "CAFETERIA",
+      "EAST_HALL",
+      "ENGINEERING",
+      "LABS",
+      "MEDBAY",
+      "REACTOR",
+      "STORAGE",
+      "UPPER_HALL",
+      "WEST_HALL"
+    ]
+  },
+  "hidden": 8,
+  "iterations": 120,
+  "random_inits": 5,
+  "seed": 0,
+  "sigma": 0.25,
+  "total_cells": 96
+}
