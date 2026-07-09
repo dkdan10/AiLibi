@@ -569,8 +569,9 @@ def _game_folds(
     When the table carries a committed split, returns the single (train ∪ val,
     test) pair it names — VALIDATED first (Codex review): the fit set
     ``(train ∪ val)`` and the test set must be DISJOINT, together they must
-    PARTITION every recorded game, and BOTH sides must be non-empty (an empty
-    test set scores nothing; an empty fit set would silently evaluate an
+    PARTITION every recorded game, and BOTH sides must carry at least one
+    scoreable meeting (an empty — or all-no-meeting — test side scores
+    nothing; an empty or all-no-meeting fit side would silently evaluate an
     untrained model). A 15.12 corpus mistake that put a seed on both sides
     would leak the same game's meetings into fitting and scoring — exactly the
     cross-meeting belief leak this by-game harness exists to prevent — so every
@@ -609,6 +610,25 @@ def _game_folds(
             raise ValueError(
                 "splits.json fit set (train ∪ val) is empty; the run would fit on "
                 "nothing and score an untrained model as if it were by-game CV"
+            )
+        # Seed-set membership is necessary but not sufficient (Codex review): the
+        # universe legitimately includes no-meeting games, so a side made ONLY of
+        # them is non-empty yet carries zero scoreable meetings — the run would
+        # return an all-zero report (test side) or fit([]) and score an untrained
+        # model (fit side) while looking like a valid held-out fidelity run.
+        scoreable = frozenset(row.seed for row in table.rows)
+        if not (test & scoreable):
+            raise ValueError(
+                f"splits.json test set {sorted(test)} has no scoreable meetings: "
+                "every test game ends before any meeting fires, so the run would "
+                "score nothing while reporting a valid-looking held-out run"
+            )
+        if not (train & scoreable):
+            raise ValueError(
+                f"splits.json fit set (train ∪ val) {sorted(train)} has no "
+                "scoreable meetings: every fit game ends before any meeting "
+                "fires, so the run would fit on no rows and score an untrained "
+                "model"
             )
         return [(train, test)]
     k = max(1, min(folds, len(seeds)))

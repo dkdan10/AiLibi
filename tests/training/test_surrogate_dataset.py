@@ -11,17 +11,29 @@ accumulator), and a committed ``splits.json`` is honoured.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from engine.actions import Action, DoTaskAction, MoveAction
+from engine.tick import advance_tick
+from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
-from meetings.schemas import ContradictionRef
+from meetings.schemas import AlibiClaim as SchemaAlibiClaim
+from meetings.schemas import (
+    CompletedTaskObservation,
+    ContradictionRef,
+    MeetingTranscript,
+    MeetingTurn,
+)
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
+from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
     MeetingTableReconstructionError,
     MeetingTableRow,
     _contradiction_lifts,
+    _WindowStats,
     build_meeting_table,
     load_splits,
 )
@@ -283,7 +295,9 @@ def test_duplicate_claim_flags_fold_to_one_rendered_lift() -> None:
             "c-2", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s2"
         ),
     ]
-    assert _contradiction_lifts(same_claim, living)["p-1"] == pytest.approx(0.08)
+    assert _contradiction_lifts(same_claim, living, transcript=None)[
+        "p-1"
+    ] == pytest.approx(0.08)
 
     distinct_claims = [
         _weak_flag(
@@ -293,7 +307,9 @@ def test_duplicate_claim_flags_fold_to_one_rendered_lift() -> None:
             "c-2", subject="p-1", alibi_claim_id="turn:t2:claim:1", sighting_id="s2"
         ),
     ]
-    assert _contradiction_lifts(distinct_claims, living)["p-1"] == pytest.approx(0.16)
+    assert _contradiction_lifts(distinct_claims, living, transcript=None)[
+        "p-1"
+    ] == pytest.approx(0.16)
 
     # Many distinct-claim flags cap at one strong flag's worth, never 1.0.
     stacked = [
@@ -305,6 +321,129 @@ def test_duplicate_claim_flags_fold_to_one_rendered_lift() -> None:
         )
         for i in range(6)
     ]
-    lifts = _contradiction_lifts(stacked, living)
+    lifts = _contradiction_lifts(stacked, living, transcript=None)
     assert lifts["p-1"] == pytest.approx(0.30)
     assert lifts["p-2"] == pytest.approx(0.0)  # unflagged candidate reads zero
+
+
+def test_self_refuted_alibi_flag_renders_the_weak_delta() -> None:
+    """The lift threads the transcript, so the 14.10 downgrade applies (Codex).
+
+    Production threads the meeting transcript into ``apply_contradiction_rule``
+    (``meetings/manager.py``), where a STRONG flag riding an alibi claim the
+    speaker disproved within their OWN turn (``self_refuted_alibi_claim_ids``)
+    contributes the WEAK 0.08 delta, not 0.30. The table-build lift must render
+    the same value or the ``contradiction_lift`` column, the reconstructed
+    suspicion, and the honest ceiling all overstate that scenario.
+    """
+
+    # One turn: p-1 states an alibi (CAFETERIA, ticks 5-14) beside their OWN
+    # completed_task observation at tick 9 in a contradictory room — the audited
+    # self-refuted shape (mirrors tests/agents/test_beliefs.py).
+    turn = MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            CompletedTaskObservation(
+                type="completed_task", tick=9, task_id="t-1", room="STORAGE"
+            ),
+        ),
+        claims=(
+            SchemaAlibiClaim(
+                type="alibi", subject="p-1", from_tick=5, to_tick=14, room="CAFETERIA"
+            ),
+        ),
+        free_text="I was in the cafeteria the whole time.",
+    )
+    transcript = MeetingTranscript(turns=(turn,))
+    strong_flag_on_self_alibi = ContradictionRef(
+        contradiction_id="c-1",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-1:turn-0:claim:0",
+        event_b_id="turn:m-1:turn-1:obs:0",
+        subjects=("p-1",),
+        description="alibi vs sighting",  # no weak marker: detector-STRONG
+    )
+
+    living = ["p-1", "p-2"]
+    with_transcript = _contradiction_lifts(
+        [strong_flag_on_self_alibi], living, transcript=transcript
+    )
+    assert with_transcript["p-1"] == pytest.approx(0.08)  # the production render
+    # Without the transcript no downgrade signal exists — the un-threaded 0.30
+    # is exactly the overstatement the fix removes.
+    without = _contradiction_lifts([strong_flag_on_self_alibi], living, transcript=None)
+    assert without["p-1"] == pytest.approx(0.30)
+
+
+def test_task_and_move_counts_derive_from_accepted_events() -> None:
+    """Cadence counters read ACCEPTED engine events, never submitted intents.
+
+    The committed corpora contain rejected ``do_task`` / ``move`` attempts (dead
+    actors, wrong rooms, unowned tasks); a rejected intent emits a rejection
+    event and no state change, so it must not count (Codex review). An accepted
+    move emits ``Moved`` and an accepted task tick ``TaskProgressed`` /
+    ``TaskCompleted`` — those do.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+
+    # A crewmate placed IN its task room: its do_task is accepted. Another
+    # crewmate NOT in some task's room submits that task: rejected.
+    crew_task = next(
+        task for task in state.tasks.values() if roles[task.owner] == "CREWMATE"
+    )
+    worker = crew_task.owner
+    players = dict(state.players)
+    players[worker] = replace(players[worker], room=crew_task.room)
+    rejected_actor = next(
+        task.owner
+        for task in state.tasks.values()
+        if task.owner != worker
+        and roles[task.owner] == "CREWMATE"
+        and players[task.owner].room != task.room
+    )
+    rejected_task = next(
+        task
+        for task in state.tasks.values()
+        if task.owner == rejected_actor and players[rejected_actor].room != task.room
+    )
+    # A third player moves: legally (adjacent room) — accepted.
+    mover = next(
+        pid for pid in sorted(state.players) if pid not in (worker, rejected_actor)
+    )
+    to_room = game_map.room_neighbors(players[mover].room)[0]
+    state = replace(state, players=players)
+
+    actions: list[Action] = [
+        DoTaskAction(
+            type="do_task",
+            actor=worker,
+            payload={"task_id": crew_task.map_task_id},  # type: ignore[arg-type]
+        ),
+        DoTaskAction(
+            type="do_task",
+            actor=rejected_actor,
+            payload={"task_id": rejected_task.map_task_id},  # type: ignore[arg-type]
+        ),
+        MoveAction(
+            type="move",
+            actor=mover,
+            payload={"to_room": to_room},  # type: ignore[arg-type]
+        ),
+    ]
+    next_state, events = advance_tick(state, actions, game_map=game_map)
+
+    stats = _WindowStats()
+    stats.absorb_tick(next_state, events, roles)
+    assert stats.task_submissions.get(worker, 0) == 1  # accepted task tick counts
+    assert rejected_actor not in stats.task_submissions  # rejected intent does not
+    assert stats.moves.get(mover, 0) == 1  # accepted move counts
+    assert worker not in stats.moves

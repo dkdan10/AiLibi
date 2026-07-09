@@ -73,6 +73,9 @@ from engine.entities import PlayerId, Role, RoomId
 from engine.events import (
     KilledEvent,
     MeetingTriggeredEvent,
+    MovedEvent,
+    TaskCompletedEvent,
+    TaskProgressedEvent,
     VentEnteredEvent,
     VentExitedEvent,
 )
@@ -85,7 +88,12 @@ from eval.validity import (
     seeds_on_disk,
 )
 from meetings.manager import extract_belief_evidence
-from meetings.schemas import ContradictionRef, MeetingOutcome, MeetingResult
+from meetings.schemas import (
+    ContradictionRef,
+    MeetingOutcome,
+    MeetingResult,
+    MeetingTranscript,
+)
 from meetings.transcript import MeetingTriggerKind, is_weak_contradiction
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
@@ -166,7 +174,10 @@ class CandidateFeatures(BaseModel):
     witnessed_kill: bool
     witnessed_vent: bool
     body_proximity: bool
-    # Cross-game cadence signals.
+    # Game-long cadence signals from ACCEPTED engine events (Codex review): one
+    # ``TaskProgressed``/``TaskCompleted`` per accepted task-work tick, one
+    # ``Moved`` per accepted room change — a rejected replay intent (dead actor,
+    # wrong room, unowned task) emits neither and never counts.
     task_submissions: int
     move_count: int
 
@@ -325,6 +336,8 @@ def _flag_counts(
 def _contradiction_lifts(
     contradictions: Sequence[ContradictionRef],
     living: Sequence[PlayerId],
+    *,
+    transcript: MeetingTranscript | None,
 ) -> dict[PlayerId, float]:
     """Per-candidate RENDERED contradiction lift for one meeting (Codex review).
 
@@ -337,11 +350,14 @@ def _contradiction_lifts(
     sums would double a duplicated weak flag (0.16 vs the rendered 0.08) and
     corrupt the ceiling's strict-argmax reachability.
 
-    ``env={}`` pins the default-OFF 14.10 evidence-quality lever regardless of
-    the process environment (the table must build byte-identically offline);
-    ``transcript`` is not threaded for the same reason — both levers only ever
-    TIGHTEN the lift, so this reads as the ceiling-appropriate upper bound of
-    the rendered value.
+    ``transcript`` is THIS meeting's recorded transcript, threaded exactly as the
+    production vote path threads it (``meetings/manager.py``): the Task-14.10
+    self-refuted-alibi downgrade — unconditional since the 14.12 close — reads
+    :func:`meetings.transcript.self_refuted_alibi_claim_ids` off it, so a strong
+    flag riding an alibi the speaker disproved within their own turn renders the
+    WEAK 0.08, never the full 0.30 the flag-kind alone would suggest (Codex
+    review; the ``eval.meeting_quality`` flag-mass fold threads it for the same
+    reason). Deterministic: a pure function of the committed transcript bytes.
     """
 
     if not contradictions:
@@ -349,7 +365,7 @@ def _contradiction_lifts(
     base = BeliefState()
     for pid in living:
         base.seed_player(pid, suspicion=0.0, trust=0.5)
-    lifted = apply_contradiction_rule(base, contradictions, env={})
+    lifted = apply_contradiction_rule(base, contradictions, transcript=transcript)
     return {pid: lifted.view(pid).suspicion for pid in living}
 
 
@@ -359,7 +375,12 @@ class _WindowStats:
     Sighting/kill-proximity/body-proximity reset each meeting (FO-6 "recent
     activity" parity); ``task_submissions`` / ``moves`` accumulate over the whole
     game (a player who has completed no tasks all game is a game-long cadence
-    signal).
+    signal). Both cadence counters derive from ACCEPTED engine events
+    (``TaskProgressed`` / ``TaskCompleted`` and ``Moved`` — Codex review), never
+    from submitted replay intents: the committed corpora contain REJECTED
+    ``do_task`` / ``move`` attempts (dead actors, wrong rooms, unowned tasks)
+    that produce a rejection event and no state change, so counting intents
+    would credit work that never happened.
 
     ``witnessed_kill`` / ``witnessed_vent`` are the EXACT role-proving eyewitness
     pins from ``KilledEvent`` / vent-event witnesses (Codex review), mapping a
@@ -382,16 +403,6 @@ class _WindowStats:
         self.moves: dict[PlayerId, int] = defaultdict(int)
         self._pending_kills: list[tuple[int, RoomId]] = []
 
-    def count_submissions(self, raw_actions: Sequence[Mapping[str, object]]) -> None:
-        for raw in raw_actions:
-            actor = raw.get("actor")
-            if not isinstance(actor, str):
-                continue
-            if raw.get("type") == "do_task":
-                self.task_submissions[actor] += 1
-            elif raw.get("type") == "move":
-                self.moves[actor] += 1
-
     def absorb_tick(
         self,
         state: WorldState,
@@ -409,7 +420,15 @@ class _WindowStats:
             else:
                 self.isolation[occupants[0]] += 1
         for event in events:
-            if isinstance(event, KilledEvent):
+            # Task cadence / movement from ACCEPTED events only (Codex review): a
+            # ``TaskProgressed`` / ``TaskCompleted`` is one accepted task-work tick
+            # (explicit submission or engine continuation), a ``Moved`` one accepted
+            # room change. A rejected intent emits neither, so it never counts.
+            if isinstance(event, (TaskProgressedEvent, TaskCompletedEvent)):
+                self.task_submissions[event.actor] += 1
+            elif isinstance(event, MovedEvent):
+                self.moves[event.actor] += 1
+            elif isinstance(event, KilledEvent):
                 self._pending_kills.append((event.tick, event.room))
                 # The EXACT witnessed-kill pin (Codex review): production stamps
                 # ``action="kill"`` for the killer's CREW witnesses, who each take
@@ -580,7 +599,6 @@ def _walk_game(
     meeting_index = 0
 
     for entry in tick_entries:
-        stats.count_submissions(entry.actions)
         actions = _deserialize_actions(entry.actions)
         state, events = advance_tick(state, actions, game_map=game_map)
         actual = _state_hash(state)
@@ -628,7 +646,9 @@ def _walk_game(
         voters = sorted(ballot.voter for ballot in result.ballots)
         living = tuple(voters)
         flags = _flag_counts(result.contradictions)
-        lifts = _contradiction_lifts(result.contradictions, living)
+        lifts = _contradiction_lifts(
+            result.contradictions, living, transcript=result.transcript
+        )
 
         by_voter = {ballot.voter: ballot for ballot in result.ballots}
         for voter in living:

@@ -157,6 +157,43 @@ def test_split_with_empty_fit_set_fails_loud() -> None:
         _game_folds(table, folds=5)
 
 
+def test_split_with_no_scoreable_test_meetings_fails_loud() -> None:
+    """A test side made ONLY of no-meeting games raises (nothing to score).
+
+    The split universe legitimately includes no-meeting games, so a malformed
+    15.12 split could put ALL of them (and nothing else) on the test side —
+    the single fold would be skipped and the harness would return
+    ``meetings_scored=0`` with all-zero metrics while looking like a valid
+    held-out run (Codex review).
+    """
+
+    base = build_meeting_table(_FOUR)
+    no_meeting = sorted(set(base.game_seeds()) - {row.seed for row in base.rows})
+    assert no_meeting, "4p1i is the fixture BECAUSE it has no-meeting games"
+    rest = [s for s in base.game_seeds() if s not in set(no_meeting)]
+    table = _with_splits(base, train=rest, val=[], test=no_meeting)
+    with pytest.raises(ValueError, match="test set .* no scoreable meetings"):
+        _game_folds(table, folds=5)
+
+
+def test_split_with_no_scoreable_fit_meetings_fails_loud() -> None:
+    """A fit side made ONLY of no-meeting games raises (fit([]) never scores).
+
+    A non-empty fit seed set of no-meeting games passes the emptiness check yet
+    carries zero train views, so the harness would ``fit([])`` and score an
+    effectively untrained model as if it were a valid held-out run (Codex
+    review); it must fail loud instead.
+    """
+
+    base = build_meeting_table(_FOUR)
+    no_meeting = sorted(set(base.game_seeds()) - {row.seed for row in base.rows})
+    assert no_meeting, "4p1i is the fixture BECAUSE it has no-meeting games"
+    rest = [s for s in base.game_seeds() if s not in set(no_meeting)]
+    table = _with_splits(base, train=no_meeting, val=[], test=rest)
+    with pytest.raises(ValueError, match="fit set .* no scoreable meetings"):
+        _game_folds(table, folds=5)
+
+
 def test_leaky_committed_split_fails_loud() -> None:
     """A split that puts a game in both the fit and test set raises (no silent leak).
 

@@ -58,14 +58,19 @@ suspicion" band §2.2 says the LLM votes on.
 Alongside it, per candidate: the **contradiction-flag structure** (`strong_flags` /
 `weak_flags` / `vent_flags` — the Task-15.4 `vent_sighting` role-proving flag in its
 own band — plus `contradiction_lift`, the meeting's RENDERED vote-time lift computed
-by the real `apply_contradiction_rule`: one delta per (subject, claim) group, capped
-at one strong flag's worth, so duplicate flags of one claim never stack),
+by the real `apply_contradiction_rule` with THIS meeting's recorded transcript
+threaded exactly as the production vote path threads it: one delta per (subject,
+claim) group, capped at one strong flag's worth, so duplicate flags of one claim
+never stack, and a strong flag riding a self-refuted alibi renders the WEAK 0.08 —
+the Task-14.10 downgrade, e.g. 9p2i seed 33 meeting 1),
 **sighting / co-presence** (`witnessed` / `isolation`), **kill-proximity**
 (`seen_at_kill` co-presence proxy), the **VOTER-LOCAL eyewitness pins** `witnessed_kill`
 (+1.0) and `witnessed_vent` (+0.5) read straight off `KilledEvent` / vent-event
 witnesses — exposed only to the row whose voter actually saw the act, never a
 bystander and never leaked to a non-witness voter — **body-proximity**, **reporter
-identity**, and **task-cadence / movement** (`task_submissions` / `move_count`). Roles
+identity**, and **task-cadence / movement** (`task_submissions` / `move_count`,
+counted from ACCEPTED `TaskProgressed`/`TaskCompleted` and `Moved` engine events —
+a rejected replay intent emits neither and never counts). Roles
 ground truth (`is_impostor` / `is_ejected`) comes from the tournament report — raw
 replays are role-free by firewall design — and is a **label**, never a predictive
 input.
@@ -98,9 +103,12 @@ number. Four channels, reported **together**, under **by-GAME cross-validation**
 (never by-meeting — a game's cross-meeting belief state would leak between train and
 test; the leakage test proves two meetings of one game never split across folds).
 When a set ships a committed `splits.json` the harness honours it (validated first —
-the fit and test seed sets must be disjoint and in the table, else it fails loud so a
-corpus mistake cannot silently leak a game across the fold); otherwise it derives K=5
-deterministic by-game folds.
+the fit and test seed sets must be disjoint, together partition EVERY recorded game
+(including no-meeting games), and each side must carry at least one scoreable
+meeting, else it fails loud so a corpus mistake cannot silently leak a game across
+the fold, drop a game from both sides, or score nothing / an untrained model while
+looking like a valid held-out run); otherwise it derives K=5 deterministic by-game
+folds.
 
 - **top-1 / top-2** ejected-target ranking (the continuous suspicion-rank signal).
 - **SKIP-vs-eject** decision accuracy (the decision FO-6 failed at).
