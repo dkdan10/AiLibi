@@ -238,11 +238,17 @@ def enumerate_options(
       here AND no non-teammate witness is co-present, and a one-step move to the
       alphabetically-first neighbor. These are ADDED to the menu (not returned):
       the ladder covers unconditionally, the scorer arbitrates cover-vs-hunt.
-    * ``kill_now`` / ``stalk_toward`` per scored target: kill iff cooldown is 0 and
-      the target is co-located THIS tick; stalk (one hop toward the sighting room)
-      iff cooldown is 0 and the target is in another known room. The ``_scored_targets``
-      score is IGNORED — the learned utility re-ranks via ``isolation`` /
-      ``witness_risk`` / ``path_hops_norm``.
+    * ``kill_now`` / ``stalk_toward`` per scored target: kill iff cooldown is 0,
+      the target is co-located THIS tick, and the FSM's coordination invariant
+      does not defer (``_defers_to_colocated_fellow`` — a lower-id co-located
+      fellow impostor takes the kill; an id-ordered INVARIANT the menu mirrors,
+      never a preference the scorer may override); stalk (one hop toward the
+      sighting room) iff cooldown is 0 and the target is in another known room.
+      The ``_scored_targets`` score is IGNORED — the learned utility re-ranks
+      via ``isolation`` / ``witness_risk`` / ``path_hops_norm``. The FSM's
+      witness gate (``co_present == 0``) is deliberately NOT mirrored: it is one
+      factor of the exact ranking this entrant replaces, so witnessed targets
+      stay on the menu with ``witness_risk`` carrying the signal.
     * ``sabotage`` iff the FSM's OWN trigger predicates hold (``_crew_near_task_win``
       AND ``_sabotage_window_open`` AND not ``_active_sabotage``) — the ``reactor``
       lever. The ladder's kill-available guard is arbitration, so it is dropped.
@@ -406,6 +412,17 @@ def enumerate_options(
 
     # KILL / STALK — over the FSM's scored targets, whose .score is ignored (the
     # learned utility re-ranks). Kill iff co-located THIS tick; stalk otherwise.
+    # The FSM's coordination INVARIANT is mirrored, its RANKING is not: when a
+    # lower-id fellow impostor is co-located this tick the FSM structurally
+    # never kills (``_defers_to_colocated_fellow`` — the two-impostors-one-tick
+    # tie-break, an id-ordered invariant, not a preference), so no ``kill_now``
+    # is generated; the witness gate (``best.co_present == 0``) is NOT mirrored
+    # — it is one factor of the ``isolation × (1 − witness_risk)`` ranking this
+    # entrant exists to replace, so witnessed targets stay on the menu with
+    # their ``witness_risk`` feature carrying the signal.
+    defers_to_fellow = ImpostorPolicy(agent_id=actor)._defers_to_colocated_fellow(
+        latest_events, own_room=own_room, fellow_impostor_ids=fellow_impostor_ids
+    )
     targets = ImpostorPolicy._scored_targets(
         events,
         cooldown=cooldown,
@@ -414,8 +431,12 @@ def enumerate_options(
         fellow_impostor_ids=fellow_impostor_ids,
     )
     for target in targets:
-        if cooldown == 0 and ImpostorPolicy._target_colocated_now(
-            latest_events, target_id=target.player_id, own_room=own_room
+        if (
+            cooldown == 0
+            and not defers_to_fellow
+            and ImpostorPolicy._target_colocated_now(
+                latest_events, target_id=target.player_id, own_room=own_room
+            )
         ):
             options.append(
                 ImpostorOption(

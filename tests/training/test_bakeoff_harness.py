@@ -450,3 +450,26 @@ def test_goodhart_surrogate_rerun_ci_budget() -> None:
 def test_masked_mlp_policy_is_bakeoff_policy() -> None:
     policy = policy_es.build_masked_mlp_policy(_forced_kill_genome(), hidden=8)
     assert isinstance(policy, BakeoffPolicy)
+
+
+# --------------------------------------------------------------------------- #
+# A filtered single-entrant rerun keeps the BC warm start (PR #242 review).     #
+# --------------------------------------------------------------------------- #
+
+
+def test_filtered_rerun_keeps_bc_warm_start() -> None:
+    # The CLI's `--entrant policy-es` path never runs the BC entrant's own
+    # train(); the warm-start closure must train the (deterministic) clone on
+    # demand instead of silently degrading to a random init (Codex review on
+    # PR #242).
+    from training.bakeoff.harness import _build_entrants
+
+    protocol = BakeoffProtocolConfig(eval_seeds=(1004,), surrogate_artifact_dir=None)
+    entrants = [
+        entrant
+        for entrant in _build_entrants("ci", protocol)
+        if entrant.name == "policy-es"
+    ]
+    assert len(entrants) == 1
+    candidate = entrants[0].train()
+    assert candidate.train_metadata["warm_start_used"] is True

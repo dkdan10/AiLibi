@@ -449,6 +449,38 @@ def test_menu_stalk_toward_target_in_other_room() -> None:
     assert "kill_now" not in {option.kind for option in options}
 
 
+def test_menu_kill_now_suppressed_by_lower_id_fellow_deferral() -> None:
+    # (d.3) The FSM's coordination INVARIANT is mirrored (Codex review on PR
+    # #242): a LOWER-id fellow impostor co-located this tick takes the kill, so
+    # no kill_now is generated for this impostor — while a HIGHER-id fellow in
+    # the same state leaves the kill on the menu (the invariant is id-ordered,
+    # not a witness preference).
+    def menu_with_fellow(fellow_id: str) -> set[str]:
+        packet = _packet(
+            tick=10,
+            room="CAFETERIA",
+            cooldown=0,
+            fellow_impostor_ids=(fellow_id,),
+            visible_players=(
+                PlayerView(id="victim", room="CAFETERIA", action=None),
+                PlayerView(id=fellow_id, room="CAFETERIA", action=None),
+            ),
+        )
+        memory = _memory(
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+            _saw_player_event(tick=10, player_id=fellow_id, room="CAFETERIA"),
+        )
+        return {
+            option.kind for option in enumerate_options(packet, _public_map(), memory)
+        }
+
+    # "a-fellow" < "imp" (the default actor id): the lower id acts, we defer.
+    assert "kill_now" not in menu_with_fellow("a-fellow")
+    # "z-fellow" > "imp": this impostor is the lower id, so the kill stays.
+    assert "kill_now" in menu_with_fellow("z-fellow")
+
+
 def test_menu_reposition_during_cooldown_toward_pending_task() -> None:
     # (e) Cooldown > 0 with a pending task in another room: reposition present,
     # no kill/stalk, wait present.
@@ -740,3 +772,49 @@ def test_frozen_candidate_is_byte_deterministic(tmp_path: Path) -> None:
     second = rollout_candidate(policy, 1004, output_dir=tmp_path / "b")
     assert first.state_hashes == second.state_hashes
     assert first.state_hashes  # a non-empty state-hash chain was actually rolled
+
+
+# --------------------------------------------------------------------------- #
+# 8. The vent-EXIT choice is learnable through the room head (PR #242 review).  #
+# --------------------------------------------------------------------------- #
+
+
+def test_policy_vent_exit_choice_is_learned_via_room_head() -> None:
+    # A vent candidate scores its kind slot PLUS the room slot of its vent's
+    # room, so an in-vent impostor's exit choice follows the learned room
+    # preference instead of the lexical vent-id tie (Codex review on PR #242).
+    from training.bakeoff.policy_es import MaskedMlpPolicy
+    from agents.tactical.features import mlp_genome_length
+
+    public_map = _public_map()
+    encoder = TacticalFeatureEncoder()
+    input_dim = encoder.feature_dimension(public_map)
+    rooms = sorted(public_map.room_ids)
+    output = len(rooms) + len(KIND_SLOTS)
+    length = mlp_genome_length(input_dim=input_dim, hidden=_HIDDEN, output=output)
+    b2_start = input_dim * _HIDDEN + _HIDDEN + _HIDDEN * output
+
+    def vent_choice(preferred_room: str) -> str:
+        genome = [0.0] * length
+        genome[b2_start + len(rooms) + KIND_SLOTS.index("vent")] = 10.0
+        genome[b2_start + rooms.index(preferred_room)] = 5.0
+        policy = MaskedMlpPolicy(
+            genome=genome,
+            public_map=public_map,
+            sabotage_kinds=("reactor",),
+            hidden=_HIDDEN,
+        )
+        packet = _packet(tick=5, room="ADMIN", in_vent=True, cooldown=3)
+        frame = policy.evaluate(
+            packet,
+            public_map,
+            AgentMemory(),
+            fsm_intent=WaitIntent(actor="imp", type="wait"),
+        )
+        assert isinstance(frame.intent, VentIntent)
+        return frame.intent.payload.vent_id
+
+    # From ADMIN_VENT every vent is submission-legal (current + two connected);
+    # the learned room preference — not the lexical vent id — picks the exit.
+    assert vent_choice("ELECTRICAL") == "ELECTRICAL_VENT"
+    assert vent_choice("MEDBAY") == "MEDBAY_VENT"

@@ -1394,18 +1394,28 @@ def _build_entrants(
     bc = BcDaggerEntrant(config=bc_budget(budget))
     bc_candidate_holder: list[TrainedCandidate] = []
 
+    def bc_candidate() -> TrainedCandidate:
+        # Train the BC clone AT MOST ONCE per _build_entrants call, no matter
+        # who asks first — the BC entrant's own train() or an ES/QD warm
+        # start. BC training is deterministic under its seeds, so on-demand
+        # training inside a `--entrant policy-es` / `--entrant map-elites`
+        # rerun reproduces the exact genome the full run warm-started from —
+        # a filtered rerun never silently drops the committed warm start
+        # (Codex review on PR #242).
+        if not bc_candidate_holder:
+            bc_candidate_holder.append(bc.train())
+        return bc_candidate_holder[0]
+
     class _WarmStartingBc:
-        """Train BC once; expose its genome to the ES/QD warm starts."""
+        """Train BC once (shared with the warm-start closure); emit its row."""
 
         name = bc.name
 
         def train(self) -> TrainedCandidate:
-            candidate = bc.train()
-            bc_candidate_holder.append(candidate)
-            return candidate
+            return bc_candidate()
 
     def bc_genome() -> tuple[float, ...] | None:
-        return bc_candidate_holder[0].weights if bc_candidate_holder else None
+        return bc_candidate().weights
 
     return [
         _WarmStartingBc(),

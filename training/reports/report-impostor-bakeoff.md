@@ -74,16 +74,21 @@
 
 | Entrant | Method | Genome | Budget (recorded) | Train wall-clock |
 |---|---|---|---|---|
-| `bc-dagger` | Behavior-clone `ImpostorPolicy.decide` on encoder-v2 features + DAgger | 1049 (encoder-v2 111 → tanh 8 → 17-slot masked head) | harvest 12 train seeds, 2 DAgger rounds × 6 seeds, 30 epochs, lr 0.2, from-scratch retrain per round | 7.8 s |
-| `utility-es` | Learned linear utility over the FSM's own option menu + (1+λ)-ES | 19 (18 option features + bias) | ES 20 gen × 12 pop × 6 train seeds, σ 0.3 (1446 games) | 202.9 s |
-| `policy-es` | Direct masked policy net (full masked intent space) + (1+λ)-ES, warm-started from the BC clone | 1049 (same family as BC) | ES 14 gen × 10 pop × 6 train seeds, σ 0.15 (846 games) | 119.6 s |
-| `map-elites` | MAP-Elites over three named 15.8 descriptors, competence as cell quality, warm-started from the BC clone | 1049 (same family) | 120 iterations + 6 inits × 4 train seeds (504 games) | 60.0 s |
+| `bc-dagger` | Behavior-clone `ImpostorPolicy.decide` on encoder-v2 features + DAgger | 1049 (encoder-v2 111 → tanh 8 → 17-slot masked head) | harvest 12 train seeds, 2 DAgger rounds × 6 seeds, 30 epochs, lr 0.2, from-scratch retrain per round | 9.2 s |
+| `utility-es` | Learned linear utility over the FSM's own option menu + (1+λ)-ES | 19 (18 option features + bias) | ES 20 gen × 12 pop × 6 train seeds, σ 0.3 (1446 games) | 219.6 s |
+| `policy-es` | Direct masked policy net (full masked intent space) + (1+λ)-ES, warm-started from the BC clone | 1049 (same family as BC) | ES 14 gen × 10 pop × 6 train seeds, σ 0.15 (846 games) | 147.9 s |
+| `map-elites` | MAP-Elites over three named 15.8 descriptors, competence as cell quality, warm-started from the BC clone | 1049 (same family) | 120 iterations + 6 inits × 4 train seeds (504 games) | 75.4 s |
 
 The crew side stayed the frozen scripted FSM throughout (no co-evolution this
 wave). The ES priors (σ, population shape, elitist (1+λ), K-seed averaging,
-BC warm-start) inherit the ml-spike's check-2/fo9 settings. Everything ran on
-CPU at $0; the whole `run --budget full` pass (train + eval, all four) took
-**7 m 18 s**.
+BC warm-start) inherit the ml-spike's check-2/fo9 settings. In the shared MLP
+family a vent candidate scores its kind slot plus the room slot of its vent's
+room, so the vent-EXIT choice is learned through the room head rather than a
+lexical vent-id tie; the utility menu mirrors the FSM's lower-id-fellow kill
+DEFERRAL as a hard invariant while leaving the witness gate to the learned
+ranking it replaces (both from the PR #242 review). Everything ran on CPU at
+$0; the whole `run --budget full` pass (train + eval, all four) took
+**8 m 28 s**.
 
 ---
 
@@ -98,22 +103,22 @@ the 15.13 ballot-predictor path — both reported, divergence is data.
 |---|---|---|---|---|
 | Validity gate | PASS | PASS | PASS | PASS |
 | Referee `referee_passed` | False | False | False | False |
-| Referee mean / median score | 1.04 / 0.30 | 8.89 / 3.70 | 14.89 / 17.30 | 9.95 / 14.60 |
+| Referee mean / median score | 1.02 / 0.20 | **14.62 / 16.80** | 6.32 / 3.70 | 6.13 / 3.70 |
 | Floor-trip rate | 0.00 | 0.00 | 0.00 | 0.00 |
-| Inner fitness (real path) | 6.57 | 18.22 | **18.96** | 15.40 |
-| Inner fitness (surrogate path) | 4.41 | **11.40** | 8.78 | 8.62 |
-| Surrogate − real divergence | −2.16 | −6.82 | −10.17 | −6.78 |
-| Anchor cross-entropy (ceiling 2.0) | 2.52 ⚠ FLAGGED | **1.04** | 1.51 | 1.94 |
-| Impostor win rate (reported, never gated) | 0.07 | 0.90 | **1.00** | 0.77 |
-| Take-rate (kills / clean opportunities) | 1.00 (254 opps) | 0.99 (238) | 1.00 (287) | 0.47 (286) |
+| Inner fitness (real path) | 5.17 | 18.67 | **19.07** | 18.20 |
+| Inner fitness (surrogate path) | 3.10 | **11.32** | 7.26 | 7.86 |
+| Surrogate − real divergence | −2.07 | −7.36 | −11.81 | −10.34 |
+| Anchor cross-entropy (ceiling 2.0) | 1.96 | **0.99** | 2.02 ⚠ FLAGGED | 1.97 |
+| Impostor win rate (reported, never gated) | 0.07 | **1.00** | **1.00** | 0.93 |
+| Take-rate (kills / clean opportunities) | 0.47 (281 opps) | 0.76 (232) | 0.76 (365) | 0.92 (304) |
 | Determinism (double-run) | PASS | PASS | PASS | PASS |
-| Leak test (own factory) | PASS (401 pkts) | PASS (379) | PASS (468) | PASS (458) |
-| Surrogate staleness uses (train / eval) | 0 / 46 | 0 / 72 | 0 / 98 | 0 / 75 |
-| Wall-clock train / eval (s) | 7.8 / 12.1 | 202.9 / 9.4 | 119.6 / 13.8 | 60.0 / 11.3 |
-| Weights sha256 (prefix) | `acb027eef97e` | `d93e0b9f6e20` | `f8d0ee59bbd6` | `8cc93f636ba0` |
+| Leak test (own factory) | PASS (381 pkts) | PASS (538) | PASS (541) | PASS (565) |
+| Surrogate staleness uses (train / eval) | 0 / 37 | 0 / 74 | 0 / 99 | 0 / 88 |
+| Wall-clock train / eval (s) | 9.2 / 12.1 | 219.6 / 10.2 | 147.9 / 16.7 | 75.4 / 15.6 |
+| Weights sha256 (prefix) | `ddb1e706ae1a` | `6d327dcbde94` | `561e5ff36478` | `b4469dec6f95` |
 
 Supply floors (baseline-3, 9p2i) on every candidate's eval set:
-`witnessed_event_rate` PASSES for all four (0.089–0.388 vs floor 0.032);
+`witnessed_event_rate` PASSES for all four (0.067–0.155 vs floor 0.032);
 `flags_per_meeting` (floor 1.863) and `testimony_backed_conversion` (floor
 0.607) FAIL for all four — under fake-provider meetings the meeting-driven
 evidence supply is structurally absent (no contradiction flags, no
@@ -131,46 +136,46 @@ through it.
 
 ## 4. The BC entrant vs its pre-stated bar — the encoder-sufficiency finding
 
-**Held-out top-1 intent agreement: 0.155 (794 held-out FSM decisions, VAL
+**Held-out top-1 intent agreement: 0.365 (794 held-out FSM decisions, VAL
 split) vs the pre-stated bar 0.90 — the bar is MISSED decisively**, so the
 encoder gaps are the finding (task contract). Per-kind confusion (from the
 committed row's `train_metadata.per_kind_agreement`):
 
 | FSM intent kind | decisions | clone agreement |
 |---|---|---|
-| vent | 77 | **0.831** |
-| kill | 65 | 0.277 |
-| move | 479 | **0.086** |
-| do_task | 97 | 0.000 |
+| kill | 65 | **0.708** |
+| vent | 77 | 0.545 |
+| move | 479 | 0.415 |
+| do_task | 97 | 0.031 |
 | wait | 61 | 0.000 |
 | sabotage | 15 | 0.000 |
 
 Named gaps, in order of mass:
 
-1. **`move` (60% of all FSM decisions, 8.6% cloned)** — the stalk/route
+1. **`move` (60% of all FSM decisions, 41.5% cloned)** — the stalk/route
    DIRECTION. The FSM's move is `find_path(own_room → best target's sighting
    room)[1]` — a function of the scored-target ranking plus A* topology.
-   Encoder v2 carries per-room last-seen occupancy and per-slot last-seen ages,
-   but NOT a "next-hop-toward-X" representation: a linear-in-features head over
-   room slots has to re-derive shortest-path routing from raw occupancy, which
-   a 1049-parameter tanh MLP does not learn at this budget. This is the same
-   history/structure gap the planning audit §6.3 named for the spike encoder —
-   v2 closes the memory HALF (the clone does rank the right REGION: vent
-   agreement is 0.83 because vent-exit choices are locally determined), not the
-   routing half.
-2. **`do_task` / `wait` (0%)** — the blend/hold discipline. Both are
+   Encoder v2 carries per-room last-seen occupancy and per-slot last-seen
+   ages, but NOT a "next-hop-toward-X" representation: a linear-in-features
+   head over room slots has to re-derive shortest-path routing from raw
+   occupancy, which a 1049-parameter tanh MLP learns only partially at this
+   budget. This is the same history/structure gap the planning audit §6.3
+   named for the spike encoder — v2 closes the memory HALF (the clone finds
+   the right ACTION kind: kill agreement is 0.71), not the routing half.
+2. **`do_task` / `wait` (3.1% / 0%)** — the blend/hold discipline. Both are
    low-salience "null" actions whose trigger is the ABSENCE of targets plus
-   task-room co-location; the softmax head systematically prefers a move slot.
-   A candidate-conditioned head (score the legal intent list, as the
-   utility-scorer does) rather than a fixed 17-slot head is the structural fix.
+   task-room co-location; the softmax head systematically prefers a move
+   slot. A candidate-conditioned head (score the legal intent list, as the
+   utility-scorer does) rather than a fixed 17-slot head is the structural
+   fix.
 3. **`sabotage` (15 decisions, 0%)** — pure class imbalance: 15 labels in a
-   1534-sample dataset cannot move a CE objective. The predicate is trivially
+   1612-sample dataset cannot move a CE objective. The predicate is trivially
    computable from `global_status` features the encoder already carries.
 
 Consistent with the spike's check-2 lesson (BC alone caps below FSM parity; ES
 climbs from it), the clone still functioned as the warm start: `policy-es`
-seeded from this genome opened at fitness 8.32 vs its random-init sibling's
-~0.5-level starts and reached 18.45 (`train_metadata.fitness_trace`).
+seeded from this genome opened at fitness 6.58 vs its random-init sibling's
+sub-1 starts and reached 18.96 (`train_metadata.fitness_trace`).
 
 ---
 
@@ -178,14 +183,15 @@ seeded from this genome opened at fitness 8.32 vs its random-init sibling's
 
 Archive: 6×4×4 = 96 cells over (`kill_count`, `witness_exposure_rate`,
 `vent_usage`) — three of the named 15.8 descriptors
-(`training.rollout.DESCRIPTOR_VECTOR_FIELDS`). **Coverage: 12/96 cells =
-0.125** after 126 evaluations (120 iterations + 6 seeds/inits at 4 train seeds
-each). Champion cell [5, 3, 0] (5+ kills, >0.5 witness exposure, no venting) at
-cell quality 16.36. Best-per-cell quality spans −1.51 (the 0-kill cell) to
-16.36; the archive's filled band is kill-count-dominated with almost no
-vent-usage spread (11 of 12 cells at vent bin 0) — the vent axis is the
-unexplored direction at this budget, and the one axis where the champion
-families differ most (see footprints).
+(`training.rollout.DESCRIPTOR_VECTOR_FIELDS`). **Coverage: 30/96 cells =
+0.3125** after 126 evaluations (120 iterations + 6 seeds/inits at 4 train
+seeds each). Champion cell [5, 0, 3] (5+ kills, zero witnessed exposure,
+heavy venting) at cell quality 18.86. Best-per-cell quality spans −2.61 (the
+0-kill corner) to 18.86, and the archive now spreads across the vent axis
+(16/5/2/7 cells in vent bins 0–3): making the vent-exit choice learnable
+through the room head (PR #242 review; §2) opened the axis that the
+pre-review archive left almost entirely unexplored — coverage more than
+doubled at the identical budget.
 
 Descriptor footprints (mean over the 30 eval seeds, from each row's
 `descriptor_footprint`) — the one-point comparison for the single-objective
@@ -193,17 +199,21 @@ entrants:
 
 | Entrant | kill_count | witness_exposure | vent_usage | meeting_count | do_task_emissions |
 |---|---|---|---|---|---|
-| bc-dagger | 2.43 | 0.17 | 0.0 | 2.07 | 86.0 |
-| utility-es | 4.87 | 0.10 | 3.53 | 3.27 | 70.6 |
-| policy-es | 5.00 | 0.17 | 47.0 | 4.33 | 81.9 |
-| map-elites (champion) | 4.63 | 0.40 | 0.0 | 3.70 | 101.1 |
+| bc-dagger | 1.93 | 0.12 | 0.0 | 1.47 | 85.4 |
+| utility-es | 5.00 | 0.14 | 4.7 | 3.37 | 72.8 |
+| policy-es | 5.00 | 0.07 | 20.3 | 4.43 | 76.9 |
+| map-elites (champion) | 4.87 | 0.08 | 22.3 | 4.10 | 74.8 |
 | scripted FSM (measured through the same protocol, §8) | 4.93 | 0.03 | 7.3 | 3.87 | 81.8 |
 
-The single-objective champions sit in three DIFFERENT cells of the same grid
-(policy-es: heavy-vent high-kill; utility-es: low-exposure high-kill;
-map-elites champion: high-exposure no-vent) — the diversity the QD framing
-predicted is real, but one archive at this budget did not dominate any single
-cell's quality over the specialists.
+The two direct-policy champions (policy-es and the map-elites champion)
+CONVERGE on the same low-exposure heavy-vent region of the grid (~20+ vent
+submissions/game vs the FSM's 7.3) — vent-heavy movement is what the shared
+fitness rewards once the vent choice is learnable — while utility-es reaches
+the same kill count at near-FSM vent usage (4.7) because its bounded menu
+only offers the vents the FSM ladder itself would generate. The archive's
+value is exactly this map: it shows the monoculture direction the
+single-objective optimizers pull toward and holds 29 other filled cells the
+pause can inspect.
 
 ---
 
@@ -279,34 +289,36 @@ divergence is unresolved (risk 1), and the finalist evaluation runs on the
 real-LLM path the pause owns.
 
 1. **`utility-es` — recommended first candidate for Wave-2 productization
-   consideration.** Within 4% of the best inner fitness (18.22 vs 18.96) with
-   the LOWEST anchor cross-entropy (1.04 — the most FSM-legible champion), the
-   best surrogate-path fitness (11.40 — most robust to the meeting-model swap),
-   a 19-weight interpretable genome, and a structural no-illegal-actions
-   guarantee (the menu is pinned by test). Its ceiling is the FSM's option
-   menu — it cannot discover an off-menu behavior.
+   consideration.** Within 2% of the best inner fitness (18.67 vs 19.07),
+   tied-best win rate (1.00), the LOWEST anchor cross-entropy (0.99 — the
+   most FSM-legible champion), the best referee geomean (14.62 mean / 16.80
+   median), the best surrogate-path fitness (11.32 — most robust to the
+   meeting-model swap), a 19-weight interpretable genome, and a structural
+   no-illegal/off-menu-actions guarantee (the menu is pinned by test, and the
+   FSM's kill-deferral coordination invariant is mirrored). Its ceiling is
+   the FSM's option menu — it cannot discover an off-menu behavior.
 2. **`policy-es` — the higher-ceiling path; carries the higher Goodhart-shaped
-   risk.** Best real-path fitness (18.96), best win rate (1.00), best referee
-   geomean (14.89), and the only entrant to EDGE PAST the scripted FSM on raw
-   shaped reward through the same protocol (20.47 vs the FSM's 20.33 —
-   FSM-parity crossed, barely). But it carries the LARGEST surrogate
-   divergence (−10.17) and a behavioral tell: 47.0 vent submissions/game vs
-   the FSM's 7.3, i.e. it leans on the vent channel the fake meeting path
+   risk.** Best real-path fitness (19.07) and the only entrant to EDGE PAST
+   the scripted FSM on raw shaped reward through the same protocol (21.10 vs
+   the FSM's 20.33 — FSM-parity crossed). But it is the one anchor-CE-FLAGGED
+   row (2.02 > the 2.0 ceiling, marginal), carries the LARGEST surrogate
+   divergence (−11.81), and shows the vent tell: 20.3 vent submissions/game
+   vs the FSM's 7.3 — it leans on the vent channel the fake meeting path
    never punishes. Treat its real-path numbers as upper bounds pending the
    pause's real-LLM eval.
-3. **`map-elites` — keep as the diversity instrument, not the champion
-   source.** Its champion trails the specialists (15.40), but the archive is
-   the only measured behavioral map (12/96 at this budget) and directly
-   counters the perfect-stealth monoculture concern; scale iterations before
+3. **`map-elites` — the diversity instrument, now within reach of the
+   specialists.** Champion at 18.20 (0.9 behind the best) and the only
+   measured behavioral map (30/96 cells); its champion converges on
+   policy-es's low-exposure heavy-vent region, which is itself the finding —
+   the archive names the monoculture direction. Scale iterations before
    judging QD's ceiling.
 4. **`bc-dagger` — a warm start and a measurement, not a candidate.** Missed
-   its 0.90 bar at 0.155 (§4); anchor-CE flagged (2.52 > 2.0). Its value was
-   proven as the ES seed (the BC-then-ES climb) and as the encoder-gap
-   finding.
+   its 0.90 bar at 0.365 (§4). Its value was proven as the ES seed (the
+   BC-then-ES climb from 6.58 to 18.96) and as the encoder-gap finding.
 
 **Open risks for the pause:**
 
-- **Surrogate/real divergence is large and one-signed** (−2.2 … −10.2 on every
+- **Surrogate/real divergence is large and one-signed** (−2.1 … −11.8 on every
   row): the surrogate path ejects learned aggression far more than the
   fake-provider path (§6 ejection rates). Until one of the two meeting models
   is validated against the real-LLM path, any champion ranking is
@@ -317,19 +329,27 @@ real-LLM path the pause owns.
   meaningful only on a meeting path that supplies evidence (surrogate §6, or
   real LLM); a Wave-2 selection that gates on `referee_passed` under fake
   meetings would select on noise.
-- **Take-rates near 1.0** (bc/utility/policy) are far above the scripted FSM's
-  — 0.55 measured through this protocol on the eval seeds (§8; the planning
-  audit §4.3 measured ≈0.48 on the committed corpus). More decisive play was
-  the objective, but a 100%-take impostor with rising witness exposure is the
-  shape the watchability floors exist to catch — re-check under the pause's
+- **Take-rates of 0.76–0.92** for the ES/QD champions sit well above the
+  scripted FSM's — 0.55 measured through this protocol on the eval seeds (§8;
+  the planning audit §4.3 measured ≈0.48 on the committed corpus). More
+  decisive play was the objective, but a high-take impostor is the shape the
+  watchability floors exist to catch — re-check under the pause's
   real-meeting referee, where the crew can actually convict.
 - **Anchor-CE ceiling (2.0) is this report's documented choice**, not an
-  audit-committed number. The pause should ratify or move it before Wave-2
-  uses it as anything stronger than a flag.
-- **Ranking stability:** utility-es and policy-es are 0.7 fitness apart on a
+  audit-committed number — and policy-es sits ON it (2.02, flagged). The
+  pause should ratify or move the ceiling before Wave-2 uses it as anything
+  stronger than a flag.
+- **Ranking stability:** utility-es and policy-es are 0.4 fitness apart on a
   30-seed set with per-game fitness variance far larger than that gap; the
   pause should not read rank 1 vs rank 2 as significant without the real-LLM
   re-score.
+- **Within-kind target ties in the direct-policy family** remain lexical
+  (several co-located kill targets; several bodies in one room — PR #242
+  review): every submission-legal intent stays reachable, but the policy
+  cannot yet express a preference inside those ties, and the FSM anchor
+  offers no supervision there (it only kills unwitnessed, where the candidate
+  is unique). If Wave-2 productizes the direct-policy path, widen the head
+  (e.g. per-roster-slot kill preferences) before scaling budgets.
 
 ---
 

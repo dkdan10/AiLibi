@@ -16,9 +16,12 @@ The head layout (:data:`KIND_SLOTS`) is one score per map room (a
 ``move-to-room`` slot; moving to the own room realizes as WAIT-in-place is NOT
 used — the explicit ``wait`` slot is) plus one score per intent KIND. At each
 impostor decision the legal-action mask (:func:`training.env.build_action_mask`)
-enumerates the submission-legal intents; each maps to its head slot; the argmax
-(score desc, canonical intent-key asc — the repo's lexical tie-break idiom)
-realizes the intent. The mask is computed with ``emergency_uses_remaining=0``:
+enumerates the submission-legal intents; each maps to its head slot — a VENT
+candidate additionally adds the room slot of its vent's room, so the vent-EXIT
+choice among connected vents is learned through the room head rather than a
+lexical vent-id tie (see :meth:`MaskedMlpPolicy._scored_candidates`) — and the
+argmax (score desc, canonical intent-key asc — the repo's lexical tie-break
+idiom) realizes the intent. The mask is computed with ``emergency_uses_remaining=0``:
 the emergency intent needs a stateful uses tracker that a pure
 :class:`~training.determinism.FramePolicy` cannot carry, and the scripted
 impostor FSM never calls emergencies, so the candidate vocabulary excludes it —
@@ -50,7 +53,7 @@ from agents.tactical.features import (
     mlp_genome_length,
 )
 from engine.world import Map, load_canonical_map
-from observation.action_intent import ActionIntent, MoveIntent
+from observation.action_intent import ActionIntent, MoveIntent, VentIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
@@ -199,7 +202,23 @@ class MaskedMlpPolicy:
         public_map: PublicMapView,
         logits: Sequence[float],
     ) -> list[tuple[ActionIntent, str, float]]:
-        """Every submission-legal intent with its key and head score."""
+        """Every submission-legal intent with its key and head score.
+
+        A vent candidate scores its kind slot PLUS the room slot of the vent's
+        room (`public_map.vent_rooms`): for an in-vent impostor the connected
+        exits differ exactly by destination room, so the room head — which
+        already means "prefer being in room X" — makes the vent-EXIT choice (a
+        named 15.15 option lever) learnable instead of a lexical vent-id tie.
+        For a vent ENTRY the vent's room is the impostor's own room, so the
+        addition is a shared state-dependent shift, not a tie-break. Remaining
+        same-kind ties — several co-located KILL targets, several bodies in one
+        room to REPORT — still share one slot and break lexically on the
+        canonical intent key: a documented expressiveness limit, not a
+        reachability one (every submission-legal intent stays emittable). The
+        FSM anchor offers no supervision inside those ties (it kills only at
+        ``co_present == 0``, where the legal kill candidate is unique), so
+        widening the head for them is deferred to the pause.
+        """
 
         mask = build_action_mask(
             packet,
@@ -212,7 +231,15 @@ class MaskedMlpPolicy:
             slot = head_slot_for_intent(intent, room_index=self._room_index)
             if slot is None:
                 continue
-            scored.append((intent, intent_key(intent), logits[slot]))
+            score = logits[slot]
+            if isinstance(intent, VentIntent):
+                vent_room = public_map.vent_rooms.get(intent.payload.vent_id)
+                room_slot = (
+                    self._room_index.get(vent_room) if vent_room is not None else None
+                )
+                if room_slot is not None:
+                    score += logits[room_slot]
+            scored.append((intent, intent_key(intent), score))
         return scored
 
     def _select(
