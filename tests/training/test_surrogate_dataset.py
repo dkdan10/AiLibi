@@ -1,0 +1,690 @@
+"""Tests for the meeting training table (Task 15.11).
+
+Pins on the committed baseline-3 bytes: the reconstructed table reproduces the
+sets' tournament-report meeting / ejection / ballot totals EXACTLY (every recorded
+ballot joins a feature row — 100% join rate), every feature derives offline, the
+table rebuilds byte-identically (determinism), the belief-fold suspicion is the
+neutral prior at the first meeting and diverges later (the cross-meeting
+accumulator), and a committed ``splits.json`` is honoured.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from agents.memory.beliefs import (
+    MEETING_SUSPICION_DECAY_RATE,
+    BeliefState,
+    apply_meeting_evidence_rules,
+)
+from engine.actions import Action, DoTaskAction, MoveAction
+from engine.entities import BodyState
+from engine.events import KilledEvent, VentEnteredEvent
+from engine.tick import advance_tick
+from engine.world import load_canonical_map
+from eval.validity import assemble_tournament_report
+from meetings.schemas import AlibiClaim as SchemaAlibiClaim
+from meetings.schemas import (
+    CompletedTaskObservation,
+    ContradictionRef,
+    MeetingTranscript,
+    MeetingTurn,
+)
+from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
+from orchestrator.seeder import seed_initial_state
+from training.surrogate.dataset import (
+    MeetingTableReconstructionError,
+    MeetingTableRow,
+    _contradiction_lifts,
+    _WindowStats,
+    build_meeting_table,
+    load_splits,
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+_FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+
+
+def _report_totals(sample_dir: Path) -> tuple[int, int, int, int]:
+    """``(meetings, ejections, skips, ballots)`` from the set's tournament report."""
+
+    report = assemble_tournament_report(sample_dir)
+    meetings = [m for g in report.games for m in g.meetings]
+    ejections = sum(1 for m in meetings if m.outcome == "EJECTED")
+    skips = sum(1 for m in meetings if m.outcome == "SKIPPED")
+    ballots = sum(len(m.ballots) for m in meetings)
+    return len(meetings), ejections, skips, ballots
+
+
+@pytest.mark.parametrize("sample_dir", [_NINE, _FOUR])
+def test_table_counts_reproduce_the_committed_report(sample_dir: Path) -> None:
+    """Meeting / ejection / ballot totals match the set's assembled report exactly.
+
+    Derived from the report, not hard-coded — the sets are baseline 3 by this
+    task's dependency order. The table's aggregates AND its actual row set both
+    reproduce the report; a drift in either fails here.
+    """
+
+    meetings, ejections, skips, ballots = _report_totals(sample_dir)
+    table = build_meeting_table(sample_dir)
+
+    assert table.meetings_total == meetings
+    assert table.ejections_total == ejections
+    assert table.skips_total == skips
+    assert table.ballots_total == ballots
+    assert table.games_total == len(table.game_seeds())
+    # The reconstructed row set reproduces the same counts, independently.
+    assert len({(r.seed, r.meeting_id) for r in table.rows}) == meetings
+    ejected_meetings = {
+        (r.seed, r.meeting_id) for r in table.rows if r.outcome == "EJECTED"
+    }
+    skipped_meetings = {
+        (r.seed, r.meeting_id) for r in table.rows if r.outcome == "SKIPPED"
+    }
+    assert len(ejected_meetings) == ejections
+    assert len(skipped_meetings) == skips
+
+
+@pytest.mark.parametrize("sample_dir", [_NINE, _FOUR])
+def test_every_recorded_ballot_joins_a_row(sample_dir: Path) -> None:
+    """100% join rate: one (meeting, voter) row per recorded ballot (asserted)."""
+
+    _, _, _, ballots = _report_totals(sample_dir)
+    table = build_meeting_table(sample_dir)
+
+    assert len(table.rows) == ballots == table.ballots_total
+    # Each row carries its voter's actual ballot and the full living candidate set.
+    for row in table.rows:
+        assert row.voter in {c.candidate for c in row.candidates}
+        assert row.ballot_target == "SKIP" or isinstance(row.ballot_target, str)
+        assert 0.0 <= row.ballot_confidence <= 1.0
+
+
+@pytest.mark.parametrize("sample_dir", [_NINE, _FOUR])
+def test_table_is_byte_deterministic(sample_dir: Path) -> None:
+    """Rebuilding the table twice is byte-identical (the determinism pin)."""
+
+    first = build_meeting_table(sample_dir).model_dump_json()
+    second = build_meeting_table(sample_dir).model_dump_json()
+    assert first == second
+
+
+def test_belief_fold_is_neutral_at_first_meeting_and_diverges_later() -> None:
+    """The pre-meeting belief row starts neutral except for perception pins.
+
+    At meeting index 0 no prior meeting evidence has folded, so a candidate the
+    voter holds NO perception pin about reads the neutral 0.5 prior — while a
+    pinned candidate (witnessed kill/vent, Rule-1 body proximity) reads ABOVE it,
+    exactly as production's perception-time ingest leaves the graph. By a later
+    meeting the cross-meeting accumulator has moved some candidate off 0.5 — the
+    signal FO-6's six raw counts never carried.
+    """
+
+    table = build_meeting_table(_NINE)
+    first_meeting = [r for r in table.rows if r.meeting_index == 0]
+    assert first_meeting, "expected at least one first-meeting row on 9p2i"
+    for row in first_meeting:
+        for cand in row.candidates:
+            assert cand.belief_trust == pytest.approx(0.5)
+            if cand.witnessed_kill or cand.witnessed_vent or cand.body_proximity:
+                assert cand.belief_suspicion > 0.5  # the ingested perception pin
+            else:
+                assert cand.belief_suspicion == pytest.approx(0.5)
+
+    later = [
+        cand
+        for row in table.rows
+        if row.meeting_index >= 1
+        for cand in row.candidates
+        if not cand.is_self
+    ]
+    assert any(abs(c.belief_suspicion - 0.5) > 1e-9 for c in later), (
+        "expected the cross-meeting belief accumulator to diverge from the prior"
+    )
+
+
+def test_vent_flags_are_counted_in_their_own_band() -> None:
+    """The Task-15.4 ``vent_sighting`` flag is a first-class column (baseline 3).
+
+    Baseline 3 is the first set recorded with grounded vent flags; at least one
+    candidate carries a ``vent_flags`` count, and it is never folded into the
+    ``strong_flags`` / ``weak_flags`` bands.
+    """
+
+    table = build_meeting_table(_NINE)
+    vent_rows = [c for row in table.rows for c in row.candidates if c.vent_flags > 0]
+    assert vent_rows, "baseline 3 9p2i should carry at least one vent_sighting flag"
+
+
+def test_witnessed_kill_marks_the_killer_not_a_bystander() -> None:
+    """The witnessed-kill pin reads ``KilledEvent.witnesses`` + actor, not a proxy.
+
+    Every candidate flagged ``witnessed_kill`` must be an IMPOSTOR — only impostors
+    kill, so the event-derived pin marks the killer (``event.actor``), never a
+    co-present bystander. Baseline 3 9p2i carries crew-witnessed kills, so the
+    column is non-empty (the +1.0 role-proving pin the belief store folds).
+    """
+
+    table = build_meeting_table(_NINE)
+    witnessed = [
+        cand for row in table.rows for cand in row.candidates if cand.witnessed_kill
+    ]
+    assert witnessed, "baseline 3 9p2i should carry at least one crew-witnessed kill"
+    assert all(cand.is_impostor for cand in witnessed), (
+        "witnessed_kill must mark the killer (an impostor), never a bystander"
+    )
+
+
+def test_witnessed_vent_marks_the_venter_from_events() -> None:
+    """The witnessed-vent pin is the venter, derived from vent-event witnesses.
+
+    A crew member who saw a vent takes the +0.5 role-proving pin even when no
+    grounded ``vent_sighting`` contradiction is spoken; every ``witnessed_vent``
+    candidate is an IMPOSTOR (vents are impostor-only), so the event-derived pin
+    marks the venter, not a bystander.
+    """
+
+    table = build_meeting_table(_NINE)
+    vented = [
+        cand for row in table.rows for cand in row.candidates if cand.witnessed_vent
+    ]
+    assert vented, "baseline 3 9p2i should carry at least one crew-witnessed vent"
+    assert all(cand.is_impostor for cand in vented), (
+        "witnessed_vent must mark the venter (an impostor)"
+    )
+
+
+def test_eyewitness_pins_are_voter_local() -> None:
+    """A witnessed-kill/vent pin appears only in the WITNESSING voter's row.
+
+    Production stamps the act only for its witnesses, so the +1.0 / +0.5 pin must
+    not leak to a co-meeting voter who did not see it. Proven by finding a candidate
+    whose pin is True in one voter's row and False in another's, at the same meeting.
+    """
+
+    table = build_meeting_table(_NINE)
+    by_meeting: dict[tuple[int, str], list[MeetingTableRow]] = {}
+    for row in table.rows:
+        by_meeting.setdefault((row.seed, row.meeting_id), []).append(row)
+
+    found_local = False
+    for rows in by_meeting.values():
+        for name in ("witnessed_kill", "witnessed_vent", "body_proximity"):
+            per_candidate: dict[str, set[bool]] = {}
+            for row in rows:
+                for cand in row.candidates:
+                    per_candidate.setdefault(cand.candidate, set()).add(
+                        bool(getattr(cand, name))
+                    )
+            if any(values == {True, False} for values in per_candidate.values()):
+                found_local = True
+    assert found_local, (
+        "expected at least one eyewitness pin that some voters hold and others do "
+        "not (voter-local), never a global flag shared by every voter"
+    )
+
+
+def test_self_candidate_reads_the_neutral_prior() -> None:
+    """A voter's own candidate row is never a held belief (the own-id exclusion)."""
+
+    table = build_meeting_table(_FOUR)
+    self_cands = [c for row in table.rows for c in row.candidates if c.is_self]
+    assert self_cands
+    for cand in self_cands:
+        assert cand.belief_suspicion == pytest.approx(0.5)
+
+
+def test_splits_json_is_honoured_when_present(tmp_path: Path) -> None:
+    """A committed ``splits.json`` is read into the table (the 15.12 seam)."""
+
+    # No committed splits on the baseline sets.
+    assert load_splits(_FOUR) is None
+
+    # A staged split file is parsed and attached; the builder reads it via
+    # ``splits_path`` without needing it inside the (read-only) replay dir.
+    splits_file = tmp_path / "splits.json"
+    splits_file.write_text(json.dumps({"train": [0, 1, 2], "val": [3], "test": [4, 5]}))
+    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    assert table.splits is not None
+    assert table.splits.train == (0, 1, 2)
+    assert table.splits.val == (3,)
+    assert table.splits.test == (4, 5)
+
+
+def test_malformed_splits_fails_loud(tmp_path: Path) -> None:
+    """A malformed ``splits.json`` raises rather than silently being ignored."""
+
+    bad = tmp_path / "splits.json"
+    bad.write_text(json.dumps({"train": "not-a-list"}))
+    with pytest.raises((ValueError, MeetingTableReconstructionError)):
+        load_splits(tmp_path)
+
+
+def test_missing_directory_fails_loud(tmp_path: Path) -> None:
+    """An absent replay-set directory raises (no silent empty table)."""
+
+    with pytest.raises(NotADirectoryError):
+        build_meeting_table(tmp_path / "does-not-exist")
+
+
+def _weak_flag(
+    flag_id: str, *, subject: str, alibi_claim_id: str, sighting_id: str
+) -> ContradictionRef:
+    """A weak ``alibi_vs_sighting`` flag riding one underlying alibi claim."""
+
+    return ContradictionRef(
+        contradiction_id=flag_id,
+        kind="alibi_vs_sighting",
+        event_a_id=alibi_claim_id,
+        event_b_id=sighting_id,
+        subjects=(subject,),
+        description=(
+            f"{WEAK_CONTRADICTION_MARKER_PREFIX}self-stated alibi] alibi vs sighting"
+        ),
+    )
+
+
+def test_duplicate_claim_flags_fold_to_one_rendered_lift() -> None:
+    """``contradiction_lift`` carries the production dedup + cap, not raw sums.
+
+    ``apply_contradiction_rule`` takes ONE delta per (subject, alibi-claim) lift
+    group: one alibi paired against N sightings is N flags but a single +0.08.
+    Two flags on DIFFERENT claims still accumulate, and the per-meeting total is
+    capped at one strong flag's worth (0.30) — the exact vote-time semantics the
+    honest ceiling must read (a raw count sum would report 0.16 / 0.60 here).
+    """
+
+    living = ["p-1", "p-2"]
+    same_claim = [
+        _weak_flag(
+            "c-1", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s1"
+        ),
+        _weak_flag(
+            "c-2", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s2"
+        ),
+    ]
+    assert _contradiction_lifts(same_claim, living, transcript=None)[
+        "p-1"
+    ] == pytest.approx(0.08)
+
+    distinct_claims = [
+        _weak_flag(
+            "c-1", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s1"
+        ),
+        _weak_flag(
+            "c-2", subject="p-1", alibi_claim_id="turn:t2:claim:1", sighting_id="s2"
+        ),
+    ]
+    assert _contradiction_lifts(distinct_claims, living, transcript=None)[
+        "p-1"
+    ] == pytest.approx(0.16)
+
+    # Many distinct-claim flags cap at one strong flag's worth, never 1.0.
+    stacked = [
+        _weak_flag(
+            f"c-{i}",
+            subject="p-1",
+            alibi_claim_id=f"turn:t{i}:claim:{i}",
+            sighting_id=f"s{i}",
+        )
+        for i in range(6)
+    ]
+    lifts = _contradiction_lifts(stacked, living, transcript=None)
+    assert lifts["p-1"] == pytest.approx(0.30)
+    assert lifts["p-2"] == pytest.approx(0.0)  # unflagged candidate reads zero
+
+
+def test_self_refuted_alibi_flag_renders_the_weak_delta() -> None:
+    """The lift threads the transcript, so the 14.10 downgrade applies (Codex).
+
+    Production threads the meeting transcript into ``apply_contradiction_rule``
+    (``meetings/manager.py``), where a STRONG flag riding an alibi claim the
+    speaker disproved within their OWN turn (``self_refuted_alibi_claim_ids``)
+    contributes the WEAK 0.08 delta, not 0.30. The table-build lift must render
+    the same value or the ``contradiction_lift`` column, the reconstructed
+    suspicion, and the honest ceiling all overstate that scenario.
+    """
+
+    # One turn: p-1 states an alibi (CAFETERIA, ticks 5-14) beside their OWN
+    # completed_task observation at tick 9 in a contradictory room — the audited
+    # self-refuted shape (mirrors tests/agents/test_beliefs.py).
+    turn = MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            CompletedTaskObservation(
+                type="completed_task", tick=9, task_id="t-1", room="STORAGE"
+            ),
+        ),
+        claims=(
+            SchemaAlibiClaim(
+                type="alibi", subject="p-1", from_tick=5, to_tick=14, room="CAFETERIA"
+            ),
+        ),
+        free_text="I was in the cafeteria the whole time.",
+    )
+    transcript = MeetingTranscript(turns=(turn,))
+    strong_flag_on_self_alibi = ContradictionRef(
+        contradiction_id="c-1",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-1:turn-0:claim:0",
+        event_b_id="turn:m-1:turn-1:obs:0",
+        subjects=("p-1",),
+        description="alibi vs sighting",  # no weak marker: detector-STRONG
+    )
+
+    living = ["p-1", "p-2"]
+    with_transcript = _contradiction_lifts(
+        [strong_flag_on_self_alibi], living, transcript=transcript
+    )
+    assert with_transcript["p-1"] == pytest.approx(0.08)  # the production render
+    # Without the transcript no downgrade signal exists — the un-threaded 0.30
+    # is exactly the overstatement the fix removes.
+    without = _contradiction_lifts([strong_flag_on_self_alibi], living, transcript=None)
+    assert without["p-1"] == pytest.approx(0.30)
+
+
+def test_task_and_move_counts_derive_from_accepted_events() -> None:
+    """Cadence counters read ACCEPTED engine events, never submitted intents.
+
+    The committed corpora contain rejected ``do_task`` / ``move`` attempts (dead
+    actors, wrong rooms, unowned tasks); a rejected intent emits a rejection
+    event and no state change, so it must not count (Codex review). An accepted
+    move emits ``Moved`` and an accepted task tick ``TaskProgressed`` /
+    ``TaskCompleted`` — those do.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+
+    # A crewmate placed IN its task room: its do_task is accepted. Another
+    # crewmate NOT in some task's room submits that task: rejected.
+    crew_task = next(
+        task for task in state.tasks.values() if roles[task.owner] == "CREWMATE"
+    )
+    worker = crew_task.owner
+    players = dict(state.players)
+    players[worker] = replace(players[worker], room=crew_task.room)
+    rejected_actor = next(
+        task.owner
+        for task in state.tasks.values()
+        if task.owner != worker
+        and roles[task.owner] == "CREWMATE"
+        and players[task.owner].room != task.room
+    )
+    rejected_task = next(
+        task
+        for task in state.tasks.values()
+        if task.owner == rejected_actor and players[rejected_actor].room != task.room
+    )
+    # A third player moves: legally (adjacent room) — accepted.
+    mover = next(
+        pid for pid in sorted(state.players) if pid not in (worker, rejected_actor)
+    )
+    to_room = game_map.room_neighbors(players[mover].room)[0]
+    state = replace(state, players=players)
+
+    actions: list[Action] = [
+        DoTaskAction(
+            type="do_task",
+            actor=worker,
+            payload={"task_id": crew_task.map_task_id},  # type: ignore[arg-type]
+        ),
+        DoTaskAction(
+            type="do_task",
+            actor=rejected_actor,
+            payload={"task_id": rejected_task.map_task_id},  # type: ignore[arg-type]
+        ),
+        MoveAction(
+            type="move",
+            actor=mover,
+            payload={"to_room": to_room},  # type: ignore[arg-type]
+        ),
+    ]
+    next_state, events = advance_tick(state, actions, game_map=game_map)
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    stats.absorb_tick(next_state, events, roles, beliefs=beliefs)
+    assert stats.task_submissions.get(worker, 0) == 1  # accepted task tick counts
+    assert rejected_actor not in stats.task_submissions  # rejected intent does not
+    assert stats.moves.get(mover, 0) == 1  # accepted move counts
+    assert worker not in stats.moves
+
+
+def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> None:
+    """The Rule-1 pin is voter-local first-sighting evidence (Codex review).
+
+    Production fires the +0.2 bump only in the DISCOVERING agent's own beliefs,
+    and only for players that agent itself observed in the body's room within the
+    prior window — never for whoever stands in the corpse's room at discovery.
+    Scenario: A and C share room R at tick 1; by tick 2 C has left, D has walked
+    in, and V's body lies in R. A (first sighting, saw C in R at tick 1) pins C —
+    and only in A's view. D (arrived with the body, no prior sightings of R) pins
+    nobody despite standing in the corpse's room, and C (elsewhere) never saw the
+    body at all.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    observer_a, leaver_c, latecomer_d = crew
+    victim_v = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    room_r = state.players[observer_a].room
+    room_s = game_map.room_neighbors(room_r)[0]
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+
+    # Tick 1: A and C co-present in R; D and V away in S. No body yet.
+    players_t1 = dict(state.players)
+    players_t1[leaver_c] = replace(players_t1[leaver_c], room=room_r)
+    players_t1[latecomer_d] = replace(players_t1[latecomer_d], room=room_s)
+    players_t1[victim_v] = replace(players_t1[victim_v], room=room_s)
+    state_t1 = replace(state, tick=1, players=players_t1)
+    stats.absorb_tick(state_t1, [], roles, beliefs=beliefs)
+
+    # Tick 2: C left to S, D walked into R, V's body lies undiscovered in R.
+    players_t2 = dict(players_t1)
+    players_t2[leaver_c] = replace(players_t2[leaver_c], room=room_s)
+    players_t2[latecomer_d] = replace(players_t2[latecomer_d], room=room_r)
+    players_t2[victim_v] = replace(players_t2[victim_v], alive=False, room=room_r)
+    body = BodyState(
+        id="body-test",
+        player_id=victim_v,
+        room=room_r,
+        position=(0.0, 0.0),
+        killed_by=victim_v,
+        discovered_by=None,
+    )
+    state_t2 = replace(state, tick=2, players=players_t2, bodies={body.id: body})
+    stats.absorb_tick(state_t2, [], roles, beliefs=beliefs)
+
+    # C is pinned, but ONLY in A's view (A saw C in R shortly before discovery).
+    assert stats.body_proximity.get(leaver_c) == {observer_a}
+    # D stands in the corpse's room at discovery yet is NOT pinned (nobody
+    # observed D in R within the pre-discovery window), and pins nothing.
+    assert latecomer_d not in stats.body_proximity
+    # The victim is never a suspect of its own body.
+    assert victim_v not in stats.body_proximity
+    # The +0.2 ingested into the OBSERVER's own belief row at perception —
+    # production's Rule-1 stamp — and nobody else's.
+    assert beliefs[observer_a].view(leaver_c).suspicion == pytest.approx(0.7)
+    assert beliefs[latecomer_d].view(leaver_c).suspicion == pytest.approx(0.5)
+    assert beliefs[leaver_c].view(latecomer_d).suspicion == pytest.approx(0.5)
+
+
+def test_teammate_vent_witness_takes_the_production_pin() -> None:
+    """An impostor witnessing a TEAMMATE's vent takes the +0.5 pin (Codex review).
+
+    Production's vent rule carries NO fellow-impostor guard (unlike the kill
+    rule's §4.7 guard): `apply_observation_rules` applies `VENTING_SUSPICION_DELTA`
+    for every witness of the vent stamp. Filtering vent witnesses to crew would
+    drop those real belief updates from impostor voters' pre-meeting rows.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=9, num_impostors=2, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    venter, teammate = sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew_witness = sorted(pid for pid, role in roles.items() if role == "CREWMATE")[0]
+    room = state.players[venter].room
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    vent = VentEnteredEvent(
+        type="VentEntered",
+        tick=1,
+        actor=venter,
+        vent_id="v-1",
+        room=room,
+        source_vent_id="v-1",
+        destination_vent_id="v-2",
+        source_room=room,
+        destination_room=room,
+        traversal_ticks=1,
+        witnesses=(teammate, crew_witness),
+        source_witnesses=(teammate, crew_witness),
+        destination_witnesses=(),
+    )
+    stats.absorb_tick(state, [vent], roles, beliefs=beliefs)
+
+    assert stats.witnessed_vent[venter] == {teammate, crew_witness}
+    # Both witnesses' OWN rows take the production +0.5 (0.5 -> 1.0).
+    assert beliefs[teammate].view(venter).suspicion == pytest.approx(1.0)
+    assert beliefs[crew_witness].view(venter).suspicion == pytest.approx(1.0)
+    # Non-witnesses take nothing (voter-local).
+    non_witness = sorted(pid for pid, role in roles.items() if role == "CREWMATE")[1]
+    assert beliefs[non_witness].view(venter).suspicion == pytest.approx(0.5)
+
+
+def test_vent_stamp_feeds_the_body_proximity_window() -> None:
+    """A witnessed vent's ``saw_player`` stamp feeds Rule-1 co-presence (Codex).
+
+    Production records witness-gated kill/vent action stamps as ``saw_player``
+    rows even when the actor is not currently visible — a venting actor is
+    hidden in the vent — and ``_recent_co_presence`` reads those rows. So a
+    voter who saw a player vent in a room must still pin that player when a
+    body is first seen there within the window.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    venter = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    witness, victim, other = crew
+    room_r = state.players[witness].room
+    room_s = game_map.room_neighbors(room_r)[0]
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+
+    # Tick 1: the venter vents in R, witnessed by `witness` — but the venter is
+    # IN THE VENT at absorb time, so it is absent from visible_player_ids and
+    # only the event stamp can record the sighting.
+    players_t1 = dict(state.players)
+    players_t1[venter] = replace(players_t1[venter], room=room_r, in_vent=True)
+    players_t1[victim] = replace(players_t1[victim], room=room_s)
+    players_t1[other] = replace(players_t1[other], room=room_s)
+    state_t1 = replace(state, tick=1, players=players_t1)
+    vent = VentEnteredEvent(
+        type="VentEntered",
+        tick=1,
+        actor=venter,
+        vent_id="v-1",
+        room=room_r,
+        source_vent_id="v-1",
+        destination_vent_id="v-2",
+        source_room=room_r,
+        destination_room=room_s,
+        traversal_ticks=1,
+        witnesses=(witness,),
+        source_witnesses=(witness,),
+        destination_witnesses=(),
+    )
+    stats.absorb_tick(state_t1, [vent], roles, beliefs=beliefs)
+
+    # Tick 2: the victim's body lies in R; `witness` first-sights it. The venter
+    # must be co-present via the tick-1 vent stamp and take the Rule-1 pin.
+    players_t2 = dict(players_t1)
+    players_t2[victim] = replace(players_t2[victim], alive=False, room=room_r)
+    body = BodyState(
+        id="body-vent-test",
+        player_id=victim,
+        room=room_r,
+        position=(0.0, 0.0),
+        killed_by=venter,
+        discovered_by=None,
+    )
+    state_t2 = replace(state, tick=2, players=players_t2, bodies={body.id: body})
+    stats.absorb_tick(state_t2, [], roles, beliefs=beliefs)
+
+    assert witness in stats.body_proximity.get(venter, set())
+
+
+def test_perception_pins_decay_through_the_real_fold() -> None:
+    """A pin ingested at perception decays at unreinforced meeting folds (Codex).
+
+    Production's Rule 5 drifts an already-known row toward the 0.5 prior by
+    ``MEETING_SUSPICION_DECAY_RATE`` per meeting that produced no new evidence
+    about the subject. Because the walk ingests the witnessed-kill +1.0 into the
+    witness's ``BeliefState`` at event time and runs the REAL fold per meeting,
+    a stale pin reads its decayed value in later rows — never the full +1.0
+    re-applied.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    killer = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    witness, victim = crew[0], crew[1]
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    kill = KilledEvent(
+        type="Killed",
+        tick=1,
+        actor=killer,
+        target=victim,
+        room=state.players[killer].room,
+        witnesses=(witness,),
+    )
+    stats.absorb_tick(state, [kill], roles, beliefs=beliefs)
+    assert beliefs[witness].view(killer).suspicion == pytest.approx(1.0)
+    assert witness in stats.witnessed_kill[killer]
+
+    # One meeting with NO evidence about the killer: the real fold decays the
+    # pinned row toward 0.5 — 1.0 -> 0.875 at the 0.25 rate.
+    beliefs[witness] = apply_meeting_evidence_rules(
+        beliefs[witness],
+        own_id=witness,
+        accused=(),
+        roster=frozenset(state.players),
+    )
+    expected = 0.5 + (1.0 - 0.5) * (1.0 - MEETING_SUSPICION_DECAY_RATE)
+    assert beliefs[witness].view(killer).suspicion == pytest.approx(expected)
+    # The FLAG persists (the voter once held first-hand evidence) — the decayed
+    # MAGNITUDE lives in the belief row, never re-applied at full strength.
+    assert witness in stats.witnessed_kill[killer]

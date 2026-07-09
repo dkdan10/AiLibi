@@ -1,5 +1,18 @@
 # ML Feasibility Spike — Results
 
+> **[STALE] The linchpin conclusion below — "FO-6 LLM-free physical surrogate top-1
+> 64% / top-2 82%" — is superseded by the committed replay bytes.** Re-run under the
+> committed by-GAME cross-validation harness (`training/surrogate/fidelity.py`), the
+> FO-6 physical logistic scores **top-1 25.7% / top-2 45.9%** on the baseline-3 9p2i
+> set (the spike's 64% was pre-re-record; the audit measured the regression to
+> 26%/43% on baseline 2 — reproduced almost exactly). Its binary eject-vs-SKIP head
+> **degenerates to always-SKIP**
+> (38.1% binary decision accuracy vs a 78.4% always-eject baseline; SKIP predicted on
+> 70/109 true ejection meetings). The single top-1 number hid that collapse. The honest
+> re-baseline, the fidelity protocol, and the measured voice-driven ceiling live in
+> **`training/reports/report-meeting-table.md`** (Task 15.11); read that before
+> citing any FO-6 figure below.
+
 > Charter: `experiments/lab/ml-spike-charter.md`. Code: `experiments/lab/ml_spike/`.
 > $0, offline, pure-Python (no deps), ZERO engine edits. All three checks RAN with
 > real numbers on the committed 9p2i substrate. This is the go/no-go memo.
