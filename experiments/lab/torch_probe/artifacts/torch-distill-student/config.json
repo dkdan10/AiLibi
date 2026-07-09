@@ -1,0 +1,9 @@
+{
+  "encoder_version": "v2",
+  "entrant": "torch-distill-student",
+  "epochs": 1500,
+  "hidden": 8,
+  "learning_rate": 0.01,
+  "teacher_artifact": "experiments/lab/torch_probe/artifacts/torch-ppo-gru-s1",
+  "torch_seed": 0
+}
