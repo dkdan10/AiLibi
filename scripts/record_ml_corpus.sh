@@ -389,6 +389,47 @@ if bad:
 PYINNER
 }
 
+# Refuse to treat a present replay as a corpus game unless its BYTES carry the
+# EXPLICIT 15.9 tactical-policy stamp with the locked policy id. File presence is
+# not provenance: the resume skip-scan trusts any non-empty in-range replay, but
+# an UNSTAMPED replay (an earlier pre-15.9 run, a canonical sample copied in)
+# renders in the MANIFEST policy column identically to a stamped one
+# (_manifest_writer._render_policy maps an absent stamp to the fsm-default
+# label) and scripts/validity_gate.py does not check the stamp — so without this
+# guard such a replay would be resumed-over and silently FROZEN in violation of
+# the Task-15.12 contract. Checked pre-spend (before the skip-scan treats a
+# replay as complete) and again before the freeze. Reads the replay bytes, not
+# MANIFEST rows (rows cannot distinguish absent from explicit). $0, no network.
+check_replay_policy_stamps() {
+  local set_dir="$1"
+  uv run python - "$REPO_ROOT" "$set_dir" "$POLICY_STAMP" <<'PYINNER'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from orchestrator.replay import read_tactical_policy_stamp  # noqa: E402
+
+set_dir, required = Path(sys.argv[2]), sys.argv[3]
+bad: list[str] = []
+for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+    stamp = read_tactical_policy_stamp(path)
+    if stamp is None:
+        bad.append(f"{path.name}: no tactical_policy stamp")
+    elif stamp.policy_id != required:
+        bad.append(f"{path.name}: policy_id={stamp.policy_id!r}")
+if bad:
+    listing = "; ".join(bad)
+    sys.stderr.write(
+        f"check_replay_policy_stamps: {len(bad)} replay(s) in {set_dir} lack the "
+        f"explicit '{required}' tactical-policy stamp — {listing}\n"
+        "An unstamped replay renders identically to a stamped one in the MANIFEST\n"
+        "policy column, so presence alone must never make it a corpus game; remove\n"
+        "the file(s) and re-record the seed(s) with this recorder.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
 # --- FREEZE: append the explicit FROZEN line naming the git SHA --------------
 
 # The MANIFEST already stamps git_sha per row (via _manifest_writer update). The
@@ -459,7 +500,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] seed workers: 1 (sequential)"
   fi
   echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
-  echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones)"
+  echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones; a present replay must carry the explicit $POLICY_STAMP tactical-policy stamp or the run is refused)"
   echo "[dry-run] split rule: $SPLIT_RULE_DESC (by game; no game in two splits)"
   for set_name in "${sets[@]}"; do
     read -r start count np ni tpc <<<"$(set_config "$set_name")"
@@ -599,6 +640,12 @@ record_set() {
   # Refuse a dirty set dir BEFORE spending: a stray replay outside the locked
   # range would survive the resume skip-scan and be swept into the finalize.
   if ! check_seed_range "$set_dir" "$start" "$last"; then
+    return 1
+  fi
+  # File presence is not provenance: before the resume skip-scan treats a present
+  # replay as "already recorded", prove its bytes carry the explicit 15.9 stamp
+  # (see check_replay_policy_stamps — an unstamped one would freeze undetected).
+  if ! check_replay_policy_stamps "$set_dir"; then
     return 1
   fi
   # Pin the set's roster.json BEFORE spending, so the recorded replays reconstruct
@@ -875,6 +922,14 @@ record_set() {
   # counterpart of the preflight registry pin — see check_recorded_prompt_versions).
   if ! check_recorded_prompt_versions "$set_dir" "$manifest"; then
     echo "ERROR: $set_name carries non-baseline prompt versions; NOT freezing." >&2
+    return 1
+  fi
+
+  # Refuse to freeze a replay whose bytes lack the explicit 15.9 stamp (re-run of
+  # the pre-spend guard over the now-complete set, incl. anything that appeared
+  # mid-run; MANIFEST rows cannot carry this check — see check_replay_policy_stamps).
+  if ! check_replay_policy_stamps "$set_dir"; then
+    echo "ERROR: $set_name holds replays without the explicit $POLICY_STAMP tactical-policy stamp; NOT freezing." >&2
     return 1
   fi
 

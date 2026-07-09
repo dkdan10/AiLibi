@@ -107,9 +107,14 @@ records only the missing ones, then re-finalizes (report + splits + `FROZEN`).
 Provenance is per-seed: a resume backfills `MANIFEST.md` rows only for seeds
 that lack one (the crash window between a replay landing and its row being
 written) — rows recorded by an earlier session keep that session's `git_sha`,
-so a resume never rewrites the provenance of bytes it did not record. A
-fully-recorded set records nothing and just re-finalizes, so re-running is
-always safe and idempotent:
+so a resume never rewrites the provenance of bytes it did not record. File
+presence alone is not provenance: before a present replay is skipped as
+"already recorded" (and again before the freeze), the recorder proves its bytes
+carry the explicit 15.9 `fsm-default` tactical-policy stamp — an unstamped
+replay (a pre-15.9 recording, a canonical sample copied in) is refused, since
+it would render in the `MANIFEST` policy column identically to a stamped one
+and the validity gate does not check the stamp. A fully-recorded set records
+nothing and just re-finalizes, so re-running is always safe and idempotent:
 
 ```bash
 export FEATHERLESS_API_KEY=... AILIBI_PROMPT_SET=qwen3_32b
