@@ -265,6 +265,85 @@ def test_malformed_splits_fails_loud(tmp_path: Path) -> None:
         load_splits(tmp_path)
 
 
+def test_load_splits_reads_the_frozen_corpus_files() -> None:
+    """The committed 15.12 corpus ``splits.json`` files load UNCHANGED.
+
+    Regression pin for the PR #240 review finding: the recorder emits four
+    audit-metadata keys (``set``/``split_rule``/``counts``/``total_games``)
+    beside the seed lists, and the loader must accept the frozen files exactly
+    as committed — the corpus is the 15.13 surrogate's training data.
+    """
+
+    nine = load_splits(Path("replays/ml_corpus/9p2i"))
+    assert nine is not None
+    assert (len(nine.train), len(nine.val), len(nine.test)) == (90, 30, 30)
+    nine_seeds = [*nine.train, *nine.val, *nine.test]
+    assert len(set(nine_seeds)) == 150  # disjoint — no game in two splits
+    assert set(nine_seeds) == set(range(1000, 1150))  # covers the recorded range
+    assert nine.set == "9p2i"
+    assert nine.split_rule == "seed mod 5: {0,1,2}=train, {3}=val, {4}=test"
+    assert nine.total_games == 150
+
+    four = load_splits(Path("replays/ml_corpus/4p1i"))
+    assert four is not None
+    assert (len(four.train), len(four.val), len(four.test)) == (30, 10, 10)
+    four_seeds = [*four.train, *four.val, *four.test]
+    assert len(set(four_seeds)) == 50
+    assert set(four_seeds) == set(range(1000, 1050))
+    assert four.set == "4p1i"
+
+
+def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
+    """The table builder runs on the committed 15.12 corpus END-TO-END.
+
+    The cross-artifact integration the PR #240 review finding proved was never
+    executed: the builder walks the frozen 4p1i corpus (hash-verified, ~0.4s),
+    attaches its committed split, and joins every recorded ballot. The 9p2i
+    corpus rides the identical path (pinned by the splits test above; its
+    ~7s walk stays out of the suite).
+    """
+
+    table = build_meeting_table(Path("replays/ml_corpus/4p1i"))
+    assert table.games_total == 50
+    assert table.meetings_total == 40
+    assert table.ballots_total == 120  # == validity-gate ballot count: 100% join
+    assert len(table.rows) == 120
+    assert table.splits is not None
+    assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (30, 10, 10)
+
+
+def test_splits_count_metadata_must_agree_with_seed_lists(tmp_path: Path) -> None:
+    """Present count metadata that contradicts the seed lists is refused."""
+
+    bad = tmp_path / "splits.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "train": [0],
+                "val": [],
+                "test": [],
+                "counts": {"train": 2, "val": 0, "test": 0},
+                "total_games": 1,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="counts"):
+        load_splits(tmp_path)
+
+    bad.write_text(json.dumps({"train": [0], "val": [], "test": [], "total_games": 3}))
+    with pytest.raises(ValueError, match="total_games"):
+        load_splits(tmp_path)
+
+
+def test_unknown_splits_keys_still_fail_loud(tmp_path: Path) -> None:
+    """Declaring the 15.12 metadata keys did not open the door to unknown keys."""
+
+    bad = tmp_path / "splits.json"
+    bad.write_text(json.dumps({"train": [0], "bogus_key": 1}))
+    with pytest.raises(ValueError, match="bogus_key"):
+        load_splits(tmp_path)
+
+
 def test_missing_directory_fails_loud(tmp_path: Path) -> None:
     """An absent replay-set directory raises (no silent empty table)."""
 
