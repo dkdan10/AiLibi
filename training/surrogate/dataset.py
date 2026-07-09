@@ -65,7 +65,13 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,

@@ -309,7 +309,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
     assert table.ballots_total == 120  # == validity-gate ballot count: 100% join
     assert len(table.rows) == 120
     assert table.splits is not None
-    assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (30, 10, 10)
+    assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (
+        30,
+        10,
+        10,
+    )
 
 
 def test_splits_count_metadata_must_agree_with_seed_lists(tmp_path: Path) -> None:
