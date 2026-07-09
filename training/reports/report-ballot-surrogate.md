@@ -110,6 +110,20 @@ always-SKIP collapse by construction, §5.2/§5.3). One ballot per living voter 
 exactly the roster the cross-meeting belief fold reads off `result.ballots`
 (`meetings/manager.py:2841`).
 
+**The §7.12 teammate-ballot firewall is preserved.** The real vote path coerces a
+ballot naming a fellow impostor to SKIP before the tally
+(`meetings.manager.coerce_teammate_ballot_to_skip`), so an impostor never supplies
+the betrayal vote that ejects a teammate. The runner mirrors it as candidate-set
+**exclusion**: an impostor voter's living teammates (roles read off the trigger-time
+engine state, exactly as the orchestrator derives `fellow_impostor_ids`) never enter
+its choice set — which can never create a betrayal ballot and matches the fit
+distribution (the recorded corpus ballots carry no teammate targets because
+production's guard ran before recording). An impostor whose only other living
+players are teammates predicts SKIP. Runner-only by necessity: the fidelity
+adapter's side-channel may not read role labels on the predict side (the leakage
+fence), and on recorded meetings a hypothetical betrayal prediction is simply
+scored as an error.
+
 ---
 
 ## 3. Held-out fidelity vs the ceiling (the four channels together)

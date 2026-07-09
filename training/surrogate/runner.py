@@ -9,8 +9,12 @@ fit on — belief suspicion/trust off the agent's own
 ``suspicion_graph_for_meeting()``, the witnessed-vent pin off its typed
 ``vent_witness_records_for_meeting()`` channel, reporter identity off the
 trigger, meeting index off the orchestrator-formatted ``meeting_id``), predicts
-one ballot per voter, and lets the REAL :func:`meetings.voting.tally_ballots` —
-at the explicit constants-home
+one ballot per voter — with the §7.12 teammate-ballot firewall mirrored as
+candidate-set exclusion (an impostor voter's fellow impostors, read off the
+trigger-time state roles exactly as the orchestrator derives
+``fellow_impostor_ids``, never enter its choice set — the real vote path's
+``coerce_teammate_ballot_to_skip`` guarantee) — and lets the REAL
+:func:`meetings.voting.tally_ballots` — at the explicit constants-home
 :data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD` — produce the
 outcome. The returned :class:`~orchestrator.game.MeetingArtifacts` echoes
 ``meeting_id`` / ``triggered_by`` / ``trigger_tick`` (validated at
@@ -191,6 +195,24 @@ class SurrogateMeetingRunner:
                 player_id for player_id, player in state.players.items() if player.alive
             )
         )
+        # The §7.12 teammate-ballot firewall (Codex review on PR #241): the real
+        # vote path coerces a ballot naming a fellow impostor to SKIP BEFORE the
+        # tally (``meetings.manager.coerce_teammate_ballot_to_skip``), so an
+        # impostor can never supply the betrayal vote that ejects a teammate.
+        # The surrogate mirrors it as candidate-set EXCLUSION: fellow impostors
+        # are dropped from an impostor voter's choice set before prediction,
+        # which (a) can never create the betrayal ballot the guard exists to
+        # stop, and (b) matches the fit distribution — the recorded corpus
+        # ballots the predictor learned from carry no teammate targets because
+        # production's guard ran before recording. Roles are read off the
+        # trigger-time engine state exactly as the orchestrator derives
+        # ``fellow_impostor_ids`` for the real meeting (game.py:875-910); by
+        # role, independent of alive state, mirroring that derivation.
+        impostor_ids = frozenset(
+            player_id
+            for player_id, player in state.players.items()
+            if player.role == "IMPOSTOR"
+        )
         meeting_index = float(_meeting_index_from_id(meeting_id))
         alive_count = float(len(living))
         ballots: list[VoteBallot] = []
@@ -215,7 +237,15 @@ class SurrogateMeetingRunner:
             vent_subjects = frozenset(
                 record.subject for record in agent.vent_witness_records_for_meeting()
             )
-            candidates = tuple(cand for cand in living if cand != voter)
+            # A crewmate (and a sole impostor) excludes only itself; an impostor
+            # also excludes its living teammates (the §7.12 guard above). An
+            # impostor whose every other living player is a teammate gets an
+            # empty choice set and predicts SKIP — the same terminal shape the
+            # production guard chain coerces to.
+            teammates = impostor_ids - {voter} if voter in impostor_ids else frozenset()
+            candidates = tuple(
+                cand for cand in living if cand != voter and cand not in teammates
+            )
             features: dict[PlayerId, dict[str, float]] = {}
             for cand in candidates:
                 entry = suspicion.get(cand)

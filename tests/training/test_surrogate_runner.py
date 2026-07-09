@@ -30,7 +30,7 @@ import asyncio
 import json
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -259,8 +259,13 @@ class _CannedMeetingAgent:
     real agent. ``decide`` is never invoked by the surrogate runner.
     """
 
-    def __init__(self, agent_id: PlayerId) -> None:
+    def __init__(
+        self,
+        agent_id: PlayerId,
+        suspicion_graph: tuple[SuspicionEntry, ...] = (),
+    ) -> None:
         self._agent_id = agent_id
+        self._suspicion_graph = suspicion_graph
 
     @property
     def agent_id(self) -> PlayerId:
@@ -284,7 +289,7 @@ class _CannedMeetingAgent:
         return ""
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
-        return ()
+        return self._suspicion_graph
 
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
         return ()
@@ -792,6 +797,97 @@ def test_missing_artifact_and_malformed_meeting_id_fail_loud(tmp_path: Path) -> 
     # The bare id parser fails loud on its own too.
     with pytest.raises(ValueError, match="does not carry the orchestrator"):
         _meeting_index_from_id("no-index")
+
+
+def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
+    """The §7.12 teammate-ballot firewall holds on the surrogate path (Codex P1).
+
+    The real vote path coerces a ballot naming a fellow impostor to SKIP before
+    the tally (``meetings.manager.coerce_teammate_ballot_to_skip``), so an
+    impostor can never supply the betrayal vote that ejects a teammate. The
+    Codex repro shape: a 9p/2i state where an impostor's own suspicion graph
+    puts its TEAMMATE far above every other candidate — the surrogate must
+    still never record a teammate-targeted ballot (the teammate is excluded
+    from the choice set), and an impostor whose only other living players are
+    teammates lands on SKIP (the guard chain's terminal shape).
+    """
+
+    runner = load_surrogate_runner_factory(_ARTIFACT_DIR)()
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+    impostors = sorted(
+        player_id
+        for player_id, player in state.players.items()
+        if player.role == "IMPOSTOR"
+    )
+    assert len(impostors) == 2
+    voter, teammate = impostors
+    graph = tuple(
+        SuspicionEntry(
+            player_id=player_id,
+            suspicion=1.0 if player_id == teammate else 0.1,
+            trust=0.5,
+        )
+        for player_id in sorted(state.players)
+        if player_id != voter
+    )
+    agents: dict[PlayerId, AgentInterface] = {
+        player_id: _CannedMeetingAgent(player_id, graph if player_id == voter else ())
+        for player_id in state.players
+    }
+    trigger = MeetingTrigger(
+        triggered_by=voter, trigger_tick=state.tick, description="reported a body"
+    )
+    artifacts = asyncio.run(
+        runner.run_meeting(
+            meeting_id="headless-seed-0:meeting-0",
+            trigger=trigger,
+            state=state,
+            agents=agents,
+        )
+    )
+    by_voter = {ballot.voter: ballot for ballot in artifacts.result.ballots}
+    assert set(by_voter) == set(state.players)
+    # Neither impostor's ballot ever names its teammate — even with the teammate
+    # as the graph's runaway argmax.
+    assert by_voter[voter].target != teammate
+    assert by_voter[teammate].target != voter
+    assert by_voter[voter].target == "SKIP" or by_voter[voter].target in (
+        set(state.players) - {voter, teammate}
+    )
+
+    # Terminal shape: an impostor duo with no living crew has an empty choice
+    # set per voter, so both ballots are SKIP and the real tally skips.
+    dead_crew = {
+        player_id: replace(player, alive=False)
+        for player_id, player in state.players.items()
+        if player_id not in impostors
+    }
+    duo_state = replace(state, players={**state.players, **dead_crew})
+    duo_agents: dict[PlayerId, AgentInterface] = {
+        player_id: _CannedMeetingAgent(player_id) for player_id in impostors
+    }
+    duo = asyncio.run(
+        runner.run_meeting(
+            meeting_id="headless-seed-0:meeting-1",
+            trigger=MeetingTrigger(
+                triggered_by=voter,
+                trigger_tick=duo_state.tick,
+                description="emergency",
+            ),
+            state=duo_state,
+            agents=duo_agents,
+        )
+    )
+    assert {ballot.voter for ballot in duo.result.ballots} == set(impostors)
+    assert all(ballot.target == "SKIP" for ballot in duo.result.ballots)
+    assert duo.result.outcome == "SKIPPED"
 
 
 # --------------------------------------------------------------------------- #
