@@ -50,7 +50,7 @@ ever produces ``MEETING_PHASE_REACHED`` the runner wire-up has regressed and
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -83,6 +83,7 @@ from orchestrator.game import (
     DEFAULT_TASKS_PER_CREWMATE,
     AgentFactory,
     HeadlessGame,
+    MeetingRunner,
     apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
@@ -237,6 +238,7 @@ def run_tournament_eval(
     max_ticks: int = DEFAULT_MAX_TICKS,
     force: bool = False,
     tactical_policy_stamp: TacticalPolicyStamp | None = None,
+    meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
 ) -> TournamentReport:
     """Run one :class:`HeadlessGame` per seed and assemble a typed report.
 
@@ -302,6 +304,19 @@ def run_tournament_eval(
     ``--tactical-policy-stamp`` CLI flag (the seam the Task-15.12 corpus wrapper
     drives).
 
+    ``meeting_runner_factory`` (Task 15.13) is the additive-optional per-game
+    meeting-runner factory, mirroring the default path's fresh-runner-per-game
+    construction: when supplied it is invoked once per seed and the produced
+    runner is installed in that seed's :class:`HeadlessGame` in place of
+    :func:`~orchestrator.game.build_default_meeting_runner` (a fresh runner per
+    game keeps per-game recording state unshared, exactly like the default). The
+    seam exists so surrogate-driven tournaments
+    (:func:`training.surrogate.runner.load_surrogate_runner_factory`) produce
+    standard :class:`~eval.report_schema.TournamentReport` artifacts for
+    DIAGNOSTICS — final champion scoring still always uses a real meeting path
+    (the default runner; the bake-off's reporting rule). The default (``None``)
+    keeps the runner construction byte-identical to the pre-15.13 path.
+
     Raises ``RuntimeError`` if any game ends at ``MEETING_PHASE_REACHED`` (the
     Task 3.13 runner wire-up regressed). Re-raises any non-parse-failure
     exception from a game unchanged (AGENTS.md "no silent fallbacks").
@@ -332,8 +347,12 @@ def run_tournament_eval(
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
             scheduler=TickScheduler(max_ticks=max_ticks),
-            meeting_runner=build_default_meeting_runner(
-                budget=_resolve_game_budget(num_players=num_players)
+            meeting_runner=(
+                meeting_runner_factory()
+                if meeting_runner_factory is not None
+                else build_default_meeting_runner(
+                    budget=_resolve_game_budget(num_players=num_players)
+                )
             ),
             force=force,
             tactical_policy_stamp=tactical_policy_stamp,

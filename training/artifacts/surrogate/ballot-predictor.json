@@ -1,0 +1,68 @@
+{
+  "confidence_weights": [
+    "0x1.3090d3aeef131p-5",
+    "0x0.0p+0",
+    "-0x1.08821b59b1c05p-5",
+    "0x1.8c0cf917a3500p-8",
+    "-0x1.0ecef7b9d7d99p-7",
+    "-0x1.dfb4b9a3ab7e2p-9",
+    "0x1.5c2d89f6e5a36p-1"
+  ],
+  "epochs": 300,
+  "feature_names": [
+    "belief_suspicion",
+    "belief_trust",
+    "is_reporter",
+    "witnessed_vent",
+    "meeting_index",
+    "alive_count"
+  ],
+  "format": "ballot-predictor.v1",
+  "lr": "0x1.3333333333333p-2",
+  "mean": [
+    "0x1.0ae1d8c23fac3p-1",
+    "0x1.0000000000000p-1",
+    "0x1.40d3c5a69caf7p-3",
+    "0x1.da4008f2b7b75p-6",
+    "0x1.4b148d7df9026p-1",
+    "0x1.aad1711c1a490p+2"
+  ],
+  "skip_bias": "-0x1.35e5cea7df3d4p-1",
+  "skip_confidence": "0x1.2d0a896c7c113p-1",
+  "skip_feature_names": [
+    "max_belief_suspicion",
+    "meeting_index",
+    "alive_count"
+  ],
+  "skip_mean": [
+    "0x1.33e7dbfca2d6bp-1",
+    "0x1.b6c956529cd0cp-1",
+    "0x1.93a9ecb50e194p+2"
+  ],
+  "skip_std": [
+    "0x1.62e70c294d7eep-3",
+    "0x1.d6fd5968c5f5ep-1",
+    "0x1.62bb87e702a9ep+0"
+  ],
+  "skip_weights": [
+    "0x1.eeeec069eea18p-1",
+    "-0x1.17815b048227fp-4",
+    "0x1.5af3821667051p-7"
+  ],
+  "std": [
+    "0x1.68fb0c5846531p-4",
+    "0x1.0000000000000p+0",
+    "0x1.74329293265c7p-2",
+    "0x1.575b4b3dc5409p-3",
+    "0x1.9a822671da613p-1",
+    "0x1.3c33c97ccdc11p+0"
+  ],
+  "weights": [
+    "0x1.8e2efec2dddaep+0",
+    "0x0.0p+0",
+    "-0x1.5f348c7a7de59p-5",
+    "-0x1.8c6ed80de0feep-1",
+    "0x1.e593d77579f78p-3",
+    "-0x1.8368f3d38fe17p-3"
+  ]
+}
