@@ -157,6 +157,74 @@ def test_numpy_torch_source_scan_rejects_planted_import() -> None:
         planted.unlink(missing_ok=True)
 
 
+# Task 15.20: the productized learned champion (``agents/tactical/learned/``)
+# is production inference, so it inherits the numpy/torch ban above AND must
+# stay engine-free / training-free on a bare tree: ``engine`` and ``training``
+# are already forbidden by import-linter (transitively), and ``orchestrator``
+# is banned here at the source level because it is NOT an import-linter root
+# package — the ``agents -> orchestrator -> engine`` chain the task contract
+# names would otherwise be invisible to ``lint-imports``.
+_FORBIDDEN_LEARNED_PACKAGE_MODULES = frozenset(
+    {"numpy", "torch", "engine", "training", "orchestrator"}
+)
+
+
+def _learned_package_source_files() -> list[Path]:
+    repo_root = Path(__file__).resolve().parents[1]
+    return sorted((repo_root / "agents" / "tactical" / "learned").rglob("*.py"))
+
+
+def test_learned_package_is_swept_by_the_agents_source_scan() -> None:
+    """``agents/tactical/learned/`` is explicitly inside the agents/ sweep.
+
+    The rglob in :func:`_agent_source_files` covers every subpackage, but this
+    pin makes the 15.20 obligation loud: if the learned package moved out from
+    under ``agents/`` (escaping the no-numpy/torch doctrine), this fails.
+    """
+
+    learned = _learned_package_source_files()
+    assert learned, "agents/tactical/learned/ must exist and carry source files"
+    assert set(learned) <= set(_agent_source_files())
+
+
+def test_learned_package_has_no_engine_training_numpy_torch_import() -> None:
+    offenders: list[tuple[str, list[str]]] = []
+    for path in _learned_package_source_files():
+        banned = (
+            _imported_top_level_modules(path.read_text(encoding="utf-8"))
+            & _FORBIDDEN_LEARNED_PACKAGE_MODULES
+        )
+        if banned:
+            offenders.append((str(path), sorted(banned)))
+    assert not offenders, (
+        "the productized champion must import nothing from engine/, training/, "
+        f"orchestrator/, numpy, or torch (Task 15.20); offenders: {offenders}"
+    )
+
+
+def test_learned_package_scan_rejects_planted_import() -> None:
+    """A synthetic ``import training`` planted under the learned package trips.
+
+    The plant-detect-cleanup shape of
+    :func:`test_numpy_torch_source_scan_rejects_planted_import` — a gate that
+    cannot fail is not a gate.
+    """
+
+    repo_root = Path(__file__).resolve().parents[1]
+    planted = repo_root / "agents" / "tactical" / "learned" / "_firewall_bad_import.py"
+    planted.write_text("import training\n", encoding="utf-8")
+    try:
+        offenders = [
+            path
+            for path in _learned_package_source_files()
+            if _imported_top_level_modules(path.read_text(encoding="utf-8"))
+            & _FORBIDDEN_LEARNED_PACKAGE_MODULES
+        ]
+        assert planted in offenders
+    finally:
+        planted.unlink(missing_ok=True)
+
+
 def test_own_kill_rides_only_the_killers_self_channel(tmp_path: Path) -> None:
     """``SelfView.own_kill`` is the killer's privileged self channel (Task 11.3,
     DESIGN.md §1.3, §6.2). The engine excludes a killer from its own kill's
