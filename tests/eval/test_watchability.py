@@ -387,6 +387,54 @@ def test_contradiction_flag_keeps_separation_live_without_conversion() -> None:
     assert score.d2_deduction == 0.5
 
 
+def test_persisted_vent_flag_keeps_separation_live_without_conversion() -> None:
+    """The D2 gate's flag leg is VENT-AWARE (Codex review on PR #247).
+
+    The re-derived ``contradictions_by_subject`` census can never contain the
+    grounded role-proving ``vent_sighting`` flag (its grounding channel is not
+    in the transcript, Task 15.4), so a game whose ONLY deduction evidence is a
+    persisted vent flag must open the gate through ``persisted_vent_flags`` —
+    mirroring the ``flags_per_meeting`` merge. A witnessed impostor vent is the
+    game's hardest evidence, not suspicion theater.
+    """
+
+    import dataclasses
+
+    vent_meeting = dataclasses.replace(
+        _suspicion_theater_meeting(), persisted_vent_flags=1
+    )
+    game = _clean_game(
+        reason="IMPOSTOR_PARITY",
+        meetings=(vent_meeting,),
+        kill_victim_roles=("CREWMATE",),
+    )
+    score = compute_game_score(game)
+    assert score.d2_separation_norm == 1.0  # the vent flag opens the gate
+    assert score.d2_conversion == 0.0
+    assert score.d2_deduction == 0.5
+
+
+def test_meeting_facts_carry_the_persisted_vent_flag_census() -> None:
+    """``_meeting_facts`` surfaces the persisted vent flags off the recorded bytes.
+
+    The committed baseline-3 4p1i set carries 11 persisted ``vent_sighting``
+    flags (the same census ``test_flags_per_meeting_is_vent_aware`` pins for the
+    supply gauge); the per-meeting facts must total the same so the D2 gate
+    actually sees them on real bytes.
+    """
+
+    from eval.validity import assemble_tournament_report
+    from eval.watchability import _meeting_facts
+
+    report = assemble_tournament_report(_FOUR)
+    total = sum(
+        _meeting_facts(meeting, index, {}).persisted_vent_flags
+        for game in report.games
+        for index, meeting in enumerate(game.meetings)
+    )
+    assert total == 11
+
+
 def test_backed_conversion_keeps_separation_live() -> None:
     """The conversion leg of the D2 gate: a converted backed accusation counts."""
 

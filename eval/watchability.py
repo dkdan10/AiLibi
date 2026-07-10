@@ -36,9 +36,11 @@ the dependency edge):
     ``mean_score`` 6.51 → 16.62, +155%, separation 0.20 → 0.84 with conversion
     pinned at 0.00): the D2 separation sub-term is GATED on deduction evidence
     — it counts only when the game converts an observation-backed accusation
-    into an ejection or some meeting carries a contradiction flag. Separation
-    without an ejection or a contradiction flag is suspicion theater, not
-    deduction, and scores 0 (:func:`_d2_crew_deduction`).
+    into an ejection or some meeting carries a contradiction flag (VENT-AWARE:
+    re-derived flags plus the persisted role-proving ``vent_sighting`` flags
+    the re-derivation cannot mint, mirroring the ``flags_per_meeting`` merge).
+    Separation without an ejection or a contradiction flag is suspicion
+    theater, not deduction, and scores 0 (:func:`_d2_crew_deduction`).
   * SUBJECT-AWARE OBSERVATION BACKING (owner-ratified 2026-07-09,
     ``audits/review-phase-15-midwave.md`` Q2 / §8): an accusation is
     observation-backed only when the accuser's turn carries a first-hand
@@ -152,8 +154,9 @@ reproducible historical pin):
     :data:`_D2_SEPARATION_SCALE` = 0.30 and clamped at 0 (a railroad that raises
     suspicion on an innocent LOWERS separation → penalized), then CONVERSION-
     COUPLED (Task 15.19): gated to 0 unless the game converted a backed
-    accusation into an ejection or carries a contradiction flag. conversion = of
-    every (meeting, observation-backed-accused true impostor) pair, the fraction
+    accusation into an ejection or carries a contradiction flag (re-derived, or
+    a persisted vent flag — the vent-aware leg). conversion = of every
+    (meeting, observation-backed-accused true impostor) pair, the fraction
     ejected (backing subject-aware per Task 15.19).
   * D3 impostor craft — the EFFECTIVE-deflection value (1.0 effective / 0.2
     accused-not-deflected / 0.0 never-accused): a counter-accusation that MOVED the
@@ -609,7 +612,16 @@ class _Accusation:
 
 @dataclass(frozen=True)
 class _MeetingFacts:
-    """The geomean/floor inputs for one resolved meeting (typed subset)."""
+    """The geomean/floor inputs for one resolved meeting (typed subset).
+
+    ``contradictions_by_subject`` is the RE-DERIVED transcript census (the
+    parity-mandated source the railroad floor reads); it can NEVER contain the
+    grounded role-proving ``vent_sighting`` flag (its grounding channel is not
+    in the transcript, Task 15.4), so the PERSISTED vent flags are carried
+    separately in ``persisted_vent_flags`` for the vent-aware consumers (the
+    15.19 D2 deduction-evidence gate, mirroring the ``flags_per_meeting``
+    merge).
+    """
 
     meeting_index: int
     ejected_player_id: PlayerId | None
@@ -622,6 +634,7 @@ class _MeetingFacts:
     plurality_margin: int
     ejected_rendered_suspicion_among_ejectors: float | None
     contradictions_by_subject: Mapping[PlayerId, tuple[bool, ...]]
+    persisted_vent_flags: int = 0
 
 
 @dataclass(frozen=True)
@@ -1102,6 +1115,11 @@ def _meeting_facts(
         contradictions_by_subject={
             subject: tuple(bits) for subject, bits in contradictions_by_subject.items()
         },
+        # The persisted role-proving vent flags (readable ONLY from the recorded
+        # contradictions — the re-derivation above cannot mint them, Task 15.4).
+        persisted_vent_flags=sum(
+            1 for flag in meeting.contradictions if flag.kind == "vent_sighting"
+        ),
     )
 
 
@@ -1247,9 +1265,15 @@ def _d2_crew_deduction(
     evidence — it counts only when the game converted a backed accusation into
     an ejection (``converted >= 1``) or some meeting carries a contradiction
     flag. Separation without an ejection or a contradiction flag is suspicion
-    theater, not deduction, and contributes 0. The returned ``separation_norm``
-    is the GATED value, so the reported sub-term always composes to the scored
-    d2. ``historical_15_2=True`` computes the FROZEN pre-15.19 spec
+    theater, not deduction, and contributes 0. The flag leg is VENT-AWARE
+    (mirroring the ``flags_per_meeting`` merge): the re-derived
+    ``contradictions_by_subject`` census can never contain the grounded
+    role-proving ``vent_sighting`` flag (Task 15.4), so the persisted vent
+    flags (``persisted_vent_flags``) also open the gate — a game whose only
+    deduction evidence is a witnessed impostor vent is evidence-rich, not
+    suspicion theater. The returned ``separation_norm`` is the GATED value, so
+    the reported sub-term always composes to the scored d2.
+    ``historical_15_2=True`` computes the FROZEN pre-15.19 spec
     (subject-agnostic backing, uncoupled separation) — ONLY for the 15.2
     geomean-parity pin.
     """
@@ -1281,7 +1305,7 @@ def _d2_crew_deduction(
     conversion = (converted / attempted) if attempted else 0.0
     if not historical_15_2:
         has_deduction_evidence = converted >= 1 or any(
-            m.contradictions_by_subject for m in game.meetings
+            m.contradictions_by_subject or m.persisted_vent_flags for m in game.meetings
         )
         if not has_deduction_evidence:
             separation_norm = 0.0
