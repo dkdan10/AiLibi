@@ -60,8 +60,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="uv run --with torch python experiments/lab/torch_probe/train_probe.py",
         description="Task 15.17: train the PPO+GRU probe, score via the harness.",
     )
-    parser.add_argument("--updates", type=int, default=40)
-    parser.add_argument("--episodes-per-update", type=int, default=8)
+    # Defaults are the RECORDED budget (100 x 12 = 1,200 episodes, the
+    # committed results' recipe): a default rerun regenerates the published
+    # champions rather than silently overwriting them with a smaller probe.
+    parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument("--episodes-per-update", type=int, default=12)
     parser.add_argument("--train-seed-count", type=int, default=24)
     parser.add_argument("--hidden", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=3e-4)

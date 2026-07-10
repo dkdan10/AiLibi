@@ -603,8 +603,8 @@ class TorchProbeEntrant:
 def _canonical_crew_delegate(decision: MaskedDecision) -> ActionIntent:
     """Delegate a crew decision to the FSM, canonicalized against the mask.
 
-    Two crew-FSM emissions fail ``is_submission_legal`` verbatim, and the
-    selector seam (unlike the production loop) refuses them loudly:
+    Exactly two crew-FSM emissions are KNOWN to fail ``is_submission_legal``
+    verbatim, both emergencies, and only those are canonicalized:
 
     * The 15.8 exact-equality gap documented at ``eval/leak_test.py:608-616``
       (the fix is Task 15.16's ``training/env.py`` region, out of scope
@@ -618,11 +618,24 @@ def _canonical_crew_delegate(decision: MaskedDecision) -> ActionIntent:
       consulting the budget, and the engine no-ops it via
       ``ActionRejectedError``. There is no same-key legal intent then, so
       mirror the engine's rejection no-op with the always-legal WAIT.
+
+    Any OTHER off-mask crew intent is an undocumented FSM/mask mismatch and
+    raises (AGENTS.md: no silent fallbacks) — a crew-policy regression must
+    surface, not silently diverge the training substrate from production.
+    (``intent_key`` folds every non-emergency intent's full payload, so the
+    same-key remap is structurally emergency-only regardless.)
     """
 
     fsm_intent = decision.fsm_intent
     if decision.mask.is_submission_legal(fsm_intent):
         return fsm_intent
+    if fsm_intent.type != "emergency":
+        raise ValueError(
+            f"crew FSM intent {fsm_intent!r} for "
+            f"{decision.packet.agent_id!r} at tick {decision.packet.tick} is "
+            "not submission-legal and is not a documented emergency "
+            "canonicalization case"
+        )
     fsm_key = intent_key(fsm_intent)
     for candidate in decision.mask.submission_legal:
         if intent_key(candidate) == fsm_key:

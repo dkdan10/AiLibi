@@ -71,7 +71,11 @@ DISTILL_AGREEMENT_BAR = 0.90
 _PROBE_DIR = Path(__file__).resolve().parent
 DEFAULT_RESULTS_PATH = _PROBE_DIR / "results-torch-probe.jsonl"
 DEFAULT_ARTIFACT_ROOT = _PROBE_DIR / "artifacts"
-DEFAULT_TEACHER = DEFAULT_ARTIFACT_ROOT / "torch-ppo-gru-s0"
+# The committed student row/artifact was distilled from the s1 champion (the
+# best inner fitness of the three seeds) — the default must point there so a
+# default rerun regenerates the published student instead of clobbering it
+# with a different teacher's clone.
+DEFAULT_TEACHER = DEFAULT_ARTIFACT_ROOT / "torch-ppo-gru-s1"
 
 
 def _load_teacher(artifact_dir: Path) -> TorchProbePolicy:
