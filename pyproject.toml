@@ -34,10 +34,13 @@ mypy_path = "scripts"
 # (experiments/lab/visibility_*.py + inference_*.py) reuse ml_spike.core via the same
 # bootstrap, and stopwatch_*.py monkeypatches engine internals through the same sys.path
 # bootstrap, so they are excluded on the same grounds; forward_redesign_probes.py is a
-# one-off $0 desk probe over committed replays, excluded likewise. The maintained top-level
+# one-off $0 desk probe over committed replays, excluded likewise. The torch probe
+# (experiments/lab/torch_probe/, Task 15.17) is experiment-tier code run via
+# `uv run --with torch` — torch is never installed for this gate — excluded on the
+# ml_spike grounds (same sys.path bootstrap, too). The maintained top-level
 # lab tools (experiments/lab/*.py) stay type-checked. design/ holds one-off design-artifact
 # generators (e.g. phase-12/gen_map_reference.py), not production code — excluded too.
-exclude = "^(experiments/lab/ml_spike/|experiments/lab/(visibility|inference|stopwatch|forward_redesign)_|design/)"
+exclude = "^(experiments/lab/ml_spike/|experiments/lab/torch_probe/|experiments/lab/(visibility|inference|stopwatch|forward_redesign)_|design/)"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
