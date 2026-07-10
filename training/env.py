@@ -137,6 +137,10 @@ class ActionMask:
 
     ``submission_legal`` is the full set a policy may emit: ``engine_legal`` plus
     ``submission_only``.
+
+    Membership is exact frozen-model equality with ONE canonicalization (Task
+    15.16): emergency intents compare with their free-form ``reason`` payload
+    dropped — see :func:`_canonical_mask_intent`.
     """
 
     engine_legal: tuple[ActionIntent, ...]
@@ -150,10 +154,34 @@ class ActionMask:
         return self.engine_legal + self.submission_only
 
     def is_engine_legal(self, intent: ActionIntent) -> bool:
-        return intent in self.engine_legal
+        return _canonical_mask_intent(intent) in self.engine_legal
 
     def is_submission_legal(self, intent: ActionIntent) -> bool:
-        return intent in self.engine_legal or intent in self.submission_only
+        canonical = _canonical_mask_intent(intent)
+        return canonical in self.engine_legal or canonical in self.submission_only
+
+
+def _canonical_mask_intent(intent: ActionIntent) -> ActionIntent:
+    """Canonicalize one intent for mask membership (Task 15.16).
+
+    The emergency-intent canonicalization that closes the documented 15.8
+    exact-equality gap (``eval/leak_test.py`` ``_IdleExploreAgent`` docstring):
+    the mask's emergency entry carries the DEFAULT payload (``reason=None``,
+    :func:`build_action_mask`'s EMERGENCY region), while the crew FSM stamps a
+    producer tag on the same action (``reason='suspicion_accumulation'`` /
+    ``'kill_witnessed'`` — ``agents/tactical/crewmate_policy.py``). The engine's
+    emergency legality is reason-blind (the tag is agent-side provenance for
+    replay/eval tooling, never an engine input), but frozen-pydantic equality is
+    field-exact, so without canonicalization a selector delegating the FSM's own
+    emergency would fail :meth:`ActionMask.is_submission_legal` and raise out of
+    the interposition wrapper. Emergency intents therefore compare with the
+    payload dropped; every other intent type compares exact — their payloads
+    (rooms, targets, kinds) ARE engine inputs.
+    """
+
+    if isinstance(intent, EmergencyMeetingIntent):
+        return EmergencyMeetingIntent(actor=intent.actor, type="emergency")
+    return intent
 
 
 def _vent_in_room(public_map: PublicMapView, room: str) -> str | None:
