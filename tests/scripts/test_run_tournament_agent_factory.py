@@ -8,9 +8,11 @@ three DoD axes of the opt-in learned factory: (1) the flag defaults to
 ``learned-champion`` run auto-stamps every recording with the champion's real
 :class:`~orchestrator.replay.TacticalPolicyStamp`, asserted off the RECORDED BYTES
 so the digest is the artifact actually loaded; (3) an explicit
-``--tactical-policy-stamp`` that contradicts the champion is rejected loudly while
-a field-for-field restatement is accepted. The fake LLM provider comes from the
-root ``tests/conftest.py`` autouse fixture — no per-test provider setup.
+``--tactical-policy-stamp`` that contradicts the SELECTED factory's stamp is
+rejected loudly in BOTH directions (the owner-ratified PR-#248 amendment: a
+learned recording can never carry an FSM label, an FSM recording never a learned
+one) while a field-for-field restatement is accepted. The fake LLM provider comes
+from the root ``tests/conftest.py`` autouse fixture — no per-test provider setup.
 """
 
 from __future__ import annotations
@@ -227,8 +229,9 @@ def test_main_fsm_default_with_explicit_fsm_stamp_accepted(
 ) -> None:
     """``fsm-default`` + explicit ``--tactical-policy-stamp fsm-default`` is back-compat.
 
-    Without the learned factory the explicit stamp passes through unchanged — the
-    Task-15.9 surface, still threaded on the default (no-``agent_factory``-kwarg) path.
+    A field-for-field restatement of the FSM default passes the two-direction
+    guard and is threaded unchanged on the default (no-``agent_factory``-kwarg)
+    path — the Task-15.12 corpus wrapper's exact invocation shape.
     """
 
     captured: dict[str, object] = {}
@@ -315,7 +318,7 @@ def test_main_learned_champion_auto_stamps_replay_on_disk(tmp_path: Path) -> Non
     assert stamp.weights_sha256 == committed_weights_sha256()
 
 
-# -- main() learned path mis-stamp guard --------------------------------------
+# -- main() mis-stamp guard (both directions) ---------------------------------
 
 
 def test_main_learned_champion_rejects_fsm_default_stamp(tmp_path: Path) -> None:
@@ -371,6 +374,69 @@ def test_main_learned_champion_rejects_contradicting_sha_stamp_file(
                 str(path),
             ]
         )
+
+
+def test_main_fsm_default_rejects_non_fsm_stamp_file(tmp_path: Path) -> None:
+    """An FSM recording can never carry a learned label — the vice-versa guard.
+
+    The owner-ratified PR-#248 amendment to the 15.21 contract: an explicit
+    champion stamp WITHOUT ``--agent-factory learned-champion`` (here, the flag
+    omitted entirely) is rejected naming the first differing field
+    (``policy_id``) instead of mis-labeling an FSM recording — the auto-stamp
+    made the Task-15.9 champion-JSON surface on this path obsolete.
+    """
+
+    path = tmp_path / "champion.json"
+    path.write_text(_expected_champion_stamp().model_dump_json(), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="policy_id"):
+        rt.main(
+            [
+                "--num-games",
+                "1",
+                "--output-dir",
+                str(tmp_path),
+                "--max-ticks",
+                "2",
+                "--tactical-policy-stamp",
+                str(path),
+            ]
+        )
+
+
+def test_main_fsm_default_accepts_matching_fsm_stamp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A JSON file restating the FSM default passes the guard on the FSM path.
+
+    The two-direction guard rejects contradictions, not restatements: a stamp
+    file carrying exactly the five FSM-default fields is accepted and threaded
+    like the ``fsm-default`` literal.
+    """
+
+    path = tmp_path / "fsm.json"
+    path.write_text(
+        fsm_default_tactical_policy_stamp().model_dump_json(), encoding="utf-8"
+    )
+
+    captured: dict[str, object] = {}
+    _install_default_path_spy(monkeypatch, captured)
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--output-dir",
+            str(tmp_path),
+            "--max-ticks",
+            "2",
+            "--tactical-policy-stamp",
+            str(path),
+        ]
+    )
+
+    assert rc == 0
+    assert captured["tactical_policy_stamp"] == fsm_default_tactical_policy_stamp()
 
 
 def test_main_learned_champion_accepts_matching_explicit_stamp(

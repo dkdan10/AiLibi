@@ -20,9 +20,12 @@ The learned champion is OPT-IN via ``--agent-factory learned-champion`` beside
 the untouched ``fsm-default`` scripted-FSM default
 (audits/audit-phase-15-pause.md decision 2, branch A): the committed
 ``replays/samples/`` corpus stays byte-identical because an unflagged run
-threads neither factory nor stamp, exactly as before Task 15.21 — and
-``--agent-factory fsm-default`` changes nothing, the Task-15.9 stamp surface
-passing through untouched. A
+threads neither factory nor stamp, exactly as before Task 15.21 — and an
+explicit ``--tactical-policy-stamp`` must match the SELECTED factory's stamp
+field-for-field in either direction, so no recording can carry the other
+policy's label (the owner-ratified PR-#248 amendment to the 15.21 contract;
+it retires the Task-15.9 champion-JSON surface on the FSM path, which the
+auto-stamp obsoleted). A
 ``learned-champion`` run AUTO-STAMPS each recording with the champion's
 :class:`~orchestrator.replay.TacticalPolicyStamp`, so the Task-15.18
 finalist-eval proof (``stamp.weights_sha256`` equals the committed sidecar
@@ -177,8 +180,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "game_over record (Task 15.9). Accepts the literal 'fsm-default' for "
             "the canonical scripted-FSM stamp, or a path to a JSON file with the "
             "five TacticalPolicyStamp fields (policy_id, method, encoder_version, "
-            "weights_sha256, anchor_policy) for a Wave-2 champion stamp. Omitted "
-            "records the absent = FSM-default stamp, byte-identical to today."
+            "weights_sha256, anchor_policy). Since Task 15.21 the stamp must "
+            "match the factory selected by --agent-factory field-for-field (the "
+            "champion stamp is auto-wired by 'learned-champion', so an explicit "
+            "stamp is only ever a re-statement); a contradiction exits non-zero. "
+            "Omitted records the absent = FSM-default stamp, byte-identical to "
+            "today."
         ),
     )
     parser.add_argument(
@@ -291,24 +298,30 @@ def _resolve_agent_factory(
 
 def _resolve_recorded_stamp(
     *,
+    factory_choice: str,
     auto_stamp: TacticalPolicyStamp | None,
     explicit_stamp: TacticalPolicyStamp | None,
 ) -> TacticalPolicyStamp | None:
-    """Reconcile the champion auto-stamp with any explicit stamp (Task 15.21).
+    """Reconcile the selected factory's stamp with any explicit stamp (Task 15.21).
 
-    The Task-15.21 mis-stamp guard. With ``--agent-factory learned-champion`` the
-    champion's auto-stamp is authoritative; an explicit ``--tactical-policy-stamp``
-    is accepted only when it matches field-for-field (an idempotent re-statement),
-    and any contradiction exits non-zero naming the differing field — a learned
-    recording can never carry an FSM label, so the Task-15.18 finalist-eval proof
-    (``stamp.weights_sha256`` equals the committed sidecar) becomes impossible to
-    forget. Without the learned factory the explicit stamp (or ``None``) passes
-    through unchanged — the Task-15.9 surface, including ``fsm-default`` plus the
-    explicit FSM stamp (back-compat).
+    The Task-15.21 mis-stamp guard, in BOTH directions (the owner-ratified
+    PR-#248 amendment to the 15.21 contract). The stamp of the factory actually
+    running is authoritative: an explicit ``--tactical-policy-stamp`` is
+    accepted only when it matches that stamp field-for-field (an idempotent
+    re-statement), and any contradiction exits non-zero naming the differing
+    field — a learned recording can never carry an FSM label, an FSM recording
+    can never carry a learned one, and the Task-15.18 finalist-eval proof
+    (``stamp.weights_sha256`` equals the committed sidecar) becomes impossible
+    to forget AND impossible to counterfeit from this CLI. What is RECORDED is
+    unchanged from Task 15.9 for every accepted combination: the champion
+    auto-stamp on the learned path, the explicit stamp (or ``None``, the
+    absent = FSM default) on the ``fsm-default`` path — so an unflagged,
+    unstamped run stays byte-identical to the pre-15.9 recorder.
     """
 
-    if auto_stamp is None:
-        return explicit_stamp
+    reference = (
+        auto_stamp if auto_stamp is not None else fsm_default_tactical_policy_stamp()
+    )
     if explicit_stamp is not None:
         for field_name in (
             "policy_id",
@@ -317,19 +330,27 @@ def _resolve_recorded_stamp(
             "weights_sha256",
             "anchor_policy",
         ):
-            auto_value = getattr(auto_stamp, field_name)
+            reference_value = getattr(reference, field_name)
             explicit_value = getattr(explicit_stamp, field_name)
-            if auto_value != explicit_value:
-                raise SystemExit(
-                    f"--agent-factory {LEARNED_CHAMPION_FACTORY_ID!r} auto-stamps "
-                    "every recording from the loaded champion artifact; the "
-                    "explicit --tactical-policy-stamp contradicts it on "
-                    f"{field_name!r} (explicit {explicit_value!r} != champion "
-                    f"{auto_value!r}). Drop the explicit stamp (the champion "
-                    "stamp is auto-wired) or pass one matching the loaded "
-                    "champion exactly."
+            if reference_value != explicit_value:
+                descriptor = (
+                    "auto-stamps every recording from the loaded champion artifact"
+                    if auto_stamp is not None
+                    else "records the scripted FSM default"
                 )
-    return auto_stamp
+                raise SystemExit(
+                    f"--agent-factory {factory_choice!r} {descriptor}; the "
+                    "explicit --tactical-policy-stamp contradicts it on "
+                    f"{field_name!r} (explicit {explicit_value!r} != factory "
+                    f"{reference_value!r}). Drop the explicit stamp (the champion "
+                    f"stamp is auto-wired by --agent-factory "
+                    f"{LEARNED_CHAMPION_FACTORY_ID!r}; the FSM default needs at "
+                    f"most the literal {FSM_DEFAULT_POLICY_ID!r}) or pass one "
+                    "matching the running factory exactly."
+                )
+    if auto_stamp is not None:
+        return auto_stamp
+    return explicit_stamp
 
 
 def _format_summary(eval_report: TournamentEvalReport) -> str:
@@ -453,7 +474,9 @@ def main(argv: list[str] | None = None) -> int:
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
     agent_factory, auto_stamp = _resolve_agent_factory(args.agent_factory)
     tactical_policy_stamp = _resolve_recorded_stamp(
-        auto_stamp=auto_stamp, explicit_stamp=explicit_stamp
+        factory_choice=args.agent_factory,
+        auto_stamp=auto_stamp,
+        explicit_stamp=explicit_stamp,
     )
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     # ``force`` is threaded into each per-seed ReplayLog construction inside

@@ -22,9 +22,12 @@ opt-in, fully reversible, `replays/samples/` byte-untouched. `scripts/run_tourna
 when absent): `learned-champion` builds `agents.tactical.learned.factory.build_learned_agent_factory()`
 and AUTO-STAMPS the recording with a `TacticalPolicyStamp` constructed from the factory's five
 plain-string stamp fields (the construction lives here in `scripts/`, which may import
-`orchestrator.replay`; the factory itself stays engine-free per 15.20) — the flag pair
-(`--agent-factory learned-champion` + an explicit contradicting `--tactical-policy-stamp`) is rejected
-loudly, so a learned recording can never carry an FSM label or vice versa (the 15.18 finalist-eval
+`orchestrator.replay`; the factory itself stays engine-free per 15.20) — an explicit
+`--tactical-policy-stamp` contradicting the SELECTED factory's stamp is rejected loudly in BOTH
+directions (`learned-champion` + an FSM label, and `fsm-default` / the flag omitted + a non-FSM
+label; the second direction is the owner-ratified PR-#248 review amendment, 2026-07-10, retiring the
+15.9 champion-JSON surface on the FSM path that the auto-stamp obsoleted), so a learned recording can
+never carry an FSM label or vice versa (the 15.18 finalist-eval
 proof, `stamp.weights_sha256 == committed sidecar`, becomes impossible to forget). `run_tournament_eval`
 itself is unchanged (the seam already exists); this is CLI plumbing + the mis-stamp guard + tests. The
 spectator path needs no change: recordings carry the stamp, `api/replay_loader.py`'s 15.9 policy guard
@@ -41,9 +44,9 @@ already distinguishes them, and the canonical samples stay FSM-stamped and byte-
 - api/ (the 15.9 policy guard already serves stamped recordings)
 
 **Definition of done:**
-- [ ] `scripts/run_tournament.py` without the flag is byte-identical in behavior to today (default `fsm-default`; a test pins the parse + the default factory path).
+- [ ] `scripts/run_tournament.py` without the flag is byte-identical in behavior to today (default `fsm-default`; a test pins the parse + the default factory path) — with ONE owner-ratified exception (PR-#248 review amendment, 2026-07-10): an explicit `--tactical-policy-stamp` contradicting the FSM default without `--agent-factory learned-champion` is rejected rather than recorded (the vice-versa mis-stamp guard).
 - [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the `TacticalPolicyStamp` constructed from the learned factory's plain-string stamp fields, with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
-- [ ] Passing `--agent-factory learned-champion` together with a contradicting `--tactical-policy-stamp` exits non-zero with a named error; `fsm-default` plus the explicit FSM stamp remains accepted (back-compat).
+- [ ] Passing `--agent-factory learned-champion` together with a contradicting `--tactical-policy-stamp` exits non-zero with a named error; `fsm-default` plus the explicit FSM stamp remains accepted (back-compat); `fsm-default` (or the flag omitted) plus an explicit stamp contradicting the FSM default likewise exits non-zero with the differing field named (the vice-versa direction, same PR-#248 amendment).
 - [ ] The module docstring records the decision-2 posture: opt-in beside the FSM default, samples untouched, default flip re-evaluated at close/Phase 17 behind the hardened referee + a corpus-scale companion record (the Q3 corollary).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
