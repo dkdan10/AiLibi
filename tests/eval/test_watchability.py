@@ -629,9 +629,9 @@ _BASELINE_2_9P2I_FLOORS = SupplyFloors(
 def test_baseline_3_sets_pass_the_hardened_referee_end_to_end() -> None:
     """The committed scripted-FSM baseline-3 sets clear their own re-pinned floors.
 
-    The 15.19 DoD anchor: the floors were re-pinned AT the measured baseline
-    values under the subject-aware definition, so the baseline passes at
-    equality — every gauge row, not just the composed verdict.
+    The 15.19 DoD anchor: every gauge row passes, not just the composed verdict
+    (the exact floor == measured equality is pinned separately by
+    ``test_baseline_3_floor_pins_equal_the_measured_bytes``).
     """
 
     for sample_dir in (_NINE, _FOUR):
@@ -639,6 +639,72 @@ def test_baseline_3_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert report.referee_passed is True
         assert report.supply_floors_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
+
+
+def test_baseline_3_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
+
+    ``passed`` alone is one-sided (any floor at or below the true measured value
+    clears it), so an under-pinned floor would silently weaken the gate with CI
+    green. This pins BOTH sides at the 15.19 re-measurement: the measured gauge
+    IS the recorded fraction, and the pinned floor IS the measured gauge —
+    "the baseline passes at equality", made an assertion instead of a comment.
+    """
+
+    expected = {
+        _NINE: {
+            "witnessed_event_rate": 5 / 154,
+            "flags_per_meeting": 259 / 139,
+            "testimony_backed_conversion": 71 / 107,  # SUBJECT-AWARE (was 71/117)
+        },
+        _FOUR: {
+            "witnessed_event_rate": 1 / 55,
+            "flags_per_meeting": 42 / 39,
+            "testimony_backed_conversion": 20 / 33,  # SUBJECT-AWARE (was 21/35)
+        },
+    }
+    for sample_dir, fractions in expected.items():
+        report = compute_watchability(sample_dir)
+        by_name = {g.name: g for g in report.supply_gauges}
+        assert set(by_name) == set(fractions)
+        for name, fraction in fractions.items():
+            gauge = by_name[name]
+            assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
+            assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
+
+
+def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
+    """LIVE-PATH SNAPSHOT: both 15.19 patches demonstrably fire on real bytes.
+
+    The historical parity pin guards only the FROZEN path, and the CLI aggregate
+    (mean 35.19) is a single scalar — neither shows the patches acting on any
+    real committed game. This pins the live-vs-historical per-game delta on the
+    9p2i bytes: the subject-aware railroad floor (patch 2) newly floors exactly
+    seeds 19/27/29/31, and the conversion-coupled D2 gate (patch 1) zeroes the
+    separation term on seeds 13/24 (games with live separation but no converted
+    backed accusation and no flag) without flooring them.
+    """
+
+    live = {s.seed: s for s in _score_committed_set(_NINE)}
+    hist = {s.seed: s for s in _score_committed_set(_NINE, historical_15_2=True)}
+
+    live_floored = {seed for seed, s in live.items() if s.floor_multiplier == 0.0}
+    hist_floored = {seed for seed, s in hist.items() if s.floor_multiplier == 0.0}
+    # Patch 2 (subject-aware backing -> the railroad floor's backed leg): the
+    # hardened floor only ever ADDS railroads on the same bytes...
+    assert hist_floored <= live_floored
+    # ...and on baseline-3 9p2i it adds exactly these four crew ejections whose
+    # only "backing" was a grounded observation about someone else.
+    assert live_floored - hist_floored == {19, 27, 29, 31}
+
+    # Patch 1 (conversion-coupled D2): these games carry rendered-suspicion
+    # separation but no converted backed accusation and no contradiction flag —
+    # suspicion theater, gated to 0 live, intact under the frozen spec.
+    for seed in (13, 24):
+        assert live[seed].floor_multiplier == 1.0
+        assert live[seed].d2_separation_norm == 0.0
+        assert hist[seed].d2_separation_norm > 0.0
+        assert live[seed].score < hist[seed].score
 
 
 def test_testimony_backed_conversion_requires_observation_backing() -> None:
