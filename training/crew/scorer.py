@@ -144,6 +144,12 @@ FO8_PRIOR_FSM_WINS: Final[int] = 10
 FO8_PRIOR_LEARNED_WINS: Final[int] = 11
 FO8_PRIOR_SEEDS: Final[int] = 12
 
+# The committed TRAINING episode budget (see CrewEsConfig): ~6-12× the
+# scripted crew's typical game length (16-49 ticks on the train seeds), and
+# generous against the FO-8 spike's own ``max_ticks=80`` training budget. Only
+# training rides it; the eval protocol keeps the production 1000-tick budget.
+TRAIN_MAX_TICKS: Final[int] = 300
+
 _RESULTS_JSONL_PATH: Final[Path] = Path("training/reports/results-crew-track.jsonl")
 _ARTIFACT_ROOT: Final[Path] = Path("training/artifacts/crew")
 _ROSTER_FILENAME: Final[str] = "roster.json"
@@ -782,13 +788,27 @@ def crew_inner_episode_fitness(
 
 @dataclass(frozen=True)
 class CrewEsConfig:
-    """The crew-scorer+ES entrant budget (recorded verbatim in the report)."""
+    """The crew-scorer+ES entrant budget (recorded verbatim in the report).
+
+    ``max_ticks`` is the TRAINING episode budget: a training episode that has
+    not terminated by then is truncated and scores the documented
+    :data:`~training.bakeoff.harness.TRUNCATED_EPISODE_FITNESS` sentinel. The
+    committed budgets cap it at :data:`TRAIN_MAX_TICKS` (the FO-8 spike
+    precedent — the prior this track measures against trained under
+    ``max_ticks=80``): without a cap the optimizer drifts into marathon
+    survive-and-grind genomes whose games run to the 1000-tick production
+    budget, 20-30× the scripted crew's game length — a wall-clock sink and a
+    degenerate play shape. The EVAL protocol (:class:`CrewProtocolConfig`)
+    keeps the production ``DEFAULT_MAX_TICKS``, so every reported metric is
+    measured under the uncapped budget.
+    """
 
     es: ESConfig
     anchor_weight: float = DEFAULT_ANCHOR_PENALTY_WEIGHT
     num_players: int = BAKEOFF_NUM_PLAYERS
     num_impostors: int = BAKEOFF_NUM_IMPOSTORS
     tasks_per_crewmate: int = BAKEOFF_TASKS_PER_CREWMATE
+    max_ticks: int = DEFAULT_MAX_TICKS
 
 
 def crew_es_budget(
@@ -798,7 +818,9 @@ def crew_es_budget(
 
     Mirrors the 15.15 utility-es budgets (the closest analog entrant): the
     full budget is 20 generations × 12 offspring, K-seed-averaged over the
-    first 6 corpus TRAIN-split seeds.
+    first 6 corpus TRAIN-split seeds. Both budgets cap TRAINING episodes at
+    :data:`TRAIN_MAX_TICKS` (see :class:`CrewEsConfig` — the eval protocol
+    keeps the production tick budget).
     """
 
     train_seeds = load_train_seeds()
@@ -812,6 +834,7 @@ def crew_es_budget(
                 fitness_seeds=train_seeds[:1],
             ),
             anchor_weight=anchor_weight,
+            max_ticks=TRAIN_MAX_TICKS,
         )
     if budget == "full":
         return CrewEsConfig(
@@ -823,6 +846,7 @@ def crew_es_budget(
                 fitness_seeds=train_seeds[:6],
             ),
             anchor_weight=anchor_weight,
+            max_ticks=TRAIN_MAX_TICKS,
         )
     raise ValueError(f"unknown budget {budget!r}; expected 'ci' or 'full'")
 
@@ -859,6 +883,7 @@ class CrewEsEntrant:
                 num_players=self._config.num_players,
                 num_impostors=self._config.num_impostors,
                 tasks_per_crewmate=self._config.tasks_per_crewmate,
+                max_ticks=self._config.max_ticks,
                 trace=trace,
             )
         return crew_inner_episode_fitness(
@@ -879,6 +904,7 @@ class CrewEsEntrant:
                 "entrant": self.name,
                 "anchor_weight": self._config.anchor_weight,
                 "es": self._config.es.model_dump(mode="json"),
+                "train_max_ticks": self._config.max_ticks,
                 "feature_names": list(CREW_OPTION_FEATURE_NAMES),
                 "genome_length": genome_length,
                 "encoder_version": policy.encoder_version,
@@ -1435,6 +1461,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "CREW_ENTRANT_NAME",
+    "TRAIN_MAX_TICKS",
     "CREW_FSM_BASELINE_NAME",
     "ENCODER_VERSION",
     "FO8_PRIOR_FSM_WINS",
