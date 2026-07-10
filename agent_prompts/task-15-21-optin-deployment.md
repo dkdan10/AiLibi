@@ -20,7 +20,9 @@ Make the champion selectable without a Python driver — the deployment end-stat
 opt-in, fully reversible, `replays/samples/` byte-untouched. `scripts/run_tournament.py` gains an
 `--agent-factory {fsm-default,learned-champion}` flag (default `fsm-default`, byte-identical behavior
 when absent): `learned-champion` builds `agents.tactical.learned.factory.build_learned_agent_factory()`
-and AUTO-STAMPS the recording with the factory's own five-field stamp — the flag pair
+and AUTO-STAMPS the recording with a `TacticalPolicyStamp` constructed from the factory's five
+plain-string stamp fields (the construction lives here in `scripts/`, which may import
+`orchestrator.replay`; the factory itself stays engine-free per 15.20) — the flag pair
 (`--agent-factory learned-champion` + an explicit contradicting `--tactical-policy-stamp`) is rejected
 loudly, so a learned recording can never carry an FSM label or vice versa (the 15.18 finalist-eval
 proof, `stamp.weights_sha256 == committed sidecar`, becomes impossible to forget). `run_tournament_eval`
@@ -40,7 +42,7 @@ already distinguishes them, and the canonical samples stay FSM-stamped and byte-
 
 **Definition of done:**
 - [ ] `scripts/run_tournament.py` without the flag is byte-identical in behavior to today (default `fsm-default`; a test pins the parse + the default factory path).
-- [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the learned factory's stamp with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
+- [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the `TacticalPolicyStamp` constructed from the learned factory's plain-string stamp fields, with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
 - [ ] Passing `--agent-factory learned-champion` together with a contradicting `--tactical-policy-stamp` exits non-zero with a named error; `fsm-default` plus the explicit FSM stamp remains accepted (back-compat).
 - [ ] The module docstring records the decision-2 posture: opt-in beside the FSM default, samples untouched, default flip re-evaluated at close/Phase 17 behind the hardened referee + a corpus-scale companion record (the Q3 corollary).
 - [ ] `uv run mypy .` passes.
@@ -55,10 +57,12 @@ already distinguishes them, and the canonical samples stay FSM-stamped and byte-
 
 Mirror the `--tactical-policy-stamp` flag's plumbing one block below it. The factory choice maps to a
 tiny registry dict `{"fsm-default": build_default_agent_factory, "learned-champion":
-build_learned_agent_factory}` resolved at parse time; the auto-stamp reads the learned factory's stamp
-accessor (15.20's DoD guarantees it matches the sidecar) so this task never hard-codes a sha. The
-contradiction guard compares the resolved stamp against an explicitly-passed one field-by-field and
-names the differing field in the error.
+build_learned_agent_factory}` resolved at parse time; the auto-stamp reads the learned factory's
+plain-string stamp fields (15.20's DoD guarantees they match the sidecar) and constructs the
+`TacticalPolicyStamp` here, so this task never hard-codes a sha. The contradiction guard compares the
+resolved stamp against an explicitly-passed one field-by-field and names the differing field in the
+error. The edge on 15.19 is sequencing, not file-driven: the champion-recording CLI should not ship
+before the referee that will judge its recordings is hardened.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

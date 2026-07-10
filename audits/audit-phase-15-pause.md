@@ -433,7 +433,11 @@ track is RETIRED:**
 - **The owner-ratified libm posture (2026-07-09, Q4) is recorded and contracted:** no libm-free forward
   pass is demanded; instead Wave-2 productization (15.20) MUST gate on bit-exact equality of the
   numpy-trained and pure-Python-shipped forward passes over the committed float-hex weights — a test,
-  not an architecture change. Replay byte-identity is untouched by libm either way.
+  not an architecture change. Replay byte-identity is untouched by libm either way. (One factual
+  precision on the ruling's shorthand: the champion's training-side reference pass is itself pure
+  Python — `math.fsum` in `training/bakeoff/utility_es.py`; numpy never touched this forward pass — so
+  the contracted gate is training-side-vs-shipped equality, which is the ruling's intent and strictly
+  easier to hold bit-exact.)
 - **Same-host generation scope, documented and accepted:** the MLP family (policy-es / map-elites /
   bc-dagger) uses tanh; had an MLP candidate won, cross-host GENERATION determinism would rest on libm
   and int-quantization's LUT-tanh would have been the fix. The linear champion moots this; the trade is

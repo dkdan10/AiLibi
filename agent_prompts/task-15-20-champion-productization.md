@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 15.20 — Champion productization: `agents/tactical/learned/`, the pure-Python forward pass, anchored to audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the numpy-side reference the shipped pass must equal bit-exactly); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine). Do not implement work outside these references.
+Implement Task 15.20 — Champion productization: `agents/tactical/learned/`, the pure-Python forward pass, anchored to audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the training-side reference the shipped pass must equal bit-exactly — itself pure-Python `math.fsum`; the Q4 ruling's "numpy-trained" is shorthand for training-side); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-champion-productization`
 **Depends on:** 15.18
-**Section refs:** audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the numpy-side reference the shipped pass must equal bit-exactly); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)
+**Section refs:** audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the training-side reference the shipped pass must equal bit-exactly — itself pure-Python `math.fsum`; the Q4 ruling's "numpy-trained" is shorthand for training-side); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)
 **Complexity:** Integration
 
 Promote the pause's champion — the `utility-es` learned utility scorer over FSM-proposed impostor
@@ -22,15 +22,18 @@ weights as a committed float-hex artifact + sha256 sidecar, value-identical to
 `training/artifacts/impostor/utility-es/weights.json` (a test pins byte equality of the weights payload
 and sha equality with the training-side sidecar); (b) a pure-Python forward pass — the 19-weight linear
 scorer over the `impostor-option-features-v1` option-feature basis, ported from
-`training/bakeoff/utility_es.py` with NO numpy/torch import (the champion's pass is a float64 dot
-product; it contains no transcendental, so the decision-6 libm scope note is discharged by
+`training/bakeoff/utility_es.py` with NO numpy/torch import (the champion's pass is a `math.fsum`
+linear score; it contains no transcendental, so the decision-6 libm scope note is discharged by
 construction); (c) `build_learned_agent_factory()` beside the scripted default — impostors run the
 learned scorer, crew delegate to the FSM, meeting protocol forwarded to the wrapped `TacticalAgent`
-exactly as `build_candidate_factory` does today, and the factory exposes the five-field
-`TacticalPolicyStamp` it should be recorded under (policy_id `utility-es`, encoder
-`impostor-option-features-v1`, the committed sha). The scripted FSM stays in-tree untouched as the
+exactly as `build_candidate_factory` does today, and the factory exposes its five stamp fields
+(policy_id `utility-es`, method, encoder `impostor-option-features-v1`, the committed sha, the anchor)
+as PLAIN STRINGS on an engine-free local record — importing `orchestrator.replay`'s
+`TacticalPolicyStamp` from `agents/` would chain `agents → orchestrator → engine` and break the
+firewall contract, so the real stamp object is constructed by 15.21's CLI in `scripts/`, which may
+import orchestrator freely. The scripted FSM stays in-tree untouched as the
 default, the anchor, the BC oracle, and the fallback. The Q4 gate is the task's spine: a committed test
-drives BOTH implementations — the numpy-side scorer and the shipped pure-Python pass — over the
+drives BOTH implementations — the training-side scorer and the shipped pure-Python pass — over the
 committed weights across a recorded decision stream (fixed seeds, full option menus) and asserts
 BIT-EXACT equality of every score and every chosen intent; plus the full 15.10 acceptance stack through
 the learned factory (determinism harness double-run, leak-test factory mode, firewall test extension).
@@ -50,9 +53,9 @@ the learned factory (determinism harness double-run, leak-test factory mode, fir
 **Definition of done:**
 - [ ] `agents/tactical/learned/` imports nothing from `engine/`, `training/`, numpy, or torch (import-linter + the extended firewall test prove it), and `uv run python -c "import agents.tactical.learned.factory"` succeeds on a bare tree.
 - [ ] The committed agents-side weights artifact is value-identical to `training/artifacts/impostor/utility-es/weights.json` and its sha256 sidecar equals the training-side sidecar (`6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0`) — both pinned by test.
-- [ ] The Q4 bit-exact gate: over the committed float-hex weights and a fixed recorded decision stream, the numpy-side scorer and the shipped pure-Python pass produce bit-identical float64 scores and identical chosen intents (a test, not an architecture change — the owner-ratified libm posture).
+- [ ] The Q4 bit-exact gate: over the committed float-hex weights and a fixed recorded decision stream, the training-side scorer and the shipped pure-Python pass produce bit-identical float64 scores and identical chosen intents (a test, not an architecture change — the owner-ratified libm posture, whose "numpy-trained" reads training-side: the reference is itself pure-Python `math.fsum`).
 - [ ] The learned factory passes the 15.10 determinism harness (double-run hash equality over the (feature, score, intent) stream plus frozen-policy full-game state-hash equality) and the leak-test factory mode through `build_learned_agent_factory()` itself.
-- [ ] The factory's stamp accessor returns the five-field `TacticalPolicyStamp` with `weights_sha256` equal to the committed sidecar digest, so 15.21's recording surfaces cannot mis-stamp.
+- [ ] The factory's stamp accessor returns the five stamp fields (policy_id, method, encoder_version, weights_sha256, anchor_policy) as plain strings on an engine-free record, with `weights_sha256` equal to the committed sidecar digest — 15.21 constructs the real `TacticalPolicyStamp` from them — so the recording surfaces cannot mis-stamp.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -64,14 +67,17 @@ the learned factory (determinism harness double-run, leak-test factory mode, fir
 ## Implementation hint
 
 The champion is deliberately the SMALL one: 19 float64 weights over 18 option features + bias, linear,
-no activation — the whole forward pass is `sum(w*x) + b` per option and an argmax with the option
-menu's existing deterministic tie-break. Port the option-feature computation from
-`training/bakeoff/utility_es.py` faithfully (the 18 feature names are in the committed `config.json`);
-the bit-exact test is what catches a drifted reorder, because float addition is not associative — sum
-in the SAME order as the numpy reference (`float(np.dot)` accumulates left-to-right pairwise; safest is
-to port the exact accumulation the reference uses and pin it). Mirror `build_candidate_factory`'s
-wrapper pattern (wrap the real `TacticalAgent`, override the impostor intent, `__getattr__`-forward the
-meeting protocol) rather than inventing a new agent class.
+no activation — the reference forward pass is `math.fsum(weight*feature for …) + bias` per option
+(`training/bakeoff/utility_es.py::_score`) and an argmax with the menu's deterministic tie-break. Port
+the accumulation VERBATIM: `math.fsum` is correctly rounded and order-independent, so the bit-exact
+hazard is not summation order — it is substituting a naive `sum()` loop (or numpy) for `fsum`, which
+diverges in the last ULP. Two porting snags the faithful port must handle: (a) the reference module's
+one live `engine.world` import feeds only `_sabotage_kinds`, which `enumerate_options` immediately
+discards — drop it, or the firewall contract breaks; (b) the argmax tie-break uses
+`training.bakeoff.harness.intent_key` (a pure `ActionIntent.model_dump` serialization) — reimplement it
+agents-side, don't import it. The 18 feature names are in the committed `config.json`. Mirror
+`build_candidate_factory`'s wrapper pattern (wrap the real `TacticalAgent`, override the impostor
+intent, `__getattr__`-forward the meeting protocol) rather than inventing a new agent class.
 
 ## Public types this task introduces
 - `agents.tactical.learned.forward.LearnedImpostorScorer`
@@ -81,8 +87,9 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 
 ## Integration risk
 
-The one real hazard is silent divergence between the two forward passes — a re-ordered sum, a float32
-intermediate, a quantization mismatch in a feature — which the Q4 bit-exact test exists to make loud.
+The one real hazard is silent divergence between the two forward passes — an `fsum` swapped for a
+naive sum, a float32 intermediate, a quantization mismatch in a feature — which the Q4 bit-exact test
+exists to make loud.
 Keep the agents-side artifact a COPY pinned by test, not a cross-package import: `agents/` importing
 `training/` would breach the dependency posture the firewall enforces. The determinism harness and leak
 test must run through the REAL factory (`build_learned_agent_factory()`), not a test double — the
@@ -142,4 +149,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-15-champion-productization` with a title like `task 15.20: champion productization: `agents/tactical/learned/`, the pure-python forward pass`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the numpy-side reference the shipped pass must equal bit-exactly); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the training-side reference the shipped pass must equal bit-exactly — itself pure-Python `math.fsum`; the Q4 ruling's "numpy-trained" is shorthand for training-side); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

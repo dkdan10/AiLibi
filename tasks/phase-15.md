@@ -1858,7 +1858,7 @@ same fixture, marked as historical.
 ### Task 15.20 — Champion productization: `agents/tactical/learned/`, the pure-Python forward pass
 **Branch:** `phase-15-champion-productization`
 **Depends on:** 15.18
-**Section refs:** audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the numpy-side reference the shipped pass must equal bit-exactly); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)
+**Section refs:** audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the training-side reference the shipped pass must equal bit-exactly — itself pure-Python `math.fsum`; the Q4 ruling's "numpy-trained" is shorthand for training-side); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)
 **Complexity:** Integration
 
 Promote the pause's champion — the `utility-es` learned utility scorer over FSM-proposed impostor
@@ -1867,15 +1867,18 @@ weights as a committed float-hex artifact + sha256 sidecar, value-identical to
 `training/artifacts/impostor/utility-es/weights.json` (a test pins byte equality of the weights payload
 and sha equality with the training-side sidecar); (b) a pure-Python forward pass — the 19-weight linear
 scorer over the `impostor-option-features-v1` option-feature basis, ported from
-`training/bakeoff/utility_es.py` with NO numpy/torch import (the champion's pass is a float64 dot
-product; it contains no transcendental, so the decision-6 libm scope note is discharged by
+`training/bakeoff/utility_es.py` with NO numpy/torch import (the champion's pass is a `math.fsum`
+linear score; it contains no transcendental, so the decision-6 libm scope note is discharged by
 construction); (c) `build_learned_agent_factory()` beside the scripted default — impostors run the
 learned scorer, crew delegate to the FSM, meeting protocol forwarded to the wrapped `TacticalAgent`
-exactly as `build_candidate_factory` does today, and the factory exposes the five-field
-`TacticalPolicyStamp` it should be recorded under (policy_id `utility-es`, encoder
-`impostor-option-features-v1`, the committed sha). The scripted FSM stays in-tree untouched as the
+exactly as `build_candidate_factory` does today, and the factory exposes its five stamp fields
+(policy_id `utility-es`, method, encoder `impostor-option-features-v1`, the committed sha, the anchor)
+as PLAIN STRINGS on an engine-free local record — importing `orchestrator.replay`'s
+`TacticalPolicyStamp` from `agents/` would chain `agents → orchestrator → engine` and break the
+firewall contract, so the real stamp object is constructed by 15.21's CLI in `scripts/`, which may
+import orchestrator freely. The scripted FSM stays in-tree untouched as the
 default, the anchor, the BC oracle, and the fallback. The Q4 gate is the task's spine: a committed test
-drives BOTH implementations — the numpy-side scorer and the shipped pure-Python pass — over the
+drives BOTH implementations — the training-side scorer and the shipped pure-Python pass — over the
 committed weights across a recorded decision stream (fixed seeds, full option menus) and asserts
 BIT-EXACT equality of every score and every chosen intent; plus the full 15.10 acceptance stack through
 the learned factory (determinism harness double-run, leak-test factory mode, firewall test extension).
@@ -1895,9 +1898,9 @@ the learned factory (determinism harness double-run, leak-test factory mode, fir
 **Definition of done:**
 - [ ] `agents/tactical/learned/` imports nothing from `engine/`, `training/`, numpy, or torch (import-linter + the extended firewall test prove it), and `uv run python -c "import agents.tactical.learned.factory"` succeeds on a bare tree.
 - [ ] The committed agents-side weights artifact is value-identical to `training/artifacts/impostor/utility-es/weights.json` and its sha256 sidecar equals the training-side sidecar (`6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0`) — both pinned by test.
-- [ ] The Q4 bit-exact gate: over the committed float-hex weights and a fixed recorded decision stream, the numpy-side scorer and the shipped pure-Python pass produce bit-identical float64 scores and identical chosen intents (a test, not an architecture change — the owner-ratified libm posture).
+- [ ] The Q4 bit-exact gate: over the committed float-hex weights and a fixed recorded decision stream, the training-side scorer and the shipped pure-Python pass produce bit-identical float64 scores and identical chosen intents (a test, not an architecture change — the owner-ratified libm posture, whose "numpy-trained" reads training-side: the reference is itself pure-Python `math.fsum`).
 - [ ] The learned factory passes the 15.10 determinism harness (double-run hash equality over the (feature, score, intent) stream plus frozen-policy full-game state-hash equality) and the leak-test factory mode through `build_learned_agent_factory()` itself.
-- [ ] The factory's stamp accessor returns the five-field `TacticalPolicyStamp` with `weights_sha256` equal to the committed sidecar digest, so 15.21's recording surfaces cannot mis-stamp.
+- [ ] The factory's stamp accessor returns the five stamp fields (policy_id, method, encoder_version, weights_sha256, anchor_policy) as plain strings on an engine-free record, with `weights_sha256` equal to the committed sidecar digest — 15.21 constructs the real `TacticalPolicyStamp` from them — so the recording surfaces cannot mis-stamp.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1913,19 +1916,23 @@ the learned factory (determinism harness double-run, leak-test factory mode, fir
 **Implementation hint:**
 
 The champion is deliberately the SMALL one: 19 float64 weights over 18 option features + bias, linear,
-no activation — the whole forward pass is `sum(w*x) + b` per option and an argmax with the option
-menu's existing deterministic tie-break. Port the option-feature computation from
-`training/bakeoff/utility_es.py` faithfully (the 18 feature names are in the committed `config.json`);
-the bit-exact test is what catches a drifted reorder, because float addition is not associative — sum
-in the SAME order as the numpy reference (`float(np.dot)` accumulates left-to-right pairwise; safest is
-to port the exact accumulation the reference uses and pin it). Mirror `build_candidate_factory`'s
-wrapper pattern (wrap the real `TacticalAgent`, override the impostor intent, `__getattr__`-forward the
-meeting protocol) rather than inventing a new agent class.
+no activation — the reference forward pass is `math.fsum(weight*feature for …) + bias` per option
+(`training/bakeoff/utility_es.py::_score`) and an argmax with the menu's deterministic tie-break. Port
+the accumulation VERBATIM: `math.fsum` is correctly rounded and order-independent, so the bit-exact
+hazard is not summation order — it is substituting a naive `sum()` loop (or numpy) for `fsum`, which
+diverges in the last ULP. Two porting snags the faithful port must handle: (a) the reference module's
+one live `engine.world` import feeds only `_sabotage_kinds`, which `enumerate_options` immediately
+discards — drop it, or the firewall contract breaks; (b) the argmax tie-break uses
+`training.bakeoff.harness.intent_key` (a pure `ActionIntent.model_dump` serialization) — reimplement it
+agents-side, don't import it. The 18 feature names are in the committed `config.json`. Mirror
+`build_candidate_factory`'s wrapper pattern (wrap the real `TacticalAgent`, override the impostor
+intent, `__getattr__`-forward the meeting protocol) rather than inventing a new agent class.
 
 **Integration risk:**
 
-The one real hazard is silent divergence between the two forward passes — a re-ordered sum, a float32
-intermediate, a quantization mismatch in a feature — which the Q4 bit-exact test exists to make loud.
+The one real hazard is silent divergence between the two forward passes — an `fsum` swapped for a
+naive sum, a float32 intermediate, a quantization mismatch in a feature — which the Q4 bit-exact test
+exists to make loud.
 Keep the agents-side artifact a COPY pinned by test, not a cross-package import: `agents/` importing
 `training/` would breach the dependency posture the firewall enforces. The determinism harness and leak
 test must run through the REAL factory (`build_learned_agent_factory()`), not a test double — the
@@ -1943,7 +1950,9 @@ Make the champion selectable without a Python driver — the deployment end-stat
 opt-in, fully reversible, `replays/samples/` byte-untouched. `scripts/run_tournament.py` gains an
 `--agent-factory {fsm-default,learned-champion}` flag (default `fsm-default`, byte-identical behavior
 when absent): `learned-champion` builds `agents.tactical.learned.factory.build_learned_agent_factory()`
-and AUTO-STAMPS the recording with the factory's own five-field stamp — the flag pair
+and AUTO-STAMPS the recording with a `TacticalPolicyStamp` constructed from the factory's five
+plain-string stamp fields (the construction lives here in `scripts/`, which may import
+`orchestrator.replay`; the factory itself stays engine-free per 15.20) — the flag pair
 (`--agent-factory learned-champion` + an explicit contradicting `--tactical-policy-stamp`) is rejected
 loudly, so a learned recording can never carry an FSM label or vice versa (the 15.18 finalist-eval
 proof, `stamp.weights_sha256 == committed sidecar`, becomes impossible to forget). `run_tournament_eval`
@@ -1963,7 +1972,7 @@ already distinguishes them, and the canonical samples stay FSM-stamped and byte-
 
 **Definition of done:**
 - [ ] `scripts/run_tournament.py` without the flag is byte-identical in behavior to today (default `fsm-default`; a test pins the parse + the default factory path).
-- [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the learned factory's stamp with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
+- [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the `TacticalPolicyStamp` constructed from the learned factory's plain-string stamp fields, with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
 - [ ] Passing `--agent-factory learned-champion` together with a contradicting `--tactical-policy-stamp` exits non-zero with a named error; `fsm-default` plus the explicit FSM stamp remains accepted (back-compat).
 - [ ] The module docstring records the decision-2 posture: opt-in beside the FSM default, samples untouched, default flip re-evaluated at close/Phase 17 behind the hardened referee + a corpus-scale companion record (the Q3 corollary).
 - [ ] `uv run mypy .` passes.
@@ -1978,10 +1987,12 @@ already distinguishes them, and the canonical samples stay FSM-stamped and byte-
 
 Mirror the `--tactical-policy-stamp` flag's plumbing one block below it. The factory choice maps to a
 tiny registry dict `{"fsm-default": build_default_agent_factory, "learned-champion":
-build_learned_agent_factory}` resolved at parse time; the auto-stamp reads the learned factory's stamp
-accessor (15.20's DoD guarantees it matches the sidecar) so this task never hard-codes a sha. The
-contradiction guard compares the resolved stamp against an explicitly-passed one field-by-field and
-names the differing field in the error.
+build_learned_agent_factory}` resolved at parse time; the auto-stamp reads the learned factory's
+plain-string stamp fields (15.20's DoD guarantees they match the sidecar) and constructs the
+`TacticalPolicyStamp` here, so this task never hard-codes a sha. The contradiction guard compares the
+resolved stamp against an explicitly-passed one field-by-field and names the differing field in the
+error. The edge on 15.19 is sequencing, not file-driven: the champion-recording CLI should not ship
+before the referee that will judge its recordings is hardened.
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-21-optin-deployment.md`
 
