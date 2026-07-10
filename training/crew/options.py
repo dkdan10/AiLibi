@@ -45,6 +45,23 @@ Zero reimplementation drift: the FSM-derived options call
 a short-circuiting priority ladder, the scorer computes with a learned linear
 head over these option features and a single argmax.
 
+Task 15.22 widens the option basis (audits/audit-phase-15-pause.md decision 5,
+the four-item review's item 4 — the encoder note): :class:`OwnedTaskOptionBasis`
+is a WRAPPER around :func:`enumerate_crew_options` (the legacy function stays
+byte-identical — every 15.16 pin holds) that re-bases each option onto the
+widened :data:`OWNED_TASK_OPTION_FEATURE_NAMES` alphabet (a ``nearest_task``
+one-hot + four owned-task scalars over the new
+:attr:`observation.packet.SelfView.owned_task_ids` self channel) and appends the
+``nearest_task`` option — nearest-of-N owned-task selection + same-room batching,
+the crew report §7 ask. The basis's version string bumps to
+``crew-option-features-v2`` (:data:`training.crew.scorer.OWNED_TASK_ENCODER_VERSION`);
+the PRODUCTION encoder (``agents/tactical/features.py``) is NOT touched. The
+FO-8-style interrupt-preserving constraint the pause scoped is STRUCTURAL: when a
+body is visible the widened menu carries ONLY ``report`` — the learned head is
+removed from the ``report`` selectable set rather than penalized for suppressing
+it (structural unreachability, not a reward term — the Goodhart lesson), so the
+15.16 win-by-meeting-starvation failure mode is unreachable.
+
 No ``eval.*`` import may appear here (the 15.15 firewall-test pattern —
 ``tests/training/test_crew_scorer.py`` AST-scans this module): the crew eval
 twin in :mod:`training.crew.scorer` computes every reported metric.
@@ -92,6 +109,11 @@ CrewOptionKind: TypeAlias = Literal[
     "emergency",
     "repair",
     "hold",
+    # The Task 15.22 widened-basis addition. It is NOT a member of the PINNED
+    # :data:`CREW_OPTION_KINDS` alphabet (the 15.16 seven-kind menu is
+    # byte-identical); it appears only in :data:`OWNED_TASK_OPTION_KINDS`, the
+    # basis :class:`OwnedTaskOptionBasis` re-bases onto.
+    "nearest_task",
 ]
 CREW_OPTION_KINDS: Final[tuple[CrewOptionKind, ...]] = (
     "continue_task",
@@ -153,6 +175,48 @@ def crew_genome_length() -> int:
     """Flat genome length: one weight per option feature + a trailing bias."""
 
     return len(CREW_OPTION_FEATURE_NAMES) + 1
+
+
+# --------------------------------------------------------------------------- #
+# The Task 15.22 widened option basis (audits/audit-phase-15-pause.md decision  #
+# 5). The legacy CREW_OPTION_* surfaces above are PINNED (byte-identical);      #
+# these are the additive widened surfaces the wrapper basis re-bases onto.      #
+# --------------------------------------------------------------------------- #
+
+# The widened alphabet: the seven pinned kinds (a PREFIX of this tuple, so a
+# legacy kind's one-hot index is unchanged) then the ``nearest_task`` addition.
+OWNED_TASK_OPTION_KINDS: Final[tuple[CrewOptionKind, ...]] = (
+    *CREW_OPTION_KINDS,
+    "nearest_task",
+)
+
+# The owned-task decision-level normalizer (mirrors the 15.16 roster caps): a
+# roster carries a handful of owned instances, so eight caps the batch signal.
+_OWNED_TASKS_CAP: Final[float] = 8.0
+
+# The widened per-option feature vector: the eight kind one-hots (in
+# OWNED_TASK_OPTION_KINDS order) then the FOURTEEN legacy scalars VERBATIM (the
+# 15.16 block, carried through re-basing unchanged) then the four owned-task
+# scalars — ``owned_tasks_norm`` the batch size, ``nearest_owned_hops_norm`` the
+# distance to the nearest owned task, ``same_room_owned_norm`` the in-room batch,
+# ``goal_room_owned_norm`` the owned count in a task-directed option's goal room
+# (the same-room batching cue). 8 + 14 + 4 = 26.
+OWNED_TASK_OPTION_FEATURE_NAMES: Final[tuple[str, ...]] = (
+    tuple(f"kind_{kind}" for kind in OWNED_TASK_OPTION_KINDS)
+    + CREW_OPTION_FEATURE_NAMES[len(CREW_OPTION_KINDS) :]
+    + (
+        "owned_tasks_norm",
+        "nearest_owned_hops_norm",
+        "same_room_owned_norm",
+        "goal_room_owned_norm",
+    )
+)
+
+
+def owned_task_genome_length() -> int:
+    """Widened flat genome length: one weight per widened feature + a bias (27)."""
+
+    return len(OWNED_TASK_OPTION_FEATURE_NAMES) + 1
 
 
 @dataclass(frozen=True)
@@ -626,11 +690,244 @@ def enumerate_crew_options(
     return tuple(options)
 
 
+@dataclass(frozen=True)
+class OwnedTaskOptionBasis:
+    """The Task 15.22 widened option basis over ``SelfView.owned_task_ids``.
+
+    A stateless, stable-signature PUBLIC TYPE (downstream tasks import it) that
+    WRAPS :func:`enumerate_crew_options` (the pinned 15.16 menu stays
+    byte-identical — this never forks its logic) and re-bases its options onto
+    the widened :data:`OWNED_TASK_OPTION_FEATURE_NAMES` alphabet: the eight kind
+    one-hots, the fourteen legacy scalars carried VERBATIM, and the four
+    owned-task scalars derived from the recipient's own unfinished map task ids
+    (:attr:`observation.packet.SelfView.owned_task_ids`, the decision-5 self
+    channel). It then appends the ``nearest_task`` option — nearest-of-N owned
+    selection + same-room batching, the crew report §7 ask the closed
+    ``pending_task_id``-only surface hides.
+
+    The interrupt-preserving constraint is STRUCTURAL (audit decision 5, the
+    FO-8-style guard): a visible body routes to ``report`` and ONLY ``report``
+    — the widened menu drops every other option, so the learned head is REMOVED
+    from the ``report`` selectable set rather than penalized for suppressing it
+    (structural unreachability, not a reward term — the 15.16 Goodhart lesson).
+    The 15.16 win-by-meeting-starvation failure mode is consequently
+    unreachable.
+    """
+
+    @property
+    def kinds(self) -> tuple[CrewOptionKind, ...]:
+        """The widened option alphabet (the 15.16 prefix + ``nearest_task``)."""
+
+        return OWNED_TASK_OPTION_KINDS
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        """The widened per-option feature-name vector (26 names)."""
+
+        return OWNED_TASK_OPTION_FEATURE_NAMES
+
+    def genome_length(self) -> int:
+        """The widened flat genome length (feature count + bias = 27)."""
+
+        return owned_task_genome_length()
+
+    def enumerate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+        emergency_uses_remaining: int | None = None,
+    ) -> tuple[CrewOption, ...]:
+        """Re-base the legacy menu onto the widened basis + append nearest_task.
+
+        Inherits every raise semantic of :func:`enumerate_crew_options` (empty
+        memory / non-crew / vented) by delegating to it FIRST. When a body is
+        visible the legacy menu carries a ``report`` option; the constraint
+        returns a 1-tuple of ONLY the re-based report (intent/target verbatim)
+        — the structural interrupt. Otherwise every legacy option is widened
+        (its one-hot re-based to the widened alphabet — the 15.16 kinds are a
+        prefix, so a kept option's index is unchanged — its fourteen legacy
+        scalars carried verbatim, and the four owned-task scalars appended) and
+        a ``nearest_task`` option is appended when the nearest routable owned
+        task is not the engine-fed ``pending_task_id``.
+        """
+
+        legacy = enumerate_crew_options(
+            packet,
+            public_map,
+            memory,
+            fsm_intent=fsm_intent,
+            emergency_uses_remaining=emergency_uses_remaining,
+        )
+
+        actor = packet.agent_id
+        own_room = packet.self_state.room
+        pending_task_id = packet.self_state.pending_task_id
+        owned = packet.self_state.owned_task_ids
+        global_state = packet.global_state
+        sabotage_gating = bool(
+            global_state.sabotage_active and global_state.sabotage_is_gating
+        )
+        fsm = CrewmatePolicy(agent_id=actor)
+
+        # Owned-task context: the routable owned tasks, their rooms + A* hops.
+        # An unroutable / unknown owned task (no ``task_locations`` entry, or a
+        # disconnected room) is skipped from the nearest search exactly as the
+        # movement featurizer degrades — never a raise.
+        owned_rooms: dict[str, str] = {}
+        owned_hops: dict[str, int] = {}
+        for task_id in owned:
+            room = public_map.task_locations.get(task_id)
+            if room is None:
+                continue
+            owned_rooms[task_id] = room
+            owned_hops[task_id] = _path_hops(public_map, own_room, room)
+        nearest_tid: str | None = None
+        if owned_hops:
+            nearest_tid = min(owned_hops, key=lambda tid: (owned_hops[tid], tid))
+        nearest_room = owned_rooms[nearest_tid] if nearest_tid is not None else None
+        nearest_hops = owned_hops[nearest_tid] if nearest_tid is not None else None
+
+        # The decision-level owned scalars (identical across every option).
+        owned_tasks_norm = min(len(owned) / _OWNED_TASKS_CAP, 1.0)
+        nearest_owned_hops_norm = (
+            min(nearest_hops / _PATH_HOPS_CAP, 1.0) if nearest_hops is not None else 0.0
+        )
+
+        def owned_in_room(room: str | None) -> float:
+            if room is None:
+                return 0.0
+            count = sum(
+                1 for task_id in owned if public_map.task_locations.get(task_id) == room
+            )
+            return min(count / _OWNED_TASKS_CAP, 1.0)
+
+        same_room_owned_norm = owned_in_room(own_room)
+
+        def owned_block(goal_room: str | None) -> tuple[float, ...]:
+            # ``goal_room_owned_norm`` is a task-directed cue: the continue_task
+            # / nearest_task goal room's owned count, 0.0 for every other kind.
+            return (
+                owned_tasks_norm,
+                nearest_owned_hops_norm,
+                same_room_owned_norm,
+                owned_in_room(goal_room),
+            )
+
+        def one_hots(kind: CrewOptionKind) -> tuple[float, ...]:
+            return tuple(
+                1.0 if kind == candidate else 0.0
+                for candidate in OWNED_TASK_OPTION_KINDS
+            )
+
+        def widen(option: CrewOption, *, goal_room: str | None) -> CrewOption:
+            legacy_scalars = option.features[len(CREW_OPTION_KINDS) :]
+            return CrewOption(
+                kind=option.kind,
+                intent=option.intent,
+                target_id=option.target_id,
+                features=one_hots(option.kind)
+                + legacy_scalars
+                + owned_block(goal_room),
+            )
+
+        # continue_task's goal room recomputed EXACTLY as the legacy function:
+        # the pending task's room, or the meeting room when there is none.
+        task_room = (
+            public_map.task_locations.get(pending_task_id)
+            if pending_task_id is not None
+            else None
+        )
+        continue_goal_room = (
+            task_room if task_room is not None else public_map.meeting_room
+        )
+
+        # INTERRUPT-PRESERVING CONSTRAINT: a visible body → ONLY report. The
+        # widened menu never offers the head anything to select away from — the
+        # FSM rung-1 interrupt made structural (the 15.16 starvation channel is
+        # unreachable by removal from the selectable set, not by a penalty).
+        for option in legacy:
+            if option.kind == "report":
+                return (widen(option, goal_room=None),)
+
+        widened: list[CrewOption] = [
+            widen(
+                option,
+                goal_room=(
+                    continue_goal_room if option.kind == "continue_task" else None
+                ),
+            )
+            for option in legacy
+        ]
+
+        # NEAREST_TASK — nearest-of-N owned selection (the widened-basis add).
+        # Skipped when the nearest owned task IS already the engine-fed pending
+        # task (``continue_task`` carries it) or when there is no routable owned
+        # task. The decision block (the last seven legacy scalars — the
+        # per-tick constants) is carried from the always-present hold option's
+        # tail, so the added option shares the menu's decision context.
+        if nearest_tid is not None and nearest_tid != pending_task_id:
+            assert nearest_room is not None and nearest_hops is not None
+            nearest_intent: ActionIntent | None
+            if own_room == nearest_room:
+                # In the task room: submit ``do_task`` — but SKIP the whole
+                # option while a gating sabotage makes it engine-illegal (the
+                # mask/engine do_task predicate; there is no move to fall to).
+                nearest_intent = (
+                    None if sabotage_gating else fsm._do_task(task_id=nearest_tid)
+                )
+            else:
+                step = _movement_step(public_map, own_room, nearest_room)
+                nearest_intent = (
+                    None
+                    if step is None
+                    else MoveIntent.model_validate(
+                        {
+                            "type": "move",
+                            "actor": actor,
+                            "payload": {"to_room": step[0]},
+                        }
+                    )
+                )
+            if nearest_intent is not None:
+                hold_option = next(option for option in legacy if option.kind == "hold")
+                decision_block = hold_option.features[len(CREW_OPTION_KINDS) + 7 :]
+                option_scalars = (
+                    min(nearest_hops / _PATH_HOPS_CAP, 1.0),
+                    1.0 if own_room == nearest_room else 0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                )
+                widened.append(
+                    CrewOption(
+                        kind="nearest_task",
+                        intent=nearest_intent,
+                        target_id=nearest_tid,
+                        features=(
+                            one_hots("nearest_task")
+                            + option_scalars
+                            + decision_block
+                            + owned_block(nearest_room)
+                        ),
+                    )
+                )
+        return tuple(widened)
+
+
 __all__ = [
     "CREW_OPTION_FEATURE_NAMES",
     "CREW_OPTION_KINDS",
+    "OWNED_TASK_OPTION_FEATURE_NAMES",
+    "OWNED_TASK_OPTION_KINDS",
     "CrewOption",
     "CrewOptionKind",
+    "OwnedTaskOptionBasis",
     "crew_genome_length",
     "enumerate_crew_options",
+    "owned_task_genome_length",
 ]

@@ -47,6 +47,22 @@ obligation (owner, 2026-07-09, mid-wave review): it correlates earned
 living impostor) with the agent's OWN contemporaneous suspicion toward the
 shadowed player. Engine-truth roles feed ONLY this diagnostic — never a policy
 input, never a reward re-definition.
+
+Task 15.22 (audits/audit-phase-15-pause.md decision 5) adds the OPTIONAL widened
+basis: an :class:`~training.crew.options.OwnedTaskOptionBasis` passed to
+:class:`CrewOptionScorer` / :func:`build_crew_scorer` / :class:`CrewEsEntrant`
+routes scoring through the widened option menu (the ``nearest_task`` addition +
+the four owned-task scalars over ``SelfView.owned_task_ids``) and bumps the
+reported encoder string to :data:`OWNED_TASK_ENCODER_VERSION` — the four-item
+review's item 4: the version bump lives on the TRAINING-side basis; the
+production encoder (``agents/tactical/features.py``) is untouched. ``basis=None``
+is the 15.16 behavior byte-identical. The wrapper's override validation gains a
+legality mirror (:func:`_owned_task_do_task_is_submission_legal`): the action
+mask (``training/env.py``, read-only this task) enumerates ``do_task`` only for
+the engine-fed ``pending_task_id`` — pre-15.22 the packet carried no owned set —
+while the engine accepts a ``do_task`` for ANY owned unfinished task in the
+actor's room, so the wrapper carries the mask-invisible mirror (the
+emergency-uses tracker precedent for wrapper-carried legality inputs).
 """
 
 from __future__ import annotations
@@ -75,7 +91,7 @@ from eval.leak_test import scan_factory_packets
 from eval.validity import run_validity_gate
 from eval.watchability import WatchabilityReport, compute_watchability
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
-from observation.action_intent import ActionIntent
+from observation.action_intent import ActionIntent, DoTaskIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.game import (
@@ -111,6 +127,7 @@ from training.crew.options import (
     _SUSPICION_GATE_QUANTUM,
     CREW_OPTION_FEATURE_NAMES,
     CrewOption,
+    OwnedTaskOptionBasis,
     crew_genome_length,
     enumerate_crew_options,
 )
@@ -129,11 +146,19 @@ from training.rollout import (
 # version string (the 15.15 utility-es precedent).
 ENCODER_VERSION: Final[str] = "crew-option-features-v1"
 
+# The Task 15.22 widened-basis encoder tag (the four-item review's item 4 — the
+# version bump lives on the training-side basis; the production encoder
+# ``agents/tactical/features.py`` is NOT touched). Reported when a
+# :class:`~training.crew.options.OwnedTaskOptionBasis` is set.
+OWNED_TASK_ENCODER_VERSION: Final[str] = "crew-option-features-v2"
+
 # The FSM-delegate baseline's tag: it runs no encoder at all.
 FSM_BASELINE_ENCODER_VERSION: Final[str] = "crew-fsm-delegate-v1"
 
 # The entrant / baseline row labels.
 CREW_ENTRANT_NAME: Final[str] = "crew-utility-es"
+# The Task 15.22 widened-basis entrant label (its own artifact subdir + jsonl).
+CREW_OWNED_TASKS_ENTRANT_NAME: Final[str] = "crew-owned-tasks-es"
 CREW_FSM_BASELINE_NAME: Final[str] = "crew-fsm-baseline"
 
 # The FO-8 small-gain prior the report states the measured delta against
@@ -151,6 +176,11 @@ FO8_PRIOR_SEEDS: Final[int] = 12
 TRAIN_MAX_TICKS: Final[int] = 300
 
 _RESULTS_JSONL_PATH: Final[Path] = Path("training/reports/results-crew-track.jsonl")
+# The Task 15.22 widened-basis rows land in their own jsonl (the CLI default
+# when ``--basis owned-tasks`` is selected); the 15.16 track file is untouched.
+_OWNED_TASK_RESULTS_JSONL_PATH: Final[Path] = Path(
+    "training/reports/results-crew-owned-tasks.jsonl"
+)
 _ARTIFACT_ROOT: Final[Path] = Path("training/artifacts/crew")
 _ROSTER_FILENAME: Final[str] = "roster.json"
 
@@ -162,6 +192,42 @@ def _softmax(scores: Sequence[float]) -> list[float]:
     exps = [math.exp(score - peak) for score in scores]
     total = math.fsum(exps)
     return [value / total for value in exps]
+
+
+def _owned_task_do_task_is_submission_legal(
+    intent: ActionIntent, *, packet: ObservationPacket, public_map: PublicMapView
+) -> bool:
+    """The Task 15.22 wrapper legality mirror for an owned-task ``do_task``.
+
+    The action mask (``training/env.py``, read-only this task) enumerates
+    ``do_task`` ONLY for the engine-fed ``pending_task_id`` — pre-15.22 the
+    packet carried no owned set, so the mask has no owned-task vocabulary — while
+    the engine (``engine/tick.py::_apply_do_task``) accepts a ``do_task`` for ANY
+    of the actor's owned unfinished tasks when it stands in the task room, is not
+    vented, and no gating sabotage is active. The widened basis's ``nearest_task``
+    override submits exactly such a task, so the wrapper carries this mirror over
+    the widened self channel (the emergency-uses tracker precedent for a
+    wrapper-carried legality input the mask cannot see). Mirrors the engine
+    predicate over the OBSERVABLE surface: a crewmate actor, the task in its own
+    :attr:`observation.packet.SelfView.owned_task_ids`, not vented, no gating
+    sabotage, and the task's room equal to the actor's room. Returns ``False``
+    for any non-``do_task`` intent, so a genuinely off-vocabulary override still
+    fails the mask and raises.
+    """
+
+    if not isinstance(intent, DoTaskIntent):
+        return False
+    self_state = packet.self_state
+    global_state = packet.global_state
+    task_id = intent.payload.task_id
+    return (
+        intent.actor == packet.agent_id
+        and self_state.role == "CREWMATE"
+        and task_id in self_state.owned_task_ids
+        and not self_state.in_vent
+        and not (global_state.sabotage_active and global_state.sabotage_is_gating)
+        and public_map.task_locations.get(task_id) == self_state.room
+    )
 
 
 @runtime_checkable
@@ -218,9 +284,16 @@ class CrewOptionScorer:
     """
 
     def __init__(
-        self, *, weights: Sequence[float], game_map: Map | None = None
+        self,
+        *,
+        weights: Sequence[float],
+        game_map: Map | None = None,
+        basis: OwnedTaskOptionBasis | None = None,
     ) -> None:
-        expected = crew_genome_length()
+        # ``basis`` (Task 15.22) selects the widened option menu; ``None`` is the
+        # 15.16 behavior byte-identical (the pinned 22-weight genome + v1 tag).
+        self._basis = basis
+        expected = basis.genome_length() if basis is not None else crew_genome_length()
         if len(weights) != expected:
             raise ValueError(f"weights length {len(weights)} != expected {expected}")
         self._weights = tuple(float(weight) for weight in weights)
@@ -231,7 +304,37 @@ class CrewOptionScorer:
 
     @property
     def encoder_version(self) -> str:
-        return ENCODER_VERSION
+        return (
+            OWNED_TASK_ENCODER_VERSION if self._basis is not None else ENCODER_VERSION
+        )
+
+    def _enumerate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+        emergency_uses_remaining: int | None,
+    ) -> tuple[CrewOption, ...]:
+        # Route through the widened basis when set (Task 15.22), otherwise the
+        # pinned 15.16 menu — one seam so evaluate/choice_distribution stay in
+        # lockstep on the option set they score.
+        if self._basis is not None:
+            return self._basis.enumerate(
+                packet,
+                public_map,
+                memory,
+                fsm_intent=fsm_intent,
+                emergency_uses_remaining=emergency_uses_remaining,
+            )
+        return enumerate_crew_options(
+            packet,
+            public_map,
+            memory,
+            fsm_intent=fsm_intent,
+            emergency_uses_remaining=emergency_uses_remaining,
+        )
 
     @property
     def weights(self) -> tuple[float, ...]:
@@ -265,7 +368,7 @@ class CrewOptionScorer:
                 logits=(),
                 intent=fsm_intent,
             )
-        options = enumerate_crew_options(
+        options = self._enumerate(
             packet,
             public_map,
             memory,
@@ -297,7 +400,7 @@ class CrewOptionScorer:
     ) -> Mapping[str, float]:
         if packet.self_state.role != "CREWMATE":
             return {intent_key(fsm_intent): 1.0}
-        options = enumerate_crew_options(
+        options = self._enumerate(
             packet,
             public_map,
             memory,
@@ -314,11 +417,18 @@ class CrewOptionScorer:
 
 
 def build_crew_scorer(
-    weights: Sequence[float], *, game_map: Map | None = None
+    weights: Sequence[float],
+    *,
+    game_map: Map | None = None,
+    basis: OwnedTaskOptionBasis | None = None,
 ) -> CrewOptionScorer:
-    """Construct the frozen scorer around a flat genome (the artifact-reload seam)."""
+    """Construct the frozen scorer around a flat genome (the artifact-reload seam).
 
-    return CrewOptionScorer(weights=weights, game_map=game_map)
+    ``basis`` (Task 15.22) selects the widened option menu + the 27-weight
+    genome; ``None`` reloads a pinned 15.16 22-weight champion byte-identically.
+    """
+
+    return CrewOptionScorer(weights=weights, game_map=game_map, basis=basis)
 
 
 class FsmCrewBaseline:
@@ -604,7 +714,16 @@ class _CrewCandidateAgent:
                     sabotage_kinds=self._sabotage_kinds,
                     emergency_uses_remaining=self._emergency_uses_remaining,
                 )
-                if not mask.is_submission_legal(chosen):
+                # The widened basis's ``nearest_task`` override submits a
+                # ``do_task`` for an owned task the mask never enumerates (it
+                # only knows ``pending_task_id``); the engine accepts it, so the
+                # wrapper accepts it through the Task 15.22 legality mirror. A
+                # genuinely off-vocabulary override fails both and raises.
+                if not mask.is_submission_legal(
+                    chosen
+                ) and not _owned_task_do_task_is_submission_legal(
+                    chosen, packet=packet, public_map=public_map
+                ):
                     raise ValueError(
                         f"crew candidate returned a non-submission-legal intent "
                         f"{chosen!r} for {packet.agent_id!r} at tick {packet.tick}"
@@ -863,16 +982,31 @@ class CrewEsEntrant:
     (``name`` + ``train()``).
     """
 
-    def __init__(self, *, config: CrewEsConfig, game_map: Map | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        config: CrewEsConfig,
+        game_map: Map | None = None,
+        basis: OwnedTaskOptionBasis | None = None,
+    ) -> None:
         self._config = config
         self._game_map = game_map if game_map is not None else load_canonical_map()
+        # ``basis`` (Task 15.22) selects the widened option menu; the entrant
+        # name, genome length, and reported encoder/feature-names all follow it.
+        self._basis = basis
 
     @property
     def name(self) -> str:
-        return CREW_ENTRANT_NAME
+        return (
+            CREW_OWNED_TASKS_ENTRANT_NAME
+            if self._basis is not None
+            else CREW_ENTRANT_NAME
+        )
 
     def _seed_fitness(self, genome: tuple[float, ...], seed: int) -> float:
-        policy = CrewOptionScorer(weights=genome, game_map=self._game_map)
+        policy = CrewOptionScorer(
+            weights=genome, game_map=self._game_map, basis=self._basis
+        )
         trace = CrewDecisionTrace()
         with tempfile.TemporaryDirectory(prefix="ailibi-crew-es-") as tmp:
             rollout = rollout_crew_candidate(
@@ -892,10 +1026,21 @@ class CrewEsEntrant:
 
     def train(self) -> TrainedCandidate:
         started = time.perf_counter()
-        genome_length = crew_genome_length()
+        genome_length = (
+            self._basis.genome_length()
+            if self._basis is not None
+            else crew_genome_length()
+        )
+        feature_names = list(
+            self._basis.feature_names
+            if self._basis is not None
+            else CREW_OPTION_FEATURE_NAMES
+        )
         fitness = k_seed_mean(self._seed_fitness, self._config.es.fitness_seeds)
         result = evolve(fitness, genome_length=genome_length, config=self._config.es)
-        policy = CrewOptionScorer(weights=result.champion, game_map=self._game_map)
+        policy = CrewOptionScorer(
+            weights=result.champion, game_map=self._game_map, basis=self._basis
+        )
         return TrainedCandidate(
             entrant=self.name,
             policy=policy,
@@ -905,7 +1050,7 @@ class CrewEsEntrant:
                 "anchor_weight": self._config.anchor_weight,
                 "es": self._config.es.model_dump(mode="json"),
                 "train_max_ticks": self._config.max_ticks,
-                "feature_names": list(CREW_OPTION_FEATURE_NAMES),
+                "feature_names": feature_names,
                 "genome_length": genome_length,
                 "encoder_version": policy.encoder_version,
             },
@@ -1439,21 +1584,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     run_parser.add_argument("--budget", choices=("ci", "full"), default="full")
     run_parser.add_argument(
-        "--results", type=Path, default=_RESULTS_JSONL_PATH, help="Output jsonl path."
+        "--basis",
+        choices=("pending", "owned-tasks"),
+        default="pending",
+        help=(
+            "Option basis: 'pending' is the 15.16 menu; 'owned-tasks' is the "
+            "Task 15.22 widened basis over SelfView.owned_task_ids."
+        ),
+    )
+    run_parser.add_argument(
+        "--results",
+        type=Path,
+        default=None,
+        help="Output jsonl path (defaults per --basis).",
     )
     run_parser.add_argument(
         "--artifacts", type=Path, default=_ARTIFACT_ROOT, help="Artifact root dir."
     )
     args = parser.parse_args(argv)
 
+    # The widened basis (Task 15.22) selects the owned-task menu, the
+    # crew-owned-tasks entrant name, and — unless overridden — its own jsonl.
+    basis = OwnedTaskOptionBasis() if args.basis == "owned-tasks" else None
+    results_path: Path = args.results
+    if results_path is None:
+        results_path = (
+            _OWNED_TASK_RESULTS_JSONL_PATH if basis is not None else _RESULTS_JSONL_PATH
+        )
+
     protocol = default_crew_protocol_config()
-    entrant = CrewEsEntrant(config=crew_es_budget(args.budget))
+    entrant = CrewEsEntrant(config=crew_es_budget(args.budget), basis=basis)
     candidates = [fsm_baseline_candidate(), entrant.train()]
     results = [
         evaluate_crew_candidate(candidate, protocol, artifact_root=args.artifacts)
         for candidate in candidates
     ]
-    write_crew_results_jsonl(results, args.results)
+    write_crew_results_jsonl(results, results_path)
     for result in results:
         print(result.to_json_line())
     return 0
@@ -1461,6 +1627,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "CREW_ENTRANT_NAME",
+    "CREW_OWNED_TASKS_ENTRANT_NAME",
+    "OWNED_TASK_ENCODER_VERSION",
     "TRAIN_MAX_TICKS",
     "CREW_FSM_BASELINE_NAME",
     "ENCODER_VERSION",
