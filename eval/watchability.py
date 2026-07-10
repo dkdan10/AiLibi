@@ -19,6 +19,49 @@ the optimizer maximizes measurable competence KL-anchored to the scripted FSM
 (runs ES directly on the geomean to surface exploits) before the mid-phase pause
 is allowed to trust it — the Goodhart probe is the referee's own acceptance test.
 
+TASK 15.19 REFEREE HARDENING — the doctrine deltas, with
+``audits/audit-phase-15-pause.md`` §4 (the per-channel re-verdict) as the
+re-verdict of record. The pause adjudicated BOTH probe runs — the 15.14
+fake-provider probe (``training/reports/report-goodhart-probe.md``) and the
+15.15 surrogate-path re-run (``training/reports/report-impostor-bakeoff.md``
+§6, a HELD on a disqualified substrate — held for the wrong structural reason,
+expressly NOT read as exploit-caught) — and contracted the patches this module
+now implements, landed BEFORE any champion selection leans on fine
+D2-conversion differences (the 15.21 re-score and the 15.23 close gate carry
+the dependency edge):
+
+  * SELECTION-ONLY — UNCHANGED. The referee remains a post-training champion
+    gate and is NEVER a training reward.
+  * CONVERSION-COUPLED D2 (the exploited ``kill``/D2-separation channel:
+    ``mean_score`` 6.51 → 16.62, +155%, separation 0.20 → 0.84 with conversion
+    pinned at 0.00): the D2 separation sub-term is GATED on deduction evidence
+    — it counts only when the game converts an observation-backed accusation
+    into an ejection or some meeting carries a contradiction flag (VENT-AWARE:
+    re-derived flags plus the persisted role-proving ``vent_sighting`` flags
+    the re-derivation cannot mint, mirroring the ``flags_per_meeting`` merge).
+    Separation without an ejection or a contradiction flag is suspicion
+    theater, not deduction, and scores 0 (:func:`_d2_crew_deduction`).
+  * SUBJECT-AWARE OBSERVATION BACKING (owner-ratified 2026-07-09,
+    ``audits/review-phase-15-midwave.md`` Q2 / §8): an accusation is
+    observation-backed only when the accuser's turn carries a first-hand
+    structured sighting WHOSE SUBJECT IS THE ACCUSED. Under the pre-15.19
+    subject-AGNOSTIC definition a trained impostor could utter a genuine vent
+    sighting of X in the turn that accuses innocent Y and have the
+    Y-accusation count "backed". The old definition is retained ONLY as the
+    frozen ``historical_15_2`` parity mode (so 15.2's cross-implementation
+    evidence stays reproducible); it must never gate a champion.
+  * ``mean_score`` must NEVER be read without the supply-floor gate. The
+    Layer-2 geomean is a fine-grained selection SCORE among candidates that
+    already cleared Layer 1 + integrity (``referee_passed``); read alone it is
+    Goodhart-able (the 15.14 exploit lived entirely on the bare sub-metric —
+    the composed referee rejected every exploiting genome).
+  * ADVISORY RARE-EVENT FLOORS (the pause audit §1/§5.1 one-event floor
+    degeneracy): a supply floor pinned on a baseline numerator ≤ 1 (today: the
+    4p1i ``witnessed_event_rate``, 1/55) is a rare-event gauge a
+    same-substrate set can miss by pure variance — it is ADVISORY: reported in
+    the JSON (``advisory: true``), excluded from ``supply_floors_passed``
+    (:func:`evaluate_supply_floors`).
+
 TWO LAYERS, both selection-only:
 
 Layer 1 — EVIDENCE-SUPPLY FLOORS (:func:`evaluate_supply_floors`). The sharp,
@@ -40,19 +83,27 @@ evidence than the baseline FAILS the referee even when meeting-rate stays high
     accused true impostor) pairs the meeting ejected, using the SAME
     evidence-grounded predicate as the geomean's D2 conversion
     (:func:`_observation_backed_impostors` — an accusation whose accuser also
-    logged a first-hand sighting). Deliberately NOT
+    logged a first-hand sighting OF THE ACCUSED, subject-aware per Task 15.19).
+    Deliberately NOT
     ``compute_conversion_report``'s ``impostor_accused_conversion_rate``, which
     counts ANY verbal accusation of a true impostor: a "testimony-BACKED" floor
     that accepts ungrounded vibe-convictions would let a candidate that ejects
     impostors on unbacked accusations clear the evidence floor.
 
 The floors are PARAMETERIZED PER BASELINE (:data:`_BASELINE_SUPPLY_FLOORS`, keyed
-by baseline id then roster). This task measures + pins the baseline-2 values (the
-measured numbers are in the constants block's comments); Task 15.7 pins the
-baseline-3 values when it lands. The floors are set FROM the measured baseline —
-"do not accept a champion whose games produce structurally less evidence than the
-baseline", not "hit a number" — so the baseline itself passes at equality and any
-strictly-poorer candidate fails.
+by baseline id then roster; each pin carries its measured value AND its raw
+baseline numerator, :class:`FloorPin` — the numerator drives the 15.19 advisory
+rare-event rule). Task 15.2 measured + pinned the baseline-2 values; Task 15.7
+pinned baseline-3 (the committed canonical default); Task 15.19 RE-PINNED the
+baseline-3 blocks under the subject-aware backing definition by re-measuring the
+SAME committed bytes (the measured numbers, with the corpus figures alongside per
+the Q3 denominator rule, are in the constants block's comments — the baseline-2
+block is a frozen historical pin under the pre-15.19 definition, its bytes having
+left the tree at the 15.7 re-record). The floors are set FROM the measured
+baseline — "do not accept a champion whose games produce structurally less
+evidence than the baseline", not "hit a number" — so the baseline itself passes
+at equality and any strictly-poorer candidate fails, and candidate + floor are
+always measured under the SAME definition.
 
 Layer 2 — the D1-D4 FLOOR-GATED WEIGHTED GEOMEAN (:func:`compute_game_score`),
 promoted verbatim from ``rubric_score.py`` (the geomean composition,
@@ -87,9 +138,12 @@ self-check exists so a champion is never SELECTED on bytes that would corrupt it
 own score.
 
 The four dimensions (report-rubric-design.md §3; weights/mappings are the lab's
-pre-fix calibration, KEPT byte-identical so the committed
-``experiments/lab/results-rubric-geomean.json`` is an exact parity fixture — the
-promotion re-anchors the INPUTS to bytes, not the numeric spec):
+pre-fix calibration. The committed
+``experiments/lab/results-rubric-geomean.json`` remains an exact parity fixture
+of the FROZEN pre-15.19 spec via ``compute_game_score(..., historical_15_2=True)``
+— the 15.2 promotion re-anchored the INPUTS to bytes, not the numeric spec, and
+15.19's hardened D2/backing deltas live beside, not instead of, that
+reproducible historical pin):
 
   * D1 resolution — did PLAY decide the board, not the clock? CREWMATE_EJECT → 1.0;
     a contested IMPOSTOR_PARITY/IMPOSTOR_SABOTAGE (≥1 meeting) → 0.6; some impostor
@@ -98,8 +152,12 @@ promotion re-anchors the INPUTS to bytes, not the numeric spec):
     game-mean of (mean rendered-suspicion of true impostors − mean of crew) over
     each meeting's ``suspicion_graph_by_voter``, normalized by
     :data:`_D2_SEPARATION_SCALE` = 0.30 and clamped at 0 (a railroad that raises
-    suspicion on an innocent LOWERS separation → penalized). conversion = of every
-    (meeting, observation-backed-accused true impostor) pair, the fraction ejected.
+    suspicion on an innocent LOWERS separation → penalized), then CONVERSION-
+    COUPLED (Task 15.19): gated to 0 unless the game converted a backed
+    accusation into an ejection or carries a contradiction flag (re-derived, or
+    a persisted vent flag — the vent-aware leg). conversion = of every
+    (meeting, observation-backed-accused true impostor) pair, the fraction
+    ejected (backing subject-aware per Task 15.19).
   * D3 impostor craft — the EFFECTIVE-deflection value (1.0 effective / 0.2
     accused-not-deflected / 0.0 never-accused): a counter-accusation that MOVED the
     eject-plurality off a true impostor. Passivity scores 0 (never rewarded).
@@ -116,7 +174,8 @@ kill victim-roles + witnesses + ``integrity_ok`` (the engine reconstruction walk
 and the per-player cross-meeting ``rendered_suspicion`` trajectory; per meeting —
 ``ejected_player_id``/``ejected_role``, ``suspicion_graph_by_voter`` (parsed from
 the vote prompts via :func:`eval.meeting_quality._parse_suspicion_graph`),
-``testimony_records`` (accusation/sighting vehicle + observation-backed bit),
+``testimony_records`` (accusation/sighting vehicle + the subject-aware
+observation-backed bit, plus the frozen subject-agnostic bit for the parity pin),
 ``accusations``, ``plurality_target``/``plurality_margin`` (the recorded ballot
 tally), ``ejected_rendered_suspicion_among_ejectors``, and
 ``contradictions_by_subject`` (RE-DERIVED via
@@ -142,12 +201,14 @@ STABLE::
       "games_total": int,
       "integrity_ok": bool,           # every game reconstructed byte-identically
       "referee_passed": bool,         # supply_floors_passed AND integrity_ok
-      "supply_floors_passed": bool,
+      "supply_floors_passed": bool,   # AND over the NON-advisory gauges
       "supply_gauges": [              # one per Layer-1 gauge, in order
-        {"name": str, "measured": float|null, "floor": float, "passed": bool},
-        ...
+        {"name": str, "measured": float|null, "floor": float, "passed": bool,
+         "advisory": bool},           # advisory = baseline numerator <= 1;
+        ...                           # excluded from supply_floors_passed
       ],
-      "mean_score": float, "median_score": float,
+      "mean_score": float, "median_score": float,  # NEVER read without the
+                                      # referee_passed / supply-floor gate
       "per_game": [                   # the Layer-2 geomean, desc by score
         {"seed": int, "reason": str, "n_meetings": int,
          "floor_multiplier": float,
@@ -222,8 +283,9 @@ from orchestrator.seeder import seed_initial_state
 # The geomean composition constants — promoted VERBATIM from the lab scorer    #
 # (experiments/lab/rubric_score.py:53 weights, :823 composition;               #
 # report-rubric-design.md §3, §8). Kept byte-identical so the committed        #
-# results-rubric-geomean.json is an exact parity fixture (the promotion moves  #
-# the INPUTS to bytes; the numeric spec is unchanged).                         #
+# results-rubric-geomean.json stays an exact parity fixture of the FROZEN      #
+# pre-15.19 spec (compute_game_score(..., historical_15_2=True); the 15.19     #
+# hardening changed the D2 term's gating, not these constants).                #
 # --------------------------------------------------------------------------- #
 _GEOMEAN_WEIGHTS: Final[Mapping[str, float]] = {
     "d1": 0.40,
@@ -263,76 +325,134 @@ _MALFORMED_INPUT_ERRORS: Final[tuple[type[Exception], ...]] = (
 
 
 @dataclass(frozen=True)
+class FloorPin:
+    """One pinned supply floor: the measured baseline value + its raw numerator.
+
+    ``value`` is the MEASURED baseline gauge pinned as the floor; ``numerator``
+    is the raw baseline event count behind it (crew-witnessed kills / total
+    flags / converted backed accusations — the measurement is recorded in the
+    constants block's comments). The numerator carries the Task-15.19 ADVISORY
+    RARE-EVENT rule (audits/audit-phase-15-pause.md §1/§5.1): a floor pinned on
+    a numerator ≤ 1 is a rare-event gauge a same-substrate set can miss by pure
+    variance, so it is ADVISORY — reported, never referee-failing
+    (:func:`evaluate_supply_floors`).
+    """
+
+    value: float
+    numerator: int
+
+
+@dataclass(frozen=True)
 class SupplyFloors:
     """The three evidence-supply floors for one (baseline, roster) (Layer 1).
 
-    Each field is the MEASURED baseline value pinned as the floor: a candidate's
-    gauge must be ``>= floor`` to clear it, so the baseline itself passes at
-    equality and any strictly-poorer set fails. ``testimony_backed_conversion``
+    Each field pins the MEASURED baseline value as the floor: a candidate's
+    gauge must be ``>= floor.value`` to clear it, so the baseline itself passes
+    at equality and any strictly-poorer set fails. ``testimony_backed_conversion``
     may be ``None`` when the baseline supplies no accused-impostor meeting (the
-    undefined-not-zero convention); a ``None`` floor is vacuously cleared.
+    undefined-not-zero convention); a ``None`` floor is vacuously cleared. A
+    floor whose baseline ``numerator`` is ≤ 1 is advisory (:class:`FloorPin`).
     """
 
-    witnessed_event_rate: float
-    flags_per_meeting: float
-    testimony_backed_conversion: float | None
+    witnessed_event_rate: FloorPin
+    flags_per_meeting: FloorPin
+    testimony_backed_conversion: FloorPin | None
 
 
-# The per-baseline supply-floor block, read by baseline id then roster key. This
-# task MEASURES + pins the baseline-2 values from the committed bytes (the
-# measured numbers are in the comments); Task 15.7 pins the "baseline-3" block
-# when the re-record lands. The floors are the baseline's OWN measured supply, so
-# the baseline passes at equality and a candidate that produces structurally less
-# evidence (the perfect-stealth failure mode) fails.
+# The per-baseline supply-floor block, read by baseline id then roster key. The
+# floors are the baseline's OWN measured supply (each pin carries the measured
+# value + the raw numerator behind it), so the baseline passes at equality and a
+# candidate that produces structurally less evidence (the perfect-stealth
+# failure mode) fails. Task 15.2 pinned baseline-2; Task 15.7 pinned baseline-3;
+# Task 15.19 RE-PINNED the baseline-3 blocks under the SUBJECT-AWARE backing
+# definition on the same committed bytes (only the conversion gauge's definition
+# changed; witnessed kills + flags are backing-independent).
 _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
+    # FROZEN HISTORICAL PIN (Task 15.19): the baseline-2 bytes left the tree at
+    # the 15.7 re-record, so this block CANNOT be re-measured and stays pinned
+    # under the pre-15.19 subject-AGNOSTIC backing definition. A candidate
+    # (measured subject-aware, hence never higher than subject-agnostic) scored
+    # against these floors faces a strictly conservative conversion gate; new
+    # champions are gated by the canonical baseline-3 block below.
     "baseline-2": {
         # Measured on replays/samples/9p2i (baseline 2, Qwen/Qwen3-32B qwen3_32b.v4;
         # the values are the baseline's OWN supply, so it passes at equality):
         #   witnessed_event_rate        = 6/160  = 0.0375 (crew-witnessed kills; §6)
         #   flags_per_meeting           = 285/142 = 2.007042253521127
-        #   testimony_backed_conversion = 56/128 = 0.4375 (OBSERVATION-BACKED)
+        #   testimony_backed_conversion = 56/128 = 0.4375 (OBSERVATION-BACKED,
+        #                                 pre-15.19 subject-agnostic)
         "9p2i": SupplyFloors(
-            witnessed_event_rate=0.0375,
-            flags_per_meeting=2.007042253521127,
-            testimony_backed_conversion=0.4375,
+            witnessed_event_rate=FloorPin(value=0.0375, numerator=6),
+            flags_per_meeting=FloorPin(value=2.007042253521127, numerator=285),
+            testimony_backed_conversion=FloorPin(value=0.4375, numerator=56),
         ),
         # Measured on replays/samples/4p1i (the flat determinism/leak reference —
         # 4 players, 1 impostor, short games; supply is naturally sparse):
-        #   witnessed_event_rate        = 1/64  = 0.015625
+        #   witnessed_event_rate        = 1/64  = 0.015625 (numerator 1 -> ADVISORY)
         #   flags_per_meeting           = 29/39 = 0.7435897435897436
-        #   testimony_backed_conversion = 12/37 = 0.32432432432432434 (OBSERVATION-BACKED)
+        #   testimony_backed_conversion = 12/37 = 0.32432432432432434 (OBSERVATION-
+        #                                 BACKED, pre-15.19 subject-agnostic)
         "4p1i": SupplyFloors(
-            witnessed_event_rate=0.015625,
-            flags_per_meeting=0.7435897435897436,
-            testimony_backed_conversion=0.32432432432432434,
+            witnessed_event_rate=FloorPin(value=0.015625, numerator=1),
+            flags_per_meeting=FloorPin(value=0.7435897435897436, numerator=29),
+            testimony_backed_conversion=FloorPin(
+                value=0.32432432432432434, numerator=12
+            ),
         ),
     },
     # Task 15.7 baseline-3 record (Qwen/Qwen3-32B, qwen3_32b.v5 + vote_ballot v6,
-    # the 6-lever Wave-0 substrate). The floors are baseline 3's OWN measured
-    # supply, so it passes at equality; a later candidate that produces less
-    # evidence than baseline 3 fails. Findings vs baseline 2: 9p2i witnessed-kill
-    # rate and flags/meeting fell slightly (fewer contradiction flags, fewer
-    # crew-witnessed kills) while testimony-backed conversion ROSE (0.44 -> 0.61)
-    # — the held evidence that IS present converts better (the Wave-0 vent/reporter
-    # substrate). Directions are findings, not pass bars (the Phase-14 doctrine).
+    # the 6-lever Wave-0 substrate), RE-PINNED by Task 15.19 under the
+    # subject-aware backing definition on the SAME committed bytes (baseline-3
+    # samples; the ml_corpus figures reported alongside per the midwave Q3
+    # denominator rule — the corpus is measured AGAINST these floors, never
+    # pinned as them; the 50-seed samples remain the byte-identity anchor).
+    # Finding at the 15.19 re-pin: the subject-aware predicate SHRANK the
+    # backed-pair pool as expected (9p2i attempted 117 -> 107; 4p1i 35 -> 33)
+    # but the conversion RATE nudged UP, not down (9p2i 71/117=0.6068 ->
+    # 71/107=0.6636; 4p1i 21/35=0.6000 -> 20/33=0.6061): the accusations that
+    # lost their backing were disproportionately the NON-converted ones. A
+    # direction, not a failure — candidate and baseline are measured under the
+    # same definition, so the relative gate stays sound (Phase-14 doctrine:
+    # directions are findings, not pass bars).
     "baseline-3": {
-        # Measured on replays/samples/9p2i (baseline 3):
-        #   witnessed_event_rate        = 5/154  = 0.032467532467532464 (crew-witnessed kills; §6)
+        # Measured on replays/samples/9p2i (baseline 3, re-measured at 15.19
+        # with the committed CLIs; corpus-9p2i alongside per the Q3 rule):
+        #   witnessed_event_rate        = 5/154  = 0.032467532467532464 (crew-witnessed
+        #                                 kills; §6)     [corpus: 16/470 = 0.0340]
         #   flags_per_meeting           = 259/139 = 1.8633093525179856
-        #   testimony_backed_conversion = 71/117 = 0.6068376068376068 (OBSERVATION-BACKED)
+        #                                                [corpus: 948/440 = 2.1545]
+        #   testimony_backed_conversion = 71/107 = 0.6635514018691588 (OBSERVATION-
+        #                                 BACKED, SUBJECT-AWARE; was 71/117 = 0.6068
+        #                                 subject-agnostic)
+        #                                                [corpus: 235/331 = 0.7100]
         "9p2i": SupplyFloors(
-            witnessed_event_rate=0.032467532467532464,
-            flags_per_meeting=1.8633093525179856,
-            testimony_backed_conversion=0.6068376068376068,
+            witnessed_event_rate=FloorPin(value=0.032467532467532464, numerator=5),
+            flags_per_meeting=FloorPin(value=1.8633093525179856, numerator=259),
+            testimony_backed_conversion=FloorPin(
+                value=0.6635514018691588, numerator=71
+            ),
         ),
-        # Measured on replays/samples/4p1i (baseline 3):
-        #   witnessed_event_rate        = 1/55  = 0.01818181818181818
-        #   flags_per_meeting           = 14/13 = 1.0769230769230769
-        #   testimony_backed_conversion = 3/5   = 0.6 (OBSERVATION-BACKED)
+        # Measured on replays/samples/4p1i (baseline 3, re-measured at 15.19
+        # with the committed CLIs; corpus-4p1i alongside per the Q3 rule):
+        #   witnessed_event_rate        = 1/55  = 0.01818181818181818 (numerator 1
+        #                                 -> ADVISORY, the pause-audit §1/§5.1
+        #                                 one-event floor degeneracy)
+        #                                                [corpus: 0/46 = 0.0]
+        #   flags_per_meeting           = 42/39 = 1.0769230769230769 (the raw
+        #                                 census incl. 11 persisted vent flags;
+        #                                 15.7 recorded the reduced form 14/13)
+        #                                                [corpus: 60/40 = 1.5]
+        #   testimony_backed_conversion = 20/33 = 0.6060606060606061 (OBSERVATION-
+        #                                 BACKED, SUBJECT-AWARE; was 21/35 = 0.6
+        #                                 subject-agnostic — 15.7 recorded the
+        #                                 reduced form 3/5)
+        #                                                [corpus: 26/36 = 0.7222]
         "4p1i": SupplyFloors(
-            witnessed_event_rate=0.01818181818181818,
-            flags_per_meeting=1.0769230769230769,
-            testimony_backed_conversion=0.6,
+            witnessed_event_rate=FloorPin(value=0.01818181818181818, numerator=1),
+            flags_per_meeting=FloorPin(value=1.0769230769230769, numerator=42),
+            testimony_backed_conversion=FloorPin(
+                value=0.6060606060606061, numerator=20
+            ),
         ),
     },
 }
@@ -350,9 +470,10 @@ class SupplyGaugeValues:
     ``testimony_backed_conversion`` is the fraction of (meeting, OBSERVATION-BACKED-
     accused true impostor) pairs the meeting EJECTED — the SAME evidence-grounded
     predicate the geomean's D2 conversion uses (a turn whose accuser also logged a
-    first-hand sighting), NOT any verbal accusation. It is ``None`` when no meeting
-    carried an observation-backed accusation of a true impostor (undefined, not
-    0.0). ``witnessed_event_rate`` is ``None`` when the set recorded zero kills.
+    first-hand sighting OF THE ACCUSED — subject-aware, Task 15.19), NOT any
+    verbal accusation. It is ``None`` when no meeting carried an
+    observation-backed accusation of a true impostor (undefined, not 0.0).
+    ``witnessed_event_rate`` is ``None`` when the set recorded zero kills.
     """
 
     witnessed_event_rate: float | None
@@ -368,7 +489,14 @@ class SupplyGaugeValues:
 
 
 class SupplyFloorGauge(BaseModel):
-    """One Layer-1 gauge's measured value + floor + pass verdict (frozen)."""
+    """One Layer-1 gauge's measured value + floor + pass verdict (frozen).
+
+    ``advisory`` marks the Task-15.19 rare-event rule: the pin's baseline
+    numerator is ≤ 1, so the row still reports the honest measured-vs-floor
+    ``passed`` verdict but is EXCLUDED from the set-level
+    ``supply_floors_passed`` (it can never fail the referee on its own). The
+    field defaults to ``False`` so pre-15.19 serialized reports still validate.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -376,6 +504,7 @@ class SupplyFloorGauge(BaseModel):
     measured: float | None
     floor: float | None
     passed: bool
+    advisory: bool = False
 
 
 def evaluate_supply_floors(
@@ -388,10 +517,19 @@ def evaluate_supply_floors(
     candidate with zero kills/meetings must not slip through), except that a
     ``None`` conversion floor (the baseline itself supplied no accused-impostor
     meeting) is vacuously cleared. The set-level ``passed`` is the AND over the
-    three gauges — the referee's Layer-1 verdict.
+    NON-ADVISORY gauges — the referee's Layer-1 verdict.
+
+    ADVISORY RARE-EVENT FLOORS (Task 15.19; audits/audit-phase-15-pause.md
+    §1/§5.1): a floor pinned on a baseline numerator ≤ 1 (today: the 4p1i
+    ``witnessed_event_rate``, 1/55) is a rare-event gauge that a same-substrate
+    set can miss by pure variance — the corpus-4p1i set measures 0.0 on it while
+    passing the hard validity gate and every other floor. Such a floor is marked
+    ``advisory``: its row keeps the honest measured-vs-floor verdict for the
+    report, but it is EXCLUDED from the set-level AND, so it is reported, never
+    referee-failing.
     """
 
-    gauge_specs: tuple[tuple[str, float | None, float | None], ...] = (
+    gauge_specs: tuple[tuple[str, float | None, FloorPin | None], ...] = (
         (
             "witnessed_event_rate",
             gauges.witnessed_event_rate,
@@ -405,17 +543,24 @@ def evaluate_supply_floors(
         ),
     )
     results: list[SupplyFloorGauge] = []
-    for name, measured, floor in gauge_specs:
-        if floor is None:
+    for name, measured, pin in gauge_specs:
+        advisory = pin is not None and pin.numerator <= 1
+        if pin is None:
             passed = True
         elif measured is None:
             passed = False
         else:
-            passed = measured >= floor
+            passed = measured >= pin.value
         results.append(
-            SupplyFloorGauge(name=name, measured=measured, floor=floor, passed=passed)
+            SupplyFloorGauge(
+                name=name,
+                measured=measured,
+                floor=None if pin is None else pin.value,
+                passed=passed,
+                advisory=advisory,
+            )
         )
-    return all(gauge.passed for gauge in results), tuple(results)
+    return all(gauge.passed for gauge in results if not gauge.advisory), tuple(results)
 
 
 # --------------------------------------------------------------------------- #
@@ -434,10 +579,18 @@ class _TrajectoryPoint:
 
 @dataclass(frozen=True)
 class _TestimonyTurn:
-    """How one turn names an accused subject (vehicle + observation-backed bit)."""
+    """How one turn names an accused subject (vehicle + observation-backed bits).
+
+    ``observation_backed`` is the LIVE subject-aware bit (Task 15.19): the turn
+    carries a first-hand structured sighting whose subject IS this record's
+    accused. ``observation_backed_any`` is the FROZEN pre-15.19
+    subject-AGNOSTIC bit (ANY grounded observation in the turn) — retained ONLY
+    for the 15.2 historical geomean-parity pin, never for live scoring.
+    """
 
     vehicle: str | None
     observation_backed: bool
+    observation_backed_any: bool
 
 
 @dataclass(frozen=True)
@@ -459,7 +612,16 @@ class _Accusation:
 
 @dataclass(frozen=True)
 class _MeetingFacts:
-    """The geomean/floor inputs for one resolved meeting (typed subset)."""
+    """The geomean/floor inputs for one resolved meeting (typed subset).
+
+    ``contradictions_by_subject`` is the RE-DERIVED transcript census (the
+    parity-mandated source the railroad floor reads); it can NEVER contain the
+    grounded role-proving ``vent_sighting`` flag (its grounding channel is not
+    in the transcript, Task 15.4), so the PERSISTED vent flags are carried
+    separately in ``persisted_vent_flags`` for the vent-aware consumers (the
+    15.19 D2 deduction-evidence gate, mirroring the ``flags_per_meeting``
+    merge).
+    """
 
     meeting_index: int
     ejected_player_id: PlayerId | None
@@ -472,6 +634,7 @@ class _MeetingFacts:
     plurality_margin: int
     ejected_rendered_suspicion_among_ejectors: float | None
     contradictions_by_subject: Mapping[PlayerId, tuple[bool, ...]]
+    persisted_vent_flags: int = 0
 
 
 @dataclass(frozen=True)
@@ -745,16 +908,31 @@ def _reconstruct_game_kills(
 # --------------------------------------------------------------------------- #
 
 
-def _testimony_vehicle(turn: MeetingTurn, subject: PlayerId) -> tuple[str | None, bool]:
+def _testimony_vehicle(
+    turn: MeetingTurn, subject: PlayerId
+) -> tuple[str | None, bool, bool]:
     """How ``turn`` names ``subject`` + whether the mention is observation-backed.
 
-    Mirrors ``audits/workflows/extract_gameplay_facts.py::_testimony_vehicle``:
+    Returns ``(vehicle, observation_backed, observation_backed_any)``. The
+    vehicle mirrors ``audits/workflows/extract_gameplay_facts.py::_testimony_vehicle``:
     ``"accusation"`` if the turn carries an :class:`AccusationClaim` against the
     subject, else ``"sighting"`` for a :class:`SawPlayerObservation` /
     :class:`SawVentObservation` / other-player :class:`AlibiClaim` naming them,
     else ``"free_text_only"`` if the id appears only in prose, else ``None``.
-    ``observation_backed`` is True iff the turn carries a first-hand structured
-    observation — the D2-conversion evidence-grounding bit.
+
+    SUBJECT-AWARE BACKING (Task 15.19; owner-ratified 2026-07-09,
+    audits/review-phase-15-midwave.md Q2): ``observation_backed`` is True iff
+    the turn carries a first-hand structured sighting whose subject IS
+    ``subject`` — a grounded observation about someone ELSE can no longer back
+    this accusation (the exploit the re-anchoring closes: a genuine vent
+    sighting of X uttered in the turn that accuses innocent Y counted the
+    Y-accusation "backed" under the pre-15.19 predicate). A
+    :class:`FoundBodyObservation` names its dead victim (``body_of``), never a
+    living accused (the meeting layer drops non-living accusation targets,
+    DESIGN.md §5.5), so it structurally cannot back an accusation under the
+    subject-aware rule. ``observation_backed_any`` is the FROZEN pre-15.19
+    subject-AGNOSTIC bit (ANY grounded observation in the turn — the audit
+    extractor's definition), retained ONLY for the 15.2 historical parity pin.
 
     VENT-AWARE (Task 15.4): a :class:`SawVentObservation` is a first-hand,
     role-proving structured sighting (a witnessed impostor vent — the game's
@@ -762,8 +940,7 @@ def _testimony_vehicle(turn: MeetingTurn, subject: PlayerId) -> tuple[str | None
     its subject, exactly like a :class:`SawPlayerObservation`. The audit extractor
     this mirrors predates 15.4 and omits the type; recognizing it here keeps a
     vent-backed accusation from being scored as an unbacked vibe (which would
-    undercount D2 conversion on baseline-3+). No effect on the committed v4 sets
-    (no vent observations), so the geomean parity is unchanged.
+    undercount D2 conversion on baseline-3+).
     """
 
     has_observation = any(
@@ -772,25 +949,26 @@ def _testimony_vehicle(turn: MeetingTurn, subject: PlayerId) -> tuple[str | None
         )
         for obs in turn.observations
     )
+    subject_observed = any(
+        isinstance(obs, (SawPlayerObservation, SawVentObservation))
+        and obs.subject == subject
+        for obs in turn.observations
+    )
     accuses = any(
         isinstance(claim, AccusationClaim) and claim.against == subject
         for claim in turn.claims
     )
-    sights = any(
-        isinstance(obs, (SawPlayerObservation, SawVentObservation))
-        and obs.subject == subject
-        for obs in turn.observations
-    ) or any(
+    sights = subject_observed or any(
         isinstance(claim, AlibiClaim) and claim.subject == subject
         for claim in turn.claims
     )
     if accuses:
-        return "accusation", has_observation
+        return "accusation", subject_observed, has_observation
     if sights:
-        return "sighting", has_observation
+        return "sighting", subject_observed, has_observation
     if subject in (turn.free_text or ""):
-        return "free_text_only", has_observation
-    return None, has_observation
+        return "free_text_only", subject_observed, has_observation
+    return None, subject_observed, has_observation
 
 
 def _suspicion_graph_by_voter(
@@ -905,10 +1083,16 @@ def _meeting_facts(
     for subject in accused_subjects:
         turns: list[_TestimonyTurn] = []
         for turn in meeting.transcript.turns:
-            vehicle, obs_backed = _testimony_vehicle(turn, subject)
+            vehicle, obs_backed, obs_backed_any = _testimony_vehicle(turn, subject)
             if vehicle is None:
                 continue
-            turns.append(_TestimonyTurn(vehicle=vehicle, observation_backed=obs_backed))
+            turns.append(
+                _TestimonyTurn(
+                    vehicle=vehicle,
+                    observation_backed=obs_backed,
+                    observation_backed_any=obs_backed_any,
+                )
+            )
         testimony_records.append(
             _TestimonyRecord(
                 subject=subject,
@@ -931,6 +1115,11 @@ def _meeting_facts(
         contradictions_by_subject={
             subject: tuple(bits) for subject, bits in contradictions_by_subject.items()
         },
+        # The persisted role-proving vent flags (readable ONLY from the recorded
+        # contradictions — the re-derivation above cannot mint them, Task 15.4).
+        persisted_vent_flags=sum(
+            1 for flag in meeting.contradictions if flag.kind == "vent_sighting"
+        ),
     )
 
 
@@ -1024,36 +1213,69 @@ def _meeting_suspicion_separation(
     return (math.fsum(imp) / len(imp)) - (math.fsum(crew) / len(crew))
 
 
-def _subject_has_observation_backed_accusation(record: _TestimonyRecord) -> bool:
+def _subject_has_observation_backed_accusation(
+    record: _TestimonyRecord, *, historical_15_2: bool = False
+) -> bool:
     """A testimony record carries an OBSERVATION-BACKED ACCUSATION of its subject.
 
-    An ``accusation`` turn whose accuser ALSO logged a first-hand sighting; a
-    sighting-only turn or a bare free-text mention does NOT count (so an enriched
-    meeting's mere sightings cannot masquerade as evidence-backed convictions).
+    An ``accusation`` turn whose accuser ALSO logged a first-hand sighting OF
+    THE ACCUSED (subject-aware, Task 15.19); a sighting-only turn or a bare
+    free-text mention does NOT count (so an enriched meeting's mere sightings
+    cannot masquerade as evidence-backed convictions). ``historical_15_2=True``
+    reads the frozen pre-15.19 subject-AGNOSTIC bit instead — ONLY for the 15.2
+    geomean-parity pin, never for live selection.
     """
 
     return any(
-        turn.observation_backed and turn.vehicle == "accusation"
+        turn.vehicle == "accusation"
+        and (
+            turn.observation_backed_any if historical_15_2 else turn.observation_backed
+        )
         for turn in record.testimony_turns
     )
 
 
-def _observation_backed_impostors(meeting: _MeetingFacts) -> set[PlayerId]:
+def _observation_backed_impostors(
+    meeting: _MeetingFacts, *, historical_15_2: bool = False
+) -> set[PlayerId]:
     """True impostors named by an OBSERVATION-BACKED ACCUSATION this meeting."""
 
     return {
         record.subject
         for record in meeting.testimony_records
         if record.subject_role == "IMPOSTOR"
-        and _subject_has_observation_backed_accusation(record)
+        and _subject_has_observation_backed_accusation(
+            record, historical_15_2=historical_15_2
+        )
     }
 
 
-def _d2_crew_deduction(game: _GameFacts) -> tuple[float, float, float]:
+def _d2_crew_deduction(
+    game: _GameFacts, *, historical_15_2: bool = False
+) -> tuple[float, float, float]:
     """D2 — does collective suspicion track truth AND convert? (§3 D2).
 
     Returns ``(d2, separation_norm, conversion)``.
     ``d2 = 0.5 * separation_norm + 0.5 * conversion``.
+
+    CONVERSION-COUPLED (Task 15.19; audits/audit-phase-15-pause.md §4 — the
+    EXPLOITED ``kill``/D2-separation channel; report-goodhart-probe.md: forcing
+    kills drove separation 0.20 → 0.84 with conversion pinned at 0.00, lifting
+    ``mean_score`` 6.51 → 16.62): the separation sub-term is GATED on deduction
+    evidence — it counts only when the game converted a backed accusation into
+    an ejection (``converted >= 1``) or some meeting carries a contradiction
+    flag. Separation without an ejection or a contradiction flag is suspicion
+    theater, not deduction, and contributes 0. The flag leg is VENT-AWARE
+    (mirroring the ``flags_per_meeting`` merge): the re-derived
+    ``contradictions_by_subject`` census can never contain the grounded
+    role-proving ``vent_sighting`` flag (Task 15.4), so the persisted vent
+    flags (``persisted_vent_flags``) also open the gate — a game whose only
+    deduction evidence is a witnessed impostor vent is evidence-rich, not
+    suspicion theater. The returned ``separation_norm`` is the GATED value, so
+    the reported sub-term always composes to the scored d2.
+    ``historical_15_2=True`` computes the FROZEN pre-15.19 spec
+    (subject-agnostic backing, uncoupled separation) — ONLY for the 15.2
+    geomean-parity pin.
     """
 
     separations = [
@@ -1074,11 +1296,19 @@ def _d2_crew_deduction(game: _GameFacts) -> tuple[float, float, float]:
     )
     converted = attempted = 0
     for m in game.meetings:
-        for subject in _observation_backed_impostors(m):
+        for subject in _observation_backed_impostors(
+            m, historical_15_2=historical_15_2
+        ):
             attempted += 1
             if m.ejected_player_id == subject:
                 converted += 1
     conversion = (converted / attempted) if attempted else 0.0
+    if not historical_15_2:
+        has_deduction_evidence = converted >= 1 or any(
+            m.contradictions_by_subject or m.persisted_vent_flags for m in game.meetings
+        )
+        if not has_deduction_evidence:
+            separation_norm = 0.0
     return 0.5 * separation_norm + 0.5 * conversion, separation_norm, conversion
 
 
@@ -1185,7 +1415,9 @@ def _d4_arc(game: _GameFacts) -> tuple[float, float, float, float]:
     return 0.45 * arc + 0.35 * swing + 0.20 * contest, arc, swing, contest
 
 
-def _is_railroad_ejection(meeting: _MeetingFacts) -> bool:
+def _is_railroad_ejection(
+    meeting: _MeetingFacts, *, historical_15_2: bool = False
+) -> bool:
     """Whether a CREWMATE ejection is a railroad (report-rubric-design.md §3 floor).
 
     Two structural forms, EITHER floors: **gate-bypass** — the ejected crewmate's
@@ -1194,6 +1426,13 @@ def _is_railroad_ejection(meeting: _MeetingFacts) -> bool:
     observation-backed accusation names the ejected AND no contradiction flag names
     them. A crewmate ejected ABOVE the gate WITH a backed accusation or a flag is
     an honest (mistaken) deduction, scored low by D2, never floored.
+
+    The backed-accusation leg uses the ONE live backing predicate
+    (:func:`_subject_has_observation_backed_accusation`), so it is SUBJECT-AWARE
+    since Task 15.19: a conviction whose only "backing" is a grounded
+    observation about someone ELSE is an evidence-free conviction of the
+    ejected. ``historical_15_2=True`` keeps the frozen pre-15.19 behavior for
+    the parity pin.
     """
 
     among = meeting.ejected_rendered_suspicion_among_ejectors
@@ -1202,11 +1441,13 @@ def _is_railroad_ejection(meeting: _MeetingFacts) -> bool:
     ejected = meeting.ejected_player_id
     record = next((r for r in meeting.testimony_records if r.subject == ejected), None)
     has_flag = ejected in meeting.contradictions_by_subject
-    backed = record is not None and _subject_has_observation_backed_accusation(record)
+    backed = record is not None and _subject_has_observation_backed_accusation(
+        record, historical_15_2=historical_15_2
+    )
     return not backed and not has_flag
 
 
-def _floor_multiplier(game: _GameFacts) -> float:
+def _floor_multiplier(game: _GameFacts, *, historical_15_2: bool = False) -> float:
     """The hard integrity floors (report-rubric-design.md §3): 0.0 on ANY breach.
 
     Punish-only, never a tradeable dimension: a firewall/determinism breach
@@ -1222,7 +1463,7 @@ def _floor_multiplier(game: _GameFacts) -> float:
         if (
             m.ejected_player_id is not None
             and m.ejected_role == "CREWMATE"
-            and _is_railroad_ejection(m)
+            and _is_railroad_ejection(m, historical_15_2=historical_15_2)
         ):
             return 0.0
     return 1.0
@@ -1249,18 +1490,27 @@ class WatchabilityGameScore(BaseModel):
     score: float
 
 
-def compute_game_score(game: _GameFacts) -> WatchabilityGameScore:
+def compute_game_score(
+    game: _GameFacts, *, historical_15_2: bool = False
+) -> WatchabilityGameScore:
     """Score one game: ``100 * floor * geomean_weighted(D1-D4)`` (rubric_score.py:823).
 
     The SINGLE source of the composition — both the per-game ``score`` and the
     D1-D4 breakdown route through here so they can never drift.
+
+    ``historical_15_2=True`` scores under the FROZEN pre-15.19 spec
+    (subject-agnostic observation backing, uncoupled D2 separation) — the mode
+    exists ONLY so the committed ``experiments/lab/results-rubric-geomean.json``
+    stays an exact, reproducible cross-implementation parity fixture for Task
+    15.2. It must NEVER select a champion; live selection always uses the
+    default hardened doctrine.
     """
 
     d1 = _d1_resolution(game)
-    d2, d2_sep, d2_conv = _d2_crew_deduction(game)
+    d2, d2_sep, d2_conv = _d2_crew_deduction(game, historical_15_2=historical_15_2)
     d3 = _d3_impostor_craft(game)
     d4, d4_arc, d4_swing, d4_contest = _d4_arc(game)
-    floor = _floor_multiplier(game)
+    floor = _floor_multiplier(game, historical_15_2=historical_15_2)
     geomean = _geomean_weighted({"d1": d1, "d2": d2, "d3": d3, "d4": d4})
     return WatchabilityGameScore(
         seed=game.seed,
@@ -1290,7 +1540,10 @@ class WatchabilityReport(BaseModel):
 
     ``referee_passed`` is the Layer-1 supply-floor verdict AND the set integrity
     flag; the Layer-2 ``per_game`` geomean is the selection SCORE (a champion is
-    chosen by it, never trained on it). See the module JSON schema.
+    chosen by it, never trained on it). ``mean_score`` / ``median_score`` must
+    NEVER be read without the supply-floor gate: the bare geomean is
+    Goodhart-able (the 15.14 exploit lived entirely on the ungated sub-metric).
+    See the module JSON schema.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1369,11 +1622,13 @@ def _observation_backed_conversion(
 
     Returns ``(rate, attempted, converted)``. Over every (meeting,
     observation-backed-accused true impostor) pair (:func:`_observation_backed_impostors`
-    — the SAME evidence-grounded predicate the per-game D2 conversion uses), the
-    fraction the meeting EJECTED. ``rate`` is ``None`` when no such pair exists
-    (undefined, not 0.0). This is deliberately the backed predicate, not any verbal
-    accusation, so the "testimony-BACKED" floor cannot be cleared by ungrounded
-    vibe-convictions.
+    — the SAME evidence-grounded predicate the per-game D2 conversion uses,
+    SUBJECT-AWARE since Task 15.19: the accuser's grounded sighting must name
+    the accused), the fraction the meeting EJECTED. ``rate`` is ``None`` when no
+    such pair exists (undefined, not 0.0). This is deliberately the backed
+    predicate, not any verbal accusation, so the "testimony-BACKED" floor cannot
+    be cleared by ungrounded vibe-convictions — nor, since 15.19, by a genuine
+    observation about someone other than the accused.
     """
 
     attempted = converted = 0
@@ -1581,6 +1836,7 @@ def _fail_closed_report(
 
 
 __all__ = [
+    "FloorPin",
     "SupplyFloorGauge",
     "SupplyFloors",
     "SupplyGaugeValues",

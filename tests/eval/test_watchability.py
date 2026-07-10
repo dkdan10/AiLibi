@@ -1,29 +1,40 @@
-"""Tests for eval/watchability.py (Task 15.2 — the selection referee).
+"""Tests for eval/watchability.py (Task 15.2 referee; Task 15.19 hardening).
 
-Three pillars, per the Definition of Done:
+Four pillars:
 
-* **Geomean parity** — on the committed 9p2i bytes the referee reproduces the lab
-  scorer's per-game D1-D4 + composed scores EXACTLY (the committed
-  ``experiments/lab/results-rubric-geomean.json`` is the fixture; any mismatch is
-  a task failure). The referee also runs on 4p1i, which has no committed rubric
+* **Historical geomean parity (frozen pin)** — on the committed 9p2i bytes the
+  referee's ``historical_15_2`` mode reproduces the lab scorer's per-game D1-D4
+  + composed scores EXACTLY (the committed
+  ``experiments/lab/results-rubric-geomean.json`` is the fixture) — 15.2's
+  cross-implementation evidence stays reproducible under the FROZEN pre-15.19
+  spec. The live referee also runs on 4p1i, which has no committed rubric
   artifact (the asymmetry is handled, not assumed away).
+* **Task-15.19 hardening** — the 15.14 exploit-trajectory shape (high D2
+  separation, zero conversion, zero flags) scores 0 on the D2 term; backing is
+  SUBJECT-AWARE (a vent sighting of X cannot back an accusation of Y); rare-event
+  floors with a baseline numerator ≤ 1 are advisory (reported, never
+  referee-failing) so ``replays/ml_corpus/4p1i`` passes the referee.
 * **Floor trips** — a railroaded crew ejection, a friendly-fire kill, and a
   determinism breach each force a game's score to 0 (synthetic ``_GameFacts``).
 * **Evidence-supply floors** — the committed baseline (baseline-3) passes its own
-  pinned floors; a synthetic evidence-starved set (high meeting rate, zero flags,
-  zero witnesses) FAILS.
+  pinned floors (re-pinned subject-aware at 15.19); a synthetic evidence-starved
+  set (high meeting rate, zero flags, zero witnesses) FAILS.
 """
 
 from __future__ import annotations
 
 import json
+import math
+import statistics
 from pathlib import Path
 
 import pytest
 
 from eval.watchability import (
+    FloorPin,
     SupplyFloors,
     SupplyGaugeValues,
+    WatchabilityGameScore,
     WatchabilityReport,
     _Accusation,
     _GameFacts,
@@ -38,6 +49,7 @@ from eval.watchability import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+_CORPUS_FOUR = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
 _GEOMEAN_FIXTURE = _REPO_ROOT / "experiments" / "lab" / "results-rubric-geomean.json"
 
 # The per-game keys the geomean parity test pins against the lab scorer's
@@ -58,21 +70,76 @@ _PARITY_KEYS = (
 
 
 # --------------------------------------------------------------------------- #
-# Geomean parity                                                              #
+# Geomean parity — FROZEN HISTORICAL PIN (Task 15.19)                         #
 # --------------------------------------------------------------------------- #
 
 
-def test_geomean_parity_reproduces_lab_scorer_on_9p2i() -> None:
-    """Per-game D1-D4 + composed scores match the committed lab geomean artifact."""
+def _score_committed_set(
+    sample_dir: Path, *, historical_15_2: bool = False
+) -> list[WatchabilityGameScore]:
+    """Fold a committed set to per-game scores under the chosen doctrine.
+
+    Replicates :func:`compute_watchability`'s facts assembly (report + re-seeded
+    roles + reconstruction) so the FROZEN ``historical_15_2`` spec can be scored
+    without exposing the parity-only mode on the composed public referee.
+    """
+
+    from engine.world import load_canonical_map
+    from eval.validity import (
+        assemble_tournament_report,
+        resolve_roster_knobs,
+        roles_by_seed,
+    )
+    from eval.watchability import _game_facts, _KillWitnessFact, _reconstruct_kills
+
+    report = assemble_tournament_report(sample_dir)
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    per_seed_roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    reconstruction = _reconstruct_kills(sample_dir)
+    kills_by_seed: dict[int, list[_KillWitnessFact]] = {}
+    for kill in reconstruction.kills:
+        kills_by_seed.setdefault(kill.seed, []).append(kill)
+    return [
+        compute_game_score(
+            _game_facts(
+                game,
+                per_seed_roles[game.seed],
+                [kill.victim_role for kill in kills_by_seed.get(game.seed, [])],
+                integrity_ok=reconstruction.integrity_ok,
+            ),
+            historical_15_2=historical_15_2,
+        )
+        for game in report.games
+    ]
+
+
+def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
+    """HISTORICAL PIN: the frozen pre-15.19 spec still reproduces the lab scorer.
+
+    Task 15.2's cross-implementation evidence — the committed
+    ``experiments/lab/results-rubric-geomean.json`` vs this module on the same
+    9p2i bytes — is kept reproducible under ``historical_15_2=True`` (the frozen
+    subject-AGNOSTIC backing + UNCOUPLED D2 spec). This is the renamed pre-15.19
+    parity test; it pins history and must never gate a champion. The LIVE
+    hardened referee's committed-set behavior is pinned separately (the CLI
+    aggregate test + the supply-floor tests below).
+    """
 
     fixture = json.loads(_GEOMEAN_FIXTURE.read_text())
     ref_by_seed = {row["seed"]: row for row in fixture["per_game"]}
 
-    report = compute_watchability(_NINE)
-    assert report.games_total == 50
-    assert {s.seed for s in report.per_game} == set(ref_by_seed)
+    scores = _score_committed_set(_NINE, historical_15_2=True)
+    assert len(scores) == 50
+    assert {s.seed for s in scores} == set(ref_by_seed)
 
-    for score in report.per_game:
+    for score in scores:
         ref = ref_by_seed[score.seed]
         assert score.reason == ref["reason"]
         assert score.n_meetings == ref["n_meetings"]
@@ -81,10 +148,13 @@ def test_geomean_parity_reproduces_lab_scorer_on_9p2i() -> None:
                 f"seed {score.seed} {key}"
             )
 
-    assert report.mean_score == pytest.approx(fixture["mean_score"])
-    assert report.median_score == pytest.approx(fixture["median_score"])
+    # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them.
+    mean = round(math.fsum(s.score for s in scores) / len(scores), 2)
+    median = round(statistics.median(s.score for s in scores), 2)
+    assert mean == pytest.approx(fixture["mean_score"])
+    assert median == pytest.approx(fixture["median_score"])
     # The fixture's floored games (0.0 score on a railroad breach) reproduce.
-    floored = {s.seed for s in report.per_game if s.floor_multiplier == 0.0}
+    floored = {s.seed for s in scores if s.floor_multiplier == 0.0}
     assert floored == set(
         fixture["validation"]["no_perverse_gradient"]["floored_games"]
     )
@@ -135,7 +205,11 @@ def _clean_meeting(
                 subject="p-0",
                 subject_role="IMPOSTOR",
                 testimony_turns=(
-                    _TestimonyTurn(vehicle="accusation", observation_backed=True),
+                    _TestimonyTurn(
+                        vehicle="accusation",
+                        observation_backed=True,
+                        observation_backed_any=True,
+                    ),
                 ),
             ),
         ),
@@ -233,23 +307,452 @@ def test_honest_mistaken_crew_ejection_is_not_railroaded() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Task 15.19 patch 1 — the conversion-coupled D2 separation term              #
+# --------------------------------------------------------------------------- #
+
+
+def _suspicion_theater_meeting(
+    *, contradictions: dict[str, tuple[bool, ...]] | None = None
+) -> _MeetingFacts:
+    """A 15.14-shaped meeting: high separation, no ejection, no backed testimony."""
+
+    return _MeetingFacts(
+        meeting_index=0,
+        ejected_player_id=None,
+        ejected_role=None,
+        # Rendered suspicion tracks the impostor's kill count (separation
+        # 0.85 - 0.10 = 0.75 >= the 0.30 scale -> separation_norm 1.0) ...
+        suspicion_graph_by_voter={
+            "p-1": {"p-0": 0.9, "p-2": 0.1},
+            "p-2": {"p-0": 0.8, "p-1": 0.1},
+        },
+        rendered_suspicion_by_target={"p-0": 0.9, "p-1": 0.1, "p-2": 0.1},
+        # ... but nothing converts: no observation-backed accusation, no
+        # ejection, no contradiction flag.
+        testimony_records=(),
+        accusations=(),
+        plurality_target=None,
+        plurality_margin=0,
+        ejected_rendered_suspicion_among_ejectors=None,
+        contradictions_by_subject=contradictions or {},
+    )
+
+
+def test_exploit_trajectory_d2_scores_zero_under_hardened_referee() -> None:
+    """REGRESSION PIN (the 15.14 kill-lever exploit, pause audit §4 EXPLOITED).
+
+    A synthetic trajectory reproducing the forced-kill shape — high D2
+    separation, conversion pinned at 0.00, zero contradiction flags (the fake
+    provider's suspicion tracks kill count; report-goodhart-probe.md: separation
+    0.20 → 0.84 lifted ``mean_score`` 6.51 → 16.62) — scores 0 on the D2 term
+    under the hardened referee: separation without an ejection or a
+    contradiction flag is suspicion theater, not deduction. The FROZEN
+    ``historical_15_2`` spec still rewards it (that IS the exploit), pinning the
+    delta the hardening closes.
+    """
+
+    game = _clean_game(
+        reason="IMPOSTOR_PARITY",
+        meetings=(_suspicion_theater_meeting(),),
+        kill_victim_roles=("CREWMATE", "CREWMATE"),
+    )
+
+    hardened = compute_game_score(game)
+    assert hardened.d2_separation_norm == 0.0  # gated: no conversion, no flag
+    assert hardened.d2_conversion == 0.0
+    assert hardened.d2_deduction == 0.0  # the D2 term scores ~0 (exactly 0)
+
+    exploited = compute_game_score(game, historical_15_2=True)
+    assert exploited.d2_separation_norm == 1.0  # the raw suspicion-theater lift
+    assert exploited.d2_deduction == 0.5
+    assert hardened.score < exploited.score
+
+
+def test_contradiction_flag_keeps_separation_live_without_conversion() -> None:
+    """The OR-leg of the D2 gate: a contradiction flag is deduction evidence.
+
+    Separation with a flag but no converted ejection still counts (the gate is
+    "an ejection or a contradiction flag", pause audit §4) — the coupling kills
+    suspicion theater, not honest tables whose evidence did not convert yet.
+    """
+
+    game = _clean_game(
+        reason="IMPOSTOR_PARITY",
+        meetings=(_suspicion_theater_meeting(contradictions={"p-0": (True,)}),),
+        kill_victim_roles=("CREWMATE",),
+    )
+    score = compute_game_score(game)
+    assert score.d2_separation_norm == 1.0
+    assert score.d2_conversion == 0.0
+    assert score.d2_deduction == 0.5
+
+
+def test_persisted_vent_flag_keeps_separation_live_without_conversion() -> None:
+    """The D2 gate's flag leg is VENT-AWARE (Codex review on PR #247).
+
+    The re-derived ``contradictions_by_subject`` census can never contain the
+    grounded role-proving ``vent_sighting`` flag (its grounding channel is not
+    in the transcript, Task 15.4), so a game whose ONLY deduction evidence is a
+    persisted vent flag must open the gate through ``persisted_vent_flags`` —
+    mirroring the ``flags_per_meeting`` merge. A witnessed impostor vent is the
+    game's hardest evidence, not suspicion theater.
+    """
+
+    import dataclasses
+
+    vent_meeting = dataclasses.replace(
+        _suspicion_theater_meeting(), persisted_vent_flags=1
+    )
+    game = _clean_game(
+        reason="IMPOSTOR_PARITY",
+        meetings=(vent_meeting,),
+        kill_victim_roles=("CREWMATE",),
+    )
+    score = compute_game_score(game)
+    assert score.d2_separation_norm == 1.0  # the vent flag opens the gate
+    assert score.d2_conversion == 0.0
+    assert score.d2_deduction == 0.5
+
+
+def test_meeting_facts_carry_the_persisted_vent_flag_census() -> None:
+    """``_meeting_facts`` surfaces the persisted vent flags off the recorded bytes.
+
+    The committed baseline-3 4p1i set carries 11 persisted ``vent_sighting``
+    flags (the same census ``test_flags_per_meeting_is_vent_aware`` pins for the
+    supply gauge); the per-meeting facts must total the same so the D2 gate
+    actually sees them on real bytes.
+    """
+
+    from eval.validity import assemble_tournament_report
+    from eval.watchability import _meeting_facts
+
+    report = assemble_tournament_report(_FOUR)
+    total = sum(
+        _meeting_facts(meeting, index, {}).persisted_vent_flags
+        for game in report.games
+        for index, meeting in enumerate(game.meetings)
+    )
+    assert total == 11
+
+
+def test_backed_conversion_keeps_separation_live() -> None:
+    """The conversion leg of the D2 gate: a converted backed accusation counts."""
+
+    score = compute_game_score(_clean_game())
+    # _clean_meeting ejects the observation-backed-accused impostor.
+    assert score.d2_conversion == 1.0
+    assert score.d2_separation_norm > 0.0
+    assert score.d2_deduction > 0.5
+
+
+# --------------------------------------------------------------------------- #
+# Task 15.19 patch 2 — subject-aware observation backing                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_vent_sighting_of_x_does_not_back_accusation_of_y() -> None:
+    """SUBJECT-AWARE BACKING (owner-ratified Q2, review-phase-15-midwave.md).
+
+    A speaker grounds a genuine vent sighting of X in the SAME turn that accuses
+    innocent Y: the Y-accusation is UNBACKED under the hardened referee (the
+    grounded observation's subject must be the accused), while the X-mention
+    stays a backed sighting. The frozen subject-agnostic bit still counts the
+    Y-accusation backed — the exploit the re-anchoring closes.
+    """
+
+    from eval.watchability import _testimony_vehicle
+    from meetings.schemas import AccusationClaim, MeetingTurn, SawVentObservation
+
+    turn = MeetingTurn(
+        turn_id="m:turn-1",
+        turn_index=1,
+        speaker="p-1",
+        turn_kind="reply",
+        reply_to=None,
+        observations=(
+            SawVentObservation(
+                type="saw_vent", tick=100, subject="p-0", room="Cafeteria"
+            ),
+        ),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-2", confidence=0.9, reason="vibes"
+            ),
+        ),
+        free_text="I saw p-0 vent, but honestly I think p-2 is the other one.",
+    )
+
+    vehicle_y, backed_y, backed_any_y = _testimony_vehicle(turn, "p-2")
+    assert vehicle_y == "accusation"
+    assert backed_y is False  # the vent names p-0, not the accused p-2
+    assert backed_any_y is True  # the frozen pre-15.19 subject-agnostic bit
+
+    vehicle_x, backed_x, backed_any_x = _testimony_vehicle(turn, "p-0")
+    assert vehicle_x == "sighting"
+    assert backed_x is True  # the sighting DOES name p-0
+
+
+def test_subject_aware_backing_gates_conversion_and_railroad() -> None:
+    """The ONE backing predicate flows into D2 conversion AND the railroad floor.
+
+    A record whose only "backing" is a grounded observation about someone else
+    (``observation_backed=False`` / ``observation_backed_any=True``) neither
+    counts as a backed conversion attempt nor saves a crew ejection from the
+    evidence-free-conviction railroad — while the frozen ``historical_15_2``
+    mode preserves the old subject-agnostic behavior for the parity pin.
+    """
+
+    from eval.watchability import (
+        _observation_backed_conversion,
+        _subject_has_observation_backed_accusation,
+    )
+
+    record = _TestimonyRecord(
+        subject="p-0",
+        subject_role="IMPOSTOR",
+        testimony_turns=(
+            _TestimonyTurn(
+                vehicle="accusation",
+                observation_backed=False,  # the grounded sighting named X, not p-0
+                observation_backed_any=True,
+            ),
+        ),
+    )
+    assert _subject_has_observation_backed_accusation(record) is False
+    assert (
+        _subject_has_observation_backed_accusation(record, historical_15_2=True) is True
+    )
+
+    # Conversion: the impostor ejection does NOT count as a backed conversion.
+    meeting = _MeetingFacts(
+        meeting_index=0,
+        ejected_player_id="p-0",
+        ejected_role="IMPOSTOR",
+        suspicion_graph_by_voter={},
+        rendered_suspicion_by_target={},
+        testimony_records=(record,),
+        accusations=(_Accusation(speaker="p-1", accused="p-0"),),
+        plurality_target="p-0",
+        plurality_margin=1,
+        ejected_rendered_suspicion_among_ejectors=0.9,
+        contradictions_by_subject={},
+    )
+    game = _clean_game(meetings=(meeting,))
+    rate, attempted, converted = _observation_backed_conversion([game])
+    assert (rate, attempted, converted) == (None, 0, 0)
+
+    # Railroad: a CREW ejection with the same someone-else "backing" and no flag
+    # is an evidence-free conviction under the hardened referee (floor 0)...
+    crew_record = _TestimonyRecord(
+        subject="p-3",
+        subject_role="CREWMATE",
+        testimony_turns=(
+            _TestimonyTurn(
+                vehicle="accusation",
+                observation_backed=False,
+                observation_backed_any=True,
+            ),
+        ),
+    )
+    railroad_meeting = _MeetingFacts(
+        meeting_index=0,
+        ejected_player_id="p-3",
+        ejected_role="CREWMATE",
+        suspicion_graph_by_voter={"p-1": {"p-3": 0.8}},
+        rendered_suspicion_by_target={"p-3": 0.8},
+        testimony_records=(crew_record,),
+        accusations=(_Accusation(speaker="p-1", accused="p-3"),),
+        plurality_target="p-3",
+        plurality_margin=1,
+        ejected_rendered_suspicion_among_ejectors=0.8,
+        contradictions_by_subject={},
+    )
+    railroaded = _clean_game(reason="CREWMATE_TASKS", meetings=(railroad_meeting,))
+    assert compute_game_score(railroaded).floor_multiplier == 0.0
+    # ... while the frozen historical spec (subject-agnostic) does not floor it.
+    assert compute_game_score(railroaded, historical_15_2=True).floor_multiplier == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Task 15.19 — advisory rare-event floors (baseline numerator <= 1)           #
+# --------------------------------------------------------------------------- #
+
+
+def test_rare_event_floor_with_numerator_at_most_one_is_advisory() -> None:
+    """A floor pinned on a baseline numerator <= 1 is reported, never failing.
+
+    The pause audit §1/§5.1 one-event floor degeneracy: the 4p1i
+    ``witnessed_event_rate`` floor is pinned to 1/55, so a same-substrate set
+    can miss it by pure variance. The gauge row keeps the honest
+    measured-vs-floor verdict (``passed=False``) and is marked ``advisory``,
+    but ``supply_floors_passed`` excludes it.
+    """
+
+    floors = SupplyFloors(
+        witnessed_event_rate=FloorPin(value=0.018, numerator=1),  # 1 event -> advisory
+        flags_per_meeting=FloorPin(value=1.0, numerator=42),
+        testimony_backed_conversion=FloorPin(value=0.5, numerator=20),
+    )
+    gauges = SupplyGaugeValues(
+        witnessed_event_rate=0.0,  # below the advisory floor
+        total_kills=46,
+        crew_witnessed_kills=0,
+        flags_per_meeting=1.5,
+        total_flags=60,
+        persisted_vent_flags=11,
+        meetings_total=40,
+        testimony_backed_conversion=0.72,
+        backed_conversion_attempted=36,
+        backed_conversion_converted=26,
+    )
+    passed, rows = evaluate_supply_floors(gauges, floors)
+    assert passed is True  # the advisory miss cannot fail the referee
+    witnessed = next(r for r in rows if r.name == "witnessed_event_rate")
+    assert witnessed.advisory is True
+    assert witnessed.passed is False  # the row still reports the honest verdict
+    assert all(r.advisory is False for r in rows if r.name != "witnessed_event_rate")
+
+
+def test_non_advisory_floor_still_fails_the_set() -> None:
+    """A numerator >= 2 floor keeps its teeth: missing it fails the referee."""
+
+    floors = SupplyFloors(
+        witnessed_event_rate=FloorPin(value=0.018, numerator=2),
+        flags_per_meeting=FloorPin(value=1.0, numerator=42),
+        testimony_backed_conversion=FloorPin(value=0.5, numerator=20),
+    )
+    gauges = SupplyGaugeValues(
+        witnessed_event_rate=0.0,
+        total_kills=46,
+        crew_witnessed_kills=0,
+        flags_per_meeting=1.5,
+        total_flags=60,
+        persisted_vent_flags=11,
+        meetings_total=40,
+        testimony_backed_conversion=0.72,
+        backed_conversion_attempted=36,
+        backed_conversion_converted=26,
+    )
+    passed, rows = evaluate_supply_floors(gauges, floors)
+    assert passed is False
+    witnessed = next(r for r in rows if r.name == "witnessed_event_rate")
+    assert witnessed.advisory is False
+    assert witnessed.passed is False
+
+
+def test_corpus_4p1i_passes_the_referee_via_the_advisory_rule() -> None:
+    """``replays/ml_corpus/4p1i`` PASSES: the one-event floor is advisory.
+
+    The pause audit §1 finding: corpus-4p1i measures 0.0 on
+    ``witnessed_event_rate`` (floor 1/55 = 0.0182, a one-event numerator) while
+    passing the hard validity gate and both other supply floors. Under the
+    advisory rule the set passes the referee; the miss is still reported.
+    """
+
+    report = compute_watchability(_CORPUS_FOUR)
+    assert report.integrity_ok is True
+    assert report.referee_passed is True
+    assert report.supply_floors_passed is True
+    witnessed = next(
+        g for g in report.supply_gauges if g.name == "witnessed_event_rate"
+    )
+    assert witnessed.advisory is True
+    assert witnessed.measured == 0.0
+    assert witnessed.passed is False  # reported honestly, excluded from the AND
+    others = [g for g in report.supply_gauges if g.name != "witnessed_event_rate"]
+    assert all(g.passed and not g.advisory for g in others)
+
+
+# --------------------------------------------------------------------------- #
 # Evidence-supply floors                                                     #
 # --------------------------------------------------------------------------- #
 
 _BASELINE_2_9P2I_FLOORS = SupplyFloors(
-    witnessed_event_rate=0.0375,
-    flags_per_meeting=2.007042253521127,
-    testimony_backed_conversion=0.4375,
+    witnessed_event_rate=FloorPin(value=0.0375, numerator=6),
+    flags_per_meeting=FloorPin(value=2.007042253521127, numerator=285),
+    testimony_backed_conversion=FloorPin(value=0.4375, numerator=56),
 )
 
 
-def test_baseline_2_supply_floors_pass() -> None:
-    """The referee accepts baseline 2 — it clears its own pinned supply floors."""
+def test_baseline_3_sets_pass_the_hardened_referee_end_to_end() -> None:
+    """The committed scripted-FSM baseline-3 sets clear their own re-pinned floors.
+
+    The 15.19 DoD anchor: every gauge row passes, not just the composed verdict
+    (the exact floor == measured equality is pinned separately by
+    ``test_baseline_3_floor_pins_equal_the_measured_bytes``).
+    """
 
     for sample_dir in (_NINE, _FOUR):
         report = compute_watchability(sample_dir)
+        assert report.referee_passed is True
         assert report.supply_floors_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
+
+
+def test_baseline_3_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
+
+    ``passed`` alone is one-sided (any floor at or below the true measured value
+    clears it), so an under-pinned floor would silently weaken the gate with CI
+    green. This pins BOTH sides at the 15.19 re-measurement: the measured gauge
+    IS the recorded fraction, and the pinned floor IS the measured gauge —
+    "the baseline passes at equality", made an assertion instead of a comment.
+    """
+
+    expected = {
+        _NINE: {
+            "witnessed_event_rate": 5 / 154,
+            "flags_per_meeting": 259 / 139,
+            "testimony_backed_conversion": 71 / 107,  # SUBJECT-AWARE (was 71/117)
+        },
+        _FOUR: {
+            "witnessed_event_rate": 1 / 55,
+            "flags_per_meeting": 42 / 39,
+            "testimony_backed_conversion": 20 / 33,  # SUBJECT-AWARE (was 21/35)
+        },
+    }
+    for sample_dir, fractions in expected.items():
+        report = compute_watchability(sample_dir)
+        by_name = {g.name: g for g in report.supply_gauges}
+        assert set(by_name) == set(fractions)
+        for name, fraction in fractions.items():
+            gauge = by_name[name]
+            assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
+            assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
+
+
+def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
+    """LIVE-PATH SNAPSHOT: both 15.19 patches demonstrably fire on real bytes.
+
+    The historical parity pin guards only the FROZEN path, and the CLI aggregate
+    (mean 35.19) is a single scalar — neither shows the patches acting on any
+    real committed game. This pins the live-vs-historical per-game delta on the
+    9p2i bytes: the subject-aware railroad floor (patch 2) newly floors exactly
+    seeds 19/27/29/31, and the conversion-coupled D2 gate (patch 1) zeroes the
+    separation term on seeds 13/24 (games with live separation but no converted
+    backed accusation and no flag) without flooring them.
+    """
+
+    live = {s.seed: s for s in _score_committed_set(_NINE)}
+    hist = {s.seed: s for s in _score_committed_set(_NINE, historical_15_2=True)}
+
+    live_floored = {seed for seed, s in live.items() if s.floor_multiplier == 0.0}
+    hist_floored = {seed for seed, s in hist.items() if s.floor_multiplier == 0.0}
+    # Patch 2 (subject-aware backing -> the railroad floor's backed leg): the
+    # hardened floor only ever ADDS railroads on the same bytes...
+    assert hist_floored <= live_floored
+    # ...and on baseline-3 9p2i it adds exactly these four crew ejections whose
+    # only "backing" was a grounded observation about someone else.
+    assert live_floored - hist_floored == {19, 27, 29, 31}
+
+    # Patch 1 (conversion-coupled D2): these games carry rendered-suspicion
+    # separation but no converted backed accusation and no contradiction flag —
+    # suspicion theater, gated to 0 live, intact under the frozen spec.
+    for seed in (13, 24):
+        assert live[seed].floor_multiplier == 1.0
+        assert live[seed].d2_separation_norm == 0.0
+        assert hist[seed].d2_separation_norm > 0.0
+        assert live[seed].score < hist[seed].score
 
 
 def test_testimony_backed_conversion_requires_observation_backing() -> None:
@@ -280,7 +783,9 @@ def test_testimony_backed_conversion_requires_observation_backing() -> None:
                             subject_role="IMPOSTOR",
                             testimony_turns=(
                                 _TestimonyTurn(
-                                    vehicle="accusation", observation_backed=backed
+                                    vehicle="accusation",
+                                    observation_backed=backed,
+                                    observation_backed_any=backed,
                                 ),
                             ),
                         ),
@@ -669,9 +1174,10 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
         ),
         free_text="I watched p-0 drop into the vent.",
     )
-    vehicle, backed = _testimony_vehicle(accuse_turn, "p-0")
+    vehicle, backed, backed_any = _testimony_vehicle(accuse_turn, "p-0")
     assert vehicle == "accusation"
-    assert backed is True
+    assert backed is True  # subject-aware: the vent names the accused p-0
+    assert backed_any is True
 
     # A bare vent sighting (no accusation) still names its subject as a sighting.
     sight_turn = MeetingTurn(
@@ -684,17 +1190,18 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
         claims=(),
         free_text="",
     )
-    vehicle2, backed2 = _testimony_vehicle(sight_turn, "p-0")
+    vehicle2, backed2, backed_any2 = _testimony_vehicle(sight_turn, "p-0")
     assert vehicle2 == "sighting"
     assert backed2 is True
+    assert backed_any2 is True
 
 
 def test_none_conversion_floor_is_vacuously_cleared() -> None:
     """A None conversion floor (baseline supplied no accused-impostor meeting) passes."""
 
     floors = SupplyFloors(
-        witnessed_event_rate=0.0,
-        flags_per_meeting=0.0,
+        witnessed_event_rate=FloorPin(value=0.0, numerator=5),
+        flags_per_meeting=FloorPin(value=0.0, numerator=10),
         testimony_backed_conversion=None,
     )
     gauges = SupplyGaugeValues(
@@ -758,7 +1265,14 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     assert report["baseline_id"] == "baseline-3"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
-    assert report["mean_score"] == pytest.approx(39.83)
+    # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
+    # one-event floor on this roster).
+    assert [g["advisory"] for g in report["supply_gauges"]] == [False, False, False]
+    # The HARDENED mean over the committed baseline-3 bytes (the frozen
+    # pre-15.19 instrument read 39.83 on the same bytes — the conversion-coupled
+    # D2 gate sinks the suspicion-theater games; the historical parity pin above
+    # keeps the old number reproducible).
+    assert report["mean_score"] == pytest.approx(35.19)
 
 
 def test_cli_watchability_human_output() -> None:
