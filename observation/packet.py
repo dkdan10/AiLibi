@@ -55,6 +55,22 @@ class SelfView(_FrozenModel):
     # engine resolves ``(actor, pending_task_id)`` back to the agent's own instance,
     # so the map id round-trips through ``do_task`` and ``task_locations`` unchanged.
     pending_task_id: TaskId | None
+    # The recipient's OWN unfinished task instances as MAP task ids (``game_map
+    # .tasks`` keys), never the per-player instance id ``"{owner}:{map_task_id}"``
+    # (DESIGN.md §3.2). Sorted ascending for replay stability, assembled
+    # owner-scoped by ``ObservationService`` so it never carries another player's
+    # task or any ownership -- the §1.3 observation firewall (Task 15.22,
+    # audit-phase-15-pause decision 5). ``pending_task_id``, when non-None, is
+    # ALWAYS a member: for a crewmate it is this set's lexicographic head; for an
+    # IMPOSTOR the field carries the camouflage pretend-task WINDOW exactly as
+    # ``pending_task_id`` carries the rotating pretend id (Task 10.14), so the
+    # field is role-indistinguishable by construction and is never mirrored into
+    # the crew-visible ``PlayerView`` channel. Defaults ``()`` so pre-widening
+    # packet bytes reconstruct unchanged (the additive-field byte discipline);
+    # the ``moved_players`` omit-when-empty precedent is NOT copied here because
+    # this field is non-empty in the common case and no committed artifact pins
+    # packet bytes.
+    owned_task_ids: tuple[TaskId, ...] = ()
     # Identities of the recipient's fellow impostor(s), excluding its own id.
     # This rides the already-privileged self channel where ``role`` lives: an
     # agent entitled to know its own role is, by the same logic, entitled to
