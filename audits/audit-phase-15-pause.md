@@ -158,7 +158,11 @@ sha).
   `AILIBI_LLM_PROVIDER=featherless`, `AILIBI_PROMPT_SET=qwen3_32b` (turn/opening v5, `vote_ballot` v6 —
   the exact baseline-3 substrate), model `Qwen/Qwen3-32B`, $0 flat-rate; 2 parallel seed-shard workers
   (the 15.7/15.12 concurrency: 2 units per 32B request on a 4-unit plan), per-seed crash-retry ≤ 4;
-  one finalist at a time. Wall-clock ≈ 2.5 h per finalist.
+  one finalist at a time. Wall-clock ≈ 2.5–3 h per finalist. Per-seed provenance guard, mirroring
+  `scripts/record_ml_corpus.sh::check_replay_provenance`: a game whose bytes carry ANY model row other
+  than the locked baseline model — in practice the wall-clock-miss `(deadline_default)` phantom the
+  validity gate rejects — is a FAILED recording and the seed is re-recorded until clean (observed rate:
+  2/50 utility-es seeds, @@POL_PHANTOM@@ policy-es seeds, each cleared on re-record).
 - **Scoring:** delete the `*.audit.jsonl` sidecars (they collide with the scorers' seed glob — the
   harness's own `_drop_audit_sidecars` precedent), write `roster.json` via
   `scripts/_manifest_writer.py roster --sample-dir <dir> --num-players 9 --num-impostors 2
