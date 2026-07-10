@@ -93,6 +93,9 @@ same protocol: shaped reward 20.33, take-rate 0.55, vent 7.3/game (report §8). 
 | crew-fsm-baseline | PASS | 7.96 (F) | 11.469 | 0.0 | 0.10 | 116 | 0.0 | PASS | PASS | 0 | `37517e5f` |
 | crew-utility-es | **FAIL** (3 checks) | 0.00 (F) | 13.240 | 0.676 | 0.60 | **0** | **1.0** | PASS | PASS | 22 | `888046d0` |
 
+(The crew rows carry no surrogate-fitness column: `inner_fitness_surrogate` is null in both rows — the
+crew track post-dates the NO-GO and never metered the surrogate; every other tuple field is present.)
+
 The trained crew scorer lifts win rate 3/30 → 18/30 by suppressing the report interrupt and starving
 the meeting layer to zero — and the validity gate + referee both catch it (`validity_failing_checks`:
 `all_games_reach_game_over`, `meeting_rate_and_resolution`, `cost_and_provenance_exact`; referee 0.00,
@@ -101,12 +104,12 @@ ceiling is still unmeasured, and that measurement is what decision 5 contracts (
 
 ### 2.3 Torch probe + distilled student — source: `experiments/lab/torch_probe/results-torch-probe.jsonl` [VERIFIED]
 
-| entrant | gate | referee mean (passed) | fitness real | anchor-CE (flag) | win rate | take-rate | det. (same-host) | genome | sha256 |
-|---|---|---|---|---|---|---|---|---|---|
-| torch-ppo-gru-s0 | PASS | 3.04 (F) | 10.963 | 2.035 (FLAGGED) | 0.267 | 1.00 | PASS | 33298 | `ae567f31` |
-| torch-ppo-gru-s1 | PASS | 3.04 (F) | 11.050 | 1.937 (–) | 0.267 | 1.00 | PASS | 33298 | `3372f409` |
-| torch-ppo-gru-s2 | PASS | 3.04 (F) | 10.971 | 2.023 (FLAGGED) | 0.267 | 1.00 | PASS | 33298 | `116c8e2c` |
-| torch-distill-student | PASS | 1.04 (F) | **−2.580** | **11.715** (FLAGGED, 256 off-menu) | 0.067 | 1.00 | PASS | 1049 | `6302c474` |
+| entrant | gate | referee mean (passed) | fitness real | fitness surrogate | anchor-CE (flag) | win rate | take-rate | det. (same-host) | leak | genome | sha256 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-ppo-gru-s0 | PASS | 3.04 (F) | 10.963 | 6.899 | 2.035 (FLAGGED) | 0.267 | 1.00 | PASS | PASS | 33298 | `ae567f31` |
+| torch-ppo-gru-s1 | PASS | 3.04 (F) | 11.050 | 6.977 | 1.937 (–) | 0.267 | 1.00 | PASS | PASS | 33298 | `3372f409` |
+| torch-ppo-gru-s2 | PASS | 3.04 (F) | 10.971 | 6.917 | 2.023 (FLAGGED) | 0.267 | 1.00 | PASS | PASS | 33298 | `116c8e2c` |
+| torch-distill-student | PASS | 1.04 (F) | **−2.580** | −5.098 | **11.715** (FLAGGED, 256 off-menu) | 0.067 | 1.00 | PASS | PASS | 1049 | `6302c474` |
 
 The probe's one question answered **NO**: best torch fitness 11.05 sits 7.6 points and 0.73 win-rate
 points below the ES ceiling at ~2× the training wall-clock, and all three seeds converge to the same
@@ -256,6 +259,12 @@ The pre-registered computation (Wilson 95% CI on the corpus cell; two-proportion
   [−0.190, +0.211]) — the two fresh, independent, same-substrate measurements AGREE.
 - vs the baseline-2 anchor 0.923: **outside** the CI (upper bound 0.914 < 0.923).
 
+On the rule's reading: the pre-registration's UNDERPOWERED arm is worded "if the CI excludes
+*neither*" — defined over the two anchors the watch item names (the pre-Wave-0 0.923 and the post-15.7
+0.808), which is how it is applied here: the corpus CI is checked against both, SHIFT if it excludes
+the old anchor while agreeing with the fresh one, variance if the reverse, UNDERPOWERED if it excludes
+neither.
+
 **Verdict: SHIFT** — per the pre-registered CI rule, the fresh 33-ejection corpus evidence replicates
 the 15.7 cell (~0.81–0.82) and excludes the old 0.923, so the uptick is a real substrate-level move of
 the v5/v6 4p1i meeting layer, not run-to-run variance of one 50-seed record. Recorded honestly: the
@@ -326,7 +335,7 @@ The NO paths — what was rejected and why — are inside each block.
   submissions/game vs the FSM's 7.3, a channel fake meetings never punish), and @@POL_REJECT@@.
 - **Rejected — `map-elites`:** the diversity instrument, not the champion — its champion converges on
   policy-es's low-exposure heavy-vent region (which is itself the finding: the monoculture direction),
-  0.9 fitness behind, take-rate 0.924.
+  0.9 fitness behind the best entrant (18.198 vs policy-es's 19.066), take-rate 0.924.
 - **Rejected — `bc-dagger`:** a measurement, not a candidate (held-out intent agreement 0.365 vs the
   0.90 bar); its value was as the ES warm start and the encoder-sufficiency finding.
 - **Evidence:** §2.1 (the committed tuple), §3.2–3.3 (the real-LLM finalist evaluation this decision
