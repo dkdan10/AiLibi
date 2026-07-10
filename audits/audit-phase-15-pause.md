@@ -162,11 +162,15 @@ sha).
   `scripts/record_ml_corpus.sh::check_replay_provenance`: a game whose bytes carry ANY model row other
   than the locked baseline model — in practice the wall-clock-miss `(deadline_default)` phantom the
   validity gate rejects — is a FAILED recording and the seed is re-recorded until clean (observed rate:
-  2/50 utility-es seeds, @@POL_PHANTOM@@ policy-es seeds, each cleared on re-record).
+  2/50 utility-es seeds, both cleared on one re-record each; 0/50 policy-es seeds).
 - **Scoring:** delete the `*.audit.jsonl` sidecars (they collide with the scorers' seed glob — the
-  harness's own `_drop_audit_sidecars` precedent), write `roster.json` via
-  `scripts/_manifest_writer.py roster --sample-dir <dir> --num-players 9 --num-impostors 2
-  --tasks-per-crewmate 2`, then run the committed CLIs unchanged: `scripts/validity_gate.py <dir>
+  harness's own `_drop_audit_sidecars` precedent), ensure `roster.json` holds
+  `{"num_impostors": 2, "num_players": 9, "tasks_per_crewmate": 2}` — write it into the output dir
+  BEFORE recording if using `scripts/_manifest_writer.py roster` (its descriptor-less-set guard
+  correctly refuses to retrofit a roster into a dir that already holds replays; written after the
+  fact, write the sidecar directly — the scorers' per-tick state-hash walk is the proof the roster is
+  right, since a wrong one fails all 50 reconstructions loudly) — then run the committed CLIs
+  unchanged: `scripts/validity_gate.py <dir>
   --json --expected-model Qwen/Qwen3-32B --require-zero-cost`, `scripts/measure_baseline.py <dir>
   --json`, `… --watchability --json --baseline-id baseline-3`, `… --funnel --json`.
 - **The proof that the learned factory produced the bytes:** the five-field `tactical_policy` stamp is
@@ -183,15 +187,58 @@ sha).
 
 | finalist | stamp==sidecar (50/50) | validity gate | referee mean/med (passed) | imp. win | ej. accuracy | genuine conv. | witnessed rate | flags/meeting | backed conv. |
 |---|---|---|---|---|---|---|---|---|---|
-| utility-es | @@UTIL_STAMP@@ | @@UTIL_GATE@@ | @@UTIL_REFEREE@@ | @@UTIL_WIN@@ | @@UTIL_EJACC@@ | @@UTIL_CONV@@ | @@UTIL_WITN@@ | @@UTIL_FLAGS@@ | @@UTIL_BACKED@@ |
-| policy-es | @@POL_STAMP@@ | @@POL_GATE@@ | @@POL_REFEREE@@ | @@POL_WIN@@ | @@POL_EJACC@@ | @@POL_CONV@@ | @@POL_WITN@@ | @@POL_FLAGS@@ | @@POL_BACKED@@ |
+| utility-es | yes (`6d327dcb…`) | **PASS** | 46.62 / 48.3 (**FAIL** — one gauge) | **0.38** | 0.613 (68/43 of 111) | 0.75 (9/12) | 0.2012 | 2.681 | **0.592** (floor 0.6068) |
+| policy-es | yes (`561e5ff3…`) | **PASS** | 48.08 / 47.7 (**PASS**) | **0.00** | 0.99 (99/1 of 100) | 0.60 (6/10) | 0.0847 | 3.581 | 0.875 |
 | (baseline 3, FSM, same seeds) | fsm-default | PASS | 39.83 / 47.5 (PASS) | 0.30 | 0.697 | 0.769 | 0.0325 | 1.863 | 0.607 |
 
-@@FINALIST_NARRATIVE@@
+The stamp proof held on every recording: all 50 games per finalist carry the five-field
+`tactical_policy` stamp read back from the bytes, uniform, with `weights_sha256` equal to the committed
+sidecar digest — the machine-checkable evidence that the learned factory, not the FSM default wearing a
+champion label, produced the recorded bytes.
+
+**utility-es on the real path:** a modest, plausible impostor edge — win 0.38 vs the FSM baseline's
+0.30, all 19 wins by parity, ejection accuracy 0.613, genuine-class conversion 0.75 — inside games that
+are markedly evidence-RICHER than the baseline (witnessed-event rate 0.201 vs 0.0325, flags/meeting
+2.68 vs 1.86) and score HIGHER under the referee geomean (46.62 vs 39.83). Its one referee miss is the
+`testimony_backed_conversion` floor by 1.5 pp (0.592 vs the floor pinned at the baseline's own 0.6068)
+— a marginal, pre-hardening verdict on the exact gauge 15.19 re-defines subject-aware and re-pins;
+the hardened re-score is 15.23's pass-bar, not this audit's.
+
+**policy-es on the real path: competitive annihilation.** 0/50 impostor wins; 100 ejections of which
+**99 are its own impostors** (accuracy 0.99); crew win all 50 games (49 by ejection). The mechanism is
+exactly the vent tell the bake-off flagged: its play leans on the vent channel (45 of its 46 report
+meetings held a witnessed vent; 38 structured vent observations reached the record), and since Wave 0
+made witnessed vents structurally speakable, role-proving evidence — a channel the fake meeting path
+never punished — is a conviction machine on the real one. Its games are nonetheless maximally
+watchable (referee PASS, 48.08; backed conversion 0.875): the referee measures whether games are a
+deduction game, not whether the impostor is any good — the gates-vs-fitness split doing precisely its
+job, on the opposite side from the crew track's failure.
 
 ### 3.3 Divergence analysis — real path vs the fake/surrogate brackets
 
-@@DIVERGENCE_ANALYSIS@@
+The bake-off's two committed meeting models bracketed the real path, and the real measurement resolves
+the bracket decisively:
+
+- **The fake-path fitness ranking INVERTED at the top.** Fake meetings (0/116 ejections — no
+  conviction pressure) ranked policy-es first by fitness (19.07 vs 18.67) with both at win 1.00. On
+  the real path the 2% fitness edge became 0.38 vs 0.00 win — the fake-path column measured how well a
+  policy exploits a meeting model that cannot convict, and policy-es's entire edge lived there.
+- **The surrogate's one-signed divergence was the correct early warning.** The surrogate-path fitness
+  ordering (utility-es 11.32 > map-elites 7.86 > policy-es 7.26) — i.e., robustness to swapping in a
+  meeting model that ejects — predicted the real-path outcome; the fake-path ordering did not. The
+  bake-off's own risk note ("treat its real-path numbers as upper bounds pending the pause's real-LLM
+  eval") is confirmed with room to spare.
+- **The referee became discriminating the moment meetings supply evidence.** Under fake meetings every
+  entrant failed the same two supply floors (noise); on the real path the floors separate: policy-es
+  clears all three, utility-es misses one by 1.5 pp, and both geomeans sit ABOVE the FSM baseline —
+  the perfect-stealth starvation failure mode is measurably absent from both finalists.
+- **The anchor-KL flag earned its keep:** the one anchor-CE-FLAGGED candidate (policy-es, 2.016) is
+  the one that collapsed on the real path — distance from the legible FSM anchor correlated with
+  exploiting the training-time meeting model.
+
+The method decision (decision 1) therefore rests on the real-meeting-path measurement, not the
+fake/surrogate columns: utility-es is the only finalist that is simultaneously gate-clean,
+real-path-competitive, evidence-positive, and anchor-legible.
 
 ---
 
@@ -336,16 +383,26 @@ The NO paths — what was rejected and why — are inside each block.
 - **Rejected — `policy-es` (rank 2):** best fake-path fitness (19.066 vs 18.671, a 2% edge inside
   seed noise per the report's own ranking-stability caveat) but the one anchor-CE-FLAGGED candidate
   (2.016 > 2.0), the largest surrogate divergence (−11.81), the vent tell (20.3 vent
-  submissions/game vs the FSM's 7.3, a channel fake meetings never punish), and @@POL_REJECT@@.
+  submissions/game vs the FSM's 7.3, a channel fake meetings never punish) — and the real-LLM
+  evaluation is terminal for it: **0/50 impostor wins, 99 of its 100 ejections being its own
+  impostors** (§3.2) — the vent channel is role-proving evidence to the real crew, so its fake-path
+  fitness edge was a meeting-model artifact.
 - **Rejected — `map-elites`:** the diversity instrument, not the champion — its champion converges on
   policy-es's low-exposure heavy-vent region (which is itself the finding: the monoculture direction),
   0.9 fitness behind the best entrant (18.198 vs policy-es's 19.066), take-rate 0.924.
 - **Rejected — `bc-dagger`:** a measurement, not a candidate (held-out intent agreement 0.365 vs the
   0.90 bar); its value was as the ES warm start and the encoder-sufficiency finding.
 - **Evidence:** §2.1 (the committed tuple), §3.2–3.3 (the real-LLM finalist evaluation this decision
-  explicitly cites: @@DECISION1_EVIDENCE@@). Method-vs-method, one protocol, and the only entrant that
+  explicitly cites: on the real meeting path utility-es wins 0.38 vs the FSM's 0.30 with gate PASS,
+  referee geomean 46.62 vs the baseline's 39.83, witnessed-event rate 6× baseline, and a single
+  1.5 pp supply-floor miss on the pre-hardening backing gauge — while policy-es records 0/50 wins with
+  99/100 of its ejections being its own impostors; `training/reports/results-finalist-eval.jsonl`).
+  Method-vs-method, one protocol, and the only entrant that
   is simultaneously gate-clean, KL-closest to the legible anchor, best under the referee's coarse
-  grain, most robust to the meeting-model swap, and confirmed on the real meeting path.
+  grain, most robust to the meeting-model swap, and confirmed on the real meeting path. The one open
+  cell — the marginal backing-floor miss — is deliberately NOT adjudicated by this un-hardened referee:
+  15.19 re-defines and re-pins that exact gauge, and the 15.23 close re-scores the champion under it
+  as the shipping pass-bar.
 
 ### Decision 2 — deployment end-state
 
@@ -356,7 +413,9 @@ The NO paths — what was rejected and why — are inside each block.
 - **Rejected — branch B (new default + baseline-4 re-record), for this wave:** (a) the referee that
   would bless a default is not yet hardened — 15.19's conversion-coupled D2 floor and subject-aware
   backing land AFTER this decision by design, and a default flip blessed by a known-exploitable
-  instrument is exactly the self-certification trap this task exists to prevent; (b) the real-LLM
+  instrument is exactly the self-certification trap this task exists to prevent — and the champion's
+  own real-path verdict is a marginal referee FAIL on the pre-hardening backing gauge (§3.2), so a
+  default flip today would ship a referee-failing measurement; (b) the real-LLM
   evidence is one 50-seed measurement per finalist — enough to pick a champion among candidates, not
   enough to re-anchor the canonical baseline every downstream measurement stands on; (c) branch B's
   true cost includes the Q3 corollary (a corpus-scale companion record, ~7 h operator time) plus the
