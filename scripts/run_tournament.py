@@ -15,6 +15,24 @@ The JSON report supersedes the old ``BalanceReport`` text summary as the
 tournament artifact (Task 5.6 / Task 5.1 ``## Decisions``); the crew / impostor
 / tick-budget buckets remain derivable from it and are still printed for the
 operator.
+
+The learned champion is OPT-IN via ``--agent-factory learned-champion`` beside
+the untouched ``fsm-default`` scripted-FSM default
+(audits/audit-phase-15-pause.md decision 2, branch A): the committed
+``replays/samples/`` corpus stays byte-identical because an unflagged run
+threads neither factory nor stamp, exactly as before Task 15.21 — and an
+explicit ``--tactical-policy-stamp`` must match the SELECTED factory's stamp
+field-for-field in either direction, so no recording can carry the other
+policy's label (the owner-ratified PR-#248 amendment to the 15.21 contract;
+it retires the Task-15.9 champion-JSON surface on the FSM path, which the
+auto-stamp obsoleted). A
+``learned-champion`` run AUTO-STAMPS each recording with the champion's
+:class:`~orchestrator.replay.TacticalPolicyStamp`, so the Task-15.18
+finalist-eval proof (``stamp.weights_sha256`` equals the committed sidecar
+digest) can never be forgotten on a learned run. Flipping the scripted default
+to the champion is deliberately NOT this task's call — the Q3 corollary recorded
+with decision 2 re-evaluates it at phase close / Phase 17, behind the
+Task-15.19-hardened referee plus a corpus-scale companion record.
 """
 
 from __future__ import annotations
@@ -22,23 +40,33 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Final
 
 # Allow `uv run python scripts/run_tournament.py ...` to find top-level packages.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from agents.tactical.crewmate_policy import CrewmatePolicy  # noqa: E402
+from agents.tactical.impostor_policy import ImpostorPolicy  # noqa: E402
+from agents.tactical.learned.factory import (  # noqa: E402
+    LearnedAgentFactory,
+    build_learned_agent_factory,
+)
 from eval.balance_eval import run_tournament_eval  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
 )
+from observation.packet import PlayerId, Role  # noqa: E402
 from orchestrator.game import (  # noqa: E402
+    AgentFactory,
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
     DEFAULT_TASKS_PER_CREWMATE,
     ROSTER_PRESETS,
+    TacticalAgent,
 )
 from orchestrator.replay import (  # noqa: E402
     FSM_DEFAULT_POLICY_ID,
@@ -47,6 +75,16 @@ from orchestrator.replay import (  # noqa: E402
 )
 
 _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
+
+# ``--agent-factory`` choices (Task 15.21; audits/audit-phase-15-pause.md
+# decision 2, branch A): the scripted FSM stays the default; the learned
+# champion is opt-in. Reusing ``FSM_DEFAULT_POLICY_ID`` as the default value
+# keeps an unflagged run byte-identical to the pre-15.21 CLI.
+LEARNED_CHAMPION_FACTORY_ID: Final[str] = "learned-champion"
+_AGENT_FACTORY_CHOICES: Final[tuple[str, ...]] = (
+    FSM_DEFAULT_POLICY_ID,
+    LEARNED_CHAMPION_FACTORY_ID,
+)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -142,8 +180,26 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "game_over record (Task 15.9). Accepts the literal 'fsm-default' for "
             "the canonical scripted-FSM stamp, or a path to a JSON file with the "
             "five TacticalPolicyStamp fields (policy_id, method, encoder_version, "
-            "weights_sha256, anchor_policy) for a Wave-2 champion stamp. Omitted "
-            "records the absent = FSM-default stamp, byte-identical to today."
+            "weights_sha256, anchor_policy). Since Task 15.21 the stamp must "
+            "match the factory selected by --agent-factory field-for-field (the "
+            "champion stamp is auto-wired by 'learned-champion', so an explicit "
+            "stamp is only ever a re-statement); a contradiction exits non-zero. "
+            "Omitted records the absent = FSM-default stamp, byte-identical to "
+            "today."
+        ),
+    )
+    parser.add_argument(
+        "--agent-factory",
+        choices=_AGENT_FACTORY_CHOICES,
+        default=FSM_DEFAULT_POLICY_ID,
+        help=(
+            "tactical agent factory for every game (Task 15.21; audit decision 2, "
+            "branch A). 'fsm-default' (the default) keeps the scripted-FSM factory, "
+            "byte-identical to omitting the flag; 'learned-champion' wraps every "
+            "impostor with the committed utility-es champion scorer "
+            "(agents.tactical.learned) and auto-stamps each recording with the "
+            "champion's TacticalPolicyStamp — combining it with a contradicting "
+            "--tactical-policy-stamp is rejected loudly."
         ),
     )
     return parser.parse_args(argv)
@@ -183,6 +239,118 @@ def _resolve_tactical_policy_stamp(value: str | None) -> TacticalPolicyStamp | N
             f"(need the five string fields policy_id/method/encoder_version/"
             f"weights_sha256/anchor_policy): {exc}"
         ) from exc
+
+
+def _build_learned_champion_factory() -> LearnedAgentFactory:
+    """Build the Task-15.20 champion factory around the production inner agent.
+
+    The injected inner constructor is exactly the per-player construction
+    :func:`orchestrator.game.build_default_agent_factory` performs — the
+    orchestrator-owned :class:`~orchestrator.game.TacticalAgent` wrapping the
+    role-appropriate scripted FSM policy. It is injected rather than imported by
+    ``agents/tactical/learned/`` because that package may not import the
+    orchestrator (the ``agents → orchestrator → engine`` chain would breach the
+    observation firewall) while this CLI may (Task 15.21); this closes the seam
+    Task 15.20 deliberately left injected.
+    """
+
+    def inner(agent_id: PlayerId, role: Role) -> TacticalAgent:
+        policy: CrewmatePolicy | ImpostorPolicy
+        if role == "IMPOSTOR":
+            policy = ImpostorPolicy(agent_id=agent_id)
+        else:
+            policy = CrewmatePolicy(agent_id=agent_id)
+        return TacticalAgent(agent_id=agent_id, policy=policy, role=role)
+
+    return build_learned_agent_factory(inner)
+
+
+def _resolve_agent_factory(
+    choice: str,
+) -> tuple[AgentFactory | None, TacticalPolicyStamp | None]:
+    """Resolve ``--agent-factory`` into a factory + auto-stamp pair (Task 15.21).
+
+    ``fsm-default`` resolves to ``(None, None)`` — :func:`main` then passes NO
+    ``agent_factory`` kwarg to :func:`run_tournament_eval` (whose omitted-kwarg
+    default already is :func:`orchestrator.game.build_default_agent_factory`),
+    keeping the default path byte-identical to the pre-15.21 CLI (the decision-2
+    posture, audit branch A). ``learned-champion`` builds the opt-in Task-15.20
+    factory (its committed weights sha-verified on load, fail loud) and
+    constructs the real :class:`~orchestrator.replay.TacticalPolicyStamp` here in
+    ``scripts/`` from the factory's five plain-string stamp fields — the factory
+    itself stays engine-free per Task 15.20 — so the auto-stamp always carries
+    the digest of the artifact actually loaded, never a hard-coded sha.
+    """
+
+    if choice == FSM_DEFAULT_POLICY_ID:
+        return None, None
+    factory = _build_learned_champion_factory()
+    fields = factory.stamp
+    stamp = TacticalPolicyStamp(
+        policy_id=fields.policy_id,
+        method=fields.method,
+        encoder_version=fields.encoder_version,
+        weights_sha256=fields.weights_sha256,
+        anchor_policy=fields.anchor_policy,
+    )
+    return factory, stamp
+
+
+def _resolve_recorded_stamp(
+    *,
+    factory_choice: str,
+    auto_stamp: TacticalPolicyStamp | None,
+    explicit_stamp: TacticalPolicyStamp | None,
+) -> TacticalPolicyStamp | None:
+    """Reconcile the selected factory's stamp with any explicit stamp (Task 15.21).
+
+    The Task-15.21 mis-stamp guard, in BOTH directions (the owner-ratified
+    PR-#248 amendment to the 15.21 contract). The stamp of the factory actually
+    running is authoritative: an explicit ``--tactical-policy-stamp`` is
+    accepted only when it matches that stamp field-for-field (an idempotent
+    re-statement), and any contradiction exits non-zero naming the differing
+    field — a learned recording can never carry an FSM label, an FSM recording
+    can never carry a learned one, and the Task-15.18 finalist-eval proof
+    (``stamp.weights_sha256`` equals the committed sidecar) becomes impossible
+    to forget AND impossible to counterfeit from this CLI. What is RECORDED is
+    unchanged from Task 15.9 for every accepted combination: the champion
+    auto-stamp on the learned path, the explicit stamp (or ``None``, the
+    absent = FSM default) on the ``fsm-default`` path — so an unflagged,
+    unstamped run stays byte-identical to the pre-15.9 recorder.
+    """
+
+    reference = (
+        auto_stamp if auto_stamp is not None else fsm_default_tactical_policy_stamp()
+    )
+    if explicit_stamp is not None:
+        for field_name in (
+            "policy_id",
+            "method",
+            "encoder_version",
+            "weights_sha256",
+            "anchor_policy",
+        ):
+            reference_value = getattr(reference, field_name)
+            explicit_value = getattr(explicit_stamp, field_name)
+            if reference_value != explicit_value:
+                descriptor = (
+                    "auto-stamps every recording from the loaded champion artifact"
+                    if auto_stamp is not None
+                    else "records the scripted FSM default"
+                )
+                raise SystemExit(
+                    f"--agent-factory {factory_choice!r} {descriptor}; the "
+                    "explicit --tactical-policy-stamp contradicts it on "
+                    f"{field_name!r} (explicit {explicit_value!r} != factory "
+                    f"{reference_value!r}). Drop the explicit stamp (the champion "
+                    f"stamp is auto-wired by --agent-factory "
+                    f"{LEARNED_CHAMPION_FACTORY_ID!r}; the FSM default needs at "
+                    f"most the literal {FSM_DEFAULT_POLICY_ID!r}) or pass one "
+                    "matching the running factory exactly."
+                )
+    if auto_stamp is not None:
+        return auto_stamp
+    return explicit_stamp
 
 
 def _format_summary(eval_report: TournamentEvalReport) -> str:
@@ -303,7 +471,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
-    tactical_policy_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
+    explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
+    agent_factory, auto_stamp = _resolve_agent_factory(args.agent_factory)
+    tactical_policy_stamp = _resolve_recorded_stamp(
+        factory_choice=args.agent_factory,
+        auto_stamp=auto_stamp,
+        explicit_stamp=explicit_stamp,
+    )
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     # ``force`` is threaded into each per-seed ReplayLog construction inside
     # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
@@ -311,16 +485,35 @@ def main(argv: list[str] | None = None) -> int:
     # therefore never deletes a later seed's replay that was never reached;
     # without --force, the first existing file raises and exits non-zero
     # (DESIGN.md §11.4; Task 4.16).
-    report = run_tournament_eval(
-        seeds=seeds,
-        output_dir=args.output_dir,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-        max_ticks=args.max_ticks,
-        force=args.force,
-        tactical_policy_stamp=tactical_policy_stamp,
-    )
+    #
+    # Two-branch call (Task 15.21): the fsm-default path passes NO agent_factory
+    # kwarg, so the harness call — and any 15.9-era caller/spy of this module's
+    # seam — stays byte-identical to the pre-15.21 CLI (run_tournament_eval's
+    # omitted-kwarg default already is build_default_agent_factory()); the
+    # learned path threads the opt-in factory.
+    if agent_factory is None:
+        report = run_tournament_eval(
+            seeds=seeds,
+            output_dir=args.output_dir,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            max_ticks=args.max_ticks,
+            force=args.force,
+            tactical_policy_stamp=tactical_policy_stamp,
+        )
+    else:
+        report = run_tournament_eval(
+            seeds=seeds,
+            output_dir=args.output_dir,
+            agent_factory=agent_factory,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            max_ticks=args.max_ticks,
+            force=args.force,
+            tactical_policy_stamp=tactical_policy_stamp,
+        )
     eval_report = build_tournament_eval_report(report)
 
     report_output: Path = (
