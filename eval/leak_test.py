@@ -31,7 +31,7 @@ from observation.packet import (
     SelfView,
 )
 from observation.public_map import PublicMapView
-from observation.service import ObservationService
+from observation.service import ObservationService, impostor_pretend_task_set
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     AgentFactory,
@@ -122,6 +122,12 @@ def _run_scripted_game(
                     world_state=state,
                     agent_id=player_id,
                     engine_events=events,
+                )
+                # The STRONG cross-player engine-truth check (Task 15.22): the
+                # recipient's owned_task_ids match per-tick engine truth and no
+                # foreign task id appears anywhere in the packet.
+                _assert_owned_tasks_match_engine_truth(
+                    packet, state=state, game_map=game_map
                 )
                 packet_records.append((packet, events))
         if state.phase == "GAME_OVER":
@@ -224,6 +230,153 @@ def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
                 )
 
 
+# --------------------------------------------------------------------------- #
+# The owned-task leak assertions (Task 15.22).
+#
+# ``SelfView.owned_task_ids`` widens the privileged self channel with the
+# recipient's OWN unfinished map task ids (crewmate) / its per-seat camouflage
+# pretend window (impostor), assembled owner-scoped by ``ObservationService`` so
+# no packet ever carries another player's task (DESIGN.md §1.3;
+# audit-phase-15-pause decision 5). This region extends the leak suite with the
+# four-item review's item (2) -- absence of foreign task ids in EVERY packet
+# field -- and the byte discipline: a stable, "versioned" SelfView key set the
+# next widening must extend deliberately.
+# --------------------------------------------------------------------------- #
+
+# The deliberate SelfView byte-shape pin (the packet-discipline "versioned"
+# guard): a future SelfView widening must extend this pin deliberately, so an
+# accidental field add or drop trips the discipline assertion below.
+_SELF_STATE_KEY_SET = frozenset(
+    {
+        "room",
+        "role",
+        "pending_task_id",
+        "owned_task_ids",
+        "fellow_impostor_ids",
+        "in_vent",
+        "own_kill",
+    }
+)
+
+
+def _assert_owned_task_discipline(packet: ObservationPacket) -> None:
+    """Assert the ``owned_task_ids`` byte shape + role-blind consistency invariant.
+
+    Role-blind by construction: every assertion below holds IDENTICALLY for a
+    crewmate's owned frontier and an impostor's camouflage window, so none asserts
+    a role bit. Each message names the packet's ``agent_id`` for a legible
+    failure. Guards: (1) the SelfView key set is EXACTLY ``_SELF_STATE_KEY_SET``
+    (byte-shape stability -- the packet discipline); (2) every owned id is a
+    non-empty ``str`` containing NO ``":"`` (never a composite instance id, whose
+    owner prefix would leak ownership); (3) the tuple is sorted ascending with no
+    duplicates (replay-stable byte shape); (4) ``pending_task_id``, when set, is a
+    member of ``owned_task_ids`` -- the role-blind consistency invariant, which
+    holds identically for a crewmate's owned frontier (pending is its head) and an
+    impostor's camouflage window (pending is the rotating pretend id).
+    """
+
+    agent = packet.agent_id
+    self_state_keys = set(packet.self_state.model_dump(mode="json").keys())
+    assert self_state_keys == _SELF_STATE_KEY_SET, (
+        f"{agent} self_state key set {sorted(self_state_keys)} != pinned "
+        f"{sorted(_SELF_STATE_KEY_SET)} (SelfView byte shape drifted)"
+    )
+    owned = packet.self_state.owned_task_ids
+    for task_id in owned:
+        assert isinstance(task_id, str) and task_id, (
+            f"{agent} owned_task_ids carries a non-string/empty id {task_id!r}"
+        )
+        assert ":" not in task_id, (
+            f"{agent} owned task id {task_id!r} is a composite instance id "
+            f"(the owner prefix would leak ownership)"
+        )
+    assert list(owned) == sorted(set(owned)), (
+        f"{agent} owned_task_ids {owned} must be sorted ascending with no "
+        f"duplicates (replay-stable byte shape)"
+    )
+    pending = packet.self_state.pending_task_id
+    assert pending is None or pending in owned, (
+        f"{agent} pending_task_id {pending!r} is not a member of owned_task_ids "
+        f"{owned} (the role-blind consistency invariant)"
+    )
+
+
+def _assert_owned_tasks_match_engine_truth(
+    packet: ObservationPacket, *, state: WorldState, game_map: Map
+) -> None:
+    """Cross-player engine-truth check: ``owned_task_ids`` == the recipient's OWN set.
+
+    The STRONG scripted-sweep guard (Task 15.22, four-item review item (2)): the
+    owned set is verified against per-tick engine truth INDEPENDENTLY of the code
+    under test, and no foreign task id appears in ANY packet field.
+
+    * CREWMATE: ``owned_task_ids`` equals EXACTLY the recipient's OWN unfinished
+      map ids -- nothing else. Kills redistribute tasks mid-game, so per-tick
+      ``state`` truth is the right side (a crewmate may now own an inherited
+      re-keyed instance).
+    * IMPOSTOR: equals its per-seat ``impostor_pretend_task_set`` camouflage
+      window, and the impostor owns ZERO ``state.tasks`` instance.
+    * Foreign absence: no OTHER player's owned unfinished map id and no OTHER
+      impostor's pretend window id (minus the recipient's own owned set) appears
+      as a substring of the whole-packet JSON -- mirroring
+      ``test_service.py::test_multi_impostor_packets_carry_no_foreign_task_ownership``.
+    """
+
+    agent = packet.agent_id
+    impostor_ids = sorted(
+        pid for pid, player in state.players.items() if player.role == "IMPOSTOR"
+    )
+    if state.players[agent].role == "CREWMATE":
+        expected = tuple(
+            sorted(
+                task.map_task_id
+                for task in state.tasks.values()
+                if task.owner == agent and not task.completed
+            )
+        )
+        assert packet.self_state.owned_task_ids == expected, (
+            f"{agent} owned_task_ids {packet.self_state.owned_task_ids} != "
+            f"engine-truth own unfinished set {expected}"
+        )
+    else:
+        expected = impostor_pretend_task_set(
+            game_map=game_map, agent_id=agent, impostor_ids=impostor_ids
+        )
+        assert packet.self_state.owned_task_ids == expected, (
+            f"{agent} impostor owned_task_ids {packet.self_state.owned_task_ids} "
+            f"!= camouflage window {expected}"
+        )
+        assert not any(task.owner == agent for task in state.tasks.values()), (
+            f"impostor {agent} unexpectedly owns a WorldState.tasks instance"
+        )
+
+    foreign: set[str] = set()
+    for other_id in state.players:
+        if other_id == agent:
+            continue
+        foreign |= {
+            task.map_task_id
+            for task in state.tasks.values()
+            if task.owner == other_id and not task.completed
+        }
+    for other_impostor in impostor_ids:
+        if other_impostor == agent:
+            continue
+        foreign |= set(
+            impostor_pretend_task_set(
+                game_map=game_map,
+                agent_id=other_impostor,
+                impostor_ids=impostor_ids,
+            )
+        )
+    foreign -= set(packet.self_state.owned_task_ids)
+    dumped = json.dumps(packet.model_dump(mode="json"), sort_keys=True)
+    for foreign_id in sorted(foreign):
+        assert foreign_id not in dumped, (
+            f"{agent} packet leaked foreign task id {foreign_id!r}"
+        )
+
+
 def test_recursive_hidden_field_scanner_reports_nested_path() -> None:
     packet_dump: JsonValue = {
         "self_state": {"role": "CREWMATE"},
@@ -301,6 +454,7 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
             packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
             _assert_no_recursive_hidden_fields(packet_dump)
             _assert_no_role_bearing_values(packet_dump)
+            _assert_owned_task_discipline(packet)
             for visible_player in packet.visible_players:
                 visible_player_dump = visible_player.model_dump(mode="json")
                 assert set(visible_player_dump.keys()) == {"id", "room", "action"}
@@ -550,6 +704,9 @@ def assert_packet_is_leak_clean(
     if packet.self_state.role == "CREWMATE":
         assert packet.cooldown is None
         assert packet.self_state.fellow_impostor_ids == ()
+    # The owned-task byte-shape + role-blind consistency discipline (Task 15.22),
+    # scanned on EVERY factory-mode packet.
+    _assert_owned_task_discipline(packet)
 
 
 def assert_no_factory_packet_leaks(records: Sequence[PacketRecord]) -> None:
@@ -730,3 +887,112 @@ def test_leak_factory_mode_witness_check_trips_on_unwitnessed_kill() -> None:
     )
     with pytest.raises(AssertionError, match="unwitnessed 'kill'"):
         assert_no_factory_packet_leaks([(poisoned, [kill_event])])
+
+
+def test_owned_task_discipline_trips_on_composite_instance_id() -> None:
+    # The owned-task discipline bites: an owned id carrying a ':' composite (the
+    # owner prefix leaks ownership) must trip. Real packets never mint this; it is
+    # planted here as a real ObservationPacket the scan sees.
+    poisoned = ObservationPacket(
+        tick=0,
+        agent_id="p-2",
+        self_state=SelfView(
+            room="ADMIN",
+            role="CREWMATE",
+            pending_task_id=None,
+            owned_task_ids=("p-2:swipe_card",),
+        ),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    with pytest.raises(AssertionError, match="composite instance id"):
+        _assert_owned_task_discipline(poisoned)
+
+
+def test_owned_task_discipline_trips_on_unsorted_tuple() -> None:
+    # An unsorted owned tuple breaks the replay-stable byte shape and must trip.
+    poisoned = ObservationPacket(
+        tick=0,
+        agent_id="p-3",
+        self_state=SelfView(
+            room="ADMIN",
+            role="CREWMATE",
+            pending_task_id=None,
+            owned_task_ids=("swipe_card", "align_engine_output"),
+        ),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    with pytest.raises(AssertionError, match="must be sorted ascending"):
+        _assert_owned_task_discipline(poisoned)
+
+
+def test_owned_task_discipline_trips_on_pending_absent_from_owned() -> None:
+    # A pending task set but ABSENT from owned_task_ids breaks the role-blind
+    # consistency invariant -- both for a non-empty owned set that lacks it and
+    # for the empty-owned edge (pending set, owned ()), which must trip identically.
+    poisoned = ObservationPacket(
+        tick=0,
+        agent_id="p-4",
+        self_state=SelfView(
+            room="ADMIN",
+            role="CREWMATE",
+            pending_task_id="swipe_card",
+            owned_task_ids=("submit_scan",),
+        ),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    with pytest.raises(AssertionError, match="is not a member of owned_task_ids"):
+        _assert_owned_task_discipline(poisoned)
+
+    poisoned_empty_owned = ObservationPacket(
+        tick=0,
+        agent_id="p-4",
+        self_state=SelfView(
+            room="ADMIN",
+            role="CREWMATE",
+            pending_task_id="swipe_card",
+            owned_task_ids=(),
+        ),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    with pytest.raises(AssertionError, match="is not a member of owned_task_ids"):
+        _assert_owned_task_discipline(poisoned_empty_owned)

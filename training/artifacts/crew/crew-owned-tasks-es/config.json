@@ -1,0 +1,50 @@
+{
+  "anchor_weight": 1.0,
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "crew-owned-tasks-es",
+  "es": {
+    "fitness_seeds": [
+      1000,
+      1001,
+      1002,
+      1005,
+      1006,
+      1007
+    ],
+    "generations": 20,
+    "init_scale": 0.5,
+    "population": 12,
+    "seed": 0,
+    "sigma": 0.3
+  },
+  "feature_names": [
+    "kind_continue_task",
+    "kind_buddy",
+    "kind_patrol",
+    "kind_report",
+    "kind_emergency",
+    "kind_repair",
+    "kind_hold",
+    "kind_nearest_task",
+    "path_hops_norm",
+    "goal_is_current_room",
+    "group_size_norm",
+    "group_min_suspicion",
+    "suspect_suspicion",
+    "lastseen_age_norm",
+    "emergency_press",
+    "body_in_own_room",
+    "kill_witnessed",
+    "sabotage_gating",
+    "task_completion_percent",
+    "visible_players_norm",
+    "own_max_suspicion",
+    "own_over_gate",
+    "owned_tasks_norm",
+    "nearest_owned_hops_norm",
+    "same_room_owned_norm",
+    "goal_room_owned_norm"
+  ],
+  "genome_length": 27,
+  "train_max_ticks": 300
+}

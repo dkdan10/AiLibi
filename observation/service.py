@@ -81,6 +81,52 @@ IMPOSTOR_PRETEND_TASK_SET_SIZE: Final[int] = 3
 IMPOSTOR_PRETEND_TASK_DWELL_TICKS: Final[int] = 6
 
 
+def _impostor_pretend_window(
+    *,
+    game_map: Map,
+    agent_id: PlayerId,
+    impostor_ids: Sequence[PlayerId],
+) -> list[TaskId]:
+    """Build one impostor seat's CONSTRUCTION-ORDER pretend-task window (Task 10.14).
+
+    The tick-independent per-seat blend window both the rotating
+    :func:`impostor_pretend_task_id` and the sorted :func:`impostor_pretend_task_set`
+    derive from, factored out so the single-id rotator and the set surface CANNOT
+    drift (Task 15.22). Each seat (the agent's index in the sorted impostor
+    roster) draws a disjoint window of ``IMPOSTOR_PRETEND_TASK_SET_SIZE``
+    consecutive sorted map ids starting at ``offset = (seat * size) % n`` and
+    wrapping, deduped in append order. Returns the window in CONSTRUCTION order
+    (NOT sorted — the rotator indexes it positionally) and ``[]`` for a task-less
+    map.
+
+    Fail-loud (AGENTS.md no silent fallbacks): ``agent_id`` MUST be a member of
+    ``impostor_ids``. A non-member is a caller wiring error (a filtered or stale
+    roster) — it raises rather than silently reusing seat 0's window and masking
+    the bug (Codex review, PR #155). A task-less map short-circuits to ``[]``
+    before the seat lookup, preserving the pre-refactor ``None`` behavior for the
+    degenerate map.
+    """
+
+    map_task_ids = sorted(game_map.tasks)
+    n = len(map_task_ids)
+    if n == 0:
+        return []
+    sorted_impostors = sorted(impostor_ids)
+    if agent_id not in sorted_impostors:
+        raise ValueError(
+            f"impostor_pretend_task_id called for {agent_id!r}, which is not in "
+            f"impostor_ids {tuple(sorted_impostors)!r} (caller wiring error)"
+        )
+    seat = sorted_impostors.index(agent_id)
+    offset = (seat * IMPOSTOR_PRETEND_TASK_SET_SIZE) % n
+    window: list[TaskId] = []
+    for i in range(min(IMPOSTOR_PRETEND_TASK_SET_SIZE, n)):
+        candidate = map_task_ids[(offset + i) % n]
+        if candidate not in window:
+            window.append(candidate)
+    return window
+
+
 def impostor_pretend_task_id(
     *,
     game_map: Map,
@@ -97,38 +143,53 @@ def impostor_pretend_task_id(
 
     Determinism / replay safety: each seat (the agent's index in the sorted
     impostor roster) draws a stable, disjoint per-impostor window of the sorted
-    map tasks and rotates through it purely by ``tick // dwell``. No RNG, no
-    module state — the same ``(game_map, agent_id, impostor_ids, tick)`` always
-    yields the same id, keeping replay reconstruction byte-identical. The
-    rotation is safe for the renderer because its completion inference is
-    role-gated to crewmates (see the module note). Returns ``None`` only for a
-    task-less map.
+    map tasks (:func:`_impostor_pretend_window`) and rotates through it purely by
+    ``tick // dwell``. No RNG, no module state — the same
+    ``(game_map, agent_id, impostor_ids, tick)`` always yields the same id,
+    keeping replay reconstruction byte-identical. The rotation is safe for the
+    renderer because its completion inference is role-gated to crewmates (see the
+    module note). Returns ``None`` only for a task-less map. The window is indexed
+    in CONSTRUCTION order (not sorted), so this rotation is byte-identical to the
+    pre-refactor inline construction.
 
     Fail-loud (AGENTS.md no silent fallbacks): ``agent_id`` MUST be a member of
-    ``impostor_ids``. A non-member is a caller wiring error (a filtered or stale
-    roster) — it raises rather than silently reusing seat 0's window and masking
-    the bug (Codex review, PR #155).
+    ``impostor_ids`` (raised by :func:`_impostor_pretend_window`).
     """
 
-    map_task_ids = sorted(game_map.tasks)
-    n = len(map_task_ids)
-    if n == 0:
+    window = _impostor_pretend_window(
+        game_map=game_map, agent_id=agent_id, impostor_ids=impostor_ids
+    )
+    if not window:
         return None
-    sorted_impostors = sorted(impostor_ids)
-    if agent_id not in sorted_impostors:
-        raise ValueError(
-            f"impostor_pretend_task_id called for {agent_id!r}, which is not in "
-            f"impostor_ids {tuple(sorted_impostors)!r} (caller wiring error)"
+    index = (tick // IMPOSTOR_PRETEND_TASK_DWELL_TICKS) % len(window)
+    return window[index]
+
+
+def impostor_pretend_task_set(
+    *,
+    game_map: Map,
+    agent_id: PlayerId,
+    impostor_ids: Sequence[PlayerId],
+) -> tuple[TaskId, ...]:
+    """The impostor's camouflage set for ``SelfView.owned_task_ids`` (Task 15.22).
+
+    The full per-seat pretend WINDOW the rotating ``pending_task_id`` is drawn
+    from (:func:`_impostor_pretend_window`), SORTED ascending — because a
+    crewmate's owned set is always ascending and the raw construction-order
+    window can wrap past the sorted-map-id boundary, so an unsorted wrapped
+    window would be an ordering tell that made the field role-distinguishable.
+    Contains every id :func:`impostor_pretend_task_id` can return for this seat,
+    tick-independent. Never minted as a ``WorldState.tasks`` instance (the
+    module-note integrity invariant); ``()`` for a task-less map.
+    """
+
+    return tuple(
+        sorted(
+            _impostor_pretend_window(
+                game_map=game_map, agent_id=agent_id, impostor_ids=impostor_ids
+            )
         )
-    seat = sorted_impostors.index(agent_id)
-    offset = (seat * IMPOSTOR_PRETEND_TASK_SET_SIZE) % n
-    pretend_set: list[TaskId] = []
-    for i in range(min(IMPOSTOR_PRETEND_TASK_SET_SIZE, n)):
-        candidate = map_task_ids[(offset + i) % n]
-        if candidate not in pretend_set:
-            pretend_set.append(candidate)
-    index = (tick // IMPOSTOR_PRETEND_TASK_DWELL_TICKS) % len(pretend_set)
-    return pretend_set[index]
+    )
 
 
 @dataclass(frozen=True)
@@ -191,6 +252,9 @@ class ObservationService:
         pending_task_id = self._pending_task_id_for_agent(
             world_state=world_state, agent_id=agent_id
         )
+        owned_task_ids = self._owned_task_ids_for_agent(
+            world_state=world_state, agent_id=agent_id
+        )
         observed_actions = self._observed_actions_for_agent(
             agent_id=agent_id,
             world_state=world_state,
@@ -246,6 +310,7 @@ class ObservationService:
                 room=player.room,
                 role=player.role,
                 pending_task_id=pending_task_id,
+                owned_task_ids=owned_task_ids,
                 fellow_impostor_ids=fellow_impostor_ids,
                 in_vent=player.in_vent,
                 own_kill=own_kill,
@@ -578,3 +643,49 @@ class ObservationService:
         if not owned_unfinished_map_ids:
             return None
         return sorted(owned_unfinished_map_ids)[0]
+
+    def _owned_task_ids_for_agent(
+        self, *, world_state: WorldState, agent_id: PlayerId
+    ) -> tuple[TaskId, ...]:
+        """Return the recipient's OWN unfinished map task ids (DESIGN.md §1.3, §3.2).
+
+        The widened ``SelfView.owned_task_ids`` surface (Task 15.22 decision 5;
+        the four-item review item (1) ObservationService scoping). Mirrors
+        ``_pending_task_id_for_agent``'s role split and is derived STRICTLY from
+        the recipient's OWN engine-side task state, never another player's:
+
+        * For a CREWMATE the ``task.owner == agent_id`` filter yields exactly its
+          owned, unfinished map ids (never the composite ``"{owner}:{map_task_id}"``
+          instance id, which would leak the owner prefix), sorted ascending for
+          replay stability.
+        * For an IMPOSTOR — which owns no ``WorldState.tasks`` instance —
+          ``impostor_pretend_task_set`` supplies the per-seat camouflage window
+          over the SAME impostor roster ``_pending_task_id_for_agent`` uses, so
+          the field carries no role bit (Task 10.14 blending, sorted like a
+          crewmate's owned set).
+
+        By construction ``pending_task_id`` is this tuple's head for a crewmate
+        and a member of the camouflage window for an impostor, so the two
+        self-channel fields stay mutually consistent and role-indistinguishable.
+        """
+
+        player = world_state.players.get(agent_id)
+        if player is not None and player.role == "IMPOSTOR":
+            impostor_ids = [
+                other_id
+                for other_id, other in world_state.players.items()
+                if other.role == "IMPOSTOR"
+            ]
+            return impostor_pretend_task_set(
+                game_map=self._game_map,
+                agent_id=agent_id,
+                impostor_ids=impostor_ids,
+            )
+
+        return tuple(
+            sorted(
+                task.map_task_id
+                for task in world_state.tasks.values()
+                if task.owner == agent_id and not task.completed
+            )
+        )
