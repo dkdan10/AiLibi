@@ -1,9 +1,10 @@
 """Operator script: train the PPO+GRU probe and score it through the harness.
 
-Run (torch never enters the project environment):
+Run (torch never enters the project environment; the defaults ARE the
+recorded budget, so a bare run regenerates the committed champions):
 
     uv run --with torch python experiments/lab/torch_probe/train_probe.py \
-        --updates 40 --episodes-per-update 8 --torch-seed 0
+        --torch-seed 0 --eval-repeats 3
 
 Training rides ``training.env.TacticalRolloutEnv`` (fast no-replay path) on
 the frozen corpus TRAIN split; evaluation is EXACTLY the committed 15.15
