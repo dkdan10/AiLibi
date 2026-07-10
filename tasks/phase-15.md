@@ -1,14 +1,19 @@
 # Phase 15 — Evidence substrate, then machine-learned tactical policies (Wave 0: cleanup → baseline 3; Wave 1: ML signal, harness, bake-off → PAUSE → Wave 2: productize)
 
-> **STATUS: IN FLIGHT (updated 2026-07-08).** **Wave 0 is CLOSED on baseline 3** — both measured
-> holes shut (structured vents 0 → 55, innocent-reporter ejections 22 → 4), both canaries UP, gate +
-> referee PASS: `audits/audit-phase-15-wave0-close.md`. `replays/samples/` now IS baseline 3 (the
-> baseline-2 bytes survive in git history at `adca07f`; their final measurement is committed as
-> `audits/baseline2-final-measure.json`). Wave 1 + the PAUSE (Tasks 15.8–15.18) are dispatching.
-> Wave 2 exists only as a prose sketch at the bottom of this file; its task contracts are authored BY
-> Task 15.18 at the mid-phase pause (the Phase-7 precedent: later waves' contracts are appended only
-> after earlier waves clear their gate). Roadmap context: `tasks/post-phase-14-plan.md`. Wave 0's
-> evidence base and target sheet: `tasks/post-phase-14-clean-up.md`.
+> **STATUS: IN FLIGHT (updated 2026-07-10).** **Wave 0 is CLOSED on baseline 3** (structured vents
+> 0 → 55, innocent-reporter ejections 22 → 4, both canaries UP: `audits/audit-phase-15-wave0-close.md`;
+> the baseline-2 bytes survive in git history at `adca07f`). **Wave 1 + the PAUSE are CLOSED**
+> (Tasks 15.8–15.18 merged): the bake-off ranked four impostor methods on one protocol, the ballot
+> surrogate landed NO-GO (diagnostic-only, fallback (a)), the torch probe answered NO, and Task
+> 15.18 ran the real-LLM finalist evaluation (committed as
+> `training/reports/results-finalist-eval.jsonl`) and locked the SEVEN owner decisions —
+> champion `utility-es`, deployment branch A (opt-in factory), torch kept experiment-tier /
+> Wave-2 track retired, co-evolution NO-GO, crew owned-task surface YES, float-hex weights kept,
+> the surrogate re-grounding cadence — with rationale in `audits/audit-phase-15-pause.md`.
+> **Wave 2 (Tasks 15.19–15.23) is dispatching** per those decisions; the referee-hardening task
+> 15.19 lands before any champion selection leans on the referee (the Goodhart floor + the Q2
+> subject-aware re-anchor). Roadmap context: `tasks/post-phase-14-plan.md`. Wave 0's evidence base
+> and target sheet: `tasks/post-phase-14-clean-up.md`.
 
 Goal: give the agents machine-learned intelligence in the deterministic, LLM-free layer BETWEEN meetings
 — kill timing, witness avoidance, cooldown stalking, cover/vent play, buddy/patrol movement — replacing
@@ -161,10 +166,21 @@ reports exist in the same metric shape; (6) Task 15.18's pause audit is committe
 decisions are recorded, the Wave-2 contracts are authored into this file, prompts are regenerated, and
 `bash scripts/check.sh` is green.
 
-Merge criteria (end-of-phase): authored at the PAUSE by Task 15.18, per the chosen deployment end-state.
-Invariant regardless of branch: the shipped end-state passes the validity gate + selection referee,
-every committed replay byte-verifies, and provenance (policy stamp + MANIFEST) attributes every recorded
-game to an exact policy identity.
+Merge criteria (end-of-phase — locked at the PAUSE, 2026-07-10, per decision 2: deployment branch A,
+the opt-in factory): (1) the champion (`utility-es`, weights sha256 `6d327dcb…`, the pause audit's
+decision 1) ships as a pure-Python opt-in factory in `agents/tactical/learned/` beside the untouched
+FSM default, with the numpy-trained and pure-Python-shipped forward passes proven BIT-EXACT over the
+committed float-hex weights (the Q4 gate, 15.20); (2) `replays/samples/` and `replays/ml_corpus/` are
+byte-untouched — branch A records no baseline 4 — and every committed replay byte-verifies bare at
+close; (3) the hardened referee (15.19: the conversion-coupled D2 floor + subject-aware observation
+backing, floors re-pinned on the same bytes) lands BEFORE the close's champion re-score, and the close
+recording passes the validity gate + the hardened referee (the one pass-bar), with the R-gate, funnel
+deltas, and canaries — judged on corpus denominators with the 50-seed figures alongside (Q3) —
+reported as findings; (4) every recording is policy-stamped, the stamp's `weights_sha256` equality
+with the committed artifact is machine-checked from recorded bytes, and operator records follow the
+Q5 annotated-tag / back-filled-sha convention; (5) torch stays out of `pyproject.toml`/`uv.lock` and
+production `agents/` stays numpy/torch-free (the firewall test); (6) `audits/audit-phase-15-close.md`
+records all of the above and flips the STATUS banner to CLOSED (15.23).
 
 ## Wave 0 — evidence substrate & cleanup (charter: tasks/post-phase-14-clean-up.md)
 
@@ -1758,38 +1774,365 @@ attributable.
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-18-pause-audit.md`
 
-## Wave 2 — productize (contracts authored at the PAUSE; sketch only — no task headers here by design)
+## Wave 2 — productize (contracts authored at the PAUSE per the recorded decisions, 2026-07-10)
 
-The pause (15.18) turns this sketch into full contracts (IDs 15.19+) per the recorded decisions. The
-skeleton, in likely dependency order:
+Authored by Task 15.18 from `audits/audit-phase-15-pause.md` (the seven locked decisions). The
+pause-era sketch mapped to contracts as follows — every bullet became a contract or is dropped here
+with its reason: champion productization → 15.20; deployment branch A → 15.21 (decision 2: opt-in
+factory); **deployment branch B — DROPPED** (decision 2 rejected the default flip this wave: the
+referee that would bless a default is not yet hardened (15.19 lands the Goodhart floors), the
+finalist evidence is one 50-seed real-LLM measurement, and branch B's baseline-4 cost includes the
+Q3 corpus-scale companion record — re-evaluated at phase close / Phase 17); referee hardening →
+15.19; **bounded co-evolution — DROPPED** (decision 4 NO-GO: no trustworthy $0 inner-loop meeting
+model exists — the 15.13 surrogate is NO-GO/diagnostic-only and the fake provider mints no evidence
+— so even the stabilized stack would optimize both sides against a meeting model neither side can
+move; deferred to Phase 17 with the re-grounded surrogate); crew surface change → 15.22 (decision
+5 YES); **torch decision execution — NO CONTRACT** (decision 3: keep the probe experiment-tier,
+promotion declined, the Wave-2 torch track retired — nothing to execute; the findings are recorded
+permanently in the pause audit and re-stated at close by 15.23); hand-off to Phase 16 — authored as
+its own `tasks/phase-16.md` per the roadmap, never inside this file (the pause audit's findings are
+its scoping inputs); phase close → 15.23.
 
-- **Champion productization.** Promote the winning method's inference into `agents/tactical/learned/`:
-  pure-Python forward pass (no numpy/torch — the 15.10 firewall test already enforces it), the committed
-  weights artifact + sha256, `ENCODER_VERSION` pinned, a `build_learned_agent_factory()` beside the
-  scripted default, full determinism-harness + leak-test + firewall coverage. The scripted FSM stays
-  in-tree as the anchor, the BC oracle, and the fallback, whatever the deployment branch.
-- **Deployment, branch A — opt-in factory.** Spectator/eval/recording select the learned factory
-  explicitly (config/CLI); `replays/samples/` is untouched; the 15.9 policy stamp distinguishes every
-  recording. Cheapest, fully reversible.
-- **Deployment, branch B — new default + baseline 4.** The learned layer becomes
-  `build_default_agent_factory()`; baseline 4 is recorded (both sets, 50 seeds, one atomic PR per the
-  14.12 pattern) with policy stamps, passes the validity gate + referee + funnel diagnostics +
-  byte-verification, and replaces `replays/samples/` as the canonical baseline; the R-gate is
-  re-measured on it as a finding.
-- **Referee hardening.** Any floors/patches the Goodhart probe demanded land in `eval/watchability.py`
-  (with the parity/floor tests extended), re-anchored if baseline 4 exists.
-- **Bounded co-evolution (only if the pause said GO).** Alternating/population training with the full
-  stabilizer stack — Hall-of-Fame snapshots, PFSP opponent mixing, reduced virulence, per-generation
-  validity gating — never the naive two-population setup FO-2 collapsed.
-- **Crew surface change (only if the pause said YES).** Expose the crewmate's owned-task set on
-  `ObservationPacket` behind the full firewall/leak review, then retrain crew task-ordering on the
-  widened surface; emergency-uses-remaining rides the same review if taken.
-- **Torch decision execution.** Promote (`uv add torch`, CI story, the distill-to-pure-Python inference
-  doctrine made permanent) or retire the probe with its findings recorded in the close audit.
-- **Hand-off to Phase 16 (Voice & Judgment).** The pause audit's findings — v5 vent-elicitation uptake,
-  the residual zero-flag channel, the funnel deltas — are the scoping inputs for Phase 16's personas +
-  citation gate + pooling levers (`tasks/post-phase-14-plan.md` §3); Phase 16 is authored as its own
-  `tasks/phase-16.md`, not inside this file.
-- **Phase close.** `audits/audit-phase-15-close.md`: gates re-run on the shipped end-state, the R-gate
-  measured and reported as a finding, provenance verified end-to-end, the STATUS banner flipped to
-  CLOSED.
+### Task 15.19 — Referee hardening: conversion-coupled D2 separation + subject-aware observation backing
+**Branch:** `phase-15-referee-hardening`
+**Depends on:** 15.18
+**Section refs:** audits/audit-phase-15-pause.md §4 (the per-channel re-verdict) + decision blocks; training/reports/report-goodhart-probe.md (the kill-lever D2-separation exploit, 6.51 → 16.62, and the recommended floor); training/reports/report-impostor-bakeoff.md §6 (the surrogate-path HELD-for-the-wrong-reason delta); audits/review-phase-15-midwave.md Q2 (the owner-ratified subject-aware re-anchoring, 2026-07-09); eval/watchability.py (`_observation_backed_conversion`, the per-baseline floor blocks)
+**Complexity:** Medium
+
+Land the two referee patches the pause contracted BEFORE any champion selection leans on the referee's
+fine D2-conversion differences (the 15.21 deployment re-score and the 15.23 close-audit champion gate
+both carry a dependency edge on this task). Patch 1, the **conversion-coupled D2 floor** (the 15.14
+finding, exploited on the fake path regardless of the composed referee's HELD): gate the D2 separation
+sub-term on backed conversion — separation without an ejection or a contradiction flag is suspicion
+theater, not deduction — so the forced-kill trajectory (separation 0.20 → 0.84 with conversion pinned
+at 0.00) can no longer lift `mean_score` 6.51 → 16.62; and document in the module docstring that
+`mean_score` must NEVER be read without the supply-floor gate. Patch 2, the **subject-AWARE
+observation-backing re-anchoring** (owner-ratified Q2): `_observation_backed_conversion` today counts
+an accusation "backed" if the speaker's turn carries ANY grounded observation — a trained impostor can
+utter a genuine vent sighting of X in the turn that accuses innocent Y and the Y-accusation counts
+backed. Re-define backing as subject-aware (the grounded observation's subject must be the accused),
+re-pin the per-baseline floors under the new definition ON THE SAME committed bytes (baseline-3
+samples; the corpus figures reported alongside per the Q3 denominator rule), and keep the old
+subject-agnostic parity fixture as a frozen historical pin (renamed, never deleted — 15.2's
+cross-implementation evidence stays reproducible). Also close the 4p1i floor-degeneracy finding from
+the pause audit: the 4p1i `witnessed_event_rate` floor is pinned to a one-event numerator (1/55 on the
+samples), so the corpus-4p1i set FAILS it at 0.0 measured — rare-event floors whose baseline numerator
+is ≤ 1 are marked advisory (reported, never referee-failing) with the rule documented and tested.
+
+**Files in scope:**
+- eval/watchability.py (the D2 conversion-coupling, the subject-aware backing definition, the re-pinned per-baseline floor blocks, the advisory rare-event floor rule)
+- tests/eval/test_watchability.py (exploit-trajectory regression fixture, subject-aware backing tests, frozen subject-agnostic parity pin, advisory-floor tests)
+
+**Files NOT in scope:**
+- eval/meeting_quality.py (its gauges are consumed as-is; backing is computed inside eval/watchability.py)
+- training/bakeoff/goodhart.py + training/reports/ (the probe and its findings are frozen evidence, never edited)
+- scripts/measure_baseline.py (the CLI surface is unchanged — the fold's internals harden underneath it)
+
+**Definition of done:**
+- [ ] A synthetic exploit-trajectory fixture reproducing the 15.14 shape (high D2 separation, zero conversion, zero flags) scores ~0 on the D2 term under the hardened referee, with a regression test pinning it; the scripted-FSM baseline-3 sets still PASS the hardened referee end-to-end.
+- [ ] Backing is subject-aware: a fixture where a speaker grounds a vent sighting of X while accusing Y counts the Y-accusation UNBACKED (test), and the old subject-agnostic fixture result is kept as a frozen, clearly-labeled historical pin.
+- [ ] The per-baseline floor blocks are re-pinned under the subject-aware definition by re-measuring the SAME committed baseline-3 bytes with the committed CLIs, measured values in comments (corpus figures alongside per the Q3 rule); `scripts/measure_baseline.py --watchability` runs clean on all four committed sets with the new floors.
+- [ ] Rare-event floors with a baseline numerator ≤ 1 (today: the 4p1i `witnessed_event_rate`, 1/55) are advisory — reported in the JSON but excluded from `supply_floors_passed` — and `replays/ml_corpus/4p1i` consequently PASSES the referee (its other gauges already clear); a test pins the advisory rule.
+- [ ] The module docstring records the doctrine deltas: selection-only (unchanged), conversion-coupled D2, subject-aware backing, mean_score-never-without-floors, and cites the pause audit §4 as the re-verdict of record.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Both patches live entirely in `eval/watchability.py` — `_observation_backed_conversion` is the backing
+chokepoint and the D1–D4 composition is a few lines above the floor gate. Re-pin floors by RUNNING the
+CLIs, never by editing constants freehand: the floor values are measured facts with the measurement in
+a comment. Expect the subject-aware re-pin to LOWER `testimony_backed_conversion` floors (fewer
+accusations count backed under the stricter definition) — direction is a finding, not a failure; what
+matters is that relative gates stay sound because candidate and baseline are measured under the same
+definition. The frozen parity pin should be a renamed test asserting the OLD definition's value on the
+same fixture, marked as historical.
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-19-referee-hardening.md`
+
+### Task 15.20 — Champion productization: `agents/tactical/learned/`, the pure-Python forward pass
+**Branch:** `phase-15-champion-productization`
+**Depends on:** 15.18
+**Section refs:** audits/audit-phase-15-pause.md decisions 1 + 6 (champion = `utility-es`; float-hex retained; the Q4 bit-exact cross-implementation gate); training/artifacts/impostor/utility-es/ (the committed champion artifact, sha256 `6d327dcb…`); training/bakeoff/utility_es.py (the numpy-side reference the shipped pass must equal bit-exactly); training/bakeoff/harness.py::build_candidate_factory (the wrapper pattern being productized); tests/test_firewall.py (the no-numpy/torch-under-agents/ doctrine)
+**Complexity:** Integration
+
+Promote the pause's champion — the `utility-es` learned utility scorer over FSM-proposed impostor
+options — into production inference: a new `agents/tactical/learned/` package holding (a) the champion
+weights as a committed float-hex artifact + sha256 sidecar, value-identical to
+`training/artifacts/impostor/utility-es/weights.json` (a test pins byte equality of the weights payload
+and sha equality with the training-side sidecar); (b) a pure-Python forward pass — the 19-weight linear
+scorer over the `impostor-option-features-v1` option-feature basis, ported from
+`training/bakeoff/utility_es.py` with NO numpy/torch import (the champion's pass is a float64 dot
+product; it contains no transcendental, so the decision-6 libm scope note is discharged by
+construction); (c) `build_learned_agent_factory()` beside the scripted default — impostors run the
+learned scorer, crew delegate to the FSM, meeting protocol forwarded to the wrapped `TacticalAgent`
+exactly as `build_candidate_factory` does today, and the factory exposes the five-field
+`TacticalPolicyStamp` it should be recorded under (policy_id `utility-es`, encoder
+`impostor-option-features-v1`, the committed sha). The scripted FSM stays in-tree untouched as the
+default, the anchor, the BC oracle, and the fallback. The Q4 gate is the task's spine: a committed test
+drives BOTH implementations — the numpy-side scorer and the shipped pure-Python pass — over the
+committed weights across a recorded decision stream (fixed seeds, full option menus) and asserts
+BIT-EXACT equality of every score and every chosen intent; plus the full 15.10 acceptance stack through
+the learned factory (determinism harness double-run, leak-test factory mode, firewall test extension).
+
+**Files in scope:**
+- agents/tactical/learned/ (new package: forward pass, weights loader + committed weights artifact + sha256 sidecar, factory)
+- tests/agents/test_learned_policy.py (new: forward-pass unit tests, weights/sha parity pins, the Q4 bit-exact cross-implementation test)
+- tests/training/test_learned_factory_acceptance.py (new: determinism-harness + leak-test runs through `build_learned_agent_factory()`)
+- tests/test_firewall.py (extension region: `agents/tactical/learned/` explicitly swept by the no-numpy/torch check)
+
+**Files NOT in scope:**
+- agents/tactical/impostor_policy.py + crewmate_policy.py (the FSM default is untouched — anchor, oracle, fallback)
+- training/bakeoff/ (the numpy reference is consumed read-only by tests; porting means re-implementing, not importing, under agents/)
+- training/artifacts/ (the training-side artifact is the frozen source of truth; the agents-side copy pins to it by test)
+- orchestrator/game.py + scripts/ (the CLI/config selection surface is 15.21's)
+
+**Definition of done:**
+- [ ] `agents/tactical/learned/` imports nothing from `engine/`, `training/`, numpy, or torch (import-linter + the extended firewall test prove it), and `uv run python -c "import agents.tactical.learned.factory"` succeeds on a bare tree.
+- [ ] The committed agents-side weights artifact is value-identical to `training/artifacts/impostor/utility-es/weights.json` and its sha256 sidecar equals the training-side sidecar (`6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0`) — both pinned by test.
+- [ ] The Q4 bit-exact gate: over the committed float-hex weights and a fixed recorded decision stream, the numpy-side scorer and the shipped pure-Python pass produce bit-identical float64 scores and identical chosen intents (a test, not an architecture change — the owner-ratified libm posture).
+- [ ] The learned factory passes the 15.10 determinism harness (double-run hash equality over the (feature, score, intent) stream plus frozen-policy full-game state-hash equality) and the leak-test factory mode through `build_learned_agent_factory()` itself.
+- [ ] The factory's stamp accessor returns the five-field `TacticalPolicyStamp` with `weights_sha256` equal to the committed sidecar digest, so 15.21's recording surfaces cannot mis-stamp.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Public types introduced:**
+- agents.tactical.learned.forward.LearnedImpostorScorer
+- agents.tactical.learned.factory.build_learned_agent_factory
+
+**Implementation hint:**
+
+The champion is deliberately the SMALL one: 19 float64 weights over 18 option features + bias, linear,
+no activation — the whole forward pass is `sum(w*x) + b` per option and an argmax with the option
+menu's existing deterministic tie-break. Port the option-feature computation from
+`training/bakeoff/utility_es.py` faithfully (the 18 feature names are in the committed `config.json`);
+the bit-exact test is what catches a drifted reorder, because float addition is not associative — sum
+in the SAME order as the numpy reference (`float(np.dot)` accumulates left-to-right pairwise; safest is
+to port the exact accumulation the reference uses and pin it). Mirror `build_candidate_factory`'s
+wrapper pattern (wrap the real `TacticalAgent`, override the impostor intent, `__getattr__`-forward the
+meeting protocol) rather than inventing a new agent class.
+
+**Integration risk:**
+
+The one real hazard is silent divergence between the two forward passes — a re-ordered sum, a float32
+intermediate, a quantization mismatch in a feature — which the Q4 bit-exact test exists to make loud.
+Keep the agents-side artifact a COPY pinned by test, not a cross-package import: `agents/` importing
+`training/` would breach the dependency posture the firewall enforces. The determinism harness and leak
+test must run through the REAL factory (`build_learned_agent_factory()`), not a test double — the
+15.15 lesson that acceptance through one's own factory is what makes the result transferable.
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-20-champion-productization.md`
+
+### Task 15.21 — Deployment, branch A: the opt-in learned factory across the recording/eval surfaces
+**Branch:** `phase-15-optin-deployment`
+**Depends on:** 15.19, 15.20
+**Section refs:** audits/audit-phase-15-pause.md decision 2 (branch A locked; branch B's rejection rationale) + the finalist recipe (the seam this task turns into a CLI); orchestrator/game.py (the `agent_factory` seam); scripts/run_tournament.py (the stamp flag that today has no factory counterpart); tasks/phase-15.md 15.9 (the provenance stamp this task auto-wires)
+**Complexity:** Medium
+
+Make the champion selectable without a Python driver — the deployment end-state decision 2 locked:
+opt-in, fully reversible, `replays/samples/` byte-untouched. `scripts/run_tournament.py` gains an
+`--agent-factory {fsm-default,learned-champion}` flag (default `fsm-default`, byte-identical behavior
+when absent): `learned-champion` builds `agents.tactical.learned.factory.build_learned_agent_factory()`
+and AUTO-STAMPS the recording with the factory's own five-field stamp — the flag pair
+(`--agent-factory learned-champion` + an explicit contradicting `--tactical-policy-stamp`) is rejected
+loudly, so a learned recording can never carry an FSM label or vice versa (the 15.18 finalist-eval
+proof, `stamp.weights_sha256 == committed sidecar`, becomes impossible to forget). `run_tournament_eval`
+itself is unchanged (the seam already exists); this is CLI plumbing + the mis-stamp guard + tests. The
+spectator path needs no change: recordings carry the stamp, `api/replay_loader.py`'s 15.9 policy guard
+already distinguishes them, and the canonical samples stay FSM-stamped and byte-identical.
+
+**Files in scope:**
+- scripts/run_tournament.py (the `--agent-factory` flag, the auto-stamp wiring, the contradiction guard)
+- tests/scripts/test_run_tournament_agent_factory.py (new: flag default byte-identity, auto-stamp correctness, contradiction rejection)
+
+**Files NOT in scope:**
+- eval/balance_eval.py (the `agent_factory` kwarg already exists — no seam change)
+- agents/tactical/learned/ (15.20's artifact, consumed as-is)
+- replays/samples/ + replays/ml_corpus/ (byte-untouched — the whole point of branch A)
+- api/ (the 15.9 policy guard already serves stamped recordings)
+
+**Definition of done:**
+- [ ] `scripts/run_tournament.py` without the flag is byte-identical in behavior to today (default `fsm-default`; a test pins the parse + the default factory path).
+- [ ] `--agent-factory learned-champion` records games whose read-back stamp (via `orchestrator.replay.read_tactical_policy_stamp`) equals the learned factory's stamp with `weights_sha256` equal to the committed sidecar digest — asserted from recorded bytes in a fake-provider test recording, never from the launch config.
+- [ ] Passing `--agent-factory learned-champion` together with a contradicting `--tactical-policy-stamp` exits non-zero with a named error; `fsm-default` plus the explicit FSM stamp remains accepted (back-compat).
+- [ ] The module docstring records the decision-2 posture: opt-in beside the FSM default, samples untouched, default flip re-evaluated at close/Phase 17 behind the hardened referee + a corpus-scale companion record (the Q3 corollary).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Mirror the `--tactical-policy-stamp` flag's plumbing one block below it. The factory choice maps to a
+tiny registry dict `{"fsm-default": build_default_agent_factory, "learned-champion":
+build_learned_agent_factory}` resolved at parse time; the auto-stamp reads the learned factory's stamp
+accessor (15.20's DoD guarantees it matches the sidecar) so this task never hard-codes a sha. The
+contradiction guard compares the resolved stamp against an explicitly-passed one field-by-field and
+names the differing field in the error.
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-21-optin-deployment.md`
+
+### Task 15.22 — Crew owned-task surface: the `SelfView` widening + the gate-valid crew retrain
+**Branch:** `phase-15-crew-owned-tasks`
+**Depends on:** 15.18, 15.19
+**Section refs:** audits/audit-phase-15-pause.md decision 5 (YES, with the four-item review) ; training/reports/report-crew-track.md §5 (the unmeasured gate-valid ceiling) + §7 (the surface ask this task lands); observation/packet.py (`SelfView`, the privileged self channel); observation/service.py (the packet assembly this widening must scope); eval/leak_test.py (the suite the new field extends); DESIGN.md §1.3 (the observation firewall this rides behind)
+**Complexity:** Integration
+
+Execute decision 5: widen the crewmate's observation surface by exactly one self-channel field and
+re-measure the crew track's gate-valid ceiling on it. Part 1, the surface (the 15.16 §7 ask, four-item
+review honored): `SelfView` gains `owned_task_ids: tuple[TaskId, ...]` — the recipient's OWN unfinished
+task instances as map task ids, assembled in `observation/service.py` strictly from the recipient's own
+engine-side task state (never another player's, never impostor fake-task state — an impostor's view
+carries its camouflage task ids exactly as `pending_task_id` does today, so the field leaks no role
+bit); the leak suite gains the owned-task assertions (no cross-player task ids anywhere in any packet;
+the field's byte shape is stable and versioned by the existing packet discipline); committed v4/v5
+transcripts and all committed replays still parse and byte-verify (additive field, default-empty for
+reconstruction of old bytes). Part 2, the retrain (the §5 ceiling measurement, run under the SAME
+protocol shape as 15.16): re-run the crew utility-scorer ES with (a) the widened option basis —
+nearest-of-N owned-task selection and same-room batching features over `owned_task_ids` — and (b) the
+FO-8-style interrupt-preserving constraint the pause scoped: the `report` interrupt is NOT suppressible
+by the learned scorer (a body sighting always routes to report, exactly the FSM's interrupt semantics),
+so the 15.16 failure mode — win-by-meeting-starvation — is structurally unreachable and the gate-valid
+ceiling finally gets a number. Evaluated under the 15.15 protocol (gate / hardened 15.19 referee /
+fitness / anchor-CE / determinism / leak), reported in the same tuple shape to its own report + jsonl.
+Crew champion adoption is NOT a goal of this task: the deliverable is the surface + the honest
+gate-valid measurement; any crew deployment is a phase-close/Phase-17 call on this task's numbers.
+
+**Files in scope:**
+- observation/packet.py (`SelfView.owned_task_ids` — additive, engine-free)
+- observation/service.py (own-task assembly + the impostor-camouflage scoping)
+- eval/leak_test.py (owned-task leak assertions region)
+- training/crew/options.py (owned-task option features + the interrupt-preserving constraint)
+- training/crew/scorer.py (basis widening only — the ES loop is 15.14's core, consumed as-is)
+- training/reports/report-crew-owned-tasks.md (new) + training/reports/results-crew-owned-tasks.jsonl (new)
+- tests/observation/test_packet_owned_tasks.py (new) + tests/training/test_crew_owned_tasks.py (new)
+
+**Files NOT in scope:**
+- agents/tactical/ (the crew FSM and the learned impostor package are untouched; this is a training-track measurement over a widened surface)
+- engine/ (task state is already engine-side; the widening is packet-assembly only)
+- meetings/ (no meeting-layer change — one layer per baseline)
+- replays/ (committed bytes untouched; old replays reconstruct with the default-empty field)
+
+**Definition of done:**
+- [ ] `SelfView.owned_task_ids` carries exactly the recipient's own unfinished map task ids; an impostor's packet carries its camouflage set (no role bit); the leak suite proves no packet ever contains another player's task ids, and all committed replays still byte-verify bare.
+- [ ] The interrupt-preserving constraint is structural: a test proves the learned scorer CANNOT select away from `report` when a body is visible (the option is not offered for suppression, mirroring the FSM interrupt), and the retrained candidate's games consequently cannot reproduce the 15.16 meeting-starvation validity failure.
+- [ ] The retrain reports in the 15.15 tuple shape (gate / referee / fitness / anchor-CE / determinism hash / leak) on the frozen corpus test split, referee scored under the HARDENED 15.19 definition, with the crew-fsm-baseline re-measured through the identical protocol as the comparator row.
+- [ ] The report states the gate-valid ceiling finding — the win-rate/fitness delta that survives the validity gate and the hardened referee — and the task-pace cell (tasks/100 ticks) that decision 5 predicted the owned-task basis would move, each cited to the jsonl.
+- [ ] The report ends with the deployment posture: no crew default change in this phase; the numbers are Phase-17 scoping inputs.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Public types introduced:**
+- training.crew.options.OwnedTaskOptionBasis
+
+**Implementation hint:**
+
+The four-item review from the 15.16 §7 ask is the checklist: (1) `ObservationService` scoping — the
+field is assembled from the recipient's own task state only; (2) leak-suite extension — assert absence
+of foreign task ids in EVERY packet field, not just the new one; (3) byte-shape discipline — additive
+Pydantic field with a default, so old bytes parse; (4) the encoder note — the crew option basis
+consumes the field training-side (`crew-option-features` bumps its version string); the production
+encoder (`agents/tactical/features.py`) is NOT touched this task. For the constraint, remove `report`
+from the scorer's selectable set rather than penalizing it — structural unreachability, not a reward
+term (the Goodhart lesson). Expect the honest outcome to be smaller than 15.16's 0.6 win rate — that
+number was bought with the starvation exploit; the gate-valid delta is the real measurement.
+
+**Integration risk:**
+
+Two hazards. First, the leak surface: `owned_task_ids` is the first packet widening since the firewall
+audit — the impostor-camouflage path must be scoped so the field is indistinguishable between roles
+(the packet already solves this for `pending_task_id`; mirror it exactly). Second, byte-compatibility:
+the additive field must default-parse for every committed replay and transcript — run the full
+byte-verification walk locally before the PR, because a shape error here fails 100 committed samples at
+once.
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-22-crew-owned-tasks.md`
+
+### Task 15.23 — Phase close: gates on the shipped end-state, the close audit, the banner flip (operator-run, $0)
+**Branch:** `phase-15-close`
+**Depends on:** 15.19, 15.20, 15.21, 15.22
+**Section refs:** audits/audit-phase-15-pause.md (the decisions this close verifies + the finalist recipe §3.1 re-run here through the CLI); tasks/phase-14.md 14.12 + audits/audit-phase-14-close.md (the close-audit pattern); audits/review-phase-15-midwave.md Q3 (corpus canary denominators) + Q5 (the provenance-durability convention this record follows)
+**Complexity:** Integration
+
+Close the phase on the shipped branch-A end-state. Record ONE fresh champion evaluation on the
+canonical 50-seed 9p2i set against the real provider — now through the committed CLI
+(`scripts/run_tournament.py --agent-factory learned-champion`, the 15.21 surface; no Python driver
+needed anymore) — as an uncommitted working artifact per the pause's provenance separation, with the
+Q5 convention honored (annotated tag at the recording commit, or the sha back-filled into the committed
+measurement rows). Score it with the committed CLIs — validity gate, R-gate, the HARDENED 15.19
+referee, funnel — and commit the measurement as `training/reports/results-champion-close.jsonl` (the
+same row shape as `results-finalist-eval.jsonl`: the five-field stamp read back from the recording
+bytes + the committed sidecar sha it was verified against). Write
+`audits/audit-phase-15-close.md`: the gates re-run green on HEAD, the champion recording PASSES the
+validity gate + the hardened referee (this is the one PASS-bar of the close; a failure here pauses for
+an owner call rather than shipping), the R-gate and funnel deltas vs baseline 3 reported as FINDINGS,
+canaries judged on the corpus denominators with the 50-seed figures alongside (Q3), every committed
+replay byte-verified bare, provenance verified end-to-end (stamp + MANIFEST + sha equality), the torch
+disposition (decision 3) re-stated as permanent record, and the Phase-16 hand-off inputs (v5
+vent-elicitation uptake, the residual zero-flag channel, the funnel deltas) restated for the
+`tasks/phase-16.md` author. Flip the STATUS banner to CLOSED with the end-state, the champion identity
++ sha, and the close-audit pointer.
+
+**Files in scope:**
+- audits/audit-phase-15-close.md (new: the close finding)
+- training/reports/results-champion-close.jsonl (new: the committed champion-close measurement rows — CLI output data, not code)
+- tasks/phase-15.md (STATUS banner flip region only)
+
+**Files NOT in scope:**
+- replays/samples/ + replays/ml_corpus/ (byte-untouched — branch A ships no baseline 4; the close recording is an uncommitted working artifact)
+- eval/ + agents/ + training/ code (the close measures; any defect it finds becomes a Phase-16/17 contract, never a close edit)
+- README.md (the samples provenance paragraph still describes baseline 3, which is still the canonical truth under branch A)
+
+**Definition of done:**
+- [ ] The champion close recording exists per the documented recipe (seeds 0–49, 9p2i, `Qwen/Qwen3-32B`, `--agent-factory learned-champion`), its read-back stamps are uniform with `weights_sha256` equal to the committed sidecar digest, and the Q5 provenance convention is demonstrably followed (tag or back-filled sha named in the audit).
+- [ ] `training/reports/results-champion-close.jsonl` carries the full gate/core/referee/funnel CLI outputs + the read-back stamp + the committed sha it was verified against; every number the audit quotes traces to it or to the other committed artifacts (zero hand-computed figures).
+- [ ] The champion recording PASSES the validity gate and the hardened referee — the close's one pass-bar; the R-gate, funnel deltas vs baseline 3, and canaries (corpus denominators, samples alongside) are reported as findings.
+- [ ] Every committed replay byte-verifies bare on the close HEAD (`bash scripts/verify_samples.sh` + the corpus verification), and provenance is verified end-to-end (stamps, MANIFESTs, sidecar shas).
+- [ ] The torch disposition, the co-evolution NO-GO, and the surrogate re-grounding cadence (decisions 3, 4, 7) are re-stated as the permanent close record, and the Phase-16 scoping inputs are handed off explicitly.
+- [ ] The STATUS banner reads CLOSED with the end-state, champion identity + sha, and the close-audit filename.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Model the audit on `audits/audit-phase-14-close.md` (verdict-first, per-gate table, findings vs pass
+bars kept separate) and reuse the pause's scoring shape verbatim — the close row is the finalist row
+re-recorded through the 15.21 CLI on the hardened referee. The one deliberate asymmetry vs 14.12: no
+re-record of the canonical sets (branch A), so there are NO byte-coupled test re-pins in this task; if
+the close measurement disagrees with the pause's finalist numbers beyond seed noise, that is a FINDING
+for the audit, not a reason to re-run until it agrees.
+
+**Integration risk:**
+
+Two ways this close can lie. First, self-agreement laundering: the close recording uses the same seeds
+as the pause's finalist eval, so silently swapping in the pause's cached numbers would be invisible —
+the audit must name its own recording timestamp + tag and quote only `results-champion-close.jsonl`.
+Second, the pass-bar inversion: the hardened referee landing in 15.19 means the close referee is
+STRICTER than the one the finalists were measured under; a champion that passed at the pause may fail
+at close, and that outcome pauses for an owner call — it is the exact scenario the referee-before-
+selection ordering exists to catch, not a defect in the close.
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-23-phase-close.md`
