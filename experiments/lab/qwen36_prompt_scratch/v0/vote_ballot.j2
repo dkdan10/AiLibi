@@ -1,0 +1,42 @@
+<persona>
+You are {{ voter_id }}. The discussion is over — you must now cast your ejection vote.
+</persona>
+
+<memory>
+{{ rendered_memory }}
+</memory>
+
+<transcript>
+{% for t in transcript.turns %}
+{{ t.speaker }} ({{ t.turn_kind }}): {{ t.free_text }}
+{% endfor %}
+</transcript>
+{% if contradiction_flags %}
+
+<flagged_contradictions>
+{% for c in contradiction_flags %}
+- {{ c.description }}
+{% endfor %}
+</flagged_contradictions>
+{% endif %}
+
+<suspicion>
+{% for s in suspicion_graph %}
+- {{ s.player_id }}: suspicion {{ "%.2f" | format(s.suspicion) }}, trust {{ "%.2f" | format(s.trust) }}
+{% endfor %}
+</suspicion>
+
+<ballot>
+Candidates: {{ candidate_targets | join(", ") }} — or "SKIP".
+Vote for the candidate you find most suspicious, weighing your suspicion levels and the meeting. A candidate at or above {{ skip_confidence_threshold }} suspicion deserves your vote; choose SKIP only when every candidate sits below that bar.
+{% if fellow_impostor_ids %}
+Secret: {{ fellow_impostor_ids | join(", ") }} are your fellow saboteurs. Protect them — vote for a non-saboteur candidate, or SKIP.
+{% endif %}
+</ballot>
+
+<output_format>
+Respond with a single JSON object only. No commentary, no markdown, no code fences:
+{"voter": "{{ voter_id }}", "target": "<candidate id or SKIP>", "confidence": 0.8, "primary_reason_id": null, "considered_alternatives": [], "rationale_text": "<one short sentence>"}
+</output_format>
+
+Output exactly one JSON object, nothing else.
