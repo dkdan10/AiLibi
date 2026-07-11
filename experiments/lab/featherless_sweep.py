@@ -891,7 +891,17 @@ def _base_row(
     max_tokens: int,
     binding: RenderBinding,
 ) -> dict[str, Any]:
-    adapter = spec.qwen_kwarg or binding.force_adapter
+    # The transport stamp mirrors _run_turn's ACTUAL route, not just the spec
+    # axes: an id absent from the production registry rides the sweep-local
+    # _probe_send regardless of qwen_kwarg/force_adapter (the adapter would
+    # fail loud on it), and stamping it "adapter" would misstate how the row
+    # was produced to the 16.2 lock.
+    if not _registry_knows(spec.model_id):
+        transport = "probe_send"
+    elif spec.qwen_kwarg or binding.force_adapter:
+        transport = "adapter"
+    else:
+        transport = "bare"
     row: dict[str, Any] = {
         "corpus": corpus,
         "model": spec.model_id,
@@ -899,7 +909,7 @@ def _base_row(
         "role": spec.role,
         "mode": _mode_label(request_thinking),
         "request_thinking": request_thinking,
-        "transport": "adapter" if adapter else "bare",
+        "transport": transport,
         "substrate": "flag_on" if any(flags.values()) else "flag_off",
         "substrate_flags": dict(flags),
     }
@@ -2463,12 +2473,24 @@ def _probe_preflight_one(
             if resp.status_code == 200:
                 return True, attempts, "ok"
             last = f"HTTP {resp.status_code} {resp.text[:160]}"
-            if resp.status_code in (400, 404):
+            # Deterministic non-served (unknown id / refused deployment) stops
+            # the probe; a busy-typed 4xx does NOT — the same server_error body
+            # shape _probe_retryable handles for the later passes can dress a
+            # transient load spike as a 400/422 here, and recording it as
+            # served=false would hand 16.2 a FALSE NO-GO on a viable candidate.
+            try:
+                body: Any = resp.json()
+            except Exception:  # noqa: BLE001 — a non-JSON error body: status decides
+                body = {"_raw": resp.text}
+            if resp.status_code in (400, 404) and not _probe_retryable(
+                resp.status_code, body
+            ):
                 return False, attempts, last  # a genuinely unrecognized id — no retry
         except Exception as exc:  # noqa: BLE001
             last = f"{type(exc).__name__}: {exc}"[:160]
-        # A 429 / 5xx here is a transient concurrency / switch-rate blip; wait long
-        # enough to clear the 1-minute window (same as _preflight_models).
+        # A 429 / 5xx / busy-typed 4xx here is a transient concurrency / switch-rate
+        # blip; wait long enough to clear the 1-minute window (same as
+        # _preflight_models).
         time.sleep(min(30.0, 5.0 * (attempt + 1)))
     return False, attempts, last
 
@@ -2692,7 +2714,12 @@ def _probe_reasoning_channel(
         if isinstance(raw_out, int):
             out_tokens = raw_out
     content_chars = len(content)
-    content_head: str = content[:120]
+    # ``content_head`` is the STRIPPED-answer head, never the raw content: for
+    # the inline shape the raw prefix IS chain-of-thought, and committing it to
+    # the jsonl/report would violate the reasoning-is-discarded-never-recorded
+    # doctrine — 16.12 only needs the channel + its length.
+    answer, inline = _split_inline_think(content)
+    content_head: str = answer[:120]
     if reasoning_content:
         return (
             "reasoning_content",
@@ -2709,8 +2736,10 @@ def _probe_reasoning_channel(
             content_head,
             out_tokens,
         )
+    # Keyed on the CLOSE TAG, not on a non-empty reasoning prefix: Qwen3.6's
+    # known empty think-sandwich quirk can emit the tag pair with zero chars
+    # between, and that channel presence is itself 16.12 evidence.
     if "</think>" in content:
-        _answer, inline = _split_inline_think(content)
         return (
             "inline_think_close",
             len(inline),
@@ -2862,7 +2891,11 @@ async def run_probe(cfg: SweepConfig, *, api_key: str) -> int:
     matrix_cfg = replace(
         cfg,
         models=served_specs,
-        results_path=PROBE_RESULTS,
+        # The CALLER-selected sink, not the PROBE_RESULTS constant: a scratch /
+        # repair invocation with a non-default results_path must keep all four
+        # passes in ONE file (and must never append matrix rows to the
+        # committed artifact behind the caller's back).
+        results_path=cfg.results_path,
         prompt_set=PROBE_PROMPT_SET,
         substrates=(True,),
         append=True,
@@ -2917,7 +2950,14 @@ def _probe_served_form(rows: Sequence[Mapping[str, Any]], label: str) -> str:
 
 
 def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> str:
-    """A computed one-line thinking-posture summary for ``label`` (Section 5)."""
+    """A computed one-line thinking-posture summary for ``label`` (Section 5).
+
+    Every clause is GATED on the underlying call having been ACCEPTED: a busy
+    4xx / 5xx cell looks exactly like "accepted with no reasoning channel" to a
+    naive reader, and summarizing it as "does NOT reason by default" (or as
+    kwarg suppression) would hand 16.12 a wrong thinking policy off a failed
+    probe. A failed cell reads INCONCLUSIVE instead.
+    """
 
     by: dict[str, Mapping[str, Any]] = {
         str(r["kwarg"]): r for r in tk_rows if r["label"] == label
@@ -2925,17 +2965,29 @@ def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> s
     absent = by.get("absent")
     false_r = by.get("false")
 
+    def _ok(r: Mapping[str, Any] | None) -> bool:
+        return r is not None and bool(r.get("accepted"))
+
     def _reasons(r: Mapping[str, Any] | None) -> bool:
         return r is not None and bool(r.get("reasoning_channel"))
 
     channels = sorted(
-        {str(r["reasoning_channel"]) for r in by.values() if r.get("reasoning_channel")}
+        {
+            str(r["reasoning_channel"])
+            for r in by.values()
+            if r.get("accepted") and r.get("reasoning_channel")
+        }
     )
-    default_posture = (
-        "REASONS by default" if _reasons(absent) else "does NOT reason by default"
-    )
-    if false_r is None:
-        false_note = "`enable_thinking=false` not recorded"
+    if not _ok(absent):
+        default_posture = "default posture INCONCLUSIVE (the kwarg-absent call failed)"
+    elif _reasons(absent):
+        default_posture = "REASONS by default"
+    else:
+        default_posture = "does NOT reason by default"
+    if not _ok(false_r):
+        false_note = (
+            "`enable_thinking=false` INCONCLUSIVE (call failed or not recorded)"
+        )
     elif not _reasons(false_r):
         false_note = "`enable_thinking=false` SUPPRESSES reasoning"
     else:
@@ -2945,9 +2997,14 @@ def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> s
         if channels
         else "no reasoning channel observed"
     )
+    # The id the rows were ACTUALLY produced against (pass 1 may have adopted a
+    # served alternate revision), never the SLATE pin — the registered-vs-
+    # sweep-local prose below is integration evidence 16.2/16.12 consumes.
+    row_ids = {str(r["model"]) for r in by.values()}
+    served_id = next(iter(row_ids)) if len(row_ids) == 1 else _id_for(label)
     extra = ""
     if "inline_think_close" in channels:
-        if _registry_knows(_id_for(label)):
+        if _registry_knows(served_id):
             # A REGISTERED id routes through the production adapter, whose strip
             # policy already excises inline reasoning — no sweep-local handling.
             extra += (
@@ -3096,12 +3153,45 @@ def write_probe_report() -> int:
                     # 14.1-era live testing recorded a 400, but the code can
                     # drift (the probe observed 422 on the incumbent) — the
                     # verdict quotes what actually came back.
-                    reject_codes = sorted(
-                        {int(r["http_status"]) for r in cell if not r.get("accepted")}
+                    # Split the failures by what they can EVIDENCE: a 4xx (bar
+                    # 429) that survived the discovery POST's bounded busy-body
+                    # retries is a HARD rejection signal; a 5xx / 429 /
+                    # status-0 transport failure is not a schema verdict at all
+                    # (the committed incumbent evidence includes a mid-retry
+                    # 504 gateway page beside its 422s) and must not be counted
+                    # toward determinism — only reported beside it.
+                    hard_codes = sorted(
+                        {
+                            int(r["http_status"])
+                            for r in cell
+                            if not r.get("accepted")
+                            and 400 <= int(r["http_status"]) < 500
+                            and int(r["http_status"]) != 429
+                        }
                     )
-                    codes_s = "/".join(str(c) for c in reject_codes) or "?"
+                    transient_n = sum(
+                        1
+                        for r in cell
+                        if not r.get("accepted")
+                        and (
+                            int(r["http_status"]) >= 500
+                            or int(r["http_status"]) in (0, 429)
+                        )
+                    )
+                    hard_s = "/".join(str(c) for c in hard_codes) or "?"
+                    transient_note = (
+                        f"; {transient_n} transient failure(s) recorded beside it"
+                        if transient_n
+                        else ""
+                    )
                     if any(r.get("accepted") for r in cell):
                         verdict = "supported"
+                    elif not hard_codes:
+                        verdict = (
+                            "inconclusive (only transient failures — 5xx/429/"
+                            "transport — after bounded retries; re-run before "
+                            "reading this as a capability verdict)"
+                        )
                     else:
                         # A rejection is only DETERMINISTIC against a same-pass
                         # CONTROL: the json_object rows for the same model+schema
@@ -3120,16 +3210,16 @@ def write_probe_report() -> int:
                         )
                         if rf_mode == "json_object" or control_ok:
                             verdict = (
-                                f"rejected (deterministic HTTP {codes_s} across "
+                                f"rejected (deterministic HTTP {hard_s} across "
                                 "attempts + busy-body retries; json_object "
-                                "control succeeded same-pass)"
+                                f"control succeeded same-pass{transient_note})"
                                 if rf_mode != "json_object"
-                                else f"rejected (deterministic HTTP {codes_s} "
-                                "across attempts)"
+                                else f"rejected (deterministic HTTP {hard_s} "
+                                f"across attempts{transient_note})"
                             )
                         else:
                             verdict = (
-                                f"inconclusive (HTTP {codes_s}, but the "
+                                f"inconclusive (HTTP {hard_s}, but the "
                                 "json_object control also failed — retry "
                                 "off-peak before reading this as a rejection)"
                             )

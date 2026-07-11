@@ -23,7 +23,7 @@ A NO-GO is a FIRST-CLASS recorded outcome for the 16.2 lock, not a task failure:
 |---|---|---|---|---|---|
 | qwen3-32b | json_object | MeetingTurn | 2/2 | yes | supported |
 | qwen3-32b | json_object | VoteBallot | 2/2 | yes | supported |
-| qwen3-32b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 422/504 across attempts + busy-body retries; json_object control succeeded same-pass) |
+| qwen3-32b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; json_object control succeeded same-pass; 1 transient failure(s) recorded beside it) |
 | qwen3-32b | json_schema | VoteBallot | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; json_object control succeeded same-pass) |
 | qwen3-6-27b | json_object | MeetingTurn | 2/2 | yes | supported |
 | qwen3-6-27b | json_object | VoteBallot | 2/2 | yes | supported |
@@ -36,12 +36,12 @@ Production posture (`llm/featherless_client.py` docstring, recorded 2026-06-27):
 
 | model | kwarg | accepted | reasoning channel | channel chars | out_tokens | content head |
 |---|---|---|---|---|---|---|
-| qwen3-32b | absent | yes | inline_think_close | 585 | 217 | <think> Okay, let's see. I need to calculate 17 multiplied by 23. Hmm, I'm not s |
+| qwen3-32b | absent | yes | inline_think_close | 839 | 338 | 391 |
 | qwen3-32b | false | yes | — | 0 | 3 | 391 |
-| qwen3-32b | true | yes | inline_think_close | 585 | 217 | <think> Okay, let's see. I need to calculate 17 multiplied by 23. Hmm, I'm not s |
-| qwen3-6-27b | absent | yes | inline_think_close | 699 | 287 | Here's a thinking process:  1.  **Analyze User Input:**    - Question: "What is  |
+| qwen3-32b | true | yes | inline_think_close | 839 | 338 | 391 |
+| qwen3-6-27b | absent | yes | inline_think_close | 603 | 263 | 391 |
 | qwen3-6-27b | false | yes | — | 0 | 3 | 391 |
-| qwen3-6-27b | true | yes | inline_think_close | 566 | 231 | Here's a thinking process:  1.  **Identify the User's Request:** The user is ask |
+| qwen3-6-27b | true | yes | inline_think_close | 699 | 287 | 391 |
 
 **qwen3-32b:** kwarg absent ⇒ REASONS by default; `enable_thinking=false` SUPPRESSES reasoning; reasoning channel(s): `inline_think_close`. Reasoning is INLINE in `content`, closed by a bare `</think>` with no side-channel; the production adapter's `strip` policy excises it for this registered id (and production always pins `enable_thinking` explicitly, so the bare-request default never reaches game state).
 
