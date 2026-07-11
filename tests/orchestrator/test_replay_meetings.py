@@ -168,6 +168,8 @@ def _crewmate_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return f"CR:{agent_id}:{current_tick}"
 
@@ -182,6 +184,8 @@ def _impostor_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return f"IM:{agent_id}:{current_tick}"
 
@@ -199,6 +203,8 @@ def _statement_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
     is_body_report: bool = False,
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 
@@ -214,6 +220,8 @@ def _vote_prompt(
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     reporter_id: PlayerId | None = None,  # Task 15.5: widened contract kwarg
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

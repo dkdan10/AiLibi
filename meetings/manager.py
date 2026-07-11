@@ -89,6 +89,7 @@ from agents.memory.beliefs import (
     MEETING_CONTRADICTION_LIFT_CAP,
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
+    SuspicionProvenance,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     reporter_exculpation_enabled,
@@ -527,6 +528,15 @@ class MeetingParticipant:
     ``()`` keeps every existing construction site valid and means "this
     speaker grounds nothing": a spoken vent observation from such a
     participant records as ordinary testimony and raises no flag.
+
+    ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
+    populates it from the deterministic persona-assignment bank in Task 16.9,
+    and Task 16.16 renders it into the report / statement / ballot prompts
+    (evidence-gated, after the citation gate). The manager threads it verbatim
+    into every render seam as the ``persona`` kwarg the widened renderer
+    Protocols accept. The default ``""`` keeps every existing construction site
+    valid and renders byte-identically until 16.16 edits the templates (the
+    widen-the-contract-inert pattern; the 15.5 reporter lever precedent).
     """
 
     agent_id: PlayerId
@@ -536,6 +546,7 @@ class MeetingParticipant:
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
     rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
     vent_witness_records: tuple[VentWitnessRecord, ...] = ()
+    persona: str = ""
 
 
 @dataclass(frozen=True)
@@ -1352,6 +1363,13 @@ class MeetingManager:
                 fellow_impostor_ids=participant.fellow_impostor_ids,
                 living_ids=accusation_targets,
                 dead_ids=dead_ids,
+                # Task 16.3 inert widenings (rendered by 16.16 / 16.15). The
+                # turn carries the frozen open-tick ``suspicion_graph`` as its
+                # provenance input -- the same rows whose scalars the frozen
+                # memory already shows -- so a later provenance surface decomposes
+                # exactly that state. ``""`` / ``()`` render byte-identical today.
+                persona=participant.persona,
+                suspicion_provenance=participant.suspicion_graph,
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
@@ -1363,6 +1381,11 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             living_ids=accusation_targets,
             dead_ids=dead_ids,
+            # Task 16.3 inert widenings (rendered by 16.16 / 16.15); the frozen
+            # open-tick graph is the provenance input, matching the frozen memory
+            # this turn renders. ``""`` / ``()`` render byte-identical today.
+            persona=participant.persona,
+            suspicion_provenance=participant.suspicion_graph,
             # Task 11.2 (DESIGN.md §5.2): the cover-consistency directive on
             # the reply branch fires for the impostor role. An explicit bool
             # rather than `fellow_impostor_ids` because a SOLE impostor has
@@ -1492,6 +1515,14 @@ class MeetingManager:
             # default-OFF reporter_exculpation lever is ON (``None`` otherwise, so
             # a lever-OFF prompt renders byte-identical).
             reporter_id=render_reporter,
+            # Task 16.3 inert widenings (rendered by 16.16 / 16.15). ``persona``
+            # is the participant's inert persona slot; ``suspicion_provenance``
+            # is the SAME post-fold rows passed as ``suspicion_graph`` above (one
+            # folded source by construction, the render-after-fold consistency
+            # pin), so 16.15's surface decomposes exactly the scalars this ballot
+            # already shows. ``""`` / ``()`` render byte-identical today.
+            persona=participant.persona,
+            suspicion_provenance=suspicion_graph,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
@@ -1861,6 +1892,92 @@ def _joint_capped_suspicion(*, prior: float, lifted: float) -> float:
     return min(lifted, prior + MEETING_CONTRADICTION_LIFT_CAP)
 
 
+def _provenance_from_entry(entry: SuspicionEntry) -> SuspicionProvenance:
+    """Rebuild a :class:`SuspicionProvenance` from a graph row's eight fields.
+
+    Task 16.3: the render-contract leaf mirrors
+    :class:`agents.memory.beliefs.SuspicionProvenance` field-by-name (it cannot
+    import ``agents.*``), so the manager reconstitutes the decomposition here to
+    reseed the reconstructed :class:`BeliefState` -- the seed carries the incoming
+    decomposition, and :meth:`BeliefState.seed_player` reconciles any residual
+    against the scalar into ``unattributed`` so the sum invariant holds on the
+    seed regardless of the caller's (scalar, decomposition) consistency. Pure.
+    """
+
+    return SuspicionProvenance(
+        flag_lift=entry.flag_lift,
+        body_proximity=entry.body_proximity,
+        kill_or_vent_pin=entry.kill_or_vent_pin,
+        testimony_spread=entry.testimony_spread,
+        accusation_carry=entry.accusation_carry,
+        carried_hard=entry.carried_hard,
+        carried_soft=entry.carried_soft,
+        unattributed=entry.unattributed,
+    )
+
+
+def _capped_provenance(
+    *,
+    seeded: SuspicionProvenance,
+    updated: SuspicionProvenance,
+    prior: float,
+    lifted: float,
+    capped: float,
+) -> SuspicionProvenance:
+    """Attribute the :func:`_joint_capped_suspicion` reduction to this-call lift.
+
+    Task 16.3, the render-after-fold provenance pin. The joint cap (Task 13.14)
+    bounds the COMBINED transient meeting lift a subject accrues THIS call
+    (contradiction lift + testimony spread) above the seeded ``prior``; when it
+    binds it lowers only the transient lift, never the carried prior. So the
+    emitted decomposition scales the per-component this-call DELTA
+    (``updated - seeded``) by the realized ``(capped - prior) / (lifted - prior)``
+    and adds it back onto the seeded components -- the seeded carry buckets ride
+    through untouched (their delta is zero: the pre-vote fold never rolls), which
+    is exactly "the cap bounds the lift, not the prior".
+
+    The scaling preserves the sum invariant on the emitted row: the seeded total
+    is ``prior - 0.5`` and the scaled delta total is ``capped - prior``, so
+    ``0.5 + emitted.total == capped`` (the scalar the entry carries) to within
+    :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`. When the cap does
+    not bind (``capped == lifted``) or nothing moved (``lifted == prior``, where
+    ``capped == lifted`` too since the cap adds a non-negative bound), the
+    post-rule provenance already sums to the scalar, so it is emitted as-is. Pure.
+    """
+
+    if capped == lifted or lifted == prior:
+        return updated
+    factor = (capped - prior) / (lifted - prior)
+    return SuspicionProvenance(
+        flag_lift=seeded.flag_lift + (updated.flag_lift - seeded.flag_lift) * factor,
+        body_proximity=(
+            seeded.body_proximity
+            + (updated.body_proximity - seeded.body_proximity) * factor
+        ),
+        kill_or_vent_pin=(
+            seeded.kill_or_vent_pin
+            + (updated.kill_or_vent_pin - seeded.kill_or_vent_pin) * factor
+        ),
+        testimony_spread=(
+            seeded.testimony_spread
+            + (updated.testimony_spread - seeded.testimony_spread) * factor
+        ),
+        accusation_carry=(
+            seeded.accusation_carry
+            + (updated.accusation_carry - seeded.accusation_carry) * factor
+        ),
+        carried_hard=(
+            seeded.carried_hard + (updated.carried_hard - seeded.carried_hard) * factor
+        ),
+        carried_soft=(
+            seeded.carried_soft + (updated.carried_soft - seeded.carried_soft) * factor
+        ),
+        unattributed=(
+            seeded.unattributed + (updated.unattributed - seeded.unattributed) * factor
+        ),
+    )
+
+
 def _suspicion_graph_with_contradictions(
     *,
     voter_id: PlayerId,
@@ -1980,8 +2097,15 @@ def _suspicion_graph_with_contradictions(
 
     beliefs = BeliefState()
     for entry in suspicion_graph:
+        # Task 16.3: seed the incoming decomposition alongside the scalar so the
+        # projected rows carry provenance through the pre-vote fold (the fold's
+        # own writes then accumulate onto it via their source tags). Scalar
+        # arithmetic is byte-identical -- the scalar assigned is the same clamp.
         beliefs.seed_player(
-            entry.player_id, suspicion=entry.suspicion, trust=entry.trust
+            entry.player_id,
+            suspicion=entry.suspicion,
+            trust=entry.trust,
+            provenance=_provenance_from_entry(entry),
         )
     updated = apply_contradiction_rule(beliefs, contradictions, transcript=transcript)
     if folds and evidence is not None:
@@ -2019,15 +2143,35 @@ def _suspicion_graph_with_contradictions(
         # 0.5. Bound the COMBINED contradiction-lift + testimony-spread above
         # that prior so a lone-STRONG-flagged + multi-accused subject cannot
         # stack past one strong flag's worth (0.92 -> capped at 0.80).
+        prior = beliefs.view(player_id).suspicion
         capped = _joint_capped_suspicion(
-            prior=beliefs.view(player_id).suspicion,
+            prior=prior,
             lifted=belief.suspicion,
+        )
+        # Task 16.3: emit the source-tagged decomposition alongside the capped
+        # scalar. The cap reduction (when it binds) is attributed to THIS call's
+        # transient lift -- the seeded carry prior is never re-scaled -- so
+        # ``0.5 + sum(the eight fields) == capped`` holds on every emitted row.
+        emitted = _capped_provenance(
+            seeded=beliefs.view(player_id).provenance,
+            updated=belief.provenance,
+            prior=prior,
+            lifted=belief.suspicion,
+            capped=capped,
         )
         entries.append(
             SuspicionEntry(
                 player_id=player_id,
                 suspicion=capped,
                 trust=belief.trust,
+                flag_lift=emitted.flag_lift,
+                body_proximity=emitted.body_proximity,
+                kill_or_vent_pin=emitted.kill_or_vent_pin,
+                testimony_spread=emitted.testimony_spread,
+                accusation_carry=emitted.accusation_carry,
+                carried_hard=emitted.carried_hard,
+                carried_soft=emitted.carried_soft,
+                unattributed=emitted.unattributed,
             )
         )
     return tuple(entries)

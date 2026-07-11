@@ -3278,6 +3278,8 @@ class TestSelfRefutedAlibiDowngrade:
             skip_confidence_threshold: float,
             fellow_impostor_ids: tuple[str, ...] = (),
             reporter_id: str | None = None,  # Task 15.5: widened contract kwarg
+            persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+            suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"
