@@ -273,6 +273,15 @@ MIN_SWITCH_INTERVAL_S: Final[float] = 20.0
 # mid-run does not turn a whole model's cells into recorded ConnectErrors.
 _TURN_MAX_ATTEMPTS: Final[int] = 4
 _TURN_RETRY_BACKOFF_S: Final[float] = 5.0
+# Hard per-attempt ceiling on ONE transport await. The 2026-07-11 probe run
+# wedged permanently: two in-flight calls lost their sockets without httpx's own
+# 600s deadline ever firing (event loop idle in select, zero ESTABLISHED
+# connections, no timer converging), and every queued cell then waited on the
+# semaphore forever. This ceiling sits ABOVE the stack's 600s deadline plus its
+# bounded internal retries, so it only fires on exactly that pathology — the
+# attempt is then recorded/retried as a normal transport failure (TimeoutError)
+# instead of hanging the matrix.
+_TURN_ATTEMPT_CEILING_S: Final[float] = 1200.0
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -760,39 +769,73 @@ async def _run_turn(
         for attempt in range(_TURN_MAX_ATTEMPTS):
             started = time.perf_counter()
             try:
-                if (spec.qwen_kwarg or force_adapter) and _registry_knows(
-                    spec.model_id
-                ):
-                    r = await call_turn(
-                        prompt,
-                        schema,
-                        backend="featherless",
-                        model=spec.model_id,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        api_key=api_key,
-                        base_url=base_url,
-                        request_thinking=request_thinking,
-                        thinking_policy=THINKING_POLICY,  # type: ignore[arg-type]
-                        response_format_mode=response_format_mode,  # type: ignore[arg-type]
-                        substrate_flags=flags,
-                    )
-                    return TurnOutcome(
-                        parsed=r.parsed,
-                        raw_text=r.raw_text,
-                        latency_s=r.latency_s,
-                        in_tokens=r.in_tokens,
-                        out_tokens=r.out_tokens,
-                        thinking_chars=r.thinking_chars,
-                        error=None,
-                        parse_error=r.parse_error,
-                    )
-                if not _registry_knows(spec.model_id):
-                    # Unregistered new-generation id (Task 16.1): the production
-                    # adapter would fail loud on it, so the sweep-local probe send
-                    # carries the Qwen kwarg (iff ``qwen_kwarg``) and recovers the
-                    # 3.6 inline ``</think>``-close reasoning out of the answer.
-                    praw = await _probe_send(
+                # Every transport await sits under the _TURN_ATTEMPT_CEILING_S
+                # wedge guard: a call whose socket silently dies without the
+                # stack's own 600s deadline firing becomes a recorded/retried
+                # TimeoutError here instead of hanging the gather (and, through
+                # the shared semaphore, the whole matrix) forever.
+                async with asyncio.timeout(_TURN_ATTEMPT_CEILING_S):
+                    if (spec.qwen_kwarg or force_adapter) and _registry_knows(
+                        spec.model_id
+                    ):
+                        r = await call_turn(
+                            prompt,
+                            schema,
+                            backend="featherless",
+                            model=spec.model_id,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            api_key=api_key,
+                            base_url=base_url,
+                            request_thinking=request_thinking,
+                            thinking_policy=THINKING_POLICY,  # type: ignore[arg-type]
+                            response_format_mode=response_format_mode,  # type: ignore[arg-type]
+                            substrate_flags=flags,
+                        )
+                        return TurnOutcome(
+                            parsed=r.parsed,
+                            raw_text=r.raw_text,
+                            latency_s=r.latency_s,
+                            in_tokens=r.in_tokens,
+                            out_tokens=r.out_tokens,
+                            thinking_chars=r.thinking_chars,
+                            error=None,
+                            parse_error=r.parse_error,
+                        )
+                    if not _registry_knows(spec.model_id):
+                        # Unregistered new-generation id (Task 16.1): the production
+                        # adapter would fail loud on it, so the sweep-local probe send
+                        # carries the Qwen kwarg (iff ``qwen_kwarg``) and recovers the
+                        # 3.6 inline ``</think>``-close reasoning out of the answer.
+                        praw = await _probe_send(
+                            base_url=resolved,
+                            api_key=api_key,
+                            model=spec.model_id,
+                            prompt=prompt,
+                            response_format=(
+                                None
+                                if response_format_mode == "none"
+                                else {"type": response_format_mode}
+                            ),
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            request_thinking=request_thinking,
+                            send_kwarg=spec.qwen_kwarg,
+                        )
+                        latency = time.perf_counter() - started
+                        answer, inline = _split_inline_think(praw.text)
+                        parsed, parse_error = _parse(schema, answer)
+                        return TurnOutcome(
+                            parsed=parsed,
+                            raw_text=praw.text,
+                            latency_s=latency,
+                            in_tokens=praw.prompt_tokens,
+                            out_tokens=praw.completion_tokens,
+                            thinking_chars=len(praw.reasoning_content) + len(inline),
+                            error=None,
+                            parse_error=parse_error,
+                        )
+                    raw = await _bare_send(
                         base_url=resolved,
                         api_key=api_key,
                         model=spec.model_id,
@@ -804,47 +847,19 @@ async def _run_turn(
                         ),
                         max_tokens=max_tokens,
                         temperature=temperature,
-                        request_thinking=request_thinking,
-                        send_kwarg=spec.qwen_kwarg,
                     )
                     latency = time.perf_counter() - started
-                    answer, inline = _split_inline_think(praw.text)
-                    parsed, parse_error = _parse(schema, answer)
+                    parsed, parse_error = _parse(schema, raw.text)
                     return TurnOutcome(
                         parsed=parsed,
-                        raw_text=praw.text,
+                        raw_text=raw.text,
                         latency_s=latency,
-                        in_tokens=praw.prompt_tokens,
-                        out_tokens=praw.completion_tokens,
-                        thinking_chars=len(praw.reasoning_content) + len(inline),
+                        in_tokens=raw.prompt_tokens,
+                        out_tokens=raw.completion_tokens,
+                        thinking_chars=len(raw.reasoning_content),
                         error=None,
                         parse_error=parse_error,
                     )
-                raw = await _bare_send(
-                    base_url=resolved,
-                    api_key=api_key,
-                    model=spec.model_id,
-                    prompt=prompt,
-                    response_format=(
-                        None
-                        if response_format_mode == "none"
-                        else {"type": response_format_mode}
-                    ),
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-                latency = time.perf_counter() - started
-                parsed, parse_error = _parse(schema, raw.text)
-                return TurnOutcome(
-                    parsed=parsed,
-                    raw_text=raw.text,
-                    latency_s=latency,
-                    in_tokens=raw.prompt_tokens,
-                    out_tokens=raw.completion_tokens,
-                    thinking_chars=len(raw.reasoning_content),
-                    error=None,
-                    parse_error=parse_error,
-                )
             except Exception as exc:  # noqa: BLE001 — record transport failures, don't abort
                 last_exc = exc
                 if attempt < _TURN_MAX_ATTEMPTS - 1:
