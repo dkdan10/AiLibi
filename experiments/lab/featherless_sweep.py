@@ -2985,22 +2985,27 @@ def write_probe_report() -> int:
                     for r in rf_rows
                     if r["label"] == label and r["rf_mode"] == rf_mode
                 ]
-                # The rejection status is DERIVED from the rows, not assumed: the
-                # 14.1-era live testing recorded a 400, but the endpoint's
-                # rejection code can drift (the probe observed 422 on the
-                # incumbent) — the verdict quotes what actually came back.
-                reject_codes = sorted(
-                    {int(r["http_status"]) for r in mode_rows if not r.get("accepted")}
-                )
-                codes_s = "/".join(str(c) for c in reject_codes) or "?"
-                verdict = (
-                    "supported"
-                    if any(r.get("accepted") for r in mode_rows)
-                    else f"rejected (deterministic HTTP {codes_s} across attempts)"
-                )
                 for schema_name in ("MeetingTurn", "VoteBallot"):
                     cell = [r for r in mode_rows if r["schema"] == schema_name]
                     n_acc = sum(1 for r in cell if r.get("accepted"))
+                    # The verdict is PER (model, rf_mode, SCHEMA) — derived from
+                    # this row's own cell, never pooled across schemas: an
+                    # endpoint can accept a strict grammar for the flat
+                    # VoteBallot yet reject the nested MeetingTurn, and a pooled
+                    # verdict would stamp "supported" beside a 0/2 row. The
+                    # rejection status is likewise DERIVED, not assumed: the
+                    # 14.1-era live testing recorded a 400, but the code can
+                    # drift (the probe observed 422 on the incumbent) — the
+                    # verdict quotes what actually came back.
+                    reject_codes = sorted(
+                        {int(r["http_status"]) for r in cell if not r.get("accepted")}
+                    )
+                    codes_s = "/".join(str(c) for c in reject_codes) or "?"
+                    verdict = (
+                        "supported"
+                        if any(r.get("accepted") for r in cell)
+                        else f"rejected (deterministic HTTP {codes_s} across attempts)"
+                    )
                     json_flags = [
                         r.get("content_is_json") for r in cell if r.get("accepted")
                     ]
@@ -3022,14 +3027,19 @@ def write_probe_report() -> int:
             for r in rf_rows
             if r["label"] == PROBE_INCUMBENT_LABEL and r["rf_mode"] == "json_schema"
         )
+        inc_verdict = (
+            "supported for at least one schema (see the per-schema rows)"
+            if inc_js
+            else "rejected for every schema probed"
+        )
         add(
             "Production posture (`llm/featherless_client.py` docstring, recorded "
             "2026-06-27): the incumbent rejects strict `json_schema` "
             "deterministically (a 400 at the time) and runs on `json_object`. "
             "Re-verified here same-day — the incumbent's `json_schema` verdict "
-            f"above is **{'supported' if inc_js else 'rejected'}** (the verdict "
-            "cell quotes the HTTP status actually observed, which may drift from "
-            "the documented code); read each candidate's row beside it."
+            f"above is **{inc_verdict}** (each verdict cell is per-schema and "
+            "quotes the HTTP status actually observed, which may drift from the "
+            "documented code); read each candidate's row beside it."
         )
         add("")
 
