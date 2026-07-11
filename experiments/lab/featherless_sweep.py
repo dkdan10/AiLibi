@@ -2848,12 +2848,23 @@ def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> s
     )
     extra = ""
     if "inline_think_close" in channels:
-        extra += (
-            " Reasoning is INLINE in `content`, closed by a bare `</think>` with no "
-            "side-channel — `_raw_from_response_body` reads only `reasoning_content`, "
-            "so the sweep-local transport carries the split (the production mapping "
-            "is 16.12's)."
-        )
+        if _registry_knows(_id_for(label)):
+            # A REGISTERED id routes through the production adapter, whose strip
+            # policy already excises inline reasoning — no sweep-local handling.
+            extra += (
+                " Reasoning is INLINE in `content`, closed by a bare `</think>` "
+                "with no side-channel; the production adapter's `strip` policy "
+                "excises it for this registered id (and production always pins "
+                "`enable_thinking` explicitly, so the bare-request default never "
+                "reaches game state)."
+            )
+        else:
+            extra += (
+                " Reasoning is INLINE in `content`, closed by a bare `</think>` "
+                "with no side-channel — `_raw_from_response_body` reads only "
+                "`reasoning_content`, so the sweep-local transport carries the "
+                "split (the production mapping is 16.12's)."
+            )
     if "reasoning" in channels:
         extra += (
             " It uses a `message.reasoning` key `_raw_from_response_body` does not "
@@ -2974,10 +2985,18 @@ def write_probe_report() -> int:
                     for r in rf_rows
                     if r["label"] == label and r["rf_mode"] == rf_mode
                 ]
+                # The rejection status is DERIVED from the rows, not assumed: the
+                # 14.1-era live testing recorded a 400, but the endpoint's
+                # rejection code can drift (the probe observed 422 on the
+                # incumbent) — the verdict quotes what actually came back.
+                reject_codes = sorted(
+                    {int(r["http_status"]) for r in mode_rows if not r.get("accepted")}
+                )
+                codes_s = "/".join(str(c) for c in reject_codes) or "?"
                 verdict = (
                     "supported"
                     if any(r.get("accepted") for r in mode_rows)
-                    else "rejected (deterministic 400 across attempts)"
+                    else f"rejected (deterministic HTTP {codes_s} across attempts)"
                 )
                 for schema_name in ("MeetingTurn", "VoteBallot"):
                     cell = [r for r in mode_rows if r["schema"] == schema_name]
@@ -3004,11 +3023,13 @@ def write_probe_report() -> int:
             if r["label"] == PROBE_INCUMBENT_LABEL and r["rf_mode"] == "json_schema"
         )
         add(
-            "Production posture (`llm/featherless_client.py` docstring): the "
-            "incumbent rejects strict `json_schema` with a deterministic 400 and "
-            "runs on `json_object`. Re-verified here same-day — the incumbent's "
-            f"`json_schema` verdict above is **{'supported' if inc_js else 'rejected'}**; "
-            "read each candidate's row beside it."
+            "Production posture (`llm/featherless_client.py` docstring, recorded "
+            "2026-06-27): the incumbent rejects strict `json_schema` "
+            "deterministically (a 400 at the time) and runs on `json_object`. "
+            "Re-verified here same-day — the incumbent's `json_schema` verdict "
+            f"above is **{'supported' if inc_js else 'rejected'}** (the verdict "
+            "cell quotes the HTTP status actually observed, which may drift from "
+            "the documented code); read each candidate's row beside it."
         )
         add("")
 
