@@ -8,13 +8,33 @@ module so they can be tuned against the eval harness.
 
 Read paths beyond the simple ``view`` accessor and prompt rendering ship
 in Phase 3 (Task 3.3).
+
+Suspicion provenance (Task 16.3; audits/post-phase-14-Voice-and-Judgment-
+planning.md §3.2, the J1 foundation). Alongside the aggregate ``suspicion``
+scalar every belief row now carries a :class:`SuspicionProvenance` -- a
+source-tagged decomposition of the lift that produced the scalar (flag-lift /
+body-proximity / kill-or-vent pin / testimony-spread / accusation-carry, plus
+a HARD/SOFT cross-meeting carry split and an ``unattributed`` residual). It is
+ACCUMULATED beside each existing write, never re-derived post hoc: the fold's
+ordering and caps make after-the-fact attribution wrong (the audit §3.2 C4
+catch), so every site that moves the scalar tags the APPLIED (clamped) delta
+with its source at the moment it lands. The decomposition is a pure record --
+it is read by no arithmetic in this module, changes no scalar value, no fold
+result, and no rendered byte (the Task 16.3 prompt-byte golden is the OFF-path
+proof). The module-level invariant (documented on :class:`SuspicionProvenance`
+and pinned by :data:`SUSPICION_PROVENANCE_ATOL`) is that for every belief row
+``_DEFAULT_SUSPICION + provenance.total == suspicion`` to within tolerance. The
+J1 hard-render gate (Task 16.4) classifies on the HARD/SOFT split and the Task
+16.15 surface renders it; today a carried-soft prior at 0.70 is
+indistinguishable from a body-proximity pin at 0.70, which is exactly what the
+split repairs.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -492,6 +512,184 @@ class ContradictionRef:
     right_ref: str
 
 
+SUSPICION_PROVENANCE_ATOL: Final[float] = 1e-9
+"""Tolerance for the suspicion-provenance sum invariant (Task 16.3).
+
+The documented contract on :class:`SuspicionProvenance` is
+``_DEFAULT_SUSPICION + provenance.total == suspicion`` for EVERY belief row.
+It holds exactly at a fresh :meth:`BeliefState.adjust_suspicion` (the applied,
+clamped delta is tagged verbatim), but the proportional decay scaling
+(:meth:`BeliefState.decay_suspicion`) and the seeded residual reconciliation
+(:meth:`BeliefState.seed_player`) each recompute a component through a division
+or subtraction, introducing at most a few ULP of IEEE-754 error per operation.
+This tolerance is the assert bar the Task 16.3 sum-to-scalar pins hold to; the
+scalar itself is never touched by the provenance record, so the drift is purely
+in the decomposition, never the value the fold or the render reads."""
+
+
+SuspicionSource: TypeAlias = Literal[
+    "flag_lift",
+    "body_proximity",
+    "kill_or_vent_pin",
+    "testimony_spread",
+    "accusation_carry",
+    "carried_hard",
+    "carried_soft",
+    "unattributed",
+]
+"""The named channels a suspicion movement can be attributed to (Task 16.3).
+
+Five FRESH buckets recorded this meeting -- ``flag_lift`` (the
+:func:`apply_contradiction_rule` capped/ceilinged contradiction delta),
+``body_proximity`` and ``kill_or_vent_pin`` (the perception-time
+:func:`apply_observation_rules` pins), ``testimony_spread`` (the ``pre_vote``
+graduated spread) and ``accusation_carry`` (the persistent accusation bump and
+its corroboration mirror) -- plus the two CARRY buckets ``carried_hard`` /
+``carried_soft`` a meeting-boundary roll folds the fresh buckets into, and the
+``unattributed`` residual for any movement not tied to a named source. See the
+per-source attribution notes at each write site and on
+:meth:`SuspicionProvenance.carried`."""
+
+
+@dataclass(frozen=True)
+class SuspicionProvenance:
+    """Source-tagged decomposition of a belief row's suspicion lift (Task 16.3).
+
+    Recorded BESIDE the ``suspicion`` scalar on every belief row, never derived
+    from it: each of the eight :data:`SuspicionSource` components accumulates the
+    APPLIED (clamped) delta that the matching write site added to the scalar, at
+    the moment it landed. The audit §3.2 C4 catch is that the fold's ordering and
+    caps make post-hoc attribution wrong, so the decomposition is grown alongside
+    the writes, not reconstructed afterwards.
+
+    The invariant (module-documented, pinned to :data:`SUSPICION_PROVENANCE_ATOL`)
+    is unconditional: for every row ``_DEFAULT_SUSPICION + total == suspicion``.
+    Any movement not attributed to a named source lands in ``unattributed`` --
+    never silently in a hard or soft bucket -- so the equality holds at every
+    write regardless of the caller (see :meth:`BeliefState.seed_player`'s
+    residual reconciliation).
+
+    HARD vs SOFT (the Task 16.3 carry split; the DoD-bullet-2 contract the J1
+    gate in Task 16.4 classifies on). ``hard_total`` sums the grounded,
+    physically-witnessed or detector-flagged channels
+    (``flag_lift + body_proximity + kill_or_vent_pin + carried_hard``);
+    ``soft_total`` sums the verbal channels
+    (``testimony_spread + accusation_carry + carried_soft``). ``unattributed``
+    counts in NEITHER split by design -- Task 16.4 decides its class; until then
+    it is neither hard nor soft evidence. The split PERSISTS across the
+    cross-meeting carry (:meth:`carried`): a grounded vent pin from meeting 1 is
+    still a HARD component of the prior at meeting 3, so collapsing the carry into
+    one soft bucket -- which would let the J1 clamp suppress standing hard
+    evidence -- is exactly the outcome its canary forbids.
+
+    Frozen and pure: every member returns a new instance or a scalar; nothing
+    mutates in place. Deliberately NOT serialized -- nothing persists this type
+    to disk in Task 16.3 (the store's cross-meeting persistence is the scalar the
+    fold writes, which the roll decomposes in memory only).
+    """
+
+    flag_lift: float = 0.0
+    body_proximity: float = 0.0
+    kill_or_vent_pin: float = 0.0
+    testimony_spread: float = 0.0
+    accusation_carry: float = 0.0
+    carried_hard: float = 0.0
+    carried_soft: float = 0.0
+    unattributed: float = 0.0
+
+    @property
+    def total(self) -> float:
+        """Sum of all eight components (the invariant's left-hand deviation)."""
+
+        return (
+            self.flag_lift
+            + self.body_proximity
+            + self.kill_or_vent_pin
+            + self.testimony_spread
+            + self.accusation_carry
+            + self.carried_hard
+            + self.carried_soft
+            + self.unattributed
+        )
+
+    @property
+    def hard_total(self) -> float:
+        """Grounded (witnessed / detector-flagged) channels, incl. carried-hard."""
+
+        return (
+            self.flag_lift
+            + self.body_proximity
+            + self.kill_or_vent_pin
+            + self.carried_hard
+        )
+
+    @property
+    def soft_total(self) -> float:
+        """Verbal (testimony / accusation) channels, incl. carried-soft.
+
+        ``unattributed`` is deliberately absent from BOTH ``hard_total`` and
+        ``soft_total`` -- Task 16.4 owns its classification; here it is an
+        un-typed residual, so ``hard_total + soft_total`` need not equal
+        ``total``.
+        """
+
+        return self.testimony_spread + self.accusation_carry + self.carried_soft
+
+    def scaled(self, factor: float) -> SuspicionProvenance:
+        """Every component multiplied by ``factor`` (the proportional decay).
+
+        Used by :meth:`BeliefState.decay_suspicion`: a decay toward the 0.5 prior
+        scales the scalar's deviation by ``(1 - rate)``, so scaling every
+        component by the same realized factor keeps the sum invariant while
+        preserving the HARD/SOFT split -- decay erodes hard and soft evidence
+        proportionally, it never reclassifies one as the other.
+        """
+
+        return SuspicionProvenance(
+            flag_lift=self.flag_lift * factor,
+            body_proximity=self.body_proximity * factor,
+            kill_or_vent_pin=self.kill_or_vent_pin * factor,
+            testimony_spread=self.testimony_spread * factor,
+            accusation_carry=self.accusation_carry * factor,
+            carried_hard=self.carried_hard * factor,
+            carried_soft=self.carried_soft * factor,
+            unattributed=self.unattributed * factor,
+        )
+
+    def carried(self) -> SuspicionProvenance:
+        """The meeting-boundary roll: fold the five fresh buckets into the carry.
+
+        ``carried_hard`` absorbs ``flag_lift + body_proximity + kill_or_vent_pin``
+        and ``carried_soft`` absorbs ``testimony_spread + accusation_carry``; the
+        five fresh buckets zero and ``unattributed`` is unchanged. ``total`` is
+        preserved (the invariant survives the roll), and so is the HARD/SOFT split
+        -- a grounded pin stays hard forever, which is the DoD-bullet-2 guarantee.
+        ``flag_lift`` never actually persists into a stored belief in production
+        (the contradiction lift is the transient vote-time channel), but it is
+        rolled HARD here for generality, so a hypothetical persisted flag lift
+        would carry as hard evidence rather than fall through to a soft bucket.
+        """
+
+        return SuspicionProvenance(
+            carried_hard=(
+                self.carried_hard
+                + self.flag_lift
+                + self.body_proximity
+                + self.kill_or_vent_pin
+            ),
+            carried_soft=(
+                self.carried_soft + self.testimony_spread + self.accusation_carry
+            ),
+            unattributed=self.unattributed,
+        )
+
+    def tagged(self, source: SuspicionSource, delta: float) -> SuspicionProvenance:
+        """Add ``delta`` to the ``source`` component, returning a new instance."""
+
+        current: float = getattr(self, source)
+        return replace(self, **{source: current + delta})
+
+
 @dataclass(frozen=True)
 class PlayerBelief:
     """Immutable snapshot of beliefs about a single other player.
@@ -510,6 +708,11 @@ class PlayerBelief:
     suspicion: float = _DEFAULT_SUSPICION
     alibis: tuple[AlibiClaim, ...] = ()
     inconsistencies: tuple[ContradictionRef, ...] = ()
+    provenance: SuspicionProvenance = SuspicionProvenance()
+    """Source-tagged decomposition of ``suspicion`` (Task 16.3). Additive and
+    defaulted -- existing constructions stay valid; the sum invariant holds
+    (``_DEFAULT_SUSPICION + provenance.total == suspicion``) on every row a write
+    path produces."""
 
 
 def _clamp(value: float, *, floor: float, ceil: float) -> float:
@@ -526,6 +729,10 @@ class _MutableBelief:
     suspicion: float = _DEFAULT_SUSPICION
     alibis: list[AlibiClaim] = field(default_factory=list)
     inconsistencies: list[ContradictionRef] = field(default_factory=list)
+    # Task 16.3: the frozen provenance record carried beside the scalar. Held
+    # as an immutable value (rebound on every write), so a snapshot/clone is a
+    # reference copy -- no deep copy needed.
+    provenance: SuspicionProvenance = SuspicionProvenance()
 
     def snapshot(self) -> PlayerBelief:
         return PlayerBelief(
@@ -533,17 +740,20 @@ class _MutableBelief:
             suspicion=self.suspicion,
             alibis=tuple(self.alibis),
             inconsistencies=tuple(self.inconsistencies),
+            provenance=self.provenance,
         )
 
 
 def _clone_belief(belief: _MutableBelief) -> _MutableBelief:
     # ``alibis``/``inconsistencies`` hold frozen dataclasses, so copying the
-    # list containers is a sufficient deep copy.
+    # list containers is a sufficient deep copy; ``provenance`` is itself frozen
+    # (Task 16.3), so the reference is a safe deep copy too.
     return _MutableBelief(
         trust=belief.trust,
         suspicion=belief.suspicion,
         alibis=list(belief.alibis),
         inconsistencies=list(belief.inconsistencies),
+        provenance=belief.provenance,
     )
 
 
@@ -559,7 +769,12 @@ class BeliefState:
         self._beliefs: dict[PlayerId, _MutableBelief] = {}
 
     def seed_player(
-        self, player_id: PlayerId, *, suspicion: float, trust: float
+        self,
+        player_id: PlayerId,
+        *,
+        suspicion: float,
+        trust: float,
+        provenance: SuspicionProvenance | None = None,
     ) -> None:
         """Initialise ``player_id``'s belief to the given prior scores.
 
@@ -567,11 +782,33 @@ class BeliefState:
         suspicion-graph snapshot (e.g. the meeting's per-voter graph) before
         applying a belief rule on top, so the rule's delta lands on the real
         prior rather than the default 0.5. Overwrites any existing entry.
+
+        Provenance seeding (Task 16.3). When ``provenance`` is None -- the
+        existing call shape (eval/, training/, and any caller without a
+        decomposition) -- the whole clamped deviation ``clamped - 0.5`` lands in
+        ``unattributed``, so the sum invariant holds with no attribution claimed.
+        When a decomposition IS supplied (the manager's pre-vote graph reseed,
+        Stage 3, which rebuilds it from the incoming ``SuspicionEntry`` fields),
+        it is stored and any residual ``clamped - 0.5 - provenance.total`` is
+        added to ``unattributed`` -- so the invariant stays unconditional even if
+        a caller hands an inconsistent (scalar, decomposition) pair. The scalar
+        assigned is byte-identical to the pre-16.3 clamp either way.
         """
 
+        clamped_suspicion = _clamp(
+            suspicion, floor=_SUSPICION_FLOOR, ceil=_SUSPICION_CEIL
+        )
+        if provenance is None:
+            resolved_provenance = SuspicionProvenance(
+                unattributed=clamped_suspicion - _DEFAULT_SUSPICION
+            )
+        else:
+            residual = clamped_suspicion - _DEFAULT_SUSPICION - provenance.total
+            resolved_provenance = provenance.tagged("unattributed", residual)
         self._beliefs[player_id] = _MutableBelief(
             trust=_clamp(trust, floor=_TRUST_FLOOR, ceil=_TRUST_CEIL),
-            suspicion=_clamp(suspicion, floor=_SUSPICION_FLOOR, ceil=_SUSPICION_CEIL),
+            suspicion=clamped_suspicion,
+            provenance=resolved_provenance,
         )
 
     def known_players(self) -> tuple[PlayerId, ...]:
@@ -583,14 +820,52 @@ class BeliefState:
             return PlayerBelief()
         return belief.snapshot()
 
-    def adjust_suspicion(self, player_id: PlayerId, *, delta: float) -> PlayerBelief:
+    def adjust_suspicion(
+        self,
+        player_id: PlayerId,
+        *,
+        delta: float,
+        source: SuspicionSource | None = None,
+    ) -> PlayerBelief:
+        """Move ``player_id``'s suspicion by ``delta`` (clamped), tagging source.
+
+        The scalar arithmetic is UNCHANGED from pre-16.3 -- the clamp is computed
+        first and identically. ``source`` (Task 16.3) then tags the APPLIED delta
+        ``new_clamped - old`` (NOT the requested ``delta``: the [0,1] clamp must be
+        reflected in the decomposition, so a bump saturating at 1.0 records only
+        the movement that actually landed). An unnamed source lands in
+        ``unattributed``, keeping the sum invariant unconditional.
+        """
+
         belief = self._ensure(player_id)
+        old = belief.suspicion
         belief.suspicion = _clamp(
             belief.suspicion + delta,
             floor=_SUSPICION_FLOOR,
             ceil=_SUSPICION_CEIL,
         )
+        applied = belief.suspicion - old
+        belief.provenance = belief.provenance.tagged(
+            source if source is not None else "unattributed", applied
+        )
         return belief.snapshot()
+
+    def roll_provenance(self) -> None:
+        """Roll every belief row's provenance across the meeting boundary.
+
+        The Task 16.3 meeting-boundary carry: each row's fresh
+        (this-meeting) provenance buckets fold into the HARD/SOFT carry via
+        :meth:`SuspicionProvenance.carried`, so a grounded pin survives as a HARD
+        component of the next meeting's prior (DoD bullet 2). Pure per-row and
+        order-independent (each row rolls in isolation), and the scalar is
+        untouched -- ``carried`` preserves ``total``. Invoked only at the
+        persistent meeting boundary (the ``phase != "pre_vote"`` tail of
+        :func:`apply_meeting_evidence_rules`), never on the transient pre-vote
+        half.
+        """
+
+        for belief in self._beliefs.values():
+            belief.provenance = belief.provenance.carried()
 
     def adjust_trust(self, player_id: PlayerId, *, delta: float) -> PlayerBelief:
         belief = self._ensure(player_id)
@@ -659,11 +934,27 @@ class BeliefState:
         if not 0.0 <= rate <= 1.0:
             raise ValueError(f"decay rate must be in [0, 1], got {rate}")
         belief = self._ensure(player_id)
+        old = belief.suspicion
         belief.suspicion = _clamp(
             belief.suspicion + (toward - belief.suspicion) * rate,
             floor=_SUSPICION_FLOOR,
             ceil=_SUSPICION_CEIL,
         )
+        # Task 16.3: scale the decomposition proportionally so the sum invariant
+        # survives decay and the HARD/SOFT split is preserved (decay erodes hard
+        # and soft evidence at the same rate, never reclassifying one as the
+        # other). A decay toward the 0.5 prior scales the scalar's deviation by
+        # the realized factor ``new_deviation / d``; applying it to every
+        # component keeps ``0.5 + total == suspicion``. Off the toward=0.5 path,
+        # or when the old row was already exactly at the prior (d == 0), there is
+        # no proportional anchor, so the movement is recorded as unattributed.
+        deviation = old - _DEFAULT_SUSPICION
+        if toward == _DEFAULT_SUSPICION and deviation != 0.0:
+            new_deviation = belief.suspicion - _DEFAULT_SUSPICION
+            belief.provenance = belief.provenance.scaled(new_deviation / deviation)
+        else:
+            applied = belief.suspicion - old
+            belief.provenance = belief.provenance.tagged("unattributed", applied)
         return belief.snapshot()
 
     def copy(self) -> BeliefState:
@@ -754,13 +1045,22 @@ def apply_observation_rules(
     fellow_impostor_ids = frozenset(observation.self_state.fellow_impostor_ids)
 
     for player in observation.visible_players:
+        # Task 16.3: the witnessed vent and kill pins are the grounded HARD
+        # kill-or-vent-pin channel (perception-time, persists into the stored
+        # BeliefState the meeting graph reads).
         if player.action == OBSERVED_VENT_ACTION:
-            result.adjust_suspicion(player.id, delta=VENTING_SUSPICION_DELTA)
+            result.adjust_suspicion(
+                player.id, delta=VENTING_SUSPICION_DELTA, source="kill_or_vent_pin"
+            )
         elif (
             player.action == OBSERVED_KILL_ACTION
             and player.id not in fellow_impostor_ids
         ):
-            result.adjust_suspicion(player.id, delta=WITNESSED_KILL_SUSPICION_DELTA)
+            result.adjust_suspicion(
+                player.id,
+                delta=WITNESSED_KILL_SUSPICION_DELTA,
+                source="kill_or_vent_pin",
+            )
 
     for body in observation.visible_bodies:
         if body.id in previous_visible_bodies:
@@ -772,7 +1072,13 @@ def apply_observation_rules(
             and player_id != body.victim_id
         }
         for player_id in sorted(co_present):
-            result.adjust_suspicion(player_id, delta=BODY_PROXIMITY_SUSPICION_DELTA)
+            # Task 16.3: the Rule-1 proximity pin is the grounded HARD
+            # body_proximity channel.
+            result.adjust_suspicion(
+                player_id,
+                delta=BODY_PROXIMITY_SUSPICION_DELTA,
+                source="body_proximity",
+            )
 
     return result
 
@@ -946,7 +1252,11 @@ def apply_contradiction_rule(
             # ceiling equals the prior, so the value holds rather than drops.
             prior = result.view(subject).suspicion
             capped = min(capped, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
-        result.adjust_suspicion(subject, delta=capped)
+        # Task 16.3: the contradiction lift is the HARD flag_lift channel. The
+        # capped/ceilinged APPLIED delta is what accumulates -- exactly why
+        # post-hoc attribution is wrong (the dedup, cap, and render-ceiling all
+        # bind BEFORE the scalar moves) and accumulate-alongside is right.
+        result.adjust_suspicion(subject, delta=capped, source="flag_lift")
     return result
 
 
@@ -1267,14 +1577,35 @@ def apply_meeting_evidence_rules(
             # (0.0 -> zeroed). Applied AFTER the 14.10 ceiling so it is the
             # tightest bound, composing with -- never bypassing -- the caps.
             delta = min(delta, REPORTER_EXCULPATION_SOFT_LIFT_CAP)
-        result.adjust_suspicion(subject, delta=delta)
+        # Task 16.3: the SOFT bump channel. The transient ``pre_vote`` half is
+        # the graduated testimony-spread; the persistent post-vote/composed bump
+        # is the accusation-carry channel (matches the audit §3.1 table).
+        bump_source: SuspicionSource = (
+            "testimony_spread" if phase == "pre_vote" else "accusation_carry"
+        )
+        result.adjust_suspicion(subject, delta=delta, source=bump_source)
     for subject in sorted(lower_now):
-        result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
+        # Task 16.3: a corroboration is the mirror of an accusation bump -- "one
+        # vouch cancels one accusation-meeting" (the CORROBORATION_SUSPICION_DELTA
+        # framing), so the negative delta is attributed to the SOFT
+        # accusation_carry channel, the same channel the persistent bump feeds.
+        result.adjust_suspicion(
+            subject, delta=-CORROBORATION_SUSPICION_DELTA, source="accusation_carry"
+        )
     if decay_now:
         for player_id in sorted(result.known_players()):
             if player_id == own_id or player_id in reinforced:
                 continue
             result.decay_suspicion(player_id, rate=MEETING_SUSPICION_DECAY_RATE)
+    # Task 16.3: the meeting-boundary ROLL. Only the persistent halves (post_vote
+    # or the composed None -- the boundary every production absorb reaches via
+    # agents.memory.store.absorb_meeting_evidence) fold each row's fresh
+    # provenance into the HARD/SOFT carry; the transient pre_vote half NEVER
+    # rolls. This is what makes a grounded vent pin a carried-HARD component of
+    # the prior at meeting 3 (DoD bullet 2) while collapsing nothing to soft. The
+    # roll preserves ``total``, so the scalar and the sum invariant are untouched.
+    if phase != "pre_vote":
+        result.roll_provenance()
     return result
 
 
@@ -1292,6 +1623,7 @@ __all__ = [
     "OBSERVED_KILL_ACTION",
     "OBSERVED_VENT_ACTION",
     "REPORTER_EXCULPATION_SOFT_LIFT_CAP",
+    "SUSPICION_PROVENANCE_ATOL",
     "TESTIMONY_INDEPENDENCE_BAR",
     "TESTIMONY_SPREAD_CAP_DELTA",
     "TESTIMONY_SPREAD_TWO_VOICE_DELTA",
@@ -1304,6 +1636,8 @@ __all__ = [
     "ContradictionRef",
     "MeetingFoldPhase",
     "PlayerBelief",
+    "SuspicionProvenance",
+    "SuspicionSource",
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",
     "apply_observation_rules",
