@@ -62,6 +62,84 @@ the dependency edge):
     the JSON (``advisory: true``), excluded from ``supply_floors_passed``
     (:func:`evaluate_supply_floors`).
 
+TASK 16.11 REFEREE RE-ANCHOR — the POPULATION-RELATIVE conversion floor.
+Provenance: the owner ruling of 2026-07-11, ``audits/audit-phase-15-close.md``
+§10 (the locked close decision this implements) + §11 (the conversion-seam
+finding it answers). The Phase-15 close measured the FIRST non-FSM population
+ever scored against the hardened floors, and the champion FAILED exactly one
+gauge: ``testimony_backed_conversion`` 0.5743 vs 0.6636
+(``training/reports/results-champion-close.jsonl``, the committed calibration
+fixture). The owner ruled the miss benign, not blocking: the floor was never a
+principled constant but the FSM baseline's own measured conversion re-pinned
+(71/107), a baseline-relative calibration pin on FSM-driven gameplay — and a
+champion that legitimately reshapes gameplay (witnessed kills 5 → 32, vent
+exposure 73 → 40) naturally shifts crew-side conversion. The contracted
+consequence lands here: the conversion floor stops being another population's
+ratio and becomes POPULATION-RELATIVE — derived from the scored population's
+own evidence supply, so a candidate is judged on whether its games CONVERT the
+testimony they actually contain.
+
+  * THE Q1-PRECEDENT RATIONALE (``audits/review-phase-15-midwave.md`` §8 Q1,
+    owner-ratified 2026-07-09; named by the §10 ruling as the instinct this
+    re-anchor follows): every absolute number in this project's history moved
+    when the population changed (64% → 26%; ceiling 65.1 → 70.6) —
+    population-relative bars survive re-records, absolute ones rot. The 15.13
+    GO bar was pinned population-relative on all three axes for exactly this
+    reason; the referee's one baseline-absolute conversion constant was the
+    remaining outlier, and the close's first non-FSM measurement exposed it.
+  * THE DERIVATION (:func:`population_relative_conversion_floor`) — what "the
+    scored population's own achievable conversion" means, mechanically: a
+    resolved meeting ejects at most ONE player, so the conviction throughput
+    available for converting backed accusations is bounded PER MEETING, while
+    the testimony competing for that single ejection slot scales with the
+    population's own per-meeting evidence supply — the referee's own
+    ``flags_per_meeting`` gauge, measured on the same bytes under the same
+    definitions as the floors. The demanded conversion rate therefore scales
+    INVERSELY with the population's measured evidence density, anchored at
+    the baseline's equality point::
+
+        floor(pop) = min(1.0, pinned_conversion
+                              * (pinned_flags_per_meeting
+                                 / measured_flags_per_meeting))
+
+    Equivalently: ``measured_conversion * measured_flags_per_meeting`` must
+    reach ``pinned_conversion * pinned_flags_per_meeting`` — the population
+    must convert the testimony its games actually contain at least as well,
+    per unit of per-meeting evidence supplied, as the baseline converted its
+    own.
+  * WHY ``flags_per_meeting`` is the density term: it is the referee's one
+    per-MEETING evidence-supply gauge (the same denominator the conversion
+    gauge's opportunities live in); it is never rare-event degenerate
+    (baseline numerators 259/42, vs ``witnessed_event_rate``'s 4p1i 1/55 —
+    the 15.19 advisory finding: corpus-4p1i measures 0.0 witnessed while
+    PASSING the referee, so a witnessed-driven derivation would spuriously
+    demand conversion 1.0 of a set the referee accepts); and it is the
+    CONSERVATIVE choice on the calibration fixture (the champion's flags
+    multiple is 1.63×, its witnessed multiple 6.76× — the bar relaxes by the
+    smaller supply margin).
+  * THE STARVATION CATCH STAYS SHARP: a set with zero backed accusations
+    measures ``None`` and FAILS the numeric floor regardless of population
+    (unchanged); a population supplying LESS per-meeting evidence than the
+    baseline faces a HIGHER demanded rate (capped at 1.0) — and already fails
+    the ``flags_per_meeting`` floor itself — so the re-anchor can only RELAX
+    the bar for populations that clear the supply floors. The FSM baseline
+    still passes at EXACT equality: at its own density the supply ratio is
+    exactly 1.0 and the derived floor IS the pin (the multiplication order
+    ``pin * (pin_flags / measured_flags)`` preserves bit-exact equality).
+  * THE CALIBRATION FIXTURE, re-read under the new definition: the champion
+    close row records ``flags_per_meeting`` 3.0431654676258995 (423/139) and
+    conversion 0.5742574257425742 (58/101); derived floor =
+    0.6635514018691588 × (1.8633093525179856 / 3.0431654676258995) =
+    0.40628797419411855 < 0.5743 → the conversion gauge PASSES — the owner's
+    close-over ruling, now derived rather than ruled. The committed row is
+    untouched: its ``referee_passed: false`` stands as the 15.23 instrument's
+    verdict under the then-current absolute floor.
+  * SCOPE: exactly the one gauge the close contracted forward re-anchors. The
+    ``witnessed_event_rate`` and ``flags_per_meeting`` floors keep their
+    per-baseline pinned form, the D1-D4 geomean and the integrity floor are
+    untouched, and the frozen baseline-2 block stays ABSOLUTE (its bytes left
+    the tree at the 15.7 re-record; a historical pin is never re-derived).
+
 TWO LAYERS, both selection-only:
 
 Layer 1 — EVIDENCE-SUPPLY FLOORS (:func:`evaluate_supply_floors`). The sharp,
@@ -88,7 +166,11 @@ evidence than the baseline FAILS the referee even when meeting-rate stays high
     ``compute_conversion_report``'s ``impostor_accused_conversion_rate``, which
     counts ANY verbal accusation of a true impostor: a "testimony-BACKED" floor
     that accepts ungrounded vibe-convictions would let a candidate that ejects
-    impostors on unbacked accusations clear the evidence floor.
+    impostors on unbacked accusations clear the evidence floor. Since Task
+    16.11 this gauge's evaluated FLOOR is POPULATION-RELATIVE on baseline-3
+    (see the re-anchor section above): the pin stays the baseline's measured
+    anchor, the demanded rate derives from the scored set's own
+    ``flags_per_meeting``.
 
 The floors are PARAMETERIZED PER BASELINE (:data:`_BASELINE_SUPPLY_FLOORS`, keyed
 by baseline id then roster; each pin carries its measured value AND its raw
@@ -103,7 +185,12 @@ left the tree at the 15.7 re-record). The floors are set FROM the measured
 baseline — "do not accept a champion whose games produce structurally less
 evidence than the baseline", not "hit a number" — so the baseline itself passes
 at equality and any strictly-poorer candidate fails, and candidate + floor are
-always measured under the SAME definition.
+always measured under the SAME definition. Task 16.11 re-anchored the
+baseline-3 conversion floors POPULATION-RELATIVE (``population_relative_conversion``
+on :class:`SupplyFloors`): the pinned (value, numerator) stays the baseline's
+measured anchor, but the floor the candidate is gated on is derived from the
+candidate's own per-meeting evidence supply — equality at the baseline's own
+density, by construction.
 
 Layer 2 — the D1-D4 FLOOR-GATED WEIGHTED GEOMEAN (:func:`compute_game_score`),
 promoted verbatim from ``rubric_score.py`` (the geomean composition,
@@ -205,7 +292,11 @@ STABLE::
       "supply_gauges": [              # one per Layer-1 gauge, in order
         {"name": str, "measured": float|null, "floor": float, "passed": bool,
          "advisory": bool},           # advisory = baseline numerator <= 1;
-        ...                           # excluded from supply_floors_passed
+        ...                           # excluded from supply_floors_passed.
+                                      # Since 16.11 the conversion row's
+                                      # "floor" is the DERIVED population-
+                                      # relative value on baseline-3 (the pin
+                                      # exactly, when scoring the baseline).
       ],
       "mean_score": float, "median_score": float,  # NEVER read without the
                                       # referee_passed / supply-floor gate
@@ -222,7 +313,9 @@ STABLE::
     }
 
 The library public surface (stable — downstream tasks import these):
-:class:`WatchabilityReport`, :func:`compute_watchability`.
+:class:`WatchabilityReport`, :func:`compute_watchability`,
+:func:`population_relative_conversion_floor` (Task 16.11 — the 16.14/16.17
+audits quote its derivation).
 
 Pure + offline: no network, no ``AILIBI_*`` env.
 """
@@ -352,11 +445,92 @@ class SupplyFloors:
     may be ``None`` when the baseline supplies no accused-impostor meeting (the
     undefined-not-zero convention); a ``None`` floor is vacuously cleared. A
     floor whose baseline ``numerator`` is ≤ 1 is advisory (:class:`FloorPin`).
+
+    ``population_relative_conversion`` (Task 16.11 — the close audit §10 owner
+    ruling, 2026-07-11) switches the conversion gauge's EVALUATED floor from
+    the pin's absolute value to the population-relative derivation
+    (:func:`population_relative_conversion_floor`): the pin stays the
+    baseline's measured ``(value, numerator)`` anchor — it still drives the
+    advisory rare-event rule and the derivation's equality point — but the
+    floor a candidate is gated on derives from the candidate's OWN measured
+    ``flags_per_meeting``. ``False`` (absolute) on the frozen baseline-2 block:
+    its bytes left the tree, so the historical pin is never re-derived.
     """
 
     witnessed_event_rate: FloorPin
     flags_per_meeting: FloorPin
     testimony_backed_conversion: FloorPin | None
+    population_relative_conversion: bool = False
+
+
+def population_relative_conversion_floor(
+    *,
+    pinned_conversion: float,
+    pinned_flags_per_meeting: float,
+    measured_flags_per_meeting: float | None,
+) -> float:
+    """The Task-16.11 population-relative ``testimony_backed_conversion`` floor.
+
+    THE DERIVATION (the quotable form — the 16.14/16.17 audits print this).
+    A resolved meeting ejects at most ONE player, so the conviction throughput
+    available for converting backed accusations is bounded per meeting, while
+    the testimony competing for that single ejection slot scales with the
+    scored population's own per-meeting evidence supply (its measured
+    ``flags_per_meeting`` — the referee's one per-MEETING evidence-supply
+    gauge). The demanded conversion rate therefore scales INVERSELY with the
+    population's own evidence density, anchored so the baseline's density
+    demands exactly the baseline's own measured conversion::
+
+        floor = min(1.0, pinned_conversion
+                         * (pinned_flags_per_meeting
+                            / measured_flags_per_meeting))
+
+    Equivalently, the bar preserves the baseline's conversion-per-unit-of-
+    supplied-evidence: ``measured_conversion * measured_flags_per_meeting``
+    must reach ``pinned_conversion * pinned_flags_per_meeting`` — the
+    population is judged on whether its games CONVERT the testimony they
+    actually contain, not on whether they reproduce another population's
+    ratio (close audit §10; the Q1 population-relative precedent).
+
+    Properties, by construction:
+
+    * EQUALITY SELF-CONSISTENCY — at the baseline's own density the ratio is
+      exactly ``1.0`` and the floor IS the pin, bit-exact (the multiplication
+      order ``pin * (pin_flags / measured_flags)`` is deliberate: it keeps
+      "the baseline passes at equality" an exact float identity).
+    * STARVATION STAYS SHARP — a population with LESS per-meeting evidence
+      than the baseline faces a HIGHER demanded rate, capped at ``1.0``; a
+      population with no per-meeting evidence at all (``None`` — no meetings —
+      or ``0.0`` flags) faces the maximal demand ``1.0``. A set with zero
+      backed accusations measures ``None`` on the conversion gauge and fails
+      the numeric floor regardless (:func:`evaluate_supply_floors`).
+    * RELAX-ONLY ABOVE THE SUPPLY FLOOR — the derived floor drops below the
+      pin only when the population's flags density EXCEEDS the baseline's,
+      i.e. only for sets that already clear the ``flags_per_meeting`` floor
+      with margin; an evidence-poorer set is gated HARDER than under the
+      retired absolute constant.
+
+    Pure: a function of the pinned anchor and the measured supply, no I/O.
+    Raises :class:`ValueError` on a degenerate pin (no silent fallbacks — an
+    un-measurable anchor must not gate a champion).
+    """
+
+    if not 0.0 < pinned_conversion <= 1.0:
+        raise ValueError(
+            "pinned_conversion must be a measured rate in (0, 1], got "
+            f"{pinned_conversion!r}"
+        )
+    if pinned_flags_per_meeting <= 0.0:
+        raise ValueError(
+            "pinned_flags_per_meeting must be a positive measured density, got "
+            f"{pinned_flags_per_meeting!r}"
+        )
+    if measured_flags_per_meeting is None or measured_flags_per_meeting <= 0.0:
+        return 1.0
+    return min(
+        1.0,
+        pinned_conversion * (pinned_flags_per_meeting / measured_flags_per_meeting),
+    )
 
 
 # The per-baseline supply-floor block, read by baseline id then roster key. The
@@ -366,7 +540,11 @@ class SupplyFloors:
 # failure mode) fails. Task 15.2 pinned baseline-2; Task 15.7 pinned baseline-3;
 # Task 15.19 RE-PINNED the baseline-3 blocks under the SUBJECT-AWARE backing
 # definition on the same committed bytes (only the conversion gauge's definition
-# changed; witnessed kills + flags are backing-independent).
+# changed; witnessed kills + flags are backing-independent). Task 16.11
+# re-anchored the baseline-3 conversion floors POPULATION-RELATIVE (close audit
+# §10, owner 2026-07-11): the conversion pins below stay the baseline's
+# measured anchors, but the floor a scored set is gated on is derived from its
+# OWN flags_per_meeting via population_relative_conversion_floor().
 _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
     # FROZEN HISTORICAL PIN (Task 15.19): the baseline-2 bytes left the tree at
     # the 15.7 re-record, so this block CANNOT be re-measured and stays pinned
@@ -425,12 +603,32 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #                                 BACKED, SUBJECT-AWARE; was 71/117 = 0.6068
         #                                 subject-agnostic)
         #                                                [corpus: 235/331 = 0.7100]
+        # TASK 16.11 RE-ANCHOR (population_relative_conversion=True): the
+        # conversion pin above stays the measured 71/107 ANCHOR; the evaluated
+        # floor is derived per scored population:
+        #   floor = 0.6635514018691588 * (1.8633093525179856 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # Existing sets re-measured at 16.11 under the derivation (committed
+        # CLIs on this checkout; every verdict matches the close audit §1/§3):
+        #   samples 9p2i (the baseline itself): flags 259/139 -> ratio exactly
+        #     1.0 -> derived floor = pin = 0.6635514018691588; measured
+        #     71/107 -> PASS at exact equality (self-consistency).
+        #   corpus 9p2i: flags 948/440 = 2.1545454545454548 -> derived
+        #     0.5738572515937326; measured 235/331 = 0.7100 -> PASS (was PASS
+        #     under the absolute pin too).
+        #   champion-close fixture (results-champion-close.jsonl, the §10
+        #     calibration row): flags 423/139 = 3.0431654676258995 -> derived
+        #     0.40628797419411855; measured 58/101 = 0.5742574257425742 ->
+        #     PASS — the owner's close-over ruling, now derived (the recorded
+        #     FAIL vs the absolute 0.6636 stands in the committed row as the
+        #     15.23 instrument's verdict).
         "9p2i": SupplyFloors(
             witnessed_event_rate=FloorPin(value=0.032467532467532464, numerator=5),
             flags_per_meeting=FloorPin(value=1.8633093525179856, numerator=259),
             testimony_backed_conversion=FloorPin(
                 value=0.6635514018691588, numerator=71
             ),
+            population_relative_conversion=True,
         ),
         # Measured on replays/samples/4p1i (baseline 3, re-measured at 15.19
         # with the committed CLIs; corpus-4p1i alongside per the Q3 rule):
@@ -447,12 +645,25 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #                                 subject-agnostic — 15.7 recorded the
         #                                 reduced form 3/5)
         #                                                [corpus: 26/36 = 0.7222]
+        # TASK 16.11 RE-ANCHOR (population_relative_conversion=True — same
+        # derivation, this roster's pins):
+        #   floor = 0.6060606060606061 * (1.0769230769230769 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # Existing sets re-measured at 16.11:
+        #   samples 4p1i (the baseline itself): flags 42/39 -> ratio exactly
+        #     1.0 -> derived floor = pin = 0.6060606060606061; measured
+        #     20/33 -> PASS at exact equality (self-consistency).
+        #   corpus 4p1i: flags 60/40 = 1.5 -> derived 0.43512043512043513;
+        #     measured 26/36 = 0.7222 -> PASS (the witnessed miss stays
+        #     advisory per 15.19 — and is deliberately NOT a derivation input,
+        #     see the module docstring's density-term rationale).
         "4p1i": SupplyFloors(
             witnessed_event_rate=FloorPin(value=0.01818181818181818, numerator=1),
             flags_per_meeting=FloorPin(value=1.0769230769230769, numerator=42),
             testimony_backed_conversion=FloorPin(
                 value=0.6060606060606061, numerator=20
             ),
+            population_relative_conversion=True,
         ),
     },
 }
@@ -527,6 +738,16 @@ def evaluate_supply_floors(
     ``advisory``: its row keeps the honest measured-vs-floor verdict for the
     report, but it is EXCLUDED from the set-level AND, so it is reported, never
     referee-failing.
+
+    POPULATION-RELATIVE CONVERSION (Task 16.11; close audit §10): when the
+    floor block carries ``population_relative_conversion``, the conversion
+    gauge is gated on :func:`population_relative_conversion_floor` — derived
+    from the CANDIDATE's own measured ``flags_per_meeting`` against the pinned
+    baseline anchor — and the gauge row reports that DERIVED floor (exactly
+    the pin when the scored set is the baseline itself). The advisory rule
+    still reads the pin's baseline numerator; a ``None`` measured conversion
+    (zero backed accusations — the starvation catch) still fails the derived
+    floor regardless of the population's supply.
     """
 
     gauge_specs: tuple[tuple[str, float | None, FloorPin | None], ...] = (
@@ -545,17 +766,28 @@ def evaluate_supply_floors(
     results: list[SupplyFloorGauge] = []
     for name, measured, pin in gauge_specs:
         advisory = pin is not None and pin.numerator <= 1
-        if pin is None:
+        floor_value: float | None = None if pin is None else pin.value
+        if (
+            pin is not None
+            and name == "testimony_backed_conversion"
+            and floors.population_relative_conversion
+        ):
+            floor_value = population_relative_conversion_floor(
+                pinned_conversion=pin.value,
+                pinned_flags_per_meeting=floors.flags_per_meeting.value,
+                measured_flags_per_meeting=gauges.flags_per_meeting,
+            )
+        if floor_value is None:
             passed = True
         elif measured is None:
             passed = False
         else:
-            passed = measured >= pin.value
+            passed = measured >= floor_value
         results.append(
             SupplyFloorGauge(
                 name=name,
                 measured=measured,
-                floor=None if pin is None else pin.value,
+                floor=floor_value,
                 passed=passed,
                 advisory=advisory,
             )
@@ -1845,4 +2077,5 @@ __all__ = [
     "compute_game_score",
     "compute_watchability",
     "evaluate_supply_floors",
+    "population_relative_conversion_floor",
 ]
