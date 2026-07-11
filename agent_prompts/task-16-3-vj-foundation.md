@@ -20,8 +20,11 @@ The seam both tracks need, landed ONCE so Judgment and Voice never collide on th
 (the C4 catch). Three parts, all provably inert. (a) **Suspicion provenance**: record a
 source-tagged decomposition beside the aggregate scalar in the belief store — per subject, the
 accumulated lift attributable to flag-lift / body-proximity / kill-or-vent pin / testimony-spread
-/ accusation-carry / carried-prior — WITHOUT changing the scalar's value, the fold's arithmetic,
-or any rendered byte. This is what 16.4's clamp classifies on and what 16.15's provenance-rendered
+/ accusation-carry, with the cross-meeting carry SPLIT into carried-HARD and carried-SOFT
+components (the hard/soft attribution PERSISTS through the carry: a grounded vent flag from
+meeting 1 is still a hard component of the prior at meeting 3 — collapsing carry into one soft
+bucket would let 16.4's clamp suppress persistent hard evidence, the exact outcome its canary
+forbids) — WITHOUT changing the scalar's value, the fold's arithmetic, or any rendered byte. This is what 16.4's clamp classifies on and what 16.15's provenance-rendered
 surface displays; today a carried soft prior at 0.70 is indistinguishable from a body-proximity
 pin at 0.70. (b) **Render-contract widening, inert**: `persona` and `suspicion_provenance` kwargs
 through the three `meetings/render_contract.py` Protocols, the four loader wrappers, and the
@@ -50,6 +53,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 
 **Definition of done:**
 - [ ] Provenance decomposition: for every subject in every committed meeting, the recorded source-tagged components sum to the aggregate scalar within documented float tolerance (pinned over both committed sets), and the fold's rendered values are bit-identical to before (the golden proves it).
+- [ ] Hard/soft attribution survives the cross-meeting carry: a fixture where a grounded hard flag lands in meeting 1 shows a carried-HARD component (never carried-soft) in meeting 2+'s decomposition, including through decay and the pre-vote re-render path.
 - [ ] The prompt-byte golden re-renders EVERY committed meeting prompt (all four template kinds) and `rendered_memory` across `replays/samples/{9p2i,4p1i}` and asserts byte-equality against `llm_calls[].prompt` — and it FAILS on a deliberate one-byte template perturbation (a golden that cannot fail is not a gate).
 - [ ] The widened contract is inert: all new kwargs defaulted, `SuspicionEntry` extended additively, `MeetingParticipant.persona` defaults empty, and `bash scripts/verify_samples.sh` reconstructs both committed sets clean.
 - [ ] `uv run mypy .` passes.

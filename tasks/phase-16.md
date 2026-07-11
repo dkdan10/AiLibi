@@ -98,9 +98,10 @@ protocol/accessor region, 16.9's participant-persona region (disjoint from each 
 the `PROMPT_VERSION_SETS` registry line, which serializes 16.13 → 16.15 → 16.16); the winning
 prompt-set directory — 16.13 → 16.15 → 16.16; recording-script literals — `refresh_samples.sh`:
 16.12's model line ∥ 16.13's set line (disjoint lines) with `tests/scripts/test_refresh_samples.py`
-split the same way (16.12's model-pin region ∥ 16.13's set-gate region, both behind 16.2), 16.17
-flips its versions literal last; `record_ml_corpus.sh`: comment-only at 16.12, untouched by 16.13
-(the preflight couples set+versions), the full pin block re-pinned at 16.17;
+split the same way (16.12's model-pin region ∥ 16.13's set-gate region, both behind 16.2) — it
+carries NO version literal, so 16.17 does not edit it (HEAD's registry governs the versions it
+records); `record_ml_corpus.sh`: comment-only at 16.12, untouched by 16.13 (the preflight couples
+set+versions), the full pin block re-pinned at 16.17;
 `eval/watchability.py` floors — 16.11 → 16.14 → 16.17 (the direct 16.11 → 16.17 edge keeps the
 ordering under NO-GO); `eval/funnel.py` + `scripts/measure_baseline.py` — 16.10 single-toucher;
 `api/` + `frontend/` — 16.7.1 single-toucher; `.env.example` — lever lines (16.4/16.5/16.6/16.8,
@@ -273,8 +274,11 @@ The seam both tracks need, landed ONCE so Judgment and Voice never collide on th
 (the C4 catch). Three parts, all provably inert. (a) **Suspicion provenance**: record a
 source-tagged decomposition beside the aggregate scalar in the belief store — per subject, the
 accumulated lift attributable to flag-lift / body-proximity / kill-or-vent pin / testimony-spread
-/ accusation-carry / carried-prior — WITHOUT changing the scalar's value, the fold's arithmetic,
-or any rendered byte. This is what 16.4's clamp classifies on and what 16.15's provenance-rendered
+/ accusation-carry, with the cross-meeting carry SPLIT into carried-HARD and carried-SOFT
+components (the hard/soft attribution PERSISTS through the carry: a grounded vent flag from
+meeting 1 is still a hard component of the prior at meeting 3 — collapsing carry into one soft
+bucket would let 16.4's clamp suppress persistent hard evidence, the exact outcome its canary
+forbids) — WITHOUT changing the scalar's value, the fold's arithmetic, or any rendered byte. This is what 16.4's clamp classifies on and what 16.15's provenance-rendered
 surface displays; today a carried soft prior at 0.70 is indistinguishable from a body-proximity
 pin at 0.70. (b) **Render-contract widening, inert**: `persona` and `suspicion_provenance` kwargs
 through the three `meetings/render_contract.py` Protocols, the four loader wrappers, and the
@@ -303,6 +307,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 
 **Definition of done:**
 - [ ] Provenance decomposition: for every subject in every committed meeting, the recorded source-tagged components sum to the aggregate scalar within documented float tolerance (pinned over both committed sets), and the fold's rendered values are bit-identical to before (the golden proves it).
+- [ ] Hard/soft attribution survives the cross-meeting carry: a fixture where a grounded hard flag lands in meeting 1 shows a carried-HARD component (never carried-soft) in meeting 2+'s decomposition, including through decay and the pre-vote re-render path.
 - [ ] The prompt-byte golden re-renders EVERY committed meeting prompt (all four template kinds) and `rendered_memory` across `replays/samples/{9p2i,4p1i}` and asserts byte-equality against `llm_calls[].prompt` — and it FAILS on a deliberate one-byte template perturbation (a golden that cannot fail is not a gate).
 - [ ] The widened contract is inert: all new kwargs defaulted, `SuspicionEntry` extended additively, `MeetingParticipant.persona` defaults empty, and `bash scripts/verify_samples.sh` reconstructs both committed sets clean.
 - [ ] `uv run mypy .` passes.
@@ -343,9 +348,10 @@ preamble maps to this task.
 **Complexity:** Integration
 
 Close the zero-flag channel at its root: a conviction-grade rendered suspicion (≥ 0.60) whose
-provenance is ENTIRELY soft (testimony-spread + accusation-carry + carried prior — no flag, no
-body-proximity, no kill/vent pin) is clamped to render just below the gate in the pre-vote
-surface. Hard-backed suspicion renders untouched; the clamp classifies on 16.3's typed provenance,
+provenance is ENTIRELY soft (testimony-spread + accusation-carry + carried-SOFT prior — no fresh
+hard component AND no carried-HARD component; a prior fed by an earlier meeting's grounded
+flag/pin stays hard through the carry, per 16.3's split) is clamped to render just below the gate
+in the pre-vote surface. Hard-backed suspicion renders untouched; the clamp classifies on 16.3's typed provenance,
 never on the scalar or on prose. Ships as the first lever back into the now-empty
 `_TOGGLEABLE_LEVER_RESOLVERS` (default-OFF, `substrate_flag_snapshot` stamped, the 13.5/14.10
 pattern end-to-end). The planning doc's static counterfactual measured 24/31 crew mis-ejects
@@ -369,7 +375,7 @@ baseline's bytes. The trade is a hypothesis to re-measure, not a carried fact.
 
 **Definition of done:**
 - [ ] Lever OFF = byte-identical: the 16.3 prompt-byte golden and `bash scripts/verify_samples.sh` both green with the lever merged OFF.
-- [ ] The clamp classifies on typed provenance only: a soft-only 0.70 renders sub-gate; the SAME scalar with any hard component renders unchanged — both pinned by fixture, including the pre-vote re-render path.
+- [ ] The clamp classifies on typed provenance only: a soft-only 0.70 renders sub-gate; the SAME scalar with any hard component renders unchanged — both pinned by fixture, including the pre-vote re-render path AND the persistent-hard case (meeting-1 grounded flag, meeting-2 clamp evaluation: the carried-hard component exempts — the cross-meeting fixture is mandatory).
 - [ ] The offline counterfactual is RE-MEASURED on committed baseline-3 bytes via the 14.8 `allow_substrate_mismatch` machinery and reported in the PR: how many soft-only convictions the clamp would keep sub-gate, how many hard-backed catches change outcome (the over-damping canary — the contract's hard line is ZERO hard-backed outcome changes), with the baseline-2-era 24/31 vs 6/16 quoted only as the prior hypothesis.
 - [ ] The lever is registered, stamped, and its OFF/ON behavior covered by the lever-pattern test suite (registration, stamp, resolver constant-ness at graduation readiness).
 - [ ] `uv run mypy .` passes.
@@ -973,8 +979,12 @@ literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NO
 preflight couples set+versions and flipping one alone fails it; 16.17 re-pins that block whole),
 register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
 `--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
-the A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
-model) committing the comparison rows — the evidence that the restyle helps, or at least does not
+the A/B as a TWO-PASS protocol on the one new set (`_SET_OWNER` binds each set to its model, so
+`--prompt-set qwen3_32b` on the qwen3.5 model is structurally rejected — the control cannot be a
+cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_5_27b/` (the control arm — commit
+it first, sweep it, record the template-source sha in the rows), pass 2 sweeps the RESTYLED
+commit (the candidate arm); the committed rows carry the sha per arm so the comparison is
+control-vs-restyle on the same model, same contexts — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
 **Files in scope:**
@@ -996,7 +1006,7 @@ hurt, before baseline 4 spends a record on it.
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
 - [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
-- [ ] The operator A/B rows are committed: new set vs the qwen3_32b-ported-verbatim control on the same model, same contexts — parse rates, grade booleans, latency — and the report states the verdict (restyle adopted or the control kept; either is a finding).
+- [ ] The operator A/B rows are committed under the two-pass protocol (pass 1 = verbatim-port commit, pass 2 = restyled commit, each row carrying its template-source sha) — parse rates, grade booleans, latency per arm on the same model and contexts — and the report states the verdict (restyle adopted or the verbatim port kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1228,12 +1238,19 @@ decision):** for each Wave-1 lever — J1 hard-evidence gate (16.4), observation
 stay-OFF, each ruling citing the lever's committed counterfactual against its named canary (J1:
 zero hard-backed outcome changes; J2: near-zero honest catches blocked; absence: the boundary
 pins + set-size evidence; id-rendering: golden-proven inertness + 16.15's citation surface needs
-it ON). A lever that fails its canary stays OFF as a RECORDED decision and its surface (if any)
-is disabled coherently — never silently absorbed. **Then the 15.7 runbook:** graduate the slate
+it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
+honesty this contract can actually deliver: for levers whose surface is kwarg/lever-gated with no
+template presence (J1, the absence prior), stay-OFF is coherent as-is; but for the COUPLED pair
+whose elicitation surface 16.15 already landed (the citation gate + observation-id rendering —
+the templates now ask for citations the substrate would neither render ids for nor honor), a
+stay-OFF ruling CANNOT be absorbed by this task (the template retreat is out of scope and needs
+its own version bump), so that outcome PAUSES the close for owner re-planning and the surface
+retreat becomes a new contract — a defect the close finds becomes a contract, never a close edit. **Then the 15.7 runbook:** graduate the slate
 at the record (resolvers constant-true, registry entries → `_RETIRED_ALWAYS_ON_LEVERS` — C6
-discharged, bare reconstruction), flip the recording scripts' `REQUIRED_PROMPT_VERSIONS` literals
-to the 16.15/16.16 versions (including `record_ml_corpus.sh`'s, with its stale-corpus comment
-updated to name the baseline-5 substrate any future corpus records at), record both sets
+discharged, bare reconstruction), re-pin `record_ml_corpus.sh`'s coupled pin block (model + set +
+`REQUIRED_PROMPT_VERSIONS`) to the baseline-5 substrate with its stale-corpus comment updated to
+name the substrate any future corpus records at (`refresh_samples.sh` needs no edit here — it has
+no version literal; HEAD's registry governs, and the MANIFEST provenance check is the proof), record both sets
 atomically on the locked model + final prompt versions, Q5 tag, validity gate + the re-anchored
 referee + baseline-5 floor pins. **The close reading:** the full before/after on 16.10's
 instruments — zero-flag conviction rate (soft/hard split), citation compliance, roll-call
@@ -1252,7 +1269,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/constants.py (citation-gate resolver graduation region)
 - agents/memory/store.py (id-rendering resolver graduation region)
 - orchestrator/replay.py (registry graduation region — slate entries to retired)
-- scripts/refresh_samples.sh (REQUIRED_PROMPT_VERSIONS literal to the 16.15/16.16 versions) + scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + their tests/scripts pin sweeps
+- scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + its tests/scripts pin sweep. NOTE: `scripts/refresh_samples.sh` carries NO version literal (only the set-name gate, already flipped by 16.13) — it records whatever HEAD's registry resolves, which at this task IS the 16.15/16.16 versions; the version proof is the recorded MANIFEST provenance check in the DoD, not a script literal
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)
@@ -1265,7 +1282,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/manager.py + meetings/transcript.py (no mechanism change at the close — graduation touches resolvers/registry only)
 
 **Definition of done:**
-- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set; stay-OFF levers absent from the stamp and their surfaces coherently disabled).
+- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close (the template retreat is a new contract with its own bump — never an in-task edit), and the pause is recorded as the slate's outcome.
 - [ ] Both sets recorded atomically at the final substrate (locked model, 16.15/16.16 versions, slate graduated), Q5 tags, MANIFEST provenance exact; validity gate PASSES with `--expected-model`; BARE byte-verification clean (no `AILIBI_*` export — C6 discharged by graduation).
 - [ ] The before/after table regenerates end-to-end from committed artifacts (the BEFORE measure file + the new bytes via the committed CLIs); the named pairing is explicit: voice metrics and zero-flag conviction rate in one table, with the persona-attribution question answered (a zero-flag rise with voice-metric movement and no judgment-lever change = the phase NO-GO, paused for the owner).
 - [ ] Canaries on the 50-seed sets per the degraded-Q3 rule (pre-registered bands, two-proportion tests, UNDERPOWERED recorded honestly); a regression pauses the close.

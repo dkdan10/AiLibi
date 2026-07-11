@@ -17,9 +17,10 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 **Complexity:** Integration
 
 Close the zero-flag channel at its root: a conviction-grade rendered suspicion (≥ 0.60) whose
-provenance is ENTIRELY soft (testimony-spread + accusation-carry + carried prior — no flag, no
-body-proximity, no kill/vent pin) is clamped to render just below the gate in the pre-vote
-surface. Hard-backed suspicion renders untouched; the clamp classifies on 16.3's typed provenance,
+provenance is ENTIRELY soft (testimony-spread + accusation-carry + carried-SOFT prior — no fresh
+hard component AND no carried-HARD component; a prior fed by an earlier meeting's grounded
+flag/pin stays hard through the carry, per 16.3's split) is clamped to render just below the gate
+in the pre-vote surface. Hard-backed suspicion renders untouched; the clamp classifies on 16.3's typed provenance,
 never on the scalar or on prose. Ships as the first lever back into the now-empty
 `_TOGGLEABLE_LEVER_RESOLVERS` (default-OFF, `substrate_flag_snapshot` stamped, the 13.5/14.10
 pattern end-to-end). The planning doc's static counterfactual measured 24/31 crew mis-ejects
@@ -43,7 +44,7 @@ baseline's bytes. The trade is a hypothesis to re-measure, not a carried fact.
 
 **Definition of done:**
 - [ ] Lever OFF = byte-identical: the 16.3 prompt-byte golden and `bash scripts/verify_samples.sh` both green with the lever merged OFF.
-- [ ] The clamp classifies on typed provenance only: a soft-only 0.70 renders sub-gate; the SAME scalar with any hard component renders unchanged — both pinned by fixture, including the pre-vote re-render path.
+- [ ] The clamp classifies on typed provenance only: a soft-only 0.70 renders sub-gate; the SAME scalar with any hard component renders unchanged — both pinned by fixture, including the pre-vote re-render path AND the persistent-hard case (meeting-1 grounded flag, meeting-2 clamp evaluation: the carried-hard component exempts — the cross-meeting fixture is mandatory).
 - [ ] The offline counterfactual is RE-MEASURED on committed baseline-3 bytes via the 14.8 `allow_substrate_mismatch` machinery and reported in the PR: how many soft-only convictions the clamp would keep sub-gate, how many hard-backed catches change outcome (the over-damping canary — the contract's hard line is ZERO hard-backed outcome changes), with the baseline-2-era 24/31 vs 6/16 quoted only as the prior hypothesis.
 - [ ] The lever is registered, stamped, and its OFF/ON behavior covered by the lever-pattern test suite (registration, stamp, resolver constant-ness at graduation readiness).
 - [ ] `uv run mypy .` passes.

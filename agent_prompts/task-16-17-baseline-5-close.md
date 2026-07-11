@@ -22,12 +22,19 @@ decision):** for each Wave-1 lever — J1 hard-evidence gate (16.4), observation
 stay-OFF, each ruling citing the lever's committed counterfactual against its named canary (J1:
 zero hard-backed outcome changes; J2: near-zero honest catches blocked; absence: the boundary
 pins + set-size evidence; id-rendering: golden-proven inertness + 16.15's citation surface needs
-it ON). A lever that fails its canary stays OFF as a RECORDED decision and its surface (if any)
-is disabled coherently — never silently absorbed. **Then the 15.7 runbook:** graduate the slate
+it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
+honesty this contract can actually deliver: for levers whose surface is kwarg/lever-gated with no
+template presence (J1, the absence prior), stay-OFF is coherent as-is; but for the COUPLED pair
+whose elicitation surface 16.15 already landed (the citation gate + observation-id rendering —
+the templates now ask for citations the substrate would neither render ids for nor honor), a
+stay-OFF ruling CANNOT be absorbed by this task (the template retreat is out of scope and needs
+its own version bump), so that outcome PAUSES the close for owner re-planning and the surface
+retreat becomes a new contract — a defect the close finds becomes a contract, never a close edit. **Then the 15.7 runbook:** graduate the slate
 at the record (resolvers constant-true, registry entries → `_RETIRED_ALWAYS_ON_LEVERS` — C6
-discharged, bare reconstruction), flip the recording scripts' `REQUIRED_PROMPT_VERSIONS` literals
-to the 16.15/16.16 versions (including `record_ml_corpus.sh`'s, with its stale-corpus comment
-updated to name the baseline-5 substrate any future corpus records at), record both sets
+discharged, bare reconstruction), re-pin `record_ml_corpus.sh`'s coupled pin block (model + set +
+`REQUIRED_PROMPT_VERSIONS`) to the baseline-5 substrate with its stale-corpus comment updated to
+name the substrate any future corpus records at (`refresh_samples.sh` needs no edit here — it has
+no version literal; HEAD's registry governs, and the MANIFEST provenance check is the proof), record both sets
 atomically on the locked model + final prompt versions, Q5 tag, validity gate + the re-anchored
 referee + baseline-5 floor pins. **The close reading:** the full before/after on 16.10's
 instruments — zero-flag conviction rate (soft/hard split), citation compliance, roll-call
@@ -46,7 +53,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/constants.py (citation-gate resolver graduation region)
 - agents/memory/store.py (id-rendering resolver graduation region)
 - orchestrator/replay.py (registry graduation region — slate entries to retired)
-- scripts/refresh_samples.sh (REQUIRED_PROMPT_VERSIONS literal to the 16.15/16.16 versions) + scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + their tests/scripts pin sweeps
+- scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + its tests/scripts pin sweep. NOTE: `scripts/refresh_samples.sh` carries NO version literal (only the set-name gate, already flipped by 16.13) — it records whatever HEAD's registry resolves, which at this task IS the 16.15/16.16 versions; the version proof is the recorded MANIFEST provenance check in the DoD, not a script literal
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)
@@ -59,7 +66,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/manager.py + meetings/transcript.py (no mechanism change at the close — graduation touches resolvers/registry only)
 
 **Definition of done:**
-- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set; stay-OFF levers absent from the stamp and their surfaces coherently disabled).
+- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close (the template retreat is a new contract with its own bump — never an in-task edit), and the pause is recorded as the slate's outcome.
 - [ ] Both sets recorded atomically at the final substrate (locked model, 16.15/16.16 versions, slate graduated), Q5 tags, MANIFEST provenance exact; validity gate PASSES with `--expected-model`; BARE byte-verification clean (no `AILIBI_*` export — C6 discharged by graduation).
 - [ ] The before/after table regenerates end-to-end from committed artifacts (the BEFORE measure file + the new bytes via the committed CLIs); the named pairing is explicit: voice metrics and zero-flag conviction rate in one table, with the persona-attribution question answered (a zero-flag rise with voice-metric movement and no judgment-lever change = the phase NO-GO, paused for the owner).
 - [ ] Canaries on the 50-seed sets per the degraded-Q3 rule (pre-registered bands, two-proportion tests, UNDERPOWERED recorded honestly); a regression pauses the close.

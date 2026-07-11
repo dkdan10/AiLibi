@@ -29,8 +29,12 @@ literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NO
 preflight couples set+versions and flipping one alone fails it; 16.17 re-pins that block whole),
 register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
 `--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
-the A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
-model) committing the comparison rows — the evidence that the restyle helps, or at least does not
+the A/B as a TWO-PASS protocol on the one new set (`_SET_OWNER` binds each set to its model, so
+`--prompt-set qwen3_32b` on the qwen3.5 model is structurally rejected — the control cannot be a
+cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_5_27b/` (the control arm — commit
+it first, sweep it, record the template-source sha in the rows), pass 2 sweeps the RESTYLED
+commit (the candidate arm); the committed rows carry the sha per arm so the comparison is
+control-vs-restyle on the same model, same contexts — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
 **Files in scope:**
@@ -52,7 +56,7 @@ hurt, before baseline 4 spends a record on it.
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
 - [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
-- [ ] The operator A/B rows are committed: new set vs the qwen3_32b-ported-verbatim control on the same model, same contexts — parse rates, grade booleans, latency — and the report states the verdict (restyle adopted or the control kept; either is a finding).
+- [ ] The operator A/B rows are committed under the two-pass protocol (pass 1 = verbatim-port commit, pass 2 = restyled commit, each row carrying its template-source sha) — parse rates, grade booleans, latency per arm on the same model and contexts — and the report states the verdict (restyle adopted or the verbatim port kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
