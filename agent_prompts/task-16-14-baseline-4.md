@@ -12,7 +12,7 @@ Implement Task 16.14 — Baseline 4: the model-only atomic re-record + the champ
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-baseline-4`
-**Depends on:** 16.11, 16.12, 16.13
+**Depends on:** 16.3, 16.11, 16.12, 16.13
 **Section refs:** tasks/phase-15.md 15.7 (the atomic re-record runbook this clones); audits/audit-phase-16-model-lock.md (the substrate this records); eval/watchability.py (16.11's re-anchored referee + the per-baseline floors block); training/reports/results-champion-close.jsonl (the stamp-proof row convention the re-audit follows)
 **Complexity:** Integration
 
@@ -88,6 +88,7 @@ cells 15.7's didn't (different dialogue → different transcript pins).
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import eval.watchability"`
+- `uv run python -c "import agents.memory.beliefs"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

@@ -2,8 +2,11 @@
 
 > **STATUS: OPEN (authored 2026-07-11).** All eighteen contracts below are dispatchable, with the
 > Wave-2 tasks (16.12–16.14) CONDITIONAL on the 16.2 model lock: under GO they activate as written;
-> under NO-GO 16.2 marks them DROPPED-with-reason and rewrites 16.15's dependency edge and template
-> paths (the contract for that surgery is inside 16.2). Two owner gates: the mid-phase MODEL LOCK
+> under NO-GO 16.2 REMOVES their three contracts and generated prompts outright, replacing them with
+> a prose drop record — `scripts/compute_next_task.py` treats any surviving `### Task` header as
+> dispatchable, so an inline "dropped" label is not enough — and rewrites BOTH 16.15 and 16.16
+> (dependency edges, template paths, and per-template version arithmetic; the contract for that
+> surgery is inside 16.2). Two owner gates: the mid-phase MODEL LOCK
 > (16.2) and the baseline-5 GRADUATION SLATE (16.17's preflight — which levers graduate is an owner
 > decision on committed counterfactuals, named here so it is not discovered mid-record). Scoping
 > inputs: `audits/audit-phase-15-close.md` §10–§11, `audits/audit-phase-15-pause.md` §9,
@@ -68,10 +71,12 @@ Locked decisions (owner, 2026-07-11):
 Parallelism: three independent roots dispatch immediately: `16.1 ∥ 16.3 ∥ 16.11` (the model probe
 runs beside the model-INDEPENDENT judgment/pooling substrate — no code task waits for the probe).
 Then `16.1 → 16.2` [OWNER: the model lock]; `16.2 → (16.12 ∥ 16.13)` [GO only];
-`(16.11, 16.12, 16.13) → 16.14` [operator: baseline 4]; `16.3 → (16.4 ∥ 16.7 ∥ 16.9)`;
+`(16.3, 16.11, 16.12, 16.13) → 16.14` [operator: baseline 4 — 16.3 gates it because the
+preflight requires the prompt-byte golden; 16.3 is a root, so no wall-clock cost]; `16.3 → (16.4 ∥ 16.7 ∥ 16.9)`;
 `16.4 → 16.5 → 16.6` (the `orchestrator/replay.py` lever-registry chain — the 16.4 → 16.5 edge
 exists ONLY to serialize that registry region, the 15.6 → 15.8 precedent; nothing semantic);
-`(16.6, 16.7) → 16.8`; `(16.5, 16.7) → 16.7.1`; `(16.3, 16.7) → 16.10`;
+`(16.6, 16.7) → 16.8`; `(16.5, 16.7) → 16.7.1`; `(16.3, 16.5, 16.7) → 16.10` (the citation-
+compliance metrics type against 16.5's ballot field);
 `(16.2, 16.5, 16.6, 16.7, 16.14) → 16.15 → 16.16` (16.9 → 16.16 as well — persona text needs the
 bank); `(16.7.1, 16.8, 16.10, 16.11, 16.16) → 16.17` [operator + OWNER: baseline 5 + close].
 The critical path is two length-7 chains joining at 16.15 — code:
@@ -91,8 +96,11 @@ both behind 16.3); `meetings/render_contract.py` — 16.3 single-toucher;
 16.4 → 16.5 → 16.6 → 16.8 → 16.17 (serialized end-to-end); `orchestrator/game.py` — 16.7's
 protocol/accessor region, 16.9's participant-persona region (disjoint from each other and from
 the `PROMPT_VERSION_SETS` registry line, which serializes 16.13 → 16.15 → 16.16); the winning
-prompt-set directory — 16.13 → 16.15 → 16.16; recording-script literals — 16.12's model lines ∥
-16.13's prompt-set lines (disjoint), 16.17 flips `REQUIRED_PROMPT_VERSIONS` last;
+prompt-set directory — 16.13 → 16.15 → 16.16; recording-script literals — `refresh_samples.sh`:
+16.12's model line ∥ 16.13's set line (disjoint lines) with `tests/scripts/test_refresh_samples.py`
+split the same way (16.12's model-pin region ∥ 16.13's set-gate region, both behind 16.2), 16.17
+flips its versions literal last; `record_ml_corpus.sh`: comment-only at 16.12, untouched by 16.13
+(the preflight couples set+versions), the full pin block re-pinned at 16.17;
 `eval/watchability.py` floors — 16.11 → 16.14 → 16.17 (the direct 16.11 → 16.17 edge keeps the
 ordering under NO-GO); `eval/funnel.py` + `scripts/measure_baseline.py` — 16.10 single-toucher;
 `api/` + `frontend/` — 16.7.1 single-toucher; `.env.example` — lever lines (16.4/16.5/16.6/16.8,
@@ -209,11 +217,17 @@ rationale — including "not served on the flat-rate plan" if that is the findin
 phase-doc surgery this file's banner promises: under **GO**, concretize the Wave-2 contracts
 (16.12–16.14 stay as written; fill the exact served id where this document says qwen3.5-27b) and
 confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_5_27b/`; under
-**NO-GO**, mark 16.12–16.14 DROPPED with the reason inline (the 15.18 skeleton-table precedent:
-dropped bullets carry their rationale), rewrite 16.15's `Depends on:` to drop 16.14 and its
-template paths to `agents/strategic/prompts/qwen3_32b/`, and adjust 16.17's BEFORE column to
-baseline 3. Either way: regenerate `agent_prompts/`, keep the validator green, and update this
-file's STATUS banner to record the lock outcome.
+**NO-GO**, REMOVE the 16.12–16.14 contracts and their generated prompts entirely, replacing the
+three with ONE prose drop record carrying the rationale (removal, not labeling:
+`scripts/compute_next_task.py` computes dispatchability from `### Task` headers + merged PRs and
+has no dropped state — a surviving header would surface forever as dispatchable), then rewrite
+BOTH downstream prompt tasks: 16.15 (`Depends on:` drops 16.14; template paths to
+`agents/strategic/prompts/qwen3_32b/`; bump arithmetic per-template — the three v5 templates → v6,
+`vote_ballot` v6 → v7) and 16.16 (paths likewise to `qwen3_32b/`; its SECOND bump per-template —
+the three → v7, `vote_ballot` → v8 — a set-level relabel would mint colliding stamps), and adjust
+16.17's BEFORE column to baseline 3 plus the DAG/critical-path text. Either way: regenerate
+`agent_prompts/`, keep the validator green, and update this file's STATUS banner to record the
+lock outcome.
 
 **Files in scope:**
 - audits/audit-phase-16-model-lock.md (new: the decision record)
@@ -227,7 +241,7 @@ file's STATUS banner to record the lock outcome.
 
 **Definition of done:**
 - [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-5-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
-- [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → 16.12–16.14 DROPPED with reason, 16.15's dependency edge and paths rewritten, 16.17's BEFORE column re-anchored — and the NO-GO per-template version arithmetic is stated in 16.15 (the three v5 templates → v6, `vote_ballot` v6 → v7; a set-level "v6" would mint a second `vote_ballot.qwen3_32b.v6` body — the 15.5 provenance collision).
+- [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → the 16.12–16.14 contracts AND their prompts are REMOVED (one prose drop record remains; task/prompt counts fall by three, validator + `--check` green at the new counts, and `compute_next_task.py --phase 16` no longer lists them), 16.15 AND 16.16 rewritten (edges, paths, per-template arithmetic — 16.15: three v5 → v6, `vote_ballot` v6 → v7; 16.16's second bump: three → v7, `vote_ballot` → v8), 16.17's BEFORE column re-anchored to baseline 3, and the DAG/critical-path text updated.
 - [ ] `uv run python scripts/validate_task_docs.py` and `uv run python scripts/generate_prompts.py --check` pass on the re-authored doc (the full-file validation discipline: a malformed phase doc breaks the repo's validator for every phase).
 - [ ] The STATUS banner names the lock outcome and the date.
 - [ ] `uv run mypy .` passes.
@@ -776,7 +790,7 @@ full preamble text.
 
 ### Task 16.10 — The V&J instruments: pooling folds + judgment metrics + deterministic voice tier
 **Branch:** `phase-16-vj-instruments`
-**Depends on:** 16.3, 16.7
+**Depends on:** 16.3, 16.5, 16.7
 **Section refs:** eval/funnel.py (the three-stage instrument this extends); audits/post-phase-14-Voice-and-Judgment-planning.md §2 (the measurement harness design: zero-flag channel, claim-ECE, voice metrics); scripts/measure_baseline.py (the CLI the folds surface through); audits/audit-phase-15-close.md §11 (the conversion-seam finding these instruments must make measurable)
 **Complexity:** Medium
 
@@ -900,10 +914,11 @@ scope: one gauge re-anchors; the geomean, the other floors, and the integrity fl
 GO-path only. Make the locked model the production default, everywhere the incumbent is pinned:
 the `_THINKING_KWARG_BY_MODEL` entry (the exact served id from the lock audit, with the
 thinking-kwarg boolean the 16.1 probe verified — an unregistered id fails loud on every call, by
-design), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, the
-`record_ml_corpus.sh` model literal WITH a loud comment that the committed corpus remains
-baseline-3/old-model substrate pending Phase-17 re-grounding (the pin is deliberate fail-loud
-posture for a future operator, not an invitation to re-record), the `response_format_mode`
+design), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, a loud
+comment in `record_ml_corpus.sh` that the committed corpus remains baseline-3/old-model substrate
+pending Phase-17 re-grounding — the corpus script's PIN BLOCK (model + set + versions) is NOT
+edited: its preflight couples the three, and the pins coherently describe the frozen artifacts
+they guard; 16.17 re-pins the whole block to the baseline-5 substrate — the `response_format_mode`
 posture if the probe's verdict differs from `json_object`, the client test pins, and the doctrine
 docs (AGENTS.md provider section, README provider table, .env.example). The $0 cost path needs NO
 change (provider-keyed empty pricing dict — every Featherless model resolves to the 0.0 fallback);
@@ -912,8 +927,9 @@ assert it in a test rather than re-implementing anything.
 **Files in scope:**
 - llm/featherless_client.py (the registry entry + DEFAULT_FEATHERLESS_MODEL + response_format posture region)
 - scripts/refresh_samples.sh (the model-literal lines — disjoint from 16.13's prompt-set-literal lines)
-- scripts/record_ml_corpus.sh (the model-literal line + the stale-corpus comment — REQUIRED_PROMPT_VERSIONS stays until 16.17)
+- scripts/record_ml_corpus.sh (the stale-corpus COMMENT only — the model/set/versions pin block is untouched; 16.17 owns it)
 - tests/llm/test_featherless_client.py (default-model + registry pins)
+- tests/scripts/test_refresh_samples.py (model-literal pin region — disjoint from 16.13's set-gate pin region)
 - AGENTS.md (provider doctrine region)
 - README.md (provider table region — the sample-provenance paragraph is 16.14's)
 - .env.example (the featherless model lines — disjoint from the lever lines)
@@ -926,7 +942,7 @@ assert it in a test rather than re-implementing anything.
 **Definition of done:**
 - [ ] The locked served id is registered in `_THINKING_KWARG_BY_MODEL` with the probe-verified boolean, is the `DEFAULT_FEATHERLESS_MODEL`, and a payload-construction test exercises it (the fail-loud path proven by a deliberate unknown-id fixture).
 - [ ] A test asserts the new id resolves to $0 under `_compute_cost_usd` (provider-keyed fallback — asserted, not re-implemented).
-- [ ] Both recording scripts carry the new model literal; `record_ml_corpus.sh` carries the stale-corpus comment; committed sets still byte-verify (`bash scripts/verify_samples.sh` green — the default swap cannot touch recorded bytes).
+- [ ] `refresh_samples.sh` carries the new model literal with its script-test pins updated in this task; `record_ml_corpus.sh` carries the stale-corpus comment with its pin block UNCHANGED (`tests/scripts/test_record_ml_corpus.py` stays green untouched — asserted); committed sets still byte-verify (`bash scripts/verify_samples.sh` green — the default swap cannot touch recorded bytes).
 - [ ] AGENTS.md / README / .env.example name the new canonical model with the lock-audit citation.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -952,9 +968,12 @@ same sections, same defaults — a reader diffing the two sets should find style
 (the 16.15 elicitation batch adds the NEW asks afterward, on this set, as its own attributable
 layer). Register `_bespoke_versions("qwen3_5_27b", version="v1")` in `PROMPT_VERSION_SETS`
 (one new line — the registry line then serializes 16.13 → 16.15 → 16.16), add the set to
-`BESPOKE_SETS` in the bespoke-set test suite, flip the two recording scripts'
-`REQUIRED_PROMPT_SET` literals (disjoint lines from 16.12's model literals), and operator-run the
-A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
+`BESPOKE_SETS` in the bespoke-set test suite, flip `refresh_samples.sh`'s `REQUIRED_PROMPT_SET`
+literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NOT touched — its
+preflight couples set+versions and flipping one alone fails it; 16.17 re-pins that block whole),
+register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
+`--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
+the A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
 model) committing the comparison rows — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
@@ -963,18 +982,20 @@ hurt, before baseline 4 spends a record on it.
 - orchestrator/game.py (the new PROMPT_VERSION_SETS line — disjoint from 16.7/16.9's regions; serializes ahead of 16.15/16.16)
 - tests/agents/test_bespoke_prompt_sets.py (BESPOKE_SETS registration — the parametrized suites pick the set up automatically)
 - scripts/refresh_samples.sh (REQUIRED_PROMPT_SET literal — disjoint from 16.12's model lines)
-- scripts/record_ml_corpus.sh (REQUIRED_PROMPT_SET literal only — REQUIRED_PROMPT_VERSIONS stays until 16.17)
+- tests/scripts/test_refresh_samples.py (set-gate pin region — disjoint from 16.12's model-literal pin region)
+- experiments/lab/featherless_sweep.py (_SET_OWNER map entry + any slate wiring the A/B needs)
 - experiments/lab/results-featherless-sweep-qwen3-5-27b-ab.jsonl (new: the A/B rows)
 - experiments/lab/report-featherless-sweep-qwen3-5-27b.md (A/B section appended)
 
 **Files NOT in scope:**
 - agents/strategic/prompts/qwen3_32b/ (the source set is frozen — provenance-versioned bytes)
+- scripts/record_ml_corpus.sh (its preflight compares `PROMPT_VERSION_SETS[$REQUIRED_PROMPT_SET]` to `REQUIRED_PROMPT_VERSIONS` — a set flip without a versions flip fails it, and its pins coherently describe the FROZEN corpus; 16.17 re-pins the whole block)
 - meetings/ + agents/memory/ (templates only)
 - replays/ (the record is 16.14's)
 
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
-- [ ] The registry entry, BESPOKE_SETS registration, and script literals land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven).
+- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
 - [ ] The operator A/B rows are committed: new set vs the qwen3_32b-ported-verbatim control on the same model, same contexts — parse rates, grade booleans, latency — and the report states the verdict (restyle adopted or the control kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.
@@ -997,7 +1018,7 @@ anchor the loader/tests reference.
 
 ### Task 16.14 — Baseline 4: the model-only atomic re-record + the champion re-audit (operator-run, $0)
 **Branch:** `phase-16-baseline-4`
-**Depends on:** 16.11, 16.12, 16.13
+**Depends on:** 16.3, 16.11, 16.12, 16.13
 **Section refs:** tasks/phase-15.md 15.7 (the atomic re-record runbook this clones); audits/audit-phase-16-model-lock.md (the substrate this records); eval/watchability.py (16.11's re-anchored referee + the per-baseline floors block); training/reports/results-champion-close.jsonl (the stamp-proof row convention the re-audit follows)
 **Complexity:** Integration
 
@@ -1231,7 +1252,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/constants.py (citation-gate resolver graduation region)
 - agents/memory/store.py (id-rendering resolver graduation region)
 - orchestrator/replay.py (registry graduation region — slate entries to retired)
-- scripts/refresh_samples.sh + scripts/record_ml_corpus.sh (REQUIRED_PROMPT_VERSIONS literals + the stale-corpus comment update)
+- scripts/refresh_samples.sh (REQUIRED_PROMPT_VERSIONS literal to the 16.15/16.16 versions) + scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + their tests/scripts pin sweeps
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)

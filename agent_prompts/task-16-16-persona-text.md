@@ -65,8 +65,8 @@ argumentative dispositions, which is what breaks consensus cascades.
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import eval.watchability"`
-- `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import meetings.constants"`
 - `uv run python -c "import agents.memory.episodic"`
 - `uv run python -c "import agents.memory.store"`

@@ -12,7 +12,7 @@ Implement Task 16.10 — The V&J instruments: pooling folds + judgment metrics +
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-vj-instruments`
-**Depends on:** 16.3, 16.7
+**Depends on:** 16.3, 16.5, 16.7
 **Section refs:** eval/funnel.py (the three-stage instrument this extends); audits/post-phase-14-Voice-and-Judgment-planning.md §2 (the measurement harness design: zero-flag channel, claim-ECE, voice metrics); scripts/measure_baseline.py (the CLI the folds surface through); audits/audit-phase-15-close.md §11 (the conversion-seam finding these instruments must make measurable)
 **Complexity:** Medium
 
@@ -76,6 +76,8 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import agents.memory.episodic"`
+- `uv run python -c "import agents.memory.store"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

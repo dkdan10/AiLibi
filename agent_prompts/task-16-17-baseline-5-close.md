@@ -46,7 +46,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/constants.py (citation-gate resolver graduation region)
 - agents/memory/store.py (id-rendering resolver graduation region)
 - orchestrator/replay.py (registry graduation region — slate entries to retired)
-- scripts/refresh_samples.sh + scripts/record_ml_corpus.sh (REQUIRED_PROMPT_VERSIONS literals + the stale-corpus comment update)
+- scripts/refresh_samples.sh (REQUIRED_PROMPT_VERSIONS literal to the 16.15/16.16 versions) + scripts/record_ml_corpus.sh (the FULL pin block — model + set + versions — re-pinned coherently to the baseline-5 substrate, with the stale-corpus comment updated; its preflight couples the three, so this is the one task that moves them together) + their tests/scripts pin sweeps
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)
@@ -99,8 +99,8 @@ whatever this close measures.
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import eval.watchability"`
-- `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import meetings.constants"`
 - `uv run python -c "import agents.memory.episodic"`
 - `uv run python -c "import agents.memory.store"`

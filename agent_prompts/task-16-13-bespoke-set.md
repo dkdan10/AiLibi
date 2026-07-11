@@ -24,9 +24,12 @@ same sections, same defaults — a reader diffing the two sets should find style
 (the 16.15 elicitation batch adds the NEW asks afterward, on this set, as its own attributable
 layer). Register `_bespoke_versions("qwen3_5_27b", version="v1")` in `PROMPT_VERSION_SETS`
 (one new line — the registry line then serializes 16.13 → 16.15 → 16.16), add the set to
-`BESPOKE_SETS` in the bespoke-set test suite, flip the two recording scripts'
-`REQUIRED_PROMPT_SET` literals (disjoint lines from 16.12's model literals), and operator-run the
-A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
+`BESPOKE_SETS` in the bespoke-set test suite, flip `refresh_samples.sh`'s `REQUIRED_PROMPT_SET`
+literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NOT touched — its
+preflight couples set+versions and flipping one alone fails it; 16.17 re-pins that block whole),
+register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
+`--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
+the A/B re-sweep (the sweep's --prompt-set axis: the new set vs the ported baseline on the SAME
 model) committing the comparison rows — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
@@ -35,18 +38,20 @@ hurt, before baseline 4 spends a record on it.
 - orchestrator/game.py (the new PROMPT_VERSION_SETS line — disjoint from 16.7/16.9's regions; serializes ahead of 16.15/16.16)
 - tests/agents/test_bespoke_prompt_sets.py (BESPOKE_SETS registration — the parametrized suites pick the set up automatically)
 - scripts/refresh_samples.sh (REQUIRED_PROMPT_SET literal — disjoint from 16.12's model lines)
-- scripts/record_ml_corpus.sh (REQUIRED_PROMPT_SET literal only — REQUIRED_PROMPT_VERSIONS stays until 16.17)
+- tests/scripts/test_refresh_samples.py (set-gate pin region — disjoint from 16.12's model-literal pin region)
+- experiments/lab/featherless_sweep.py (_SET_OWNER map entry + any slate wiring the A/B needs)
 - experiments/lab/results-featherless-sweep-qwen3-5-27b-ab.jsonl (new: the A/B rows)
 - experiments/lab/report-featherless-sweep-qwen3-5-27b.md (A/B section appended)
 
 **Files NOT in scope:**
 - agents/strategic/prompts/qwen3_32b/ (the source set is frozen — provenance-versioned bytes)
+- scripts/record_ml_corpus.sh (its preflight compares `PROMPT_VERSION_SETS[$REQUIRED_PROMPT_SET]` to `REQUIRED_PROMPT_VERSIONS` — a set flip without a versions flip fails it, and its pins coherently describe the FROZEN corpus; 16.17 re-pins the whole block)
 - meetings/ + agents/memory/ (templates only)
 - replays/ (the record is 16.14's)
 
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
-- [ ] The registry entry, BESPOKE_SETS registration, and script literals land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven).
+- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
 - [ ] The operator A/B rows are committed: new set vs the qwen3_32b-ported-verbatim control on the same model, same contexts — parse rates, grade booleans, latency — and the report states the verdict (restyle adopted or the control kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.

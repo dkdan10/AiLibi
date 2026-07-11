@@ -23,11 +23,17 @@ rationale — including "not served on the flat-rate plan" if that is the findin
 phase-doc surgery this file's banner promises: under **GO**, concretize the Wave-2 contracts
 (16.12–16.14 stay as written; fill the exact served id where this document says qwen3.5-27b) and
 confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_5_27b/`; under
-**NO-GO**, mark 16.12–16.14 DROPPED with the reason inline (the 15.18 skeleton-table precedent:
-dropped bullets carry their rationale), rewrite 16.15's `Depends on:` to drop 16.14 and its
-template paths to `agents/strategic/prompts/qwen3_32b/`, and adjust 16.17's BEFORE column to
-baseline 3. Either way: regenerate `agent_prompts/`, keep the validator green, and update this
-file's STATUS banner to record the lock outcome.
+**NO-GO**, REMOVE the 16.12–16.14 contracts and their generated prompts entirely, replacing the
+three with ONE prose drop record carrying the rationale (removal, not labeling:
+`scripts/compute_next_task.py` computes dispatchability from `### Task` headers + merged PRs and
+has no dropped state — a surviving header would surface forever as dispatchable), then rewrite
+BOTH downstream prompt tasks: 16.15 (`Depends on:` drops 16.14; template paths to
+`agents/strategic/prompts/qwen3_32b/`; bump arithmetic per-template — the three v5 templates → v6,
+`vote_ballot` v6 → v7) and 16.16 (paths likewise to `qwen3_32b/`; its SECOND bump per-template —
+the three → v7, `vote_ballot` → v8 — a set-level relabel would mint colliding stamps), and adjust
+16.17's BEFORE column to baseline 3 plus the DAG/critical-path text. Either way: regenerate
+`agent_prompts/`, keep the validator green, and update this file's STATUS banner to record the
+lock outcome.
 
 **Files in scope:**
 - audits/audit-phase-16-model-lock.md (new: the decision record)
@@ -41,7 +47,7 @@ file's STATUS banner to record the lock outcome.
 
 **Definition of done:**
 - [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-5-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
-- [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → 16.12–16.14 DROPPED with reason, 16.15's dependency edge and paths rewritten, 16.17's BEFORE column re-anchored — and the NO-GO per-template version arithmetic is stated in 16.15 (the three v5 templates → v6, `vote_ballot` v6 → v7; a set-level "v6" would mint a second `vote_ballot.qwen3_32b.v6` body — the 15.5 provenance collision).
+- [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → the 16.12–16.14 contracts AND their prompts are REMOVED (one prose drop record remains; task/prompt counts fall by three, validator + `--check` green at the new counts, and `compute_next_task.py --phase 16` no longer lists them), 16.15 AND 16.16 rewritten (edges, paths, per-template arithmetic — 16.15: three v5 → v6, `vote_ballot` v6 → v7; 16.16's second bump: three → v7, `vote_ballot` → v8), 16.17's BEFORE column re-anchored to baseline 3, and the DAG/critical-path text updated.
 - [ ] `uv run python scripts/validate_task_docs.py` and `uv run python scripts/generate_prompts.py --check` pass on the re-authored doc (the full-file validation discipline: a malformed phase doc breaks the repo's validator for every phase).
 - [ ] The STATUS banner names the lock outcome and the date.
 - [ ] `uv run mypy .` passes.

@@ -19,10 +19,11 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 GO-path only. Make the locked model the production default, everywhere the incumbent is pinned:
 the `_THINKING_KWARG_BY_MODEL` entry (the exact served id from the lock audit, with the
 thinking-kwarg boolean the 16.1 probe verified — an unregistered id fails loud on every call, by
-design), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, the
-`record_ml_corpus.sh` model literal WITH a loud comment that the committed corpus remains
-baseline-3/old-model substrate pending Phase-17 re-grounding (the pin is deliberate fail-loud
-posture for a future operator, not an invitation to re-record), the `response_format_mode`
+design), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, a loud
+comment in `record_ml_corpus.sh` that the committed corpus remains baseline-3/old-model substrate
+pending Phase-17 re-grounding — the corpus script's PIN BLOCK (model + set + versions) is NOT
+edited: its preflight couples the three, and the pins coherently describe the frozen artifacts
+they guard; 16.17 re-pins the whole block to the baseline-5 substrate — the `response_format_mode`
 posture if the probe's verdict differs from `json_object`, the client test pins, and the doctrine
 docs (AGENTS.md provider section, README provider table, .env.example). The $0 cost path needs NO
 change (provider-keyed empty pricing dict — every Featherless model resolves to the 0.0 fallback);
@@ -31,8 +32,9 @@ assert it in a test rather than re-implementing anything.
 **Files in scope:**
 - llm/featherless_client.py (the registry entry + DEFAULT_FEATHERLESS_MODEL + response_format posture region)
 - scripts/refresh_samples.sh (the model-literal lines — disjoint from 16.13's prompt-set-literal lines)
-- scripts/record_ml_corpus.sh (the model-literal line + the stale-corpus comment — REQUIRED_PROMPT_VERSIONS stays until 16.17)
+- scripts/record_ml_corpus.sh (the stale-corpus COMMENT only — the model/set/versions pin block is untouched; 16.17 owns it)
 - tests/llm/test_featherless_client.py (default-model + registry pins)
+- tests/scripts/test_refresh_samples.py (model-literal pin region — disjoint from 16.13's set-gate pin region)
 - AGENTS.md (provider doctrine region)
 - README.md (provider table region — the sample-provenance paragraph is 16.14's)
 - .env.example (the featherless model lines — disjoint from the lever lines)
@@ -45,7 +47,7 @@ assert it in a test rather than re-implementing anything.
 **Definition of done:**
 - [ ] The locked served id is registered in `_THINKING_KWARG_BY_MODEL` with the probe-verified boolean, is the `DEFAULT_FEATHERLESS_MODEL`, and a payload-construction test exercises it (the fail-loud path proven by a deliberate unknown-id fixture).
 - [ ] A test asserts the new id resolves to $0 under `_compute_cost_usd` (provider-keyed fallback — asserted, not re-implemented).
-- [ ] Both recording scripts carry the new model literal; `record_ml_corpus.sh` carries the stale-corpus comment; committed sets still byte-verify (`bash scripts/verify_samples.sh` green — the default swap cannot touch recorded bytes).
+- [ ] `refresh_samples.sh` carries the new model literal with its script-test pins updated in this task; `record_ml_corpus.sh` carries the stale-corpus comment with its pin block UNCHANGED (`tests/scripts/test_record_ml_corpus.py` stays green untouched — asserted); committed sets still byte-verify (`bash scripts/verify_samples.sh` green — the default swap cannot touch recorded bytes).
 - [ ] AGENTS.md / README / .env.example name the new canonical model with the lock-audit citation.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
