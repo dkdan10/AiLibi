@@ -1207,8 +1207,9 @@ def _preflight_models(
     (:func:`resolve_featherless_base_url`, honoring ``AILIBI_FEATHERLESS_BASE_URL``)
     so preflight and the run hit the same endpoint. Paces each model touch through
     the shared :class:`_SwitchPacer` so the probe does not trip the 4-switches/min
-    plan limit. Only a 404/400 (an unrecognized id) is a real skip; a transient
-    5xx/429/blip is retried.
+    plan limit. Only a NON-BUSY 404/400 (an unrecognized id) is a real skip; a
+    transient 5xx/429/blip — including a busy-typed ``server_error``-body 4xx,
+    the shape :func:`_probe_retryable` classifies — is retried.
     """
 
     import httpx
@@ -1238,7 +1239,18 @@ def _preflight_models(
                     print(f"  PREFLIGHT {spec.model_id}: served", flush=True)
                     break
                 last = f"HTTP {resp.status_code} {resp.text[:120]}"
-                if resp.status_code in (400, 404):
+                # A busy-typed (server_error-body) 4xx is a TRANSIENT load shape,
+                # not an unrecognized id — skipping on it would drop a served
+                # model from the matrix (e.g. the probe's Pass-4 re-preflight of
+                # a spec Pass 1 just confirmed) and bias the evidence. Only a
+                # non-busy 400/404 is a real skip.
+                try:
+                    pf_body: Any = resp.json()
+                except Exception:  # noqa: BLE001 — non-JSON body: status decides
+                    pf_body = {"_raw": resp.text}
+                if resp.status_code in (400, 404) and not _probe_retryable(
+                    resp.status_code, pf_body
+                ):
                     break  # a genuinely unrecognized id — a real skip, no retry
             except Exception as exc:  # noqa: BLE001
                 last = f"{type(exc).__name__}: {exc}"
@@ -3211,8 +3223,10 @@ def write_probe_report() -> int:
                         if rf_mode == "json_object" or control_ok:
                             verdict = (
                                 f"rejected (deterministic HTTP {hard_s} across "
-                                "attempts + busy-body retries; json_object "
-                                f"control succeeded same-pass{transient_note})"
+                                "attempts + busy-body retries; a busy-TYPED 4xx "
+                                "counts as rejection here because the same-pass "
+                                "json_object control succeeded — a genuinely "
+                                f"busy deployment fails both shapes{transient_note})"
                                 if rf_mode != "json_object"
                                 else f"rejected (deterministic HTTP {hard_s} "
                                 f"across attempts{transient_note})"

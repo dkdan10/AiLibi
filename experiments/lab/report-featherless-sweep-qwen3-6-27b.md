@@ -23,12 +23,12 @@ A NO-GO is a FIRST-CLASS recorded outcome for the 16.2 lock, not a task failure:
 |---|---|---|---|---|---|
 | qwen3-32b | json_object | MeetingTurn | 2/2 | yes | supported |
 | qwen3-32b | json_object | VoteBallot | 2/2 | yes | supported |
-| qwen3-32b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; json_object control succeeded same-pass; 1 transient failure(s) recorded beside it) |
-| qwen3-32b | json_schema | VoteBallot | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; json_object control succeeded same-pass) |
+| qwen3-32b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; a busy-TYPED 4xx counts as rejection here because the same-pass json_object control succeeded — a genuinely busy deployment fails both shapes; 1 transient failure(s) recorded beside it) |
+| qwen3-32b | json_schema | VoteBallot | 0/2 | — | rejected (deterministic HTTP 422 across attempts + busy-body retries; a busy-TYPED 4xx counts as rejection here because the same-pass json_object control succeeded — a genuinely busy deployment fails both shapes) |
 | qwen3-6-27b | json_object | MeetingTurn | 2/2 | yes | supported |
 | qwen3-6-27b | json_object | VoteBallot | 2/2 | yes | supported |
-| qwen3-6-27b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 400 across attempts + busy-body retries; json_object control succeeded same-pass) |
-| qwen3-6-27b | json_schema | VoteBallot | 0/2 | — | rejected (deterministic HTTP 400 across attempts + busy-body retries; json_object control succeeded same-pass) |
+| qwen3-6-27b | json_schema | MeetingTurn | 0/2 | — | rejected (deterministic HTTP 400 across attempts + busy-body retries; a busy-TYPED 4xx counts as rejection here because the same-pass json_object control succeeded — a genuinely busy deployment fails both shapes) |
+| qwen3-6-27b | json_schema | VoteBallot | 0/2 | — | rejected (deterministic HTTP 400 across attempts + busy-body retries; a busy-TYPED 4xx counts as rejection here because the same-pass json_object control succeeded — a genuinely busy deployment fails both shapes) |
 
 Production posture (`llm/featherless_client.py` docstring, recorded 2026-06-27): the incumbent rejects strict `json_schema` deterministically (a 400 at the time) and runs on `json_object`. Re-verified here same-day — the incumbent's `json_schema` verdict above is **rejected for every schema probed** (each verdict cell is per-schema and quotes the HTTP status actually observed, which may drift from the documented code); read each candidate's row beside it.
 
