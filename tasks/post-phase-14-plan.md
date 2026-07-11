@@ -52,14 +52,17 @@ baseline 3                      scripted movers · FIXED meeting substrate
         │
         │   Phase 15, Wave 2 — champion productization per the pause decision
         ▼
-baseline 4 (only if the         LEARNED movers · same meeting layer
- default flips)                 → the ML effect measured cleanly
+baseline 4 (REPURPOSED,         scripted movers · same mechanics · NEW MODEL
+ 2026-07-11: Phase 15 chose      → the model effect measured cleanly (Phase 16 Wave 2,
+ branch A — no default flip;       probe-locked, GO-conditional; the learned champion
+ baseline 4 is now the             stays opt-in and is re-audited against it)
+ qwen3.5-27b swap, if GO)
         │
-        │   Phase 16 — Voice & Judgment: personas, citation-gated conviction, and the
-        │   information-POOLING levers (roll-call / ballot-whereabouts elicitation) — richer voices
-        │   arguing over evidence the substrate can now hold
+        │   Phase 16 — Voice & Judgment (tasks/phase-16.md): personas, citation-gated conviction,
+        │   and the information-POOLING levers (roll-call / whereabouts / grounded vouching /
+        │   absence prior) — richer voices arguing over evidence the substrate can now hold
         ▼
-baseline 5                      learned movers · upgraded meeting layer
+baseline 5                      scripted movers (champion opt-in) · upgraded meeting layer
         │                       → the V&J effect measured cleanly
         │
         │   Phase 17 — co-adaptation: re-ground the meeting surrogate on baseline 5, re-run the
@@ -86,13 +89,15 @@ baseline 6                      co-adapted movers · upgraded meetings
   there. The training-signal doctrine is locked: optimizers maximize measurable side-specific competence
   with a KL anchor to the scripted FSM; the validity gate and the watchability referee are selection
   gates, never rewards.
-- **Phase 16 — Voice & Judgment (to be authored at/after the Phase-15 pause).** The deferred
+- **Phase 16 — Voice & Judgment (contracted, `tasks/phase-16.md`, opened 2026-07-11).** The deferred
   `audits/post-phase-14-Voice-and-Judgment-planning.md` program, upgraded by what Wave 0 lands: personas
   (deterministic per-seed registry + persona-conditioned prompts), the citation-gated vote surface
   (zero-flag convictions must cite a source — with vent observations now citable, the gate has sources
   to demand), suspicion provenance, and the pooling levers deferred out of Wave 0 (ballot-whereabouts /
   roll-call elicitation — the mechanism that converts the measured median-3 oracle candidate sets into
-  playable deduction). Closes on baseline 5 with the funnel metrics as the before/after instrument.
+  playable deduction, now including typed-grounded vouching and a capped absence prior). Adds the
+  probe-first qwen3.5-27b model decision (GO ⇒ baseline 4 = the model swap, its own layer). Closes on
+  baseline 5 with the funnel + the new V&J instruments as the before/after.
 - **Phase 17 — co-adaptation (owner goal 3).** Re-ground the ballot surrogate on baseline 5, re-run the
   Phase-15 bake-off recipe for both sides against the upgraded meeting model, re-select champions
   through the same gates. Structurally cheap by design: the surrogate staleness/re-grounding machinery
