@@ -158,6 +158,8 @@ def _crewmate_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
@@ -180,6 +182,8 @@ def _impostor_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
@@ -205,6 +209,8 @@ def _statement_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
     is_body_report: bool = False,
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
@@ -230,6 +236,8 @@ def _vote_prompt(
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     reporter_id: PlayerId | None = None,
+    persona: str = "",  # Task 16.3: widened contract kwarg (inert)
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is

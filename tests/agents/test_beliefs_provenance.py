@@ -54,6 +54,7 @@ from agents.memory.beliefs import (
     apply_meeting_evidence_rules,
     apply_observation_rules,
 )
+from meetings.manager import SuspicionEntry
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from observation.packet import (
     BodyView,
@@ -609,3 +610,156 @@ class TestRollSemantics:
         prov = folded.view("v").provenance
         assert prov.carried_hard == pytest.approx(0.375)
         assert prov.kill_or_vent_pin == 0.0
+
+
+# --- (6) the manager pre-vote re-render leg (Stage 3) -----------------------
+
+
+def _entry_from_belief(player_id: str, state: BeliefState) -> SuspicionEntry:
+    """Build a graph row from a belief snapshot exactly as the game builder does.
+
+    Mirrors :meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`:
+    the scalar plus the eight provenance fields, read straight off
+    ``belief.provenance``. The manager reseeds this decomposition through the
+    pre-vote fold, so the row round-trips the split into meeting 2+.
+    """
+
+    belief = state.view(player_id)
+    prov = belief.provenance
+    return SuspicionEntry(
+        player_id=player_id,
+        suspicion=belief.suspicion,
+        trust=belief.trust,
+        flag_lift=prov.flag_lift,
+        body_proximity=prov.body_proximity,
+        kill_or_vent_pin=prov.kill_or_vent_pin,
+        testimony_spread=prov.testimony_spread,
+        accusation_carry=prov.accusation_carry,
+        carried_hard=prov.carried_hard,
+        carried_soft=prov.carried_soft,
+        unattributed=prov.unattributed,
+    )
+
+
+def _entry_sum_error(entry: SuspicionEntry) -> float:
+    """Absolute error in ``0.5 + sum(the eight fields) == suspicion`` for a row."""
+
+    total = (
+        entry.flag_lift
+        + entry.body_proximity
+        + entry.kill_or_vent_pin
+        + entry.testimony_spread
+        + entry.accusation_carry
+        + entry.carried_hard
+        + entry.carried_soft
+        + entry.unattributed
+    )
+    return abs((_DEFAULT_SUSPICION + total) - entry.suspicion)
+
+
+class TestManagerPreVoteReRenderCarry:
+    """The Stage-3 manager leg of DoD bullet 2: the split survives the pre-vote fold.
+
+    A grounded hard pin from meeting 1 (witnessed vent -> composed absorb/roll)
+    is projected into a meeting-2 :class:`SuspicionEntry` graph EXACTLY as
+    :meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting` builds
+    it, then run through the production
+    :func:`meetings.manager._suspicion_graph_with_contradictions` (a contradiction
+    flag + a pre-vote testimony fold). The emitted rows must keep the carried-HARD
+    component hard (``carried_soft == 0`` for the pinned subject), accumulate the
+    fresh ``flag_lift`` alongside it, and satisfy the sum invariant
+    ``0.5 + sum(the eight fields) == suspicion`` on every row -- and when the Task
+    13.14 joint cap binds, the scaled decomposition still sums to the CAPPED
+    scalar while the carried seed rides through untouched (the cap bounds the
+    transient lift, never the carried prior).
+    """
+
+    def _meeting_one_vent_absorbed(self) -> BeliefState:
+        vented = apply_observation_rules(
+            BeliefState(),
+            observation=_packet(
+                tick=10,
+                visible_players=(PlayerView(id="killer", room="R", action="vent"),),
+            ),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+        )
+        return apply_meeting_evidence_rules(vented, own_id="observer", accused=[])
+
+    def test_hard_pin_survives_the_pre_vote_fold_with_a_fresh_flag(self) -> None:
+        from meetings.manager import (  # noqa: PLC2701
+            MeetingBeliefEvidence,
+            _suspicion_graph_with_contradictions,
+        )
+        from meetings.schemas import MeetingTranscript
+
+        after_one = self._meeting_one_vent_absorbed()
+        # Meeting-2 opening graph, built as the production builder does.
+        seeded_row = _entry_from_belief("killer", after_one)
+        assert seeded_row.carried_hard == pytest.approx(0.375)
+        assert seeded_row.carried_soft == 0.0
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="voter",
+            suspicion_graph=(seeded_row,),
+            contradictions=(_strong_flag(subject="killer"),),
+            evidence=MeetingBeliefEvidence(
+                accused=(), corroborated=(), contradicted=("killer",)
+            ),
+            transcript=MeetingTranscript(turns=()),
+        )
+        row = next(e for e in graph if e.player_id == "killer")
+        # The carried-HARD pin persists into meeting 2 and stays hard; the fresh
+        # contradiction lands in flag_lift; carried_soft never materialises.
+        assert row.carried_hard == pytest.approx(0.375)
+        assert row.carried_soft == 0.0
+        assert row.flag_lift > 0.0
+        assert _entry_sum_error(row) <= SUSPICION_PROVENANCE_ATOL
+
+    def test_joint_cap_binds_scaled_split_sums_and_carry_untouched(self) -> None:
+        from agents.memory.beliefs import MEETING_CONTRADICTION_LIFT_CAP
+        from meetings.manager import (  # noqa: PLC2701
+            MeetingBeliefEvidence,
+            _suspicion_graph_with_contradictions,
+        )
+        from meetings.schemas import MeetingTranscript
+
+        # A carried-HARD prior (0.1 -> suspicion 0.6) then a STRONG flag stacked
+        # with a two-voice pre-vote spread: the joint cap bounds the COMBINED
+        # transient lift to one strong flag's worth above the prior (0.6 -> 0.9),
+        # below the uncapped clamp (1.0).
+        seed = BeliefState()
+        seed.seed_player(
+            "susp",
+            suspicion=0.6,
+            trust=0.5,
+            provenance=SuspicionProvenance(carried_hard=0.1),
+        )
+        seeded_row = _entry_from_belief("susp", seed)
+        assert seeded_row.carried_hard == pytest.approx(0.1)
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="voter",
+            suspicion_graph=(seeded_row,),
+            contradictions=(_strong_flag(subject="susp"),),
+            evidence=MeetingBeliefEvidence(
+                accused=("susp",),
+                corroborated=(),
+                contradicted=("susp",),
+                pre_vote_folded=("susp",),
+                pre_vote_voice_counts=(("susp", 2),),
+            ),
+            transcript=MeetingTranscript(turns=()),
+        )
+        row = next(e for e in graph if e.player_id == "susp")
+        # The cap bound at prior + one strong flag's worth, strictly below 1.0.
+        assert row.suspicion == pytest.approx(0.6 + MEETING_CONTRADICTION_LIFT_CAP)
+        assert row.suspicion < 1.0
+        # The transient lift was scaled down (flag_lift + testimony_spread present
+        # and reduced), but the carried-HARD seed is untouched by the scaling --
+        # the cap bounds the lift, never the prior.
+        assert row.carried_hard == pytest.approx(0.1)
+        assert row.flag_lift > 0.0
+        assert row.testimony_spread > 0.0
+        # And the scaled decomposition still sums to the CAPPED scalar.
+        assert _entry_sum_error(row) <= SUSPICION_PROVENANCE_ATOL

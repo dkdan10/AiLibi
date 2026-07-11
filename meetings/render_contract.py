@@ -39,14 +39,39 @@ from meetings.schemas import (
 class SuspicionEntry:
     """One row of the agent's suspicion graph (DESIGN.md §5.5).
 
-    Surfaced verbatim into the vote-ballot prompt. The fields mirror
+    Surfaced verbatim into the vote-ballot prompt. The ``player_id`` /
+    ``suspicion`` / ``trust`` fields mirror
     :class:`agents.memory.beliefs.PlayerBelief` so a belief snapshot maps
     into this DTO without re-shaping it.
+
+    Provenance decomposition (Task 16.3). The eight trailing float fields
+    mirror :class:`agents.memory.beliefs.SuspicionProvenance` FIELD-BY-NAME --
+    NOT by import: this module is the leaf that breaks the ``agents ↛
+    meetings.manager`` cycle (see the module docstring), so it must never
+    import ``agents.*``. They decompose ``suspicion`` into its source channels
+    (``_DEFAULT_SUSPICION + sum(the eight) == suspicion`` within the belief
+    module's :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`),
+    populated by :meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`
+    from ``belief.provenance`` and re-seeded through the manager's pre-vote fold
+    (:func:`meetings.manager._suspicion_graph_with_contradictions`). All default
+    to ``0.0`` and are additive/trailing, so every existing construction stays
+    valid and a row built without them decomposes as "wholly unattributed"
+    (0.0 in every channel). No template renders them yet -- Task 16.15 is the
+    provenance surface; until then they ride inert (the widen-the-contract-inert
+    pattern, the 15.5 reporter-lever precedent).
     """
 
     player_id: PlayerId
     suspicion: float
     trust: float
+    flag_lift: float = 0.0
+    body_proximity: float = 0.0
+    kill_or_vent_pin: float = 0.0
+    testimony_spread: float = 0.0
+    accusation_carry: float = 0.0
+    carried_hard: float = 0.0
+    carried_soft: float = 0.0
+    unattributed: float = 0.0
 
 
 @runtime_checkable
@@ -76,6 +101,14 @@ class ReportPromptRenderer(Protocol):
     alone left "who is dead" implicit and 17/18 hallucinated accusation
     targets named a dead real player. ``()`` (ad-hoc renders) omits the
     line.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the two inert
+    trailing widenings the foundation lands once so the later render levers
+    edit ONLY templates (the widen-the-contract-inert pattern; the 15.5
+    ``reporter_id`` lever is the precedent). The default ``""`` / ``()`` keep
+    every current render byte-identical (jinja ignores a kwarg no template
+    references), which the prompt-byte golden pins.
     """
 
     def __call__(
@@ -89,6 +122,8 @@ class ReportPromptRenderer(Protocol):
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         living_ids: tuple[PlayerId, ...] = (),
         dead_ids: tuple[PlayerId, ...] = (),
+        persona: str = "",
+        suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     ) -> str: ...
 
 
@@ -132,6 +167,13 @@ class StatementPromptRenderer(Protocol):
     must fire only when a body is on the table, never on a body-less emergency
     reply. The default ``False`` keeps the block off unless the caller marks the
     meeting a body report.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the two inert
+    trailing widenings the foundation lands once (the widen-the-contract-inert
+    pattern; the 15.5 ``reporter_id`` lever precedent). The default ``""`` /
+    ``()`` keep every current render byte-identical, pinned by the prompt-byte
+    golden.
     """
 
     def __call__(
@@ -148,6 +190,8 @@ class StatementPromptRenderer(Protocol):
         dead_ids: tuple[PlayerId, ...] = (),
         is_impostor: bool = False,
         is_body_report: bool = False,
+        persona: str = "",
+        suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     ) -> str: ...
 
 
@@ -178,6 +222,16 @@ class VotePromptRenderer(Protocol):
     :func:`agents.memory.beliefs.apply_meeting_evidence_rules`; both read the one
     :func:`agents.memory.beliefs.reporter_exculpation_enabled` resolver so the
     damped suspicion graph and the annotation cannot disagree.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the two inert
+    trailing widenings the foundation lands once (the widen-the-contract-inert
+    pattern; the 15.5 ``reporter_id`` lever precedent). On the ballot the manager
+    threads the SAME post-fold rows into ``suspicion_provenance`` as into
+    ``suspicion_graph`` -- the render-after-fold consistency pin -- so 16.15's
+    surface decomposes exactly the scalars this prompt already shows. The default
+    ``""`` / ``()`` keep every current render byte-identical, pinned by the
+    prompt-byte golden.
     """
 
     def __call__(
@@ -192,6 +246,8 @@ class VotePromptRenderer(Protocol):
         skip_confidence_threshold: float,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         reporter_id: PlayerId | None = None,
+        persona: str = "",
+        suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     ) -> str: ...
 
 

@@ -2352,16 +2352,35 @@ class TacticalAgent:
         DESIGN.md §5.5 feeds the suspicion graph straight into the
         vote-ballot prompt. The entries are sorted by ``player_id``
         for deterministic prompt-input ordering.
+
+        Task 16.3: each row also carries the belief's
+        :class:`~agents.memory.beliefs.SuspicionProvenance` decomposition,
+        mapped field-by-name onto the widened :class:`SuspicionEntry` (the
+        render-contract leaf mirrors the provenance shape without importing
+        ``agents.*``). It rides the graph inertly today -- no template renders
+        it until Task 16.15 -- but populating it HERE, at the one production
+        builder, keeps ``0.5 + sum(the eight fields) == suspicion`` on every live
+        row (the belief store's own invariant), so 16.15's surface has real
+        hard/soft data rather than defaults.
         """
 
         entries: list[SuspicionEntry] = []
         for player_id in sorted(self._memory.beliefs.known_players()):
             belief = self._memory.beliefs.view(player_id)
+            provenance = belief.provenance
             entries.append(
                 SuspicionEntry(
                     player_id=player_id,
                     suspicion=belief.suspicion,
                     trust=belief.trust,
+                    flag_lift=provenance.flag_lift,
+                    body_proximity=provenance.body_proximity,
+                    kill_or_vent_pin=provenance.kill_or_vent_pin,
+                    testimony_spread=provenance.testimony_spread,
+                    accusation_carry=provenance.accusation_carry,
+                    carried_hard=provenance.carried_hard,
+                    carried_soft=provenance.carried_soft,
+                    unattributed=provenance.unattributed,
                 )
             )
         return tuple(entries)

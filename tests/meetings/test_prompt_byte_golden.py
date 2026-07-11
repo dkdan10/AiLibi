@@ -84,6 +84,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from agents.memory.beliefs import SUSPICION_PROVENANCE_ATOL
 from agents.memory.store import DEFAULT_TOKEN_BUDGET
 from agents.perception import ingest_packet
 from agents.strategic.prompts.loader import (
@@ -107,7 +108,9 @@ from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     MeetingConfig,
     MeetingManager,
+    MeetingParticipant,
     MeetingTrigger,
+    SuspicionEntry,
 )
 from meetings.schemas import MeetingResult
 from observation.service import ObservationService
@@ -181,6 +184,11 @@ class _Render:
     kind: str
     agent_id: PlayerId | None
     prompt: str
+    # Task 16.3 (c): the ``suspicion_provenance`` rows the manager threaded into
+    # this render. On the ballot seam these are the post-fold rows (the same
+    # object as ``suspicion_graph``), so the live-population provenance assertions
+    # can read the folded ballot-time decomposition straight off the render sink.
+    suspicion_provenance: tuple[SuspicionEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -217,6 +225,10 @@ class ReconstructedMeeting:
     renders: tuple[_Render, ...]
     complete_calls: tuple[_CompleteCall, ...]
     hit_prompts: frozenset[str]
+    # Task 16.3 (c): the participants built VERBATIM by ``_build_participants``.
+    # Each carries the live suspicion_graph (with the game builder's provenance
+    # fields) the live-population assertions decompose.
+    participants: tuple[MeetingParticipant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -310,7 +322,17 @@ class _KindTaggingRenderer:
         agent_id = kwargs.get("agent_id")
         if agent_id is None:
             agent_id = kwargs.get("voter_id")
-        self._renders.append(_Render(kind=self._kind, agent_id=agent_id, prompt=prompt))
+        self._renders.append(
+            _Render(
+                kind=self._kind,
+                agent_id=agent_id,
+                prompt=prompt,
+                # Task 16.3 (c): capture the inert provenance rows the manager
+                # threaded (post-fold rows on the ballot seam; the frozen graph
+                # on the turn seams). Default ``()`` before the widening lands.
+                suspicion_provenance=tuple(kwargs.get("suspicion_provenance", ())),
+            )
+        )
         return prompt
 
 
@@ -608,6 +630,7 @@ def _run_recorded_meeting(
         renders=tuple(renders),
         complete_calls=tuple(stub.calls),
         hit_prompts=hit_prompts,
+        participants=tuple(participants),
     )
     return reconstructed, result, body_id, trigger_kind
 
@@ -732,6 +755,13 @@ class _SetWalk:
     meetings: int
     seeds: int
     kinds_in_data: frozenset[str]
+    # Task 16.3 (c): the live provenance decompositions collected on the same
+    # walk. ``participant_rows`` are the open-tick graph rows the game builder
+    # populated (``suspicion_graph_for_meeting``); ``ballot_prov_rows`` are the
+    # post-fold rows the manager threaded into the ballot's ``suspicion_provenance``
+    # kwarg (Seam C). Both must satisfy ``0.5 + sum(components) == suspicion``.
+    participant_rows: tuple[SuspicionEntry, ...] = ()
+    ballot_prov_rows: tuple[SuspicionEntry, ...] = ()
 
 
 def _seed_from_path(path: Path) -> int:
@@ -753,6 +783,8 @@ def _walk_set(set_dir: Path) -> _SetWalk:
     renderers_for_set = _canonical_renderers()
     prompts: list[RerenderedPrompt] = []
     kinds_in_data: set[str] = set()
+    participant_rows: list[SuspicionEntry] = []
+    ballot_prov_rows: list[SuspicionEntry] = []
     meetings = 0
     seed_paths = _seed_paths(set_dir)
     for path in seed_paths:
@@ -763,12 +795,23 @@ def _walk_set(set_dir: Path) -> _SetWalk:
             for rendered in rerendered_prompts(meeting):
                 prompts.append(rendered)
                 kinds_in_data.add(rendered.kind)
+            # Task 16.3 (c): the live open-tick graph rows the game builder
+            # populated (provenance read straight off ``belief.provenance``).
+            for participant in meeting.participants:
+                participant_rows.extend(participant.suspicion_graph)
+            # The post-fold rows threaded into every ballot render's inert
+            # ``suspicion_provenance`` kwarg (Seam C).
+            for render in meeting.renders:
+                if render.kind == _KIND_VOTE_BALLOT:
+                    ballot_prov_rows.extend(render.suspicion_provenance)
     return _SetWalk(
         set_dir=set_dir,
         prompts=tuple(prompts),
         meetings=meetings,
         seeds=len(seed_paths),
         kinds_in_data=frozenset(kinds_in_data),
+        participant_rows=tuple(participant_rows),
+        ballot_prov_rows=tuple(ballot_prov_rows),
     )
 
 
@@ -1081,4 +1124,123 @@ def test_defaults_are_the_only_lookup_misses(set_walk: _SetWalk) -> None:
     assert reproduced == len(set_walk.prompts), (
         f"{set_walk.set_dir.name}: {len(set_walk.prompts) - reproduced} recorded "
         "prompts were lookup misses — see the byte-equality failure above"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Live provenance population (Task 16.3 parts (a)+(b), over both committed sets) #
+# --------------------------------------------------------------------------- #
+
+# The eight provenance channels on ``SuspicionEntry`` (mirror
+# ``agents.memory.beliefs.SuspicionProvenance`` field-by-name).
+_PROVENANCE_COMPONENTS: tuple[str, ...] = (
+    "flag_lift",
+    "body_proximity",
+    "kill_or_vent_pin",
+    "testimony_spread",
+    "accusation_carry",
+    "carried_hard",
+    "carried_soft",
+    "unattributed",
+)
+
+# Non-vacuous "populated, not defaults" floors (DoD bullets 1 + 5), measured on
+# the committed sets 2026-07-11: 9p2i had 1066/1505 open-tick graph rows and
+# 1886/2484 folded ballot rows carrying a nonzero hard/soft split; 4p1i had 13/13
+# and 99/168. These per-set-safe floors sit well below the smaller set's counts,
+# so a regression that stopped populating provenance (defaults everywhere) trips
+# them while the healthy committed data clears them.
+_MIN_POPULATED_PARTICIPANT_ROWS = 10
+_MIN_POPULATED_BALLOT_ROWS = 50
+
+
+def _entry_sum_error(entry: SuspicionEntry) -> float:
+    """Absolute error in ``0.5 + sum(the eight fields) == suspicion`` for a row."""
+
+    total = sum(float(getattr(entry, name)) for name in _PROVENANCE_COMPONENTS)
+    return abs((0.5 + total) - entry.suspicion)
+
+
+def _has_hard_or_soft(entry: SuspicionEntry) -> bool:
+    """A row carries a real decomposition (some hard or soft channel is nonzero).
+
+    ``unattributed`` alone does NOT count as populated -- it is the residual
+    bucket every seed writes, so a row with only unattributed movement carries no
+    source-tagged evidence. A nonzero hard or soft channel is the "populated, not
+    defaults" signal the DoD requires.
+    """
+
+    hard = (
+        entry.flag_lift
+        + entry.body_proximity
+        + entry.kill_or_vent_pin
+        + entry.carried_hard
+    )
+    soft = entry.testimony_spread + entry.accusation_carry + entry.carried_soft
+    return hard != 0.0 or soft != 0.0
+
+
+def test_live_suspicion_graph_rows_decompose_to_the_scalar(
+    set_walk: _SetWalk,
+) -> None:
+    """Every live open-tick graph row satisfies the sum invariant and is populated.
+
+    DoD bullets 1 + 5, over both committed sets: the participants
+    ``_build_participants`` produced VERBATIM carry the game builder's
+    ``suspicion_graph_for_meeting`` rows, whose eight provenance fields are read
+    straight off ``belief.provenance``. Every row must satisfy
+    ``0.5 + sum(components) == suspicion`` within
+    :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`, and a non-vacuous
+    floor of rows must carry a real hard/soft decomposition (not all-default) --
+    proving 16.15's future surface has genuine data, not zeros.
+    """
+
+    assert set_walk.participant_rows, (
+        f"{set_walk.set_dir.name}: walked zero participant graph rows"
+    )
+    for entry in set_walk.participant_rows:
+        err = _entry_sum_error(entry)
+        assert err <= SUSPICION_PROVENANCE_ATOL, (
+            f"{set_walk.set_dir.name}: live graph row {entry.player_id!r} violates "
+            f"0.5 + sum(provenance) == suspicion (error {err}, suspicion "
+            f"{entry.suspicion})"
+        )
+    populated = sum(1 for e in set_walk.participant_rows if _has_hard_or_soft(e))
+    assert populated >= _MIN_POPULATED_PARTICIPANT_ROWS, (
+        f"{set_walk.set_dir.name}: only {populated} of "
+        f"{len(set_walk.participant_rows)} live graph rows carry a nonzero "
+        f"hard/soft split (floor {_MIN_POPULATED_PARTICIPANT_ROWS}) — provenance "
+        "population regressed to defaults"
+    )
+
+
+def test_folded_ballot_provenance_rows_decompose_to_the_scalar(
+    set_walk: _SetWalk,
+) -> None:
+    """Every post-fold ballot provenance row satisfies the sum invariant.
+
+    The ballot seam (Seam C) threads the SAME post-fold rows into
+    ``suspicion_provenance`` as into ``suspicion_graph`` -- the rows
+    ``_suspicion_graph_with_contradictions`` emits after the Rule-2 lift, the
+    pre-vote fold, and the Task 13.14 joint cap. The joint cap's provenance
+    scaling must keep ``0.5 + sum(components) == suspicion`` on every emitted row
+    (the render-after-fold consistency pin), over both committed sets. A
+    non-vacuous floor must again carry a real hard/soft split.
+    """
+
+    assert set_walk.ballot_prov_rows, (
+        f"{set_walk.set_dir.name}: walked zero folded ballot provenance rows"
+    )
+    for entry in set_walk.ballot_prov_rows:
+        err = _entry_sum_error(entry)
+        assert err <= SUSPICION_PROVENANCE_ATOL, (
+            f"{set_walk.set_dir.name}: folded ballot row {entry.player_id!r} "
+            f"violates 0.5 + sum(provenance) == suspicion (error {err}, suspicion "
+            f"{entry.suspicion})"
+        )
+    populated = sum(1 for e in set_walk.ballot_prov_rows if _has_hard_or_soft(e))
+    assert populated >= _MIN_POPULATED_BALLOT_ROWS, (
+        f"{set_walk.set_dir.name}: only {populated} of "
+        f"{len(set_walk.ballot_prov_rows)} folded ballot rows carry a nonzero "
+        f"hard/soft split (floor {_MIN_POPULATED_BALLOT_ROWS})"
     )

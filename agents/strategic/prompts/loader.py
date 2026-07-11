@@ -168,6 +168,8 @@ def crewmate_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
 ) -> str:
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
@@ -188,6 +190,15 @@ def crewmate_report_prompt(
     ``dead_ids`` (Task 10.3, audit gp-9) is the dead / ejected negative
     list, rendered as an explicit do-not-accuse line under the living
     roster. Guarded the same way: the default ``()`` omits the line.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are accepted so this
+    wrapper conforms to the widened
+    :class:`~meetings.render_contract.ReportPromptRenderer` Protocol and are
+    passed straight through to ``.render(...)``. The current template references
+    neither, so jinja ignores them and the prompt is byte-unchanged (the
+    widen-the-contract-inert pattern; the 15.5 ``reporter_id`` precedent). The
+    seam is landed once here so 16.15/16.16 edit ONLY the template.
     """
 
     return (
@@ -201,6 +212,8 @@ def crewmate_report_prompt(
             public_transcript=public_transcript,
             living_ids=living_ids,
             dead_ids=dead_ids,
+            persona=persona,
+            suspicion_provenance=suspicion_provenance,
         )
     )
 
@@ -215,6 +228,8 @@ def impostor_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    persona: str = "",
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
@@ -238,6 +253,13 @@ def impostor_report_prompt(
     same roster block as the crewmate one. ``dead_ids`` (Task 10.3) is
     the matching dead / ejected do-not-accuse line. Both are guarded on
     a non-empty value, so the defaults (``()``) omit the blocks.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the inert
+    render-contract widenings, passed straight through; the current template
+    references neither, so the prompt is byte-unchanged (the
+    widen-the-contract-inert pattern, landed once so 16.15/16.16 edit only the
+    template).
     """
 
     return (
@@ -252,6 +274,8 @@ def impostor_report_prompt(
             fellow_impostor_ids=fellow_impostor_ids,
             living_ids=living_ids,
             dead_ids=dead_ids,
+            persona=persona,
+            suspicion_provenance=suspicion_provenance,
         )
     )
 
@@ -269,6 +293,8 @@ def accusation_round_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
     is_body_report: bool = False,
+    persona: str = "",
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
@@ -324,6 +350,13 @@ def accusation_round_prompt(
     gate -- the block must fire only when a body is on the table, never on a
     body-less emergency reply. The default ``False`` keeps the block off unless
     the caller explicitly marks the meeting a body report.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the inert
+    render-contract widenings, passed straight through; the current template
+    references neither, so the prompt is byte-unchanged (the
+    widen-the-contract-inert pattern, landed once so 16.15/16.16 edit only the
+    template).
     """
 
     return (
@@ -341,6 +374,8 @@ def accusation_round_prompt(
             dead_ids=dead_ids,
             is_impostor=is_impostor,
             is_body_report=is_body_report,
+            persona=persona,
+            suspicion_provenance=suspicion_provenance,
         )
     )
 
@@ -356,6 +391,8 @@ def vote_ballot_prompt(
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     reporter_id: PlayerId | None = None,
+    persona: str = "",
+    suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
@@ -375,6 +412,15 @@ def vote_ballot_prompt(
     the self-report base-rate annotation only when it is non-``None``; the
     default ``None`` (lever OFF, emergency call, or ad-hoc render) omits the
     block, so a lever-OFF ballot prompt is byte-identical.
+
+    ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
+    ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the inert
+    render-contract widenings, passed straight through; the current template
+    references neither, so the prompt is byte-unchanged. On the ballot the
+    manager threads the same post-fold rows into ``suspicion_provenance`` as into
+    ``suspicion_graph`` (the render-after-fold consistency pin), so 16.15's
+    surface will decompose exactly the scalars already shown -- landed once here
+    so 16.15 edits only the template.
     """
 
     return (
@@ -390,6 +436,8 @@ def vote_ballot_prompt(
             skip_confidence_threshold=skip_confidence_threshold,
             fellow_impostor_ids=fellow_impostor_ids,
             reporter_id=reporter_id,
+            persona=persona,
+            suspicion_provenance=suspicion_provenance,
         )
     )
 
