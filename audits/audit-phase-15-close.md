@@ -1,6 +1,6 @@
-# Phase-15 close — every gate on the shipped branch-A end-state is green, but the fresh champion recording FAILS the hardened referee's backing floor: the close's one pass-bar. The close PAUSES for the owner call; the banner is NOT flipped.
+# Phase-15 close — every gate on the shipped branch-A end-state is green; the fresh champion recording passes the HARD validity gate and FAILS the hardened referee's backing floor — the close's one pass-bar — pausing per contract for the owner call; the owner ruled the miss benign (a baseline-relative floor met by a gameplay-shifting champion, with the floors' starvation failure mode absent) and CLOSED the phase over the recorded FAIL. The banner is flipped; the floor-recalibration question is handed to Phase 16/17.
 
-**Date:** 2026-07-10
+**Date:** 2026-07-10 (recording + measurement) / 2026-07-11 (owner ruling + close)
 **Task:** 15.23 — phase close: gates on the shipped end-state, the close audit, the banner flip
 (operator-run, $0).
 **The one fresh measurement:** the champion close recording — seeds 0–49, 9p2i
@@ -36,11 +36,16 @@ replay sets validity-PASS, hardened-referee-PASS, and byte-identical bare, prove
 end-to-end from bytes — and the fresh champion recording through the committed CLI is validity-PASS
 with the stamp proof holding on all 50 games; but the hardened 15.19 referee **FAILS** it on the
 subject-aware `testimony_backed_conversion` floor (measured **0.5743** vs floor **0.6636**, one gauge
-of three, the other two passed with wide margin), and per the contract that outcome **pauses the
-close for an owner call rather than shipping** — the STATUS banner stays un-flipped and this PR opens
-as a draft. This is the pass-bar inversion the contract pre-registered, not a defect in the close:
-the referee-before-selection ordering exists precisely to catch a champion that was selected under
-the softer instrument.
+of three, the other two passed with wide margin), and per the contract that outcome **paused the
+close for an owner call rather than shipping**. This is the pass-bar inversion the contract
+pre-registered, not a defect in the close: the referee-before-selection ordering exists precisely to
+catch a champion that was selected under the softer instrument. The owner call came back
+(2026-07-11, §10): the recorded FAIL stands as the instrument's verdict, and the phase **CLOSES over
+it** — the floor is the FSM baseline's own measured value met by a champion that legitimately
+reshapes gameplay, the starvation failure mode the supply floors exist for is absent, and the
+conversion-floor recalibration is contracted forward rather than adjudicated by a close edit. The
+STATUS banner is flipped to CLOSED with the verdict quoted, so the close cannot be read as a
+champion referee-endorsement.
 
 ---
 
@@ -167,11 +172,12 @@ recording) and the definition (subject-aware) — and they cannot be decomposed 
 discarded raw recordings; the composite is reported as the finding.
 
 **Consequence (the contract's own rule):** the champion recording does NOT pass the close's one
-pass-bar, so the phase does NOT close on this record — the STATUS banner stays IN FLIGHT, the torch
-disposition and hand-off below stand as the permanent record regardless, and the owner call is
-framed in §10. Consistent with decision 2's own rationale for branch A: "a default flip today would
-ship a referee-failing measurement" — the opt-in factory shipped precisely so this verdict could be
-rendered by the hardened instrument before any irreversible move.
+pass-bar as written, so the close paused for the owner call rather than shipping — consistent with
+decision 2's own rationale for branch A: "a default flip today would ship a referee-failing
+measurement"; the opt-in factory shipped precisely so this verdict could be rendered by the hardened
+instrument before any irreversible move. The owner call was made 2026-07-11 and is recorded as the
+locked decision in §10: the phase closes over the recorded FAIL, the measurement stands unedited,
+and the recalibration question moves forward as a contract input, not a close edit.
 
 ---
 
@@ -307,38 +313,60 @@ The pause-locked criteria (tasks/phase-15.md, "Merge criteria (end-of-phase — 
    untouched FSM default; the Q4 bit-exact gate is test-pinned and green (§1, §7).
 2. **Committed replays byte-untouched and byte-verified bare at close — MET** (§1).
 3. **Hardened referee lands BEFORE the close re-score; close recording passes validity gate + the
-   hardened referee — HALF-MET, and the un-met half is the pause.** The ordering held (15.19 merged
-   before this close; the dependency edge did its job); the recording passes the validity gate; the
-   hardened referee FAILS it on the backing-conversion floor (§3). The R-gate, funnel, and canaries
-   are reported as findings on corpus denominators with samples alongside (§4–§6).
+   hardened referee — HALF-MET AS WRITTEN, closed over by the owner ruling.** The ordering held
+   (15.19 merged before this close; the dependency edge did its job); the recording passes the
+   validity gate; the hardened referee FAILS it on the backing-conversion floor (§3), the outcome
+   paused per contract, and the owner ruling (§10) closed the phase over the recorded FAIL. The
+   R-gate, funnel, and canaries are reported as findings on corpus denominators with samples
+   alongside (§4–§6).
 4. **Stamped recordings, machine-checked sha equality from bytes, Q5 convention — MET** (§2, §7).
 5. **Torch out of the lockfile; production `agents/` numpy/torch-free — MET** (§1 firewall test, §8).
-6. **This audit records all of the above — MET; the banner flip is WITHHELD** pending §10.
+6. **This audit records all of the above and the banner is flipped to CLOSED — MET**, with the
+   referee verdict quoted in the banner per the ruling (§10) so the CLOSED state is not readable as
+   a champion referee-endorsement.
 
 ---
 
-## 10. The owner call this close pauses for
+## 10. The owner call — made, and recorded as the locked close decision
 
 The contract's rule: a hardened-referee failure at close "pauses for an owner call rather than
-shipping." What is actually at stake — the branch-A end-state itself is unaffected (the champion is
-opt-in, the FSM default and every committed byte are untouched, nothing irreversible shipped), so
-the call is about the phase's closing verdict on the champion:
+shipping." The close paused on the 2026-07-10 measurement; the owner ruled on 2026-07-11. The block
+below follows the Task-14.6 locked-decision shape; sign-off is the owner's merge of this task's PR.
 
-- **The fact to adjudicate:** the selected champion, re-measured fresh through the shipped CLI under
-  the hardened referee, supplies evidence far above both supply floors but converts subject-aware
-  backed accusations at 0.5743 vs the 0.6636 baseline bar — the same gauge it missed marginally
-  (0.5922 vs 0.6068) under the pre-hardening definition at the pause.
-- **What a close-over-the-fail would mean:** ratifying the opt-in champion as shipped with a
-  standing referee FAIL as its permanent verdict — defensible under branch A's design (the default
-  flip was already deferred behind this exact instrument; decision 2 anticipated "a default flip
-  today would ship a referee-failing measurement"), but it is the owner's ratification to give, not
-  this task's.
-- **What keeping the phase open would mean:** contracting the conversion seam — an
-  elicitation/judgment problem squarely in Phase 16's Voice & Judgment scope (§11) — and re-running
-  this close's pass-bar afterward.
-- **Not on the table without new evidence:** re-running the recording until it agrees (forbidden by
-  the contract's own anti-laundering rule), editing the referee inside a close task (15.19's floors
-  are the owner-ratified instrument), or any default flip.
+**LOCKED DECISION (owner, 2026-07-11) — the phase CLOSES over the recorded referee FAIL; the
+0.5743-vs-0.6636 backing-conversion miss is judged benign, not blocking:**
+
+- **The ruling and its rationale (the owner's, recorded verbatim in substance):** the measured
+  0.5743 and the floor 0.6636 are relatively close; the floor is not a principled necessity but the
+  FSM baseline's own measured conversion re-pinned (71/107 under the subject-aware definition) —
+  a baseline-relative calibration pin, pinned on FSM-driven gameplay. The champion legitimately
+  changes gameplay (this close's own findings: witnessed kills 5 → 32, vent exposure 73 → 40,
+  in-window voting up, §5), so swings in crew-side conversion behavior are natural, and 0.5743
+  should not be read as a failing number for the close.
+- **What makes the ruling safe on this evidence:** the failure mode the supply floors exist to
+  catch — perfect-stealth evidence starvation — is measurably absent: both supply gauges pass at
+  wide margins (witnessed 0.2195 vs 0.0325; flags 3.0432 vs 1.8633), the geomean 38.58 sits above
+  the hardened baseline's own 35.19, integrity is clean, and the validity gate is a full PASS. The
+  miss is confined to one crew-side conversion-rate gauge measured against the FSM baseline's own
+  value.
+- **What the ruling does NOT do:** the committed measurement is untouched — `referee_passed: false`
+  stands in `results-champion-close.jsonl` as the instrument's verdict, quoted in the CLOSED banner;
+  no referee code or floor is edited inside this close (the contract forbids it: a defect the close
+  finds becomes a Phase-16/17 contract, never a close edit); the default flip stays un-blessed
+  (decision 2's re-evaluation condition is unchanged — a default flip still requires a
+  referee-passing measurement under the then-current instrument).
+- **The contracted consequence — floor recalibration is a Phase-16/17 scoping input (§11):** the
+  hardened conversion floor is pinned to the FSM baseline population; this close is the first
+  measurement of a non-FSM population against it, and it exposes a calibration question the 15.19
+  contract could not have answered (champion-shifted crew behavior vs baseline-pinned bar). Whether
+  the floor should be re-anchored population-relative (the project's Q1-precedent instinct),
+  band-tolerant, or kept baseline-absolute is referee-calibration work for the phase that next
+  touches the referee — with this close's committed row as its evidence.
+- **Recorded honestly, per this project's convention:** the gauge also correlates with a real
+  finding — crew convert backed accusations less and mis-eject more in champion games (accuracy
+  0.6972 → 0.6195, §4) — so the ruling trades a calibrated-instrument FAIL for a documented,
+  committed finding; it does not declare the signal noise. The pause deliberately made this gauge
+  the shipping pass-bar, and the deliberate record of overriding it is this block.
 
 ---
 
@@ -361,6 +389,12 @@ the call is about the phase's closing verdict on the champion:
   subject-aware-backed accusations. Raising it is voice/judgment work (how testimony converts to
   votes), not tactical-policy work — exactly Phase 16's lane, and the natural companion to the
   zero-flag channel above.
+- **NEW from the ruling (§10) — the conversion-floor recalibration question:** the hardened floor is
+  pinned to the FSM baseline's own conversion (71/107); this close is the first non-FSM population
+  measured against it and the owner ruled the baseline-pinned bar non-blocking for a
+  gameplay-shifting champion. The phase that next touches the referee owns the calibration decision
+  (population-relative re-anchor, tolerance band, or keep absolute), with
+  `results-champion-close.jsonl` as the committed evidence.
 - **Phase-17 inputs (unchanged from the pause, plus one):** decision 4's entry condition and
   decision 7's cadence (§8); the branch-B revisit with the Q3 corpus-companion corollary; the
   surrogate synthetic-provenance ask; and the 15.22 gate-valid crew ceiling now measured — learned
@@ -371,8 +405,10 @@ the call is about the phase's closing verdict on the champion:
 
 ## 12. What I did not do / caveats
 
-- **No banner flip.** The DoD's banner item is deliberately unmet: the close's pass-bar failed, and
-  flipping to CLOSED would misstate the record. The banner edit ships with the owner's adjudication.
+- **The banner flip shipped WITH the owner ruling, not before it.** The close first paused with the
+  banner untouched (the 2026-07-10 state of this audit); the flip to CLOSED landed only after the
+  2026-07-11 ruling (§10), and the banner quotes the referee verdict so CLOSED cannot be read as a
+  referee-endorsement of the champion.
 - **No re-record, no re-run-until-agree.** One 50-seed recording, per the recipe; its disagreements
   with the pause's numbers are reported as findings (§4) and sit within seed noise on every shared
   cell.
