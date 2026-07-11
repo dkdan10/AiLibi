@@ -827,7 +827,12 @@ async def _run_turn(
                         parsed, parse_error = _parse(schema, answer)
                         return TurnOutcome(
                             parsed=parsed,
-                            raw_text=praw.text,
+                            # The STRIPPED answer, never praw.text: on a parse
+                            # failure _record_outcome commits raw_head from
+                            # raw_text, and the inline reasoning prefix must not
+                            # leak into the jsonl (reasoning is discarded, never
+                            # recorded — its length survives in thinking_chars).
+                            raw_text=answer,
                             latency_s=latency,
                             in_tokens=praw.prompt_tokens,
                             out_tokens=praw.completion_tokens,
@@ -2386,7 +2391,7 @@ async def _probe_post(
                     body = resp.json()
                 except Exception:  # noqa: BLE001 — a non-JSON error body is recorded raw
                     body = {"_raw": resp.text}
-                if status not in (429,) and status < 500:
+                if status == 200 or not _probe_retryable(status, body):
                     return status, body
             except Exception as exc:  # noqa: BLE001 — record transport failures as evidence
                 status = 0
@@ -2394,6 +2399,31 @@ async def _probe_post(
             if attempt < 2:
                 await asyncio.sleep(10.0 * (attempt + 1))
     return status, body
+
+
+def _probe_retryable(status: int, body: Any) -> bool:
+    """Is a non-200 discovery response TRANSIENT (retry) or a capability verdict?
+
+    Retried: 429, any 5xx, and — the shape a load spike actually presents as on
+    this endpoint — a 4xx whose error body is TYPED ``server_error`` ("This model
+    is busy, please try again later" arrives as an HTTP 400/422 with
+    ``{"error": {"type": "server_error", ...}}``). Without the body check, a
+    busy blip would be recorded as a deterministic ``json_schema`` rejection and
+    feed the 16.2 lock a false capability verdict; with it, a rejection verdict
+    means the busy-typed body persisted across every bounded retry while
+    ``json_object`` control requests on the same model succeeded around it.
+    NOT retried: 4xx with ``invalid_request_error`` (or any other non-server
+    type) — e.g. ``model_not_found`` and ThinkingCap's chat-template 400 —
+    because that determinism IS the recorded evidence.
+    """
+
+    if status == 429 or status >= 500:
+        return True
+    if 400 <= status < 500 and isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("type") == "server_error":
+            return True
+    return False
 
 
 def _probe_preflight_one(
@@ -2449,24 +2479,29 @@ def _probe_served_pass(
     base_url: str,
     pacer: _SwitchPacer,
     emit: Callable[[dict[str, Any]], None],
-) -> set[str]:
+) -> dict[str, str]:
     """Pass 1 — served-id discovery: the generation preflight is the arbiter.
 
     For each candidate label (its owner-directed id forms, PINNED SLATE id first)
     plus the incumbent (same-day re-verification of its single SLATE id), runs a
-    paced 1-token preflight per id form and emits one ``served_id`` row per form. A
-    candidate whose PINNED id is not served after all its forms ALSO emits a
-    ``no_go`` row and is EXCLUDED from every later pass — this NEVER raises, because
-    a NO-GO is a first-class recorded outcome for the 16.2 lock (e.g. ThinkingCap's
-    deterministic chat-template 400). Returns the set of labels that proceed
-    (candidates whose pinned id served, plus the incumbent if it served).
+    paced 1-token preflight per id form and emits one ``served_id`` row per form.
+    Returns ``label -> served id form`` for every label that proceeds: the pinned
+    id when it serves, else the FIRST served alternate form — which the later
+    passes ADOPT (loudly, and self-described in every row's ``model`` stamp),
+    because excluding a model whose canonical revision the preflight just found
+    would record a FALSE NO-GO (the 14.4 slate needed exactly such suffixed
+    revisions). An adopted alternate is an explicit re-pin instruction for the
+    SLATE, not a silent fallback: the served_id rows carry both forms' evidence.
+    A label none of whose forms serve emits a ``no_go`` row and is EXCLUDED from
+    every later pass — this NEVER raises, because a NO-GO is a first-class
+    recorded outcome for the 16.2 lock (e.g. ThinkingCap's deterministic 400).
     """
 
-    proceed: set[str] = set()
+    proceed: dict[str, str] = {}
     for label in _PROBE_LABELS:
         slate_id = _id_for(label)
         forms = _PROBE_ID_FORMS.get(label, (slate_id,))
-        pinned_served = False
+        served_forms: list[str] = []
         evidence_by_form: list[tuple[str, str]] = []
         for form in forms:
             served, attempts, evidence = _probe_preflight_one(
@@ -2484,11 +2519,22 @@ def _probe_served_pass(
                 }
             )
             evidence_by_form.append((form, evidence))
-            if form == slate_id and served:
-                pinned_served = True
-        if pinned_served:
-            proceed.add(label)
+            if served:
+                served_forms.append(form)
+        if slate_id in served_forms:
+            proceed[label] = slate_id
             print(f"  PROBE served: {label} -> {slate_id}", flush=True)
+        elif served_forms:
+            # The pinned guess is wrong but a canonical revision IS served:
+            # adopt it for the later passes rather than recording a false
+            # NO-GO. The operator should re-pin the SLATE id to this form.
+            proceed[label] = served_forms[0]
+            print(
+                f"  PROBE served (ALTERNATE): {label} pinned id {slate_id} is "
+                f"not served, adopting {served_forms[0]} — re-pin the SLATE "
+                "entry to this form.",
+                flush=True,
+            )
         else:
             reason = next(
                 (ev for form, ev in evidence_by_form if form == slate_id),
@@ -2735,9 +2781,12 @@ async def _probe_thinking_kwarg_pass(
 async def run_probe(cfg: SweepConfig, *, api_key: str) -> int:
     """Run the Task 16.1 probe: discovery passes 1-3 then the graded matrix (Pass 4).
 
-    Truncates/creates ``cfg.results_path`` (or appends under ``cfg.append``) and
-    streams passes 1-3 into it, then rides the EXISTING :func:`run_sweep` (Pass 4,
-    ``append=True``) so the graded matrix uses the unmodified harness shape. The
+    Truncates/creates ``cfg.results_path`` and streams passes 1-3 into it, then
+    rides the EXISTING :func:`run_sweep` (Pass 4, ``append=True`` so the matrix
+    lands after the discovery rows) so the graded matrix uses the unmodified
+    harness shape. The ``probe`` CLI never sets ``cfg.append``: with no
+    --models/--modes selection an append could only duplicate rows and corrupt
+    the report's rates (partial recovery is a driver-level row replacement). The
     served-id pass excludes any NO-GO candidate from the later passes and the
     matrix. NEVER calls ``write_report`` (the CLI calls :func:`write_probe_report`
     after this returns 0). The ``_SwitchPacer`` is shared across passes 1-3; Pass 4
@@ -2764,10 +2813,21 @@ async def run_probe(cfg: SweepConfig, *, api_key: str) -> int:
         proceed = _probe_served_pass(
             api_key=api_key, base_url=resolved, pacer=pacer, emit=emit
         )
+        # Adopt the served form per label: identical to the SLATE spec when the
+        # pinned id served; a `replace`d spec carrying the served ALTERNATE
+        # revision otherwise (never a silent fallback — pass 1 printed the
+        # re-pin instruction and the served_id rows carry both forms).
         served_specs = tuple(
-            s for s in SLATE if s.label in _PROBE_LABELS and s.label in proceed
+            s
+            if proceed[s.label] == s.model_id
+            else replace(s, model_id=proceed[s.label])
+            for s in SLATE
+            if s.label in _PROBE_LABELS and s.label in proceed
         )
-        print(f"PROBE served labels: {[s.label for s in served_specs]}", flush=True)
+        print(
+            f"PROBE served: {[(s.label, s.model_id) for s in served_specs]}",
+            flush=True,
+        )
         if served_specs:
             print("PROBE pass 2 — response_format verification", flush=True)
             await _probe_response_format_pass(
@@ -2822,14 +2882,38 @@ def _md_cell(text: str, limit: int = 160) -> str:
 
 
 def _probe_served_labels(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Labels whose PINNED id served (candidates + incumbent), in SLATE order."""
+    """Labels ANY of whose id forms served (candidates + incumbent), SLATE order.
+
+    Any-form, not pinned-only: pass 1 ADOPTS a served alternate revision when
+    the pinned guess 404s, so that label's later-pass rows exist and the report
+    must render them (the served_id table shows which form actually served).
+    """
 
     served = {
         str(r["label"])
         for r in rows
-        if r.get("corpus") == "served_id" and r.get("pinned") and r.get("served")
+        if r.get("corpus") == "served_id" and r.get("served")
     }
     return [s.label for s in SLATE if s.label in served]
+
+
+def _probe_served_form(rows: Sequence[Mapping[str, Any]], label: str) -> str:
+    """The id form that actually served for ``label`` (pinned first), from rows."""
+
+    forms = [
+        str(r["model"])
+        for r in rows
+        if r.get("corpus") == "served_id" and r["label"] == label and r.get("served")
+    ]
+    pinned = [
+        str(r["model"])
+        for r in rows
+        if r.get("corpus") == "served_id"
+        and r["label"] == label
+        and r.get("served")
+        and r.get("pinned")
+    ]
+    return pinned[0] if pinned else (forms[0] if forms else _id_for(label))
 
 
 def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> str:
@@ -3016,11 +3100,39 @@ def write_probe_report() -> int:
                         {int(r["http_status"]) for r in cell if not r.get("accepted")}
                     )
                     codes_s = "/".join(str(c) for c in reject_codes) or "?"
-                    verdict = (
-                        "supported"
-                        if any(r.get("accepted") for r in cell)
-                        else f"rejected (deterministic HTTP {codes_s} across attempts)"
-                    )
+                    if any(r.get("accepted") for r in cell):
+                        verdict = "supported"
+                    else:
+                        # A rejection is only DETERMINISTIC against a same-pass
+                        # CONTROL: the json_object rows for the same model+schema
+                        # ran minutes apart on the same deployment, so if they
+                        # succeeded, "the model is busy" cannot explain the
+                        # failures (the discovery POST also retries
+                        # server_error-typed 4xx bodies before recording one).
+                        # Without a passing control the cell is INCONCLUSIVE —
+                        # a load spike, not a capability verdict.
+                        control_ok = any(
+                            r.get("accepted")
+                            for r in rf_rows
+                            if r["label"] == label
+                            and r["rf_mode"] == "json_object"
+                            and r["schema"] == schema_name
+                        )
+                        if rf_mode == "json_object" or control_ok:
+                            verdict = (
+                                f"rejected (deterministic HTTP {codes_s} across "
+                                "attempts + busy-body retries; json_object "
+                                "control succeeded same-pass)"
+                                if rf_mode != "json_object"
+                                else f"rejected (deterministic HTTP {codes_s} "
+                                "across attempts)"
+                            )
+                        else:
+                            verdict = (
+                                f"inconclusive (HTTP {codes_s}, but the "
+                                "json_object control also failed — retry "
+                                "off-peak before reading this as a rejection)"
+                            )
                     json_flags = [
                         r.get("content_is_json") for r in cell if r.get("accepted")
                     ]
@@ -3296,9 +3408,11 @@ def write_probe_report() -> int:
         add("")
     cand_served = [c for c in served_labels if c in PROBE_CANDIDATE_LABELS]
     if cand_served:
+        # The served FORM comes from the rows (pass 1 may have adopted an
+        # alternate revision when the pinned guess 404'd), never from the pin.
         add(
             "Served candidate id(s): "
-            + ", ".join(f"`{_id_for(c)}` ({c})" for c in cand_served)
+            + ", ".join(f"`{_probe_served_form(rows, c)}` ({c})" for c in cand_served)
             + "."
         )
     else:
@@ -3458,12 +3572,12 @@ def main() -> int:
     )
     p.add_argument("--latency-samples", type=int, default=2)
     p.add_argument("--base-url", type=str, default=None)
-    p.add_argument(
-        "--append",
-        action="store_true",
-        help="Append to PROBE_RESULTS instead of truncating (merge a partial "
-        "re-run into an existing probe jsonl).",
-    )
+    # NO --append here, deliberately: `probe` carries no --models/--modes
+    # selection, so an append could ONLY duplicate every discovery + matrix row
+    # for the same pinned contexts and silently corrupt probe-report's rates
+    # (unlike `run`, whose --models/--modes filters make a merge meaningful).
+    # A partial recovery is a driver-level operation over the harness cell
+    # functions on the same pinned ids, replacing rows — not a CLI re-append.
     sub.add_parser(
         "probe-report",
         help="(re)generate the probe report from "
@@ -3499,7 +3613,6 @@ def main() -> int:
             base_url=args.base_url,
             results_path=PROBE_RESULTS,
             models=probe_models,
-            append=args.append,
             prompt_set=PROBE_PROMPT_SET,
         )
         rc = asyncio.run(run_probe(probe_cfg, api_key=api_key))
