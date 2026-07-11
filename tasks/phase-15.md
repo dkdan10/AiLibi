@@ -1,19 +1,26 @@
 # Phase 15 — Evidence substrate, then machine-learned tactical policies (Wave 0: cleanup → baseline 3; Wave 1: ML signal, harness, bake-off → PAUSE → Wave 2: productize)
 
-> **STATUS: IN FLIGHT (updated 2026-07-10).** **Wave 0 is CLOSED on baseline 3** (structured vents
-> 0 → 55, innocent-reporter ejections 22 → 4, both canaries UP: `audits/audit-phase-15-wave0-close.md`;
-> the baseline-2 bytes survive in git history at `adca07f`). **Wave 1 + the PAUSE are CLOSED**
-> (Tasks 15.8–15.18 merged): the bake-off ranked four impostor methods on one protocol, the ballot
-> surrogate landed NO-GO (diagnostic-only, fallback (a)), the torch probe answered NO, and Task
-> 15.18 ran the real-LLM finalist evaluation (committed as
-> `training/reports/results-finalist-eval.jsonl`) and locked the SEVEN owner decisions —
-> champion `utility-es`, deployment branch A (opt-in factory), torch kept experiment-tier /
-> Wave-2 track retired, co-evolution NO-GO, crew owned-task surface YES, float-hex weights kept,
-> the surrogate re-grounding cadence — with rationale in `audits/audit-phase-15-pause.md`.
-> **Wave 2 (Tasks 15.19–15.23) is dispatching** per those decisions; the referee-hardening task
-> 15.19 lands before any champion selection leans on the referee (the Goodhart floor + the Q2
-> subject-aware re-anchor). Roadmap context: `tasks/post-phase-14-plan.md`. Wave 0's evidence base
-> and target sheet: `tasks/post-phase-14-clean-up.md`.
+> **STATUS: CLOSED 2026-07-11 on the branch-A end-state (Task 15.23).** Phase 15 ships the
+> `utility-es` champion — weights sha256
+> `6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0`, 19-weight utility scorer,
+> encoder `impostor-option-features-v1` — as a pure-Python OPT-IN factory
+> (`agents/tactical/learned/`, `scripts/run_tournament.py --agent-factory learned-champion`) beside
+> the untouched FSM default; `replays/samples/` + `replays/ml_corpus/` are byte-untouched (branch A
+> records no baseline 4, baseline 3 stays canonical; the baseline-2 bytes survive in git history at
+> `adca07f`) and byte-verify bare on the close HEAD. The close recording (seeds 0–49, 9p2i, real
+> provider, committed as `training/reports/results-champion-close.jsonl`) **PASSES the HARD validity
+> gate** 10/10 with the champion stamp proven from bytes on all 50 games; the hardened 15.19 referee
+> reads it **FAIL** on the subject-aware `testimony_backed_conversion` floor (0.5743 vs 0.6636, both
+> supply gauges passing wide) — **closed over by owner ruling (2026-07-11, close audit §10)**:
+> the floor is the FSM baseline's own measured value, champion gameplay legitimately shifts crew
+> conversion, and the starvation failure mode the floors exist for is absent; the floor
+> recalibration is a Phase-16/17 contract input, and the default flip stays un-blessed (decision 2).
+> Full close: `audits/audit-phase-15-close.md`. Wave 0 closed on baseline 3
+> (`audits/audit-phase-15-wave0-close.md`); the pause locked the seven decisions
+> (`audits/audit-phase-15-pause.md`); torch experiment-tier (decision 3), co-evolution NO-GO
+> (decision 4), and the surrogate re-grounding cadence (decision 7) stand as the permanent record.
+> Phase-16 (Voice & Judgment) scoping inputs: pause audit §9 + close audit §11. Roadmap context:
+> `tasks/post-phase-14-plan.md`.
 
 Goal: give the agents machine-learned intelligence in the deterministic, LLM-free layer BETWEEN meetings
 — kill timing, witness avoidance, cooldown stalking, cover/vent play, buddy/patrol movement — replacing
