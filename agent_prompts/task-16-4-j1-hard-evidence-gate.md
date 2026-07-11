@@ -31,7 +31,9 @@ on the committed baseline-3 bytes, and the 16.17 graduation decision re-checks i
 baseline's bytes. The trade is a hypothesis to re-measure, not a carried fact.
 
 **Files in scope:**
-- agents/memory/beliefs.py (the clamp rule + `hard_evidence_gate_enabled` resolver — behind 16.3's provenance region)
+- agents/memory/beliefs.py (the clamp rule as a PURE helper + `hard_evidence_gate_enabled` resolver — behind 16.3's provenance region; stored state never mutates)
+- agents/memory/store.py (the belief-line render read-site — `_build_belief_lines`/`_format_belief_score` apply the clamp helper lever-ON; the prompt rows are produced HERE, not in beliefs.py)
+- orchestrator/game.py (the suspicion-graph builder read-site — the graph rows the vote template renders apply the same helper; region disjoint from 16.3's provenance-population edit, behind the 16.3 edge)
 - orchestrator/replay.py (lever registration region — the first entry back into `_TOGGLEABLE_LEVER_RESOLVERS` + `substrate_flag_snapshot`)
 - .env.example (the lever env line)
 - tests/agents/test_beliefs_hard_evidence_gate.py (new: clamp classification + OFF-path byte pins)
@@ -61,7 +63,10 @@ Clone the reporter-exculpation lever end-to-end (resolver + registration + stamp
 + byte-coupled OFF tests — the pattern has now shipped six times); the novelty is only the
 classification predicate, which 16.3's decomposition makes a pure function of recorded provenance.
 Clamp at render time (the pre-vote surface), never mutate the stored scalar — the fold and its
-caps stay untouched, and OFF-path storage is bit-identical by construction.
+caps stay untouched, and OFF-path storage is bit-identical by construction. ONE pure helper in
+beliefs.py, applied at BOTH render read-sites (the store's belief lines and the game.py graph
+builder) so the memory prose and the suspicion graph can never disagree about the clamped value;
+non-render consumers keep reading the raw scalar.
 
 ## Public types this task introduces
 - `agents.memory.beliefs.hard_evidence_gate_enabled`

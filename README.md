@@ -45,7 +45,7 @@ These are the architectural invariants every contributor (human or agent) must r
 
 ## Project status
 
-MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. All phases are merged.
+MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. Phases 0–15 are merged and closed; Phase 16 (Voice & Judgment) is open and dispatching.
 
 | Phase | Description |
 | --- | --- |

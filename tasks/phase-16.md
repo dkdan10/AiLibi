@@ -296,6 +296,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 - meetings/render_contract.py (persona + provenance kwargs, SuspicionEntry provenance fields — all defaulted)
 - agents/strategic/prompts/loader.py (the four wrapper signatures + render bodies — defaulted pass-through)
 - meetings/manager.py (render seams + MeetingParticipant.persona/provenance threading region — disjoint from 16.5/16.6/16.7/16.8's regions per the preamble map)
+- orchestrator/game.py (the `suspicion_graph_for_meeting` builder region — POPULATE the new `SuspicionEntry` provenance fields from the belief store; without this, live graphs carry defaults and 16.15's surface has nothing to render; disjoint from 16.7/16.9's regions and the registry line)
 - tests/agents/test_beliefs_provenance.py (new: decomposition-sums-to-scalar pins)
 - tests/meetings/test_prompt_byte_golden.py (new: the golden over both committed sets)
 
@@ -310,6 +311,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 - [ ] Hard/soft attribution survives the cross-meeting carry: a fixture where a grounded hard flag lands in meeting 1 shows a carried-HARD component (never carried-soft) in meeting 2+'s decomposition, including through decay and the pre-vote re-render path.
 - [ ] The prompt-byte golden re-renders EVERY committed meeting prompt (all four template kinds) and `rendered_memory` across `replays/samples/{9p2i,4p1i}` and asserts byte-equality against `llm_calls[].prompt` — and it FAILS on a deliberate one-byte template perturbation (a golden that cannot fail is not a gate).
 - [ ] The widened contract is inert: all new kwargs defaulted, `SuspicionEntry` extended additively, `MeetingParticipant.persona` defaults empty, and `bash scripts/verify_samples.sh` reconstructs both committed sets clean.
+- [ ] The production graph builder POPULATES the provenance fields (a fixture proves live `MeetingParticipant.suspicion_graph` rows carry the hard/soft split, not defaults) — populated-but-unrendered is the inert contract; defaults-forever would starve 16.15's surface.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -362,7 +364,9 @@ on the committed baseline-3 bytes, and the 16.17 graduation decision re-checks i
 baseline's bytes. The trade is a hypothesis to re-measure, not a carried fact.
 
 **Files in scope:**
-- agents/memory/beliefs.py (the clamp rule + `hard_evidence_gate_enabled` resolver — behind 16.3's provenance region)
+- agents/memory/beliefs.py (the clamp rule as a PURE helper + `hard_evidence_gate_enabled` resolver — behind 16.3's provenance region; stored state never mutates)
+- agents/memory/store.py (the belief-line render read-site — `_build_belief_lines`/`_format_belief_score` apply the clamp helper lever-ON; the prompt rows are produced HERE, not in beliefs.py)
+- orchestrator/game.py (the suspicion-graph builder read-site — the graph rows the vote template renders apply the same helper; region disjoint from 16.3's provenance-population edit, behind the 16.3 edge)
 - orchestrator/replay.py (lever registration region — the first entry back into `_TOGGLEABLE_LEVER_RESOLVERS` + `substrate_flag_snapshot`)
 - .env.example (the lever env line)
 - tests/agents/test_beliefs_hard_evidence_gate.py (new: clamp classification + OFF-path byte pins)
@@ -395,7 +399,10 @@ Clone the reporter-exculpation lever end-to-end (resolver + registration + stamp
 + byte-coupled OFF tests — the pattern has now shipped six times); the novelty is only the
 classification predicate, which 16.3's decomposition makes a pure function of recorded provenance.
 Clamp at render time (the pre-vote surface), never mutate the stored scalar — the fold and its
-caps stay untouched, and OFF-path storage is bit-identical by construction.
+caps stay untouched, and OFF-path storage is bit-identical by construction. ONE pure helper in
+beliefs.py, applied at BOTH render read-sites (the store's belief lines and the game.py graph
+builder) so the memory prose and the suspicion graph can never disagree about the clamped value;
+non-render consumers keep reading the raw scalar.
 
 **Integration risk:**
 
@@ -1068,7 +1075,7 @@ degraded champion result is a FINDING for the close + Phase 17, never a blocker.
 - agents/tactical/learned/ (the champion is measured, never modified)
 
 **Definition of done:**
-- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `REQUIRED_PROMPT_SET/VERSIONS` literals matching the lock (`*.qwen3_5_27b.v1`).
+- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `refresh_samples.sh`'s `REQUIRED_PROMPT_SET` literal matching the locked set, and HEAD's `PROMPT_VERSION_SETS` resolving that set to exactly `*.qwen3_5_27b.v1` (the registry is the version authority — `refresh_samples.sh` carries no version literal, and `record_ml_corpus.sh`'s coupled block stays baseline-3 until 16.17; the recorded MANIFEST provenance check below is the on-disk proof).
 - [ ] Both sets recorded at the locked substrate, committed atomically with MANIFEST provenance exact (locked model id, v1 versions, six retired flags, git_sha, $0, winner) and the Q5 annotated tag; `scripts/validity_gate.py --expected-model <locked-id> --require-zero-cost` PASSES both sets; byte-identical reconstruction clean BARE.
 - [ ] The BEFORE column is committed (`audits/baseline3-final-measure.json`, named with its tip sha) and the audit's before/after table regenerates from it + the new bytes via the committed CLIs — funnel, R-gate, referee (16.11 definition), canaries (degraded-Q3 discipline, UNDERPOWERED honestly recorded when the CI spans both hypotheses).
 - [ ] Baseline-4 floors pinned in the per-baseline block with measured values; `measure_baseline.py --watchability` clean on the new sets.
@@ -1273,6 +1280,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)
+- tasks/phase-16.md (the STATUS banner flip to CLOSED — or to PAUSED on the slate's pause path; the 15.23 precedent)
 - README.md (sample-provenance paragraph)
 - tests/ (graduation re-pins + the byte-coupled sweep)
 
@@ -1282,7 +1290,8 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/manager.py + meetings/transcript.py (no mechanism change at the close — graduation touches resolvers/registry only)
 
 **Definition of done:**
-- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close (the template retreat is a new contract with its own bump — never an in-task edit), and the pause is recorded as the slate's outcome.
+- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close. **PAUSE-path DoD** (replaces every bullet below except the CI tail): the slate audit section is committed with the pause ruling and its counterfactual evidence, the banner flips to PAUSED naming the re-plan owner-side, NO record is performed, and the surface-retreat successor contract is named — the remaining bullets bind ONLY on the proceed path.
+- [ ] [proceed path] The recorded substrate matches the slate exactly (stamped flags = graduated set).
 - [ ] Both sets recorded atomically at the final substrate (locked model, 16.15/16.16 versions, slate graduated), Q5 tags, MANIFEST provenance exact; validity gate PASSES with `--expected-model`; BARE byte-verification clean (no `AILIBI_*` export — C6 discharged by graduation).
 - [ ] The before/after table regenerates end-to-end from committed artifacts (the BEFORE measure file + the new bytes via the committed CLIs); the named pairing is explicit: voice metrics and zero-flag conviction rate in one table, with the persona-attribution question answered (a zero-flag rise with voice-metric movement and no judgment-lever change = the phase NO-GO, paused for the owner).
 - [ ] Canaries on the 50-seed sets per the degraded-Q3 rule (pre-registered bands, two-proportion tests, UNDERPOWERED recorded honestly); a regression pauses the close.

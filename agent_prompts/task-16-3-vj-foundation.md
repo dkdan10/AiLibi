@@ -42,6 +42,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 - meetings/render_contract.py (persona + provenance kwargs, SuspicionEntry provenance fields — all defaulted)
 - agents/strategic/prompts/loader.py (the four wrapper signatures + render bodies — defaulted pass-through)
 - meetings/manager.py (render seams + MeetingParticipant.persona/provenance threading region — disjoint from 16.5/16.6/16.7/16.8's regions per the preamble map)
+- orchestrator/game.py (the `suspicion_graph_for_meeting` builder region — POPULATE the new `SuspicionEntry` provenance fields from the belief store; without this, live graphs carry defaults and 16.15's surface has nothing to render; disjoint from 16.7/16.9's regions and the registry line)
 - tests/agents/test_beliefs_provenance.py (new: decomposition-sums-to-scalar pins)
 - tests/meetings/test_prompt_byte_golden.py (new: the golden over both committed sets)
 
@@ -56,6 +57,7 @@ instrument every later render lever in this phase reuses (16.5's id-rendering, 1
 - [ ] Hard/soft attribution survives the cross-meeting carry: a fixture where a grounded hard flag lands in meeting 1 shows a carried-HARD component (never carried-soft) in meeting 2+'s decomposition, including through decay and the pre-vote re-render path.
 - [ ] The prompt-byte golden re-renders EVERY committed meeting prompt (all four template kinds) and `rendered_memory` across `replays/samples/{9p2i,4p1i}` and asserts byte-equality against `llm_calls[].prompt` — and it FAILS on a deliberate one-byte template perturbation (a golden that cannot fail is not a gate).
 - [ ] The widened contract is inert: all new kwargs defaulted, `SuspicionEntry` extended additively, `MeetingParticipant.persona` defaults empty, and `bash scripts/verify_samples.sh` reconstructs both committed sets clean.
+- [ ] The production graph builder POPULATES the provenance fields (a fixture proves live `MeetingParticipant.suspicion_graph` rows carry the hard/soft split, not defaults) — populated-but-unrendered is the inert contract; defaults-forever would starve 16.15's surface.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

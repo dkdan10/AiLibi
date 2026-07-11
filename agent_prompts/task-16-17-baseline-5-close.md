@@ -57,6 +57,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - eval/watchability.py (baseline-5 floors region — behind 16.11/16.14's)
 - audits/baseline4-final-measure.json (new: the BEFORE column, captured pre-replacement — GO path naming; 16.2's surgery renames under NO-GO)
 - audits/audit-phase-16-close.md (new)
+- tasks/phase-16.md (the STATUS banner flip to CLOSED — or to PAUSED on the slate's pause path; the 15.23 precedent)
 - README.md (sample-provenance paragraph)
 - tests/ (graduation re-pins + the byte-coupled sweep)
 
@@ -66,7 +67,8 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - meetings/manager.py + meetings/transcript.py (no mechanism change at the close — graduation touches resolvers/registry only)
 
 **Definition of done:**
-- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge); the recorded substrate matches the slate exactly (stamped flags = graduated set). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close (the template retreat is a new contract with its own bump — never an in-task edit), and the pause is recorded as the slate's outcome.
+- [ ] The graduation slate is recorded in the close audit BEFORE the record (each lever's ruling + its counterfactual citation + the owner sign-off via PR merge). Stay-OFF is coherent in-scope ONLY for the template-free levers (J1, absence); a stay-OFF ruling on the citation gate or id-rendering AFTER 16.15's asks landed PAUSES the close. **PAUSE-path DoD** (replaces every bullet below except the CI tail): the slate audit section is committed with the pause ruling and its counterfactual evidence, the banner flips to PAUSED naming the re-plan owner-side, NO record is performed, and the surface-retreat successor contract is named — the remaining bullets bind ONLY on the proceed path.
+- [ ] [proceed path] The recorded substrate matches the slate exactly (stamped flags = graduated set).
 - [ ] Both sets recorded atomically at the final substrate (locked model, 16.15/16.16 versions, slate graduated), Q5 tags, MANIFEST provenance exact; validity gate PASSES with `--expected-model`; BARE byte-verification clean (no `AILIBI_*` export — C6 discharged by graduation).
 - [ ] The before/after table regenerates end-to-end from committed artifacts (the BEFORE measure file + the new bytes via the committed CLIs); the named pairing is explicit: voice metrics and zero-flag conviction rate in one table, with the persona-attribution question answered (a zero-flag rise with voice-metric movement and no judgment-lever change = the phase NO-GO, paused for the owner).
 - [ ] Canaries on the 50-seed sets per the degraded-Q3 rule (pre-registered bands, two-proportion tests, UNDERPOWERED recorded honestly); a regression pauses the close.
