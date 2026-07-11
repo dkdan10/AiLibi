@@ -31,7 +31,7 @@ pairing is enforced at close: 16.17 reads the voice metrics ALONGSIDE the zero-f
 rate — a zero-flag rise attributable to personas is the phase NO-GO.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (persona preamble region in all four templates — behind 16.15's edits)
+- agents/strategic/prompts/qwen3_6_27b/ (persona preamble region in all four templates — behind 16.15's edits)
 - orchestrator/game.py (the locked set's version entry — the second bump; behind 16.15's)
 - data/personas.json (card-text refinement region — the bank 16.9 committed; structure unchanged)
 - tests/meetings/test_persona_render.py (new: empty-persona byte-identity + per-card render fixtures + the re-anchor line presence)

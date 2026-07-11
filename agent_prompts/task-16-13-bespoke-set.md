@@ -1,4 +1,4 @@
-# Agent Prompt — 16.13 The bespoke set `qwen3_5_27b` v1: semantics ported exactly, restyled to the new model
+# Agent Prompt — 16.13 The bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.13 — The bespoke set `qwen3_5_27b` v1: semantics ported exactly, restyled to the new model, anchored to audits/audit-phase-16-model-lock.md; agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source semantics); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis). Do not implement work outside these references.
+Implement Task 16.13 — The bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model, anchored to audits/audit-phase-16-model-lock.md; agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source semantics); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -16,13 +16,13 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 **Section refs:** audits/audit-phase-16-model-lock.md; agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source semantics); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis)
 **Complexity:** Medium
 
-GO-path only, ∥ 16.12. Author `agents/strategic/prompts/qwen3_5_27b/` — the four templates,
+GO-path only, ∥ 16.12. Author `agents/strategic/prompts/qwen3_6_27b/` — the four templates,
 porting the `qwen3_32b` v5/v6 SEMANTICS exactly (the vent-elicitation instructions, the
 reporter-exculpation section, the schema examples, every mechanical directive) restyled to the
 new model's idioms per the 16.1 probe's findings. Baseline 4 must be MECHANICS-PURE: same asks,
 same sections, same defaults — a reader diffing the two sets should find style, never semantics
 (the 16.15 elicitation batch adds the NEW asks afterward, on this set, as its own attributable
-layer). Register `_bespoke_versions("qwen3_5_27b", version="v1")` in `PROMPT_VERSION_SETS`
+layer). Register `_bespoke_versions("qwen3_6_27b", version="v1")` in `PROMPT_VERSION_SETS`
 (one new line — the registry line then serializes 16.13 → 16.15 → 16.16), add the set to
 `BESPOKE_SETS` in the bespoke-set test suite, flip `refresh_samples.sh`'s `REQUIRED_PROMPT_SET`
 literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NOT touched — its
@@ -30,22 +30,22 @@ preflight couples set+versions and flipping one alone fails it; 16.17 re-pins th
 register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
 `--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
 the A/B as a TWO-PASS protocol on the one new set (`_SET_OWNER` binds each set to its model, so
-`--prompt-set qwen3_32b` on the qwen3.5 model is structurally rejected — the control cannot be a
-cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_5_27b/` (the control arm — commit
+`--prompt-set qwen3_32b` on the Qwen3.6 model is structurally rejected — the control cannot be a
+cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_6_27b/` (the control arm — commit
 it first, sweep it, record the template-source sha in the rows), pass 2 sweeps the RESTYLED
 commit (the candidate arm); the committed rows carry the sha per arm so the comparison is
 control-vs-restyle on the same model, same contexts — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (new: crewmate_report.j2, impostor_report.j2, accusation_round.j2, vote_ballot.j2)
+- agents/strategic/prompts/qwen3_6_27b/ (new: crewmate_report.j2, impostor_report.j2, accusation_round.j2, vote_ballot.j2)
 - orchestrator/game.py (the new PROMPT_VERSION_SETS line — disjoint from 16.7/16.9's regions; serializes ahead of 16.15/16.16)
 - tests/agents/test_bespoke_prompt_sets.py (BESPOKE_SETS registration — the parametrized suites pick the set up automatically)
 - scripts/refresh_samples.sh (REQUIRED_PROMPT_SET literal — disjoint from 16.12's model lines)
 - tests/scripts/test_refresh_samples.py (set-gate pin region — disjoint from 16.12's model-literal pin region)
 - experiments/lab/featherless_sweep.py (_SET_OWNER map entry + any slate wiring the A/B needs)
-- experiments/lab/results-featherless-sweep-qwen3-5-27b-ab.jsonl (new: the A/B rows)
-- experiments/lab/report-featherless-sweep-qwen3-5-27b.md (A/B section appended)
+- experiments/lab/results-featherless-sweep-qwen3-6-27b-ab.jsonl (new: the A/B rows)
+- experiments/lab/report-featherless-sweep-qwen3-6-27b.md (A/B section appended)
 
 **Files NOT in scope:**
 - agents/strategic/prompts/qwen3_32b/ (the source set is frozen — provenance-versioned bytes)
@@ -55,7 +55,7 @@ hurt, before baseline 4 spends a record on it.
 
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
-- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
+- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_6_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
 - [ ] The operator A/B rows are committed under the two-pass protocol (pass 1 = verbatim-port commit, pass 2 = restyled commit, each row carrying its template-source sha) — parse rates, grade booleans, latency per arm on the same model and contexts — and the report states the verdict (restyle adopted or the verbatim port kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.
@@ -98,5 +98,5 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-16-bespoke-set` with a title like `task 16.13: the bespoke set `qwen3_5_27b` v1: semantics ported exactly, restyled to the new model`.
+Open a PR from branch `phase-16-bespoke-set` with a title like `task 16.13: the bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-16-model-lock.md; agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source semantics); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

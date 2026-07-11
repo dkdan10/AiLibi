@@ -56,7 +56,7 @@ baseline 4 (REPURPOSED,         scripted movers · same mechanics · NEW MODEL
  2026-07-11: Phase 15 chose      → the model effect measured cleanly (Phase 16 Wave 2,
  branch A — no default flip;       probe-locked, GO-conditional; the learned champion
  baseline 4 is now the             stays opt-in and is re-audited against it)
- qwen3.5-27b swap, if GO)
+ Qwen3.6-27b swap, if GO)
         │
         │   Phase 16 — Voice & Judgment (tasks/phase-16.md): personas, citation-gated conviction,
         │   and the information-POOLING levers (roll-call / whereabouts / grounded vouching /
@@ -96,7 +96,7 @@ baseline 6                      co-adapted movers · upgraded meetings
   to demand), suspicion provenance, and the pooling levers deferred out of Wave 0 (ballot-whereabouts /
   roll-call elicitation — the mechanism that converts the measured median-3 oracle candidate sets into
   playable deduction, now including typed-grounded vouching and a capped absence prior). Adds the
-  probe-first qwen3.5-27b model decision (GO ⇒ baseline 4 = the model swap, its own layer). Closes on
+  probe-first Qwen3.6-27b model decision (GO ⇒ baseline 4 = the model swap, its own layer). Closes on
   baseline 5 with the funnel + the new V&J instruments as the before/after.
 - **Phase 17 — co-adaptation (owner goal 3).** Re-ground the ballot surrogate on baseline 5, re-run the
   Phase-15 bake-off recipe for both sides against the upgraded meeting model, re-select champions

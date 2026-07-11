@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.15 — The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix, anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_5_27b/; the NO-GO rewrite is 16.2's surgery). Do not implement work outside these references.
+Implement Task 16.15 — The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix, anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-elicitation-batch`
 **Depends on:** 16.2, 16.5, 16.6, 16.7, 16.14
-**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_5_27b/; the NO-GO rewrite is 16.2's surgery)
+**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery)
 **Complexity:** Integration
 
 The prompt surface that makes the Wave-1 machinery SPEAK, all four templates, ONE version bump
@@ -35,7 +35,7 @@ framing that closes the 3/851 self-naming artifact. Every ask is mechanism-teste
 UPTAKE is 16.17's measurement, record-only discipline.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (all four templates — the locked set per 16.2; behind 16.13's creation and 16.14's record)
+- agents/strategic/prompts/qwen3_6_27b/ (all four templates — the locked set per 16.2; behind 16.13's creation and 16.14's record)
 - orchestrator/game.py (the locked set's PROMPT_VERSION_SETS entry — the single bump this task owns; behind 16.13's line)
 - tests/meetings/test_elicitation_fixtures.py (new: per-ask mechanism fixtures)
 - tests/agents/test_bespoke_prompt_sets.py (version-pin region for the bumped entry)
@@ -110,4 +110,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-16-elicitation-batch` with a title like `task 16.15: the elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_5_27b/; the NO-GO rewrite is 16.2's surgery)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -32,7 +32,7 @@ honesty, not the subject's guilt, so it never mints a strong flag), and a capped
 prior (making visibility a strategic resource for the first time — the incentive Phase 17's
 retraining needs); (3) **Voice** — a deterministic, role-neutral persona layer landing STRICTLY
 after the citation gate (the planning doc's thesis: louder voices without an evidence bound worsen
-the zero-flag channel); (4) **the model decision** — qwen3.5-27b evaluated probe-first against the
+the zero-flag channel); (4) **the model decision** — Qwen3.6-27b evaluated probe-first against the
 incumbent `Qwen/Qwen3-32B` on the committed contexts, locked by the owner, and (under GO) landed as
 its OWN baseline 4 with mechanics untouched, so the model effect and the V&J effect are separately
 attributable. The phase closes on **baseline 5** with the funnel + the new V&J instruments as the
@@ -148,13 +148,13 @@ and flips this banner.
 
 ## Wave 0 — the model probe and the lock
 
-### Task 16.1 — qwen3.5-27b sweep probe: the new Qwen generation on the committed contexts
+### Task 16.1 — Qwen3.6-27b sweep probe: the new Qwen generation on the committed contexts
 **Branch:** `phase-16-model-probe`
 **Depends on:** none
 **Section refs:** experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer)
 **Complexity:** Medium
 
-Evaluate the newer Qwen generation before any production change: add qwen3.5-27b to the committed
+Evaluate the newer Qwen generation before any production change: add Qwen3.6-27b to the committed
 sweep harness's `SLATE` as a candidate `ModelSpec` (probing BOTH thinking-axis settings and the
 transport `qwen_kwarg`, exactly how the Phase-14 slate rows are declared) and operator-run the
 sweep over the SAME reconstructed 9p2i contexts as the incumbent — model is the only moving
@@ -170,8 +170,8 @@ edit, no constant change — the fail-loud registry entry is 16.12's, post-lock.
 
 **Files in scope:**
 - experiments/lab/featherless_sweep.py (SLATE + any new-generation transport handling the probe needs)
-- experiments/lab/results-featherless-sweep-qwen3-5-27b.jsonl (new: the committed sweep rows)
-- experiments/lab/report-featherless-sweep-qwen3-5-27b.md (new: the graded comparison + the served-id/response-format/thinking findings)
+- experiments/lab/results-featherless-sweep-qwen3-6-27b.jsonl (new: the committed sweep rows)
+- experiments/lab/report-featherless-sweep-qwen3-6-27b.md (new: the graded comparison + the served-id/response-format/thinking findings)
 - tests/experiments/test_probe_backends.py (slate-entry pins region — the new ModelSpec is well-formed; no network)
 
 **Files NOT in scope:**
@@ -198,7 +198,7 @@ Clone a candidate row's shape from the existing `SLATE` (:247-275) — `served_i
 `thinking_axis`, `qwen_kwarg`, `role="candidate"` — and let the harness do the rest; the pinned
 corpus-id mechanism (`_pin_ids` :969-992) guarantees the new model sees byte-identical contexts.
 The served id for a new release is a guess until the preflight confirms it: try the obvious
-Featherless namespace forms (`Qwen/Qwen3.5-27B` and variants) and record what the API actually
+Featherless namespace forms (`Qwen/Qwen3.6-27B` and variants) and record what the API actually
 serves — the preflight probe (:904-957) is the arbiter, and "not served on the plan" is a
 first-class NO-GO outcome for 16.2, not a task failure. Operator gate: `FEATHERLESS_API_KEY`,
 hours-scale, $0 flat-rate.
@@ -216,8 +216,8 @@ The mid-phase owner gate. Consume 16.1's committed evidence and record the GO/NO
 thinking policy, `response_format_mode` posture, parse/latency evidence, the rejected path's
 rationale — including "not served on the flat-rate plan" if that is the finding). Then perform the
 phase-doc surgery this file's banner promises: under **GO**, concretize the Wave-2 contracts
-(16.12–16.14 stay as written; fill the exact served id where this document says qwen3.5-27b) and
-confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_5_27b/`; under
+(16.12–16.14 stay as written; fill the exact served id where this document says Qwen3.6-27b) and
+confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_6_27b/`; under
 **NO-GO**, REMOVE the 16.12–16.14 contracts and their generated prompts entirely, replacing the
 three with ONE prose drop record carrying the rationale (removal, not labeling:
 `scripts/compute_next_task.py` computes dispatchability from `### Task` headers + merged PRs and
@@ -241,7 +241,7 @@ lock outcome.
 - replays/ (untouched)
 
 **Definition of done:**
-- [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-5-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
+- [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-6-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
 - [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → the 16.12–16.14 contracts AND their prompts are REMOVED (one prose drop record remains; task/prompt counts fall by three, validator + `--check` green at the new counts, and `compute_next_task.py --phase 16` no longer lists them), 16.15 AND 16.16 rewritten (edges, paths, per-template arithmetic — 16.15: three v5 → v6, `vote_ballot` v6 → v7; 16.16's second bump: three → v7, `vote_ballot` → v8), 16.17's BEFORE column re-anchored to baseline 3, and the DAG/critical-path text updated.
 - [ ] `uv run python scripts/validate_task_docs.py` and `uv run python scripts/generate_prompts.py --check` pass on the re-authored doc (the full-file validation discipline: a malformed phase doc breaks the repo's validator for every phase).
 - [ ] The STATUS banner names the lock outcome and the date.
@@ -967,19 +967,19 @@ assert it in a test rather than re-implementing anything.
 
 **Ready-to-paste prompt:** `agent_prompts/task-16-12-model-onboarding.md`
 
-### Task 16.13 — The bespoke set `qwen3_5_27b` v1: semantics ported exactly, restyled to the new model
+### Task 16.13 — The bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model
 **Branch:** `phase-16-bespoke-set`
 **Depends on:** 16.2
 **Section refs:** audits/audit-phase-16-model-lock.md; agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source semantics); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis)
 **Complexity:** Medium
 
-GO-path only, ∥ 16.12. Author `agents/strategic/prompts/qwen3_5_27b/` — the four templates,
+GO-path only, ∥ 16.12. Author `agents/strategic/prompts/qwen3_6_27b/` — the four templates,
 porting the `qwen3_32b` v5/v6 SEMANTICS exactly (the vent-elicitation instructions, the
 reporter-exculpation section, the schema examples, every mechanical directive) restyled to the
 new model's idioms per the 16.1 probe's findings. Baseline 4 must be MECHANICS-PURE: same asks,
 same sections, same defaults — a reader diffing the two sets should find style, never semantics
 (the 16.15 elicitation batch adds the NEW asks afterward, on this set, as its own attributable
-layer). Register `_bespoke_versions("qwen3_5_27b", version="v1")` in `PROMPT_VERSION_SETS`
+layer). Register `_bespoke_versions("qwen3_6_27b", version="v1")` in `PROMPT_VERSION_SETS`
 (one new line — the registry line then serializes 16.13 → 16.15 → 16.16), add the set to
 `BESPOKE_SETS` in the bespoke-set test suite, flip `refresh_samples.sh`'s `REQUIRED_PROMPT_SET`
 literal (a disjoint line from 16.12's model literal; `record_ml_corpus.sh` is NOT touched — its
@@ -987,22 +987,22 @@ preflight couples set+versions and flipping one alone fails it; 16.17 re-pins th
 register the set in the sweep harness's `_SET_OWNER` map (the sweep REJECTS an unregistered
 `--prompt-set` before it starts — without this the A/B is unrunnable in scope), and operator-run
 the A/B as a TWO-PASS protocol on the one new set (`_SET_OWNER` binds each set to its model, so
-`--prompt-set qwen3_32b` on the qwen3.5 model is structurally rejected — the control cannot be a
-cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_5_27b/` (the control arm — commit
+`--prompt-set qwen3_32b` on the Qwen3.6 model is structurally rejected — the control cannot be a
+cross-set run): pass 1 sweeps the VERBATIM-PORT commit of `qwen3_6_27b/` (the control arm — commit
 it first, sweep it, record the template-source sha in the rows), pass 2 sweeps the RESTYLED
 commit (the candidate arm); the committed rows carry the sha per arm so the comparison is
 control-vs-restyle on the same model, same contexts — the evidence that the restyle helps, or at least does not
 hurt, before baseline 4 spends a record on it.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (new: crewmate_report.j2, impostor_report.j2, accusation_round.j2, vote_ballot.j2)
+- agents/strategic/prompts/qwen3_6_27b/ (new: crewmate_report.j2, impostor_report.j2, accusation_round.j2, vote_ballot.j2)
 - orchestrator/game.py (the new PROMPT_VERSION_SETS line — disjoint from 16.7/16.9's regions; serializes ahead of 16.15/16.16)
 - tests/agents/test_bespoke_prompt_sets.py (BESPOKE_SETS registration — the parametrized suites pick the set up automatically)
 - scripts/refresh_samples.sh (REQUIRED_PROMPT_SET literal — disjoint from 16.12's model lines)
 - tests/scripts/test_refresh_samples.py (set-gate pin region — disjoint from 16.12's model-literal pin region)
 - experiments/lab/featherless_sweep.py (_SET_OWNER map entry + any slate wiring the A/B needs)
-- experiments/lab/results-featherless-sweep-qwen3-5-27b-ab.jsonl (new: the A/B rows)
-- experiments/lab/report-featherless-sweep-qwen3-5-27b.md (A/B section appended)
+- experiments/lab/results-featherless-sweep-qwen3-6-27b-ab.jsonl (new: the A/B rows)
+- experiments/lab/report-featherless-sweep-qwen3-6-27b.md (A/B section appended)
 
 **Files NOT in scope:**
 - agents/strategic/prompts/qwen3_32b/ (the source set is frozen — provenance-versioned bytes)
@@ -1012,7 +1012,7 @@ hurt, before baseline 4 spends a record on it.
 
 **Definition of done:**
 - [ ] The four templates render under StrictUndefined with the full kwarg surface (the bespoke-set suite green), and a semantics diff table in the PR maps every v5/v6 mechanical directive to its ported location — nothing added, nothing dropped (the mechanics-pure claim, reviewable).
-- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_5_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
+- [ ] The registry entry, BESPOKE_SETS registration, the refresh_samples set literal (with its script-test pins updated here), and the `_SET_OWNER` sweep registration all land; `AILIBI_PROMPT_SET=qwen3_6_27b` is env-selectable end-to-end (suite-proven), and `tests/scripts/test_record_ml_corpus.py` stays green UNTOUCHED (the corpus script is out of scope — asserted).
 - [ ] The operator A/B rows are committed under the two-pass protocol (pass 1 = verbatim-port commit, pass 2 = restyled commit, each row carrying its template-source sha) — parse rates, grade booleans, latency per arm on the same model and contexts — and the report states the verdict (restyle adopted or the verbatim port kept; either is a finding).
 - [ ] The prompt-byte golden still passes on committed sets (nothing here touches the old set or its renders).
 - [ ] `uv run mypy .` passes.
@@ -1039,7 +1039,7 @@ anchor the loader/tests reference.
 **Section refs:** tasks/phase-15.md 15.7 (the atomic re-record runbook this clones); audits/audit-phase-16-model-lock.md (the substrate this records); eval/watchability.py (16.11's re-anchored referee + the per-baseline floors block); training/reports/results-champion-close.jsonl (the stamp-proof row convention the re-audit follows)
 **Complexity:** Integration
 
-GO-path only. Record **baseline 4** — both canonical sets on the locked model + the `qwen3_5_27b`
+GO-path only. Record **baseline 4** — both canonical sets on the locked model + the `qwen3_6_27b`
 v1 set — with the model as the ONLY layer change: every Phase-16 lever merged OFF/inert (the
 preflight: the prompt-byte golden green and `verify_samples.sh` bare on the pre-record tree),
 mechanics byte-equivalent to baseline 3's. The 15.7 runbook end-to-end: 2 Featherless workers,
@@ -1075,7 +1075,7 @@ degraded champion result is a FINDING for the close + Phase 17, never a blocker.
 - agents/tactical/learned/ (the champion is measured, never modified)
 
 **Definition of done:**
-- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `refresh_samples.sh`'s `REQUIRED_PROMPT_SET` literal matching the locked set, and HEAD's `PROMPT_VERSION_SETS` resolving that set to exactly `*.qwen3_5_27b.v1` (the registry is the version authority — `refresh_samples.sh` carries no version literal, and `record_ml_corpus.sh`'s coupled block stays baseline-3 until 16.17; the recorded MANIFEST provenance check below is the on-disk proof).
+- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `refresh_samples.sh`'s `REQUIRED_PROMPT_SET` literal matching the locked set, and HEAD's `PROMPT_VERSION_SETS` resolving that set to exactly `*.qwen3_6_27b.v1` (the registry is the version authority — `refresh_samples.sh` carries no version literal, and `record_ml_corpus.sh`'s coupled block stays baseline-3 until 16.17; the recorded MANIFEST provenance check below is the on-disk proof).
 - [ ] Both sets recorded at the locked substrate, committed atomically with MANIFEST provenance exact (locked model id, v1 versions, six retired flags, git_sha, $0, winner) and the Q5 annotated tag; `scripts/validity_gate.py --expected-model <locked-id> --require-zero-cost` PASSES both sets; byte-identical reconstruction clean BARE.
 - [ ] The BEFORE column is committed (`audits/baseline3-final-measure.json`, named with its tip sha) and the audit's before/after table regenerates from it + the new bytes via the committed CLIs — funnel, R-gate, referee (16.11 definition), canaries (degraded-Q3 discipline, UNDERPOWERED honestly recorded when the CI spans both hypotheses).
 - [ ] Baseline-4 floors pinned in the per-baseline block with measured values; `measure_baseline.py --watchability` clean on the new sets.
@@ -1114,7 +1114,7 @@ cells 15.7's didn't (different dialogue → different transcript pins).
 ### Task 16.15 — The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix
 **Branch:** `phase-16-elicitation-batch`
 **Depends on:** 16.2, 16.5, 16.6, 16.7, 16.14
-**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_5_27b/; the NO-GO rewrite is 16.2's surgery)
+**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery)
 **Complexity:** Integration
 
 The prompt surface that makes the Wave-1 machinery SPEAK, all four templates, ONE version bump
@@ -1136,7 +1136,7 @@ framing that closes the 3/851 self-naming artifact. Every ask is mechanism-teste
 UPTAKE is 16.17's measurement, record-only discipline.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (all four templates — the locked set per 16.2; behind 16.13's creation and 16.14's record)
+- agents/strategic/prompts/qwen3_6_27b/ (all four templates — the locked set per 16.2; behind 16.13's creation and 16.14's record)
 - orchestrator/game.py (the locked set's PROMPT_VERSION_SETS entry — the single bump this task owns; behind 16.13's line)
 - tests/meetings/test_elicitation_fixtures.py (new: per-ask mechanism fixtures)
 - tests/agents/test_bespoke_prompt_sets.py (version-pin region for the bumped entry)
@@ -1199,7 +1199,7 @@ pairing is enforced at close: 16.17 reads the voice metrics ALONGSIDE the zero-f
 rate — a zero-flag rise attributable to personas is the phase NO-GO.
 
 **Files in scope:**
-- agents/strategic/prompts/qwen3_5_27b/ (persona preamble region in all four templates — behind 16.15's edits)
+- agents/strategic/prompts/qwen3_6_27b/ (persona preamble region in all four templates — behind 16.15's edits)
 - orchestrator/game.py (the locked set's version entry — the second bump; behind 16.15's)
 - data/personas.json (card-text refinement region — the bank 16.9 committed; structure unchanged)
 - tests/meetings/test_persona_render.py (new: empty-persona byte-identity + per-card render fixtures + the re-anchor line presence)

@@ -16,7 +16,7 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 **Section refs:** tasks/phase-15.md 15.7 (the atomic re-record runbook this clones); audits/audit-phase-16-model-lock.md (the substrate this records); eval/watchability.py (16.11's re-anchored referee + the per-baseline floors block); training/reports/results-champion-close.jsonl (the stamp-proof row convention the re-audit follows)
 **Complexity:** Integration
 
-GO-path only. Record **baseline 4** — both canonical sets on the locked model + the `qwen3_5_27b`
+GO-path only. Record **baseline 4** — both canonical sets on the locked model + the `qwen3_6_27b`
 v1 set — with the model as the ONLY layer change: every Phase-16 lever merged OFF/inert (the
 preflight: the prompt-byte golden green and `verify_samples.sh` bare on the pre-record tree),
 mechanics byte-equivalent to baseline 3's. The 15.7 runbook end-to-end: 2 Featherless workers,
@@ -52,7 +52,7 @@ degraded champion result is a FINDING for the close + Phase 17, never a blocker.
 - agents/tactical/learned/ (the champion is measured, never modified)
 
 **Definition of done:**
-- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `refresh_samples.sh`'s `REQUIRED_PROMPT_SET` literal matching the locked set, and HEAD's `PROMPT_VERSION_SETS` resolving that set to exactly `*.qwen3_5_27b.v1` (the registry is the version authority — `refresh_samples.sh` carries no version literal, and `record_ml_corpus.sh`'s coupled block stays baseline-3 until 16.17; the recorded MANIFEST provenance check below is the on-disk proof).
+- [ ] Preflight proven and quoted in the audit: golden green + bare `verify_samples.sh` on the pre-record tree, every `_TOGGLEABLE_LEVER_RESOLVERS` entry OFF, `refresh_samples.sh`'s `REQUIRED_PROMPT_SET` literal matching the locked set, and HEAD's `PROMPT_VERSION_SETS` resolving that set to exactly `*.qwen3_6_27b.v1` (the registry is the version authority — `refresh_samples.sh` carries no version literal, and `record_ml_corpus.sh`'s coupled block stays baseline-3 until 16.17; the recorded MANIFEST provenance check below is the on-disk proof).
 - [ ] Both sets recorded at the locked substrate, committed atomically with MANIFEST provenance exact (locked model id, v1 versions, six retired flags, git_sha, $0, winner) and the Q5 annotated tag; `scripts/validity_gate.py --expected-model <locked-id> --require-zero-cost` PASSES both sets; byte-identical reconstruction clean BARE.
 - [ ] The BEFORE column is committed (`audits/baseline3-final-measure.json`, named with its tip sha) and the audit's before/after table regenerates from it + the new bytes via the committed CLIs — funnel, R-gate, referee (16.11 definition), canaries (degraded-Q3 discipline, UNDERPOWERED honestly recorded when the CI spans both hypotheses).
 - [ ] Baseline-4 floors pinned in the per-baseline block with measured values; `measure_baseline.py --watchability` clean on the new sets.

@@ -1,4 +1,4 @@
-# Agent Prompt — 16.1 qwen3.5-27b sweep probe: the new Qwen generation on the committed contexts
+# Agent Prompt — 16.1 Qwen3.6-27b sweep probe: the new Qwen generation on the committed contexts
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.1 — qwen3.5-27b sweep probe: the new Qwen generation on the committed contexts, anchored to experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer). Do not implement work outside these references.
+Implement Task 16.1 — Qwen3.6-27b sweep probe: the new Qwen generation on the committed contexts, anchored to experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -16,7 +16,7 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 **Section refs:** experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer)
 **Complexity:** Medium
 
-Evaluate the newer Qwen generation before any production change: add qwen3.5-27b to the committed
+Evaluate the newer Qwen generation before any production change: add Qwen3.6-27b to the committed
 sweep harness's `SLATE` as a candidate `ModelSpec` (probing BOTH thinking-axis settings and the
 transport `qwen_kwarg`, exactly how the Phase-14 slate rows are declared) and operator-run the
 sweep over the SAME reconstructed 9p2i contexts as the incumbent — model is the only moving
@@ -32,8 +32,8 @@ edit, no constant change — the fail-loud registry entry is 16.12's, post-lock.
 
 **Files in scope:**
 - experiments/lab/featherless_sweep.py (SLATE + any new-generation transport handling the probe needs)
-- experiments/lab/results-featherless-sweep-qwen3-5-27b.jsonl (new: the committed sweep rows)
-- experiments/lab/report-featherless-sweep-qwen3-5-27b.md (new: the graded comparison + the served-id/response-format/thinking findings)
+- experiments/lab/results-featherless-sweep-qwen3-6-27b.jsonl (new: the committed sweep rows)
+- experiments/lab/report-featherless-sweep-qwen3-6-27b.md (new: the graded comparison + the served-id/response-format/thinking findings)
 - tests/experiments/test_probe_backends.py (slate-entry pins region — the new ModelSpec is well-formed; no network)
 
 **Files NOT in scope:**
@@ -60,7 +60,7 @@ Clone a candidate row's shape from the existing `SLATE` (:247-275) — `served_i
 `thinking_axis`, `qwen_kwarg`, `role="candidate"` — and let the harness do the rest; the pinned
 corpus-id mechanism (`_pin_ids` :969-992) guarantees the new model sees byte-identical contexts.
 The served id for a new release is a guess until the preflight confirms it: try the obvious
-Featherless namespace forms (`Qwen/Qwen3.5-27B` and variants) and record what the API actually
+Featherless namespace forms (`Qwen/Qwen3.6-27B` and variants) and record what the API actually
 serves — the preflight probe (:904-957) is the arbiter, and "not served on the plan" is a
 first-class NO-GO outcome for 16.2, not a task failure. Operator gate: `FEATHERLESS_API_KEY`,
 hours-scale, $0 flat-rate.
@@ -86,5 +86,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-16-model-probe` with a title like `task 16.1: qwen3.5-27b sweep probe: the new qwen generation on the committed contexts`.
+Open a PR from branch `phase-16-model-probe` with a title like `task 16.1: qwen3.6-27b sweep probe: the new qwen generation on the committed contexts`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -21,8 +21,8 @@ The mid-phase owner gate. Consume 16.1's committed evidence and record the GO/NO
 thinking policy, `response_format_mode` posture, parse/latency evidence, the rejected path's
 rationale — including "not served on the flat-rate plan" if that is the finding). Then perform the
 phase-doc surgery this file's banner promises: under **GO**, concretize the Wave-2 contracts
-(16.12–16.14 stay as written; fill the exact served id where this document says qwen3.5-27b) and
-confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_5_27b/`; under
+(16.12–16.14 stay as written; fill the exact served id where this document says Qwen3.6-27b) and
+confirm 16.15/16.16's template paths point at `agents/strategic/prompts/qwen3_6_27b/`; under
 **NO-GO**, REMOVE the 16.12–16.14 contracts and their generated prompts entirely, replacing the
 three with ONE prose drop record carrying the rationale (removal, not labeling:
 `scripts/compute_next_task.py` computes dispatchability from `### Task` headers + merged PRs and
@@ -46,7 +46,7 @@ lock outcome.
 - replays/ (untouched)
 
 **Definition of done:**
-- [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-5-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
+- [ ] The lock audit records the decision in the 14.6 shape with every quoted number traced to `results-featherless-sweep-qwen3-6-27b.jsonl`, the exact served id (GO) or the NO-GO reason, and owner sign-off (the owner merges this PR — the 15.18 convention).
 - [ ] The phase doc reflects the decision: GO → Wave 2 active with the served id concretized; NO-GO → the 16.12–16.14 contracts AND their prompts are REMOVED (one prose drop record remains; task/prompt counts fall by three, validator + `--check` green at the new counts, and `compute_next_task.py --phase 16` no longer lists them), 16.15 AND 16.16 rewritten (edges, paths, per-template arithmetic — 16.15: three v5 → v6, `vote_ballot` v6 → v7; 16.16's second bump: three → v7, `vote_ballot` → v8), 16.17's BEFORE column re-anchored to baseline 3, and the DAG/critical-path text updated.
 - [ ] `uv run python scripts/validate_task_docs.py` and `uv run python scripts/generate_prompts.py --check` pass on the re-authored doc (the full-file validation discipline: a malformed phase doc breaks the repo's validator for every phase).
 - [ ] The STATUS banner names the lock outcome and the date.
