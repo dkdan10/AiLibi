@@ -30,6 +30,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+import experiments.lab.featherless_sweep as fs
 import experiments.lab.probe_backends as pb
 from experiments.lab.probe_backends import (
     CallResult,
@@ -521,3 +522,124 @@ def test_active_substrate_flags_every_lever_unconditional(
     # stray AILIBI_REPORTER_EXCULPATION export (either polarity) cannot flip it.
     assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "0"}) == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "1"}) == _FLAGS_ON
+
+
+# --------------------------------------------------------------------------- #
+# Slate-entry pins — Task 16.1 probe region (no network)                      #
+# --------------------------------------------------------------------------- #
+def _find_spec(label: str) -> fs.ModelSpec:
+    """The single SLATE entry with ``label`` (fails loud if absent or duplicated)."""
+
+    matches = [spec for spec in fs.SLATE if spec.label == label]
+    assert len(matches) == 1, f"expected exactly one slate entry labelled {label!r}"
+    return matches[0]
+
+
+def test_slate_is_well_formed() -> None:
+    """The slate is a clean set: unique ids and labels, one 9B-class reference."""
+
+    model_ids = [spec.model_id for spec in fs.SLATE]
+    labels = [spec.label for spec in fs.SLATE]
+    assert len(model_ids) == len(set(model_ids))
+    assert len(labels) == len(set(labels))
+    assert all(spec.role in {"candidate", "reference"} for spec in fs.SLATE)
+    references = [spec for spec in fs.SLATE if spec.role == "reference"]
+    assert len(references) == 1
+    assert references[0].label == fs.REFERENCE_LABEL == "qwen3-8b"
+    assert all(spec.model_id and spec.label for spec in fs.SLATE)
+
+
+def test_qwen3_6_candidate_spec_pins() -> None:
+    """qwen3-6-27b: served id preflight-confirmed 2026-07-11; the kwarg axis is
+    honored live, but the id is deliberately NOT in the production registry
+    (16.12's fail-loud entry lands post-lock)."""
+
+    spec = _find_spec("qwen3-6-27b")
+    assert spec.model_id == "Qwen/Qwen3.6-27B"
+    assert spec.thinking_axis is True
+    assert spec.qwen_kwarg is True
+    assert spec.role == "candidate"
+    assert fs._modes_for(spec) == (False, True)
+
+
+def test_thinkingcap_candidate_spec_pins() -> None:
+    """thinkingcap-27b: its deployment 400s on chat_template_kwargs (and, live
+    2026-07-11, on every generation) — bare transport, no thinking axis; the
+    probe records the NO-GO."""
+
+    spec = _find_spec("thinkingcap-27b")
+    assert spec.model_id == "bottlecapai/ThinkingCap-Qwen3.6-27B"
+    assert spec.thinking_axis is False
+    assert spec.qwen_kwarg is False
+    assert spec.role == "candidate"
+    assert fs._modes_for(spec) == (False,)
+
+
+def test_probe_artifacts_are_distinct_from_committed_14_4() -> None:
+    """The probe writes its OWN artifacts — it must never clobber the committed
+    14.4 matrix (results-featherless-sweep.jsonl / report-featherless-sweep.md)."""
+
+    assert fs.PROBE_RESULTS != fs.RESULTS
+    assert fs.PROBE_REPORT != fs.REPORT
+    assert fs.PROBE_RESULTS.name == "results-featherless-sweep-qwen3-6-27b.jsonl"
+    assert fs.PROBE_REPORT.name == "report-featherless-sweep-qwen3-6-27b.md"
+
+
+def test_probe_slate_constants() -> None:
+    """The probe reuses the incumbent's EXISTING prompt set (qwen3_32b — a 16.1
+    finding; the bespoke set is 16.13's) and its labels resolve in the slate."""
+
+    assert fs.PROBE_PROMPT_SET == "qwen3_32b"
+    assert fs.PROBE_CANDIDATE_LABELS == ("qwen3-6-27b", "thinkingcap-27b")
+    assert fs.PROBE_INCUMBENT_LABEL == "qwen3-32b"
+    slate_labels = {spec.label for spec in fs.SLATE}
+    for label in (*fs.PROBE_CANDIDATE_LABELS, fs.PROBE_INCUMBENT_LABEL):
+        assert label in slate_labels
+    assert set(fs._PROBE_ID_FORMS) == set(fs.PROBE_CANDIDATE_LABELS)
+    for label, forms in fs._PROBE_ID_FORMS.items():
+        assert forms  # a non-empty tuple of id forms...
+        assert forms[0] == _find_spec(label).model_id  # ...led by the pinned id
+
+
+def test_new_generation_ids_stay_out_of_production_registry() -> None:
+    """The experiment-tier boundary pin: 16.1 keeps the new ids OUT of the
+    production registry (16.12's fail-loud entry is post-lock). If this starts
+    failing because an id was registered, 16.12 has landed and the sweep-local
+    transport should be retired."""
+
+    from llm.featherless_client import _supports_thinking_kwarg
+
+    assert fs._registry_knows("Qwen/Qwen3-32B") is True
+    for model_id in ("Qwen/Qwen3.6-27B", "bottlecapai/ThinkingCap-Qwen3.6-27B"):
+        assert fs._registry_knows(model_id) is False
+        with pytest.raises(ValueError):
+            _supports_thinking_kwarg(model_id)
+
+
+def test_split_inline_think_shapes() -> None:
+    """_split_inline_think splits on the LAST </think>: no tag is a passthrough,
+    the reasoning prefix is peeled (a leading <think> dropped), the answer is the
+    lstripped tail."""
+
+    # No close tag: passthrough answer, empty reasoning.
+    answer, reasoning = fs._split_inline_think("plain answer")
+    assert answer == "plain answer"
+    assert reasoning == ""
+
+    # A bare close tag: the tail is the answer (no </think> leaks through), the
+    # prefix becomes the reasoning.
+    answer, reasoning = fs._split_inline_think("reasoning stuff</think>\n\n391")
+    assert "391" in answer
+    assert "</think>" not in answer
+    assert "reasoning stuff" in reasoning
+
+    # Wrapped <think>...</think> then a JSON tail: reasoning is the peeled scratch,
+    # answer is the JSON (tolerant of trimming choices).
+    answer, reasoning = fs._split_inline_think('<think>scratch</think>{"a": 1}')
+    assert answer.strip() == '{"a": 1}'
+    assert reasoning.strip() == "scratch"
+
+    # Multiple close tags: the split is on the LAST one, so the answer is "c".
+    answer, reasoning = fs._split_inline_think("a</think>b</think>c")
+    assert answer.strip() == "c"
+    assert "</think>" not in answer
