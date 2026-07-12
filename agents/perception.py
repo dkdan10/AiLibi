@@ -13,6 +13,15 @@ Provenance values:
 * ``"inferred"`` — the global aggregate the agent receives but does not
   directly perceive (system-wide task progress, sabotage status). The
   number is derived from world state the agent could not see itself.
+
+Observation ids (Task 16.5, C8; audits/post-phase-14-Voice-and-Judgment-
+planning.md §3.4 C3/C8). Every ``"observed"`` row this module writes is stamped
+with a stable ``{agent_id}:{tick}:{seq}`` :data:`~agents.memory.episodic.ObservationId`
+via :func:`~agents.memory.episodic.derive_observation_id` — the citation handle the
+§6.6 render surfaces (lever-ON) and the vote ballot cites (16.6 enforces). The
+``"inferred"`` ``global_status`` aggregate carries no id (a derived aggregate is
+not first-hand citable evidence), and reported testimony
+(:func:`agents.memory.store.absorb_reported_testimony`) carries none by design.
 """
 
 from __future__ import annotations
@@ -25,7 +34,7 @@ from agents.memory.beliefs import (
     BeliefState,
     apply_observation_rules,
 )
-from agents.memory.episodic import EpisodicEvent, MemoryStore
+from agents.memory.episodic import EpisodicEvent, MemoryStore, derive_observation_id
 from observation.packet import (
     AudibleEvent,
     BodyId,
@@ -102,6 +111,13 @@ def ingest_packet(
     no extra branch is needed here; ingestion simply reacts to the presence of
     the witness-gated signal.
 
+    Each OBSERVED row (steps 1-7) is stamped with a stable
+    ``{agent_id}:{tick}:{seq}`` observation id (Task 16.5, C8) via
+    :func:`~agents.memory.episodic.derive_observation_id`; ``seq`` is a per-tick
+    counter that runs in exactly the documented append order. Step 8's inferred
+    ``global_status`` aggregate is left un-stamped -- it is not first-hand citable
+    evidence.
+
     When ``beliefs`` is supplied, the agent's DESIGN.md §6.3 rule-based belief
     updates (Rules 1 and 4) run after the episodic append: the proximity and
     co-presence inputs are derived from the just-updated episodic store and
@@ -112,14 +128,34 @@ def ingest_packet(
 
     tick = packet.tick
 
+    # Task 16.5 (C8): stamp a stable ``{agent_id}:{tick}:{seq}`` observation id on
+    # each first-hand OBSERVED row below. ``seq`` CONTINUES from the store's
+    # existing id-stamped count at this tick rather than resetting to 0: production
+    # delivers exactly one packet per (agent, tick), but the store TOLERATES
+    # repeated same-tick ingestion (``test_repeated_ingest_across_ticks_is_monotonic``
+    # ingests tick 2 twice) and the append-time duplicate-id guard
+    # (:meth:`MemoryStore.append`) must never fire on a legitimate call sequence.
+    # Continuation keeps ids unique AND stays a pure function of the append history,
+    # so a replay reconstruction -- the same call sequence -- regenerates identical
+    # ids byte-for-byte.
+    seq = sum(
+        1
+        for event in memory.recent(since_tick=tick)
+        if event.tick == tick and event.observation_id is not None
+    )
+
     memory.append(
         EpisodicEvent(
             tick=tick,
             type=EVENT_SELF_STATE,
             payload=_self_state_payload(packet.self_state, agent_id=packet.agent_id),
             provenance=PROVENANCE_OBSERVED,
+            observation_id=derive_observation_id(
+                agent_id=packet.agent_id, tick=tick, seq=seq
+            ),
         )
     )
+    seq += 1
 
     own_kill = packet.self_state.own_kill
     if own_kill is not None:
@@ -129,8 +165,12 @@ def ingest_packet(
                 type=EVENT_OWN_KILL,
                 payload=_own_kill_payload(own_kill),
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
     if packet.cooldown is not None:
         memory.append(
@@ -139,8 +179,12 @@ def ingest_packet(
                 type=EVENT_COOLDOWN_STATUS,
                 payload={"cooldown": packet.cooldown},
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
     for player in packet.visible_players:
         memory.append(
@@ -149,8 +193,12 @@ def ingest_packet(
                 type=EVENT_SAW_PLAYER,
                 payload=_visible_player_payload(player),
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
     for moved in packet.moved_players:
         memory.append(
@@ -159,8 +207,12 @@ def ingest_packet(
                 type=EVENT_SAW_PLAYER_MOVE,
                 payload=_moved_player_payload(moved),
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
     for body in packet.visible_bodies:
         memory.append(
@@ -169,8 +221,12 @@ def ingest_packet(
                 type=EVENT_SAW_BODY,
                 payload=_visible_body_payload(body),
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
     for audible in packet.audible_events:
         memory.append(
@@ -179,9 +235,15 @@ def ingest_packet(
                 type=_audible_event_type(audible),
                 payload=_audible_event_payload(audible),
                 provenance=PROVENANCE_OBSERVED,
+                observation_id=derive_observation_id(
+                    agent_id=packet.agent_id, tick=tick, seq=seq
+                ),
             )
         )
+        seq += 1
 
+    # The inferred system-wide aggregate is NOT first-hand citable evidence, so it
+    # carries no observation id (Task 16.5).
     memory.append(
         EpisodicEvent(
             tick=tick,
