@@ -19,7 +19,9 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 GO-path only. Make the locked model the production default, everywhere the incumbent is pinned:
 the `_THINKING_KWARG_BY_MODEL` entry (the exact served id from the lock audit, with the
 thinking-kwarg boolean the 16.1 probe verified — an unregistered id fails loud on every call, by
-design), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, a loud
+design; NOTE the probe's operational finding: this generation REASONS BY DEFAULT, so the
+production entry must PIN non-thinking (`enable_thinking` false) — the scratch ladder's viable
+profile is non-thinking-only, and unpinned reasoning would leak think-text into recorded state), `DEFAULT_FEATHERLESS_MODEL`, the `refresh_samples.sh` model literal, a loud
 comment in `record_ml_corpus.sh` that the committed corpus remains baseline-3/old-model substrate
 pending Phase-17 re-grounding — the corpus script's PIN BLOCK (model + set + versions) is NOT
 edited: its preflight couples the three, and the pins coherently describe the frozen artifacts

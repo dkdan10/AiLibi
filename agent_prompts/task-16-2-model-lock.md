@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.2 — The model lock: owner decision + the conditional-wave surgery, anchored to agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green). Do not implement work outside these references.
+Implement Task 16.2 — The model lock: owner decision + the conditional-wave surgery, anchored to agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); experiments/lab/report-featherless-sweep-qwen3-6-27b.md + experiments/lab/qwen36_prompt_scratch/README.md (the TWO evidence sets — the held-constant probe AND the owner-directed from-scratch v0→v5 ladder whose v5 validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking; the lock audit weighs both); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-model-lock`
 **Depends on:** 16.1
-**Section refs:** agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green)
+**Section refs:** agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); experiments/lab/report-featherless-sweep-qwen3-6-27b.md + experiments/lab/qwen36_prompt_scratch/README.md (the TWO evidence sets — the held-constant probe AND the owner-directed from-scratch v0→v5 ladder whose v5 validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking; the lock audit weighs both); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green)
 **Complexity:** Medium
 
 The mid-phase owner gate. Consume 16.1's committed evidence and record the GO/NO-GO in
@@ -87,4 +87,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-16-model-lock` with a title like `task 16.2: the model lock: owner decision + the conditional-wave surgery`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); experiments/lab/report-featherless-sweep-qwen3-6-27b.md + experiments/lab/qwen36_prompt_scratch/README.md (the TWO evidence sets — the held-constant probe AND the owner-directed from-scratch v0→v5 ladder whose v5 validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking; the lock audit weighs both); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
