@@ -22,7 +22,7 @@ import pytest
 from engine.entities import PlayerId, Role
 from engine.world import WorldState, load_canonical_map
 from meetings.manager import SuspicionEntry
-from meetings.schemas import VentWitnessRecord
+from meetings.schemas import SightingRecord, VentWitnessRecord
 from orchestrator.game import _build_participants  # noqa: PLC2701
 from orchestrator.personas import (
     PERSONA_BANK_MIN_SIZE,
@@ -539,6 +539,9 @@ class _MeetingAwareStub:
         return ()
 
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+        return ()
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
         return ()
 
 
