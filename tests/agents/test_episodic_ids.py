@@ -27,8 +27,12 @@ from agents.memory.episodic import (
     derive_observation_id,
 )
 from agents.memory.store import (
+    ENV_OBSERVATION_ID_RENDERING,
     AgentMemory,
+    absorb_meeting_evidence,
     absorb_reported_testimony,
+    observation_id_rendering_enabled,
+    render_for_prompt,
 )
 from agents.perception import (
     EVENT_GLOBAL_STATUS,
@@ -336,3 +340,104 @@ class TestDeriveObservationId:
         # No RNG, no hash, no floats: a pure function of the three coordinates.
         assert derive_observation_id(agent_id="p3", tick=410, seq=2) == "p3:410:2"
         assert derive_observation_id(agent_id="p3", tick=410, seq=2) == "p3:410:2"
+
+
+def _lever_memory() -> AgentMemory:
+    """A rendered memory with one first-hand sighting, body, and heard event.
+
+    Ingested at tick 5 for agent ``p1`` so the id-stamped rows are, in append
+    order: self_state(seq 0), saw_player p2(1), saw_player p4(2), saw_body(3),
+    heard(4). A meeting accusation gives ``p2`` a rendered belief line, and a
+    reported accusation gives a reported (no-id) observation line -- so the render
+    carries a belief line, a role line, and a reported line that must all stay
+    un-prefixed when the lever is ON.
+    """
+
+    memory = AgentMemory()
+    ingest_packet(
+        packet=_packet(
+            tick=5,
+            agent_id="p1",
+            room="CAFETERIA",
+            visible_players=(
+                PlayerView(id="p2", room="ADMIN", action="task"),
+                PlayerView(id="p4", room="ELECTRICAL", action=None),
+            ),
+            visible_bodies=(BodyView(id="p3-body", room="ELECTRICAL", victim_id="p3"),),
+            audible_events=(AudibleEvent(kind="sabotage_alarm", room="STORAGE"),),
+        ),
+        memory=memory.episodic,
+    )
+    absorb_meeting_evidence(memory, accused=["p2"])
+    absorb_reported_testimony(
+        memory,
+        statements=(ReportedStatement(speaker="p2", kind="accusation", subject="p4"),),
+    )
+    return memory
+
+
+class TestObservationIdRenderLever:
+    def test_off_is_byte_inert(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # DEFAULT-OFF: env=None (unset), env={}, and an explicit "0" all render
+        # identically, and no ``[obs `` prefix appears anywhere (the OFF proof the
+        # 16.3 prompt-byte golden enforces on the committed set).
+        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
+        memory = _lever_memory()
+        default = render_for_prompt(memory)
+        empty = render_for_prompt(memory, env={})
+        zero = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "0"})
+        assert default == empty == zero
+        assert "[obs " not in default
+
+    def test_on_prefixes_each_first_hand_observation_with_its_id(self) -> None:
+        # ON folds ``[obs {agent}:{tick}:{seq}]`` into each first-hand observation
+        # line with the EXACT id of its source event; the belief line, the role
+        # line, and the reported-testimony line carry none.
+        memory = _lever_memory()
+        rendered = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        assert "[obs p1:5:1] [tick 5] You saw p2 task in ADMIN." in rendered
+        assert "[obs p1:5:2] [tick 5] You saw p4 in ELECTRICAL." in rendered
+        assert (
+            "[obs p1:5:3] [tick 5] You discovered p3's body in ELECTRICAL." in rendered
+        )
+        assert (
+            "[obs p1:5:4] [tick 5] You heard a sabotage alarm in STORAGE." in rendered
+        )
+        # Exactly the four first-hand observations are prefixed -- the belief,
+        # role, and reported-testimony lines are not.
+        assert rendered.count("[obs ") == 4
+        assert "## Your role: CREWMATE" in rendered
+        assert "## Your current beliefs:" in rendered
+        assert "[meeting] CLAIM by p2 (unverified): accused p4." in rendered
+
+    def test_resolver_default_off_truthy_and_garbage(self) -> None:
+        # Resolver semantics mirror the 16.4 lever: default OFF, the four truthy
+        # tokens ON (case-insensitive), anything else OFF.
+        assert observation_id_rendering_enabled({}) is False
+        assert (
+            observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: "0"})
+            is False
+        )
+        assert (
+            observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: "garbage"})
+            is False
+        )
+        for truthy in ("1", "true", "yes", "on", "TRUE", "On", " yes "):
+            assert (
+                observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: truthy})
+                is True
+            )
+
+    def test_on_ids_survive_a_tight_token_budget_shed(self) -> None:
+        # The id is folded BEFORE the salience sort and budget shed, so a surviving
+        # line keeps its ORIGINAL id even when lower-salience lines are dropped. The
+        # highest-salience body line (salience 100) survives with its id under a
+        # tight budget; some lower-salience observations are shed.
+        memory = _lever_memory()
+        full = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        assert full.count("[obs ") == 4
+        tight = render_for_prompt(
+            memory, env={ENV_OBSERVATION_ID_RENDERING: "1"}, token_budget=70
+        )
+        assert 0 < tight.count("[obs ") < 4
+        assert "[obs p1:5:3] [tick 5] You discovered p3's body in ELECTRICAL." in tight

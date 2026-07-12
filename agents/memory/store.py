@@ -12,7 +12,8 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import os
 from typing import Final, TypeAlias
 
 from agents.memory.beliefs import (
@@ -129,11 +130,20 @@ class AgentMemory:
 
 @dataclass(frozen=True)
 class _Observation:
-    """One renderable observation line with the data needed to sort and budget it."""
+    """One renderable observation line with the data needed to sort and budget it.
+
+    ``observation_id`` (Task 16.5) is the stable id of the SINGLE episodic event
+    this line derives from, or ``None`` when the line is not a single citable
+    observation (a RECONSTRUCTED breadcrumb / transition, a meeting boundary). It
+    is inert unless the observation-id render lever
+    (:func:`observation_id_rendering_enabled`) is ON, in which case
+    :func:`render_for_prompt` folds it into the line as an ``[obs {id}]`` prefix.
+    """
 
     salience: int
     tick: int
     line: str
+    observation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -152,6 +162,50 @@ class _Breadcrumb:
     prior_room: str
     prior_tick: int
     current_room: str
+
+
+# Task 16.5 observation-id render lever — DEFAULT-OFF (the 16.4 hard-evidence-gate
+# live-toggle pattern, still env-gated, NOT retired). Registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` BEHIND 16.4's entry: it is the
+# SECOND live toggle in that table, so a bare-environment snapshot stamps it
+# ``False`` and the committed baseline-3 replays (recorded before the key existed)
+# reconstruct byte-identically. The 16.17 graduation decision may re-record the
+# adopting baseline with it measured ON.
+ENV_OBSERVATION_ID_RENDERING: Final[str] = "AILIBI_OBSERVATION_ID_RENDERING"
+_OBSERVATION_ID_RENDERING_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def observation_id_rendering_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 16.5 observation-id render lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_OBSERVATION_ID_RENDERING` from ``env`` (defaulting to the real
+    process environment), mirroring the Task 16.4
+    :func:`agents.memory.beliefs.hard_evidence_gate_enabled` resolver it clones and
+    the retired 13.5 / 14.10 / 15.5 resolvers. Default OFF: an unset / empty /
+    unrecognised value is ``False`` so :func:`render_for_prompt` stays byte-identical
+    to the committed baseline-3 substrate -- the Task-16.3 prompt-byte golden is the
+    proof instrument (``scripts/verify_samples.sh`` reconstructs clean). Accepts
+    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests and the
+    offline counterfactual toggle the lever deterministically without mutating
+    ``os.environ``.
+
+    ON folds each first-hand remembered observation's stable
+    :data:`~agents.memory.episodic.ObservationId` into its rendered line as an
+    ``[obs {id}]`` prefix (the §6.6 render surface the Task-16.15 elicitation reads);
+    RECONSTRUCTED breadcrumb / meeting-boundary lines and the belief / contradiction
+    rows carry no id. The fold happens BEFORE the salience sort in
+    :func:`render_for_prompt`, so ordering, tie-breaks and the token budget all see
+    the final bytes. Lever gating lives at that one call site (the 16.4 in-line
+    pattern), never inside the pure render helpers.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_OBSERVATION_ID_RENDERING, "").strip().lower()
+        in _OBSERVATION_ID_RENDERING_FLAG_TRUE
+    )
 
 
 def render_for_prompt(
@@ -188,7 +242,12 @@ def render_for_prompt(
     belief-line render clamp (:func:`_build_belief_lines`); ``None`` reads the
     process environment. It is threaded so tests and the offline counterfactual can
     toggle the lever without mutating ``os.environ``. With the lever OFF (the
-    default) the render is byte-identical to pre-task HEAD.
+    default) the render is byte-identical to pre-task HEAD. The SAME ``env`` also
+    resolves the default-OFF Task-16.5 observation-id render lever
+    (:func:`observation_id_rendering_enabled`): ON prefixes each first-hand
+    observation line with its stable ``[obs {agent}:{tick}:{seq}]`` id before the
+    salience sort; OFF (the default) leaves the observation list untouched, so the
+    render is byte-identical (the 16.3 prompt-byte golden proves it).
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -216,12 +275,31 @@ def render_for_prompt(
     # byte-identically.
     own_agent_id, fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
     teammate_ids = fellow_impostor_ids if role == "IMPOSTOR" else frozenset()
+    # Task 16.5: resolve the default-OFF observation-id render lever ONCE (the 16.4
+    # in-line pattern). OFF leaves the observation list untouched, so not a single
+    # byte differs from pre-task HEAD -- the 16.3 prompt-byte golden is the proof.
+    ids_on = observation_id_rendering_enabled(env)
+    observations = _build_observations(
+        memory.episodic,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+    )
+    if ids_on:
+        # Fold each first-hand observation's stable id into its line BEFORE the
+        # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
+        # see the final bytes. RECONSTRUCTED lines (breadcrumb transitions, the
+        # meeting boundary) carry ``observation_id is None`` -- they derive from
+        # MULTIPLE events and are not a single citable observation -- so they render
+        # unchanged. The ``[obs ...]`` wrapper is render dressing only; a ballot
+        # cites the raw ``{agent}:{tick}:{seq}`` id, not the wrapper.
+        observations = [
+            replace(obs, line=f"[obs {obs.observation_id}] {obs.line}")
+            if obs.observation_id is not None
+            else obs
+            for obs in observations
+        ]
     observations = sorted(
-        _build_observations(
-            memory.episodic,
-            own_agent_id=own_agent_id,
-            teammate_ids=teammate_ids,
-        ),
+        observations,
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
     )
     # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
@@ -1089,6 +1167,10 @@ def _build_observations(
                             f"{last_pending_task} (you were in "
                             f"{completed_room})."
                         ),
+                        # The self_state event whose pending change was inferred
+                        # (Task 16.5): the completion is derived from this single
+                        # id-stamped row, so it is citable.
+                        observation_id=event.observation_id,
                     )
                 )
             last_pending_task = pending
@@ -1109,6 +1191,7 @@ def _build_observations(
                         f"[tick {event.tick}] You (IMPOSTOR) killed "
                         f"{victim_id} in {room}."
                     ),
+                    observation_id=event.observation_id,
                 )
             )
             continue
@@ -1144,6 +1227,7 @@ def _build_observations(
                         f"[tick {event.tick}] You discovered {victim_id}'s "
                         f"body in {room}."
                     ),
+                    observation_id=event.observation_id,
                 )
             )
             continue
@@ -1209,6 +1293,7 @@ def _build_observations(
                             f"[tick {event.tick}] Your kill cooldown is "
                             f"{cooldown} ticks."
                         ),
+                        observation_id=event.observation_id,
                     )
                 )
 
@@ -1249,12 +1334,14 @@ def _render_saw_player(
             salience=_SALIENCE_VENT_WITNESSED,
             tick=event.tick,
             line=(f"[tick {event.tick}] You witnessed {player_id} vent in {room}."),
+            observation_id=event.observation_id,
         )
     if action_str == "kill":
         return _Observation(
             salience=_SALIENCE_KILL_WITNESSED,
             tick=event.tick,
             line=(f"[tick {event.tick}] You witnessed {player_id} kill in {room}."),
+            observation_id=event.observation_id,
         )
     # Task 13.9 co-presence + Task 13.6 breadcrumb suffixes, ordinary sightings
     # only (the vent/kill witnessed lines above stay clean). Co-presence ("with …")
@@ -1275,11 +1362,13 @@ def _render_saw_player(
                 f"[tick {event.tick}] You saw {player_id} "
                 f"{action_str} in {room}{co_present}{suffix}."
             ),
+            observation_id=event.observation_id,
         )
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
         tick=event.tick,
         line=f"[tick {event.tick}] You saw {player_id} in {room}{co_present}{suffix}.",
+        observation_id=event.observation_id,
     )
 
 
@@ -1334,6 +1423,7 @@ def _render_saw_player_move(
             f"[tick {event.tick}] You saw {player_id} move from "
             f"{from_room} to {to_room}."
         ),
+        observation_id=event.observation_id,
     )
 
 
@@ -1388,6 +1478,9 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
         salience=_SALIENCE_REPORTED_TESTIMONY,
         tick=event.tick,
         line=f"{prefix} {body}.",
+        # A reported-testimony event carries no observation id (it is not first-hand
+        # perception), so this threads ``None`` naturally (Task 16.5).
+        observation_id=event.observation_id,
     )
 
 
@@ -1404,7 +1497,12 @@ def _render_heard(
         line = f"[tick {event.tick}] You heard a {noun}."
     else:
         return None
-    return _Observation(salience=salience, tick=event.tick, line=line)
+    return _Observation(
+        salience=salience,
+        tick=event.tick,
+        line=line,
+        observation_id=event.observation_id,
+    )
 
 
 def _record_movement_sightings(
@@ -1763,6 +1861,7 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
+    "ENV_OBSERVATION_ID_RENDERING",
     "EpisodicEvent",
     "MemoryStore",
     "PlayerBelief",
@@ -1773,5 +1872,6 @@ __all__ = [
     "WorkingMemory",
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
+    "observation_id_rendering_enabled",
     "render_for_prompt",
 ]

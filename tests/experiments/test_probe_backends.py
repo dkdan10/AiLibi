@@ -70,9 +70,9 @@ _FLAGS_OFF = {
 # -- the four 13.5 levers since Task 14.9, the Task-14.10 evidence-quality lever
 # since the Task-14.12 close, and Task 15.5's reporter_exculpation since the
 # Task-15.7 baseline-3 record (each env gate retired once the baseline adopted
-# it, so the snapshot no longer reads an AILIBI_* var for any of them) -- plus
-# Task 16.4's hard_evidence_gate, the one LIVE default-OFF toggle, stamped False
-# under the bare env.
+# it, so the snapshot no longer reads an AILIBI_* var for any of them) -- plus the
+# TWO LIVE default-OFF toggles, Task 16.4's hard_evidence_gate and Task 16.5's
+# observation_id_rendering, both stamped False under the bare env.
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
@@ -80,9 +80,10 @@ _FLAGS_ON = {
     "unfreeze_memory": True,
     "evidence_quality_lift": True,
     "reporter_exculpation": True,
-    # Task 16.4 live toggle: DEFAULT-OFF, so the bare/default snapshot stamps
-    # it False alongside the six unconditional levers.
+    # The two live toggles: DEFAULT-OFF, so the bare/default snapshot stamps them
+    # False alongside the six unconditional levers.
     "hard_evidence_gate": False,
+    "observation_id_rendering": False,
 }
 
 
