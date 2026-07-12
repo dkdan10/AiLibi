@@ -70,6 +70,7 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agents.memory.beliefs import hard_evidence_gate_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -390,8 +391,9 @@ ReplayLogEntry: TypeAlias = Annotated[
 # it), AND Task 15.5's ``reporter_exculpation`` (graduated to unconditional at the
 # Task-15.7 baseline-3 record, once baseline 3 adopted it) are ALL RETIRED as
 # toggles — unconditionally ON, env gates deleted — but stay in the snapshot as
-# provenance. ``_TOGGLEABLE_LEVER_RESOLVERS`` below is now empty; a future live
-# toggleable lever would register its key + resolver there.
+# provenance. Task 16.4's default-OFF ``hard_evidence_gate`` is the live toggle
+# registered in ``_TOGGLEABLE_LEVER_RESOLVERS`` below -- the first entry back into
+# that table since the 15.7 graduation emptied it.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -406,16 +408,16 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). This table is currently EMPTY: every substrate lever
-# has graduated to unconditional-ON. Task 15.5's ``reporter_exculpation`` was the
-# last live toggle; it joined ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-15.7
-# baseline-3 record (``evidence_quality_lift`` graduated the same way at the 14.12
-# close). The typed-empty form is retained so a future live lever registers here
-# with no structural change, and so ``substrate_flag_snapshot`` keeps one uniform
-# snapshot path.
+# ``*_enabled()`` signature). Task 16.4's ``hard_evidence_gate`` is the live toggle:
+# DEFAULT-OFF, so a bare-environment snapshot stamps it ``False`` and the committed
+# baseline-3 replays (recorded before the key existed) reconstruct byte-identically
+# -- ``_assert_substrate_matches`` reads a missing key as ``False`` on both sides.
+# The previous live toggle, Task 15.5's ``reporter_exculpation``, graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-15.7 baseline-3 record
+# (``evidence_quality_lift`` graduated the same way at the 14.12 close).
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = ()
+] = (("hard_evidence_gate", hard_evidence_gate_enabled),)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -438,7 +440,7 @@ def substrate_flag_snapshot(
 ) -> dict[str, bool]:
     """Snapshot the active substrate-lever config (Task 14.7).
 
-    Every substrate lever now reports unconditionally ``True``. The four merged
+    The six retired levers report unconditionally ``True``. The four merged
     Phase-13.5 levers (Task 14.9), Task 14.10's ``evidence_quality_lift`` (retired
     at the Task-14.12 close once baseline 2 adopted it), and Task 15.5's
     ``reporter_exculpation`` (graduated at the Task-15.7 baseline-3 record once
@@ -447,9 +449,13 @@ def substrate_flag_snapshot(
     stay in the snapshot so the MANIFEST ``flags`` column and the replay stamp keep
     self-describing recordings (and so the loader's substrate-mismatch guard can
     still validate legacy stamped replays — a baseline-2 stamp recording
-    ``reporter_exculpation`` OFF now fails loud, no cross-substrate replay). ``env``
-    is still threaded to the (currently empty) ``_TOGGLEABLE_LEVER_RESOLVERS`` loop
-    so a future live lever can resolve a specific mapping without a signature churn.
+    ``reporter_exculpation`` OFF now fails loud, no cross-substrate replay). Task
+    16.4's ``hard_evidence_gate`` is the one LIVE env-gated toggle: its resolver is
+    read from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env``
+    threaded through (defaulting to the live process environment), so a bare
+    environment stamps it ``False`` (DEFAULT-OFF, byte-identical to baseline 3)
+    while an ``AILIBI_HARD_EVIDENCE_GATE`` export stamps it ``True`` -- preserving
+    the deterministic-snapshot seam tests and sweep configs rely on.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
