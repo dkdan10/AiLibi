@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from agents.base import AgentInterface
-from agents.memory.beliefs import OBSERVED_VENT_ACTION
+from agents.memory.beliefs import OBSERVED_KILL_ACTION, OBSERVED_VENT_ACTION
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -2436,14 +2436,23 @@ class TacticalAgent:
 
         The vent accessor's sibling with the polarity inverted: the same
         first-hand (``provenance == "observed"``) ``saw_player`` rows,
-        minus the vent-action filter -- every sighting is a candidate
-        grounding record, vent-witnessed rows included -- plus the
-        ``co_present`` projection: the OTHER subjects this agent saw in
+        but capturing ORDINARY sightings (the vent accessor's role-proving
+        ``vent`` filter is dropped) rather than restricting to vents, plus
+        the ``co_present`` projection: the OTHER subjects this agent saw in
         the same room on the same tick, the same Task 13.9 grouping the
         §6.6 renderer's "(with ...)" suffix is built from. The meeting
         layer grounds a speaker's spoken ``saw_player`` observation ONLY
         against the speaker's own rows here (the grounded-vouch feed into
         the existing corroboration channel -- never a flag, never trust).
+
+        Incriminating-action rows are EXCLUDED: a witnessed ``kill`` or
+        ``vent`` names its subject an impostor, and the grounded-vouch
+        channel is the -0.05 EXCULPATION path (the contract's "not
+        role-proving"), so grounding a spoken sighting against one would
+        lower a witnessed killer's/venter's suspicion. Their subjects are
+        impostors by construction, so no legitimate vouch is lost; the
+        role-proving signal stays in its own channel (vent -> the 15.4
+        STRONG flag; kill -> the Rule-4 witness pin).
         Firewall-clean: every row was witness-gated by the engine before
         it reached this agent's packet (``eval/leak_test.py``), and the
         accessor reports only this agent's own log.
@@ -2471,6 +2480,19 @@ class TacticalAgent:
             if event.type != EVENT_SAW_PLAYER:
                 continue
             if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            # An INCRIMINATING-action observation is not a corroboration-class
+            # sighting and must never seed the exculpation channel: a witnessed
+            # ``kill`` or ``vent`` names its subject an impostor, so grounding a
+            # spoken sighting against it would lower a witnessed killer's/venter's
+            # suspicion through the -0.05 vouch. Both subjects are impostors by
+            # construction, so no legitimate vouch is lost. This refines the
+            # contract's "drop the vent-action filter" to its intent (the vouch
+            # channel is "not role-proving"): the accessor no longer restricts to
+            # vents, but the ROLE-PROVING actions stay in their own channels
+            # (vent -> the 15.4 STRONG flag; kill -> the Rule-4 witness pin).
+            action = event.payload.get("action")
+            if action in (OBSERVED_VENT_ACTION, OBSERVED_KILL_ACTION):
                 continue
             player_id = event.payload.get("player_id")
             room = event.payload.get("room")

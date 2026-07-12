@@ -752,6 +752,15 @@ def is_weak_contradiction(flag: ContradictionRef) -> bool:
 # parser below can never drift from the id format.
 _CLAIM_EVENT_SEGMENT: Final[str] = ":claim:"
 
+# Task 16.7: the event-id segment for a whereabouts self-placement indexed as a
+# degenerate alibi (:func:`_turn_whereabouts_id`). A whereabouts lives on
+# ``turn.observations`` but is an ALIBI-SIDE account, not a sighting, so it gets
+# its own segment (never ``:obs:``, which would make :func:`contradiction_lift_key`
+# fall back to the full event-id pair and let one roll-call answer contradicted by
+# N sightings stack N deltas). Recognised as an account-side key beside
+# ``:claim:`` so one whereabouts folds to at most one contradiction lift.
+_WHEREABOUTS_EVENT_SEGMENT: Final[str] = ":whereabouts:"
+
 # Task 10.10: the constant lift key shared by every proxy-intra-turn
 # re-target. A re-targeted flag's sole subject is the speaker, so belief
 # Rule 2's ``(subject, lift_key)`` dedup folds ALL of one speaker's
@@ -793,10 +802,14 @@ def contradiction_lift_key(flag: ContradictionRef) -> str:
 
     if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
         return _PROXY_INTRA_TURN_LIFT_KEY
+    # Task 16.7: a whereabouts self-placement is an alibi-side account
+    # (:data:`_WHEREABOUTS_EVENT_SEGMENT`), so it keys like a ``:claim:`` id --
+    # one roll-call answer paired against N sightings shares its key and folds
+    # to a single lift, the same per-account dedup a real alibi gets.
     claim_ids = [
         event_id
         for event_id in (flag.event_a_id, flag.event_b_id)
-        if _CLAIM_EVENT_SEGMENT in event_id
+        if _CLAIM_EVENT_SEGMENT in event_id or _WHEREABOUTS_EVENT_SEGMENT in event_id
     ]
     if claim_ids:
         return "|".join(claim_ids)
@@ -1179,7 +1192,7 @@ def reconstruct_stated_paths(
                     tick=observation.tick,
                     rooms=rooms,
                     speaker=turn.speaker,
-                    event_id=_turn_observation_id(turn=turn, index=index),
+                    event_id=_turn_whereabouts_id(turn=turn, index=index),
                 )
             )
 
@@ -1882,7 +1895,7 @@ def _iter_alibis(
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, WhereaboutsClaim):
                 yield _IndexedAlibi(
-                    event_id=_turn_observation_id(turn=turn, index=index),
+                    event_id=_turn_whereabouts_id(turn=turn, index=index),
                     speaker=turn.speaker,
                     claim=AlibiClaim(
                         type="alibi",
@@ -2486,7 +2499,11 @@ def grounded_vouch_subjects(
       kill-scene vouch is evidentially empty and never exculpates,
       preserving the documented invariant that EVERY producer of the
       ``corroborated`` set routes through the one relevance gate
-      (:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`).
+      (:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`). The
+      gate reads the MATCHED RECORD's tick and room, never the model-stated
+      observation: the +-:data:`SIGHTING_GROUNDING_TICK_TOLERANCE` match
+      window would otherwise let a spawn-window record be re-timed one tick
+      past the window and exculpate off an evidentially-empty sighting.
 
     Pure and deterministic: a function of the transcript, the typed
     records, and the trigger kind alone. A caller with no records gets the
@@ -2517,20 +2534,33 @@ def grounded_vouch_subjects(
                 continue
             if not _subject_in_roster(observation.subject, effective_roster):
                 continue
-            rooms = canonical_rooms(observation.room)
-            if not rooms:
+            matched = next(
+                (
+                    record
+                    for record in records
+                    if _sighting_observation_matches_record(observation, record)
+                ),
+                None,
+            )
+            if matched is None:
                 continue
+            # The Rule-3 relevance gate reads the MATCHED RECORD (the private
+            # ground truth), NEVER the model-stated observation tick/room: the
+            # match tolerance (+-SIGHTING_GROUNDING_TICK_TOLERANCE) would
+            # otherwise let a spawn-window record be re-timed one tick past the
+            # window and slip an evidentially-empty sighting through the
+            # exculpation channel. The record's canonical rooms are non-empty by
+            # construction (the match required them to intersect the spoken
+            # rooms), so an unhelpful spawn-window or kill-scene record is the
+            # only thing this drops.
+            record_rooms = canonical_rooms(matched.room)
             if not is_relevant_sighting(
-                tick=observation.tick,
-                rooms=rooms,
+                tick=matched.tick,
+                rooms=record_rooms,
                 triggering_body_rooms=body_rooms,
             ):
                 continue
-            if any(
-                _sighting_observation_matches_record(observation, record)
-                for record in records
-            ):
-                grounded.add(observation.subject)
+            grounded.add(observation.subject)
     return frozenset(grounded)
 
 
@@ -2842,8 +2872,15 @@ def _event_speaker_index(transcript: MeetingTranscript) -> Mapping[str, PlayerId
     for turn in transcript.turns:
         for claim_index in range(len(turn.claims)):
             index[_turn_claim_id(turn=turn, index=claim_index)] = turn.speaker
-        for obs_index in range(len(turn.observations)):
-            index[_turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
+        for obs_index, observation in enumerate(turn.observations):
+            # Task 16.7: a whereabouts self-placement is cited by its alibi-side
+            # id (:func:`_turn_whereabouts_id`), so register THAT id here or a
+            # whereabouts-alibi flag's ``event_a_id`` would not resolve to its
+            # speaker in the proxy-intra-turn guard.
+            if isinstance(observation, WhereaboutsClaim):
+                index[_turn_whereabouts_id(turn=turn, index=obs_index)] = turn.speaker
+            else:
+                index[_turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
     return index
 
 
@@ -2984,6 +3021,14 @@ def _turn_claim_id(*, turn: MeetingTurn, index: int) -> str:
 
 def _turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
     return f"turn:{turn.turn_id}:obs:{index}"
+
+
+def _turn_whereabouts_id(*, turn: MeetingTurn, index: int) -> str:
+    # Task 16.7: a whereabouts self-placement is an alibi-side account carried on
+    # ``turn.observations``; it gets its OWN segment (not ``:obs:``) so
+    # :func:`contradiction_lift_key` recognises it as an account key. ``index``
+    # is the observation index, matching :func:`_event_speaker_index`.
+    return f"turn:{turn.turn_id}:whereabouts:{index}"
 
 
 def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:

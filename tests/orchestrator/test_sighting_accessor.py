@@ -130,9 +130,8 @@ class TestSightingRecordsAccessor:
 
     def test_deterministic_self_only_and_tick_ordered(self) -> None:
         agent = self._crew_agent()
-        # Three first-hand sightings across ascending ticks, each subject alone
-        # in its (tick, room) -- the tick-7 stamp is a witnessed vent, included
-        # here exactly because the sighting channel drops the vent filter.
+        # Three ordinary first-hand sightings across ascending ticks, each
+        # subject alone in its (tick, room).
         ingest_packet(
             packet=_sighting_packet(
                 agent_id="p-2", tick=3, players=(_view("p-3", "WEST_HALL"),)
@@ -147,9 +146,7 @@ class TestSightingRecordsAccessor:
         )
         ingest_packet(
             packet=_sighting_packet(
-                agent_id="p-2",
-                tick=7,
-                players=(_view("p-4", "REACTOR", action="vent"),),
+                agent_id="p-2", tick=7, players=(_view("p-4", "REACTOR"),)
             ),
             memory=agent.memory.episodic,
         )
@@ -168,11 +165,13 @@ class TestSightingRecordsAccessor:
         assert first == second == expected
         assert len(agent.memory.episodic) == before
 
-    def test_vent_action_row_is_a_sighting_record(self) -> None:
-        # The inverted 15.4 assertion: a plain ``action=None`` sighting AND a
-        # witnessed ``action="vent"`` row BOTH become sighting records, whereas
-        # the vent accessor -- reading the SAME two rows -- keeps only the vent
-        # one. Asserted side by side to pin the sibling relationship.
+    def test_incriminating_action_rows_are_excluded(self) -> None:
+        # The grounded-vouch channel is EXCULPATION ("not role-proving"), so a
+        # witnessed kill or vent -- which names its subject an impostor -- must
+        # NOT become a SightingRecord (grounding a sighting against it would
+        # lower a witnessed killer's/venter's suspicion via the -0.05). An
+        # ordinary sighting beside them still records; the vent accessor still
+        # keeps the vent (each channel owns its own action).
         agent = self._crew_agent()
         ingest_packet(
             packet=_sighting_packet(
@@ -188,11 +187,20 @@ class TestSightingRecordsAccessor:
             ),
             memory=agent.memory.episodic,
         )
+        ingest_packet(
+            packet=_sighting_packet(
+                agent_id="p-2",
+                tick=11,
+                players=(_view("p-7", "ADMIN", action="kill"),),
+            ),
+            memory=agent.memory.episodic,
+        )
 
+        # Only the ordinary sighting survives into the grounding channel.
         assert agent.sighting_records_for_meeting() == (
             SightingRecord(subject="p-5", room="MEDBAY", tick=5),
-            SightingRecord(subject="p-6", room="REACTOR", tick=9),
         )
+        # The vent accessor still keeps the vent (its own channel is unchanged).
         assert agent.vent_witness_records_for_meeting() == (
             VentWitnessRecord(subject="p-6", room="REACTOR", tick=9),
         )

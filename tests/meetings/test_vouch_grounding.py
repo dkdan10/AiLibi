@@ -70,6 +70,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     SIGHTING_GROUNDING_TICK_TOLERANCE,
     StatedPlacement,
+    contradiction_lift_key,
     detect_contradictions,
     detect_corroborations,
     grounded_vouch_subjects,
@@ -307,6 +308,31 @@ class TestGroundedFeedsCorroboration:
             sighting_records={"p-2": (_record(subject="p-5", room="MEDBAY", tick=2),)},
             roster=_ROSTER,
         ) == frozenset({"p-5"})
+
+    def test_spawn_window_record_cannot_be_retimed_into_relevance(self) -> None:
+        # Codex P2: the relevance gate reads the MATCHED RECORD, not the spoken
+        # tick. A true spawn-window sighting (record tick 1) re-stated one tick
+        # later (spoken tick 2, out of the spawn window) matches within tolerance
+        # but must NOT ground -- the underlying record is evidentially empty, so
+        # re-timing cannot smuggle it through the exculpation channel.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=2),),
+            )
+        )
+
+        assert (
+            grounded_vouch_subjects(
+                transcript,
+                sighting_records={
+                    "p-2": (_record(subject="p-5", room="MEDBAY", tick=1),)
+                },
+                roster=_ROSTER,
+            )
+            == frozenset()
+        )
 
     def test_compound_room_label_grounds_against_the_canonical_record(self) -> None:
         # canonical_rooms is the one room-normalisation point: a compound
@@ -662,7 +688,10 @@ class TestWhereaboutsClaimMechanism:
                 tick=7,
                 rooms=frozenset({"ADMIN"}),
                 speaker="p-3",
-                event_id="turn:m-1:turn-0:obs:0",
+                # A whereabouts is an alibi-side account, so it carries the
+                # :whereabouts: event-id segment (not :obs:) — Task 16.7 lift-key
+                # dedup (Codex P2).
+                event_id="turn:m-1:turn-0:whereabouts:0",
             )
             in paths["p-3"]
         )
@@ -774,6 +803,46 @@ class TestWhereaboutsClaimMechanism:
         conflict_flags = [flag for flag in flags if flag.kind == "alibi_conflict"]
         assert len(conflict_flags) == 1
         assert conflict_flags[0].subjects == ("p-3",)
+
+    def test_one_whereabouts_folds_to_one_lift_key_across_sightings(self) -> None:
+        # Codex P2: one roll-call answer contradicted by SEVERAL sightings must
+        # fold to a SINGLE contradiction lift (the per-account dedup a real alibi
+        # gets), never stack N deltas up to the meeting cap. The :whereabouts:
+        # account segment gives contradiction_lift_key a shared key for every
+        # (whereabouts, sighting) pair.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-3",
+                observations=(_whereabouts(tick=7, room="ADMIN"),),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-1",
+                turn_kind="opt_in",
+                observations=(_saw(subject="p-3", room="REACTOR", tick=7),),
+            ),
+            _turn(
+                turn_index=2,
+                speaker="p-5",
+                turn_kind="opt_in",
+                observations=(_saw(subject="p-3", room="STORAGE", tick=7),),
+            ),
+        )
+
+        flags = detect_contradictions(transcript, roster=_ROSTER)
+        sighting_flags = [
+            flag
+            for flag in flags
+            if flag.kind == "alibi_vs_sighting" and flag.subjects == ("p-3",)
+        ]
+        # One flag per contradicting sighting...
+        assert len(sighting_flags) == 2
+        # ...but ALL share one lift key (the whereabouts account), so belief
+        # Rule 2's (subject, key) dedup folds them to a single delta.
+        keys = {contradiction_lift_key(flag) for flag in sighting_flags}
+        assert len(keys) == 1
+        assert ":whereabouts:" in keys.pop()
 
 
 # --- H. The live feed stays inert until graduation --------------------------
