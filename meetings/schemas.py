@@ -41,6 +41,7 @@ RoomId: TypeAlias = str
 TaskId: TypeAlias = str
 BodyId: TypeAlias = str
 TurnId: TypeAlias = str
+ObservationId: TypeAlias = str
 ContradictionId: TypeAlias = str
 
 
@@ -386,12 +387,30 @@ class VoteBallot(_FrozenModel):
     The structured fields drive the tally; the rationale is logged
     post-hoc for transparency. ``primary_reason_id`` references a
     :class:`MeetingTurn` ``turn_id`` from the chain when applicable.
+
+    Task 16.5 (C8/C3, audits/post-phase-14-Voice-and-Judgment-planning.md
+    §3.4). ``primary_reason_observation_id`` is the private-hard-evidence
+    citation channel: a stable episodic observation id drawn from the
+    VOTER'S OWN memory (the ``{agent_id}:{tick}:{seq}`` scheme minted in
+    perception; the DESIGN.md §6.6 render surfaces them to the voter only
+    when the ``AILIBI_OBSERVATION_ID_RENDERING`` lever is ON). It lets a
+    voter cite evidence NOBODY spoke -- a witnessed kill or vent the voter
+    holds first-hand but which never entered the transcript -- so the
+    reason need not be a ``turn_id`` from the public chain. The manager
+    validates it against the voter's typed valid-id set exactly like
+    ``primary_reason_id`` (mark-and-null in
+    :func:`meetings.manager._normalize_ballot_observation_id`); NO gate,
+    guard, or tally consults it until Task 16.6. ADDITIVE: the ``None``
+    default is what lets every committed replay -- recorded before the
+    field existed -- parse unchanged under ``_FrozenModel``'s config;
+    ``None`` means the voter cited no private observation.
     """
 
     voter: PlayerId
     target: PlayerId | Literal["SKIP"]
     confidence: float = Field(ge=0.0, le=1.0)
     primary_reason_id: TurnId | None
+    primary_reason_observation_id: ObservationId | None = None
     considered_alternatives: tuple[PlayerId, ...] = ()
     rationale_text: str
 
@@ -526,6 +545,7 @@ __all__ = [
     "MeetingTranscript",
     "MeetingTurn",
     "ObservationClaim",
+    "ObservationId",
     "PlayerId",
     "ReportedStatement",
     "ReportedStatementKind",
