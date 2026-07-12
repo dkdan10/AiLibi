@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.6 — J2: citation-gated ballots (default-OFF lever), anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1602-1648 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate). Do not implement work outside these references.
+Implement Task 16.6 — J2: citation-gated ballots (default-OFF lever), anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1699-1758 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-j2-citation-gate`
 **Depends on:** 16.5
-**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1602-1648 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)
+**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1699-1758 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)
 **Complexity:** Integration
 
 The enforcement tooth, last in its chain: a zero-flag EJECT ballot (target carries no
@@ -103,4 +103,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-16-j2-citation-gate` with a title like `task 16.6: j2: citation-gated ballots (default-off lever)`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1602-1648 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1699-1758 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

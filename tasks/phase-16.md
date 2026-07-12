@@ -496,7 +496,7 @@ lands adjacent edits first (the preamble declares the regions disjoint — honor
 ### Task 16.6 — J2: citation-gated ballots (default-OFF lever)
 **Branch:** `phase-16-j2-citation-gate`
 **Depends on:** 16.5
-**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1602-1648 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)
+**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2 (the gate design + the null-citation allowance it must respect); meetings/manager.py:1699-1758 (_collect_ballots guard chain — the slot after guard_ballot_target_graph); agents/strategic/prompts/qwen3_32b/vote_ballot.j2:134-153 (the sanctioned null-citation prose the gate must accommodate)
 **Complexity:** Integration
 
 The enforcement tooth, last in its chain: a zero-flag EJECT ballot (target carries no
@@ -1069,7 +1069,7 @@ under the DEGRADED-Q3 rule (50-seed sets, two-proportion discipline, UNDERPOWERE
 honestly; the corpus quoted as stale context only). Same operator session, second artifact: the
 opt-in champion's 50-seed re-audit against the new meeting substrate —
 `scripts/run_tournament.py --agent-factory learned-champion` on the audit seeds, measurement
-committed as `training/reports/results-champion-qwen35-audit.jsonl` with the stamp-proof rows
+committed as `training/reports/results-champion-qwen36-audit.jsonl` with the stamp-proof rows
 (read back from bytes, never echoed), raw recordings uncommitted. The champion was selected under
 Qwen3-32B meetings; this is the honest re-reading, NOT a retrain (Phase 17's business), and a
 degraded champion result is a FINDING for the close + Phase 17, never a blocker.
@@ -1079,7 +1079,7 @@ degraded champion result is a FINDING for the close + Phase 17, never a blocker.
 - replays/samples/4p1i/ (the baseline-4 set)
 - audits/baseline3-final-measure.json (new: the BEFORE column, captured pre-replacement)
 - audits/audit-phase-16-baseline-4.md (new: the model-swap measurement — funnel/R-gate/referee/canaries before/after + the champion re-audit reading)
-- training/reports/results-champion-qwen35-audit.jsonl (new: the champion re-audit rows, stamp-proven)
+- training/reports/results-champion-qwen36-audit.jsonl (new: the champion re-audit rows, stamp-proven)
 - eval/watchability.py (baseline-4 floors in the per-baseline block region — behind 16.11's definition)
 - scripts/validity_gate.py + scripts/measure_baseline.py — NOT edited; invoked (listed to declare the negative)
 - README.md (sample-provenance paragraph region)
