@@ -74,7 +74,7 @@ These are the ONLY names a ballot may carry. Every other player is already out o
 {% if fellow_impostor_ids %}
 
 ## Your team
-Secret: {{ fellow_impostor_ids | join(", ") }} are your fellow saboteurs. Never vote a teammate — if your suspicion lands on one, set "target" to "SKIP" or vote a non-saboteur candidate instead.
+Secret: {{ fellow_impostor_ids | join(", ") }} are your fellow saboteurs. Never vote a teammate — if your suspicion lands on one, set "target" to "SKIP" instead.
 {% endif %}
 {% if reporter_id is defined and reporter_id %}
 
