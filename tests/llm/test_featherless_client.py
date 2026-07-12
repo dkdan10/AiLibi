@@ -54,7 +54,9 @@ from llm.featherless_client import (
     _supports_thinking_kwarg,
 )
 from llm.provider import (
+    PROVIDER_FEATHERLESS,
     AnthropicClient,
+    _compute_cost_usd,
     build_default_client,
     extract_parse_failure,
 )
@@ -152,12 +154,13 @@ class TestProtocolConformance:
 class TestConstantPins:
     """The Featherless defaults are pinned so a change is a deliberate edit.
 
-    The model default leads the Phase-14 slate (non-binding until 14.6); the
-    base URL is the hosted OpenAI-compatible endpoint.
+    The model default IS the canonical PRODUCTION model, locked at Task 16.2
+    (audits/audit-phase-16-model-lock.md, 2026-07-12) — no longer a non-binding
+    slate lead; the base URL is the hosted OpenAI-compatible endpoint.
     """
 
-    def test_default_model_is_qwen3_32b(self) -> None:
-        assert DEFAULT_FEATHERLESS_MODEL == "Qwen/Qwen3-32B"
+    def test_default_model_is_the_locked_qwen3_6_27b(self) -> None:
+        assert DEFAULT_FEATHERLESS_MODEL == "Qwen/Qwen3.6-27B"
 
     def test_default_base_url_is_hosted_featherless(self) -> None:
         assert DEFAULT_FEATHERLESS_BASE_URL == "https://api.featherless.ai/v1"
@@ -435,6 +438,9 @@ class TestTokenMappingAndCost:
             "Qwen/Qwen3-30B-A3B",
             "zai-org/GLM-4-32B",
             "some-rp-finetune",
+            # The locked production id (Task 16.2): $0 like every other Featherless
+            # model — the rate is keyed by provider, so the swap is free.
+            "Qwen/Qwen3.6-27B",
         ],
     )
     def test_cost_is_zero_regardless_of_model(self, model: str) -> None:
@@ -448,6 +454,22 @@ class TestTokenMappingAndCost:
         )
 
         assert response.cost_usd == 0.0
+
+    def test_locked_id_cost_is_zero_by_provider_keyed_fallback(self) -> None:
+        # Direct provider-keyed assertion for the locked id (Task 16.2): the $0
+        # rate resolves through llm.provider's empty per-model Featherless dict +
+        # the (0.0, 0.0) provider fallback, so NONZERO token counts still cost
+        # $0. This is ASSERTED, never re-implemented — llm/provider.py is
+        # untouched by Task 16.12; the pricing already covers the new id.
+        assert (
+            _compute_cost_usd(
+                model="Qwen/Qwen3.6-27B",
+                input_tokens=1234,
+                output_tokens=567,
+                provider=PROVIDER_FEATHERLESS,
+            )
+            == 0.0
+        )
 
     def test_preflight_rates_are_zero(self) -> None:
         client = FeatherlessClient(api_key="k")
@@ -999,7 +1021,14 @@ class TestSupportsThinkingKwarg:
 
     @pytest.mark.parametrize(
         "model",
-        ["Qwen/Qwen3-32B", "Qwen/Qwen3-30B-A3B-Instruct-2507", "Qwen/Qwen3-8B"],
+        [
+            "Qwen/Qwen3-32B",
+            "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "Qwen/Qwen3-8B",
+            # The locked production id (Task 16.2): the 16.1 probe verified it
+            # honors the enable_thinking kwarg, so it must classify True.
+            "Qwen/Qwen3.6-27B",
+        ],
     )
     def test_qwen3_models_support_kwarg(self, model: str) -> None:
         assert _supports_thinking_kwarg(model) is True
@@ -1039,6 +1068,28 @@ class TestThinkingKwargConditional:
     ) -> None:
         payload = _build_chat_payload(
             model="Qwen/Qwen3-32B",
+            prompt="p",
+            response_format={"type": "json_object"},
+            max_tokens=64,
+            temperature=0.0,
+            request_thinking=request_thinking,
+        )
+        assert payload["chat_template_kwargs"] == {"enable_thinking": request_thinking}
+
+    @pytest.mark.parametrize("request_thinking", [True, False])
+    def test_locked_production_id_pins_enable_thinking(
+        self, request_thinking: bool
+    ) -> None:
+        # The locked production model (Qwen/Qwen3.6-27B, Task 16.2) REASONS BY
+        # DEFAULT when the kwarg is ABSENT — inline </think> leaks into content
+        # (16.1 probe finding). So production PINS the toggle on EVERY call: the
+        # constructor's request_thinking=False default sends
+        # {"enable_thinking": False}, which suppresses the leak (an unpinned call
+        # would record think-text into game state). Both booleans are exercised
+        # so the True registry entry is pinned to actually SEND the toggle either
+        # way (not silently drop it).
+        payload = _build_chat_payload(
+            model="Qwen/Qwen3.6-27B",
             prompt="p",
             response_format={"type": "json_object"},
             max_tokens=64,

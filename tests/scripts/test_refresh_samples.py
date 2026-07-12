@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -794,3 +795,23 @@ def test_ollama_preflight_proceeds_when_reachable_and_model_present(
     # The gate proceeded: no reachability / model-missing failure was reported.
     assert "Ollama server unreachable" not in combined
     assert "is not pulled" not in combined
+
+
+# -- locked model literal (Task 16.12) ----------------------------------------
+
+
+def test_default_featherless_model_pins_the_locked_served_id() -> None:
+    # The refresh script's DEFAULT_FEATHERLESS_MODEL is the exact served id locked
+    # for production (Task 16.2, audits/audit-phase-16-model-lock.md, locked
+    # 2026-07-12): the un-suffixed HuggingFace repo form Qwen/Qwen3.6-27B — the
+    # -Instruct variant 404s, so the un-suffixed id is the only servable form.
+    # Pin the source literal against the locked id, AND against the client default
+    # the script comment promises to mirror, so the shell constant can never drift
+    # from either the lock or llm.featherless_client.DEFAULT_FEATHERLESS_MODEL.
+    from llm.featherless_client import DEFAULT_FEATHERLESS_MODEL
+
+    script = _REFRESH_SH.read_text(encoding="utf-8")
+    match = re.search(r'^DEFAULT_FEATHERLESS_MODEL="([^"]+)"$', script, re.MULTILINE)
+    assert match is not None, "DEFAULT_FEATHERLESS_MODEL constant missing from script"
+    assert match.group(1) == "Qwen/Qwen3.6-27B"
+    assert match.group(1) == DEFAULT_FEATHERLESS_MODEL

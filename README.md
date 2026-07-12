@@ -122,7 +122,7 @@ The provider is selected by `AILIBI_LLM_PROVIDER`:
 - **`fake`** (default) — deterministic, offline, $0. Powers the CI loop.
 - **`anthropic`** — the real Anthropic provider (requires `ANTHROPIC_API_KEY`).
 - **`ollama`** — a local open model (`qwen3.5:9b`), free, served from your own machine.
-- **`featherless`** — hosted Featherless AI (`Qwen/Qwen3-32B`), OpenAI-compatible, on a flat-rate subscription (recorded as $0; requires `FEATHERLESS_API_KEY`). This is the **canonical eval provider** as of Phase 14.
+- **`featherless`** — hosted Featherless AI (`Qwen/Qwen3.6-27B`), OpenAI-compatible, on a flat-rate subscription (recorded as $0; requires `FEATHERLESS_API_KEY`). This is the **canonical eval provider** as of Phase 14 (model locked 2026-07-12, Task 16.2 — audits/audit-phase-16-model-lock.md).
 
 Both open-model providers disable "thinking" per request and fail loud if a response still carries thinking content. CI never selects a real provider and never reaches the network; the live integration tests are opt-in.
 
