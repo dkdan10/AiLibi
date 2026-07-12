@@ -2916,7 +2916,20 @@ def guard_ballot_citation(
 
     Runs AFTER :func:`guard_ballot_target_graph` (the post-redirect slot in
     the chain), so a redirected eject is judged on the REDIRECTED target's
-    flag status, not the original's. The zero-flag predicate reads only this
+    flag status, not the original's. A redirect that KEPT its citation also
+    keeps its gate pass: the 10.9.2 redirect deliberately preserves
+    ``primary_reason_id`` (the cited turn still drove the decision to
+    EJECT; that guard constrains only the target), so a cited under-gate
+    eject redirected onto a zero-flag argmax passes this gate on the kept
+    citation. Deliberate, and pinned by fixture: the gate enforces citation
+    VALIDITY, never relevance -- neither upstream validator links a
+    citation to the ballot's target (a voter naming any target may cite any
+    real turn / own observation), so the direct-vote twin passes
+    identically and the redirect opens no new hole. Nulling the citation at
+    the redirect instead would edit ``guard_ballot_target_graph``'s
+    lever-independent recorded behavior (OFF-path bytes) -- not this
+    lever's to change; citation QUALITY is 16.15/16.17's measured business.
+    The zero-flag predicate reads only this
     meeting's detected ``contradictions`` -- never suspicion values -- so
     16.8's absence delta (which moves suspicion and mints no flag) cannot
     change the gate's decision by construction. Pure function of its inputs

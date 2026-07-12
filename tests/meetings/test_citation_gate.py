@@ -296,6 +296,38 @@ class TestCitationGuardRunsAfterRedirect:
             result.rationale_text
         )
 
+    def test_redirect_keeps_citation_and_passes_the_gate(self) -> None:
+        # The kept-citation redirect (PR #262 review): the 10.9.2 redirect
+        # deliberately preserves primary_reason_id, so a CITED under-gate
+        # eject redirected onto a zero-flag argmax passes the gate on the
+        # kept citation. Deliberate, not a hole: the gate enforces citation
+        # VALIDITY, never relevance -- no validator links a citation to the
+        # ballot's target, so the direct-vote twin (voting p-3 outright
+        # while citing the same p-2-era turn) passes identically. Pinned so
+        # the interaction is explicit for the 16.15 elicitation / 16.17
+        # graduation review, which measure citation quality.
+        graph = (
+            SuspicionEntry(player_id="p-2", suspicion=0.40, trust=0.5),
+            SuspicionEntry(player_id="p-3", suspicion=0.80, trust=0.5),
+        )
+        result = self._chain(
+            ballot=_ballot(target="p-2", primary_reason_id="m-1:turn-0"),
+            suspicion_graph=graph,
+            contradictions=(),
+        )
+        assert result.target == "p-3"
+        assert result.primary_reason_id == "m-1:turn-0"
+        assert UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3") not in (
+            result.rationale_text
+        )
+        # The direct-vote twin: the same citation on an outright p-3 eject
+        # passes the gate the same way -- the redirect adds nothing.
+        direct = guard_ballot_citation(
+            ballot=_ballot(target="p-3", primary_reason_id="m-1:turn-0"),
+            contradictions=(),
+        )
+        assert direct.target == "p-3"
+
     def test_production_chain_redirects_then_gates_the_redirected_target(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
