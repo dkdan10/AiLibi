@@ -16,8 +16,9 @@ The authoritative task contract is copied below from tasks/phase-16.md. Follow i
 **Section refs:** audits/audit-phase-16-model-lock.md (the decision this implements); llm/featherless_client.py:135 (DEFAULT_FEATHERLESS_MODEL) + :556-592 (_THINKING_KWARG_BY_MODEL — the fail-loud exact-id registry) + :18-32 (response_format_mode posture); llm/provider.py:64-73 (the $0 provider-keyed pricing — assert, don't touch); scripts/refresh_samples.sh + scripts/record_ml_corpus.sh (the locked literals)
 **Complexity:** Small
 
-GO-path only. Make the locked model the production default, everywhere the incumbent is pinned:
-the `_THINKING_KWARG_BY_MODEL` entry (the exact served id from the lock audit, with the
+GO-path only. Make the locked model — **`Qwen/Qwen3.6-27B`** (the exact served id, locked
+2026-07-12) — the production default, everywhere the incumbent is pinned:
+the `_THINKING_KWARG_BY_MODEL` entry (that served id verbatim, with the
 thinking-kwarg boolean the 16.1 probe verified — an unregistered id fails loud on every call, by
 design; NOTE the probe's operational finding: this generation REASONS BY DEFAULT, so the
 production entry must PIN non-thinking (`enable_thinking` false) — the scratch ladder's viable
