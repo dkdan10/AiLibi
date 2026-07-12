@@ -361,6 +361,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   elif [[ "$PROVIDER" == "featherless" ]]; then
     echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
     echo "[dry-run] model-set coupling: would require the effective featherless meeting model (AILIBI_LLM_MEETING_MODEL, else the script default) to be 'Qwen/Qwen3.6-27B' — the qwen3_6_27b set's locked owner model (Task 16.13)"
+    echo "[dry-run] model registry: would require 'Qwen/Qwen3.6-27B' registered in llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's entry — the client fails loud on an unregistered id)"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
@@ -457,6 +458,23 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Model-set coupling OK: $REQUIRED_PROMPT_SET on $EFFECTIVE_FEATHERLESS_MODEL."
+  # Registry gate (PR #260 review, follow-up): the production client fails loud
+  # on a model id absent from llm/featherless_client._THINKING_KWARG_BY_MODEL at
+  # the FIRST call (by design), so a run that passes the coupling gate on a tree
+  # without Task 16.12's registry entry would abort mid-refresh — AFTER
+  # no-meeting seeds had already re-recorded and updated their MANIFEST rows.
+  # Fail HERE instead, before any staging or mutation. Self-retiring like the
+  # coupling gate: 16.12's registry entry makes this pass with no operator
+  # action.
+  if ! uv run python -c "import sys; from llm.featherless_client import _THINKING_KWARG_BY_MODEL as R; sys.exit(0 if any(i == '$REQUIRED_SET_OWNER_MODEL' for i, _ in R) else 1)"; then
+    echo "Error: the locked model '$REQUIRED_SET_OWNER_MODEL' is not registered in" >&2
+    echo "       llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's fail-loud entry)," >&2
+    echo "       so the production client would abort on the first meeting call — after" >&2
+    echo "       no-meeting seeds had already re-recorded. A locked-substrate featherless" >&2
+    echo "       refresh becomes runnable once Task 16.12 lands; nothing was staged." >&2
+    exit 1
+  fi
+  echo "Model registry OK: $REQUIRED_SET_OWNER_MODEL is registered in the production client."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2

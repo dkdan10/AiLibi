@@ -364,9 +364,16 @@ def test_featherless_refresh_requires_coupled_model_before_spend() -> None:
 def test_featherless_coupled_model_env_passes_the_gate(tmp_path: Path) -> None:
     # The acceptance direction, hermetic (no spend): with the locked set AND
     # AILIBI_LLM_MEETING_MODEL pinned to the owner model, the coupling gate
-    # passes and the run proceeds to the NEXT pre-spend gate — here forced to
-    # fail loud at the roster-descriptor check by a deliberately disagreeing
-    # committed roster.json, which proves gate order without any provider call.
+    # passes and the run proceeds to the NEXT pre-spend gate. Which gate that
+    # is depends on whether Task 16.12's production registry entry has landed:
+    # before it, the refresh must fail loud at the REGISTRY gate (the client
+    # would otherwise abort mid-run, after no-meeting seeds re-recorded);
+    # after it, the run reaches the roster-descriptor check, here forced to
+    # fail loud by a deliberately disagreeing committed roster.json. Both
+    # branches prove gate order without any provider call, and the test stays
+    # green across 16.12's merge (the two tasks land in parallel).
+    from llm.featherless_client import _THINKING_KWARG_BY_MODEL
+
     set_dir = tmp_path / "set"
     set_dir.mkdir()
     (set_dir / "roster.json").write_text(
@@ -382,10 +389,21 @@ def test_featherless_coupled_model_env_passes_the_gate(tmp_path: Path) -> None:
         AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
     )
     proc = _run("--seeds", "0", env=env, timeout=120)
-    assert proc.returncode != 0  # fails at the roster gate, not the coupling
+    assert proc.returncode != 0  # fails at a later pre-spend gate, not coupling
     out = proc.stdout + proc.stderr
     assert "Model-set coupling OK: qwen3_6_27b on Qwen/Qwen3.6-27B" in out
     assert "coupled to its locked owner model" not in out
+    registered = any(
+        model_id == "Qwen/Qwen3.6-27B" for model_id, _ in _THINKING_KWARG_BY_MODEL
+    )
+    if registered:
+        # Post-16.12 tree: the registry gate passes; the roster gate fires.
+        assert "Model registry OK" in out
+        assert not set_dir.joinpath("MANIFEST.md").exists()  # no row staged
+    else:
+        # Pre-16.12 tree: the registry gate fires BEFORE mkdir/staging.
+        assert "is not registered in" in out
+        assert "nothing was staged" in out
 
 
 def test_dry_run_featherless_echoes_model_set_coupling() -> None:
@@ -400,6 +418,8 @@ def test_dry_run_featherless_echoes_model_set_coupling() -> None:
     assert proc.returncode == 0
     assert "[dry-run] model-set coupling:" in proc.stdout
     assert "Qwen/Qwen3.6-27B" in proc.stdout
+    assert "[dry-run] model registry:" in proc.stdout
+    assert "_THINKING_KWARG_BY_MODEL" in proc.stdout
 
 
 def test_featherless_refresh_accepts_locked_substrate() -> None:
