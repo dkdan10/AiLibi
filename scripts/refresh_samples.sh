@@ -360,6 +360,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] preflight: would ping http://$OLLAMA_HOST/api/tags for reachability and confirm model $OLLAMA_MODEL is pulled"
   elif [[ "$PROVIDER" == "featherless" ]]; then
     echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
+    echo "[dry-run] model-set coupling: would require the effective featherless meeting model (AILIBI_LLM_MEETING_MODEL, else the script default) to be 'Qwen/Qwen3.6-27B' — the qwen3_6_27b set's locked owner model (Task 16.13)"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
@@ -434,6 +435,28 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (all five levers unconditionally ON)."
+  # Model-set coupling (Task 16.13, PR #260 review): the qwen3_6_27b set is
+  # authored for its locked owner model Qwen/Qwen3.6-27B
+  # (audits/audit-phase-16-model-lock.md; _SET_OWNER in the sweep harness), and
+  # recording it against any other model would corrupt the substrate provenance
+  # exactly the way this preflight exists to prevent. The effective meeting
+  # model mirrors the attribution logic below (AILIBI_LLM_MEETING_MODEL, else
+  # the script's DEFAULT_FEATHERLESS_MODEL, which tracks
+  # llm.featherless_client.DEFAULT_FEATHERLESS_MODEL). Until Task 16.12 flips
+  # that default to the locked id, a coupled refresh must export the model env
+  # explicitly; once 16.12 lands, this guard passes with no env and self-retires
+  # to a pure backstop.
+  REQUIRED_SET_OWNER_MODEL="Qwen/Qwen3.6-27B"
+  EFFECTIVE_FEATHERLESS_MODEL="${AILIBI_LLM_MEETING_MODEL:-$DEFAULT_FEATHERLESS_MODEL}"
+  if [[ "$EFFECTIVE_FEATHERLESS_MODEL" != "$REQUIRED_SET_OWNER_MODEL" ]]; then
+    echo "Error: prompt set '$REQUIRED_PROMPT_SET' is coupled to its locked owner model." >&2
+    echo "       The effective featherless meeting model is '$EFFECTIVE_FEATHERLESS_MODEL', but the" >&2
+    echo "       set was authored for '$REQUIRED_SET_OWNER_MODEL' (audits/audit-phase-16-model-lock.md)." >&2
+    echo "       Export AILIBI_LLM_MEETING_MODEL='$REQUIRED_SET_OWNER_MODEL' (or record after the" >&2
+    echo "       Task 16.12 default-model flip); nothing was staged." >&2
+    exit 1
+  fi
+  echo "Model-set coupling OK: $REQUIRED_PROMPT_SET on $EFFECTIVE_FEATHERLESS_MODEL."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2

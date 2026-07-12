@@ -232,6 +232,11 @@ PROBE_REPORT: Final[Path] = WORK / "report-featherless-sweep-qwen3-6-27b.md"
 # ``template_source_sha`` stamp (the arms differ ONLY by committed template
 # bytes; the model, mode, contexts, and detectors are held constant).
 AB_RESULTS: Final[Path] = WORK / "results-featherless-sweep-qwen3-6-27b-ab.jsonl"
+# The ONE set the `ab` pipeline is bound to (PR #260 review): AB_RESULTS and the
+# probe-report A/B section are 16.13 evidence artifacts, so a run over any other
+# registered set would overwrite/append unrelated rows into them. A future set's
+# A/B must bind its own artifact paths rather than widen this constant silently.
+AB_PROMPT_SET: Final[str] = "qwen3_6_27b"
 # The probe renders through the incumbent's EXISTING bespoke set (a deliberate
 # 16.1 finding — the bespoke 3.6 set is Task 16.13's), held CONSTANT across both
 # matrix models and BOTH thinking modes (mode is the controlled axis).
@@ -4010,7 +4015,10 @@ def main() -> int:
         required=True,
         help="the bespoke set under A/B; must be registered in _SET_OWNER (the "
         "sweep rejects an unregistered set before it starts, and the owner "
-        "binding structurally rejects a cross-set control).",
+        "binding structurally rejects a cross-set control) AND must be the one "
+        "set this pipeline's artifacts record (AB_PROMPT_SET, qwen3_6_27b — "
+        "any other registered set is rejected so the 16.13 evidence file "
+        "cannot be polluted).",
     )
     a.add_argument("--sample-dir", type=Path, default=Path("replays/samples/9p2i"))
     a.add_argument(
@@ -4085,6 +4093,19 @@ def main() -> int:
             raise SystemExit(
                 f"--prompt-set {args.prompt_set!r} is not a known bespoke set "
                 f"(valid: {sorted(_SET_OWNER)})"
+            )
+        # And the pipeline itself is bound to ONE set (PR #260 review): every
+        # `ab` run writes AB_RESULTS and re-renders the probe report's A/B
+        # section, which are Task 16.13 evidence artifacts for AB_PROMPT_SET.
+        # Accepting another registered set here would pollute that evidence
+        # with unrelated rows after a real run — fail before any spend instead.
+        if args.prompt_set != AB_PROMPT_SET:
+            raise SystemExit(
+                f"the `ab` pipeline is bound to the Task 16.13 artifacts "
+                f"({AB_RESULTS.name} + the probe report's A/B section), which "
+                f"record the {AB_PROMPT_SET!r} two-pass protocol; --prompt-set "
+                f"must be {AB_PROMPT_SET!r} (got {args.prompt_set!r}). A new "
+                f"set's A/B needs its own artifact paths."
             )
         ab_label, ab_thinking = ab_owner
         arm_sha = _template_source_sha(args.prompt_set)

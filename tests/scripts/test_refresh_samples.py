@@ -339,6 +339,69 @@ def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     assert "AILIBI_TESTIMONY_AS_CONTENT" not in out
 
 
+def test_featherless_refresh_requires_coupled_model_before_spend() -> None:
+    # Task 16.13 (PR #260 review): the qwen3_6_27b set is coupled to its locked
+    # owner model (Qwen/Qwen3.6-27B). With the set exported but the effective
+    # meeting model left at the script default (still the 32B incumbent until
+    # Task 16.12's flip), a real featherless refresh must fail loud AFTER the
+    # set gate and BEFORE any staging/spend — recording the new set against the
+    # old model would corrupt the substrate provenance.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "featherless"
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
+    env.pop("AILIBI_LLM_MEETING_MODEL", None)
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    # The SET gate passed (its error is absent); the COUPLING gate fired.
+    assert "AILIBI_PROMPT_SET must be" not in out
+    assert "coupled to its locked owner model" in out
+    assert "Qwen/Qwen3.6-27B" in out
+    assert "nothing was staged" in out
+
+
+def test_featherless_coupled_model_env_passes_the_gate(tmp_path: Path) -> None:
+    # The acceptance direction, hermetic (no spend): with the locked set AND
+    # AILIBI_LLM_MEETING_MODEL pinned to the owner model, the coupling gate
+    # passes and the run proceeds to the NEXT pre-spend gate — here forced to
+    # fail loud at the roster-descriptor check by a deliberately disagreeing
+    # committed roster.json, which proves gate order without any provider call.
+    set_dir = tmp_path / "set"
+    set_dir.mkdir()
+    (set_dir / "roster.json").write_text(
+        '{"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}'
+    )
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3.6-27B",
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+    )
+    proc = _run("--seeds", "0", env=env, timeout=120)
+    assert proc.returncode != 0  # fails at the roster gate, not the coupling
+    out = proc.stdout + proc.stderr
+    assert "Model-set coupling OK: qwen3_6_27b on Qwen/Qwen3.6-27B" in out
+    assert "coupled to its locked owner model" not in out
+
+
+def test_dry_run_featherless_echoes_model_set_coupling() -> None:
+    # The dry-run surfaces the coupling requirement (mirroring the key-preflight
+    # echo pattern) so the operator sees it before any real invocation.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] model-set coupling:" in proc.stdout
+    assert "Qwen/Qwen3.6-27B" in proc.stdout
+
+
 def test_featherless_refresh_accepts_locked_substrate() -> None:
     # Task 14.12: with the locked prompt set, the substrate guard passes -- no
     # lever env needed (all five levers are unconditional). Use --dry-run so the
