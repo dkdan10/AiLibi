@@ -2500,10 +2500,12 @@ def grounded_vouch_subjects(
       preserving the documented invariant that EVERY producer of the
       ``corroborated`` set routes through the one relevance gate
       (:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`). The
-      gate reads the MATCHED RECORD's tick and room, never the model-stated
-      observation: the +-:data:`SIGHTING_GROUNDING_TICK_TOLERANCE` match
-      window would otherwise let a spawn-window record be re-timed one tick
-      past the window and exculpate off an evidentially-empty sighting.
+      gate reads each candidate RECORD's tick and room, never the
+      model-stated observation: the +-:data:`SIGHTING_GROUNDING_TICK_TOLERANCE`
+      match window would otherwise let a spawn-window record be re-timed one
+      tick past the window and exculpate off an evidentially-empty sighting.
+      A vouch grounds iff SOME record both matches and is relevant, so an
+      irrelevant record never masks a later relevant one within the window.
 
     Pure and deterministic: a function of the transcript, the typed
     records, and the trigger kind alone. A caller with no records gets the
@@ -2534,33 +2536,29 @@ def grounded_vouch_subjects(
                 continue
             if not _subject_in_roster(observation.subject, effective_roster):
                 continue
-            matched = next(
-                (
-                    record
-                    for record in records
-                    if _sighting_observation_matches_record(observation, record)
-                ),
-                None,
-            )
-            if matched is None:
-                continue
-            # The Rule-3 relevance gate reads the MATCHED RECORD (the private
+            # The vouch grounds iff the speaker holds AT LEAST ONE record that
+            # both MATCHES the spoken sighting and is itself relevance-grade.
+            # The Rule-3 relevance gate reads each candidate RECORD (the private
             # ground truth), NEVER the model-stated observation tick/room: the
             # match tolerance (+-SIGHTING_GROUNDING_TICK_TOLERANCE) would
             # otherwise let a spawn-window record be re-timed one tick past the
             # window and slip an evidentially-empty sighting through the
-            # exculpation channel. The record's canonical rooms are non-empty by
-            # construction (the match required them to intersect the spoken
-            # rooms), so an unhelpful spawn-window or kill-scene record is the
-            # only thing this drops.
-            record_rooms = canonical_rooms(matched.room)
-            if not is_relevant_sighting(
-                tick=matched.tick,
-                rooms=record_rooms,
-                triggering_body_rooms=body_rooms,
+            # exculpation channel. Testing match-AND-relevance per record (not
+            # "pick the first match, then gate it") means an irrelevant
+            # spawn-window/kill-scene record never masks a later relevant one
+            # for the same subject/room within the window. The record's
+            # canonical rooms are non-empty by construction on a match (it
+            # required them to intersect the spoken rooms).
+            if any(
+                _sighting_observation_matches_record(observation, record)
+                and is_relevant_sighting(
+                    tick=record.tick,
+                    rooms=canonical_rooms(record.room),
+                    triggering_body_rooms=body_rooms,
+                )
+                for record in records
             ):
-                continue
-            grounded.add(observation.subject)
+                grounded.add(observation.subject)
     return frozenset(grounded)
 
 

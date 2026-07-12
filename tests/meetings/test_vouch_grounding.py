@@ -334,6 +334,30 @@ class TestGroundedFeedsCorroboration:
             == frozenset()
         )
 
+    def test_irrelevant_record_does_not_mask_a_later_relevant_one(self) -> None:
+        # Codex P2: the vouch grounds iff SOME record matches AND is relevant, so
+        # an earlier spawn-window record (tick 1) sharing the subject/room must
+        # not shadow a later relevant record (tick 3) that grounds the spoken
+        # tick-3 sighting. (Both match the spoken tick 3 within tolerance.)
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=3),),
+            )
+        )
+
+        assert grounded_vouch_subjects(
+            transcript,
+            sighting_records={
+                "p-2": (
+                    _record(subject="p-5", room="MEDBAY", tick=1),
+                    _record(subject="p-5", room="MEDBAY", tick=3),
+                )
+            },
+            roster=_ROSTER,
+        ) == frozenset({"p-5"})
+
     def test_compound_room_label_grounds_against_the_canonical_record(self) -> None:
         # canonical_rooms is the one room-normalisation point: a compound
         # spoken label whose member set contains the record's canonical room
