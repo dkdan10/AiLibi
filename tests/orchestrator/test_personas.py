@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from engine.entities import PlayerId, Role
-from engine.world import load_canonical_map
+from engine.world import WorldState, load_canonical_map
 from meetings.manager import SuspicionEntry
 from meetings.schemas import VentWitnessRecord
 from orchestrator.game import _build_participants  # noqa: PLC2701
@@ -293,19 +293,39 @@ def test_assign_personas_rejects_caller_bank_below_floor() -> None:
 # --------------------------------------------------------------------------- #
 
 
+_AssignFn = Callable[
+    [int, tuple[PlayerId, ...], WorldState], Mapping[PlayerId, PersonaCard]
+]
+
+
+def _committed_assign(
+    seed: int, roster: tuple[PlayerId, ...], state: WorldState
+) -> Mapping[PlayerId, PersonaCard]:
+    """The real assignment under test; ``state`` (and so roles) deliberately unused."""
+
+    return assign_personas(seed=seed, roster=roster)
+
+
 def _chi2_persona_role_independence(
-    *, num_players: int, num_impostors: int, chance_rate: float
+    *,
+    num_players: int,
+    num_impostors: int,
+    chance_rate: float,
+    assign: _AssignFn = _committed_assign,
 ) -> tuple[int, int, float, float, dict[str, tuple[int, int]]]:
     """Sweep the committed seeds and measure persona↔impostorhood independence.
 
-    For each seed the seeder assigns roles and ``assign_personas`` assigns
-    cards over the same fixed roster (both pure functions of the seed). We
-    accumulate, per card id ``k``: ``n_k`` = games the card was seated and
-    ``x_k`` = of those, how many landed on an impostor. Under the null
-    hypothesis (persona independent of role, which holds BY CONSTRUCTION — roles
-    never enter the persona module and the persona rng is namespace-offset off
-    the seeder stream) each seated card is impostor with probability
-    ``chance_rate`` = num_impostors / num_players.
+    For each seed the seeder assigns roles and ``assign`` assigns cards over
+    the same fixed roster (both pure functions of the seed). We accumulate,
+    per card id ``k``: ``n_k`` = games the card was seated and ``x_k`` = of
+    those, how many landed on an impostor. Under the null hypothesis (persona
+    independent of role, which holds BY CONSTRUCTION for the real assignment —
+    roles never enter the persona module) each seated card is impostor with
+    probability ``chance_rate`` = num_impostors / num_players.
+
+    ``assign`` defaults to the real :func:`assign_personas`; the planted-leak
+    test swaps in a role-COUPLED assigner to prove the chi-square gate can
+    fail (a gate that cannot fail is not a gate).
 
     Returns (total_appearances, total_impostor_slots, chi2, worst_abs_dev,
     per_card_counts) so the caller can pin the sanity totals and the thresholds.
@@ -324,7 +344,7 @@ def _chi2_persona_role_independence(
             num_impostors=num_impostors,
         )
         roster = tuple(sorted(state.players))
-        cards = assign_personas(seed=seed, roster=roster)
+        cards = assign(seed, roster, state)
         for player_id, card in cards.items():
             n_counts[card.id] += 1
             total_app += 1
@@ -346,10 +366,15 @@ def _chi2_persona_role_independence(
     return total_app, total_imp, chi2, worst_dev, per_card
 
 
-# alpha=0.001 chi-square critical value for df = 14 cards - 1 = 13. A persona
-# whose assignment correlated with impostorhood (e.g. a namespace regression
-# that let the persona shuffle track the seeder's role shuffle) blows far past
-# this; the observed statistic sits comfortably below it.
+# alpha=0.001 chi-square critical value for df = 14 cards - 1 = 13. The sweep
+# certifies the definition-of-done property — persona↔role association at
+# chance level over the committed corpus — and has power against GROSS
+# coupling: an assignment computed FROM roles blows past this by an order of
+# magnitude (the planted-leak test below proves the gate can fail). It has NO
+# power against subtle derivation changes — the measured un-offset-namespace
+# variant lands at chi² ≈ 20.9 (9p2i) / 13.1 (4p1i), inside the null band —
+# so the seed-0/seed-42 golden pins above, not this sweep, are the
+# derivation guard.
 _CHI2_CRITICAL_DF13 = 34.53
 # A wide, documented per-card band: even if the aggregate chi2 were diluted, a
 # single card correlated with role would breach this.
@@ -387,6 +412,38 @@ def test_role_neutrality_sweep_4p1i() -> None:
     assert total_imp == 50
     assert chi2 < _CHI2_CRITICAL_DF13
     assert worst_dev <= _PER_CARD_DEV_BAND
+
+
+def test_role_neutrality_sweep_bites_on_role_coupled_assignment() -> None:
+    """The sweep gate can fail: a role-COUPLED assignment blows past both
+    thresholds (the leak-suite planted-leak pattern, applied to the statistic).
+
+    The planted assigner hands the lexicographically first bank cards to the
+    impostors every game — the gross persona→role coupling class this sweep
+    guards against. The impostor-held cards are then impostor 100% of the time
+    (per-card deviation 1 - 2/9 ≈ 0.78, chi² in the hundreds), so both the
+    chi-square threshold and the per-card band trip. This proves the
+    role-neutrality assertions are a live gate, not a tautology over whatever
+    the implementation happens to produce.
+    """
+
+    bank = sorted(load_persona_bank(), key=lambda card: card.id)
+
+    def role_leaking_assign(
+        seed: int, roster: tuple[PlayerId, ...], state: WorldState
+    ) -> Mapping[PlayerId, PersonaCard]:
+        impostors = [p for p in roster if state.players[p].role == "IMPOSTOR"]
+        others = [p for p in roster if state.players[p].role != "IMPOSTOR"]
+        return {pid: bank[i] for i, pid in enumerate(impostors + others)}
+
+    _, _, chi2, worst_dev, _ = _chi2_persona_role_independence(
+        num_players=9,
+        num_impostors=2,
+        chance_rate=2.0 / 9.0,
+        assign=role_leaking_assign,
+    )
+    assert chi2 > _CHI2_CRITICAL_DF13
+    assert worst_dev > _PER_CARD_DEV_BAND
 
 
 # --------------------------------------------------------------------------- #

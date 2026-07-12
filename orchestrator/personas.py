@@ -57,16 +57,24 @@ fixed cast reshuffled.
 
 # ASCII "PERSONA" as a fixed namespace offset for the persona rng seed.
 #
-# Load-bearing, two independent reasons:
+# Load-bearing, two reasons:
 #   (a) The persona stream must never share or perturb the seeder's
 #       ``random.Random(seed)`` draws — replay byte-identity depends on the
 #       seeder stream staying untouched. A fresh ``Random`` instance already
 #       guarantees that on its own (separate PRNG object, separate state).
 #   (b) An UN-offset ``random.Random(seed)`` would seed the persona
 #       Fisher–Yates with the exact integer the seeder feeds its
-#       role-assignment shuffle, correlating the two permutations and risking
-#       a persona↔role association — the very leak the role-neutrality sweep
-#       exists to catch. Offsetting the seed decorrelates the streams.
+#       role-assignment shuffle. On the committed seed range that happens to
+#       decorrelate anyway — the role shuffle permutes a 4/9-element list,
+#       the bank shuffle a 14-element one, and the measured association stays
+#       at chance level (chi² ≈ 20.9 on the 9p2i sweep, inside the null
+#       band) — but that is an accident of list lengths and the generator,
+#       not a property the design may lean on. The offset makes the
+#       decorrelation BY CONSTRUCTION, and the seed-0/seed-42 golden pins in
+#       ``tests/orchestrator/test_personas.py`` fix the derivation so
+#       removing the offset trips loudly THERE: the chi-square sweep has no
+#       power against so subtle a change (it exists to catch gross
+#       persona↔role coupling, which its planted-leak test proves it does).
 _PERSONA_SEED_NAMESPACE: Final[int] = 0x504552534F4E41
 
 _PERSONA_BANK_PATH: Final[Path] = (
