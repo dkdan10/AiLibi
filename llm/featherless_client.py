@@ -31,6 +31,14 @@ even with no ``response_format`` at all — exactly how the Anthropic adapter ha
 always worked: prompt + extract + validate + FailedCall, no constrained
 decoding).
 
+The Task 16.1 probe RE-VERIFIED this posture UNCHANGED on the locked production
+model ``Qwen/Qwen3.6-27B`` (Task 16.2, audits/audit-phase-16-model-lock.md):
+``json_object`` accepted 2/2 on BOTH production schemas (MeetingTurn, VoteBallot,
+JSON content), while strict ``json_schema`` was deterministically rejected 0/2 on
+both (HTTP 400 — the incumbent's same-day re-verify rejected 0/2 too, at drifting
+422/504 statuses; the VERDICT, not the status code, is the pin). So ``json_object``
+stays the default and there is still NO silent fallback between modes.
+
 So the wire shape is a constructor knob, :data:`ResponseFormatMode`, defaulting
 to ``json_object``: ``json_schema`` is kept selectable for a future
 endpoint/model that supports it (and so 14.4 can A/B it), but it is never the
@@ -128,11 +136,14 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 # :func:`llm.provider.build_default_client`) for a proxy or a self-hosted
 # OpenAI-compatible endpoint.
 DEFAULT_FEATHERLESS_BASE_URL: Final[str] = "https://api.featherless.ai/v1"
-# Default model id (HuggingFace repo form, as Featherless expects). Qwen3-32B
-# leads the Phase-14 slate; this is a non-binding default — the canonical
-# (meeting_model, trigger_model) tuple is locked at Task 14.6 and supplied via
-# ``AILIBI_LLM_MEETING_MODEL`` / ``AILIBI_LLM_TRIGGER_MODEL`` until then.
-DEFAULT_FEATHERLESS_MODEL: Final[str] = "Qwen/Qwen3-32B"
+# Default model id (HuggingFace repo form, as Featherless expects). This IS the
+# canonical PRODUCTION model — locked at Task 16.2
+# (audits/audit-phase-16-model-lock.md, 2026-07-12), no longer a non-binding
+# slate lead. ``Qwen/Qwen3.6-27B`` is the EXACT served id: the ``-Instruct``
+# variant 404s, so the un-suffixed id is the only servable form
+# (generation-preflight-confirmed). Still overridable per ``call_kind`` via
+# ``AILIBI_LLM_MEETING_MODEL`` / ``AILIBI_LLM_TRIGGER_MODEL``.
+DEFAULT_FEATHERLESS_MODEL: Final[str] = "Qwen/Qwen3.6-27B"
 
 ThinkingPolicy = Literal["fail_loud", "strip"]
 # Response-side policy applied when a response carries reasoning. ``fail_loud``
@@ -161,9 +172,12 @@ ResponseFormatMode = Literal["json_object", "json_schema", "none"]
 # module docstring): live testing showed every Phase-14 slate model returns a
 # deterministic 400 to ``json_schema`` while ``json_object`` succeeds, and the
 # 32B-class models clear the structured-output parse bar on the production
-# prompts under ``json_object`` (and even with ``none``). There is NO silent
-# fallback between modes (AGENTS.md): the mode is chosen explicitly at
-# construction time; a rejected ``json_schema`` request fails loud.
+# prompts under ``json_object`` (and even with ``none``). The Task 16.1 probe
+# re-verified this posture UNCHANGED on the locked ``Qwen/Qwen3.6-27B``
+# (``json_object`` accepted 2/2, strict ``json_schema`` rejected 0/2 — Task 16.2,
+# audits/audit-phase-16-model-lock.md). There is NO silent fallback between modes
+# (AGENTS.md): the mode is chosen explicitly at construction time; a rejected
+# ``json_schema`` request fails loud.
 DEFAULT_RESPONSE_FORMAT_MODE: Final[ResponseFormatMode] = "json_object"
 
 
@@ -559,6 +573,16 @@ _THINKING_KWARG_BY_MODEL: Final[tuple[tuple[str, bool], ...]] = (
     ("Qwen/Qwen3-32B", True),
     ("Qwen/Qwen3-30B-A3B", True),
     ("Qwen/Qwen3-30B-A3B-Instruct-2507", True),
+    # Locked production model (probe-verified Task 16.1, locked Task 16.2 —
+    # audits/audit-phase-16-model-lock.md). The 16.1 probe confirmed this served
+    # id HONORS the Qwen3 ``chat_template_kwargs.enable_thinking`` kwarg, so it
+    # is classified True. CRITICAL: this generation REASONS BY DEFAULT — with the
+    # kwarg ABSENT it leaks inline ``</think>`` reasoning into ``content``;
+    # ``enable_thinking=false`` suppresses it (0 channel chars). So production
+    # PINS non-thinking on EVERY call: the constructor's ``request_thinking=False``
+    # default combined with this True entry SENDS the kwarg (with false). An
+    # unpinned call would leak inline ``</think>`` think-text into recorded state.
+    ("Qwen/Qwen3.6-27B", True),
     # Non-Qwen slate — the mandatory field BREAKS them, so it is omitted (14.4).
     ("zai-org/GLM-4-32B", False),
     ("zai-org/GLM-4-32B-0414", False),

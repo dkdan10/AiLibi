@@ -266,7 +266,7 @@ done
 #   featherless                    -> featherless (hosted flat-rate provider, Task
 #                                     14.7 / 14.12 baseline re-record; $0
 #                                     provider-keyed cost, key required, the locked
-#                                     Qwen/Qwen3-32B model + qwen3_32b prompt set
+#                                     Qwen/Qwen3.6-27B model + qwen3_32b prompt set
 #                                     exported by the operator — see the hint in
 #                                     tasks/phase-14.md Task 14.12. All five
 #                                     substrate levers are unconditionally ON —
@@ -276,11 +276,12 @@ done
 #                                     needed.)
 DEFAULT_OLLAMA_HOST="localhost:11434"
 DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
-# The locked Featherless baseline model (Task 14.6); mirrors
-# llm.featherless_client.DEFAULT_FEATHERLESS_MODEL. Used for the no-meeting-seed
-# MANIFEST attribution so a Featherless refresh attributes those rows to the
-# model it actually ran with, not the anthropic/ollama default.
-DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3-32B"
+# The locked production model (Task 16.2, audits/audit-phase-16-model-lock.md,
+# locked 2026-07-12); mirrors llm.featherless_client.DEFAULT_FEATHERLESS_MODEL.
+# Used for the no-meeting-seed MANIFEST attribution so a Featherless refresh
+# attributes those rows to the model it actually ran with, not the
+# anthropic/ollama default.
+DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3.6-27B"
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-anthropic}" | tr '[:upper:]' '[:lower:]')"
 case "$PROVIDER" in
   ollama) ;;

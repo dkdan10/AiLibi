@@ -67,11 +67,14 @@ contract for each PR.
   `AILIBI_LLM_PROVIDER`: Anthropic (`anthropic`, needs `ANTHROPIC_API_KEY`);
   a local **Ollama** open model (`ollama`, `qwen3.5:9b` on `localhost:11434`,
   run with thinking disabled, free); and hosted **Featherless**
-  (`featherless`, `Qwen/Qwen3-32B`, OpenAI-compatible, needs
+  (`featherless`, `Qwen/Qwen3.6-27B`, OpenAI-compatible, needs
   `FEATHERLESS_API_KEY`, recorded as $0 on a flat-rate subscription) — the
-  **canonical eval provider** since Phase 14, under which the committed
-  baseline sets were recorded. None is reached in CI: the Anthropic and
-  Ollama integration tests are opt-in behind env gates
+  **canonical eval provider** since Phase 14, its model locked 2026-07-12 at
+  Task 16.2 (audits/audit-phase-16-model-lock.md) and pinned non-thinking; the
+  committed baseline sets were recorded under the previous model
+  `Qwen/Qwen3-32B` (baseline 3), pending the 16.14 baseline-4 re-record.
+  None is reached in CI: the Anthropic and Ollama integration tests are
+  opt-in behind env gates
   (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`), and the
   Featherless client is unit-tested against a mock transport (no network).
 

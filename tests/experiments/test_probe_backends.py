@@ -556,8 +556,8 @@ def test_slate_is_well_formed() -> None:
 
 def test_qwen3_6_candidate_spec_pins() -> None:
     """qwen3-6-27b: served id preflight-confirmed 2026-07-11; the kwarg axis is
-    honored live, but the id is deliberately NOT in the production registry
-    (16.12's fail-loud entry lands post-lock)."""
+    honored live, and Task 16.12 landed its fail-loud entry in the production
+    registry (lock: Task 16.2, audits/audit-phase-16-model-lock.md)."""
 
     spec = _find_spec("qwen3-6-27b")
     assert spec.model_id == "Qwen/Qwen3.6-27B"
@@ -606,19 +606,26 @@ def test_probe_slate_constants() -> None:
         assert forms[0] == _find_spec(label).model_id  # ...led by the pinned id
 
 
-def test_new_generation_ids_stay_out_of_production_registry() -> None:
-    """The experiment-tier boundary pin: 16.1 keeps the new ids OUT of the
-    production registry (16.12's fail-loud entry is post-lock). If this starts
-    failing because an id was registered, 16.12 has landed and the sweep-local
-    transport should be retired."""
+def test_production_registry_boundary_post_lock() -> None:
+    """The experiment-tier boundary pin, RE-PINNED post-lock: Task 16.12 landed
+    the fail-loud registry entry for the locked id (lock: Task 16.2,
+    audits/audit-phase-16-model-lock.md), so ``Qwen/Qwen3.6-27B`` is now a
+    REGISTERED production id that supports the enable_thinking kwarg. The
+    ThinkingCap NO-GO candidate stays UNREGISTERED — the probe never promoted it
+    — so the production adapter still fails loud on it and the sweep-local
+    transport remains its only route."""
 
     from llm.featherless_client import _supports_thinking_kwarg
 
+    # The incumbent stays registered.
     assert fs._registry_knows("Qwen/Qwen3-32B") is True
-    for model_id in ("Qwen/Qwen3.6-27B", "bottlecapai/ThinkingCap-Qwen3.6-27B"):
-        assert fs._registry_knows(model_id) is False
-        with pytest.raises(ValueError):
-            _supports_thinking_kwarg(model_id)
+    # 16.12 landed the locked id: registered AND kwarg-supporting.
+    assert fs._registry_knows("Qwen/Qwen3.6-27B") is True
+    assert _supports_thinking_kwarg("Qwen/Qwen3.6-27B") is True
+    # The NO-GO ThinkingCap id is never registered: the adapter fails loud on it.
+    assert fs._registry_knows("bottlecapai/ThinkingCap-Qwen3.6-27B") is False
+    with pytest.raises(ValueError):
+        _supports_thinking_kwarg("bottlecapai/ThinkingCap-Qwen3.6-27B")
 
 
 def test_split_inline_think_shapes() -> None:

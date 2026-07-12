@@ -73,6 +73,23 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # tests via AILIBI_ML_CORPUS_ROOT; the default is the committed layout.
 CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 
+# =============================================================================
+# STALE-CORPUS NOTICE (Task 16.12) — the pin block below is INTENTIONALLY STALE.
+# =============================================================================
+# As of Task 16.12 the PRODUCTION default model is Qwen/Qwen3.6-27B (Task 16.2
+# lock, audits/audit-phase-16-model-lock.md, locked 2026-07-12). This recorder,
+# however, STILL pins the baseline-3 / OLD-MODEL substrate — Qwen/Qwen3-32B + the
+# qwen3_32b prompt set (turn/opening v5, vote_ballot v6) — because the committed
+# ML corpus it guards was RECORDED on that substrate and is FROZEN there PENDING
+# PHASE-17 RE-GROUNDING. The pins below are deliberately NOT bumped: the preflight
+# couples model + prompt set + prompt versions as ONE substrate, and they
+# coherently describe the frozen artifacts they guard — bumping only the model
+# here would make the recorder REFUSE the very corpus it protects (the validity
+# gate + freeze assert the recorded bytes match these pins). Task 16.17 re-pins
+# this whole block to the baseline-5 substrate (a re-record + re-freeze, an owner
+# decision). Until then, EVERY pin below stays at baseline-3 — do not bump.
+# =============================================================================
+
 # The locked Featherless baseline model (Task 14.6); mirrors
 # llm.featherless_client.DEFAULT_FEATHERLESS_MODEL and refresh_samples.sh. Stamped
 # onto no-meeting rows and asserted by the operator's --expected-model gate.
