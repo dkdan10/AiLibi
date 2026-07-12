@@ -23,6 +23,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    SightingRecord,
     VentWitnessRecord,
     VoteBallot,
 )
@@ -995,6 +996,11 @@ class _MeetingAwareReporter:
         # Task 15.4: this double DOES cross ``_build_participants`` (it runs
         # under ``build_default_meeting_runner``), so the runtime-checkable
         # protocol requires the accessor; a canned stub grounds nothing.
+        return ()
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
+        # Task 16.7: the vent accessor's sighting sibling -- same protocol
+        # requirement, same canned grounds-nothing stub.
         return ()
 
     @property

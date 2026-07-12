@@ -55,6 +55,7 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     SawPlayerObservation,
+    SightingRecord,
     TurnKind,
     VentWitnessRecord,
     VoteBallot,
@@ -759,6 +760,11 @@ class TestHeadlessGameMeetingDispatch:
             ) -> tuple[VentWitnessRecord, ...]:
                 return self._delegate.vent_witness_records_for_meeting()
 
+            def sighting_records_for_meeting(
+                self,
+            ) -> tuple[SightingRecord, ...]:
+                return self._delegate.sighting_records_for_meeting()
+
         def factory(agent_id: PlayerId, role: Role):  # type: ignore[no-untyped-def]
             if agent_id == "p-1":
                 return _ScriptedAgent(
@@ -1092,6 +1098,11 @@ class TestDefaultMeetingRunner:
             ) -> tuple[VentWitnessRecord, ...]:
                 return self._delegate.vent_witness_records_for_meeting()
 
+            def sighting_records_for_meeting(
+                self,
+            ) -> tuple[SightingRecord, ...]:
+                return self._delegate.sighting_records_for_meeting()
+
             @property
             def agent_id(self) -> PlayerId:
                 return self._delegate.agent_id
@@ -1266,6 +1277,11 @@ class TestDefaultMeetingRunner:
                 self,
             ) -> tuple[VentWitnessRecord, ...]:
                 return self._delegate.vent_witness_records_for_meeting()
+
+            def sighting_records_for_meeting(
+                self,
+            ) -> tuple[SightingRecord, ...]:
+                return self._delegate.sighting_records_for_meeting()
 
         agents: dict[PlayerId, object] = {
             pid: _MinimalAware(pid, players.role)
@@ -1551,6 +1567,9 @@ class _MeetingAwareStub:
         return ()
 
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+        return ()
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
         return ()
 
 
@@ -2169,6 +2188,9 @@ class _MeetingAwareScriptedAgent:
 
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
         return self._inner.vent_witness_records_for_meeting()
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
+        return self._inner.sighting_records_for_meeting()
 
 
 class _EmergencyChainLLMClient:

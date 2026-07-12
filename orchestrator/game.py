@@ -78,6 +78,7 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
     ReportedStatement,
+    SightingRecord,
     VentWitnessRecord,
 )
 from meetings.transcript import MeetingTriggerKind
@@ -451,17 +452,20 @@ class MeetingAwareAgent(Protocol):
     that do not exercise meetings can use any
     :class:`AgentInterface` implementer.
 
-    ``vent_witness_records_for_meeting`` (Task 15.4) is the ONE typed
-    self-channel accessor on this protocol: the agent's OWN witnessed-vent
-    episodic records, the grounding input behind the meeting layer's
-    ``vent_sighting`` hard flag. It is a REQUIRED protocol member (not an
-    optional sibling capability like :class:`BeliefPersistingAgent`) because
-    the grounding chokepoint is load-bearing -- a meeting run without the
-    channel would silently accept every spoken vent claim as ungroundable
-    testimony, an advisory-grounding failure mode the task contract forbids.
-    Firewall-clean: an agent reporting its own witnessed events leaks
-    nothing (the packet stamp the records derive from is witness-gated,
-    ``eval/leak_test.py``); a canned test double may return ``()``.
+    ``vent_witness_records_for_meeting`` (Task 15.4) and
+    ``sighting_records_for_meeting`` (Task 16.7) are the two typed
+    self-channel accessors on this protocol: the agent's OWN witnessed-vent
+    and first-hand-sighting episodic records, the grounding inputs behind
+    the meeting layer's ``vent_sighting`` hard flag and the grounded-vouch
+    corroboration feed respectively. Both are REQUIRED protocol members
+    (not optional sibling capabilities like :class:`BeliefPersistingAgent`)
+    because the grounding chokepoints are load-bearing -- a meeting run
+    without a channel would silently accept every spoken claim on it as
+    ungroundable testimony, an advisory-grounding failure mode the task
+    contracts forbid. Firewall-clean: an agent reporting its own witnessed
+    events leaks nothing (the packet stamp the records derive from is
+    witness-gated, ``eval/leak_test.py``); a canned test double may return
+    ``()`` from either.
     """
 
     @property
@@ -480,6 +484,8 @@ class MeetingAwareAgent(Protocol):
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]: ...
 
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]: ...
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]: ...
 
 
 @runtime_checkable
@@ -897,7 +903,8 @@ def _build_participants(
                 f"agent for {player_id!r} does not implement MeetingAwareAgent; "
                 "meeting-enabled HeadlessGame requires agents that expose "
                 "render_memory_for_meeting(), suspicion_graph_for_meeting(), "
-                "and vent_witness_records_for_meeting()"
+                "vent_witness_records_for_meeting(), and "
+                "sighting_records_for_meeting()"
             )
         # Crewmates (and a sole impostor) get ``()``; an impostor gets the
         # other impostors' ids, never its own. This is the meeting-side
@@ -929,6 +936,9 @@ def _build_participants(
                 # agent exactly like ``suspicion_graph``, a meeting-open
                 # snapshot of the agent's OWN witnessed-vent episodic records.
                 vent_witness_records=agent.vent_witness_records_for_meeting(),
+                # Task 16.7: the vent channel's sighting sibling -- the
+                # grounded-vouch input, same meeting-open snapshot discipline.
+                sighting_records=agent.sighting_records_for_meeting(),
             )
         )
     return tuple(participants)
@@ -2420,6 +2430,54 @@ class TacticalAgent:
                 VentWitnessRecord(subject=player_id, room=room, tick=event.tick)
             )
         return tuple(records)
+
+    def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
+        """The agent's OWN first-hand sighting episodic records, typed (Task 16.7).
+
+        The vent accessor's sibling with the polarity inverted: the same
+        first-hand (``provenance == "observed"``) ``saw_player`` rows,
+        minus the vent-action filter -- every sighting is a candidate
+        grounding record, vent-witnessed rows included -- plus the
+        ``co_present`` projection: the OTHER subjects this agent saw in
+        the same room on the same tick, the Task 13.9 grouping the §6.6
+        renderer's "(with ...)" suffix reads, so the typed channel and the
+        rendered prose the model speaks from can never drift. The meeting
+        layer grounds a speaker's spoken ``saw_player`` observation ONLY
+        against the speaker's own rows here (the grounded-vouch feed into
+        the existing corroboration channel -- never a flag, never trust).
+        Firewall-clean: every row was witness-gated by the engine before
+        it reached this agent's packet (``eval/leak_test.py``), and the
+        accessor reports only this agent's own log. Payload reads are
+        defensive per the store convention -- a malformed row contributes
+        nothing. Append order is non-decreasing in tick (the
+        episodic-store invariant), so the returned tuple is deterministic
+        and tick-sorted.
+        """
+
+        sightings: list[tuple[str, str, int]] = []
+        co_present: dict[tuple[int, str], set[str]] = {}
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("room")
+            if not isinstance(player_id, str) or not isinstance(room, str):
+                continue
+            sightings.append((player_id, room, event.tick))
+            co_present.setdefault((event.tick, room), set()).add(player_id)
+        return tuple(
+            SightingRecord(
+                subject=player_id,
+                room=room,
+                tick=tick,
+                co_present=tuple(
+                    sorted(co_present.get((tick, room), set()) - {player_id})
+                ),
+            )
+            for player_id, room, tick in sightings
+        )
 
     def absorb_meeting_evidence(
         self,

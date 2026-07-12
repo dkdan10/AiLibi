@@ -156,6 +156,36 @@ guard by design: that guard re-targets one narrator's two conflicting
 proxy CLAIMS, while a grounded vent flag is a single memory-confirmed
 observation, not a claim pair -- gutting it there would delete exactly the
 evidence this rule exists to carry.
+
+Task 16.7 (pooling substrate): sightings made speakable-and-checkable the
+way 15.4 made vents so, with the polarity INVERTED. A spoken
+:class:`~meetings.schemas.SawPlayerObservation` that matches one of the
+SPEAKER'S OWN typed :class:`~meetings.schemas.SightingRecord` rows
+(same subject, canonically intersecting room, tick within
+:data:`SIGHTING_GROUNDING_TICK_TOLERANCE`) is a GROUNDED VOUCH:
+:func:`grounded_vouch_subjects` surfaces its subject into the meeting's
+relevance-gated ``corroborated`` set (the existing -0.05 exculpation
+channel priced by
+:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`), NEVER a
+contradiction flag and NEVER the dead trust field -- grounding a sighting
+proves the speaker honestly reported what they saw, not that the subject
+is innocent. An ungrounded vouch stays ordinary testimony, and a
+FABRICATED vouch (no matching record) moves nothing -- the anti-collusion
+floor. Known property (not a bug): grounding cannot catch an impostor who
+TRUTHFULLY vouches for its partner ("I really did see them in Medbay") --
+the sighting is true, so the -0.05 is earned legitimately; it is small by
+design, and the collusion PATTERN (mutual vouching) stays visible in the
+transcript as material for Phase 17's detectors. The mechanism ships
+INERT: committed transcripts already carry speaker-groundable sightings,
+so the production pre-vote call does not pass the participant record
+mapping yet -- the live feed graduates under the phase's byte-identity
+lever doctrine (see :func:`meetings.manager.derive_belief_evidence`). The
+``whereabouts`` observation kind (a SELF-placement, "I was in
+``room`` at ``tick``") is indexed by :func:`_iter_alibis` as a degenerate
+single-tick self-alibi, so lying in it is prosecuted by the EXISTING
+alibi rules (``alibi_vs_sighting`` / ``alibi_conflict``, no new flag
+kind), and :func:`reconstruct_stated_paths` places its speaker by it --
+answering roll-call puts you on the public record.
 """
 
 from __future__ import annotations
@@ -177,7 +207,9 @@ from meetings.schemas import (
     PlayerId,
     SawPlayerObservation,
     SawVentObservation,
+    SightingRecord,
     VentWitnessRecord,
+    WhereaboutsClaim,
 )
 
 _ContradictionKind = Literal[
@@ -581,6 +613,17 @@ PHYSICAL_CONTRADICTION_MIN_VOICES: Final[int] = 2
 # :data:`NARROW_ALIBI_WINDOW_TICKS` -- the detector's existing notion of a
 # tick-scale rounding error.
 VENT_GROUNDING_TICK_TOLERANCE: Final[int] = 2
+
+# Task 16.7 (pooling substrate): the tick tolerance of the sighting-vouch
+# grounding chokepoint -- the vent constant's polarity-inverted sibling. A
+# spoken :class:`~meetings.schemas.SawPlayerObservation` grounds against one
+# of the SPEAKER'S OWN typed :class:`~meetings.schemas.SightingRecord` rows
+# only when the subject matches, the canonical room sets intersect, and the
+# spoken tick sits within this many ticks of the record's tick
+# (:func:`grounded_vouch_subjects`). Starts at the vent value; a NAMED
+# constant precisely so the Task 16.17 measurement can retune the vouch
+# window independently of the vent one.
+SIGHTING_GROUNDING_TICK_TOLERANCE: Final[int] = 2
 
 # The map's canonical room ids -- a frozen ALLOWLIST (Task 10.6; audit
 # gp-1 C-C-5). The 10.1 placeholder DENYLIST ("VARIOUS", "UNKNOWN", ...)
@@ -1039,6 +1082,17 @@ def reconstruct_stated_paths(
     The returned mapping is therefore a SUPERSET of the default reconstruction
     (the same regular placements, plus the recovered kill-scene ones).
 
+    ``whereabouts`` self-placements (Task 16.7). A spoken
+    :class:`~meetings.schemas.WhereaboutsClaim` places its SPEAKER (the
+    claim carries no subject -- the speaker is the subject by construction)
+    in its canonical rooms at its tick, through the SAME spatial-label and
+    relevance gates a sighting passes -- the reconstruction counts exactly
+    the placements the detectors trust. Answering roll-call therefore puts
+    the speaker on the public record; a self-placement's ``speaker`` equals
+    its placed player, so the 13.4 physical detector's independence filter
+    (``placement.speaker != subject``) excludes it from contradicting-voice
+    material exactly as it excludes a self-stated sighting.
+
     Returns ``{subject: placements}`` for every player with at least one
     relevant stated placement, the subjects sorted and each subject's
     placements sorted by :func:`_placement_sort_key`. Pure: the transcript
@@ -1085,6 +1139,33 @@ def reconstruct_stated_paths(
             if not _subject_in_roster(player, effective_roster):
                 continue
             paths.setdefault(player, []).append(placement)
+
+    # Task 16.7: whereabouts self-placements -- the speaker placing
+    # THEMSELVES on the public record, through the same spatial-label and
+    # relevance gates as a sighting.
+    for turn in transcript.turns:
+        if not _subject_in_roster(turn.speaker, effective_roster):
+            continue
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, WhereaboutsClaim):
+                continue
+            rooms = canonical_rooms(observation.room)
+            if not rooms:
+                continue
+            if not is_relevant_sighting(
+                tick=observation.tick,
+                rooms=rooms,
+                triggering_body_rooms=relevance_body_rooms,
+            ):
+                continue
+            paths.setdefault(turn.speaker, []).append(
+                StatedPlacement(
+                    tick=observation.tick,
+                    rooms=rooms,
+                    speaker=turn.speaker,
+                    event_id=_turn_observation_id(turn=turn, index=index),
+                )
+            )
 
     return {
         subject: tuple(sorted(placements, key=_placement_sort_key))
@@ -1719,6 +1800,25 @@ class _IndexedSighting:
 
 
 def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
+    """Yield every location account: alibi claims + whereabouts self-placements.
+
+    Task 16.7: a spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
+    in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
+    SELF-ALIBI (subject = the speaker, ``from_tick == to_tick == tick``) so
+    every consumer of the alibi indexing -- the conflict / sighting /
+    physical detectors, the subject-account proxy check, the echo dedup,
+    and :func:`detect_corroborations` -- prosecutes a lying self-placement
+    with the alibi rules it already has, no new flag kind and no duplicated
+    chronology discipline (a single tick satisfies the
+    :class:`~meetings.schemas.AlibiClaim` range validator by construction).
+    The synthesized claim's event id is the OBSERVATION id
+    (:func:`_turn_observation_id` -- a whereabouts lives on
+    ``turn.observations``), so a flag referencing it resolves through
+    :func:`_event_speaker_index` and the spectator surface exactly like any
+    other observation. Per turn, claims index before observations -- a fixed
+    order, so the echo dedup's first-statement-wins is deterministic.
+    """
+
     for turn in transcript.turns:
         for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
@@ -1727,6 +1827,20 @@ def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
                     speaker=turn.speaker,
                     claim=claim,
                     rooms=canonical_rooms(claim.room),
+                )
+        for index, observation in enumerate(turn.observations):
+            if isinstance(observation, WhereaboutsClaim):
+                yield _IndexedAlibi(
+                    event_id=_turn_observation_id(turn=turn, index=index),
+                    speaker=turn.speaker,
+                    claim=AlibiClaim(
+                        type="alibi",
+                        subject=turn.speaker,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                    ),
+                    rooms=canonical_rooms(observation.room),
                 )
 
 
@@ -2248,6 +2362,127 @@ def _vent_observation_matches_record(
     return bool(observation_rooms and record_rooms & observation_rooms)
 
 
+def _sighting_observation_matches_record(
+    observation: SawPlayerObservation,
+    record: SightingRecord,
+) -> bool:
+    """Whether one spoken sighting matches one typed record (Task 16.7).
+
+    :func:`_vent_observation_matches_record`'s polarity-inverted sibling --
+    the same deterministic comparison: same ``subject``, canonically
+    intersecting rooms (:func:`canonical_rooms`, so a compound spoken label
+    still matches the record's canonical engine room while a non-spatial
+    label matches nothing), and a spoken tick within
+    :data:`SIGHTING_GROUNDING_TICK_TOLERANCE` of the record's tick.
+    ``co_present`` is deliberately NOT part of the match key: the record's
+    companion projection is completeness for downstream consumers, while
+    grounding needs only "did the speaker really see this subject there,
+    then". Pure function of its two arguments -- no prose parsing, no LLM
+    judgment.
+    """
+
+    if observation.subject != record.subject:
+        return False
+    if abs(observation.tick - record.tick) > SIGHTING_GROUNDING_TICK_TOLERANCE:
+        return False
+    observation_rooms = canonical_rooms(observation.room)
+    record_rooms = canonical_rooms(record.room)
+    return bool(observation_rooms and record_rooms & observation_rooms)
+
+
+def grounded_vouch_subjects(
+    transcript: MeetingTranscript,
+    *,
+    sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
+    roster: frozenset[PlayerId] | None = None,
+    trigger_kind: MeetingTriggerKind | None = None,
+) -> frozenset[PlayerId]:
+    """Subjects of GROUNDED VOUCHES -- corroboration-class, never flags (Task 16.7).
+
+    The vent grounding chokepoint's polarity-inverted sibling
+    (:func:`_detect_grounded_vent_flags`): for every spoken
+    :class:`~meetings.schemas.SawPlayerObservation` naming ANOTHER player,
+    the SPEAKER'S OWN typed records are searched for a match
+    (:func:`_sighting_observation_matches_record`). A match proves the
+    speaker honestly reported what they saw -- it does NOT prove the
+    subject innocent -- so the subject earns exactly the weak exculpation
+    the existing corroboration channel already prices: the returned set
+    feeds :func:`meetings.manager.derive_belief_evidence`'s
+    ``corroborated`` set (the
+    :data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA` -0.05,
+    deduplicated per subject per meeting by the set fold), NEVER a
+    :class:`~meetings.schemas.ContradictionRef` and NEVER the dead trust
+    field. An ungrounded spoken sighting stays ordinary testimony, and a
+    FABRICATED vouch (no matching record) contributes nothing -- the
+    anti-collusion floor: two impostors vouching for each other with
+    invented sightings earn zero exculpation.
+
+    Known property, not a bug: an impostor who TRUTHFULLY vouches for its
+    partner grounds legitimately -- the sighting is true. The delta is
+    small by design and the mutual-vouching PATTERN stays visible in the
+    transcript for Phase 17's collusion detectors.
+
+    Three gates beyond the record match, mirroring the channel's existing
+    discipline:
+
+    * **self-vouch exclusion** -- a sighting whose subject IS the speaker
+      grounds nothing (self-exculpation would let any player mint their
+      own -0.05 from their own log);
+    * **roster** -- a non-roster subject (hallucinated id, dead player)
+      never reaches the fold, matching :func:`detect_corroborations`;
+    * **Rule-3 relevance** (:func:`is_relevant_sighting` against this
+      meeting's :func:`triggering_body_rooms`) -- a spawn-window or
+      kill-scene vouch is evidentially empty and never exculpates,
+      preserving the documented invariant that EVERY producer of the
+      ``corroborated`` set routes through the one relevance gate
+      (:data:`agents.memory.beliefs.CORROBORATION_SUSPICION_DELTA`).
+
+    Pure and deterministic: a function of the transcript, the typed
+    records, and the trigger kind alone. A caller with no records gets the
+    empty set -- in particular the replay-side re-derivation
+    (:func:`meetings.manager.extract_belief_evidence`) has no private
+    records by construction, so a grounded vouch can only ever move the
+    PRE-VOTE fold, the same record/replay boundary the vent channel draws.
+    The production pre-vote call does not pass the participant mapping YET:
+    committed transcripts already carry speaker-groundable sightings, so
+    the live feed is a behavioral change that graduates under the phase's
+    byte-identity lever doctrine (see
+    :func:`meetings.manager.derive_belief_evidence`), not here.
+    """
+
+    effective_roster = _NO_ROSTER if roster is None else roster
+    body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
+    grounded: set[PlayerId] = set()
+    for turn in transcript.turns:
+        records = sighting_records.get(turn.speaker, ())
+        if not records:
+            continue
+        for observation in turn.observations:
+            if not isinstance(observation, SawPlayerObservation):
+                continue
+            if observation.subject == turn.speaker:
+                continue
+            if observation.subject in grounded:
+                continue
+            if not _subject_in_roster(observation.subject, effective_roster):
+                continue
+            rooms = canonical_rooms(observation.room)
+            if not rooms:
+                continue
+            if not is_relevant_sighting(
+                tick=observation.tick,
+                rooms=rooms,
+                triggering_body_rooms=body_rooms,
+            ):
+                continue
+            if any(
+                _sighting_observation_matches_record(observation, record)
+                for record in records
+            ):
+                grounded.add(observation.subject)
+    return frozenset(grounded)
+
+
 def _detect_grounded_vent_flags(
     transcript: MeetingTranscript,
     *,
@@ -2710,6 +2945,7 @@ __all__ = [
     "CANONICAL_ROOMS",
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
+    "SIGHTING_GROUNDING_TICK_TOLERANCE",
     "SPAWN_WINDOW_LAST_TICK",
     "VENT_GROUNDING_TICK_TOLERANCE",
     "WEAK_CONTRADICTION_MARKER_PREFIX",
@@ -2733,6 +2969,7 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
+    "grounded_vouch_subjects",
     "independent_voices",
     "is_canonically_ordered",
     "is_relevant_sighting",

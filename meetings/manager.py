@@ -119,6 +119,7 @@ from meetings.schemas import (
     ReportedStatement,
     SawPlayerObservation,
     SawVentObservation,
+    SightingRecord,
     TurnId,
     TurnKind,
     VentWitnessRecord,
@@ -130,6 +131,7 @@ from meetings.transcript import (
     canonical_rooms,
     detect_contradictions,
     detect_corroborations,
+    grounded_vouch_subjects,
     independent_voices,
     is_relevant_sighting,
     next_chain_step,
@@ -529,6 +531,27 @@ class MeetingParticipant:
     speaker grounds nothing": a spoken vent observation from such a
     participant records as ordinary testimony and raises no flag.
 
+    ``sighting_records`` (Task 16.7) is the vent channel's polarity-inverted
+    sibling: the participant's OWN typed first-hand-sighting channel -- the
+    grounding input behind the GROUNDED VOUCH corroboration feed. The
+    orchestrator populates it from
+    ``MeetingAwareAgent.sighting_records_for_meeting()`` (episodic memory,
+    self-channel only, so it is firewall-clean). Carried INERT today, the
+    widen-the-contract-inert pattern ``persona`` below also follows: the
+    consuming seam is the ``sighting_records`` parameter of
+    :func:`derive_belief_evidence` (which routes it through
+    :func:`meetings.transcript.grounded_vouch_subjects` into the existing
+    relevance-gated ``corroborated`` set -- fixture-pinned), but the
+    production :meth:`MeetingManager.run` does not pass the mapping yet:
+    committed transcripts already carry speaker-groundable sightings, so a
+    live feed would move committed ballot-prompt bytes, and the phase's
+    lever doctrine requires every behavioral change to be byte-identical
+    at rest -- the graduating task connects the one call. It never reaches
+    a prompt surface and never mints a contradiction flag. The default
+    ``()`` keeps every existing construction site valid and means "this
+    speaker grounds nothing": a spoken sighting from such a participant
+    records as ordinary testimony and exculpates no one.
+
     ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
     populates it from the deterministic persona-assignment bank in Task 16.9,
     and Task 16.16 renders it into the report / statement / ballot prompts
@@ -546,6 +569,7 @@ class MeetingParticipant:
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
     rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
     vent_witness_records: tuple[VentWitnessRecord, ...] = ()
+    sighting_records: tuple[SightingRecord, ...] = ()
     persona: str = ""
 
 
@@ -986,6 +1010,17 @@ class MeetingManager:
             trigger_kind=meeting_trigger_kind,
             vent_witness_records=vent_witness_records,
         )
+        # Task 16.7 note: ``MeetingParticipant.sighting_records`` (the
+        # grounded-vouch channel) is deliberately NOT threaded into this
+        # derivation yet. The mechanism is complete behind the
+        # ``sighting_records`` parameter of :func:`derive_belief_evidence`
+        # (fixture-pinned), but connecting the live per-speaker mapping here
+        # moves committed ballot-prompt bytes -- committed transcripts already
+        # carry speaker-groundable sightings (9p2i seed-0 meeting-0: p-5/p-6
+        # mutual grounded vouches) -- and the phase's lever doctrine requires
+        # every behavioral change to be byte-identical at rest. The graduating
+        # task turns the feed on by passing the mapping (the
+        # widen-the-contract-inert pattern; the 16.3 persona precedent).
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
         )
@@ -2872,6 +2907,7 @@ def derive_belief_evidence(
     contradictions: Sequence[ContradictionRef],
     roster: frozenset[PlayerId],
     trigger_kind: MeetingTriggerKind | None = None,
+    sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
 ) -> MeetingBeliefEvidence:
     """Derive a meeting's public belief evidence (Tasks 9.8, 10.7).
 
@@ -2899,6 +2935,24 @@ def derive_belief_evidence(
     recording-time ``detect_contradictions`` call was scoped; the
     claim-stated fields need no second filter (the chokepoint already
     validated them before recording).
+
+    ``sighting_records`` (Task 16.7) is the per-speaker typed
+    first-hand-sighting channel -- the GROUNDED VOUCH input. When present,
+    a third producer joins the ``corroborated`` set:
+    :func:`meetings.transcript.grounded_vouch_subjects`, the subjects of
+    spoken sightings that match the SPEAKER'S OWN records (relevance-gated
+    like both existing halves, deduplicated by the same set fold, priced
+    by the same -0.05 delta -- one channel, three producers, never a
+    parallel path). NO production caller passes it yet: committed
+    transcripts already carry speaker-groundable sightings, so the live
+    pre-vote feed would move committed ballot-prompt bytes, and the
+    phase's lever doctrine requires every behavioral change to be
+    byte-identical at rest -- the graduating task passes the participant
+    mapping from :meth:`MeetingManager.run`. ``None`` (every current
+    caller, including every replay-side re-derivation, which has no
+    private records by construction) is byte-identical to the pre-16.7
+    derivation, so a recorded meeting still re-derives its persistent
+    evidence from the public record alone (DESIGN.md §0 rule 1).
     """
 
     accused: set[PlayerId] = set()
@@ -2935,6 +2989,20 @@ def derive_belief_evidence(
             transcript, roster=roster, trigger_kind=trigger_kind
         )
     )
+    # Grounded vouches (Task 16.7): a spoken sighting matching the SPEAKER'S
+    # OWN typed record proves the speaker honestly reported what they saw --
+    # corroboration-class evidence for the subject, folded into the SAME set
+    # (same relevance gate inside the chokepoint, same per-meeting dedup,
+    # same -0.05) rather than a parallel path. Never a flag, never trust.
+    if sighting_records:
+        corroborated.update(
+            grounded_vouch_subjects(
+                transcript,
+                sighting_records=sighting_records,
+                roster=roster,
+                trigger_kind=trigger_kind,
+            )
+        )
     contradicted = {
         subject
         for contradiction in contradictions

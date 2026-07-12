@@ -108,17 +108,48 @@ class SawVentObservation(_FrozenModel):
     room: RoomId
 
 
+class WhereaboutsClaim(_FrozenModel):
+    """Self-placement on the public record: "I was in ``room`` at ``tick``" (Task 16.7).
+
+    The roll-call answer shape. Deliberately SELF-placement only — it
+    carries NO subject field because the subject IS the speaker
+    (``turn.speaker``); vouching for OTHERS needs no new kind, a
+    :class:`SawPlayerObservation` already expresses it. That construction
+    eliminates the placeholder-subject failure class outright (nothing for
+    ``_normalize_self_alibi_subjects`` to rewrite, nothing for the roster
+    chokepoint to validate — the speaker is a living participant by
+    definition of taking a turn).
+
+    Detection-side, a whereabouts claim is a degenerate single-tick
+    self-alibi: :func:`meetings.transcript.detect_contradictions` indexes
+    it beside the :class:`AlibiClaim` accounts (subject = speaker,
+    ``from_tick == to_tick == tick``), so LYING in it creates exactly the
+    contradiction-detectable material the alibi rules already prosecute —
+    a claim contradicted by another speaker's sighting raises the EXISTING
+    ``alibi_vs_sighting`` flag path, no new flag kind. A single tick is
+    chronological by construction, which is the whole of the alibi
+    validators' range discipline applied to this shape.
+    :func:`meetings.transcript.reconstruct_stated_paths` places the
+    speaker by it, so answering roll-call puts you on the public record.
+    """
+
+    type: Literal["whereabouts"]
+    tick: int
+    room: RoomId
+
+
 ObservationClaim: TypeAlias = Annotated[
     SawPlayerObservation
     | CompletedTaskObservation
     | FoundBodyObservation
-    | SawVentObservation,
+    | SawVentObservation
+    | WhereaboutsClaim,
     Field(discriminator="type"),
 ]
 
 
 # ---------------------------------------------------------------------------
-# Typed vent-witness grounding channel (Task 15.4)
+# Typed grounding channels: vent witness (Task 15.4) + sighting (Task 16.7)
 # ---------------------------------------------------------------------------
 
 
@@ -146,6 +177,41 @@ class VentWitnessRecord(_FrozenModel):
     subject: PlayerId
     room: RoomId
     tick: int
+
+
+class SightingRecord(_FrozenModel):
+    """One of an agent's OWN first-hand sighting episodic records (Task 16.7).
+
+    The vent channel's sibling with the polarity inverted: where a grounded
+    :class:`SawVentObservation` mints the STRONG role-proving
+    ``vent_sighting`` flag against its subject, a spoken
+    :class:`SawPlayerObservation` that matches one of the SPEAKER's own
+    rows here (subject + room, tick within
+    :data:`meetings.transcript.SIGHTING_GROUNDING_TICK_TOLERANCE`) becomes
+    a GROUNDED VOUCH — it feeds the existing relevance-gated
+    ``corroborated`` set (the −0.05 exculpation channel of
+    :func:`agents.memory.beliefs.apply_meeting_evidence_rules`), NEVER a
+    contradiction flag and NEVER the dead trust field. The asymmetry is
+    the design: grounding a sighting proves the speaker honestly reported
+    what they saw — it does not prove the subject innocent, so it earns
+    only the weak exculpation the corroboration channel already prices.
+    An ungrounded vouch stays ordinary testimony and moves nothing.
+
+    The ``MeetingAwareAgent.sighting_records_for_meeting()`` accessor
+    (``orchestrator/game.py``) surfaces these off the SAME first-hand
+    (``provenance == "observed"``) ``saw_player`` episodic rows the vent
+    accessor reads, minus the vent-action filter, plus the ``co_present``
+    projection — the other subjects the observer saw in the same room on
+    the same tick, the Task 13.9 grouping the §6.6 renderer's "(with …)"
+    suffix uses. Firewall-clean by construction: an agent reporting its
+    own witnessed events leaks nothing, and the packet stamp the records
+    derive from is witness-gated by the engine (``eval/leak_test.py``).
+    """
+
+    subject: PlayerId
+    room: RoomId
+    tick: int
+    co_present: tuple[PlayerId, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -466,9 +532,11 @@ __all__ = [
     "RoomId",
     "SawPlayerObservation",
     "SawVentObservation",
+    "SightingRecord",
     "TaskId",
     "TurnId",
     "TurnKind",
     "VentWitnessRecord",
     "VoteBallot",
+    "WhereaboutsClaim",
 ]
