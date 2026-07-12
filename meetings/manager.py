@@ -283,8 +283,19 @@ INVALID_OBSERVATION_ID_MARKER: Final[str] = (
 # into the recorded ballot the spectator surface already reads (mirrors the
 # ``INVALID_REASON_ID_MARKER`` prefix shape; ``api.replay_loader``'s
 # ``_marker_pattern`` relies on the ``{x!r}`` repr interpolation when a later
-# task registers the chip). Downstream eval counts coercions per game by
-# grepping one string. Pin the literal exactly.
+# task registers the chip). Two downstream consumers are DEFERRED with that
+# chip, both unreachable until a lever-ON recording exists (none can exist
+# before the 16.17 graduation, and the loader refuses cross-substrate
+# reconstruction): the spectator chip registration
+# (``api.replay_loader._BALLOT_PREFIX_MARKERS`` -- the api-region task,
+# beside 16.5's equally-unregistered observation marker) and the eval SKIP
+# partition (``eval.meeting_quality.compute_conversion_report`` recognises
+# only the parse-default / teammate / invalid-target / redirect markers, so
+# a gated SKIP from a MUST-vote voter would today land in its
+# ``threshold_inversions`` sentinel -- the partition must learn this literal
+# BEFORE any lever-ON conversion read, or the §4.6 gate-obedience sentinel
+# over-counts). Until then eval counts coercions per game by grepping this
+# one string. Pin the literal exactly.
 UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
     "[uncited zero-flag eject target {target!r} coerced to SKIP] "
 )
