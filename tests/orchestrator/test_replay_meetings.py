@@ -42,6 +42,7 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
+    ObservationId,
     SightingRecord,
     TurnKind,
     VentWitnessRecord,
@@ -355,6 +356,9 @@ def _report_then_default_factory(
 
         def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
             return self._delegate.sighting_records_for_meeting()
+
+        def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
+            return self._delegate.observation_ids_for_meeting()
 
     def factory(agent_id: PlayerId, role: Role) -> _ReportThenDefault:
         return _ReportThenDefault(agent_id, role)

@@ -71,6 +71,7 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agents.memory.beliefs import hard_evidence_gate_enabled
+from agents.memory.store import observation_id_rendering_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -408,16 +409,21 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). Task 16.4's ``hard_evidence_gate`` is the live toggle:
-# DEFAULT-OFF, so a bare-environment snapshot stamps it ``False`` and the committed
-# baseline-3 replays (recorded before the key existed) reconstruct byte-identically
-# -- ``_assert_substrate_matches`` reads a missing key as ``False`` on both sides.
-# The previous live toggle, Task 15.5's ``reporter_exculpation``, graduated to
+# ``*_enabled()`` signature). TWO live toggles now, both DEFAULT-OFF: Task 16.4's
+# ``hard_evidence_gate`` (the belief-render clamp) and Task 16.5's
+# ``observation_id_rendering`` (the §6.6 observation-id render prefix). A
+# bare-environment snapshot stamps BOTH ``False`` and the committed baseline-3
+# replays (recorded before either key existed) reconstruct byte-identically --
+# ``_assert_substrate_matches`` reads a missing key as ``False`` on both sides. The
+# previous live toggle, Task 15.5's ``reporter_exculpation``, graduated to
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-15.7 baseline-3 record
 # (``evidence_quality_lift`` graduated the same way at the 14.12 close).
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("hard_evidence_gate", hard_evidence_gate_enabled),)
+] = (
+    ("hard_evidence_gate", hard_evidence_gate_enabled),
+    ("observation_id_rendering", observation_id_rendering_enabled),
+)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -450,12 +456,13 @@ def substrate_flag_snapshot(
     self-describing recordings (and so the loader's substrate-mismatch guard can
     still validate legacy stamped replays — a baseline-2 stamp recording
     ``reporter_exculpation`` OFF now fails loud, no cross-substrate replay). Task
-    16.4's ``hard_evidence_gate`` is the one LIVE env-gated toggle: its resolver is
-    read from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env``
-    threaded through (defaulting to the live process environment), so a bare
-    environment stamps it ``False`` (DEFAULT-OFF, byte-identical to baseline 3)
-    while an ``AILIBI_HARD_EVIDENCE_GATE`` export stamps it ``True`` -- preserving
-    the deterministic-snapshot seam tests and sweep configs rely on.
+    16.4's ``hard_evidence_gate`` and Task 16.5's ``observation_id_rendering`` are
+    the TWO LIVE env-gated toggles: their resolvers are read from the immutable
+    ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through (defaulting
+    to the live process environment), so a bare environment stamps BOTH ``False``
+    (DEFAULT-OFF, byte-identical to baseline 3) while an ``AILIBI_HARD_EVIDENCE_GATE``
+    / ``AILIBI_OBSERVATION_ID_RENDERING`` export stamps the respective key ``True``
+    -- preserving the deterministic-snapshot seam tests and sweep configs rely on.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)

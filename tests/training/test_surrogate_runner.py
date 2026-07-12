@@ -41,7 +41,7 @@ from engine.entities import PlayerId, Role
 from engine.world import WorldState, load_canonical_map
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.manager import MeetingTrigger, SuspicionEntry
-from meetings.schemas import SightingRecord, VentWitnessRecord
+from meetings.schemas import ObservationId, SightingRecord, VentWitnessRecord
 from meetings.voting import tally_ballots
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
@@ -241,6 +241,9 @@ class _RecordingAgent:
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
         return self._inner.sighting_records_for_meeting()
 
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
+        return self._inner.observation_ids_for_meeting()
+
     def absorb_meeting_evidence(
         self,
         *,
@@ -298,6 +301,9 @@ class _CannedMeetingAgent:
         return ()
 
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
+        return ()
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
         return ()
 
 

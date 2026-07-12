@@ -142,6 +142,7 @@
                 "target": "SKIP",
                 "confidence": 0.0,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [],
                 "rationale_text": "[unparseable ballot defaulted to SKIP; response head: '{\\n  \"voter\": \"p-1\",\\n  \"target\": \"p-2\",\\n  \"confidence\": 0.55,...'] "
               },
@@ -150,6 +151,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-0:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -160,6 +162,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-0:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -376,6 +379,7 @@
                 "target": "p-4",
                 "confidence": 0.52,
                 "primary_reason_id": "headless-seed-1:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -386,6 +390,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-1:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -396,6 +401,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-1:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -610,6 +616,7 @@
                 "target": "p-2",
                 "confidence": 0.9,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -620,6 +627,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-2:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -630,6 +638,7 @@
                 "target": "p-2",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-2:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -913,6 +922,7 @@
                 "target": "p-2",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-3:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -923,6 +933,7 @@
                 "target": "p-1",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-3:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -933,6 +944,7 @@
                 "target": "p-2",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-3:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -1230,6 +1242,7 @@
                 "target": "p-3",
                 "confidence": 0.9,
                 "primary_reason_id": "headless-seed-4:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -1240,6 +1253,7 @@
                 "target": "p-4",
                 "confidence": 0.68,
                 "primary_reason_id": "headless-seed-4:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -1250,6 +1264,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-4:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -1559,6 +1574,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -1569,6 +1585,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-5:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [],
                 "rationale_text": "I found p-3's body and saw p-4 with them earlier, which makes p-4 the strongest lead."
               },
@@ -1577,6 +1594,7 @@
                 "target": "p-2",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-5:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [],
                 "rationale_text": "p-2 moved to ADMIN after being with us all in EAST_HALL — that creates a window to kill p-3 without witnesses."
               }
@@ -1852,6 +1870,7 @@
                 "target": "p-4",
                 "confidence": 0.63,
                 "primary_reason_id": "headless-seed-6:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -1862,6 +1881,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-6:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -1872,6 +1892,7 @@
                 "target": "p-1",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-6:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -2147,6 +2168,7 @@
                 "target": "p-4",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-7:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -2157,6 +2179,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-7:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -2167,6 +2190,7 @@
                 "target": "p-3",
                 "confidence": 0.85,
                 "primary_reason_id": "headless-seed-7:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -2471,6 +2495,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-8:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -2481,6 +2506,7 @@
                 "target": "p-1",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-8:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -2491,6 +2517,7 @@
                 "target": "p-1",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-8:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -2791,6 +2818,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-9:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -2801,6 +2829,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-9:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -2811,6 +2840,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-9:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -3106,6 +3136,7 @@
                 "target": "p-4",
                 "confidence": 0.63,
                 "primary_reason_id": "headless-seed-10:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -3116,6 +3147,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-10:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -3126,6 +3158,7 @@
                 "target": "p-1",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-10:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -3437,6 +3470,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-11:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -3447,6 +3481,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-11:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -3457,6 +3492,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-11:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -3760,6 +3796,7 @@
                 "target": "p-4",
                 "confidence": 0.57,
                 "primary_reason_id": "headless-seed-13:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -3770,6 +3807,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-13:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -3780,6 +3818,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-13:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -4093,6 +4132,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-16:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -4103,6 +4143,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-16:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -4113,6 +4154,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-16:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -4395,6 +4437,7 @@
                 "target": "p-2",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-17:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -4405,6 +4448,7 @@
                 "target": "p-1",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-17:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -4415,6 +4459,7 @@
                 "target": "p-1",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-17:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -4715,6 +4760,7 @@
                 "target": "p-3",
                 "confidence": 0.85,
                 "primary_reason_id": "headless-seed-18:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -4725,6 +4771,7 @@
                 "target": "p-2",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-18:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -4735,6 +4782,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -5034,6 +5082,7 @@
                 "target": "p-2",
                 "confidence": 0.9,
                 "primary_reason_id": "headless-seed-19:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5044,6 +5093,7 @@
                 "target": "p-1",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-19:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5054,6 +5104,7 @@
                 "target": "p-2",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-19:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -5358,6 +5409,7 @@
                 "target": "p-3",
                 "confidence": 0.95,
                 "primary_reason_id": "headless-seed-20:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5368,6 +5420,7 @@
                 "target": "p-2",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-20:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5378,6 +5431,7 @@
                 "target": "p-3",
                 "confidence": 0.95,
                 "primary_reason_id": "headless-seed-20:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -5631,6 +5685,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-21:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5641,6 +5696,7 @@
                 "target": "p-1",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-21:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -5651,6 +5707,7 @@
                 "target": "p-1",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-21:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -5867,6 +5924,7 @@
                 "target": "p-4",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-22:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -5877,6 +5935,7 @@
                 "target": "p-4",
                 "confidence": 0.95,
                 "primary_reason_id": "headless-seed-22:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -5887,6 +5946,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-22:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6085,6 +6145,7 @@
                 "target": "SKIP",
                 "confidence": 0.45,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6095,6 +6156,7 @@
                 "target": "p-1",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-23:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3",
                   "SKIP"
@@ -6106,6 +6168,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-23:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6380,6 +6443,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-24:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -6390,6 +6454,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-24:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6400,6 +6465,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-24:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6669,6 +6735,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-26:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -6679,6 +6746,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-26:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6689,6 +6757,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-26:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -6966,6 +7035,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-27:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -6976,6 +7046,7 @@
                 "target": "p-1",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-27:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -6986,6 +7057,7 @@
                 "target": "p-1",
                 "confidence": 0.68,
                 "primary_reason_id": "headless-seed-27:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -7295,6 +7367,7 @@
                 "target": "p-3",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-28:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -7305,6 +7378,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-28:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -7315,6 +7389,7 @@
                 "target": "p-2",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-28:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -7572,6 +7647,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-29:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -7582,6 +7658,7 @@
                 "target": "p-4",
                 "confidence": 0.65,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -7592,6 +7669,7 @@
                 "target": "p-1",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-29:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -7921,6 +7999,7 @@
                 "target": "p-2",
                 "confidence": 0.9,
                 "primary_reason_id": "headless-seed-32:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -7931,6 +8010,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-32:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -7941,6 +8021,7 @@
                 "target": "p-2",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-32:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -8227,6 +8308,7 @@
                 "target": "p-4",
                 "confidence": 0.92,
                 "primary_reason_id": "headless-seed-33:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -8237,6 +8319,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-33:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -8247,6 +8330,7 @@
                 "target": "p-3",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-33:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -8560,6 +8644,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-35:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -8570,6 +8655,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-35:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -8580,6 +8666,7 @@
                 "target": "p-2",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-35:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -8872,6 +8959,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-36:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -8882,6 +8970,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-36:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -8892,6 +8981,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-36:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -9242,6 +9332,7 @@
                 "target": "p-3",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-39:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -9252,6 +9343,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-39:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -9262,6 +9354,7 @@
                 "target": "p-1",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-39:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -9560,6 +9653,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-41:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -9570,6 +9664,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-41:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -9580,6 +9675,7 @@
                 "target": "p-3",
                 "confidence": 0.95,
                 "primary_reason_id": "headless-seed-41:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -9929,6 +10025,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-42:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -9939,6 +10036,7 @@
                 "target": "p-4",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-42:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -9949,6 +10047,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-42:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -10191,6 +10290,7 @@
                 "target": "p-3",
                 "confidence": 0.65,
                 "primary_reason_id": "headless-seed-44:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -10201,6 +10301,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-44:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -10211,6 +10312,7 @@
                 "target": "p-2",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-44:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -10503,6 +10605,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-45:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -10513,6 +10616,7 @@
                 "target": "p-1",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-45:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -10523,6 +10627,7 @@
                 "target": "p-1",
                 "confidence": 0.68,
                 "primary_reason_id": "headless-seed-45:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -10805,6 +10910,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-46:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -10815,6 +10921,7 @@
                 "target": "p-3",
                 "confidence": 0.9,
                 "primary_reason_id": null,
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -10825,6 +10932,7 @@
                 "target": "p-2",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-46:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -11148,6 +11256,7 @@
                 "target": "p-3",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-47:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-4"
                 ],
@@ -11158,6 +11267,7 @@
                 "target": "p-4",
                 "confidence": 0.58,
                 "primary_reason_id": "headless-seed-47:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -11168,6 +11278,7 @@
                 "target": "p-3",
                 "confidence": 0.55,
                 "primary_reason_id": "headless-seed-47:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -11456,6 +11567,7 @@
                 "target": "p-4",
                 "confidence": 0.95,
                 "primary_reason_id": "headless-seed-48:meeting-0:turn-0",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -11466,6 +11578,7 @@
                 "target": "p-4",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-48:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-1"
                 ],
@@ -11476,6 +11589,7 @@
                 "target": "p-1",
                 "confidence": 0.45,
                 "primary_reason_id": "headless-seed-48:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -11812,6 +11926,7 @@
                 "target": "p-4",
                 "confidence": 0.63,
                 "primary_reason_id": "headless-seed-49:meeting-0:turn-2",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-3"
                 ],
@@ -11822,6 +11937,7 @@
                 "target": "p-4",
                 "confidence": 0.62,
                 "primary_reason_id": "headless-seed-49:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],
@@ -11832,6 +11948,7 @@
                 "target": "p-3",
                 "confidence": 0.75,
                 "primary_reason_id": "headless-seed-49:meeting-0:turn-1",
+                "primary_reason_observation_id": null,
                 "considered_alternatives": [
                   "p-2"
                 ],

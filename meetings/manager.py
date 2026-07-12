@@ -115,6 +115,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     ObservationClaim,
+    ObservationId,
     PlayerId,
     ReportedStatement,
     SawPlayerObservation,
@@ -249,6 +250,23 @@ VOTE_PARSE_DEFAULT_MARKER: Final[str] = (
 # ``INVALID_VOTE_TARGET_MARKER`` prefix shape). Pin the literal exactly.
 INVALID_REASON_ID_MARKER: Final[str] = (
     "[invalid primary_reason_id {reason_id!r} nulled] "
+)
+
+# Audit-trail marker prepended to ``rationale_text`` when a ballot's
+# ``primary_reason_observation_id`` (Task 16.5, C8) cites a stable episodic
+# id that is NOT in the voter's own typed valid-id set. The id is nulled
+# (AGENTS.md "no silent fallbacks") so the private-hard-evidence citation
+# instrument is never corrupted by a hallucinated id -- an id the voter
+# never actually observed. Unlike ``INVALID_REASON_ID_MARKER`` there is no
+# suffix-recovery branch: an observation id has no in-meeting ordinal table
+# (the ``:turn-{k}`` echo shape is turn-id-specific), so an unknown id is
+# nulled, never guessed. Preserves the original (invalid) id for replay
+# analysis and lets eval count normalizations per game by grepping one
+# string (mirrors the ``INVALID_REASON_ID_MARKER`` prefix shape;
+# ``api.replay_loader``'s ``_marker_pattern`` relies on the ``{x!r}`` repr
+# interpolation when a later task registers the chip). Pin the literal exactly.
+INVALID_OBSERVATION_ID_MARKER: Final[str] = (
+    "[invalid primary_reason_observation_id {observation_id!r} nulled] "
 )
 
 # Audit-trail marker prepended to a turn's ``free_text`` when an
@@ -552,6 +570,18 @@ class MeetingParticipant:
     speaker grounds nothing": a spoken sighting from such a participant
     records as ordinary testimony and exculpates no one.
 
+    ``observation_ids`` (Task 16.5, C8) is the participant's OWN stable
+    episodic observation-id set -- the valid-citation universe for a ballot's
+    ``primary_reason_observation_id``. The orchestrator populates it from
+    ``MeetingAwareAgent.observation_ids_for_meeting()`` (episodic memory,
+    self-channel only, so it is firewall-clean -- the ids name the agent's
+    own memory rows and leak nothing). The manager consults it in exactly ONE
+    place, :func:`_normalize_ballot_observation_id`: a cited id outside this
+    set is nulled with the audit marker. It never reaches a prompt surface
+    and no gate/guard/tally reads it (Task 16.6 enforces). The default ``()``
+    keeps every existing construction site valid and means "this voter can
+    cite nothing": any non-null citation from such a participant nulls.
+
     ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
     populates it from the deterministic persona-assignment bank in Task 16.9,
     and Task 16.16 renders it into the report / statement / ballot prompts
@@ -570,6 +600,7 @@ class MeetingParticipant:
     rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
     vent_witness_records: tuple[VentWitnessRecord, ...] = ()
     sighting_records: tuple[SightingRecord, ...] = ()
+    observation_ids: tuple[ObservationId, ...] = ()
     persona: str = ""
 
 
@@ -1684,6 +1715,19 @@ class MeetingManager:
             valid_reason_ids=valid_reason_ids,
             reason_id_by_ordinal=reason_id_by_ordinal,
         )
+        # primary_reason_observation_id integrity (Task 16.5, C8): the private
+        # citation channel names a stable episodic id from the voter's OWN
+        # memory, so a hallucinated id must not corrupt the instrument.
+        # Validate against the voter's typed valid-id set read DIRECTLY off
+        # the participant (no per-speaker Mapping like the vent channel's --
+        # the ballot validator needs only THIS voter's own set, not every
+        # speaker's). Out-of-set -> nulled with an audit marker; never
+        # guessed. Enforcement-free: nothing downstream reads the field yet
+        # (Task 16.6 enforces).
+        normalized = _normalize_ballot_observation_id(
+            ballot=normalized,
+            valid_observation_ids=frozenset(participant.observation_ids),
+        )
         # Teammate firewall guard (Task 7.12): a teammate is a *valid* living
         # candidate, so the invalid-target normalization above never catches
         # it. Coerce a ballot that targets a fellow impostor to SKIP so an
@@ -2477,6 +2521,45 @@ def _normalize_ballot_reason_id(
     return ballot.model_copy(
         update={
             "primary_reason_id": None,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
+def _normalize_ballot_observation_id(
+    *,
+    ballot: VoteBallot,
+    valid_observation_ids: frozenset[ObservationId],
+) -> VoteBallot:
+    """Validate / normalize ``primary_reason_observation_id`` (Task 16.5, C8).
+
+    ``primary_reason_observation_id`` is the private-hard-evidence citation
+    channel (DESIGN.md §5.5, §6.6): a stable ``{agent_id}:{tick}:{seq}``
+    episodic id the voter cites for evidence NOBODY spoke (a witnessed
+    kill/vent held first-hand). It must name a real observation from the
+    VOTER'S OWN memory, so it is validated against ``valid_observation_ids``
+    -- the voter's own typed id set threaded onto
+    :class:`MeetingParticipant`. Mirrors :func:`_normalize_ballot_reason_id`
+    and NEVER raises:
+
+    * ``None`` or a member of the set passes through unchanged.
+    * Anything else is nulled with :data:`INVALID_OBSERVATION_ID_MARKER`
+      prefixed to ``rationale_text``, preserving the original (invalid) id.
+
+    Unlike the turn-id validator there is NO suffix-recovery branch: the
+    ``:turn-{k}`` ordinal recovery is turn-id-specific (the 7B echo shape),
+    and an observation id has no in-meeting ordinal table to recover
+    against -- an unknown id is nulled, never guessed. Enforcement-free: no
+    gate/guard/tally consults the field (Task 16.6 enforces).
+    """
+
+    observation_id = ballot.primary_reason_observation_id
+    if observation_id is None or observation_id in valid_observation_ids:
+        return ballot
+    marker = INVALID_OBSERVATION_ID_MARKER.format(observation_id=observation_id)
+    return ballot.model_copy(
+        update={
+            "primary_reason_observation_id": None,
             "rationale_text": marker + ballot.rationale_text,
         }
     )
@@ -3304,6 +3387,7 @@ __all__ = [
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
+    "INVALID_OBSERVATION_ID_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
