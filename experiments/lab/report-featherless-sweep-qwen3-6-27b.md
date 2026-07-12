@@ -148,3 +148,52 @@ uv run python -m experiments.lab.featherless_sweep probe-report
 ```
 
 **Harness/raw:** `experiments/lab/featherless_sweep.py` + `experiments/lab/results-featherless-sweep-qwen3-6-27b.jsonl` (served-id + response_format + thinking-kwarg discovery rows and the graded matrix cells; every number in this report regenerates from those rows).
+
+
+## Two-pass bespoke-set A/B (Task 16.13): `qwen3_6_27b`
+
+One set, one model, one mode (the `_SET_OWNER` binding — a cross-set control is structurally rejected), the SAME pinned contexts and detectors; the arms differ ONLY by the committed template bytes, told apart per row by `template_source_sha`. Pass 1 = the scratch-v5-verbatim commit (the known-clean, mechanics-incomplete control); pass 2 = the mechanics-complete commit (the candidate baseline 4 records with). The open question measured: HOW MUCH of the scratch profile survives the mechanics merge.
+
+### Reply corpus — parse / deflect / tell / self-flag, per cover arm
+
+| arm | template sha | cover | parse | deflect | self-co-loc (tell) | self-flag |
+|---|---|---|---|---|---|---|
+| control (scratch-v5-verbatim) | `df731018e0a6` | off | 16/16 (100%) | 16/16 (100%) | 0/16 (0%) | 0/16 (0%) |
+| control (scratch-v5-verbatim) | `df731018e0a6` | on | 16/16 (100%) | 15/16 (94%) | 0/16 (0%) | 0/16 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | off | 16/16 (100%) | 14/16 (88%) | 0/16 (0%) | 0/16 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | on | 16/16 (100%) | 15/16 (94%) | 0/16 (0%) | 0/16 (0%) |
+
+### Vote corpus — parse + conversion
+
+| arm | template sha | parse | conversion |
+|---|---|---|---|
+| control (scratch-v5-verbatim) | `df731018e0a6` | 8/8 (100%) | 8/8 (100%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | 8/8 (100%) | 8/8 (100%) |
+
+### Opening corpus — impostor self-report
+
+| arm | template sha | parse | self-co-loc (tell) | confess |
+|---|---|---|---|---|
+| control (scratch-v5-verbatim) | `df731018e0a6` | 10/10 (100%) | 0/10 (0%) | 0/10 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | 10/10 (100%) | 0/10 (0%) | 0/10 (0%) |
+
+### Latency
+
+| arm | isolated latency (s) | mean reply latency (s) |
+|---|---|---|
+| control (scratch-v5-verbatim) | 16.7 | 22.2 |
+| candidate (mechanics-complete) | 31.1 | 24.4 |
+
+**Verdict (computed from the rows): no clean cell regressed — the scratch profile SURVIVES the mechanics merge, and the restyled mechanics-complete templates are adopted as the set's v1 (the bytes baseline 4 records with).**
+
+Reproduce (each pass from ITS template commit; rows are the evidence):
+
+```
+PYTHONPATH=. uv run python audits/workflows/extract_gameplay_facts.py
+uv run python -m experiments.lab.featherless_sweep ab \
+    --prompt-set qwen3_6_27b --facts $TMPDIR/ailibi-gameplay-facts-9p2i.json
+# ... commit the mechanics-complete templates, then:
+uv run python -m experiments.lab.featherless_sweep ab \
+    --prompt-set qwen3_6_27b --facts $TMPDIR/ailibi-gameplay-facts-9p2i.json \
+    --append
+```

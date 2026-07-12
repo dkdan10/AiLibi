@@ -189,13 +189,13 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
     assert "[dry-run] provider: featherless" in proc.stdout
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
-    assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
+    assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
     assert (
         "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
         "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
@@ -211,7 +211,7 @@ def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
     )
     proc = _run("--full", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -225,7 +225,7 @@ def test_dry_run_worker_count_is_overridable() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_REFRESH_WORKERS="3",
     )
     proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
@@ -258,7 +258,7 @@ def test_dry_run_seed_crash_retry_scoped_to_featherless() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -279,7 +279,7 @@ def test_invalid_seed_max_attempts_fails_loud() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_SEED_MAX_ATTEMPTS="lots",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
@@ -295,7 +295,7 @@ def test_invalid_worker_count_fails_loud() -> None:
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_REFRESH_WORKERS="two",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
@@ -318,7 +318,7 @@ def test_featherless_preflight_requires_api_key_before_spend() -> None:
 
 def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     # Task 14.7 / 14.12 (PR #209 review): a real featherless refresh WITH a key
-    # but WITHOUT the locked prompt set (qwen3_32b) must fail loud at preflight,
+    # but WITHOUT the locked prompt set (qwen3_6_27b) must fail loud at preflight,
     # before any seed is staged -- so an operator cannot spend a multi-hour run
     # recording the wrong (default 9B) set and only learn afterward from the
     # MANIFEST. The substrate LEVERS need no env: all five are unconditionally ON
@@ -334,10 +334,93 @@ def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "locked substrate" in out
-    assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
+    assert "AILIBI_PROMPT_SET must be 'qwen3_6_27b'" in out
     # No substrate-lever env is required any more (they are all unconditional).
     assert "AILIBI_EVIDENCE_QUALITY_LIFT" not in out
     assert "AILIBI_TESTIMONY_AS_CONTENT" not in out
+
+
+def test_featherless_refresh_requires_coupled_model_before_spend() -> None:
+    # Task 16.13 (PR #260 review): the qwen3_6_27b set is coupled to its locked
+    # owner model (Qwen/Qwen3.6-27B). With the set exported but the effective
+    # meeting model left at the script default (still the 32B incumbent until
+    # Task 16.12's flip), a real featherless refresh must fail loud AFTER the
+    # set gate and BEFORE any staging/spend — recording the new set against the
+    # old model would corrupt the substrate provenance.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "featherless"
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
+    env.pop("AILIBI_LLM_MEETING_MODEL", None)
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    # The SET gate passed (its error is absent); the COUPLING gate fired.
+    assert "AILIBI_PROMPT_SET must be" not in out
+    assert "coupled to its locked owner model" in out
+    assert "Qwen/Qwen3.6-27B" in out
+    assert "nothing was staged" in out
+
+
+def test_featherless_coupled_model_env_passes_the_gate(tmp_path: Path) -> None:
+    # The acceptance direction, hermetic (no spend): with the locked set AND
+    # AILIBI_LLM_MEETING_MODEL pinned to the owner model, the coupling gate
+    # passes and the run proceeds to the NEXT pre-spend gate. Which gate that
+    # is depends on whether Task 16.12's production registry entry has landed:
+    # before it, the refresh must fail loud at the REGISTRY gate (the client
+    # would otherwise abort mid-run, after no-meeting seeds re-recorded);
+    # after it, the run reaches the roster-descriptor check, here forced to
+    # fail loud by a deliberately disagreeing committed roster.json. Both
+    # branches prove gate order without any provider call, and the test stays
+    # green across 16.12's merge (the two tasks land in parallel).
+    from llm.featherless_client import _THINKING_KWARG_BY_MODEL
+
+    set_dir = tmp_path / "set"
+    set_dir.mkdir()
+    (set_dir / "roster.json").write_text(
+        '{"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}'
+    )
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3.6-27B",
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+    )
+    proc = _run("--seeds", "0", env=env, timeout=120)
+    assert proc.returncode != 0  # fails at a later pre-spend gate, not coupling
+    out = proc.stdout + proc.stderr
+    assert "Model-set coupling OK: qwen3_6_27b on Qwen/Qwen3.6-27B" in out
+    assert "coupled to its locked owner model" not in out
+    registered = any(
+        model_id == "Qwen/Qwen3.6-27B" for model_id, _ in _THINKING_KWARG_BY_MODEL
+    )
+    if registered:
+        # Post-16.12 tree: the registry gate passes; the roster gate fires.
+        assert "Model registry OK" in out
+        assert not set_dir.joinpath("MANIFEST.md").exists()  # no row staged
+    else:
+        # Pre-16.12 tree: the registry gate fires BEFORE mkdir/staging.
+        assert "is not registered in" in out
+        assert "nothing was staged" in out
+
+
+def test_dry_run_featherless_echoes_model_set_coupling() -> None:
+    # The dry-run surfaces the coupling requirement (mirroring the key-preflight
+    # echo pattern) so the operator sees it before any real invocation.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] model-set coupling:" in proc.stdout
+    assert "Qwen/Qwen3.6-27B" in proc.stdout
+    assert "[dry-run] model registry:" in proc.stdout
+    assert "_THINKING_KWARG_BY_MODEL" in proc.stdout
 
 
 def test_featherless_refresh_accepts_locked_substrate() -> None:
@@ -346,10 +429,10 @@ def test_featherless_refresh_accepts_locked_substrate() -> None:
     # test never spends.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
-    env["AILIBI_PROMPT_SET"] = "qwen3_32b"
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
-    assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
+    assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
     assert (
         "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
         "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout

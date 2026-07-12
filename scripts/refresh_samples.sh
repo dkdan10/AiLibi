@@ -361,6 +361,8 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] preflight: would ping http://$OLLAMA_HOST/api/tags for reachability and confirm model $OLLAMA_MODEL is pulled"
   elif [[ "$PROVIDER" == "featherless" ]]; then
     echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
+    echo "[dry-run] model-set coupling: would require the effective featherless meeting model (AILIBI_LLM_MEETING_MODEL, else the script default) to be 'Qwen/Qwen3.6-27B' — the qwen3_6_27b set's locked owner model (Task 16.13)"
+    echo "[dry-run] model registry: would require 'Qwen/Qwen3.6-27B' registered in llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's entry — the client fails loud on an unregistered id)"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
@@ -414,8 +416,11 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
   # Task 14.7 / 14.12: refresh_samples.sh records the CANONICAL baseline into
-  # replays/samples/, and the only sanctioned Featherless baseline is the
-  # 14.6-locked prompt set qwen3_32b. The substrate levers are ALL unconditionally
+  # replays/samples/, and the only sanctioned Featherless baseline is the locked
+  # prompt set — since Task 16.13 (the model-lock GO path) that is the
+  # qwen3_6_27b bespoke set (audits/audit-phase-16-model-lock.md; the registry
+  # in orchestrator/game.py is the version authority — this script carries no
+  # version literal). The substrate levers are ALL unconditionally
   # ON (the four Phase-13.5 levers since Task 14.9, the Task-14.10
   # evidence_quality_lift lever since the 14.12 close), so they need no export and
   # cannot be mis-set — the guard only pins the prompt set. The game reads the
@@ -423,8 +428,8 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   # the wrong substrate (the default 9B set) and only reveal it in the MANIFEST
   # afterward, wasting the whole (multi-hour) spend. Fail loud HERE, before any
   # seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock of the
-  # baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
-  REQUIRED_PROMPT_SET="qwen3_32b"
+  # baseline updates REQUIRED_PROMPT_SET to match the locked substrate.
+  REQUIRED_PROMPT_SET="qwen3_6_27b"
   if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
     echo "Error: a featherless refresh must run the locked substrate (Task 14.6)." >&2
     echo "       Export the locked prompt set before re-running; nothing was staged:" >&2
@@ -432,6 +437,45 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (all five levers unconditionally ON)."
+  # Model-set coupling (Task 16.13, PR #260 review): the qwen3_6_27b set is
+  # authored for its locked owner model Qwen/Qwen3.6-27B
+  # (audits/audit-phase-16-model-lock.md; _SET_OWNER in the sweep harness), and
+  # recording it against any other model would corrupt the substrate provenance
+  # exactly the way this preflight exists to prevent. The effective meeting
+  # model mirrors the attribution logic below (AILIBI_LLM_MEETING_MODEL, else
+  # the script's DEFAULT_FEATHERLESS_MODEL, which tracks
+  # llm.featherless_client.DEFAULT_FEATHERLESS_MODEL). Until Task 16.12 flips
+  # that default to the locked id, a coupled refresh must export the model env
+  # explicitly; once 16.12 lands, this guard passes with no env and self-retires
+  # to a pure backstop.
+  REQUIRED_SET_OWNER_MODEL="Qwen/Qwen3.6-27B"
+  EFFECTIVE_FEATHERLESS_MODEL="${AILIBI_LLM_MEETING_MODEL:-$DEFAULT_FEATHERLESS_MODEL}"
+  if [[ "$EFFECTIVE_FEATHERLESS_MODEL" != "$REQUIRED_SET_OWNER_MODEL" ]]; then
+    echo "Error: prompt set '$REQUIRED_PROMPT_SET' is coupled to its locked owner model." >&2
+    echo "       The effective featherless meeting model is '$EFFECTIVE_FEATHERLESS_MODEL', but the" >&2
+    echo "       set was authored for '$REQUIRED_SET_OWNER_MODEL' (audits/audit-phase-16-model-lock.md)." >&2
+    echo "       Export AILIBI_LLM_MEETING_MODEL='$REQUIRED_SET_OWNER_MODEL' (or record after the" >&2
+    echo "       Task 16.12 default-model flip); nothing was staged." >&2
+    exit 1
+  fi
+  echo "Model-set coupling OK: $REQUIRED_PROMPT_SET on $EFFECTIVE_FEATHERLESS_MODEL."
+  # Registry gate (PR #260 review, follow-up): the production client fails loud
+  # on a model id absent from llm/featherless_client._THINKING_KWARG_BY_MODEL at
+  # the FIRST call (by design), so a run that passes the coupling gate on a tree
+  # without Task 16.12's registry entry would abort mid-refresh — AFTER
+  # no-meeting seeds had already re-recorded and updated their MANIFEST rows.
+  # Fail HERE instead, before any staging or mutation. Self-retiring like the
+  # coupling gate: 16.12's registry entry makes this pass with no operator
+  # action.
+  if ! uv run python -c "import sys; from llm.featherless_client import _THINKING_KWARG_BY_MODEL as R; sys.exit(0 if any(i == '$REQUIRED_SET_OWNER_MODEL' for i, _ in R) else 1)"; then
+    echo "Error: the locked model '$REQUIRED_SET_OWNER_MODEL' is not registered in" >&2
+    echo "       llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's fail-loud entry)," >&2
+    echo "       so the production client would abort on the first meeting call — after" >&2
+    echo "       no-meeting seeds had already re-recorded. A locked-substrate featherless" >&2
+    echo "       refresh becomes runnable once Task 16.12 lands; nothing was staged." >&2
+    exit 1
+  fi
+  echo "Model registry OK: $REQUIRED_SET_OWNER_MODEL is registered in the production client."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
