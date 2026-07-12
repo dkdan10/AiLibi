@@ -23,6 +23,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ObservationId,
     SightingRecord,
     VentWitnessRecord,
     VoteBallot,
@@ -1001,6 +1002,11 @@ class _MeetingAwareReporter:
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
         # Task 16.7: the vent accessor's sighting sibling -- same protocol
         # requirement, same canned grounds-nothing stub.
+        return ()
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
+        # Task 16.5: the stable observation-id set -- same protocol
+        # requirement, same canned cites-nothing stub.
         return ()
 
     @property

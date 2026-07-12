@@ -19,6 +19,9 @@ reconstructions assign byte-identical ids.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from agents.memory.episodic import (
@@ -441,3 +444,91 @@ class TestObservationIdRenderLever:
         )
         assert 0 < tight.count("[obs ") < 4
         assert "[obs p1:5:3] [tick 5] You discovered p3's body in ELECTRICAL." in tight
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+# The two committed baseline-3 sets; the first 2 seeds of each keep the twin
+# walk ~1 min while pinning against the real corpus (Task 16.5 determinism DoD).
+_COMMITTED_SETS = ("4p1i", "9p2i")
+
+# {(set_name, seed, meeting_id, agent_id): participant.observation_ids}
+_IdMap = dict[tuple[str, int, str, str], tuple[str, ...]]
+
+
+class TestObservationIdsAreReconstructionStable:
+    """Two reconstructions of a committed replay mint byte-identical ids (Task
+    16.5, C8 determinism DoD).
+
+    The ``{agent_id}:{tick}:{seq}`` scheme is a pure function of the append
+    history and carries no RNG / hash / float, so walking the SAME committed
+    replay twice through the real reconstruction pipeline must assign every
+    participant the identical id tuple. The reuse surface is the 16.4 precedent
+    (tests/agents/test_beliefs_hard_evidence_gate.py):
+    :func:`tests.meetings.test_prompt_byte_golden.walk_replay_meetings` re-seeds,
+    re-walks and rebuilds each agent's memory in lockstep, then threads
+    ``observation_ids_for_meeting`` onto every reconstructed
+    :class:`~meetings.manager.MeetingParticipant` via
+    :func:`orchestrator.game._build_participants`. A SMALL deterministic subset
+    (first 2 seeds of each set) is walked TWICE; the class-scoped fixture runs
+    each walk exactly once.
+    """
+
+    @staticmethod
+    def _walk_ids() -> _IdMap:
+        from engine.world import load_canonical_map
+        from tests.meetings.test_prompt_byte_golden import (
+            _canonical_renderers,  # noqa: PLC2701
+            _seed_paths,  # noqa: PLC2701
+            walk_replay_meetings,
+        )
+
+        game_map = load_canonical_map()
+        renderers = _canonical_renderers()
+        ids: _IdMap = {}
+        for set_name in _COMMITTED_SETS:
+            set_dir = _REPO_ROOT / "replays" / "samples" / set_name
+            for path in _seed_paths(set_dir)[:2]:
+                for meeting in walk_replay_meetings(
+                    path, game_map=game_map, renderers_for_set=renderers
+                ):
+                    for participant in meeting.participants:
+                        key = (
+                            set_name,
+                            meeting.seed,
+                            meeting.meeting_id,
+                            participant.agent_id,
+                        )
+                        ids[key] = participant.observation_ids
+        return ids
+
+    @pytest.fixture(scope="class")
+    def walks(self) -> tuple[_IdMap, _IdMap]:
+        # Two full reconstructions; each walk runs once for the whole class.
+        return (self._walk_ids(), self._walk_ids())
+
+    def test_two_walks_assign_identical_ids(self, walks: tuple[_IdMap, _IdMap]) -> None:
+        first, second = walks
+        assert first, "the committed subset produced no reconstructed participants"
+        # Two reconstructions regenerate every participant's id tuple byte-for-byte.
+        assert first == second
+
+    def test_ids_are_well_shaped_nonempty_and_unique(
+        self, walks: tuple[_IdMap, _IdMap]
+    ) -> None:
+        first, _ = walks
+        for (set_name, seed, meeting_id, agent_id), observation_ids in first.items():
+            where = f"{set_name} seed {seed} {meeting_id} {agent_id}"
+            # Non-empty for every living participant: the id-stamped self_state
+            # row is always present by meeting time.
+            assert observation_ids, f"{where}: participant cited no observation"
+            # Every id is the participant's OWN {agent_id}:{tick}:{seq}.
+            pattern = re.compile(rf"^{re.escape(agent_id)}:\d+:\d+$")
+            for observation_id in observation_ids:
+                assert pattern.match(observation_id), (
+                    f"{where}: id {observation_id!r} is not {agent_id}:{{tick}}:{{seq}}"
+                )
+            # Unique within the participant's tuple (the store's append-time
+            # duplicate-id guard enforces uniqueness within an agent's memory).
+            assert len(observation_ids) == len(set(observation_ids)), (
+                f"{where}: duplicate ids in {observation_ids!r}"
+            )

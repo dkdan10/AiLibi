@@ -459,6 +459,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "output_tokens",
         "per_prompt_version",
         "primary_reason_id",
+        "primary_reason_observation_id",
         "prompt",
         "prompt_length",
         "prompt_versions",

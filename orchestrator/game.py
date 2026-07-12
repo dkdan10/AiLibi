@@ -82,6 +82,7 @@ from meetings.manager import (
 from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
+    ObservationId,
     ReportedStatement,
     SightingRecord,
     VentWitnessRecord,
@@ -472,6 +473,13 @@ class MeetingAwareAgent(Protocol):
     events leaks nothing (the packet stamp the records derive from is
     witness-gated, ``eval/leak_test.py``); a canned test double may return
     ``()`` from either.
+
+    ``observation_ids_for_meeting`` (Task 16.5, C8) is the sibling
+    self-channel accessor for stable episodic observation ids: the agent's
+    OWN ``{agent_id}:{tick}:{seq}`` id set, the valid-citation universe the
+    manager validates a ballot's ``primary_reason_observation_id`` against.
+    Also REQUIRED and firewall-clean -- the ids name the agent's own memory
+    rows and leak nothing; a canned double may return ``()``.
     """
 
     @property
@@ -492,6 +500,8 @@ class MeetingAwareAgent(Protocol):
     def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]: ...
 
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]: ...
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]: ...
 
 
 @runtime_checkable
@@ -930,8 +940,9 @@ def _build_participants(
                 f"agent for {player_id!r} does not implement MeetingAwareAgent; "
                 "meeting-enabled HeadlessGame requires agents that expose "
                 "render_memory_for_meeting(), suspicion_graph_for_meeting(), "
-                "vent_witness_records_for_meeting(), and "
-                "sighting_records_for_meeting()"
+                "vent_witness_records_for_meeting(), "
+                "sighting_records_for_meeting(), and "
+                "observation_ids_for_meeting()"
             )
         # Crewmates (and a sole impostor) get ``()``; an impostor gets the
         # other impostors' ids, never its own. This is the meeting-side
@@ -966,6 +977,11 @@ def _build_participants(
                 # Task 16.7: the vent channel's sighting sibling -- the
                 # grounded-vouch input, same meeting-open snapshot discipline.
                 sighting_records=agent.sighting_records_for_meeting(),
+                # Task 16.5 (C8): the voter's OWN stable observation-id set --
+                # the valid-citation universe the manager validates
+                # ``primary_reason_observation_id`` against, same self-channel
+                # snapshot discipline. Enforcement-free until 16.6.
+                observation_ids=agent.observation_ids_for_meeting(),
                 # Task 16.9: the inert persona-text fill (nothing reads it until 16.16).
                 persona=persona_by_id[player_id].text,
             )
@@ -2560,6 +2576,34 @@ class TacticalAgent:
                 ),
             )
             for player_id, room, tick in sightings
+        )
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
+        """The agent's OWN stable episodic observation-id set (Task 16.5, C8).
+
+        The self-channel accessor for the private-hard-evidence citation
+        universe: every first-hand id-stamped episodic row's
+        ``{agent_id}:{tick}:{seq}`` observation id, in append order. The
+        manager validates a ballot's ``primary_reason_observation_id``
+        against this set (:func:`meetings.manager._normalize_ballot_observation_id`)
+        so a voter can only cite an observation it actually holds; an
+        out-of-set citation nulls with the audit marker. Enforcement-free:
+        no gate/guard/tally reads it until Task 16.6.
+
+        Reads only ids stamped in perception at OBSERVED-event write sites,
+        so reported testimony and the inferred global aggregate (both carry
+        ``observation_id is None``) are naturally excluded -- the citation
+        universe is first-hand evidence only. Firewall-clean: the ids name
+        this agent's own memory rows and leak nothing. Append order is
+        non-decreasing in tick (the episodic-store invariant) and the
+        derivation is a pure function of the append history, so two
+        reconstructions of the same replay return an identical tuple.
+        """
+
+        return tuple(
+            event.observation_id
+            for event in self._memory.episodic.recent(since_tick=0)
+            if event.observation_id is not None
         )
 
     def absorb_meeting_evidence(

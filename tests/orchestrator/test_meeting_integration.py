@@ -54,6 +54,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     ObservationClaim,
+    ObservationId,
     SawPlayerObservation,
     SightingRecord,
     TurnKind,
@@ -765,6 +766,11 @@ class TestHeadlessGameMeetingDispatch:
             ) -> tuple[SightingRecord, ...]:
                 return self._delegate.sighting_records_for_meeting()
 
+            def observation_ids_for_meeting(
+                self,
+            ) -> tuple[ObservationId, ...]:
+                return self._delegate.observation_ids_for_meeting()
+
         def factory(agent_id: PlayerId, role: Role):  # type: ignore[no-untyped-def]
             if agent_id == "p-1":
                 return _ScriptedAgent(
@@ -1103,6 +1109,11 @@ class TestDefaultMeetingRunner:
             ) -> tuple[SightingRecord, ...]:
                 return self._delegate.sighting_records_for_meeting()
 
+            def observation_ids_for_meeting(
+                self,
+            ) -> tuple[ObservationId, ...]:
+                return self._delegate.observation_ids_for_meeting()
+
             @property
             def agent_id(self) -> PlayerId:
                 return self._delegate.agent_id
@@ -1282,6 +1293,11 @@ class TestDefaultMeetingRunner:
                 self,
             ) -> tuple[SightingRecord, ...]:
                 return self._delegate.sighting_records_for_meeting()
+
+            def observation_ids_for_meeting(
+                self,
+            ) -> tuple[ObservationId, ...]:
+                return self._delegate.observation_ids_for_meeting()
 
         agents: dict[PlayerId, object] = {
             pid: _MinimalAware(pid, players.role)
@@ -1570,6 +1586,9 @@ class _MeetingAwareStub:
         return ()
 
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
+        return ()
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
         return ()
 
 
@@ -2191,6 +2210,9 @@ class _MeetingAwareScriptedAgent:
 
     def sighting_records_for_meeting(self) -> tuple[SightingRecord, ...]:
         return self._inner.sighting_records_for_meeting()
+
+    def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
+        return self._inner.observation_ids_for_meeting()
 
 
 class _EmergencyChainLLMClient:
