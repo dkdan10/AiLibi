@@ -89,6 +89,7 @@ from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intents_for_tick,
 )
+from orchestrator.personas import assign_personas
 from orchestrator.replay import (
     LLMCallRecord,
     ReplayLog,
@@ -870,6 +871,16 @@ def _build_participants(
     for every crewmate and for a sole impostor, and never contains the
     participant's own id. The orchestrator is the right place to read
     roles: the meeting layer is engine-pure and must not re-derive them.
+
+    ``persona`` (Task 16.9) is filled from
+    :func:`orchestrator.personas.assign_personas`, a pure function of the
+    game seed and the FULL fixed roster (dead seats included), so a
+    player's card is stable across every meeting regardless of deaths and
+    no two living players ever share one (sampling without replacement).
+    It is computed with no reference to roles, keeping the assignment
+    role-neutral by construction. Inert until Task 16.16: the text fills
+    ``MeetingParticipant.persona`` and no template reads it, so rendered
+    prompt bytes are unchanged.
     """
 
     impostor_ids = tuple(
@@ -878,6 +889,17 @@ def _build_participants(
             for player_id, player in state.players.items()
             if player.role == "IMPOSTOR"
         )
+    )
+
+    # Task 16.9: deterministic persona assignment -- a pure function of the
+    # game seed and the FULL fixed roster (dead seats included), so a
+    # player persona is stable across every meeting of a game regardless
+    # of deaths, and no two living players ever share a card (sampling
+    # without replacement). Inert until 16.16: the text fills
+    # ``MeetingParticipant.persona`` and no template reads it, so rendered
+    # prompt bytes are unchanged (the 16.3 golden proves it).
+    persona_by_id = assign_personas(
+        seed=state.seed, roster=tuple(sorted(state.players))
     )
 
     participants: list[MeetingParticipant] = []
@@ -929,6 +951,8 @@ def _build_participants(
                 # agent exactly like ``suspicion_graph``, a meeting-open
                 # snapshot of the agent's OWN witnessed-vent episodic records.
                 vent_witness_records=agent.vent_witness_records_for_meeting(),
+                # Task 16.9: the inert persona-text fill (nothing reads it until 16.16).
+                persona=persona_by_id[player_id].text,
             )
         )
     return tuple(participants)
