@@ -271,6 +271,43 @@ class TestGroundedFeedsCorroboration:
             == frozenset()
         )
 
+    def test_tolerance_window_is_symmetric(self) -> None:
+        # The tolerance is an abs() window: a spoken tick BELOW the record's by
+        # exactly the tolerance grounds, mirroring the above-tolerance case.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(
+                    _saw(subject="p-5", tick=14 - SIGHTING_GROUNDING_TICK_TOLERANCE),
+                ),
+            )
+        )
+
+        assert grounded_vouch_subjects(
+            transcript,
+            sighting_records={"p-2": (_record(subject="p-5", tick=14),)},
+            roster=_ROSTER,
+        ) == frozenset({"p-5"})
+
+    def test_first_relevant_tick_grounds(self) -> None:
+        # tick 2 is the first tick past the spawn window (SPAWN_WINDOW_LAST_TICK
+        # == 1): a vouch there is relevance-eligible and grounds against a
+        # matching record, pinning the exclusion boundary from the inside.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=2),),
+            )
+        )
+
+        assert grounded_vouch_subjects(
+            transcript,
+            sighting_records={"p-2": (_record(subject="p-5", room="MEDBAY", tick=2),)},
+            roster=_ROSTER,
+        ) == frozenset({"p-5"})
+
     def test_compound_room_label_grounds_against_the_canonical_record(self) -> None:
         # canonical_rooms is the one room-normalisation point: a compound
         # spoken label whose member set contains the record's canonical room
