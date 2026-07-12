@@ -27,7 +27,11 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from agents.base import AgentInterface
-from agents.memory.beliefs import OBSERVED_VENT_ACTION
+from agents.memory.beliefs import (
+    OBSERVED_VENT_ACTION,
+    hard_evidence_gate_enabled,
+    hard_evidence_gated_suspicion,
+)
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -2346,7 +2350,9 @@ class TacticalAgent:
             suspicion_override=suspicion_override,
         )
 
-    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+    def suspicion_graph_for_meeting(
+        self, *, env: Mapping[str, str] | None = None
+    ) -> tuple[SuspicionEntry, ...]:
         """Snapshot of the agent's belief state as a suspicion graph.
 
         DESIGN.md §5.5 feeds the suspicion graph straight into the
@@ -2360,18 +2366,37 @@ class TacticalAgent:
         ``agents.*``). It rides the graph inertly today -- no template renders
         it until Task 16.15 -- but populating it HERE, at the one production
         builder, keeps ``0.5 + sum(the eight fields) == suspicion`` on every live
-        row (the belief store's own invariant), so 16.15's surface has real
-        hard/soft data rather than defaults.
+        row (the belief store's own invariant, lever-OFF), so 16.15's surface has
+        real hard/soft data rather than defaults.
+
+        Task 16.4 (the J1 render clamp; ``env`` resolves the default-OFF
+        hard-evidence-gate lever, ``None`` reads the process environment). With the
+        lever ON, a row whose typed provenance is entirely soft renders its
+        ``suspicion`` scalar clamped to
+        :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL`, just below
+        the §4.6 gate; hard-backed rows and the stored :class:`BeliefState` are
+        untouched. The eight provenance kwargs stay the RAW 16.3 decomposition --
+        the true evidence record -- so a clamped row's scalar deliberately renders
+        below its decomposition sum (the ``0.5 + sum == suspicion`` invariant is
+        qualified to the lever-OFF case; ON, the manager's ``seed_player``
+        reconciles the shortfall as an ``unattributed`` residual). OFF (the default)
+        is byte-identical to pre-task HEAD.
         """
 
+        # Task 16.4: resolve the default-OFF hard-evidence-gate lever ONCE; OFF
+        # leaves the row loop byte-identical to pre-task HEAD.
+        gate_on = hard_evidence_gate_enabled(env)
         entries: list[SuspicionEntry] = []
         for player_id in sorted(self._memory.beliefs.known_players()):
             belief = self._memory.beliefs.view(player_id)
             provenance = belief.provenance
+            suspicion = belief.suspicion
+            if gate_on:
+                suspicion = hard_evidence_gated_suspicion(suspicion, provenance)
             entries.append(
                 SuspicionEntry(
                     player_id=player_id,
-                    suspicion=belief.suspicion,
+                    suspicion=suspicion,
                     trust=belief.trust,
                     flag_lift=provenance.flag_lift,
                     body_proximity=provenance.body_proximity,

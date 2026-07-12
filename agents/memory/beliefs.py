@@ -24,14 +24,18 @@ result, and no rendered byte (the Task 16.3 prompt-byte golden is the OFF-path
 proof). The module-level invariant (documented on :class:`SuspicionProvenance`
 and pinned by :data:`SUSPICION_PROVENANCE_ATOL`) is that for every belief row
 ``_DEFAULT_SUSPICION + provenance.total == suspicion`` to within tolerance. The
-J1 hard-render gate (Task 16.4) classifies on the HARD/SOFT split and the Task
-16.15 surface renders it; today a carried-soft prior at 0.70 is
-indistinguishable from a body-proximity pin at 0.70, which is exactly what the
-split repairs.
+J1 hard-render gate (Task 16.4) classifies on the HARD/SOFT split -- an
+entirely-soft conviction-grade row renders clamped just below the §4.6 gate, a
+hard-backed row renders untouched -- and the Task 16.15 surface renders the
+decomposition; a carried-soft prior at 0.70 is no longer indistinguishable from
+a body-proximity pin at 0.70, which is exactly what the split repairs. The
+``unattributed`` residual classifies as EXEMPT (Task 16.4): neither hard nor
+soft, and never clamped, so evidence of unknown class is never suppressed.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
@@ -261,6 +265,131 @@ risk (a self-reporting impostor laundering suspicion): such a game does not occu
 in the corpus, and the over-damping canary (zero hard-flag-backed conviction
 outcomes change) is the contract's hard line. The magnitude is a single tuning
 point should 15.7's live measurement warrant a non-zero cap."""
+
+
+# Task 16.4 hard-evidence-gate lever — DEFAULT-OFF (the 13.5/14.10 live-toggle
+# pattern, still env-gated, NOT retired). This is the FIRST live toggle registered
+# back into ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` since the 15.7
+# graduation emptied it: OFF (the default) is byte-identical to the committed
+# baseline-3 substrate, so the committed replays reconstruct clean, and the 16.17
+# graduation decision re-measures the counterfactual on the adopting baseline's
+# bytes and may record it with the lever measured ON. Unlike the six retired
+# levers above, this one stays a live env read and is stamped per-recording.
+ENV_HARD_EVIDENCE_GATE: Final[str] = "AILIBI_HARD_EVIDENCE_GATE"
+_HARD_EVIDENCE_GATE_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def hard_evidence_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 16.4 hard-evidence-gate (J1) lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_HARD_EVIDENCE_GATE` from ``env`` (defaulting to the real
+    process environment), mirroring the retired 13.5 / 14.10 resolvers, the 15.5
+    ``reporter_exculpation`` resolver it clones, and
+    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF: an
+    unset / empty / unrecognised value is ``False`` so the two belief-render
+    read-sites stay byte-identical to the committed baseline-3 substrate
+    (``scripts/verify_samples.sh`` reconstructs clean); the live re-measure of the
+    counterfactual and the graduation decision are Task 16.17. Accepts
+    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests + the
+    offline counterfactual toggle the lever deterministically without mutating
+    ``os.environ``.
+
+    ON gates the J1 render clamp at exactly the two belief-render read-sites -- the
+    store's §6.6 belief lines (:func:`agents.memory.store._build_belief_lines`) and
+    the vote-ballot suspicion-graph builder
+    (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`) -- where a
+    row whose typed provenance is ENTIRELY soft is clamped to
+    :data:`HARD_EVIDENCE_GATE_RENDER_CEIL`. The classification is a pure function of
+    the 16.3 provenance (:func:`hard_evidence_gated_suspicion`); the HARD channels,
+    the stored scalar, and the fold arithmetic are never touched, so a hard-backed
+    row renders unchanged. Lever gating lives at the call sites (the 15.5 in-line
+    pattern), never inside the pure helper.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_HARD_EVIDENCE_GATE, "").strip().lower()
+        in _HARD_EVIDENCE_GATE_FLAG_TRUE
+    )
+
+
+HARD_EVIDENCE_GATE_RENDER_CEIL: Final[float] = 0.59
+"""Sub-gate render value the J1 clamp folds an entirely-soft conviction-grade row
+down to (Task 16.4; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1).
+
+One display-precision notch under the §4.6 0.60 eject gate
+(:data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`): a row clamped to
+``0.59`` renders exactly ``"0.59"`` under the vote template's ``"%.2f"`` format, so
+the model reads a MUST-SKIP row rather than the MUST-vote a raw ``>= 0.60`` scalar
+would surface. Mirrors the :data:`CONTRADICTION_RENDER_CEIL` naming (a
+render-time ceiling, not a fold-time cap) and sits behind the default-OFF
+:func:`hard_evidence_gate_enabled` lever. The measured trade is a HYPOTHESIS this
+task re-measures: the planning-doc §3.4 J1 static counterfactual read 24/31 crew
+mis-ejects neutralised vs 6/16 impostor catches risked, but those are
+baseline-2-era figures and the champion close reshaped exactly the relevant
+distribution (witnessed kills 5 -> 32, structured vents 0 -> 55, innocent-reporter
+ejections 22 -> 4), so Task 16.4's DoD re-measures the counterfactual on the
+committed baseline-3 bytes and the 16.17 graduation decision re-checks it on the
+adopting baseline's bytes. The over-damping canary -- zero hard-flag-backed
+conviction outcomes change -- is the contract's hard line."""
+
+
+def hard_evidence_gated_suspicion(
+    suspicion: float, provenance: SuspicionProvenance
+) -> float:
+    """Clamp an entirely-soft conviction-grade suspicion to the J1 render ceiling.
+
+    The PURE J1 classification predicate (Task 16.4; audits/post-phase-14-Voice-
+    and-Judgment-planning.md §3.4 J1). Classifies on the 16.3 typed
+    :class:`SuspicionProvenance` decomposition ONLY -- never on the ``suspicion``
+    scalar, never on prose. A row is ENTIRELY soft when its grounded evidence is
+    absent (``abs(hard_total) <= SUSPICION_PROVENANCE_ATOL``) AND its unattributed
+    residual is absent (``abs(unattributed) <= SUSPICION_PROVENANCE_ATOL``) AND it
+    carries real verbal lift (``soft_total > SUSPICION_PROVENANCE_ATOL``); such a
+    row renders ``min(suspicion, HARD_EVIDENCE_GATE_RENDER_CEIL)``. Every other row
+    -- any hard component present, or no soft lift at all -- returns ``suspicion``
+    verbatim.
+
+    The carried-hard exemption is the canary mandate: a meeting-1 grounded
+    flag/pin rolls into ``carried_hard`` through the 16.3 cross-meeting carry
+    (:meth:`SuspicionProvenance.carried`) and stays HARD forever, so a prior fed by
+    an earlier meeting's real evidence lifts ``hard_total`` above the tolerance and
+    is never clamped -- collapsing the carry to soft would let this gate suppress
+    standing hard evidence, exactly the outcome the over-damping canary (zero
+    hard-flag-backed conviction outcomes change) forbids.
+
+    The ``unattributed`` residual classifies as EXEMPT (the Task 16.4 DECISION):
+    evidence of unknown class is never suppressed -- clamping it would risk damping
+    the over-damping canary itself. The 16.3 sum invariant keeps
+    ``abs(unattributed)`` at ULP scale on every production row (every write tags its
+    source), so the exemption binds only on legacy / analysis seeds whose scalar was
+    reconciled straight into ``unattributed``; on a real belief row the residual is
+    ~0 and the predicate turns on the hard/soft split alone.
+
+    Pure and lever-agnostic: this helper NEVER reads the env or the lever (the
+    gating is the 15.5 in-line pattern at the two call sites,
+    :func:`hard_evidence_gate_enabled`). It mutates no stored state -- it is applied
+    to the rendered scalar at the two belief-render read-sites only, and every
+    non-render consumer keeps reading the raw ``belief.suspicion``.
+
+    Composes with (never bypasses) the downstream caps. The clamp is applied to the
+    builder rows BEFORE the manager pre-vote fold, so fresh same-meeting lift lands
+    ON TOP of the clamped seed through the untouched fold and
+    :func:`meetings.manager._joint_capped_suspicion` /
+    :data:`CONTRADICTION_RENDER_CEIL` min-compose after it (a clamped 0.59 seed plus
+    a fresh strong flag emits 0.89 -- the joint cap anchored at the clamped prior,
+    not the raw one). This clamp-before-joint-cap ordering produces different bytes
+    than clamp-after and is pinned by test.
+    """
+
+    soft_only = (
+        abs(provenance.hard_total) <= SUSPICION_PROVENANCE_ATOL
+        and abs(provenance.unattributed) <= SUSPICION_PROVENANCE_ATOL
+        and provenance.soft_total > SUSPICION_PROVENANCE_ATOL
+    )
+    return min(suspicion, HARD_EVIDENCE_GATE_RENDER_CEIL) if soft_only else suspicion
 
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
@@ -575,8 +704,10 @@ class SuspicionProvenance:
     (``flag_lift + body_proximity + kill_or_vent_pin + carried_hard``);
     ``soft_total`` sums the verbal channels
     (``testimony_spread + accusation_carry + carried_soft``). ``unattributed``
-    counts in NEITHER split by design -- Task 16.4 decides its class; until then
-    it is neither hard nor soft evidence. The split PERSISTS across the
+    counts in NEITHER split by design -- Task 16.4 classified it as EXEMPT: neither
+    hard nor soft, and the J1 gate (:func:`hard_evidence_gated_suspicion`) never
+    clamps a row carrying it, so evidence of unknown class is never suppressed. The
+    split PERSISTS across the
     cross-meeting carry (:meth:`carried`): a grounded vent pin from meeting 1 is
     still a HARD component of the prior at meeting 3, so collapsing the carry into
     one soft bucket -- which would let the J1 clamp suppress standing hard
@@ -628,9 +759,9 @@ class SuspicionProvenance:
         """Verbal (testimony / accusation) channels, incl. carried-soft.
 
         ``unattributed`` is deliberately absent from BOTH ``hard_total`` and
-        ``soft_total`` -- Task 16.4 owns its classification; here it is an
-        un-typed residual, so ``hard_total + soft_total`` need not equal
-        ``total``.
+        ``soft_total`` -- Task 16.4 classified it EXEMPT (never clamped, never
+        suppressed); it stays an un-typed residual here, so
+        ``hard_total + soft_total`` need not equal ``total``.
         """
 
         return self.testimony_spread + self.accusation_carry + self.carried_soft
@@ -1617,7 +1748,9 @@ __all__ = [
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
     "ENV_EVIDENCE_QUALITY_LIFT",
+    "ENV_HARD_EVIDENCE_GATE",
     "ENV_REPORTER_EXCULPATION",
+    "HARD_EVIDENCE_GATE_RENDER_CEIL",
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_KILL_ACTION",
@@ -1643,5 +1776,7 @@ __all__ = [
     "apply_observation_rules",
     "evidence_quality_lift_enabled",
     "graduated_spread_delta",
+    "hard_evidence_gate_enabled",
+    "hard_evidence_gated_suspicion",
     "reporter_exculpation_enabled",
 ]
