@@ -39,6 +39,7 @@ import pytest
 
 from meetings.constants import ENV_CITATION_GATE, citation_gate_enabled
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     SuspicionEntry,
@@ -59,6 +60,7 @@ from tests.meetings.test_ballot_observation_citation import (
 )
 from tests.meetings.test_manager import (
     _make_responder,  # noqa: PLC2701
+    _participant,  # noqa: PLC2701
     _run_meeting,  # noqa: PLC2701
 )
 
@@ -215,6 +217,23 @@ class TestGuardBallotCitationUnit:
         )
         assert result is ballot
 
+    def test_multi_subject_flag_shields_every_named_subject(self) -> None:
+        # A ContradictionRef may name several subjects (the alibi-conflict
+        # kinds flag both sides); the gate's shield set flattens EVERY
+        # subject, so an uncited eject of EITHER named player is flag-backed
+        # while a third party stays gated.
+        flag = _flag("p-2", "p-3")
+        for shielded in ("p-2", "p-3"):
+            ballot = _ballot(target=shielded)
+            assert (
+                guard_ballot_citation(ballot=ballot, contradictions=(flag,)) is ballot
+            )
+        outsider = _ballot(target="p-4")
+        assert (
+            guard_ballot_citation(ballot=outsider, contradictions=(flag,)).target
+            == "SKIP"
+        )
+
 
 class TestCitationGuardRunsAfterRedirect:
     """The ordering pin: flag status is judged on the REDIRECTED target.
@@ -275,6 +294,42 @@ class TestCitationGuardRunsAfterRedirect:
         assert result.target == "p-3"
         assert UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3") not in (
             result.rationale_text
+        )
+
+    def test_production_chain_redirects_then_gates_the_redirected_target(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The same ordering proven through the REAL _collect_one_ballot chain
+        # (not a hand-composed pair): p-1's rendered graph reads MUST-vote off
+        # p-3's 0.80 row while the named target p-2 renders 0.40 (under-gate),
+        # so guard_ballot_target_graph redirects the eject to p-3 FIRST; the
+        # citation gate then judges the REDIRECTED zero-flag target and
+        # coerces. The recorded marker stack pins the production order: the
+        # gate's prefix names p-3 (never p-2) and sits OUTSIDE the redirect
+        # marker.
+        monkeypatch.setenv(ENV_CITATION_GATE, "1")
+        participants = (
+            _participant(
+                "p-1",
+                suspicion_graph=(
+                    SuspicionEntry(player_id="p-2", suspicion=0.4, trust=0.5),
+                    SuspicionEntry(player_id="p-3", suspicion=0.8, trust=0.5),
+                ),
+            ),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4"),
+        )
+        result, _ = _run_meeting(
+            _make_responder(vote_targets={"p-1": "p-2"}),
+            participants=participants,
+        )
+
+        ballot = next(b for b in result.ballots if b.voter == "p-1")
+        assert ballot.target == "SKIP"
+        assert ballot.rationale_text.startswith(
+            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3")
+            + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
         )
 
 
