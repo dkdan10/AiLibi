@@ -413,8 +413,11 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
   # Task 14.7 / 14.12: refresh_samples.sh records the CANONICAL baseline into
-  # replays/samples/, and the only sanctioned Featherless baseline is the
-  # 14.6-locked prompt set qwen3_32b. The substrate levers are ALL unconditionally
+  # replays/samples/, and the only sanctioned Featherless baseline is the locked
+  # prompt set — since Task 16.13 (the model-lock GO path) that is the
+  # qwen3_6_27b bespoke set (audits/audit-phase-16-model-lock.md; the registry
+  # in orchestrator/game.py is the version authority — this script carries no
+  # version literal). The substrate levers are ALL unconditionally
   # ON (the four Phase-13.5 levers since Task 14.9, the Task-14.10
   # evidence_quality_lift lever since the 14.12 close), so they need no export and
   # cannot be mis-set — the guard only pins the prompt set. The game reads the
@@ -422,8 +425,8 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   # the wrong substrate (the default 9B set) and only reveal it in the MANIFEST
   # afterward, wasting the whole (multi-hour) spend. Fail loud HERE, before any
   # seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock of the
-  # baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
-  REQUIRED_PROMPT_SET="qwen3_32b"
+  # baseline updates REQUIRED_PROMPT_SET to match the locked substrate.
+  REQUIRED_PROMPT_SET="qwen3_6_27b"
   if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
     echo "Error: a featherless refresh must run the locked substrate (Task 14.6)." >&2
     echo "       Export the locked prompt set before re-running; nothing was staged:" >&2

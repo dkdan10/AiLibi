@@ -45,14 +45,25 @@ from orchestrator.game import (
     prompt_versions_for_set,
 )
 
-# The five Task 14.5 bespoke sets (each a candidate model/mode).
+# The five Task 14.5 bespoke sets (each a candidate model/mode), plus the
+# Task 16.13 locked-model set (the scratch-ladder style base carrying the
+# qwen3_32b v5/v6 mechanics — audits/audit-phase-16-model-lock.md).
 BESPOKE_SETS = (
     "qwen3_32b",
     "qwen3_32b_thinking",
     "qwen3_30b_a3b",
     "glm_4_32b",
     "cydonia_24b",
+    "qwen3_6_27b",
 )
+
+# Sets that legitimately CARRY the measured-defect directive batches: the
+# qwen3_32b set they were authored on (Tasks 14.11 / 15.4) and the Task 16.13
+# qwen3_6_27b set, whose mechanics-pure contract MERGES every qwen3_32b v5/v6
+# mechanical directive (restyled, semantics-identical). The remaining 14.5
+# sets are frozen — a directive marker leaking into one of THOSE still means
+# an out-of-scope edit.
+_DIRECTIVE_CARRYING_SETS = frozenset({"qwen3_32b", "qwen3_6_27b"})
 
 # A small reconstructed body-report meeting context (a found body + an accusation
 # chain) — enough to exercise every branch of every template.
@@ -333,9 +344,11 @@ class TestQwen332bV4Directives:
 
     def test_frozen_sets_do_not_carry_the_v4_directives(self) -> None:
         # The task iterates ONLY the locked qwen3_32b set; a v4 marker leaking
-        # into another set means an out-of-scope edit.
+        # into a FROZEN set means an out-of-scope edit. The 16.13 qwen3_6_27b
+        # set carries the directives by contract (the mechanics merge) and is
+        # exempt alongside its source.
         for set_name in BESPOKE_SETS:
-            if set_name == "qwen3_32b":
+            if set_name in _DIRECTIVE_CARRYING_SETS:
                 continue
             rendered = _render_all(set_name)
             for text in rendered.values():
@@ -473,8 +486,10 @@ class TestQwen332bV5VentElicitation:
         }
 
     def test_frozen_sets_do_not_carry_the_v5_markers(self) -> None:
+        # Same exemption as the v4 batch: qwen3_6_27b merges the v5 vent
+        # mechanics (Task 16.13), so only the FROZEN 14.5 sets are swept.
         for set_name in BESPOKE_SETS:
-            if set_name == "qwen3_32b":
+            if set_name in _DIRECTIVE_CARRYING_SETS:
                 continue
             rendered = _render_all(set_name)
             for text in rendered.values():
