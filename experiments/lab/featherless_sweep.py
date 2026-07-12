@@ -135,6 +135,32 @@ Usage::
 
     # (re)generate the probe report from the committed probe rows:
     uv run python -m experiments.lab.featherless_sweep probe-report
+
+Bespoke-set two-pass A/B (Task 16.13)
+=====================================
+
+The ``ab`` subcommand runs ONE pass of the 16.13 two-pass protocol over a
+bespoke set on its ``_SET_OWNER`` model/mode, writing its OWN jsonl
+(``results-featherless-sweep-qwen3-6-27b-ab.jsonl``) so ``run`` / ``probe``
+stay byte-identical. The control is not another set but the SAME set's earlier
+commit: pass 1 sweeps the scratch-v5-verbatim commit of
+``agents/strategic/prompts/qwen3_6_27b/`` (the known-clean, mechanics-incomplete
+profile), pass 2 ``--append``s the mechanics-complete commit. Every row is
+stamped with the set's COMMITTED template tree sha (``template_source_sha``;
+the sweep fails loud on a dirty template dir), and the A/B section of the probe
+report regenerates from those rows — including the computed verdict over the
+scratch ladder's clean cells (reply tell / self-flag / vote conversion).
+
+Usage::
+
+    # pass 1, from the scratch-v5-verbatim template commit:
+    uv run python -m experiments.lab.featherless_sweep ab \
+        --prompt-set qwen3_6_27b --facts /tmp/ailibi-gameplay-facts-9p2i.json
+
+    # pass 2, from the mechanics-complete template commit:
+    uv run python -m experiments.lab.featherless_sweep ab \
+        --prompt-set qwen3_6_27b --facts /tmp/ailibi-gameplay-facts-9p2i.json \
+        --append
 """
 
 from __future__ import annotations
@@ -144,6 +170,7 @@ import asyncio
 import json
 import os
 import statistics
+import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -197,6 +224,14 @@ REF_COVER: Final[Path] = WORK / "results-deflection-probe.jsonl"
 # generation actually probed.
 PROBE_RESULTS: Final[Path] = WORK / "results-featherless-sweep-qwen3-6-27b.jsonl"
 PROBE_REPORT: Final[Path] = WORK / "report-featherless-sweep-qwen3-6-27b.md"
+# ── Task 16.13 bespoke-set two-pass A/B artifacts ──
+# The `ab` subcommand writes its OWN jsonl so `run` / `probe` stay byte-identical
+# (the probe precedent). One file holds BOTH arms of the two-pass protocol —
+# pass 1 = the scratch-v5-verbatim commit of the set (control), pass 2 = the
+# mechanics-complete commit (candidate) — told apart per row by the
+# ``template_source_sha`` stamp (the arms differ ONLY by committed template
+# bytes; the model, mode, contexts, and detectors are held constant).
+AB_RESULTS: Final[Path] = WORK / "results-featherless-sweep-qwen3-6-27b-ab.jsonl"
 # The probe renders through the incumbent's EXISTING bespoke set (a deliberate
 # 16.1 finding — the bespoke 3.6 set is Task 16.13's), held CONSTANT across both
 # matrix models and BOTH thinking modes (mode is the controlled axis).
@@ -395,6 +430,11 @@ _SET_OWNER: Final[dict[str, tuple[str, bool]]] = {
     "qwen3_30b_a3b": ("qwen3-30b-a3b", False),
     "glm_4_32b": ("glm-4-32b", False),
     "cydonia_24b": ("cydonia-24b", False),
+    # Task 16.13: the locked-model bespoke set (audits/audit-phase-16-model-lock.md).
+    # Non-thinking pinned — the 16.1 probe found this generation REASONS BY
+    # DEFAULT, and the viable profile (and the scratch ladder it derives from) is
+    # non-thinking-only.
+    "qwen3_6_27b": ("qwen3-6-27b", False),
 }
 
 
@@ -438,6 +478,12 @@ class SweepConfig:
     # ``--modes thinking`` on the same model. ``None`` keeps the full per-model
     # axis (the 14.4 behavior). Intersected with each spec's own axis.
     mode_filter: tuple[bool, ...] | None = None
+    # Task 16.13 two-pass A/B: the git tree sha of the committed template-set
+    # directory this run renders, stamped on every row (the per-arm provenance
+    # that tells the control / candidate arms apart in one jsonl). ``None`` —
+    # every `run` / `probe` invocation — omits the field entirely, so the
+    # committed 14.4 / 16.1 rows stay byte-identical.
+    template_source_sha: str | None = None
 
 
 @dataclass(frozen=True)
@@ -487,6 +533,10 @@ class RenderBinding:
     # reply cover directive fires (the reply corpus is impostor-only). False for
     # the default set keeps the 9B reply render byte-identical.
     reply_is_impostor: bool
+    # Task 16.13: the template-source tree sha stamped on every row of an `ab`
+    # run (``None`` elsewhere — the field is omitted so committed rows are
+    # unchanged).
+    template_source_sha: str | None = None
 
 
 def _binding_for(cfg: SweepConfig) -> RenderBinding:
@@ -510,7 +560,38 @@ def _binding_for(cfg: SweepConfig) -> RenderBinding:
         is_bespoke=bespoke,
         force_adapter=bespoke,
         reply_is_impostor=bespoke,
+        template_source_sha=cfg.template_source_sha,
     )
+
+
+def _template_source_sha(set_name: str) -> str:
+    """The git tree sha of ``agents/strategic/prompts/<set_name>/`` at HEAD.
+
+    The Task 16.13 two-pass A/B tells its arms apart by the COMMITTED template
+    bytes that rendered each row, so the stamp must describe what actually
+    renders: the protocol is commit the arm first, sweep second. A dirty
+    template directory would silently stamp the wrong arm onto a whole pass,
+    so it fails loud here (AGENTS.md "no silent fallbacks").
+    """
+
+    rel = f"agents/strategic/prompts/{set_name}"
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--", rel],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if dirty:
+        raise SystemExit(
+            f"{rel} has uncommitted changes — the A/B stamps the COMMITTED "
+            f"template-source sha (commit the arm first, then sweep):\n{dirty}"
+        )
+    return subprocess.run(
+        ["git", "rev-parse", f"HEAD:{rel}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
 
 
 def _set_substrate(flag_on: bool) -> dict[str, bool]:
@@ -920,6 +1001,12 @@ def _base_row(
     # the A/B stays self-describing without polluting the legacy output path.
     if binding.is_bespoke:
         row["prompt_set"] = binding.prompt_set
+    # Task 16.13 two-pass A/B provenance: the git tree sha of the committed
+    # template set that rendered this row. The two arms differ ONLY by these
+    # bytes, so this stamp is what tells them apart inside one jsonl. Omitted
+    # (never null-stamped) outside `ab` runs — committed rows are unchanged.
+    if binding.template_source_sha is not None:
+        row["template_source_sha"] = binding.template_source_sha
     # The best-shot call profile that produced this row (so the comparison is
     # transparent and 14.6 sees exactly how each number was obtained).
     row["response_format_mode"] = response_format_mode
@@ -3049,6 +3136,219 @@ def _probe_thinking_prose(tk_rows: Sequence[Mapping[str, Any]], label: str) -> s
     )
 
 
+# ── Task 16.13 bespoke-set two-pass A/B section (rendered from AB_RESULTS) ──
+
+
+def _ab_arms(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Distinct ``template_source_sha`` stamps in file order.
+
+    File order IS protocol order: pass 1 (the scratch-v5-verbatim control
+    commit) writes first and pass 2 (the mechanics-complete candidate commit)
+    appends, so the first sha is the control arm and the second the candidate.
+    """
+
+    order: list[str] = []
+    for r in rows:
+        sha = str(r.get("template_source_sha") or "")
+        if sha and sha not in order:
+            order.append(sha)
+    return order
+
+
+def _ab_arm_name(index: int) -> str:
+    if index == 0:
+        return "control (scratch-v5-verbatim)"
+    if index == 1:
+        return "candidate (mechanics-complete)"
+    return f"arm {index + 1}"
+
+
+def _ab_two_pass_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Render the Task 16.13 two-pass A/B section — every number from the rows.
+
+    The section regenerates with the rest of the probe report (probe-report /
+    a successful `ab` pass both call :func:`write_probe_report`), so the
+    committed report stays derivable from the committed jsonl evidence,
+    including the computed verdict line.
+    """
+
+    arms = _ab_arms(rows)
+    set_names = sorted({str(r["prompt_set"]) for r in rows if "prompt_set" in r})
+    set_label = ", ".join(f"`{s}`" for s in set_names) or "`?`"
+    lines: list[str] = []
+    add = lines.append
+    add("")
+    add(f"## Two-pass bespoke-set A/B (Task 16.13): {set_label}")
+    add("")
+    add(
+        "One set, one model, one mode (the `_SET_OWNER` binding — a cross-set "
+        "control is structurally rejected), the SAME pinned contexts and "
+        "detectors; the arms differ ONLY by the committed template bytes, told "
+        "apart per row by `template_source_sha`. Pass 1 = the scratch-v5-verbatim "
+        "commit (the known-clean, mechanics-incomplete control); pass 2 = the "
+        "mechanics-complete commit (the candidate baseline 4 records with). The "
+        "open question measured: HOW MUCH of the scratch profile survives the "
+        "mechanics merge."
+    )
+    add("")
+    per_arm = [
+        [r for r in rows if str(r.get("template_source_sha") or "") == sha]
+        for sha in arms
+    ]
+
+    add("### Reply corpus — parse / deflect / tell / self-flag, per cover arm")
+    add("")
+    add(
+        "| arm | template sha | cover | parse | deflect | self-co-loc (tell) | self-flag |"
+    )
+    add("|---|---|---|---|---|---|---|")
+    for i, (sha, arm_rows) in enumerate(zip(arms, per_arm)):
+        for cover in ("off", "on"):
+            s = _summ_reply(
+                [
+                    r
+                    for r in arm_rows
+                    if r.get("corpus") == "reply" and r.get("cover") == cover
+                ]
+            )
+            p = int(s["parsed"])
+            add(
+                f"| {_ab_arm_name(i)} | `{sha[:12]}` | {cover} "
+                f"| {_pct(p, int(s['n']))} | {_pct(int(s['deflect']), p)} "
+                f"| {_pct(int(s['self_co']), p)} | {_pct(int(s['self_flag']), p)} |"
+            )
+    add("")
+
+    add("### Vote corpus — parse + conversion")
+    add("")
+    add("| arm | template sha | parse | conversion |")
+    add("|---|---|---|---|")
+    for i, (sha, arm_rows) in enumerate(zip(arms, per_arm)):
+        votes = [r for r in arm_rows if r.get("corpus") == "vote"]
+        parsed = [r for r in votes if r.get("parsed_ok")]
+        conv = sum(1 for r in parsed if r.get("voted_available_impostor"))
+        add(
+            f"| {_ab_arm_name(i)} | `{sha[:12]}` "
+            f"| {_pct(len(parsed), len(votes))} | {_pct(conv, len(parsed))} |"
+        )
+    add("")
+
+    add("### Opening corpus — impostor self-report")
+    add("")
+    add("| arm | template sha | parse | self-co-loc (tell) | confess |")
+    add("|---|---|---|---|---|")
+    for i, (sha, arm_rows) in enumerate(zip(arms, per_arm)):
+        opens = [r for r in arm_rows if r.get("corpus") == "opening"]
+        parsed = [r for r in opens if r.get("parsed_ok")]
+        tell = sum(1 for r in parsed if r.get("self_co_locates_kill"))
+        confess = sum(1 for r in parsed if r.get("self_incriminating_text"))
+        add(
+            f"| {_ab_arm_name(i)} | `{sha[:12]}` | {_pct(len(parsed), len(opens))} "
+            f"| {_pct(tell, len(parsed))} | {_pct(confess, len(parsed))} |"
+        )
+    add("")
+
+    add("### Latency")
+    add("")
+    add("| arm | isolated latency (s) | mean reply latency (s) |")
+    add("|---|---|---|")
+    for i, (sha, arm_rows) in enumerate(zip(arms, per_arm)):
+        iso = _latency_by_model(arm_rows)
+        iso_s = ", ".join(f"{v}" for v in iso.values()) or "—"
+        reply_lat = [
+            float(r["latency_s"])
+            for r in arm_rows
+            if r.get("corpus") == "reply" and r.get("parsed_ok")
+        ]
+        mean_reply = f"{statistics.mean(reply_lat):.1f}" if reply_lat else "—"
+        add(f"| {_ab_arm_name(i)} | {iso_s} | {mean_reply} |")
+    add("")
+
+    if len(arms) < 2:
+        add(
+            "**Verdict: pending — only the pass-1 control arm is recorded; run "
+            "pass 2 (`ab --prompt-set ... --append`) from the mechanics-complete "
+            "commit.**"
+        )
+    else:
+        add(_ab_verdict(per_arm[0], per_arm[1]))
+    add("")
+    add("Reproduce (each pass from ITS template commit; rows are the evidence):")
+    add("")
+    add("```")
+    add("PYTHONPATH=. uv run python audits/workflows/extract_gameplay_facts.py")
+    add("uv run python -m experiments.lab.featherless_sweep ab \\")
+    add("    --prompt-set qwen3_6_27b --facts $TMPDIR/ailibi-gameplay-facts-9p2i.json")
+    add("# ... commit the mechanics-complete templates, then:")
+    add("uv run python -m experiments.lab.featherless_sweep ab \\")
+    add(
+        "    --prompt-set qwen3_6_27b --facts $TMPDIR/ailibi-gameplay-facts-9p2i.json \\"
+    )
+    add("    --append")
+    add("```")
+    return lines
+
+
+def _ab_verdict(
+    control: Sequence[Mapping[str, Any]], candidate: Sequence[Mapping[str, Any]]
+) -> str:
+    """The computed A/B verdict over the contract's named clean cells.
+
+    The cells the scratch ladder earned (its validated profile) are the reply
+    tell (`self_co_locates_body`, both cover arms), the reply self-flag
+    (`new_self_flag`), and the vote conversion (`voted_available_impostor`);
+    parse / deflect / opening-tell move as secondary evidence. A regression on
+    a clean cell is a FINDING for the lock record, never a silent cost.
+    """
+
+    def cells(rows: Sequence[Mapping[str, Any]]) -> dict[str, tuple[int, int]]:
+        reply = [r for r in rows if r.get("corpus") == "reply" and r.get("parsed_ok")]
+        votes = [r for r in rows if r.get("corpus") == "vote" and r.get("parsed_ok")]
+        opens = [r for r in rows if r.get("corpus") == "opening" and r.get("parsed_ok")]
+        return {
+            "reply tell": (
+                sum(1 for r in reply if r.get("self_co_locates_body")),
+                len(reply),
+            ),
+            "reply self-flag": (
+                sum(1 for r in reply if r.get("new_self_flag")),
+                len(reply),
+            ),
+            "vote conversion": (
+                sum(1 for r in votes if r.get("voted_available_impostor")),
+                len(votes),
+            ),
+            "opening tell": (
+                sum(1 for r in opens if r.get("self_co_locates_kill")),
+                len(opens),
+            ),
+        }
+
+    good_high = {"vote conversion"}
+    ctl, cand = cells(control), cells(candidate)
+    moved: list[str] = []
+    for name, (c_num, c_den) in cand.items():
+        k_num, k_den = ctl[name]
+        c_rate = c_num / c_den if c_den else 0.0
+        k_rate = k_num / k_den if k_den else 0.0
+        regressed = c_rate < k_rate if name in good_high else c_rate > k_rate
+        if regressed:
+            moved.append(f"{name} {k_num}/{k_den} -> {c_num}/{c_den}")
+    if not moved:
+        return (
+            "**Verdict (computed from the rows): no clean cell regressed — the "
+            "scratch profile SURVIVES the mechanics merge, and the restyled "
+            "mechanics-complete templates are adopted as the set's v1 (the "
+            "bytes baseline 4 records with).**"
+        )
+    return (
+        "**Verdict (computed from the rows): REGRESSION on "
+        + "; ".join(moved)
+        + " — a measured finding for the lock record (Task 16.13 PR / "
+        "audits/audit-phase-16-model-lock.md), not a silent cost.**"
+    )
+
+
 def write_probe_report() -> int:
     """Regenerate PROBE_REPORT from PROBE_RESULTS (every number from the rows)."""
 
@@ -3575,6 +3875,13 @@ def write_probe_report() -> int:
     )
     add("")
 
+    # Task 16.13: the two-pass bespoke-set A/B section is APPENDED whenever its
+    # rows exist, so the whole report — probe sections AND the A/B — regenerates
+    # from committed jsonl evidence (a hand-appended section would be lost on the
+    # next `probe-report`; this hook is what keeps it regenerable).
+    if AB_RESULTS.exists():
+        lines.extend(_ab_two_pass_section(_read_rows(AB_RESULTS)))
+
     PROBE_REPORT.write_text("\n".join(lines))
     print(f"wrote {PROBE_REPORT}")
     return 0
@@ -3687,6 +3994,50 @@ def main() -> int:
         help="(re)generate the probe report from "
         "results-featherless-sweep-qwen3-6-27b.jsonl",
     )
+
+    # ── Task 16.13 bespoke-set two-pass A/B: a SEPARATE pipeline over AB_RESULTS ──
+    a = sub.add_parser(
+        "ab",
+        help="one pass of the Task 16.13 two-pass bespoke-set A/B: sweep "
+        "--prompt-set on its _SET_OWNER model/mode into "
+        "results-featherless-sweep-qwen3-6-27b-ab.jsonl, stamping every row "
+        "with the set's COMMITTED template-source tree sha (commit the arm "
+        "first, then sweep; pass 2 adds --append).",
+    )
+    a.add_argument(
+        "--prompt-set",
+        type=str,
+        required=True,
+        help="the bespoke set under A/B; must be registered in _SET_OWNER (the "
+        "sweep rejects an unregistered set before it starts, and the owner "
+        "binding structurally rejects a cross-set control).",
+    )
+    a.add_argument("--sample-dir", type=Path, default=Path("replays/samples/9p2i"))
+    a.add_argument(
+        "--facts",
+        type=Path,
+        default=None,
+        help="extractor facts JSON (kill ground truth) enabling the opening "
+        "corpus; produced by audits/workflows/extract_gameplay_facts.py.",
+    )
+    a.add_argument("--reply-cap", type=int, default=16)
+    a.add_argument("--vote-limit", type=int, default=8)
+    a.add_argument("--opening-cap", type=int, default=10)
+    a.add_argument(
+        "--concurrency",
+        type=int,
+        default=2,
+        help="Concurrent requests. Default 2: the plan caps at 4 concurrency "
+        "units and a 32B-class request costs 2 units, so >2 risks 429s.",
+    )
+    a.add_argument("--latency-samples", type=int, default=2)
+    a.add_argument("--base-url", type=str, default=None)
+    a.add_argument(
+        "--append",
+        action="store_true",
+        help="append this pass's rows to the existing A/B jsonl (pass 2 — the "
+        "candidate arm — appends to the pass-1 control rows; omit on pass 1).",
+    )
     args = parser.parse_args()
 
     if args.mode == "report":
@@ -3721,6 +4072,49 @@ def main() -> int:
         )
         rc = asyncio.run(run_probe(probe_cfg, api_key=api_key))
         if rc == 0:
+            write_probe_report()
+        return rc
+
+    if args.mode == "ab":
+        # The two-pass A/B runs ONE set on its OWN model/mode (the _SET_OWNER
+        # binding): the control is not another set but the SAME set's earlier
+        # (scratch-v5-verbatim) commit, so a cross-set control is structurally
+        # rejected here — an unregistered --prompt-set fails before any spend.
+        ab_owner = _SET_OWNER.get(args.prompt_set)
+        if ab_owner is None:
+            raise SystemExit(
+                f"--prompt-set {args.prompt_set!r} is not a known bespoke set "
+                f"(valid: {sorted(_SET_OWNER)})"
+            )
+        ab_label, ab_thinking = ab_owner
+        arm_sha = _template_source_sha(args.prompt_set)
+        print(
+            f"AB pass: prompt_set={args.prompt_set} on {ab_label} "
+            f"({_mode_label(ab_thinking)}); template_source_sha={arm_sha} "
+            f"({'append' if args.append else 'truncate'} -> {AB_RESULTS})",
+            flush=True,
+        )
+        ab_cfg = SweepConfig(
+            sample_dir=args.sample_dir,
+            facts_path=args.facts,
+            reply_cap=args.reply_cap,
+            vote_limit=args.vote_limit,
+            opening_cap=args.opening_cap,
+            concurrency=args.concurrency,
+            latency_samples=args.latency_samples,
+            substrates=(True,),
+            base_url=args.base_url,
+            results_path=AB_RESULTS,
+            models=tuple(s for s in SLATE if s.label == ab_label),
+            append=args.append,
+            prompt_set=args.prompt_set,
+            mode_filter=(ab_thinking,),
+            template_source_sha=arm_sha,
+        )
+        rc = asyncio.run(run_sweep(ab_cfg, api_key=api_key))
+        if rc == 0:
+            # The A/B section lives in the PROBE report (the qwen3-6-27b lab
+            # record) and regenerates from AB_RESULTS like every other number.
             write_probe_report()
         return rc
     # Validate the substrate tokens exactly (a typo like "onn" must not silently

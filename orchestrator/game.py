@@ -337,6 +337,11 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
     "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),
     "cydonia_24b": _bespoke_versions("cydonia_24b", version="v2"),
+    # Task 16.13 (the model-lock GO path): the locked-model bespoke set — the
+    # scratch-ladder style base (experiments/lab/qwen36_prompt_scratch/) with the
+    # baseline-3 qwen3_32b v5/v6 mechanics merged in. This line serializes
+    # 16.13 -> 16.15 -> 16.16 (each later task bumps versions here).
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v1"),
 }
 
 
