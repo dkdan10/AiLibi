@@ -160,29 +160,29 @@ One set, one model, one mode (the `_SET_OWNER` binding — a cross-set control i
 |---|---|---|---|---|---|---|
 | control (scratch-v5-verbatim) | `df731018e0a6` | off | 16/16 (100%) | 16/16 (100%) | 0/16 (0%) | 0/16 (0%) |
 | control (scratch-v5-verbatim) | `df731018e0a6` | on | 16/16 (100%) | 15/16 (94%) | 0/16 (0%) | 0/16 (0%) |
-| candidate (mechanics-complete) | `bfd6af901191` | off | 16/16 (100%) | 12/16 (75%) | 0/16 (0%) | 0/16 (0%) |
-| candidate (mechanics-complete) | `bfd6af901191` | on | 16/16 (100%) | 15/16 (94%) | 0/16 (0%) | 0/16 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | off | 16/16 (100%) | 14/16 (88%) | 0/16 (0%) | 0/16 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | on | 16/16 (100%) | 15/16 (94%) | 0/16 (0%) | 0/16 (0%) |
 
 ### Vote corpus — parse + conversion
 
 | arm | template sha | parse | conversion |
 |---|---|---|---|
 | control (scratch-v5-verbatim) | `df731018e0a6` | 8/8 (100%) | 8/8 (100%) |
-| candidate (mechanics-complete) | `bfd6af901191` | 8/8 (100%) | 8/8 (100%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | 8/8 (100%) | 8/8 (100%) |
 
 ### Opening corpus — impostor self-report
 
 | arm | template sha | parse | self-co-loc (tell) | confess |
 |---|---|---|---|---|
 | control (scratch-v5-verbatim) | `df731018e0a6` | 10/10 (100%) | 0/10 (0%) | 0/10 (0%) |
-| candidate (mechanics-complete) | `bfd6af901191` | 10/10 (100%) | 0/10 (0%) | 0/10 (0%) |
+| candidate (mechanics-complete) | `e131b406d3b9` | 10/10 (100%) | 0/10 (0%) | 0/10 (0%) |
 
 ### Latency
 
 | arm | isolated latency (s) | mean reply latency (s) |
 |---|---|---|
 | control (scratch-v5-verbatim) | 16.7 | 22.2 |
-| candidate (mechanics-complete) | 28.6 | 22.3 |
+| candidate (mechanics-complete) | 31.1 | 24.4 |
 
 **Verdict (computed from the rows): no clean cell regressed — the scratch profile SURVIVES the mechanics merge, and the restyled mechanics-complete templates are adopted as the set's v1 (the bytes baseline 4 records with).**
 
