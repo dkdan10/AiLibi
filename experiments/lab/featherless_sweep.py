@@ -3297,20 +3297,33 @@ def _ab_two_pass_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
 def _ab_verdict(
     control: Sequence[Mapping[str, Any]], candidate: Sequence[Mapping[str, Any]]
 ) -> str:
-    """The computed A/B verdict over the contract's named clean cells.
+    """The computed A/B verdict over the validated profile's clean cells.
 
     The cells the scratch ladder earned (its validated profile) are the reply
     tell (`self_co_locates_body`, both cover arms), the reply self-flag
-    (`new_self_flag`), and the vote conversion (`voted_available_impostor`);
-    parse / deflect / opening-tell move as secondary evidence. A regression on
-    a clean cell is a FINDING for the lock record, never a silent cost.
+    (`new_self_flag`), the vote conversion (`voted_available_impostor`), and
+    the opening tell AND confess (`self_co_locates_kill` /
+    `self_incriminating_text`); deflect moves as secondary evidence. The
+    per-corpus PARSE rates are gated too (PR #260 review): the grade cells are
+    computed over parsed rows only, so without a parse gate a candidate whose
+    output stopped parsing would shrink its own denominators — a 0/0
+    low-is-good cell reads clean, and a conversion over the smaller parsed
+    subset still reads 100% — and the verdict would adopt exactly the collapse
+    the profile forbids. A regression on a clean cell is a FINDING for the
+    lock record, never a silent cost.
     """
 
     def cells(rows: Sequence[Mapping[str, Any]]) -> dict[str, tuple[int, int]]:
-        reply = [r for r in rows if r.get("corpus") == "reply" and r.get("parsed_ok")]
-        votes = [r for r in rows if r.get("corpus") == "vote" and r.get("parsed_ok")]
-        opens = [r for r in rows if r.get("corpus") == "opening" and r.get("parsed_ok")]
+        reply_all = [r for r in rows if r.get("corpus") == "reply"]
+        votes_all = [r for r in rows if r.get("corpus") == "vote"]
+        opens_all = [r for r in rows if r.get("corpus") == "opening"]
+        reply = [r for r in reply_all if r.get("parsed_ok")]
+        votes = [r for r in votes_all if r.get("parsed_ok")]
+        opens = [r for r in opens_all if r.get("parsed_ok")]
         return {
+            "reply parse": (len(reply), len(reply_all)),
+            "vote parse": (len(votes), len(votes_all)),
+            "opening parse": (len(opens), len(opens_all)),
             "reply tell": (
                 sum(1 for r in reply if r.get("self_co_locates_body")),
                 len(reply),
@@ -3327,9 +3340,13 @@ def _ab_verdict(
                 sum(1 for r in opens if r.get("self_co_locates_kill")),
                 len(opens),
             ),
+            "opening confess": (
+                sum(1 for r in opens if r.get("self_incriminating_text")),
+                len(opens),
+            ),
         }
 
-    good_high = {"vote conversion"}
+    good_high = {"reply parse", "vote parse", "opening parse", "vote conversion"}
     ctl, cand = cells(control), cells(candidate)
     moved: list[str] = []
     for name, (c_num, c_den) in cand.items():
