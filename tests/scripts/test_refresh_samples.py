@@ -342,16 +342,18 @@ def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
 
 def test_featherless_refresh_requires_coupled_model_before_spend() -> None:
     # Task 16.13 (PR #260 review): the qwen3_6_27b set is coupled to its locked
-    # owner model (Qwen/Qwen3.6-27B). With the set exported but the effective
-    # meeting model left at the script default (still the 32B incumbent until
-    # Task 16.12's flip), a real featherless refresh must fail loud AFTER the
-    # set gate and BEFORE any staging/spend — recording the new set against the
-    # old model would corrupt the substrate provenance.
+    # owner model (Qwen/Qwen3.6-27B). Post-16.12 the script DEFAULT matches the
+    # owner model, so the guard is a pure backstop: it must still fail loud
+    # AFTER the set gate and BEFORE any staging/spend when a stale env pins the
+    # OLD incumbent explicitly — recording the new set against another model
+    # would corrupt the substrate provenance. (The original pre-16.12 form of
+    # this test relied on the un-flipped default; the 16.12 flip made that
+    # premise stale — the mismatch is now exercised explicitly.)
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
     env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
     env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
-    env.pop("AILIBI_LLM_MEETING_MODEL", None)
+    env["AILIBI_LLM_MEETING_MODEL"] = "Qwen/Qwen3-32B"  # the stale incumbent
     proc = _run("--seeds", "0", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
