@@ -1,13 +1,16 @@
-# Phase 16 — Voice & Judgment on a probe-locked model (Wave 0: model probe → lock; Wave 1: judgment/pooling substrate; Wave 2: baseline 4 [GO-conditional]; Wave 3: elicitation + personas; Wave 4: baseline 5 close)
+# Phase 16 — Voice & Judgment on a probe-locked model (Wave 0: model probe → lock; Wave 1: judgment/pooling substrate; Wave 2: baseline 4 [GO]; Wave 3: elicitation + personas; Wave 4: baseline 5 close)
 
-> **STATUS: OPEN (authored 2026-07-11).** All eighteen contracts below are dispatchable, with the
-> Wave-2 tasks (16.12–16.14) CONDITIONAL on the 16.2 model lock: under GO they activate as written;
-> under NO-GO 16.2 REMOVES their three contracts and generated prompts outright, replacing them with
-> a prose drop record — `scripts/compute_next_task.py` treats any surviving `### Task` header as
-> dispatchable, so an inline "dropped" label is not enough — and rewrites BOTH 16.15 and 16.16
-> (dependency edges, template paths, and per-template version arithmetic; the contract for that
-> surgery is inside 16.2). Two owner gates: the mid-phase MODEL LOCK
-> (16.2) and the baseline-5 GRADUATION SLATE (16.17's preflight — which levers graduate is an owner
+> **STATUS: OPEN (authored 2026-07-11) — MODEL LOCK: GO (owner, 2026-07-12).** The 16.2 mid-phase
+> gate is decided: **GO** on the exact served id **`Qwen/Qwen3.6-27B`**, recorded in
+> `audits/audit-phase-16-model-lock.md` (the 14.6 LOCKED-DECISION shape, weighing BOTH evidence
+> sets — the held-constant 16.1 probe and the owner-directed from-scratch v0→v5 ladder whose v5
+> validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking).
+> All eighteen contracts below are dispatchable; the Wave-2 tasks (16.12–16.14) are ACTIVE as
+> written, and 16.15/16.16's template paths are confirmed at `agents/strategic/prompts/qwen3_6_27b/`.
+> The NO-GO surgery this banner formerly promised (removing 16.12–16.14 and rewriting 16.15/16.16's
+> edges, paths, and per-template version arithmetic) was NOT performed; the rejected path's
+> rationale is §5 of the lock audit. One owner gate remains: the baseline-5 GRADUATION SLATE
+> (16.17's preflight — which levers graduate is an owner
 > decision on committed counterfactuals, named here so it is not discovered mid-record). Scoping
 > inputs: `audits/audit-phase-15-close.md` §10–§11, `audits/audit-phase-15-pause.md` §9,
 > `audits/post-phase-14-Voice-and-Judgment-planning.md` (the program design; its "Phase 15 / 15.x"
@@ -32,7 +35,8 @@ honesty, not the subject's guilt, so it never mints a strong flag), and a capped
 prior (making visibility a strategic resource for the first time — the incentive Phase 17's
 retraining needs); (3) **Voice** — a deterministic, role-neutral persona layer landing STRICTLY
 after the citation gate (the planning doc's thesis: louder voices without an evidence bound worsen
-the zero-flag channel); (4) **the model decision** — Qwen3.6-27b evaluated probe-first against the
+the zero-flag channel); (4) **the model decision** — Qwen3.6-27b (locked GO 2026-07-12: the exact
+served id `Qwen/Qwen3.6-27B`) evaluated probe-first against the
 incumbent `Qwen/Qwen3-32B` on the committed contexts, locked by the owner, and (under GO) landed as
 its OWN baseline 4 with mechanics untouched, so the model effect and the V&J effect are separately
 attributable. The phase closes on **baseline 5** with the funnel + the new V&J instruments as the
@@ -916,7 +920,7 @@ scope: one gauge re-anchors; the geomean, the other floors, and the integrity fl
 
 **Ready-to-paste prompt:** `agent_prompts/task-16-11-referee-reanchor.md`
 
-## Wave 2 — the model swap (GO-conditional; activated or dropped by 16.2)
+## Wave 2 — the model swap (ACTIVE — the 16.2 lock is GO, 2026-07-12: `Qwen/Qwen3.6-27B`)
 
 ### Task 16.12 — Model onboarding: the production client, the locked literals, the doctrine docs
 **Branch:** `phase-16-model-onboarding`
