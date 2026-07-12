@@ -2439,15 +2439,26 @@ class TacticalAgent:
         minus the vent-action filter -- every sighting is a candidate
         grounding record, vent-witnessed rows included -- plus the
         ``co_present`` projection: the OTHER subjects this agent saw in
-        the same room on the same tick, the Task 13.9 grouping the §6.6
-        renderer's "(with ...)" suffix reads, so the typed channel and the
-        rendered prose the model speaks from can never drift. The meeting
+        the same room on the same tick, the same Task 13.9 grouping the
+        §6.6 renderer's "(with ...)" suffix is built from. The meeting
         layer grounds a speaker's spoken ``saw_player`` observation ONLY
         against the speaker's own rows here (the grounded-vouch feed into
         the existing corroboration channel -- never a flag, never trust).
         Firewall-clean: every row was witness-gated by the engine before
         it reached this agent's packet (``eval/leak_test.py``), and the
-        accessor reports only this agent's own log. Payload reads are
+        accessor reports only this agent's own log.
+
+        Unlike the §6.6 render this does NOT apply the §4.7
+        ``_sighting_is_suppressed`` teammate-at-kill-window drop, so an
+        impostor's record CAN name a teammate seen at a kill window that
+        the rendered prose hides. That is safe for the ONE consumer this
+        channel has: grounding only ever CORROBORATES (a teammate
+        corroboration is retained by the §4.7 firewall, unlike a teammate
+        accusation), a kill-scene vouch is dropped by the relevance gate
+        (:func:`meetings.transcript.grounded_vouch_subjects`), and a
+        ``SightingRecord`` never reaches a prompt or the recorded
+        ``MeetingResult``. A future consumer beyond grounding must re-apply
+        the suppression rather than assume it here. Payload reads are
         defensive per the store convention -- a malformed row contributes
         nothing. Append order is non-decreasing in tick (the
         episodic-store invariant), so the returned tuple is deterministic

@@ -53,6 +53,7 @@ from meetings.manager import (
     derive_reported_testimony,
 )
 from meetings.schemas import (
+    AccusationClaim,
     AlibiClaim,
     Claim,
     FoundBodyObservation,
@@ -70,7 +71,9 @@ from meetings.transcript import (
     SIGHTING_GROUNDING_TICK_TOLERANCE,
     StatedPlacement,
     detect_contradictions,
+    detect_corroborations,
     grounded_vouch_subjects,
+    independent_voices,
     reconstruct_stated_paths,
 )
 from tests.meetings.test_manager import (
@@ -627,16 +630,47 @@ class TestWhereaboutsClaimMechanism:
             in paths["p-3"]
         )
 
-    def test_spawn_window_whereabouts_places_nothing(self) -> None:
+    @pytest.mark.parametrize("tick", [0, 1])
+    def test_spawn_window_whereabouts_still_places(self, tick: int) -> None:
+        # Codex P2 (reconstruct places roll-call answers): a self-placement is
+        # gated on the SPATIAL label only, NEVER the relevance gate -- a
+        # spawn-window roll-call answer still accounts for the speaker, so it
+        # must place them on the public record (out of Task 16.8's absent set).
         transcript = _transcript(
             _turn(
                 turn_index=0,
                 speaker="p-3",
-                observations=(_whereabouts(tick=0, room="ADMIN"),),
+                observations=(_whereabouts(tick=tick, room="ADMIN"),),
             )
         )
 
-        assert "p-3" not in reconstruct_stated_paths(transcript, roster=_ROSTER)
+        paths = reconstruct_stated_paths(transcript, roster=_ROSTER)
+        assert "p-3" in paths
+        assert paths["p-3"][0].tick == tick
+
+    def test_body_room_whereabouts_still_places(self) -> None:
+        # The kill-scene prong is likewise skipped for self-placement: a player
+        # who answers roll-call IN the body room has still accounted for
+        # themselves (presence-at-scene is an EXCULPATION rule, not an
+        # existence-on-record rule), so they are NOT absent.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                observations=(
+                    FoundBodyObservation(
+                        type="found_body", tick=10, body_of="p-9", room="MEDBAY"
+                    ),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-3",
+                observations=(_whereabouts(tick=11, room="MEDBAY"),),
+            ),
+        )
+
+        assert "p-3" in reconstruct_stated_paths(transcript, roster=_ROSTER)
 
     def test_non_spatial_whereabouts_places_nothing(self) -> None:
         transcript = _transcript(
@@ -751,3 +785,132 @@ class TestLiveFeedInertness:
         assert isinstance(result, MeetingResult)
         assert result.outcome in ("EJECTED", "SKIPPED")
         assert len(result.ballots) == 4
+
+
+# --- I. Whereabouts is prosecutable but never an EXCULPATION surface ---------
+
+
+class TestWhereaboutsIsNotACorroborationSurface:
+    """Codex P1: a roll-call self-placement must not become an ungrounded
+    corroboration a colluder can confirm. It feeds the contradiction detectors
+    (prosecution) but is kept out of detect_corroborations (exculpation)."""
+
+    def _rollcall_plus_confirming_sighting(self) -> MeetingTranscript:
+        # p-3 answers roll-call "MEDBAY @ 7"; p-8 (a would-be colluder) confirms
+        # it with a sighting placing p-3 in MEDBAY @ 7. NEITHER holds a grounding
+        # SightingRecord -- both are pure speech.
+        return _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-3",
+                observations=(_whereabouts(tick=7, room="MEDBAY"),),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-8",
+                turn_kind="opt_in",
+                observations=(_saw(subject="p-3", room="MEDBAY", tick=7),),
+            ),
+        )
+
+    def test_whereabouts_is_not_detected_as_a_corroboration(self) -> None:
+        corroborations = detect_corroborations(
+            self._rollcall_plus_confirming_sighting(), roster=_ROSTER
+        )
+
+        assert corroborations == ()
+
+    def test_confirmed_rollcall_answer_stays_out_of_corroborated(self) -> None:
+        # The whole point: derive_belief_evidence must NOT put p-3 in the
+        # corroborated set off a whereabouts + a confederate's ungrounded
+        # sighting -- exculpation requires the grounded-vouch channel, which
+        # checks the speaker's OWN typed record.
+        evidence = derive_belief_evidence(
+            self._rollcall_plus_confirming_sighting(),
+            contradictions=(),
+            roster=_ROSTER,
+        )
+
+        assert "p-3" not in evidence.corroborated
+
+    def test_a_real_alibi_still_corroborates(self) -> None:
+        # Guard the fix's blast radius: a genuine AlibiClaim (not a whereabouts)
+        # confirmed by an independent sighting is STILL a detector-derived
+        # corroboration -- only the whereabouts kind is excluded.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-3",
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-3",
+                        from_tick=6,
+                        to_tick=8,
+                        room="MEDBAY",
+                    ),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-8",
+                turn_kind="opt_in",
+                observations=(_saw(subject="p-3", room="MEDBAY", tick=7),),
+            ),
+        )
+
+        corroborations = detect_corroborations(transcript, roster=_ROSTER)
+
+        assert any(c.subject == "p-3" for c in corroborations)
+
+
+class TestWhereaboutsDoesNotBackAccusations:
+    """Codex P2: a self-placement carries no evidence about the accused, so it
+    must not promote a bare accusation into an observation-backed independent
+    voice (which would neuter the testimony-spread gate once roll-call is
+    universal)."""
+
+    def test_accusation_backed_only_by_whereabouts_carries_no_voice(self) -> None:
+        # p-2 accuses p-5 and answers roll-call, but states NO observation about
+        # p-5. The whereabouts must not back the accusation, so p-5 gets no
+        # independent voice.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(_whereabouts(tick=7, room="ADMIN"),),
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against="p-5",
+                        confidence=0.8,
+                        reason="a hunch",
+                    ),
+                ),
+            )
+        )
+
+        assert "p-5" not in independent_voices(transcript, roster=_ROSTER)
+
+    def test_accusation_backed_by_a_real_sighting_still_carries_a_voice(
+        self,
+    ) -> None:
+        # Guard the blast radius: a genuine first-hand sighting of the accused
+        # STILL backs the voice -- only the whereabouts self-placement is inert.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="ADMIN", tick=7),),
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against="p-5",
+                        confidence=0.8,
+                        reason="saw them near the body",
+                    ),
+                ),
+            )
+        )
+
+        assert "p-5" in independent_voices(transcript, roster=_ROSTER)

@@ -181,11 +181,19 @@ so the production pre-vote call does not pass the participant record
 mapping yet -- the live feed graduates under the phase's byte-identity
 lever doctrine (see :func:`meetings.manager.derive_belief_evidence`). The
 ``whereabouts`` observation kind (a SELF-placement, "I was in
-``room`` at ``tick``") is indexed by :func:`_iter_alibis` as a degenerate
-single-tick self-alibi, so lying in it is prosecuted by the EXISTING
-alibi rules (``alibi_vs_sighting`` / ``alibi_conflict``, no new flag
-kind), and :func:`reconstruct_stated_paths` places its speaker by it --
-answering roll-call puts you on the public record.
+``room`` at ``tick``") is PROSECUTABLE but never EXCULPATORY -- the same
+polarity the vouch channel draws. It is indexed by :func:`_iter_alibis` as
+a degenerate single-tick self-alibi, so lying in it is prosecuted by the
+EXISTING alibi rules (``alibi_vs_sighting`` / ``alibi_conflict``, no new
+flag kind), and :func:`reconstruct_stated_paths` places its speaker by it
+so answering roll-call puts you on the public record (out of Task 16.8's
+absent set). But it is deliberately kept OUT of the two channels a
+self-placement has no business feeding: :func:`detect_corroborations`
+(``include_whereabouts=False``) -- a colluder confirming a roll-call answer
+with a fabricated sighting must not earn the subject an ungrounded -0.05,
+the anti-collusion floor -- and :func:`_carries_relevant_observation`'s
+accusation-backing gate -- a self-placement is no evidence about the
+accused, so it cannot promote a bare accusation into an independent voice.
 """
 
 from __future__ import annotations
@@ -1085,13 +1093,18 @@ def reconstruct_stated_paths(
     ``whereabouts`` self-placements (Task 16.7). A spoken
     :class:`~meetings.schemas.WhereaboutsClaim` places its SPEAKER (the
     claim carries no subject -- the speaker is the subject by construction)
-    in its canonical rooms at its tick, through the SAME spatial-label and
-    relevance gates a sighting passes -- the reconstruction counts exactly
-    the placements the detectors trust. Answering roll-call therefore puts
-    the speaker on the public record; a self-placement's ``speaker`` equals
-    its placed player, so the 13.4 physical detector's independence filter
-    (``placement.speaker != subject``) excludes it from contradicting-voice
-    material exactly as it excludes a self-stated sighting.
+    in its canonical rooms at its tick, on the SPATIAL-label gate ONLY. It
+    deliberately SKIPS the §6.3 relevance gate the sightings above pass: that
+    gate drops spawn-window and kill-scene sightings as evidentially empty
+    for EXCULPATION, but whether a self-placement EXISTS on the public record
+    is a different question -- answering roll-call (even trivially, at spawn
+    or in the body room) accounts for the speaker, so it must remove them
+    from Task 16.8's absent set (the roster minus these keys). The placement
+    is inert for the current contradiction consumer: a self-placement's
+    ``speaker`` equals its placed player, so the 13.4 physical detector's
+    independence filter (``placement.speaker != subject``) excludes it from
+    contradicting-voice material exactly as it excludes a self-stated
+    sighting.
 
     Returns ``{subject: placements}`` for every player with at least one
     relevant stated placement, the subjects sorted and each subject's
@@ -1140,9 +1153,18 @@ def reconstruct_stated_paths(
                 continue
             paths.setdefault(player, []).append(placement)
 
-    # Task 16.7: whereabouts self-placements -- the speaker placing
-    # THEMSELVES on the public record, through the same spatial-label and
-    # relevance gates as a sighting.
+    # Task 16.7: whereabouts self-placements -- the speaker placing THEMSELVES
+    # on the public record. Gated on the SPATIAL label ONLY (a non-spatial
+    # "VARIOUS" locates nobody), never the §6.3 RELEVANCE gate: that gate drops
+    # spawn-window and kill-scene SIGHTINGS because they are evidentially empty
+    # for EXCULPATION, but whether a self-placement EXISTS on the public record
+    # is a different question -- a player who answers roll-call "I was in
+    # CAFETERIA at tick 1" or in the body room HAS accounted for themselves and
+    # must not read as absent (Task 16.8 derives the absent set as the roster
+    # minus these keys). The placement stays inert for the current
+    # contradiction consumer: :func:`_detect_alibi_vs_physical` reads only
+    # placements with ``speaker != subject``, and a self-placement's speaker IS
+    # its subject.
     for turn in transcript.turns:
         if not _subject_in_roster(turn.speaker, effective_roster):
             continue
@@ -1151,12 +1173,6 @@ def reconstruct_stated_paths(
                 continue
             rooms = canonical_rooms(observation.room)
             if not rooms:
-                continue
-            if not is_relevant_sighting(
-                tick=observation.tick,
-                rooms=rooms,
-                triggering_body_rooms=relevance_body_rooms,
-            ):
                 continue
             paths.setdefault(turn.speaker, []).append(
                 StatedPlacement(
@@ -1451,9 +1467,15 @@ def detect_corroborations(
     """
 
     effective_roster = _NO_ROSTER if roster is None else roster
+    # Task 16.7: ``include_whereabouts=False`` -- a roll-call self-placement is
+    # prosecutable (the contradiction path indexes it) but NEVER an ungrounded
+    # exculpation surface. Pairing a WhereaboutsClaim with a confederate's
+    # confirming sighting would corroborate the subject with no grounding
+    # record behind either side, the anti-collusion hole the grounded-vouch
+    # channel exists to close.
     alibis = tuple(
         indexed
-        for indexed in _iter_alibis(transcript)
+        for indexed in _iter_alibis(transcript, include_whereabouts=False)
         if _subject_in_roster(indexed.claim.subject, effective_roster)
     )
     sightings = tuple(
@@ -1673,9 +1695,21 @@ def _carries_relevant_observation(
     venting at the kill scene is exactly the shape the evidence must
     reach. The spawn-window prong still applies, matching every other
     observation kind.
+
+    Task 16.7: a :class:`~meetings.schemas.WhereaboutsClaim` is NOT
+    observation backing. A roll-call self-placement carries zero
+    information about the ACCUSED -- it locates only the speaker -- so it
+    cannot promote a bare verbal accusation into an observation-backed
+    independent voice. Once roll-call is elicited (Task 16.15) every
+    accuser answers it, so counting it as backing would make the
+    testimony-spread gate always-pass and silently retire the
+    bare-accusation exclusion; excluded HERE keeps the voice count keyed
+    on genuine evidence about the subject.
     """
 
     for observation in turn.observations:
+        if isinstance(observation, WhereaboutsClaim):
+            continue
         rooms = canonical_rooms(observation.room)
         if not rooms:
             continue
@@ -1799,24 +1833,39 @@ class _IndexedSighting:
     rooms: frozenset[str]
 
 
-def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
+def _iter_alibis(
+    transcript: MeetingTranscript, *, include_whereabouts: bool = True
+) -> Iterator[_IndexedAlibi]:
     """Yield every location account: alibi claims + whereabouts self-placements.
 
     Task 16.7: a spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
     in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
     SELF-ALIBI (subject = the speaker, ``from_tick == to_tick == tick``) so
-    every consumer of the alibi indexing -- the conflict / sighting /
-    physical detectors, the subject-account proxy check, the echo dedup,
-    and :func:`detect_corroborations` -- prosecutes a lying self-placement
-    with the alibi rules it already has, no new flag kind and no duplicated
-    chronology discipline (a single tick satisfies the
-    :class:`~meetings.schemas.AlibiClaim` range validator by construction).
-    The synthesized claim's event id is the OBSERVATION id
-    (:func:`_turn_observation_id` -- a whereabouts lives on
+    the CONTRADICTION consumers of the alibi indexing -- the conflict /
+    sighting / physical detectors, the subject-account proxy check, the echo
+    dedup -- prosecute a lying self-placement with the alibi rules they
+    already have, no new flag kind and no duplicated chronology discipline (a
+    single tick satisfies the :class:`~meetings.schemas.AlibiClaim` range
+    validator by construction). The synthesized claim's event id is the
+    OBSERVATION id (:func:`_turn_observation_id` -- a whereabouts lives on
     ``turn.observations``), so a flag referencing it resolves through
     :func:`_event_speaker_index` and the spectator surface exactly like any
     other observation. Per turn, claims index before observations -- a fixed
     order, so the echo dedup's first-statement-wins is deterministic.
+
+    ``include_whereabouts=False`` (the :func:`detect_corroborations` caller)
+    yields ONLY genuine :class:`~meetings.schemas.AlibiClaim` accounts. A
+    roll-call self-placement is deliberately PROSECUTABLE but never
+    EXCULPATORY: pairing it with another speaker's confirming sighting would
+    mint a detector-derived corroboration with NO grounding record behind it,
+    so two colluders (one answering roll-call, one confirming it with a
+    fabricated sighting) could earn the subject a -0.05 that the
+    anti-collusion floor forbids. Exculpation for a self-placement's
+    companions must travel the GROUNDED-vouch channel
+    (:func:`grounded_vouch_subjects`), which checks the speaker's OWN typed
+    record; the contradiction channel (default ``True``) needs no such
+    check because a flag INCRIMINATES -- fabricating one only exposes the
+    liar.
     """
 
     for turn in transcript.turns:
@@ -1828,6 +1877,8 @@ def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
                     claim=claim,
                     rooms=canonical_rooms(claim.room),
                 )
+        if not include_whereabouts:
+            continue
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, WhereaboutsClaim):
                 yield _IndexedAlibi(
