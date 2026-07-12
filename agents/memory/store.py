@@ -22,6 +22,8 @@ from agents.memory.beliefs import (
     ContradictionRef,
     PlayerBelief,
     apply_meeting_evidence_rules,
+    hard_evidence_gate_enabled,
+    hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.working import LastSeen, WorkingMemory
@@ -157,6 +159,7 @@ def render_for_prompt(
     *,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
     suspicion_override: Mapping[PlayerId, float] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> str:
     """Produce a token-budgeted Markdown view of agent memory (DESIGN.md §6.6).
 
@@ -180,6 +183,12 @@ def render_for_prompt(
     the vote-ballot ``suspicion_graph`` kwarg carries) so the ballot's belief
     lines and that graph agree by construction. ``None`` (the default, and
     every non-ballot render) is byte-identical to pre-task HEAD.
+
+    ``env`` (Task 16.4) resolves the default-OFF hard-evidence-gate lever for the
+    belief-line render clamp (:func:`_build_belief_lines`); ``None`` reads the
+    process environment. It is threaded so tests and the offline counterfactual can
+    toggle the lever without mutating ``os.environ``. With the lever OFF (the
+    default) the render is byte-identical to pre-task HEAD.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -241,6 +250,7 @@ def render_for_prompt(
         memory.working,
         roster=roster,
         suspicion_override=suspicion_override,
+        env=env,
     )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
 
@@ -1459,6 +1469,7 @@ def _build_belief_lines(
     *,
     roster: frozenset[str] | None = None,
     suspicion_override: Mapping[PlayerId, float] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> list[str]:
     """Render the §6.6 belief rows, filtered to ``roster`` when supplied.
 
@@ -1477,12 +1488,22 @@ def _build_belief_lines(
     ``suspicion_graph`` it mirrors is suspicion-only. ``None`` is
     byte-identical to pre-task HEAD.
 
+    ``env`` (Task 16.4) resolves the default-OFF hard-evidence-gate lever once,
+    before the row loop. With it ON, a row whose stored scalar is used (no override
+    for that player) and whose 16.3 typed provenance is entirely soft renders
+    clamped to :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL` just
+    below the §4.6 gate; a hard-backed row renders untouched. OFF (the default) runs
+    the original path untouched, so the render is byte-identical to pre-task HEAD.
+
     Reads ``working.last_seen`` for the last-seen suffix (the R-6
     composite-memory gate: render reads all three stores). The field is filled
     by :func:`_record_movement_sightings` from the witnessed ``saw_player_move``
     rows (firewall-suppressed).
     """
 
+    # Task 16.4: resolve the default-OFF hard-evidence-gate lever ONCE; OFF leaves
+    # the loop body byte-identical to pre-task HEAD.
+    gate_on = hard_evidence_gate_enabled(env)
     lines: list[str] = []
     for player_id in sorted(beliefs.known_players()):
         if roster is not None and player_id not in roster:
@@ -1493,6 +1514,21 @@ def _build_belief_lines(
             if suspicion_override is not None
             else None
         )
+        # Task 16.4 J1 render clamp. TWO halves: (1) the STORED-scalar clamp --
+        # when this row renders its own ``belief.suspicion`` (no override, or the
+        # player is absent from the override mapping) an entirely-soft
+        # conviction-grade scalar is clamped sub-gate. (2) an override VALUE passes
+        # through UNTOUCHED: it is the post-fold scalar from the already-clamped
+        # pipeline (the builder clamped the seed before the manager pre-vote fold),
+        # so clamping it again against the STORED provenance would misclassify a row
+        # that took fresh HARD lift this meeting. Prose and graph therefore read one
+        # clamped source by construction.
+        if gate_on and (
+            suspicion_override is None or player_id not in suspicion_override
+        ):
+            effective_suspicion = hard_evidence_gated_suspicion(
+                belief.suspicion, belief.provenance
+            )
         belief_text = _format_belief_score(belief, suspicion=effective_suspicion)
         # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
         # suffix for a subject the agent witnessed move. Filled in

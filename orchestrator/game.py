@@ -27,7 +27,12 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from agents.base import AgentInterface
-from agents.memory.beliefs import OBSERVED_KILL_ACTION, OBSERVED_VENT_ACTION
+from agents.memory.beliefs import (
+    OBSERVED_KILL_ACTION,
+    OBSERVED_VENT_ACTION,
+    hard_evidence_gate_enabled,
+    hard_evidence_gated_suspicion,
+)
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -90,6 +95,7 @@ from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intents_for_tick,
 )
+from orchestrator.personas import assign_personas
 from orchestrator.replay import (
     LLMCallRecord,
     ReplayLog,
@@ -876,6 +882,16 @@ def _build_participants(
     for every crewmate and for a sole impostor, and never contains the
     participant's own id. The orchestrator is the right place to read
     roles: the meeting layer is engine-pure and must not re-derive them.
+
+    ``persona`` (Task 16.9) is filled from
+    :func:`orchestrator.personas.assign_personas`, a pure function of the
+    game seed and the FULL fixed roster (dead seats included), so a
+    player's card is stable across every meeting regardless of deaths and
+    no two living players ever share one (sampling without replacement).
+    It is computed with no reference to roles, keeping the assignment
+    role-neutral by construction. Inert until Task 16.16: the text fills
+    ``MeetingParticipant.persona`` and no template reads it, so rendered
+    prompt bytes are unchanged.
     """
 
     impostor_ids = tuple(
@@ -884,6 +900,17 @@ def _build_participants(
             for player_id, player in state.players.items()
             if player.role == "IMPOSTOR"
         )
+    )
+
+    # Task 16.9: deterministic persona assignment -- a pure function of the
+    # game seed and the FULL fixed roster (dead seats included), so a
+    # player persona is stable across every meeting of a game regardless
+    # of deaths, and no two living players ever share a card (sampling
+    # without replacement). Inert until 16.16: the text fills
+    # ``MeetingParticipant.persona`` and no template reads it, so rendered
+    # prompt bytes are unchanged (the 16.3 golden proves it).
+    persona_by_id = assign_personas(
+        seed=state.seed, roster=tuple(sorted(state.players))
     )
 
     participants: list[MeetingParticipant] = []
@@ -939,6 +966,8 @@ def _build_participants(
                 # Task 16.7: the vent channel's sighting sibling -- the
                 # grounded-vouch input, same meeting-open snapshot discipline.
                 sighting_records=agent.sighting_records_for_meeting(),
+                # Task 16.9: the inert persona-text fill (nothing reads it until 16.16).
+                persona=persona_by_id[player_id].text,
             )
         )
     return tuple(participants)
@@ -2356,7 +2385,9 @@ class TacticalAgent:
             suspicion_override=suspicion_override,
         )
 
-    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+    def suspicion_graph_for_meeting(
+        self, *, env: Mapping[str, str] | None = None
+    ) -> tuple[SuspicionEntry, ...]:
         """Snapshot of the agent's belief state as a suspicion graph.
 
         DESIGN.md §5.5 feeds the suspicion graph straight into the
@@ -2370,18 +2401,37 @@ class TacticalAgent:
         ``agents.*``). It rides the graph inertly today -- no template renders
         it until Task 16.15 -- but populating it HERE, at the one production
         builder, keeps ``0.5 + sum(the eight fields) == suspicion`` on every live
-        row (the belief store's own invariant), so 16.15's surface has real
-        hard/soft data rather than defaults.
+        row (the belief store's own invariant, lever-OFF), so 16.15's surface has
+        real hard/soft data rather than defaults.
+
+        Task 16.4 (the J1 render clamp; ``env`` resolves the default-OFF
+        hard-evidence-gate lever, ``None`` reads the process environment). With the
+        lever ON, a row whose typed provenance is entirely soft renders its
+        ``suspicion`` scalar clamped to
+        :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL`, just below
+        the §4.6 gate; hard-backed rows and the stored :class:`BeliefState` are
+        untouched. The eight provenance kwargs stay the RAW 16.3 decomposition --
+        the true evidence record -- so a clamped row's scalar deliberately renders
+        below its decomposition sum (the ``0.5 + sum == suspicion`` invariant is
+        qualified to the lever-OFF case; ON, the manager's ``seed_player``
+        reconciles the shortfall as an ``unattributed`` residual). OFF (the default)
+        is byte-identical to pre-task HEAD.
         """
 
+        # Task 16.4: resolve the default-OFF hard-evidence-gate lever ONCE; OFF
+        # leaves the row loop byte-identical to pre-task HEAD.
+        gate_on = hard_evidence_gate_enabled(env)
         entries: list[SuspicionEntry] = []
         for player_id in sorted(self._memory.beliefs.known_players()):
             belief = self._memory.beliefs.view(player_id)
             provenance = belief.provenance
+            suspicion = belief.suspicion
+            if gate_on:
+                suspicion = hard_evidence_gated_suspicion(suspicion, provenance)
             entries.append(
                 SuspicionEntry(
                     player_id=player_id,
-                    suspicion=belief.suspicion,
+                    suspicion=suspicion,
                     trust=belief.trust,
                     flag_lift=provenance.flag_lift,
                     body_proximity=provenance.body_proximity,

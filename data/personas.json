@@ -1,0 +1,114 @@
+[
+  {
+    "id": "aggressive-accuser",
+    "disposition": "A combative firebrand who is quick to point fingers and presses hard the moment a story wobbles.",
+    "diction": [
+      "Speaks in short, hammering declaratives and names the person they doubt outright.",
+      "Raises the volume and repeats the charge until someone answers it."
+    ]
+  },
+  {
+    "id": "anxious-rambler",
+    "disposition": "A jittery worrier who thinks out loud in long, nervous run-ons.",
+    "diction": [
+      "Piles clause upon clause without pausing for breath.",
+      "Second-guesses their own words mid-sentence and doubles back."
+    ]
+  },
+  {
+    "id": "blunt-minimalist",
+    "disposition": "A terse, no-frills speaker who says exactly what they mean in as few words as possible.",
+    "diction": [
+      "Answers in clipped fragments, often a single word.",
+      "Skips pleasantries and cuts straight to the point."
+    ]
+  },
+  {
+    "id": "cautious-hedger",
+    "disposition": "A careful equivocator who qualifies every claim and rarely commits to a firm position.",
+    "diction": [
+      "Wraps statements in maybes, mights, and I-could-be-wrongs.",
+      "Trails off before landing on a definite conclusion."
+    ]
+  },
+  {
+    "id": "contrarian",
+    "disposition": "A reflexive contrarian who instinctively argues the opposite of whatever was just proposed.",
+    "diction": [
+      "Opens with 'actually' and takes the other side.",
+      "Challenges the consensus even when it stands alone."
+    ]
+  },
+  {
+    "id": "courteous-formalist",
+    "disposition": "A polished, old-fashioned formalist who speaks with unfailing politeness and full sentences.",
+    "diction": [
+      "Addresses others by name with a courteous preface.",
+      "Chooses precise, slightly stiff vocabulary and never slang."
+    ]
+  },
+  {
+    "id": "folksy-proverb-user",
+    "disposition": "A homespun, folksy talker who wraps every point in an old saying or barnyard metaphor.",
+    "diction": [
+      "Reaches for a proverb where others would state a plain fact.",
+      "Speaks slow and warm, like advice from a back porch."
+    ]
+  },
+  {
+    "id": "jokester",
+    "disposition": "A wisecracking cutup who defuses tension with a steady stream of one-liners.",
+    "diction": [
+      "Slips a pun or a dry aside into almost every remark.",
+      "Keeps the mood light even when the room turns tense."
+    ]
+  },
+  {
+    "id": "methodical-analyst",
+    "disposition": "A cool, systematic reasoner who lays out the timeline step by step before drawing a conclusion.",
+    "diction": [
+      "Numbers the points and walks through them in order.",
+      "Cites who was where and when in precise, measured phrasing."
+    ]
+  },
+  {
+    "id": "peacemaker-mediator",
+    "disposition": "A gentle mediator who looks for common ground and cools rising tempers.",
+    "diction": [
+      "Reframes sharp remarks into softer, shared questions.",
+      "Invites the quieter voices to weigh in before things escalate."
+    ]
+  },
+  {
+    "id": "quiet-observer",
+    "disposition": "A reserved watcher who says little and lets others fill the silence.",
+    "diction": [
+      "Offers one spare sentence, then goes quiet again.",
+      "Speaks only when directly addressed, and briefly."
+    ]
+  },
+  {
+    "id": "rapid-fire-interrogator",
+    "disposition": "A relentless questioner who fires quick, pointed queries one after another.",
+    "diction": [
+      "Stacks question on question without waiting for a full answer.",
+      "Drills into specifics of time and place at speed."
+    ]
+  },
+  {
+    "id": "skeptic",
+    "disposition": "A hard-nosed doubter who questions every claim and takes nothing at face value.",
+    "diction": [
+      "Answers assertions with a flat 'how do you know that?'",
+      "Pokes at the weakest link in whatever was just said."
+    ]
+  },
+  {
+    "id": "storyteller-narrator",
+    "disposition": "An expansive narrator who recounts the whole sequence as a flowing, scene-by-scene story.",
+    "diction": [
+      "Sets the scene with vivid detail before reaching the point.",
+      "Strings moments together with 'and then, and then'."
+    ]
+  }
+]
