@@ -75,12 +75,15 @@ function ballot(
   confidence: number,
   rationale: string,
   rewrite_reasons: string[] = [],
+  // Task 16.7.1: the voter's own-episodic-observation citation, display-only.
+  primary_reason_observation_id: string | null = null,
 ): BallotView {
   return {
     voter,
     target,
     confidence,
     primary_reason_id: null,
+    primary_reason_observation_id,
     considered_alternatives: [],
     rationale_text: rationale,
     rewrite_reasons,
@@ -187,7 +190,9 @@ const CHAIN_BALLOTS: BallotView[] = [
   ballot("p-0", "p-5", 0.72, "The Reactor sighting plus the body location point at p-5."),
   ballot("p-1", "SKIP", 0.3, "Not confident enough to eject anyone yet."),
   ballot("p-2", "p-8", 0.4, "Labs is suspicious.", ["no new evidence"]),
-  ballot("p-3", "p-5", 0.81, "I saw them go to Reactor myself."),
+  // Task 16.7.1: a firsthand vote — the voter cites its own episodic
+  // observation, giving the "cites" chip visual story coverage.
+  ballot("p-3", "p-5", 0.81, "I saw them go to Reactor myself.", [], "p-3:312:0"),
   ballot("p-4", "p-5", 0.78, "The body in Reactor breaks p-5's alibi.", ["alibi broken"]),
   ballot("p-5", "p-8", 0.55, "p-8 had no alibi."),
   ballot("p-6", "p-5", 0.66, "Two independent accounts agree on p-5."),
@@ -290,6 +295,7 @@ const SKIPPED_MEETING: MeetingViewDTO = {
       target: "p-3",
       confidence: 0.4,
       primary_reason_id: null,
+      primary_reason_observation_id: null,
       considered_alternatives: [],
       rationale_text: "[[VOTE_PARSE_DEFAULT]]",
       rewrite_reasons: ["vote did not parse"],

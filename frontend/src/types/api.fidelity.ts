@@ -26,6 +26,7 @@ import type {
   SawVentObservationView,
   TaskCompletedEventView,
   VentEventView,
+  WhereaboutsClaimView,
 } from "./api";
 
 export const _fidelityReplay: ReplayView = {
@@ -882,6 +883,8 @@ export function _narrow_ObservationClaimView(e: ObservationClaimView): Observati
       return e satisfies FoundBodyObsView;
     case "saw_vent":
       return e satisfies SawVentObservationView;
+    case "whereabouts":
+      return e satisfies WhereaboutsClaimView;
     default: {
       const _exhaustive: never = e;
       return _exhaustive;

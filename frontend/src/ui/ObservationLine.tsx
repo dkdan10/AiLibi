@@ -4,9 +4,16 @@
 // the transcript-render primitives move into `ui/`). TypeScript narrows each
 // `case` exhaustively. Behaviour unchanged; cream/ink restyle is a Wave-B slice.
 
+import type { ReactElement } from "react";
+
 import type { ObservationClaimView } from "../types/api";
 
-export function ObservationLine({ obs }: { obs: ObservationClaimView }) {
+// Explicit return type (Task 16.7.1): the annotation makes a future
+// `ObservationClaimView` member fail tsc (TS2366: not all code paths return)
+// instead of silently blanking, mirroring `claimText(...): string` in
+// `components/MindInspector.tsx`. React 19 dropped the global `JSX` namespace,
+// so we annotate with `ReactElement` (the return type of a JSX expression).
+export function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
   switch (obs.type) {
     case "saw_player":
       return (
@@ -40,6 +47,15 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }) {
         <span className="min-w-0 break-words">
           <span className="font-semibold text-ink-900">saw</span> {obs.subject}{" "}
           <span className="font-semibold text-ink-900">vent</span> in {obs.room} at
+          tick {obs.tick}
+        </span>
+      );
+    case "whereabouts":
+      // Task 16.7.1: the roll-call self-placement. The speaker IS the subject
+      // (`TurnView.speaker`), so no name is rendered — role-neutral wording.
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-ink-900">was in</span> {obs.room} at
           tick {obs.tick}
         </span>
       );
