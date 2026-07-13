@@ -1,6 +1,6 @@
-{#- Crewmate OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15).
+{#- Crewmate OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v2
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v3
 
    Baseline-4 merge (v1, Task 16.13): the owner-directed from-scratch ladder's
    style base (experiments/lab/qwen36_prompt_scratch/v5/ — tag-sectioned,
@@ -33,20 +33,37 @@
      memory-line → JSON example (the v5 lesson: the example moves uptake more
      than the instruction).
 
+   Persona voice layer (v3, Task 16.16 — post-phase-14 V&J planning §4.1-4.2):
+   the participant's persona card renders as a guarded <voice> block in the
+   instruction preamble, after the role framing and before the first markdown
+   header. Style only — it shapes "free_text" diction, never what the speaker
+   may claim (observations/claims stay schema-locked; the card never enters
+   the <memory> block — the firewall orthogonality §4.1 proves). Guarded on a
+   non-empty value: an empty persona renders the exact v2 bytes, so the layer
+   is inert wherever assignment is off.
+
    The "## This meeting" line doubles as the machine anchor
    audits/workflows/extract_gameplay_facts._classify_call_slot reads (the
    FIRST markdown header, before the memory block, classifies the recorded
-   call as an opening).
+   call as an opening — the <voice> block carries no markdown header).
 
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,
-     public_transcript, living_ids, dead_ids (persona and
-     suspicion_provenance are accepted by the loader and unreferenced here).
+     public_transcript, living_ids, dead_ids, persona (rendered since v3 —
+     Task 16.16; suspicion_provenance is accepted by the loader and
+     unreferenced here).
 -#}
 {% set emergency = "called an emergency meeting" in meeting_trigger %}
 <persona>
 You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-deduction game: a hidden impostor is killing crewmates one at a time; the crew wins by voting the impostor out at a meeting, the impostor wins by surviving until they equal the crew. You are innocent and you want the truth found — your job is to find the impostor from what you have seen and pool it with the table.
 </persona>
+{% if persona %}
+
+<voice>
+Your voice at this table: {{ persona }}
+Let that voice color HOW you speak — the wording of your "free_text" only; every observation, claim, and structured field stays grounded in your memory and the rules below.
+</voice>
+{% endif %}
 
 ## This meeting
 It is tick {{ current_tick }} and a meeting just started: {{ meeting_trigger }}. It is your turn to open it (turn 0).

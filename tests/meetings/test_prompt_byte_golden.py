@@ -71,10 +71,10 @@ can fail — a golden that cannot fail is not a gate.
 
 Task 16.15 re-parametrization (the elicitation batch, the first prompt-set
 bump since this instrument landed): the committed baseline-4 sets stamp
-``*.qwen3_6_27b.v1`` while HEAD's registry and templates advanced to v2, so an
-exact reverse lookup against :data:`PROMPT_VERSION_SETS` alone would resolve
-nothing and a re-render through the v2 bytes could not byte-match the v1
-recordings. The recorded stamps therefore resolve through
+``*.qwen3_6_27b.v1`` while HEAD's registry and templates advanced past it (v2
+at 16.15, v3 at 16.16's persona voice layer), so an exact reverse lookup
+against :data:`PROMPT_VERSION_SETS` alone would resolve nothing and a
+re-render through the HEAD bytes could not byte-match the v1 recordings. The recorded stamps therefore resolve through
 :data:`ARCHIVED_PROMPT_VERSION_SETS` — byte-copies of the recorded template
 bodies under ``tests/fixtures/prompt_archive/`` — and the walk renders each
 recorded meeting through the templates its own stamps name. Every byte
@@ -1087,10 +1087,10 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     renderers = build_prompt_renderers(
         resolve_prompt_set(
             {
-                "accusation_round": "accusation_round.qwen3_6_27b.v2",
-                "crewmate_report": "crewmate_report.qwen3_6_27b.v2",
-                "impostor_report": "impostor_report.qwen3_6_27b.v2",
-                "vote_ballot": "vote_ballot.qwen3_6_27b.v2",
+                "accusation_round": "accusation_round.qwen3_6_27b.v3",
+                "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
+                "impostor_report": "impostor_report.qwen3_6_27b.v3",
+                "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
             }
         )
     )
@@ -1117,7 +1117,7 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
         "impostor opener did not dispatch to the impostor_report renderer; "
         f"kinds rendered: {sorted({r.kind for r in renders})}"
     )
-    # The locked-set impostor template (impostor_report.qwen3_6_27b.v2) frames the
+    # The locked-set impostor template (impostor_report.qwen3_6_27b.v3) frames the
     # role as the saboteur — it carries NO "**IMPOSTOR**" literal (the qwen3_32b.v5
     # marker); its role marker is this unconditional persona line, absent from the
     # crewmate template, so its presence proves the impostor kind rendered.
