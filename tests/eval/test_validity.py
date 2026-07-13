@@ -3,7 +3,7 @@
 Covers each of the eight gate checks with a PASS input and a synthetic VIOLATION
 that flips ``passed`` to ``False`` (a gate that cannot fail is not a gate), the
 reconstruction cross-check against the tested win-condition home, and the
-baseline-3 reproduction of ``run_validity_gate`` over the committed sets.
+baseline-4 reproduction of ``run_validity_gate`` over the committed sets.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 139
+    assert check.facts["resolved_meetings"] == 160
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -222,7 +222,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 139  # type: ignore[arg-type]
+    assert int(check.facts["meetings_total"]) == 160  # type: ignore[arg-type]
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -433,7 +433,7 @@ def _railroaded_meeting(base: MeetingReport, crew: str) -> MeetingReport:
     )
     call = LLMCallRecord(
         call_kind="meeting",
-        model="Qwen/Qwen3-32B",
+        model="Qwen/Qwen3.6-27B",
         prompt=prompt,
         response_text="{}",
         input_tokens=0,
@@ -549,7 +549,7 @@ def _substrate_by_seed(sample_dir: Path) -> dict[int, dict[str, bool] | None]:
 def test_provenance_passes_on_committed(nine_report: TournamentReport) -> None:
     check = check_cost_and_provenance(nine_report, _substrate_by_seed(_NINE))
     assert check.passed
-    assert check.facts["model"] == "Qwen/Qwen3-32B"
+    assert check.facts["model"] == "Qwen/Qwen3.6-27B"
 
 
 def test_provenance_fails_on_wrong_substrate(nine_report: TournamentReport) -> None:
@@ -602,7 +602,7 @@ def test_provenance_fails_on_negative_per_call_tokens(
 def test_provenance_exact_model_pins(nine_report: TournamentReport) -> None:
     subs = _substrate_by_seed(_NINE)
     assert check_cost_and_provenance(
-        nine_report, subs, expected_model="Qwen/Qwen3-32B"
+        nine_report, subs, expected_model="Qwen/Qwen3.6-27B"
     ).passed
     wrong = check_cost_and_provenance(nine_report, subs, expected_model="WrongModel")
     assert not wrong.passed
@@ -768,7 +768,7 @@ def test_run_validity_gate_reproduces_9p2i_close() -> None:
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 139
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 160
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:

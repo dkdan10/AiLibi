@@ -5210,17 +5210,17 @@ class TestRenderAfterFoldConsistency:
 
 
 class TestCommittedBytes107FoldPins:
-    """The Task 10.7 fold pins, walked offline against the Qwen/Qwen3-32B re-record.
+    """The Task 10.7 fold pins, walked offline against the Qwen/Qwen3.6-27B re-record.
 
     The two-witness fold, replayed over the recorded per-voter rendered
     suspicion graphs, lifts additional listeners over the §4.6 gate on the
-    converting meetings (seed 9 m0 on baseline 3 -- Qwen/Qwen3-32B qwen3_32b.v5/v6,
-    Task 15.7, the six-lever Wave-0 substrate), and the STOP-pin tripwire is pinned
+    converting meetings (seed 9 m3 on baseline 4 -- Qwen/Qwen3.6-27B qwen3_6_27b.v1,
+    Task 16.14), and the STOP-pin tripwire is pinned
     in its SET-WIDE form: no voiceless subject is pre-vote-folded in ANY committed
     meeting. (The lone bare pile-on the tripwire once demonstrated -- a subject with
-    >= 2 accusers and ZERO observation-backed voices -- NO LONGER OCCURS on the v5
-    substrate; every multi-accuser subject now carries a voice, so the invariant is
-    verified across the whole set rather than on one example.) Re-anchored across
+    >= 2 accusers and ZERO observation-backed voices -- NO LONGER OCCURS on the
+    qwen3_6_27b substrate; every multi-accuser subject now carries a voice, so the
+    invariant is verified across the whole set rather than on one example.) Re-anchored across
     successive canonical re-records (prior coordinates kept in git history as stable
     identifiers, e.g. the seed-27/seed-15/seed-16 baseline-2 rows) to the meeting /
     invariant now exhibiting each shape: the mechanism-level invariant the tripwire
@@ -5280,12 +5280,12 @@ class TestCommittedBytes107FoldPins:
         return evidence, recorded, folded
 
     def test_seed29_m0_pile_on_stop_pin(self) -> None:
-        # THE owner-principle tripwire, pinned in its SET-WIDE form on baseline 3
-        # (Qwen/Qwen3-32B qwen3_32b.v5/v6, Task 15.7). The prior single-meeting
+        # THE owner-principle tripwire, pinned in its SET-WIDE form on baseline 4
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v1, Task 16.14). The prior single-meeting
         # bare-pile-on example (a subject with >= 2 accusers and ZERO
         # observation-backed voices, whose fold must leave it byte-unchanged) NO
-        # LONGER OCCURS on the v5 substrate -- every multi-accuser subject now
-        # carries a voice. So the invariant the tripwire actually guards is
+        # LONGER OCCURS on the qwen3_6_27b substrate -- every multi-accuser subject
+        # now carries a voice. So the invariant the tripwire actually guards is
         # asserted directly across the whole committed set: NO voiceless subject is
         # ever pre-vote-folded. A voiceless fold anywhere is the STOP-and-escalate
         # condition of the task contract.
@@ -5313,20 +5313,20 @@ class TestCommittedBytes107FoldPins:
                         voiceless_folds.append((seed, meeting_index, subject))
         # The STOP tripwire: a fold requires a voice, set-wide.
         assert voiceless_folds == []
-        # Non-vacuous: the fold DID fire across the committed set (37 folds on
-        # baseline 3 — a byte-coupled count that re-pins on each re-record).
-        assert folded_total == 37
+        # Non-vacuous: the fold DID fire across the committed set (64 folds on
+        # baseline 4 — a byte-coupled count that re-pins on each re-record).
+        assert folded_total == 64
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
-        # The two-witness fold's conversion on baseline 3 (Qwen/Qwen3-32B
-        # qwen3_32b.v5/v6, Task 15.7). NOTE: the fold is LIVE at record time, so the
+        # The two-witness fold's conversion on baseline 4 (Qwen/Qwen3.6-27B
+        # qwen3_6_27b.v1, Task 16.14). NOTE: the fold is LIVE at record time, so the
         # recorded vote graphs are ALREADY post-fold -- read them directly
         # (replaying the fold over them would double-apply). Re-anchored to seed 9
-        # m0: a multi-voice fold on impostor p-4 (voices p-5/p-7/p-9) lifts the four
-        # LISTENERS p-1/p-2/p-6/p-8 over the §4.6 gate in the recorded graphs; all
-        # four target p-4, and p-4 is ejected. The §6.3 fold conversion, end to end
-        # on real bytes.
-        entry = _committed_meeting(9, 0)
+        # m3 (nearest equivalent to the prior seed 9 m0 anchor, same ejected impostor
+        # p-4): a multi-voice fold on impostor p-4 (voices p-6/p-9) lifts the LISTENER
+        # p-8 over the §4.6 gate in the recorded graphs; it targets p-4, and p-4 is
+        # ejected. The §6.3 fold conversion, end to end on real bytes.
+        entry = _committed_meeting(9, 3)
         assert entry.ejected_player_id == "p-4"
         _, recorded, _ = self._replay_pre_vote_fold(entry)
         voices = set(
@@ -5344,20 +5344,20 @@ class TestCommittedBytes107FoldPins:
             and graph.get("p-4", 0.0) >= 0.60
             and ballots.get(voter) == "p-4"
         )
-        assert listeners_over_gate == ["p-1", "p-2", "p-6", "p-8"]
+        assert listeners_over_gate == ["p-8"]
 
     def test_seed7_m2_defended_subject_corroborated_not_folded(self) -> None:
-        # Same-phase symmetry (re-anchored to baseline 3 -- Qwen/Qwen3-32B
-        # qwen3_32b.v5/v6, Task 15.7): a defended subject's vouches are ingested as
+        # Same-phase symmetry (re-anchored to baseline 4 -- Qwen/Qwen3.6-27B
+        # qwen3_6_27b.v1, Task 16.14): a defended subject's vouches are ingested as
         # a CORROBORATION (which lowers its suspicion same-phase), never as a
-        # pile-on fold. Anchored to seed 7 m2: the corroborated subject p-1 (a
+        # pile-on fold. Anchored to seed 7 m0: the corroborated subject p-6 (a
         # crewmate, with ZERO accusation voices, so it can only reach the
-        # corroboration channel) is never folded, while a separate subject p-5
+        # corroboration channel) is never folded, while a separate subject p-2
         # takes the fold. The audited suspicion-math (a corroboration drops the
         # defended subject below the §4.6 gate) is covered by the synthetic
         # corroboration-delta tests; here we pin that the bytes route the defended
         # subject to the corroboration channel, not the fold.
-        entry = _committed_meeting(7, 2)
+        entry = _committed_meeting(7, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
@@ -5366,10 +5366,10 @@ class TestCommittedBytes107FoldPins:
 
         # The defended subject reaches the corroboration channel with no
         # accusation voice of its own, so the fold could never have claimed it.
-        assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
-        assert "p-1" in evidence.corroborated
-        assert "p-1" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-5",)
+        assert independent_voices(entry.transcript, roster=roster).get("p-6", ()) == ()
+        assert "p-6" in evidence.corroborated
+        assert "p-6" not in evidence.pre_vote_folded
+        assert evidence.pre_vote_folded == ("p-2",)
 
 
 # ---------------------------------------------------------------------------
@@ -6294,47 +6294,52 @@ def _derive_inform_yield() -> _InformYield:
 class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the committed bytes.
 
-    The deliverable number, re-anchored to the baseline-2 re-record
-    (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever ON).
-    The derivation first reproduces the §4(3) partition EXACTLY off the committed
-    bytes (baseline 2: 72 accused living-impostor meeting-subjects the ballots did
-    not eject; 38 of them rendered over the §4.6 gate yet lost plurality -- the
-    prior qwen3_32b.v3 re-record read 71 / 50, the W1 audit-2026-06-13-1816 read
-    59 / 37), which validates the offline oracle, then counts how many the
-    single-witness inform converts WITHOUT any tally change (baseline 2: none).
+    The deliverable number, re-anchored to the baseline-4 re-record
+    (Qwen/Qwen3.6-27B qwen3_6_27b.v1, Task 16.14). The derivation first reproduces
+    the §4(3) partition EXACTLY off the committed bytes (baseline 4: 46 accused
+    living-impostor meeting-subjects the ballots did not eject; 19 of them rendered
+    over the §4.6 gate yet lost plurality -- prior baseline 3 read 46 / 10,
+    baseline 2 read 72 / 38, the W1 audit-2026-06-13-1816 read 59 / 37), which
+    validates the offline oracle, then counts how many the single-witness inform
+    converts WITHOUT any tally change (baseline 4: 4; baselines 2 & 3: none).
     """
 
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the baseline-3 committed bytes
-        # (Qwen/Qwen3-32B qwen3_32b.v5/v6, Task 15.7). The prior baseline-2 re-record
-        # read 72 accused-not-ejected / 38 over-gate-lost-plurality; baseline 3
-        # moves both (46 / 10) -- a legitimate era move (pure functions of the bytes,
-        # re-derived by the SAME offline oracle). The accused-not-ejected count
-        # cross-checks the effective-deflection survivals (accused_impostor_survivals
-        # in the eval-layer metrics) exactly.
+        # The §4(3) partition, re-derived from the baseline-4 committed bytes
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v1, Task 16.14). The prior baseline-3 re-record
+        # read 46 accused-not-ejected / 10 over-gate-lost-plurality; baseline 4 holds
+        # accused-not-ejected at 46 and moves over-gate-lost-plurality to 19 -- a
+        # legitimate era move (pure functions of the bytes, re-derived by the SAME
+        # offline oracle). The accused-not-ejected count cross-checks the
+        # effective-deflection survivals (accused_impostor_survivals in the eval-layer
+        # metrics) exactly.
         assert result.accused_not_ejected == 46
-        assert result.over_gate_lost_plurality == 10
+        assert result.over_gate_lost_plurality == 19
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
 
-        # 6 of the 10 over-gate-lost-plurality subjects are single-witness-informed
-        # (one observation-backed voice under echo-dedup) on baseline 3
-        # (Qwen/Qwen3-32B qwen3_32b.v5/v6, Task 15.7; prior baseline 2: 29 of 38).
-        # The conservative single-witness inform CONVERTS NONE of them on these
-        # bytes: the +0.05 inform never lifts a candidate to a strict plurality
-        # under the frozen equal-votes + tie->SKIP tally, so the yield is ZERO
-        # (prior baseline 2: 0; the earliest redistribute era: 14 of 97). The flip
-        # set is still the conservative one (only recorded SKIP voters whose
-        # rendered value sits in [gate - inform, gate) -- a baseline below that band
-        # still cannot cross on the inform alone, the owner principle), and it
-        # produces NO spurious conversion: the property this pins is that the inform
-        # never manufactures a conversion the bytes do not support.
-        assert result.informed_candidates == 6
-        assert len(result.conversions) == 0
-        assert result.conversions == ()
+        # 12 of the 19 over-gate-lost-plurality subjects are single-witness-informed
+        # (one observation-backed voice under echo-dedup) on baseline 4
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v1, Task 16.14; prior baseline 3: 6 of 10).
+        # BASELINE-4 BEHAVIOR SHIFT: unlike baselines 2 & 3 (0 conversions each) the
+        # +0.05 inform now DOES lift FOUR single-witness candidates to a strict
+        # plurality under the frozen equal-votes + tie->SKIP tally (the earliest
+        # redistribute era read 14 of 97). The flip set is still the conservative one
+        # (only recorded SKIP voters whose rendered value sits in [gate - inform,
+        # gate) -- a baseline below that band still cannot cross on the inform alone,
+        # the owner principle); these four conversions are the honest census the
+        # committed bytes support, pinned exactly (not the ZERO the prior eras read).
+        assert result.informed_candidates == 12
+        assert len(result.conversions) == 4
+        assert result.conversions == (
+            (9, "headless-seed-9:meeting-2", "p-4"),
+            (26, "headless-seed-26:meeting-3", "p-3"),
+            (46, "headless-seed-46:meeting-0", "p-8"),
+            (46, "headless-seed-46:meeting-2", "p-8"),
+        )
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()

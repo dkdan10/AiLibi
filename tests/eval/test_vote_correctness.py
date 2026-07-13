@@ -1854,23 +1854,22 @@ _COMMITTED_9P2I_REPORT = (
 
 
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
-    """The shipped 9p/2i report carries the recorded gp-2 values exactly.
+    """The shipped 9p/2i report carries the recorded baseline-4 values exactly.
 
-    Re-anchored to the Task-15.7 baseline-3 re-record (Qwen/Qwen3-32B, prompt
-    set qwen3_32b.v5 + vote_ballot.v6, all SIX substrate levers unconditionally
-    ON — reporter_exculpation was graduated to always-on this task).
-    ejection_accuracy 76/109 = 0.6972, impostor-accused conversion 74/111 =
-    0.6667, missed_skip 11.
+    Re-anchored to the Task-16.14 baseline-4 re-record (model Qwen/Qwen3.6-27B,
+    prompt set qwen3_6_27b with all four templates at *.qwen3_6_27b.v1, all SIX
+    substrate levers unconditionally ON). ejection_accuracy 77/89 = 0.8652,
+    impostor-accused conversion 77/118 = 0.6525, missed_skip 89.
 
-    threshold_inversions is 0 on this substrate: no crew voter shown a met
-    threshold over a living target SKIPs without a by-design excuse. The
-    missed_skip partition holds exactly: 11 = 7 impostor-voter (sanctioned
-    in-character declines, 4 of them §7.12 teammate-coerced) + 4 invalid-target
-    (hallucinated targets normalized to SKIP) + 0 threshold_inversions (the
-    crew discretionary remainder).
+    threshold_inversions rose to 47 on this substrate (the crew discretionary
+    remainder — crew voters shown a met threshold over a living target that SKIP
+    without a by-design excuse). The missed_skip partition holds exactly: 89 =
+    40 impostor-voter (sanctioned in-character declines, 5 of them §7.12
+    teammate-coerced) + 2 invalid-target (hallucinated targets normalized to
+    SKIP) + 47 threshold_inversions.
 
-    The sentinel reads the recorded truth: 71 of the 76 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 71/76 = 0.934); the 5
+    The sentinel reads the recorded truth: 72 of the 77 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 72/77 = 0.935); the 5
     unbacked ejections converted on accumulated/carried suspicion that
     ``_has_real_evidence`` deliberately does not consult.
     """
@@ -1880,33 +1879,33 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 109
-    assert conversion.impostor_ejections == 76
-    assert conversion.ejection_accuracy == pytest.approx(76 / 109)
-    assert conversion.impostor_accused_meetings == 111
-    assert conversion.impostor_accused_conversions == 74
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(74 / 111)
-    assert conversion.skip_ballots == 76
-    assert conversion.correct_skip_ballots == 65
-    assert conversion.missed_skip_ballots == 11
+    assert conversion.total_ejections == 89
+    assert conversion.impostor_ejections == 77
+    assert conversion.ejection_accuracy == pytest.approx(77 / 89)
+    assert conversion.impostor_accused_meetings == 118
+    assert conversion.impostor_accused_conversions == 77
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(77 / 118)
+    assert conversion.skip_ballots == 439
+    assert conversion.correct_skip_ballots == 350
+    assert conversion.missed_skip_ballots == 89
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 7
-    assert conversion.missed_skip_teammate_coerced == 4
-    assert conversion.missed_skip_invalid_target == 4
-    # The missed_skip partition holds exactly: 11 = 7 impostor-voter + 4
-    # invalid-target + 0 threshold_inversions (the crew discretionary remainder).
-    assert conversion.threshold_inversions == 0
+    assert conversion.missed_skip_impostor_voters == 40
+    assert conversion.missed_skip_teammate_coerced == 5
+    assert conversion.missed_skip_invalid_target == 2
+    # The missed_skip partition holds exactly: 89 = 40 impostor-voter + 2
+    # invalid-target + 47 threshold_inversions (the crew discretionary remainder).
+    assert conversion.threshold_inversions == 47
 
-    # The sentinel reads the recorded truth: 71 of the 76 impostor ejections are
+    # The sentinel reads the recorded truth: 72 of the 77 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(71 / 76)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 71
-    assert report.vote_correctness.impostor_ejections == 76
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(72 / 77)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 72
+    assert report.vote_correctness.impostor_ejections == 77
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.6972, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 11
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.8652, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 89

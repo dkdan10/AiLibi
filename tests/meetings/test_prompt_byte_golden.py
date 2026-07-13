@@ -59,7 +59,7 @@ the feedback path replays exactly.
 Coverage (GOLDEN-ARCH.md §3): the four template kinds are ``crewmate_report`` /
 ``impostor_report`` (the opening, split by opener role) and ``accusation_round``
 (reply + opt_in) / ``vote_ballot``. In the committed sets EVERY meeting opener is
-a CREWMATE (0 of 178 openers is an impostor — the FSM impostor presses no button;
+a CREWMATE (0 of 199 openers is an impostor — the FSM impostor presses no button;
 DESIGN.md §12, AGENTS.md), so ``impostor_report`` has NO committed coverage. The
 per-set counters therefore assert every kind that OCCURS in the recorded data was
 reproduced (a kind silently skipped fails the gate), and
@@ -895,7 +895,7 @@ def test_present_template_kinds_are_each_reproduced(set_walk: _SetWalk) -> None:
 
     ``crewmate_report`` / ``accusation_round`` / ``vote_ballot`` all occur in
     both committed sets and must each be reproduced. ``impostor_report`` does
-    NOT occur — every one of the 178 committed meeting openers is a crewmate
+    NOT occur — every one of the 199 committed meeting openers is a crewmate
     (the FSM impostor presses no button; DESIGN.md §12) — so it is covered by
     :func:`test_impostor_report_opening_kind_is_exercised` instead, not asserted
     per-set here (asserting it would make the golden RED on unmodified code,
@@ -1035,10 +1035,10 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     renderers = build_prompt_renderers(
         resolve_prompt_set(
             {
-                "accusation_round": "accusation_round.qwen3_32b.v5",
-                "crewmate_report": "crewmate_report.qwen3_32b.v5",
-                "impostor_report": "impostor_report.qwen3_32b.v5",
-                "vote_ballot": "vote_ballot.qwen3_32b.v6",
+                "accusation_round": "accusation_round.qwen3_6_27b.v1",
+                "crewmate_report": "crewmate_report.qwen3_6_27b.v1",
+                "impostor_report": "impostor_report.qwen3_6_27b.v1",
+                "vote_ballot": "vote_ballot.qwen3_6_27b.v1",
             }
         )
     )
@@ -1065,7 +1065,11 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
         "impostor opener did not dispatch to the impostor_report renderer; "
         f"kinds rendered: {sorted({r.kind for r in renders})}"
     )
-    assert "**IMPOSTOR**" in impostor_openings[0].prompt
+    # The baseline-4 impostor template (impostor_report.qwen3_6_27b.v1) frames the
+    # role as the saboteur — it carries NO "**IMPOSTOR**" literal (the qwen3_32b.v5
+    # marker); its role marker is this unconditional persona line, absent from the
+    # crewmate template, so its presence proves the impostor kind rendered.
+    assert "for this match YOU are the saboteur" in impostor_openings[0].prompt
 
 
 # --------------------------------------------------------------------------- #
@@ -1078,7 +1082,7 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    Copy the qwen3_32b template dir under a scratch root, append one byte to
+    Copy the qwen3_6_27b template dir under a scratch root, append one byte to
     ``crewmate_report.j2`` (the committed dir is never touched), build renderers
     against the perturbed root, and re-run ONE recorded meeting. At least one
     recorded prompt must no longer reproduce byte-for-byte — proving the gate can
@@ -1089,7 +1093,7 @@ def test_one_byte_template_perturbation_breaks_the_golden(
     perturbed_root = tmp_path / "prompts"
     for name in PROMPT_VERSION_SETS:
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_32b" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
@@ -1155,9 +1159,9 @@ _PROVENANCE_COMPONENTS: tuple[str, ...] = (
 )
 
 # Non-vacuous "populated, not defaults" floors (DoD bullets 1 + 5), measured on
-# the committed sets 2026-07-11: 9p2i had 1066/1505 open-tick graph rows and
-# 1886/2484 folded ballot rows carrying a nonzero hard/soft split; 4p1i had 13/13
-# and 99/168. These per-set-safe floors sit well below the smaller set's counts,
+# the baseline-4 committed sets 2026-07-13: 9p2i had 1393/1615 open-tick graph rows
+# and 1973/2372 folded ballot rows carrying a nonzero hard/soft split; 4p1i had
+# 13/13 and 73/91. These per-set-safe floors sit well below the smaller set's counts,
 # so a regression that stopped populating provenance (defaults everywhere) trips
 # them while the healthy committed data clears them.
 _MIN_POPULATED_PARTICIPANT_ROWS = 10

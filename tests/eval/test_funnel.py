@@ -6,8 +6,8 @@ Two layers:
   ``_GameWalk`` objects, exercising each stage's folds in isolation (the oracle's
   sighting/alibi/vent-alibi logic, the possession census, the transmission
   census), plus the walk's fail-loud state-hash verification;
-* the baseline-2 REPRODUCTION PINS — ``compute_information_funnel`` over the
-  committed 9p2i bytes must reproduce the clean-up charter §2 figures EXACTLY, and
+* the baseline-4 REPRODUCTION PINS — ``compute_information_funnel`` over the
+  committed 9p2i bytes must reproduce the committed baseline-4 census EXACTLY, and
   the fold must also run clean on the 4p1i preset.
 """
 
@@ -573,7 +573,7 @@ def test_walk_raises_on_missing_meeting_row(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Baseline-2 reproduction pins (charter §2)                                    #
+# Baseline-4 reproduction pins                                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -585,64 +585,64 @@ def nine_funnel() -> InformationFunnelReport:
 def test_funnel_reproduces_report_meeting_count(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    # Baseline 3 (Task 15.7 re-record); the before/after reading vs baseline 2 is
-    # in audits/audit-phase-15-wave0-close.md §2.
+    # Baseline 4 (Task 16.14 re-record: model Qwen/Qwen3.6-27B, prompt set
+    # qwen3_6_27b.v1 across all four templates). Re-derived from the committed
+    # 9p2i bytes via eval.funnel.
     assert nine_funnel.games_total == 50
-    assert nine_funnel.report_meetings == 124
+    assert nine_funnel.report_meetings == 150
 
 
 def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) -> None:
-    # Baseline-3 committed bytes: the oracle is a diagnostic ceiling; the median
+    # Baseline-4 committed bytes: the oracle is a diagnostic ceiling; the median
     # holds at 3, and killer-in-set is preserved via one-hop reachability (the
     # model never wrongly alibis the killer).
     assert nine_funnel.candidate_set_median == 3
     assert nine_funnel.candidate_set_mean is not None
-    assert round(nine_funnel.candidate_set_mean, 2) == 2.84
-    assert nine_funnel.killer_in_set == 109
+    assert round(nine_funnel.candidate_set_mean, 2) == 2.72
+    assert nine_funnel.killer_in_set == 136
     assert nine_funnel.candidate_set_pm1_mean is not None
-    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.30
-    # 38 singleton ±1-window sets, of which 35 hold EXACTLY the killer — the 3
+    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.24
+    # 51 singleton ±1-window sets, of which 47 hold EXACTLY the killer — the 4
     # misses are dead-killer late reports (unique_killer never over-counts a
     # singleton that convicted the wrong player).
-    assert nine_funnel.candidate_singleton_pm1 == 38
-    assert nine_funnel.unique_killer_pm1 == 35
-    assert nine_funnel.candidate_le2_pm1 == 76
+    assert nine_funnel.candidate_singleton_pm1 == 51
+    assert nine_funnel.unique_killer_pm1 == 47
+    assert nine_funnel.candidate_le2_pm1 == 96
 
 
 def test_funnel_reproduces_possession_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    assert nine_funnel.vent_witnessed == 73
-    assert nine_funnel.kill_witnessed == 5
-    assert nine_funnel.killer_at_scene == 33
-    assert nine_funnel.last_seen_with_killer == 42
-    # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen (baseline 3; held-clue
-    # supply is unchanged from baseline 2 at 98).
-    assert nine_funnel.hard_clue_held == 98
+    assert nine_funnel.vent_witnessed == 100
+    assert nine_funnel.kill_witnessed == 9
+    assert nine_funnel.killer_at_scene == 38
+    assert nine_funnel.last_seen_with_killer == 47
+    # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen (baseline 4: vent
+    # witnessing rose sharply on the Qwen3.6-27B / qwen3_6_27b.v1 re-record).
+    assert nine_funnel.hard_clue_held == 125
 
 
 def test_funnel_reproduces_transmission_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    # The Wave-0 transmission gains (audit-phase-15-wave0-close.md §2): free-text
-    # vent mentions rose 36 -> 53 of 73 held, and the reporter damp cut
-    # innocent-reporter ejections 22 -> 4.
-    assert nine_funnel.vent_mentioned == 53
-    assert nine_funnel.vent_meetings == 73
-    assert nine_funnel.reporter_ejected == 4
-    assert nine_funnel.reporter_ejected_innocent == 4
-    assert nine_funnel.report_ejections == 95
+    # Baseline-4 transmission census: free-text vent mentions cover 75 of the 100
+    # held vents, and the reporter damp holds innocent-reporter ejections at 1.
+    assert nine_funnel.vent_mentioned == 75
+    assert nine_funnel.vent_meetings == 100
+    assert nine_funnel.reporter_ejected == 1
+    assert nine_funnel.reporter_ejected_innocent == 1
+    assert nine_funnel.report_ejections == 79
     # Votes outside the ≤3 exact-tick candidate set.
-    assert nine_funnel.votes_outside_small_set == 30
-    assert nine_funnel.small_set_ejections == 64
+    assert nine_funnel.votes_outside_small_set == 12
+    assert nine_funnel.small_set_ejections == 54
     # The messenger-innocent-prior tripwire: no committed killer self-reports.
     assert nine_funnel.killer_self_reported == 0
-    # The Wave-0 headline: 15.4's SawVentObservation type makes held vents
-    # STRUCTURALLY speakable — 55 structured vent observations on baseline 3 where
-    # the v4 baselines had 0/74. Pinned so the folds cannot silently drift.
-    assert nine_funnel.structured_vent_observed == 55
-    assert nine_funnel.killer_placement_observed == 40
-    assert nine_funnel.killer_accused == 75
+    # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable — 74
+    # structured vent observations on baseline 4. Pinned so the folds cannot
+    # silently drift.
+    assert nine_funnel.structured_vent_observed == 74
+    assert nine_funnel.killer_placement_observed == 39
+    assert nine_funnel.killer_accused == 88
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:
