@@ -560,7 +560,7 @@ non-interaction by test).
 ### Task 16.7 — Pooling substrate: typed grounded vouching + the whereabouts claim
 **Branch:** `phase-16-pooling-substrate`
 **Depends on:** 16.3
-**Section refs:** meetings/schemas.py:56-149 (the observation union + VentWitnessRecord — the pattern to generalize); orchestrator/game.py:2369-2403 (the vent accessor to near-copy); meetings/transcript.py:989-1092 (reconstruct_stated_paths — where whereabouts integrate) + :2251-2309 (the vent grounding chokepoint); agents/memory/beliefs.py:387-423 (CORROBORATION_SUSPICION_DELTA — the channel vouching feeds)
+**Section refs:** meetings/schemas.py:56-149 (the observation union + VentWitnessRecord — the pattern to generalize); orchestrator/game.py:2369-2403 (the vent accessor to near-copy); meetings/transcript.py:1053-1156 (reconstruct_stated_paths — where whereabouts integrate) + :2251-2309 (the vent grounding chokepoint); agents/memory/beliefs.py:387-423 (CORROBORATION_SUSPICION_DELTA — the channel vouching feeds)
 **Complexity:** Integration
 
 Make sightings speakable-and-checkable the way 15.4 made vents speakable-and-checkable — with the
@@ -689,7 +689,7 @@ logic; the manager already validated.
 ### Task 16.8 — The absence prior: a capped sub-gate delta for the publicly unplaced (default-OFF lever)
 **Branch:** `phase-16-absence-prior`
 **Depends on:** 16.6, 16.7
-**Section refs:** meetings/transcript.py:989-1092 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1830-1861 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:80-99 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
+**Section refs:** meetings/transcript.py:1053-1156 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1992-2025 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:104-145 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
 **Complexity:** Medium
 
 The channel that makes visibility a resource: at the pre-vote fold, the ABSENT set — living
