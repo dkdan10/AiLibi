@@ -1,6 +1,6 @@
-{#- Vote-ballot prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15).
+{#- Vote-ballot prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v2
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v3
 
    Baseline-4 merge (v1, Task 16.13): the scratch-ladder style base
    (qwen36_prompt_scratch/v5/ — whose v3-v5 rungs each converted a measured
@@ -54,16 +54,32 @@
    suffix-safe), and the "maximum suspicion among the living ejection targets
    is" line keeps the exact wording eval._suspicion_parse reads.
 
+   Persona voice layer (v3, Task 16.16 — post-phase-14 V&J planning §4.1-4.2):
+   the voter's persona card renders as a guarded <voice> block in the
+   instruction preamble, after the role framing and before the memory block.
+   Style only — it shapes "rationale_text" diction, never the vote: the
+   target, confidence, and the J3 citation discipline (every EJECT names its
+   evidence) are untouched, and the card never enters the <memory> block.
+   Guarded on a non-empty value: an empty persona renders the exact v2 bytes,
+   so the layer is inert wherever assignment is off.
+
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
    skip_confidence_threshold (optional, default 0.6), fellow_impostor_ids
    (optional), reporter_id (optional, Task 15.5 lever), suspicion_provenance
    (optional, Task 16.3 widening — rendered here since v2; default () keeps
-   the surface off), persona (accepted, unreferenced until 16.16).
+   the surface off), persona (rendered since v3 — Task 16.16).
 -#}
 <persona>
 You are {{ voter_id }}, voting at an AiLibi meeting: a hidden impostor kills crewmates; the crew wins by voting the impostor out, the impostor by surviving. The discussion is over — cast one ejection ballot: name the one player you believe is the impostor, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.
 </persona>
+{% if persona %}
+
+<voice>
+Your voice at this table: {{ persona }}
+Let that voice color HOW you speak — the wording of your "rationale_text" only; your target, confidence, and cited reason ids follow the evidence and the rules below, exactly as written.
+</voice>
+{% endif %}
 
 <memory>
 {{ rendered_memory }}

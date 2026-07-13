@@ -349,7 +349,13 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # samples still stamp *.qwen3_6_27b.v1; the prompt-byte golden walks them
     # through the archived v1 bytes (tests/fixtures/prompt_archive/) until 16.17
     # re-records, so pre- and post-batch bodies never share a version stamp.
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v2"),
+    # Task 16.16 (the persona voice layer): the second set-level bump, v2 -> v3
+    # — each participant's persona card renders as a guarded <voice> block in
+    # all four templates' instruction preambles (empty persona = the exact v2
+    # bytes), so the voice layer is its own attributable prompt layer at the
+    # 16.17 re-record, separable from the elicitation batch. The committed
+    # samples keep stamping *.qwen3_6_27b.v1 through the same archive walk.
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v3"),
 }
 
 
@@ -911,9 +917,10 @@ def _build_participants(
     player's card is stable across every meeting regardless of deaths and
     no two living players ever share one (sampling without replacement).
     It is computed with no reference to roles, keeping the assignment
-    role-neutral by construction. Inert until Task 16.16: the text fills
-    ``MeetingParticipant.persona`` and no template reads it, so rendered
-    prompt bytes are unchanged.
+    role-neutral by construction. Inert from 16.9 until Task 16.16; since
+    16.16 the locked set renders the text as the guarded <voice> preamble
+    block (style only — an empty persona still renders byte-unchanged, and
+    the other sets' templates read nothing).
     """
 
     impostor_ids = tuple(
@@ -928,9 +935,9 @@ def _build_participants(
     # game seed and the FULL fixed roster (dead seats included), so a
     # player persona is stable across every meeting of a game regardless
     # of deaths, and no two living players ever share a card (sampling
-    # without replacement). Inert until 16.16: the text fills
-    # ``MeetingParticipant.persona`` and no template reads it, so rendered
-    # prompt bytes are unchanged (the 16.3 golden proves it).
+    # without replacement). Rendered since 16.16 as the locked set's guarded
+    # <voice> preamble block; an empty persona renders byte-unchanged (the
+    # 16.3 golden proves the guard).
     persona_by_id = assign_personas(
         seed=state.seed, roster=tuple(sorted(state.players))
     )
@@ -994,7 +1001,8 @@ def _build_participants(
                 # ``primary_reason_observation_id`` against, same self-channel
                 # snapshot discipline. Enforcement-free until 16.6.
                 observation_ids=agent.observation_ids_for_meeting(),
-                # Task 16.9: the inert persona-text fill (nothing reads it until 16.16).
+                # Task 16.9's persona-text fill; the locked set's templates
+                # render it since 16.16 (the guarded <voice> preamble block).
                 persona=persona_by_id[player_id].text,
             )
         )

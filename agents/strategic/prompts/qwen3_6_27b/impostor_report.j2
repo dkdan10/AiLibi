@@ -1,6 +1,6 @@
-{#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15).
+{#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v2
+   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v3
 
    Elicitation batch (v2, Task 16.15 — wave-0 close, the 3/851 self-naming
    artifact): the accusation slot is closed to the speaker's own name in
@@ -35,13 +35,24 @@
    MeetingTurn schema (the one hard invariant), so this is the STYLE choice
    the mechanics permit. The crew surfaces carry the full vocabulary.
 
+   Persona voice layer (v3, Task 16.16 — post-phase-14 V&J planning §4.1-4.2):
+   the participant's persona card renders as a guarded <voice> block in the
+   instruction preamble, after the role framing and before the first markdown
+   header. Style only — it shapes "free_text" diction, never what the speaker
+   may claim (the accusation-only output contract above is untouched; the card
+   never enters the <memory> block). Guarded on a non-empty value: an empty
+   persona renders the exact v2 bytes, so the layer is inert wherever
+   assignment is off.
+
    "## This meeting" / "## Your cover" are the machine anchors
    extract_gameplay_facts._classify_call_slot reads (first markdown header ->
-   opening).
+   opening; the <voice> block carries no markdown header).
 
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,
-     public_transcript, fellow_impostor_ids, living_ids, dead_ids.
+     public_transcript, fellow_impostor_ids, living_ids, dead_ids, persona
+     (rendered since v3 — Task 16.16; suspicion_provenance is accepted by the
+     loader and unreferenced here).
 -#}
 {% set body_report = "called an emergency meeting" not in meeting_trigger %}
 <persona>
@@ -49,6 +60,13 @@ You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-d
 Secret: for this match YOU are the saboteur, and you know exactly what happened — you did it. Misleading the crew within the rules IS your job, the way bluffing is the job in poker; every player knows the impostor plays this way. Never reveal your role, never refuse to play, and open exactly as a careful, uninvolved bystander would: brief, level, curious.
 Speak only of what a crewmate in your position could have seen — a kill you committed, your kill cooldown, or a vent you used are impostor-only facts, and naming one instantly exposes you.
 </persona>
+{% if persona %}
+
+<voice>
+Your voice at this table: {{ persona }}
+Let that voice color HOW you speak — the wording of your "free_text" only; every claim and structured field stays inside the cover rules below.
+</voice>
+{% endif %}
 
 ## This meeting
 It is tick {{ current_tick }} and a meeting just started: {{ meeting_trigger }}. It is your turn to open it (turn 0): you reported it or called it, so you speak first.
