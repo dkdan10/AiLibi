@@ -129,6 +129,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from agents.perception import ingest_packet
 from engine.actions import Action
 from engine.entities import PlayerId, Role, RoomId
 from engine.events import (
@@ -142,16 +143,32 @@ from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from observation.service import ObservationService
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
+from meetings.manager import derive_reported_testimony, extract_belief_evidence
+from meetings.render_contract import SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
+    ContradictionRef,
     MeetingResult,
+    MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
     SawVentObservation,
+    SightingRecord,
     VoteBallot,
+    WhereaboutsClaim,
 )
-from orchestrator.game import apply_meeting_result
+from meetings.transcript import (
+    MeetingTriggerKind,
+    grounded_vouch_subjects,
+    reconstruct_stated_paths,
+)
+from orchestrator.game import (
+    TacticalAgent,
+    apply_meeting_result,
+    build_default_agent_factory,
+)
 from orchestrator.replay import (
+    LLMCallRecord,
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
@@ -1045,9 +1062,649 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Task 16.10 pooling-folds extension region (additive — the 15.3 folds above   #
+# are untouched).                                                              #
+#                                                                              #
+# The V&J instruments' pooling census over EVERY resolved meeting (body-report #
+# AND emergency — pooling mechanisms are per-meeting, not per-body): roll-call #
+# coverage, vouch + GROUNDED-vouch rates, absence-set size distribution, and   #
+# the whereabouts-lie detection rate. Diagnostics the 16.17 close QUOTES —     #
+# nothing here gates; the referee (eval/watchability.py) alone gates.          #
+#                                                                              #
+# The walk (:func:`_walk_game_vj`) extends the 15.3 replay reconstruction with #
+# the ONE layer the 15.3 walk deliberately omitted: per-agent memory. It       #
+# mirrors ``orchestrator.game._run_loop``'s feeding exactly — per tick, the    #
+# pre-advance observation packet of every living player is ingested into a     #
+# real per-agent :class:`~orchestrator.game.TacticalAgent` memory              #
+# (``agents.perception.ingest_packet``, the same call ``decide()`` makes), and #
+# at each meeting boundary the recorded result is absorbed through the same    #
+# ``extract_belief_evidence`` / ``derive_reported_testimony`` fan-out the      #
+# orchestrator runs — so the meeting-open snapshots this walk takes            #
+# (suspicion graphs, sighting records, observation-id sets) are read off the   #
+# PRODUCTION accessors, byte-equal to what the live meeting saw. The           #
+# reconstruction fidelity is pinned by eval/vj_instruments.py's rendered-value #
+# cross-check (every per-player suspicion in the committed vote prompts        #
+# reproduces exactly).                                                         #
+#                                                                              #
+# Accessor levers resolve against an EMPTY environment (``env={}``): the       #
+# instrument is pure and $0 (no ``AILIBI_*`` reads), and every committed set   #
+# was recorded lever-OFF, so the snapshots match the recorded bytes. A future  #
+# lever-ON recording diverges only in the J1-clamped rendered SCALAR, never in #
+# the raw decomposition this region reads — the vj rendered cross-check counts #
+# any such divergence instead of failing.                                      #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class _VJMeeting:
+    """One reconstructed meeting + the meeting-open agent-memory snapshots.
+
+    The carrier the pooling folds (this region) and the judgment folds
+    (:mod:`eval.vj_instruments`) both read. ``living`` is the living-player set
+    at meeting open (== the recorded ballot voters — verified during the walk);
+    the ``*_by_*`` mappings are the production accessor snapshots taken exactly
+    where ``orchestrator.game._build_participants`` takes them.
+    """
+
+    seed: int
+    meeting_id: str
+    tick: int
+    trigger_kind: MeetingTriggerKind
+    triggered_by: PlayerId
+    outcome: str
+    ejected: PlayerId | None
+    living: frozenset[PlayerId]
+    transcript: MeetingTranscript
+    ballots: tuple[VoteBallot, ...]
+    contradictions: tuple[ContradictionRef, ...]
+    llm_calls: tuple[LLMCallRecord, ...]
+    suspicion_graph_by_voter: Mapping[PlayerId, tuple[SuspicionEntry, ...]]
+    sighting_records_by_speaker: Mapping[PlayerId, tuple[SightingRecord, ...]]
+    observation_ids_by_voter: Mapping[PlayerId, frozenset[str]]
+    fellow_impostor_ids_by_voter: Mapping[PlayerId, tuple[PlayerId, ...]]
+
+
+@dataclass(frozen=True)
+class _VJGameWalk:
+    """The memory-augmented reconstruction of one recorded game (all meetings)."""
+
+    seed: int
+    roles: Mapping[PlayerId, Role]
+    meetings: tuple[_VJMeeting, ...]
+
+
+def _walk_game_vj(
+    replay_path: Path,
+    *,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    roles: Mapping[PlayerId, Role],
+    game_map: Map,
+) -> _VJGameWalk:
+    """Re-seed + replay one game with the per-agent memory layer reconstructed.
+
+    Mirrors :func:`_walk_game`'s engine walk (same hash verification, same
+    fail-loud on a MEETING tick without a meeting row) and adds the live
+    game's memory feeding: real :class:`~orchestrator.game.TacticalAgent`
+    instances (the default factory, exactly what the recorded games ran)
+    ingest every living player's pre-advance packet each tick, and each
+    meeting's recorded result is absorbed post-apply through the same
+    ``extract_belief_evidence`` + ``derive_reported_testimony`` fan-out as
+    ``orchestrator.game._absorb_meeting_beliefs`` — sorted iteration, living
+    players in the post-meeting state. Collects EVERY meeting (emergency
+    included) with its meeting-open accessor snapshots.
+    """
+
+    game_id = f"headless-seed-{seed}"
+    entries = read_all_entries(replay_path)
+    tick_entries = [e for e in entries if isinstance(e, ReplayEntry)]
+    meeting_by_tick: dict[int, MeetingReplayEntry] = {
+        e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)
+    }
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    factory = build_default_agent_factory()
+    agents: dict[PlayerId, TacticalAgent] = {}
+    for pid in sorted(state.players):
+        agent = factory(pid, roles[pid])
+        if not isinstance(agent, TacticalAgent):  # pragma: no cover - factory pin
+            raise TypeError(
+                "build_default_agent_factory returned a non-TacticalAgent; the "
+                "memory-augmented walk mirrors the production accessors and "
+                "cannot proceed without them"
+            )
+        agents[pid] = agent
+    impostor_ids = tuple(
+        sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    )
+
+    meetings: list[_VJMeeting] = []
+    audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-funnel-vj-")
+    service = ObservationService(
+        game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+    )
+    last_events: tuple[EngineEvent, ...] = ()
+
+    try:
+        for entry in tick_entries:
+            # Pre-advance packets for EVERY living player (the 15.3 walk builds
+            # crew-only packets; the memory layer needs impostor memories too —
+            # impostor speakers vouch and vote like anyone else), ingested into
+            # each agent's own memory exactly as ``TacticalAgent.decide`` does.
+            for pid in sorted(state.players):
+                if not state.players[pid].alive:
+                    continue
+                packet = service.build_packet(
+                    world_state=state, agent_id=pid, engine_events=last_events
+                )
+                ingest_packet(
+                    packet=packet,
+                    memory=agents[pid].memory.episodic,
+                    beliefs=agents[pid].memory.beliefs,
+                )
+
+            actions = _deserialize_actions(entry.actions)
+            state, events = advance_tick(state, actions, game_map=game_map)
+            actual = _state_hash(state)
+            if actual != entry.state_hash:
+                raise FunnelReconstructionError(
+                    f"{game_id}: tick {entry.tick} reconstructed {actual!r} != "
+                    f"recorded {entry.state_hash!r} (roster mismatch or engine "
+                    "non-determinism)"
+                )
+
+            if state.phase == "GAME_OVER":
+                break
+            if state.phase != "MEETING":
+                last_events = tuple(events)
+                continue
+
+            meeting_entry = meeting_by_tick.get(entry.tick)
+            if meeting_entry is None:
+                # Same deliberate divergence from the serving loader as the 15.3
+                # walk: an instrument must never silently under-count.
+                raise FunnelReconstructionError(
+                    f"{game_id}: tick {entry.tick} entered MEETING but the replay "
+                    "carries no meeting row for that tick (partial recording or "
+                    "drifted meeting tick) — refusing to silently under-measure"
+                )
+            if meeting_entry.state_hash_before != actual:
+                raise FunnelReconstructionError(
+                    f"{game_id}: meeting at tick {entry.tick} recorded "
+                    f"state_hash_before {meeting_entry.state_hash_before!r} != "
+                    f"reconstructed pre-meeting state {actual!r}"
+                )
+
+            trigger_event: MeetingTriggeredEvent | None = None
+            for event in events:
+                if isinstance(event, MeetingTriggeredEvent):
+                    trigger_event = event
+            if trigger_event is None:
+                raise FunnelReconstructionError(
+                    f"{game_id}: tick {entry.tick} entered MEETING without a "
+                    "MeetingTriggeredEvent (engine invariant violation)"
+                )
+            trigger_kind: MeetingTriggerKind = trigger_event.trigger
+            body_id = trigger_event.body_id if trigger_kind == "report" else None
+
+            living = frozenset(
+                pid for pid, player in state.players.items() if player.alive
+            )
+            voters = frozenset(b.voter for b in meeting_entry.ballots)
+            if living != voters:
+                # Every living participant casts exactly one ballot (defaults
+                # included) — a mismatch means the reconstruction diverged from
+                # the recorded meeting and every snapshot below would lie.
+                raise FunnelReconstructionError(
+                    f"{game_id}: meeting at tick {entry.tick} reconstructed "
+                    f"living set {sorted(living)} != recorded ballot voters "
+                    f"{sorted(voters)}"
+                )
+
+            # Meeting-open snapshots off the PRODUCTION accessors, sorted like
+            # ``_build_participants``. ``env={}`` resolves every accessor lever
+            # OFF deterministically (see the region banner).
+            graph_by_voter: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}
+            sightings_by_speaker: dict[PlayerId, tuple[SightingRecord, ...]] = {}
+            obs_ids_by_voter: dict[PlayerId, frozenset[str]] = {}
+            fellows_by_voter: dict[PlayerId, tuple[PlayerId, ...]] = {}
+            for pid in sorted(living):
+                agent = agents[pid]
+                graph_by_voter[pid] = agent.suspicion_graph_for_meeting(env={})
+                sightings_by_speaker[pid] = agent.sighting_records_for_meeting()
+                obs_ids_by_voter[pid] = frozenset(agent.observation_ids_for_meeting())
+                fellows_by_voter[pid] = (
+                    tuple(x for x in impostor_ids if x != pid)
+                    if roles[pid] == "IMPOSTOR"
+                    else ()
+                )
+
+            meetings.append(
+                _VJMeeting(
+                    seed=seed,
+                    meeting_id=meeting_entry.meeting_id,
+                    tick=entry.tick,
+                    trigger_kind=trigger_kind,
+                    triggered_by=meeting_entry.triggered_by,
+                    outcome=meeting_entry.outcome,
+                    ejected=meeting_entry.ejected_player_id,
+                    living=living,
+                    transcript=meeting_entry.transcript,
+                    ballots=tuple(meeting_entry.ballots),
+                    contradictions=tuple(meeting_entry.contradictions),
+                    llm_calls=tuple(meeting_entry.llm_calls),
+                    suspicion_graph_by_voter=graph_by_voter,
+                    sighting_records_by_speaker=sightings_by_speaker,
+                    observation_ids_by_voter=obs_ids_by_voter,
+                    fellow_impostor_ids_by_voter=fellows_by_voter,
+                )
+            )
+
+            result = MeetingResult(
+                meeting_id=meeting_entry.meeting_id,
+                triggered_by=meeting_entry.triggered_by,
+                trigger_tick=meeting_entry.tick,
+                outcome=meeting_entry.outcome,
+                ejected_player_id=meeting_entry.ejected_player_id,
+                ballots=meeting_entry.ballots,
+                contradictions=meeting_entry.contradictions,
+                transcript=meeting_entry.transcript,
+            )
+            pre_meeting_events = tuple(events)
+            state, post_events = apply_meeting_result(
+                state, result, game_map=game_map, triggering_body_id=body_id
+            )
+            after = _state_hash(state)
+            if after != meeting_entry.state_hash_after:
+                raise FunnelReconstructionError(
+                    f"{game_id}: meeting at tick {entry.tick} reconstructed "
+                    f"{after!r} != recorded {meeting_entry.state_hash_after!r}"
+                )
+
+            # The post-meeting persistent belief fold, mirroring
+            # ``orchestrator.game._absorb_meeting_beliefs``: one evidence
+            # reduction + one absorb per player still alive in the post-meeting
+            # state, sorted; the reported-testimony content fold rides the same
+            # loop. Decay (§6.3 Rule 5) runs inside the absorb, so an
+            # evidence-free meeting still decays — exactly as live.
+            evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
+            statements = derive_reported_testimony(result)
+            for pid in sorted(state.players):
+                if not state.players[pid].alive:
+                    continue
+                agents[pid].absorb_meeting_evidence(
+                    accused=evidence.accused,
+                    corroborated=evidence.corroborated,
+                    contradicted=evidence.contradicted,
+                )
+                agents[pid].absorb_reported_testimony(statements=statements)
+
+            last_events = pre_meeting_events + tuple(post_events)
+            if state.phase == "GAME_OVER":
+                break
+    finally:
+        audit_dir.cleanup()
+
+    return _VJGameWalk(seed=seed, roles=roles, meetings=tuple(meetings))
+
+
+# --------------------------------------------------------------------------- #
+# The four pooling folds (per meeting)                                        #
+# --------------------------------------------------------------------------- #
+
+
+def _roll_call_placed(meeting: _VJMeeting) -> frozenset[PlayerId]:
+    """Living players who self-placed via a spoken :class:`WhereaboutsClaim`.
+
+    Roll-call coverage counts ONLY the whereabouts channel (the Task 16.7
+    roll-call answer shape) — NOT ``saw_player`` placements — so the fold
+    reads 0 on every committed set that predates roll-call elicitation
+    (16.15) and moves exactly when the mechanism does. The broader
+    any-public-placement census is the absence-set fold's complement below.
+    """
+
+    return frozenset(
+        turn.speaker
+        for turn in meeting.transcript.turns
+        if turn.speaker in meeting.living
+        and any(isinstance(obs, WhereaboutsClaim) for obs in turn.observations)
+    )
+
+
+def _whereabouts_claim_event_ids(meeting: _VJMeeting) -> tuple[str, ...]:
+    """Every living speaker's whereabouts claim, as its contradiction event id.
+
+    Mirrors ``meetings.transcript._turn_whereabouts_id`` exactly
+    (``turn:{turn_id}:whereabouts:{index}``, ``index`` = the observation's
+    position in ``turn.observations``) so a recorded
+    :class:`~meetings.schemas.ContradictionRef` referencing the claim is
+    matched byte-for-byte.
+    """
+
+    ids: list[str] = []
+    for turn in meeting.transcript.turns:
+        if turn.speaker not in meeting.living:
+            continue
+        for index, obs in enumerate(turn.observations):
+            if isinstance(obs, WhereaboutsClaim):
+                ids.append(f"turn:{turn.turn_id}:whereabouts:{index}")
+    return tuple(ids)
+
+
+def _vouch_census(meeting: _VJMeeting) -> tuple[int, frozenset[PlayerId]]:
+    """Spoken vouches: ``saw_player`` observations placing ANOTHER living player.
+
+    Returns ``(vouch_observations, vouched_subjects)``. A vouch is a living
+    speaker's spoken :class:`SawPlayerObservation` whose subject is another
+    LIVING player (the pooling census places the living; testimony about the
+    victim is the 15.3 transmission folds' business). Self-placements are the
+    roll-call/whereabouts channel, never a vouch.
+    """
+
+    observations = 0
+    subjects: set[PlayerId] = set()
+    for turn in meeting.transcript.turns:
+        if turn.speaker not in meeting.living:
+            continue
+        for obs in turn.observations:
+            if (
+                isinstance(obs, SawPlayerObservation)
+                and obs.subject != turn.speaker
+                and obs.subject in meeting.living
+            ):
+                observations += 1
+                subjects.add(obs.subject)
+    return observations, frozenset(subjects)
+
+
+def _grounded_vouch_set(meeting: _VJMeeting) -> frozenset[PlayerId]:
+    """Subjects of GROUNDED vouches — the 16.7 chokepoint over reconstructed records.
+
+    Runs the production :func:`meetings.transcript.grounded_vouch_subjects`
+    with each speaker's OWN reconstructed
+    :class:`~meetings.schemas.SightingRecord` snapshot (the walk's
+    meeting-open accessor read), the living roster, and the trigger kind —
+    exactly the mapping the graduating task will feed live. Committed
+    transcripts already carry speaker-groundable sightings, so this fold is
+    NON-zero on committed bytes: it measures the vouch supply the inert
+    channel would ground, the before-column the close reads.
+    """
+
+    return grounded_vouch_subjects(
+        meeting.transcript,
+        sighting_records=meeting.sighting_records_by_speaker,
+        roster=meeting.living,
+        trigger_kind=meeting.trigger_kind,
+    )
+
+
+def _absence_set(meeting: _VJMeeting) -> tuple[PlayerId, ...]:
+    """Living players with NO public placement in this meeting (sorted).
+
+    The complement of :func:`meetings.transcript.reconstruct_stated_paths`
+    over the living roster — BOTH placement channels count (a ``saw_player``
+    subject / co-present and a whereabouts self-placement), so on committed
+    bytes the fold reads the unplaced share as-is and shrinks as pooling
+    mechanisms land (the 16.8 absence prior reads the same construction).
+    """
+
+    placed = reconstruct_stated_paths(
+        meeting.transcript,
+        roster=meeting.living,
+        trigger_kind=meeting.trigger_kind,
+    )
+    return tuple(sorted(meeting.living - set(placed)))
+
+
+def _whereabouts_lies_detected(meeting: _VJMeeting) -> int:
+    """Whereabouts claims named by a RECORDED contradiction flag.
+
+    A lying whereabouts claim indexes as a degenerate single-tick self-alibi
+    and is prosecuted by the existing alibi flag paths (its 16.7 design), so
+    detection is read off the meeting's RECORDED
+    :class:`~meetings.schemas.ContradictionRef` rows — the production
+    detector's own output — by event id, never re-derived.
+    """
+
+    flagged_event_ids = frozenset(
+        event_id
+        for ref in meeting.contradictions
+        for event_id in (ref.event_a_id, ref.event_b_id)
+    )
+    return sum(
+        1
+        for event_id in _whereabouts_claim_event_ids(meeting)
+        if event_id in flagged_event_ids
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Pooling report types (public, stable)                                       #
+# --------------------------------------------------------------------------- #
+
+
+class MeetingPoolingRow(BaseModel):
+    """The pooling census for ONE resolved meeting (frozen).
+
+    Rates are shares of ``living`` (the meeting's living-player count, always
+    positive). ``absence_set`` exposes the raw unplaced roster so any variant
+    definition can be re-derived from the rows without another walk.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seed: int
+    meeting_id: str
+    tick: int
+    trigger_kind: MeetingTriggerKind
+    outcome: str
+    living: int
+    whereabouts_claims: int
+    roll_call_placed: int
+    roll_call_coverage: float
+    vouch_observations: int
+    vouched_subjects: int
+    vouch_rate: float
+    grounded_vouch_subjects: int
+    grounded_vouch_rate: float
+    absence_set: tuple[PlayerId, ...]
+    absence_set_size: int
+    whereabouts_lies_detected: int
+
+
+class PoolingFunnelReport(BaseModel):
+    """The pooling-census diagnostics over one replay set (frozen value object).
+
+    Aggregates the per-meeting rows over EVERY resolved meeting (emergency
+    included). Mean rates are ``None`` (undefined, not ``0.0``) when the set
+    has no meetings; ``whereabouts_lie_detection_rate`` and
+    ``grounded_vouch_share`` are ``None`` when their denominators (claims /
+    vouched subjects) are zero — on committed bytes that predate roll-call,
+    the lie rate is therefore ``None`` with ``whereabouts_claims_total == 0``.
+    ``absence_set_size_histogram`` maps set size to meeting count. Emitted
+    inside :class:`eval.vj_instruments.VJInstrumentReport` (the ``pooling``
+    field of the ``--vj`` report; JSON shape documented there).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    replay_set_dir: str
+    num_players: int
+    num_impostors: int
+    tasks_per_crewmate: int
+    games_total: int
+    meetings_total: int
+    whereabouts_claims_total: int
+    roll_call_meetings: int
+    roll_call_coverage_mean: float | None
+    vouch_observations_total: int
+    vouch_rate_mean: float | None
+    grounded_vouch_rate_mean: float | None
+    grounded_vouch_share: float | None
+    absence_set_size_mean: float | None
+    absence_set_size_median: float | None
+    absence_set_size_histogram: Mapping[int, int]
+    whereabouts_lies_detected: int
+    whereabouts_lie_detection_rate: float | None
+    per_meeting: tuple[MeetingPoolingRow, ...]
+
+
+def _pooling_row(meeting: _VJMeeting) -> MeetingPoolingRow:
+    living = len(meeting.living)
+    if living <= 0:
+        raise FunnelReconstructionError(
+            f"meeting {meeting.meeting_id!r} reconstructed an empty living set"
+        )
+    placed = _roll_call_placed(meeting)
+    claims = _whereabouts_claim_event_ids(meeting)
+    vouch_observations, vouched = _vouch_census(meeting)
+    grounded = _grounded_vouch_set(meeting)
+    absence = _absence_set(meeting)
+    return MeetingPoolingRow(
+        seed=meeting.seed,
+        meeting_id=meeting.meeting_id,
+        tick=meeting.tick,
+        trigger_kind=meeting.trigger_kind,
+        outcome=meeting.outcome,
+        living=living,
+        whereabouts_claims=len(claims),
+        roll_call_placed=len(placed),
+        roll_call_coverage=len(placed) / living,
+        vouch_observations=vouch_observations,
+        vouched_subjects=len(vouched),
+        vouch_rate=len(vouched) / living,
+        grounded_vouch_subjects=len(grounded),
+        grounded_vouch_rate=len(grounded) / living,
+        absence_set=absence,
+        absence_set_size=len(absence),
+        whereabouts_lies_detected=_whereabouts_lies_detected(meeting),
+    )
+
+
+def _pooling_report_from_walks(
+    walks: Sequence[_VJGameWalk],
+    *,
+    sample_dir: Path,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+) -> PoolingFunnelReport:
+    """Aggregate the pooling rows of already-walked games into the set report.
+
+    Shared by :func:`compute_pooling_funnel` and
+    :func:`eval.vj_instruments.compute_vj_instruments` so the ``--vj`` report
+    embeds the pooling census off ONE walk of the set.
+    """
+
+    rows = [_pooling_row(meeting) for walk in walks for meeting in walk.meetings]
+    sizes = [row.absence_set_size for row in rows]
+    histogram: dict[int, int] = {}
+    for size in sizes:
+        histogram[size] = histogram.get(size, 0) + 1
+    claims_total = sum(row.whereabouts_claims for row in rows)
+    lies_total = sum(row.whereabouts_lies_detected for row in rows)
+    vouched_total = sum(row.vouched_subjects for row in rows)
+    grounded_total = sum(row.grounded_vouch_subjects for row in rows)
+    return PoolingFunnelReport(
+        replay_set_dir=str(sample_dir),
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        games_total=len(walks),
+        meetings_total=len(rows),
+        whereabouts_claims_total=claims_total,
+        roll_call_meetings=sum(1 for row in rows if row.whereabouts_claims),
+        roll_call_coverage_mean=(
+            statistics.fmean(row.roll_call_coverage for row in rows) if rows else None
+        ),
+        vouch_observations_total=sum(row.vouch_observations for row in rows),
+        vouch_rate_mean=(
+            statistics.fmean(row.vouch_rate for row in rows) if rows else None
+        ),
+        grounded_vouch_rate_mean=(
+            statistics.fmean(row.grounded_vouch_rate for row in rows) if rows else None
+        ),
+        grounded_vouch_share=(
+            grounded_total / vouched_total if vouched_total else None
+        ),
+        absence_set_size_mean=statistics.fmean(sizes) if sizes else None,
+        absence_set_size_median=statistics.median(sizes) if sizes else None,
+        absence_set_size_histogram={
+            size: histogram[size] for size in sorted(histogram)
+        },
+        whereabouts_lies_detected=lies_total,
+        whereabouts_lie_detection_rate=(
+            lies_total / claims_total if claims_total else None
+        ),
+        per_meeting=tuple(rows),
+    )
+
+
+def _walk_set_vj(sample_dir: Path) -> tuple[list[_VJGameWalk], int, int, int]:
+    """Walk every game of a replay set through the memory-augmented walk."""
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    per_seed_roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    seeds = seeds_on_disk(sample_dir)
+    if not seeds:
+        raise ValueError(f"no replay-seed-*.jsonl found under {sample_dir}")
+    walks = [
+        _walk_game_vj(
+            sample_dir / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            roles=per_seed_roles[seed],
+            game_map=game_map,
+        )
+        for seed in seeds
+    ]
+    return walks, num_players, num_impostors, tasks_per_crewmate
+
+
+def compute_pooling_funnel(sample_dir: Path) -> PoolingFunnelReport:
+    """Fold a replay set's committed bytes into the pooling-census diagnostics.
+
+    The Task 16.10 pooling instrument: roll-call coverage, vouch +
+    GROUNDED-vouch rates, absence-set size distribution, and the
+    whereabouts-lie detection rate over every resolved meeting. Runs on any
+    replay-set directory and both roster presets; pure and offline. Also
+    surfaced (embedded) through ``scripts/measure_baseline.py --vj``.
+    """
+
+    walks, num_players, num_impostors, tasks_per_crewmate = _walk_set_vj(sample_dir)
+    return _pooling_report_from_walks(
+        walks,
+        sample_dir=sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+
+
 __all__ = [
     "FunnelReconstructionError",
     "InformationFunnelReport",
     "MeetingFunnelRow",
+    "MeetingPoolingRow",
+    "PoolingFunnelReport",
     "compute_information_funnel",
+    "compute_pooling_funnel",
 ]

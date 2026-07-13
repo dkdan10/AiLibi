@@ -560,7 +560,7 @@ non-interaction by test).
 ### Task 16.7 — Pooling substrate: typed grounded vouching + the whereabouts claim
 **Branch:** `phase-16-pooling-substrate`
 **Depends on:** 16.3
-**Section refs:** meetings/schemas.py:56-149 (the observation union + VentWitnessRecord — the pattern to generalize); orchestrator/game.py:2369-2403 (the vent accessor to near-copy); meetings/transcript.py:989-1092 (reconstruct_stated_paths — where whereabouts integrate) + :2251-2309 (the vent grounding chokepoint); agents/memory/beliefs.py:387-423 (CORROBORATION_SUSPICION_DELTA — the channel vouching feeds)
+**Section refs:** meetings/schemas.py:56-149 (the observation union + VentWitnessRecord — the pattern to generalize); orchestrator/game.py:2369-2403 (the vent accessor to near-copy); meetings/transcript.py:1053-1156 (reconstruct_stated_paths — where whereabouts integrate) + :2251-2309 (the vent grounding chokepoint); agents/memory/beliefs.py:387-423 (CORROBORATION_SUSPICION_DELTA — the channel vouching feeds)
 **Complexity:** Integration
 
 Make sightings speakable-and-checkable the way 15.4 made vents speakable-and-checkable — with the
@@ -689,7 +689,7 @@ logic; the manager already validated.
 ### Task 16.8 — The absence prior: a capped sub-gate delta for the publicly unplaced (default-OFF lever)
 **Branch:** `phase-16-absence-prior`
 **Depends on:** 16.6, 16.7
-**Section refs:** meetings/transcript.py:989-1092 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1830-1861 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:80-99 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
+**Section refs:** meetings/transcript.py:1053-1156 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1992-2025 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:104-145 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
 **Complexity:** Medium
 
 The channel that makes visibility a resource: at the pre-vote fold, the ABSENT set — living
@@ -1260,8 +1260,9 @@ decision):** for each Wave-1 lever — J1 hard-evidence gate (16.4), observation
 (16.5), J2 citation gate (16.6), the absence prior (16.8) — the owner rules graduate-ON or
 stay-OFF, each ruling citing the lever's committed counterfactual against its named canary (J1:
 zero hard-backed outcome changes; J2: near-zero honest catches blocked; absence: the boundary
-pins + set-size evidence; id-rendering: golden-proven inertness + 16.15's citation surface needs
-it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
+pins + set-size evidence, plus the PR #264-flagged owner question of whether vent sightings
+should widen the placement substrate; id-rendering: golden-proven inertness + 16.15's citation
+surface needs it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
 honesty this contract can actually deliver: for levers whose surface is kwarg/lever-gated with no
 template presence (J1, the absence prior), stay-OFF is coherent as-is; but for the COUPLED pair
 whose elicitation surface 16.15 already landed (the citation gate + observation-id rendering —

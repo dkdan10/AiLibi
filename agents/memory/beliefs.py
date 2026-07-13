@@ -392,6 +392,113 @@ def hard_evidence_gated_suspicion(
     return min(suspicion, HARD_EVIDENCE_GATE_RENDER_CEIL) if soft_only else suspicion
 
 
+# Task 16.8 absence-prior lever — DEFAULT-OFF (the 16.4 live-toggle pattern,
+# env-gated, NOT retired). Registered as the FOURTH live entry in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` (behind 16.6's
+# ``citation_gate``, the 16.4 -> 16.5 -> 16.6 -> 16.8 registry-chain order) and
+# stamped via ``substrate_flag_snapshot``. On committed baseline-3 bytes the
+# absent set is often LARGE (the 16.15 roll-call elicitation does not exist
+# yet), which is exactly why this stays OFF until 16.17 measures the pair
+# together — see ``ABSENCE_SUSPICION_DELTA``'s docstring for the sizing
+# contract the lever guards.
+ENV_ABSENCE_PRIOR: Final[str] = "AILIBI_ABSENCE_PRIOR"
+_ABSENCE_PRIOR_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
+
+
+def absence_prior_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 16.8 absence-prior lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_ABSENCE_PRIOR` from ``env`` (defaulting to the real
+    process environment), mirroring the 16.4 ``hard_evidence_gate`` resolver it
+    clones (and the retired 13.5 / 14.10 / 15.5 resolvers before it). Default
+    OFF: an unset / empty / unrecognised value is ``False`` so the pre-vote
+    fold stays byte-identical to the committed baseline-3 substrate
+    (``scripts/verify_samples.sh`` reconstructs clean); the live measurement
+    beside the 16.15 roll-call elicitation and the graduation decision are
+    Task 16.17. Accepts ``1/true/yes/on`` (case-insensitive). The ``env``
+    argument lets tests + the offline counterfactual toggle the lever
+    deterministically without mutating ``os.environ``.
+
+    ON applies :data:`ABSENCE_SUSPICION_DELTA` to every absent subject
+    (:func:`meetings.transcript.absent_players` -- the meeting's living roster
+    minus the players public testimony placed) in the TRANSIENT ``pre_vote``
+    half of :func:`apply_meeting_evidence_rules`, threaded by the manager's
+    vote-time fold. The gating lives at the fold's application region and the
+    manager's fold-path guard -- both read THIS resolver, so a lever-OFF
+    meeting takes the identical code path (and bytes) as before the lever
+    existed. The persistent absorb never applies the delta, lever ON or OFF.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_ABSENCE_PRIOR, "").strip().lower()
+        in _ABSENCE_PRIOR_FLAG_TRUE
+    )
+
+
+ABSENCE_SUSPICION_DELTA: Final[float] = 0.08
+"""The Task 16.8 absence prior: the WEAK pre-vote delta a publicly UNPLACED
+living player takes (audits/post-phase-14-Voice-and-Judgment-planning.md's
+pooling program; the phase-16 "visibility as a resource" channel).
+
+At the pre-vote fold, every subject in the meeting's ABSENT set -- the living
+roster minus :func:`meetings.transcript.reconstruct_stated_paths` keys, i.e.
+the players whom NOBODY's public testimony (sighting or Task 16.7 whereabouts
+answer) placed anywhere this meeting -- takes this delta, behind the
+default-OFF :func:`absence_prior_enabled` lever. Answering roll-call removes a
+player from the set, so impostors gain a reason to account for their time
+(lying creates the contradiction material the alibi rules prosecute), and
+staying unseen finally has a price -- the incentive Phase 17's retraining
+climbs.
+
+THE SIZING IS THE CONTRACT (the :data:`WEAK_CONTRADICTION_SUSPICION_DELTA`
+lone-weak-signal discipline, applied to a second weak channel). Alone, the
+delta MUST stay sub-gate: ``0.50 + 0.08 = 0.58 < 0.60`` -- a quiet crewmate is
+NEVER ejectable on absence alone. Stacked with a SECOND independent weak
+signal it deliberately CAN cross (the two-signal eject discipline). The
+documented boundary table -- every row pinned raw AND rendered
+(quantize-then-compare on the vote surface's ``"%.2f"`` grid, the Task 15.6
+band lesson; IEEE-luck excluded) in ``tests/agents/test_absence_prior.py``,
+per the Task 15.5 boundary-sum precedent:
+
+* UNDER  -- absence alone on the neutral prior: ``0.50 + 0.08 = 0.58``.
+* UNDER  -- absence repeated across meetings: the delta is TRANSIENT
+  (``pre_vote`` half only, like the Task 13.7 spread graduation), so a
+  player absent in every meeting renders 0.58 every time -- absence never
+  accumulates into an ejection.
+* UNDER  -- absence + a DECAY-DRIFTED stale prior: a lone accusation bump
+  (0.55) left unreinforced decays into the neutral band
+  (``0.50 + 0.05 * 0.75**5 ~= 0.5119`` after five quiet meetings), and
+  absence on top renders 0.59 < 0.60 -- the delta never resurrects
+  suspicion the Rule-5 decay already discounted.
+* CROSSES -- absence + the single-voice inform (+0.05): 0.63.
+* CROSSES -- absence + the two-voice graduated spread (+0.12): 0.70.
+* CROSSES -- absence + the capped 3+-voice spread (+0.15): 0.73.
+* CROSSES -- absence + a FRESH accusation-carry prior (0.55, accused last
+  meeting, not yet decayed): 0.63 -- accused-then-unaccounted IS the
+  two-signal shape.
+* CROSSES -- absence + a lone weak contradiction flag (+0.08): 0.66.
+
+COMPOSITION (never bypassed, always through the existing caps): the delta is
+applied inside :func:`apply_meeting_evidence_rules`'s ``pre_vote`` half, so it
+rides the Task 14.10 :data:`CONTRADICTION_RENDER_CEIL` bound (an absent
+subject's lift can never reach the 1.0 clamp; a prior already at/above the
+ceiling takes NO lift -- the ceiling bounds the lift, not the prior), the Task
+15.5 reporter cap (:data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP` -- the
+body-report reporter takes no soft lift, absence included, so the lever cannot
+re-open the H5 innocent-reporter railroad), the §4.7 teammate/self guards, and
+-- downstream in the manager's vote-time graph --
+:func:`meetings.manager._joint_capped_suspicion` (absence + a strong flag caps
+at ``prior + 0.30``: 0.80 from neutral, never 0.88). Attributed to the SOFT
+``testimony_spread`` provenance channel (the ``pre_vote`` transient bucket the
+spread already feeds -- the eight-source decomposition is 16.3's frozen
+contract, and absence-of-testimony is testimony-class, soft by construction),
+so the 16.4 hard-evidence gate classifies it as soft and it can never masquerade
+as grounded evidence. It moves SUSPICION only and mints NO
+:class:`ContradictionRef`, so the 16.6 citation gate's zero-flag boundary is
+structurally out of reach (the flag-independence both tasks pin)."""
+
+
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
 """Accusation-driven suspicion bump (Tasks 9.8, 10.7; audit gp-1 recall).
 
@@ -1405,6 +1512,7 @@ def apply_meeting_evidence_rules(
     pre_vote_informed: AbstractSet[PlayerId] = frozenset(),
     pre_vote_voice_counts: Mapping[PlayerId, int] | None = None,
     reporter: PlayerId | None = None,
+    absent: AbstractSet[PlayerId] = frozenset(),
     env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
@@ -1593,6 +1701,23 @@ def apply_meeting_evidence_rules(
     caught by a real flag still crosses the §4.6 gate (the over-damping canary:
     zero hard-flag-backed conviction outcomes change).
 
+    **Absence prior (Task 16.8; default-OFF).** ``absent`` names the meeting's
+    publicly UNPLACED living players (:func:`meetings.transcript.absent_players`
+    -- the roster minus the stated-paths keys), threaded by the manager's
+    vote-time fold. Behind the default-OFF :func:`absence_prior_enabled` lever
+    (``env``-resolved, the 15.5 ``reporter`` gating pattern), every absent
+    subject takes :data:`ABSENCE_SUSPICION_DELTA` in the ``pre_vote`` half ONLY
+    -- the delta is TRANSIENT exactly like the 13.7 spread graduation (the
+    ``post_vote`` and composed halves ignore ``absent`` entirely, so a
+    perpetually quiet player renders 0.58 every meeting and never accumulates
+    toward the gate; see the constant's documented boundary table). The delta
+    composes through every existing bound: the 14.10 render ceiling, the 15.5
+    reporter cap (the reporter takes no absence lift), the teammate/self/roster
+    guards, and -- downstream -- the manager's joint cap. Applied AFTER the
+    testimony bumps and BEFORE the corroborations, so a vouched-but-unplaced
+    subject still gets the corroboration's clamp-ceiling last word. Lever OFF
+    (the default) or ``absent`` empty is byte-identical to the pre-16.8 fold.
+
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
     """
@@ -1630,6 +1755,7 @@ def apply_meeting_evidence_rules(
         accused = [subject for subject in accused if subject in roster]
         corroborated = [subject for subject in corroborated if subject in roster]
         contradicted = [subject for subject in contradicted if subject in roster]
+        absent = {subject for subject in absent if subject in roster}
     teammates = frozenset(fellow_impostor_ids)
     bumped = {
         subject for subject in accused if subject != own_id and subject not in teammates
@@ -1687,6 +1813,11 @@ def apply_meeting_evidence_rules(
         and reporter is not None
         and reporter_exculpation_enabled(env)
     )
+    # Task 16.8 absence prior (default-OFF): the TRANSIENT pre-vote half only,
+    # like the 13.7 spread graduation -- the persistent halves never consult
+    # the lever or the set, so absence can never accumulate across meetings
+    # and the OFF path (or an empty set) is byte-identical by construction.
+    absence_now = phase == "pre_vote" and bool(absent) and absence_prior_enabled(env)
     for subject in sorted(bump_now):
         # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a
         # voiced subject by its voice-count delta (1->+0.05, 2->+0.12,
@@ -1715,6 +1846,33 @@ def apply_meeting_evidence_rules(
             "testimony_spread" if phase == "pre_vote" else "accusation_carry"
         )
         result.adjust_suspicion(subject, delta=delta, source=bump_source)
+    if absence_now:
+        for subject in sorted(absent):
+            # The same guards as the bump loop: no self row, and the §4.7
+            # team-internal firewall -- an impostor listener never accrues
+            # the absence lift against a fellow impostor.
+            if subject == own_id or subject in teammates:
+                continue
+            absence_delta = ABSENCE_SUSPICION_DELTA
+            if ceil_lift:
+                # Task 14.10 bound 1, unchanged: never lift a subject INTO the
+                # 1.0 clamp, and a prior already at/above the ceiling takes no
+                # lift (the ceiling bounds the lift, never the prior).
+                prior = result.view(subject).suspicion
+                absence_delta = min(
+                    absence_delta, max(prior, CONTRADICTION_RENDER_CEIL) - prior
+                )
+            if exculpate_reporter and subject == reporter:
+                # Task 15.5 composition: the body-report reporter takes NO soft
+                # pre-vote lift -- absence included, so this lever cannot
+                # re-open the H5 proximity-at-discovery railroad.
+                absence_delta = min(absence_delta, REPORTER_EXCULPATION_SOFT_LIFT_CAP)
+            # Task 16.8: absence-of-testimony is testimony-class evidence --
+            # SOFT, the pre-vote transient bucket the spread already feeds
+            # (the eight-source decomposition is 16.3's frozen contract).
+            result.adjust_suspicion(
+                subject, delta=absence_delta, source="testimony_spread"
+            )
     for subject in sorted(lower_now):
         # Task 16.3: a corroboration is the mirror of an accusation bump -- "one
         # vouch cancels one accusation-meeting" (the CORROBORATION_SUSPICION_DELTA
@@ -1741,12 +1899,14 @@ def apply_meeting_evidence_rules(
 
 
 __all__ = [
+    "ABSENCE_SUSPICION_DELTA",
     "ACCUSATION_SUSPICION_DELTA",
     "BODY_PROXIMITY_SUSPICION_DELTA",
     "BODY_PROXIMITY_WINDOW_TICKS",
     "CONTRADICTION_RENDER_CEIL",
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
+    "ENV_ABSENCE_PRIOR",
     "ENV_EVIDENCE_QUALITY_LIFT",
     "ENV_HARD_EVIDENCE_GATE",
     "ENV_REPORTER_EXCULPATION",
@@ -1771,6 +1931,7 @@ __all__ = [
     "PlayerBelief",
     "SuspicionProvenance",
     "SuspicionSource",
+    "absence_prior_enabled",
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",
     "apply_observation_rules",

@@ -21,8 +21,9 @@ decision):** for each Wave-1 lever — J1 hard-evidence gate (16.4), observation
 (16.5), J2 citation gate (16.6), the absence prior (16.8) — the owner rules graduate-ON or
 stay-OFF, each ruling citing the lever's committed counterfactual against its named canary (J1:
 zero hard-backed outcome changes; J2: near-zero honest catches blocked; absence: the boundary
-pins + set-size evidence; id-rendering: golden-proven inertness + 16.15's citation surface needs
-it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
+pins + set-size evidence, plus the PR #264-flagged owner question of whether vent sightings
+should widen the placement substrate; id-rendering: golden-proven inertness + 16.15's citation
+surface needs it ON). A lever that fails its canary stays OFF as a RECORDED decision — with the disable-path
 honesty this contract can actually deliver: for levers whose surface is kwarg/lever-gated with no
 template presence (J1, the absence prior), stay-OFF is coherent as-is; but for the COUPLED pair
 whose elicitation surface 16.15 already landed (the citation gate + observation-id rendering —

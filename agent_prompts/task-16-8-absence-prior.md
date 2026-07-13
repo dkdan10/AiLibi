@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 16.8 — The absence prior: a capped sub-gate delta for the publicly unplaced (default-OFF lever), anchored to meetings/transcript.py:989-1092 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1830-1861 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:80-99 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent). Do not implement work outside these references.
+Implement Task 16.8 — The absence prior: a capped sub-gate delta for the publicly unplaced (default-OFF lever), anchored to meetings/transcript.py:1053-1156 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1992-2025 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:104-145 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-16.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-16-absence-prior`
 **Depends on:** 16.6, 16.7
-**Section refs:** meetings/transcript.py:989-1092 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1830-1861 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:80-99 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
+**Section refs:** meetings/transcript.py:1053-1156 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1992-2025 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:104-145 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)
 **Complexity:** Medium
 
 The channel that makes visibility a resource: at the pre-vote fold, the ABSENT set — living
@@ -107,4 +107,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-16-absence-prior` with a title like `task 16.8: the absence prior: a capped sub-gate delta for the publicly unplaced (default-off lever)`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing meetings/transcript.py:989-1092 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1830-1861 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:80-99 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing meetings/transcript.py:1053-1156 (reconstruct_stated_paths — the absence complement is roster minus its keys, computed nowhere today); meetings/manager.py:1992-2025 (_joint_capped_suspicion — the cap everything composes through); agents/memory/beliefs.py:104-145 (the lone-weak-signal discipline); tasks/phase-15.md 15.5 (the boundary-sum pin precedent)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -483,8 +483,31 @@ class SawVentObservationView(_FrozenView):
     room: str
 
 
+class WhereaboutsClaimView(_FrozenView):
+    """Shadows ``meetings.schemas.WhereaboutsClaim`` (Task 16.7.1).
+
+    The spectator mirror of the roll-call self-placement (Task 16.7): "I was
+    in ``room`` at ``tick``". Deliberately SELF-placement — it carries NO
+    subject field because the subject IS the turn speaker
+    (:attr:`TurnView.speaker`); the placement belongs to whoever took the
+    turn. Vouching for OTHERS needs no new kind — a :class:`SawPlayerView`
+    already expresses that. Display-only: the source shape is a degenerate
+    single-tick self-alibi the manager already indexes for contradiction
+    detection, so lying in it surfaces through the EXISTING alibi flag path;
+    this view re-derives nothing.
+    """
+
+    type: Literal["whereabouts"]
+    tick: int
+    room: str
+
+
 ObservationClaimView: TypeAlias = Annotated[
-    SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView,
+    SawPlayerView
+    | CompletedTaskObsView
+    | FoundBodyObsView
+    | SawVentObservationView
+    | WhereaboutsClaimView,
     Field(discriminator="type"),
 ]
 
@@ -602,12 +625,24 @@ class BallotView(_FrozenView):
     parse. ``VOTE_PARSE_DEFAULT`` is special-cased: it is the WHOLE
     ``rationale_text`` (the model authored nothing), so ``rationale_text_clean``
     is empty for it. See ``api.replay_loader._parse_rewrite_reasons``.
+
+    Task 16.7.1: ``primary_reason_observation_id`` mirrors the private
+    hard-evidence citation channel (``meetings.schemas.VoteBallot`` gained it
+    at Task 16.5): a stable episodic observation id
+    (``{agent_id}:{tick}:{seq}``) drawn from the VOTER'S OWN memory, distinct
+    from ``primary_reason_id`` (which references a public meeting ``turn_id``).
+    It is display-only here — the manager already validated it against the
+    voter's memory (``meetings.manager._normalize_ballot_observation_id``); the
+    spectator surface never re-validates. The ``None`` default mirrors the
+    source model's additive rationale (recordings predating the field, and
+    ballots that cited nothing, surface ``None``).
     """
 
     voter: str
     target: str
     confidence: float
     primary_reason_id: str | None
+    primary_reason_observation_id: str | None = None
     considered_alternatives: tuple[str, ...]
     rationale_text: str
     rewrite_reasons: tuple[str, ...]
@@ -1030,4 +1065,5 @@ __all__ = [
     "VentView",
     "VisibleBodyView",
     "VisiblePlayerView",
+    "WhereaboutsClaimView",
 ]

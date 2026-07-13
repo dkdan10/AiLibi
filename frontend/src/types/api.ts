@@ -260,6 +260,12 @@ export interface SawVentObservationView {
   room: string;
 }
 
+export interface WhereaboutsClaimView {
+  type: "whereabouts";
+  tick: number;
+  room: string;
+}
+
 export interface AlibiClaimView {
   type: "alibi";
   subject: string;
@@ -288,6 +294,7 @@ export interface BallotView {
   target: string;
   confidence: number;
   primary_reason_id: string | null;
+  primary_reason_observation_id: string | null;
   considered_alternatives: string[];
   rationale_text: string;
   rewrite_reasons: string[];
@@ -528,7 +535,7 @@ export interface GenuineClassConversionReport {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | WhereaboutsClaimView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {

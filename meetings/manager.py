@@ -80,7 +80,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -90,13 +90,14 @@ from agents.memory.beliefs import (
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
     SuspicionProvenance,
+    absence_prior_enabled,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     reporter_exculpation_enabled,
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
-from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD, citation_gate_enabled
 from meetings.render_contract import (
     ReportPromptRenderer,
     StatementPromptRenderer,
@@ -128,6 +129,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     MeetingTriggerKind,
+    absent_players,
     accusation_target,
     canonical_rooms,
     detect_contradictions,
@@ -267,6 +269,37 @@ INVALID_REASON_ID_MARKER: Final[str] = (
 # interpolation when a later task registers the chip). Pin the literal exactly.
 INVALID_OBSERVATION_ID_MARKER: Final[str] = (
     "[invalid primary_reason_observation_id {observation_id!r} nulled] "
+)
+
+# Audit-trail marker prepended to ``rationale_text`` when the citation gate
+# (Task 16.6, J2; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4)
+# coerces an EJECT ballot to ``SKIP``: the target carries NO contradiction
+# flag this meeting (zero-flag) and the ballot cites NOTHING -- both
+# ``primary_reason_id`` and ``primary_reason_observation_id`` are null after
+# validation (a fabricated citation has already been nulled by the
+# ``INVALID_REASON_ID_MARKER`` / ``INVALID_OBSERVATION_ID_MARKER`` passes
+# above, so it gates exactly like a bare null). Fires ONLY with the
+# default-OFF ``citation_gate_enabled`` lever ON; the gate coerces, never
+# rejects (never a crash, never a re-prompt), so the marker preserves the
+# original target for replay / audit analysis and rides ``rationale_text``
+# into the recorded ballot the spectator surface already reads (mirrors the
+# ``INVALID_REASON_ID_MARKER`` prefix shape; ``api.replay_loader``'s
+# ``_marker_pattern`` relies on the ``{x!r}`` repr interpolation when a later
+# task registers the chip). Two downstream consumers are DEFERRED with that
+# chip, both unreachable until a lever-ON recording exists (none can exist
+# before the 16.17 graduation, and the loader refuses cross-substrate
+# reconstruction): the spectator chip registration
+# (``api.replay_loader._BALLOT_PREFIX_MARKERS`` -- the api-region task,
+# beside 16.5's equally-unregistered observation marker) and the eval SKIP
+# partition (``eval.meeting_quality.compute_conversion_report`` recognises
+# only the parse-default / teammate / invalid-target / redirect markers, so
+# a gated SKIP from a MUST-vote voter would today land in its
+# ``threshold_inversions`` sentinel -- the partition must learn this literal
+# BEFORE any lever-ON conversion read, or the §4.6 gate-obedience sentinel
+# over-counts). Until then eval counts coercions per game by grepping this
+# one string. Pin the literal exactly.
+UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
+    "[uncited zero-flag eject target {target!r} coerced to SKIP] "
 )
 
 # Audit-trail marker prepended to a turn's ``free_text`` when an
@@ -577,10 +610,12 @@ class MeetingParticipant:
     self-channel only, so it is firewall-clean -- the ids name the agent's
     own memory rows and leak nothing). The manager consults it in exactly ONE
     place, :func:`_normalize_ballot_observation_id`: a cited id outside this
-    set is nulled with the audit marker. It never reaches a prompt surface
-    and no gate/guard/tally reads it (Task 16.6 enforces). The default ``()``
-    keeps every existing construction site valid and means "this voter can
-    cite nothing": any non-null citation from such a participant nulls.
+    set is nulled with the audit marker. It never reaches a prompt surface;
+    the validated citation's one downstream consumer is the Task 16.6
+    citation gate (:func:`guard_ballot_citation`, default-OFF lever). The
+    default ``()`` keeps every existing construction site valid and means
+    "this voter can cite nothing": any non-null citation from such a
+    participant nulls.
 
     ``persona`` (Task 16.3) is the inert persona-text slot: the orchestrator
     populates it from the deterministic persona-assignment bank in Task 16.9,
@@ -1054,6 +1089,25 @@ class MeetingManager:
         # widen-the-contract-inert pattern; the 16.3 persona precedent).
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
+        )
+        # Task 16.8 (PR #264 review): re-derive the ABSENT set with the
+        # ENGINE-derived trigger kind. The sibling folds above keep their
+        # standing ``trigger_kind=None`` call shape (threading the kind into
+        # them would change lever-OFF emergency-meeting behavior for the
+        # corroboration/voices gates -- the 16.7 sighting-records precedent
+        # declines exactly that), but the absent set is lever-gated data and
+        # must honor the Task 10.11 emergency gate: under ``None`` a
+        # model-FABRICATED opening body in an emergency transcript reads as a
+        # report kill scene, relevance-gates away real public sightings at
+        # that room, and would mint spurious absence lever-ON. The true-kind
+        # derivation is also what the replay path already computes
+        # (:func:`extract_belief_evidence` receives the trigger kind), so
+        # live and replay agree on every meeting.
+        evidence = replace(
+            evidence,
+            absent=absent_players(
+                transcript, roster=roster, trigger_kind=meeting_trigger_kind
+            ),
         )
         ballots = await self._collect_ballots(
             trigger=trigger,
@@ -1722,8 +1776,9 @@ class MeetingManager:
         # the participant (no per-speaker Mapping like the vent channel's --
         # the ballot validator needs only THIS voter's own set, not every
         # speaker's). Out-of-set -> nulled with an audit marker; never
-        # guessed. Enforcement-free: nothing downstream reads the field yet
-        # (Task 16.6 enforces).
+        # guessed. The validated field's one consumer is the Task 16.6
+        # citation gate at the END of this chain (default-OFF lever): a
+        # nulled fabrication gates exactly like a bare null.
         normalized = _normalize_ballot_observation_id(
             ballot=normalized,
             valid_observation_ids=frozenset(participant.observation_ids),
@@ -1744,10 +1799,11 @@ class MeetingManager:
         # the SAME ``suspicion_graph`` / ``candidate_targets`` /
         # ``skip_confidence_threshold`` passed to the prompt renderer
         # above, so guard and in-prompt §4.6 verdict read one source. Runs
-        # LAST in the chain -- after roster normalization and the §7.12
-        # coercion -- so it only sees valid living non-teammate targets
-        # and can never create a betrayal ballot for the firewall to
-        # re-coerce.
+        # LAST among the target-shaping guards -- after roster
+        # normalization and the §7.12 coercion -- so it only sees valid
+        # living non-teammate targets and can never create a betrayal
+        # ballot for the firewall to re-coerce; only the post-redirect
+        # citation gate below runs after it.
         normalized = guard_ballot_target_graph(
             ballot=normalized,
             voter_id=participant.agent_id,
@@ -1756,6 +1812,23 @@ class MeetingManager:
             skip_confidence_threshold=self._config.skip_confidence_threshold,
             fellow_impostor_ids=participant.fellow_impostor_ids,
         )
+        # Citation gate (Task 16.6, J2; planning doc §3.4): with the
+        # default-OFF ``citation_gate_enabled`` lever ON, a zero-flag EJECT
+        # ballot -- its target carries no contradiction flag among THIS
+        # meeting's detected ``contradictions`` -- that cites neither a
+        # transcript turn (``primary_reason_id``) nor a private observation
+        # (``primary_reason_observation_id``, the 16.5 path) coerces to SKIP
+        # with :data:`UNCITED_ZERO_FLAG_EJECT_MARKER` -- mark-and-coerce,
+        # never a crash, never a re-prompt. The POST-REDIRECT slot is the
+        # contract: a redirected ballot is judged on the REDIRECTED target's
+        # flag status, not the original's. Lever OFF (the default) skips the
+        # guard entirely, so the chain's output is byte-identical to the
+        # committed baseline-3 substrate.
+        if citation_gate_enabled():
+            normalized = guard_ballot_citation(
+                ballot=normalized,
+                contradictions=contradictions,
+            )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
     # -- Resolution -------------------------------------------------------
@@ -2146,6 +2219,20 @@ def _suspicion_graph_with_contradictions(
     reads as guilt; OFF (the default) it is inert and this path is byte-identical.
     ``env`` lets the offline counterfactual toggle the lever deterministically
     without mutating ``os.environ``.
+
+    Absence prior (Task 16.8; default-OFF). ``evidence.absent`` -- the living
+    roster minus the players public testimony placed
+    (:func:`meetings.transcript.absent_players`) -- is threaded into the same
+    pre-vote fold, where each absent subject takes the TRANSIENT
+    :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA` behind the
+    default-OFF :func:`agents.memory.beliefs.absence_prior_enabled` lever
+    (``env``-resolved, like the reporter damp). The lift composes through the
+    fold's existing ceilings AND this function's joint cap below -- absence +
+    a strong flag caps at ``prior + 0.30`` like every other stack -- and it
+    moves suspicion only (no :class:`ContradictionRef` is minted), so the 16.6
+    citation gate's zero-flag boundary never sees it. OFF (the default) the
+    fold path is not even entered for an absence-only meeting (the ``folds``
+    guard re-checks the lever), so the graph is byte-identical.
     """
 
     # Task 14.10 fail-loud seam guard (PR #217 review; unconditional since the
@@ -2163,8 +2250,17 @@ def _suspicion_graph_with_contradictions(
         )
 
     teammates = frozenset(fellow_impostor_ids)
+    # Task 16.8: a meeting whose ONLY pre-vote evidence is a non-empty absent
+    # set takes the fold path solely when the default-OFF absence_prior lever
+    # is ON -- gating the path (not just the delta) keeps the lever-OFF
+    # control flow, and therefore the emitted rows, structurally identical to
+    # the pre-16.8 graph (the byte-identity discipline; the fold re-checks the
+    # same resolver before applying the delta).
     folds = evidence is not None and bool(
-        evidence.pre_vote_folded or evidence.pre_vote_informed or evidence.corroborated
+        evidence.pre_vote_folded
+        or evidence.pre_vote_informed
+        or evidence.corroborated
+        or (evidence.absent and absence_prior_enabled(env))
     )
 
     if not contradictions and not folds:
@@ -2208,6 +2304,13 @@ def _suspicion_graph_with_contradictions(
             # the default-OFF reporter_exculpation lever (``env``-resolved), so
             # this is inert unless the lever is ON -- OFF stays byte-identical.
             reporter=reporter,
+            # Task 16.8: the publicly-unplaced set, taking the TRANSIENT
+            # absence delta behind the default-OFF absence_prior lever (the
+            # fold gates on the same ``env``-resolved resolver as the path
+            # guard above). Like the voice counts, it rides the meeting
+            # context only -- the persistent absorb never passes it, so only
+            # this vote-time graph ever sees the lift.
+            absent=frozenset(evidence.absent),
             env=env,
         )
 
@@ -2549,8 +2652,10 @@ def _normalize_ballot_observation_id(
     Unlike the turn-id validator there is NO suffix-recovery branch: the
     ``:turn-{k}`` ordinal recovery is turn-id-specific (the 7B echo shape),
     and an observation id has no in-meeting ordinal table to recover
-    against -- an unknown id is nulled, never guessed. Enforcement-free: no
-    gate/guard/tally consults the field (Task 16.6 enforces).
+    against -- an unknown id is nulled, never guessed. The validated field's
+    one consumer is the Task 16.6 citation gate
+    (:func:`guard_ballot_citation`, default-OFF lever): a nulled fabrication
+    gates exactly like a bare null. The tally never reads it.
     """
 
     observation_id = ballot.primary_reason_observation_id
@@ -2829,6 +2934,95 @@ def guard_ballot_target_graph(
     )
 
 
+def guard_ballot_citation(
+    *,
+    ballot: VoteBallot,
+    contradictions: tuple[ContradictionRef, ...],
+) -> VoteBallot:
+    """Coerce an uncited zero-flag EJECT ballot to ``SKIP`` (Task 16.6, J2).
+
+    The enforcement tooth of the citation chain
+    (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2): a claim
+    counts toward conviction only if it cites a specific in-game source. The
+    guard is deterministic and fires only when ALL of:
+
+    * the ballot is an eject (``target != "SKIP"``) -- a SKIP ballot is
+      byte-unchanged, always;
+    * the target is ZERO-FLAG: no :class:`ContradictionRef` detected THIS
+      meeting names it in ``subjects``. A flagged target is convictable
+      uncited -- the flag IS the in-game source, already on the public
+      record;
+    * the ballot cites NOTHING: ``primary_reason_id`` (the transcript-turn
+      channel) AND ``primary_reason_observation_id`` (the 16.5 private-
+      observation channel) are BOTH null. The upstream validators
+      (:func:`_normalize_ballot_reason_id` /
+      :func:`_normalize_ballot_observation_id`) have already nulled any
+      fabricated id with its own marker, so a hallucinated citation gates
+      exactly like a bare null -- nulls-then-coerces, two markers.
+
+    A gated ballot COERCES to ``SKIP`` with
+    :data:`UNCITED_ZERO_FLAG_EJECT_MARKER` prepended to ``rationale_text``
+    (the mark-and-coerce pattern of :func:`coerce_teammate_ballot_to_skip`);
+    the gate never rejects, never crashes, never re-prompts. Both citation
+    fields are already null on every coerced ballot by the predicate above,
+    so there is no stale reason id to null.
+
+    Scope honesty (the planning doc's own analysis): the gate cannot
+    distinguish an honest memory-only conviction from a bare pile-on when the
+    voter cites nothing -- that is WHY 16.5's observation-citation path lands
+    first (an honest witness can cite their private observation id) and why
+    today's prompts, whose null-citation prose is sanctioned
+    (``vote_ballot.j2`` "use ``null`` when your call rests on your own
+    memory"), keep the lever DEFAULT-OFF until the 16.15 elicitation asks for
+    citations and 16.17 rules on the measured soundness counterfactual.
+
+    Runs AFTER :func:`guard_ballot_target_graph` (the post-redirect slot in
+    the chain), so a redirected eject is judged on the REDIRECTED target's
+    flag status, not the original's. A redirect that KEPT its citation also
+    keeps its gate pass: the 10.9.2 redirect deliberately preserves
+    ``primary_reason_id`` (the cited turn still drove the decision to
+    EJECT; that guard constrains only the target), so a cited under-gate
+    eject redirected onto a zero-flag argmax passes this gate on the kept
+    citation. Deliberate, and pinned by fixture: the gate enforces citation
+    VALIDITY, never relevance -- neither upstream validator links a
+    citation to the ballot's target (a voter naming any target may cite any
+    real turn / own observation), so the direct-vote twin passes
+    identically and the redirect opens no new hole. Nulling the citation at
+    the redirect instead would edit ``guard_ballot_target_graph``'s
+    lever-independent recorded behavior (OFF-path bytes) -- not this
+    lever's to change; citation QUALITY is 16.15/16.17's measured business.
+    The zero-flag predicate reads only this
+    meeting's detected ``contradictions`` -- never suspicion values -- so
+    16.8's absence delta (which moves suspicion and mints no flag) cannot
+    change the gate's decision by construction. Pure function of its inputs
+    (no RNG, no clock, no env read -- lever gating lives at the call site,
+    the 15.5/16.4 pattern), so replaying the same ballot + flags yields the
+    same coercion.
+    """
+
+    if ballot.target == _SKIP_TARGET:
+        return ballot
+    if (
+        ballot.primary_reason_id is not None
+        or ballot.primary_reason_observation_id is not None
+    ):
+        return ballot
+    flagged = frozenset(
+        subject
+        for contradiction in contradictions
+        for subject in contradiction.subjects
+    )
+    if ballot.target in flagged:
+        return ballot
+    marker = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target=ballot.target)
+    return ballot.model_copy(
+        update={
+            "target": _SKIP_TARGET,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
 def _guard_teammate_turn_claims(
     claims: tuple[Claim, ...],
     *,
@@ -2974,6 +3168,24 @@ class MeetingBeliefEvidence:
       post-meeting absorb passes no counts, so only the flat +0.05
       persists (no cross-round railroad). Empty when no subject is voiced,
       which keeps a no-witness meeting byte-identical.
+    * ``absent`` -- the Task 16.8 absent set: the meeting's living roster
+      minus the players public testimony placed
+      (:func:`meetings.transcript.absent_players` -- a sighting names you
+      or your own Task 16.7 whereabouts answer places you; otherwise you
+      are absent). Derived unconditionally (pure, PUBLIC-transcript-only,
+      so the replay path re-derives the identical set), but CONSUMED only
+      by the vote-time pre-vote fold behind the default-OFF
+      :func:`agents.memory.beliefs.absence_prior_enabled` lever, where
+      each absent subject takes the TRANSIENT
+      :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. Derived with
+      THIS function's ``trigger_kind`` -- both live paths supply the true
+      engine-derived kind (the manager's pre-vote region re-derives this
+      field with it, PR #264 review; :func:`extract_belief_evidence`
+      threads it), so a fabricated emergency-opening body never widens the
+      kill-scene exclusion into spurious absence (the Task 10.11 gate).
+      The persistent post-meeting absorb never reads it, so absence never
+      accumulates across meetings (the sizing contract on the delta's
+      docstring).
     """
 
     accused: tuple[PlayerId, ...]
@@ -2982,6 +3194,7 @@ class MeetingBeliefEvidence:
     pre_vote_folded: tuple[PlayerId, ...] = ()
     pre_vote_informed: tuple[PlayerId, ...] = ()
     pre_vote_voice_counts: tuple[tuple[PlayerId, int], ...] = ()
+    absent: tuple[PlayerId, ...] = ()
 
 
 def derive_belief_evidence(
@@ -3130,6 +3343,12 @@ def derive_belief_evidence(
         pre_vote_folded=pre_vote_folded,
         pre_vote_informed=pre_vote_informed,
         pre_vote_voice_counts=pre_vote_voice_counts,
+        # Task 16.8: the absent set rides the SAME derivation (same roster,
+        # same trigger_kind) as every other evidence fold here, so the replay
+        # path re-derives it bit-identically from the public record alone.
+        # Inert data unless the default-OFF absence_prior lever is ON at the
+        # vote-time fold -- deriving it unconditionally changes no bytes.
+        absent=absent_players(transcript, roster=roster, trigger_kind=trigger_kind),
     )
 
 
@@ -3399,6 +3618,7 @@ __all__ = [
     "OPENING_UNSURE_MARKER",
     "OPENING_UNSURE_MAX_FREE_TEXT_CHARS",
     "TEAMMATE_VOTE_TARGET_MARKER",
+    "UNCITED_ZERO_FLAG_EJECT_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
     "DefaultTrigger",
     "DefaultedCall",
@@ -3422,5 +3642,6 @@ __all__ = [
     "exclude_teammate_accusation_claims",
     "exclude_teammate_vent_observations",
     "extract_belief_evidence",
+    "guard_ballot_citation",
     "guard_ballot_target_graph",
 ]

@@ -1202,6 +1202,52 @@ def reconstruct_stated_paths(
     }
 
 
+def absent_players(
+    transcript: MeetingTranscript,
+    *,
+    roster: frozenset[PlayerId],
+    trigger_kind: MeetingTriggerKind | None = None,
+) -> tuple[PlayerId, ...]:
+    """The publicly UNPLACED living players -- Task 16.8's absent set.
+
+    The complement of :func:`reconstruct_stated_paths` over the meeting's
+    living roster: every roster player whom NOBODY'S public testimony -- a
+    ``saw_player`` sighting (as subject or ``co_present``) or the player's
+    own :class:`~meetings.schemas.WhereaboutsClaim` self-placement (Task
+    16.7's roll-call answer) -- placed anywhere this meeting. Answering
+    roll-call therefore removes a player from this set (the loop the 16.7
+    docstrings promise), while staying publicly unseen keeps them in it:
+    the set the Task 16.8 absence prior prices.
+
+    Derived from the PUBLIC transcript ONLY, exactly as the reconstruction
+    it complements: no engine state, no perception packet, and no private
+    memory of others feeds it (the DESIGN.md §1.3 firewall -- this module
+    stays engine-free, and a privately-witnessed sighting that nobody SPOKE
+    leaves its subject absent by construction). The same gates apply too: a
+    kill-scene or spawn-window sighting reconstructs no position (§6.3
+    relevance), so it removes nobody, while a whereabouts self-placement
+    needs only a spatial label (see the Task 16.7 asymmetry note on
+    :func:`reconstruct_stated_paths`).
+
+    ``roster`` is REQUIRED and must be the meeting's LIVING-participant set
+    (the same set the manager passes to :func:`detect_contradictions`):
+    the complement of a placement mapping is only meaningful against an
+    explicit universe, and a living-only universe excludes dead players by
+    construction (a dead player named in testimony is filtered out of the
+    reconstruction AND absent from the roster, so it can never surface
+    here). ``trigger_kind`` threads through to the reconstruction's
+    relevance gate unchanged.
+
+    Returns a sorted tuple (replay-deterministic, like every fold in this
+    module). Pure: the transcript is not mutated.
+    """
+
+    placed = reconstruct_stated_paths(
+        transcript, roster=roster, trigger_kind=trigger_kind
+    )
+    return tuple(sorted(player for player in roster if player not in placed))
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -3058,6 +3104,7 @@ __all__ = [
     "ChainWalk",
     "DetectedCorroboration",
     "StatedPlacement",
+    "absent_players",
     "accusation_target",
     "canonical_rooms",
     "contradiction_lift_key",
