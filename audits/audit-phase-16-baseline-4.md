@@ -24,8 +24,27 @@ below). Zero hand-computed figures except the two pre-registered canary statisti
 formulas are pre-registered in §0.3 and whose inputs are quoted beside them (the 15.18
 convention).
 
-**Verdict in one line:** _to be filled from the recorded bytes — GO/NO-GO per the §0.3 canary
-bands._
+**Recording:** 2 parallel Featherless seed workers per set; wall ≈ **5h01m** (9p2i) + **37m**
+(4p1i), with the plan's 4-concurrent-unit cap absorbed by per-seed crash-retry (9p2i: 11
+transient 429/transport retries, deepest 4/4 on seed 31; 4p1i: 4 retries under an 8-attempt
+budget; **0 hard failures**). One live-recording edge case: 9p2i seed 5's first take recorded a
+wall-clock-miss `(deadline_default)` phantom failed-call row ("opening turn (turn 0) defaulted
+(validation); p-1 submitted no turn", 0 tokens, no real call) — the validity gate rejects the
+phantom class by design, and the seed was re-recorded clean per the corpus-runbook remedy (its
+MANIFEST row honestly stamps `refreshed_at 2026-07-13`; the other 99 rows span 2026-07-12/13
+across the UTC midnight the session crossed).
+
+**Verdict in one line:** the model swap is a VALID baseline — both sets PASS the hard gate
+(`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`, 10/10 checks) and reconstruct
+byte-identically BARE; **neither §0.3 canary band fired** (R1 lands EXACTLY on its 34/50 anchor,
+z = 0.000; genuine-class conversion is NO-DATA at 0/0 supplied — the pre-registered test cannot
+fire, §3) — and the headline finding is that the locked model's scratch-ladder impostor profile
+TRANSFERRED to live games: structured alibi lies vanished (alibi_vs_* transcript flags 190 → 7,
+all crew-subject), the vent/sighting channels strengthened, crew mis-ejections collapsed 33 → 12,
+and ejection accuracy rose 0.697 → 0.865 while the impostor win rate eased 0.30 → 0.24. The
+alibi-channel instruments (genuine-class conversion and its supply) are STARVED on this
+substrate — routed to 16.15's elicitation scope and the 16.17 close, not absorbed (§6). GO
+stands; no phase pause.
 
 ---
 
@@ -154,18 +173,183 @@ record; the champion row shares only the measurement CLIs.
 
 ---
 
-## 1. HARD validity gate — _to be filled from the recorded bytes_
+## 1. HARD validity gate — PASS (both sets)
 
-## 2. The information funnel re-measured (baseline 3 → baseline 4) — _to be filled_
+`validity_gate.py --expected-model Qwen/Qwen3.6-27B --require-zero-cost` over both committed
+sets (10/10 checks green each), cross-checked by `bash scripts/check.sh`:
 
-## 3. R-gate re-measured + the canaries under the §0.3 bands — _to be filled_
+| criterion | 9p2i | 4p1i |
+|---|---|---|
+| every game reaches game_over | 50/50 | 50/50 |
+| meeting_rate / resolved meetings (bar ≥0.60 / ≥30) | 1.00 / 160 | 0.78 / 39 |
+| tick-1 kills | 0 | 0 |
+| friendly-fire (impostor-on-impostor) kills | 0 | 0 |
+| betrayal ballots/accusations (§7.12 firewall) | 0 / 964 | 0 (single-impostor, vacuous) |
+| railroaded crew ejections | 0 / 1420 | 0 |
+| dangling `primary_reason_id` | 0 / 964 | 0 |
+| cost rows ($0 Featherless flat-rate, `--require-zero-cost`) | exact | exact |
+| provenance rows (`Qwen/Qwen3.6-27B`, 4 × `*.qwen3_6_27b.v1`, 6 levers stamped) | exact | exact |
+| byte-identical reconstruction (BARE env) | 0 drift | 0 drift |
 
-## 4. Selection referee + evidence-supply floors (16.11 definition; baseline-4 floors pinned) — _to be filled_
+`verify_samples.sh` reconstructs all 50+50 samples clean under a bare environment (no
+`AILIBI_*` export): the two live Phase-16 toggles stamp `False` on every game_over record and
+the six retired levers stamp `True` — byte-consistent with the preflight snapshot (§0.1).
 
-## 5. The champion re-audit (finding, not blocker) — _to be filled_
+## 2. The information funnel re-measured (baseline 3 → baseline 4)
 
-## 6. Findings — _to be filled_
+`eval.funnel` (the 15.3 instrument), the same three-stage fold before and after; BEFORE
+regenerates from `audits/baseline3-final-measure.json`, AFTER from the committed bytes (9p2i):
 
-## 7. Decisions — _to be filled_
+| funnel row | baseline 3 | **baseline 4** | read |
+|---|---|---|---|
+| structured vent observations | 55 (of 73 vent meetings) | **74 (of 100)** | the 15.4 mechanism carries over AND the model witnesses more vents |
+| vent mentioned (free text) | 53/73 | **75/100** | transmission holds at ~0.75 |
+| innocent-reporter ejections | 4 | **1** | the reporter hole stays shut |
+| votes outside a ≤3 candidate set | 30 (of 64) | **12 (of 54)** | vote discipline sharply tighter |
+| report-meeting ejections | 95 | 79 | fewer, more accurate (§3) |
+| killer accused | 75 | **88** | up |
+| kill witnessed | 5 | **9** | witnessed-kill supply nearly doubles |
+| hard clue held | 98 | 125 | more held evidence (more meetings: 160 vs 139) |
+| oracle candidate-set median | 3 | 3 | diagnostic ceiling unchanged |
+| killer-in-set (±1 window) | 109 | 136 | up with the meeting count |
 
-## 8. Method + reproduction — _to be filled_
+4p1i is the determinism control and the cleanest possible proof that the model was the ONLY
+layer: every held-evidence row — vent witnessed/held 6, hard clue held 21, killer-in-set 35,
+kill witnessed 1 — is **byte-identical** between baselines (the pre-meeting simulation is a
+deterministic function of the seed and the unchanged tactical layer); only the meeting-decided
+rows move (killer accused 31 → 25, report ejections 22 → 15, innocent reporters 3 → 2), and the
+win split lands identical (36 crew / 14 impostor).
+
+## 3. R-gate re-measured + the canaries under the §0.3 bands (9p2i, vs the baseline-3 anchors)
+
+Per the pre-registration, directions are findings; the ONLY NO-GO is a §0.3 band violation —
+and neither band fired.
+
+| term | baseline 3 | **baseline 4** | read |
+|---|---|---|---|
+| **R1 eject-decided win share** (canary) | 34/50 = 0.68 | **34/50 = 0.68** | EXACTLY the anchor (two-proportion z = 0.000; Wilson 95% CI [0.542, 0.792] excludes the 0.48 rung — not UNDERPOWERED). Inside the pre-registered band [25/50, 50/50]. |
+| **genuine-class conversion** (canary) | 10/13 = 0.769 | **0/0 — NO DATA** | supply is ZERO: the §0.3 two-proportion test is UNDEFINED at n₂ = 0 and no REGRESSION verdict can fire (the rule requires a below-anchor cell at \|z\| ≥ 1.96). Verdict recorded as NO-DATA; the supply collapse is §6's headline finding, and the failure mode this canary guards (crew failing to convict on supplied genuine catches) demonstrably did not occur — conviction rose across the board. |
+| ejection accuracy | 0.697 (76 imp / 33 crew of 109) | **0.865 (77 imp / 12 crew of 89)** | crew mis-ejects collapsed 33 → 12 at equal impostor ejections |
+| impostor win (floor ≥0.14) | 0.30 | **0.24** | eased; floor holds — from better crew deduction, not a balance bug |
+| reason histogram | `{EJECT 34, PARITY 15, TASKS 1}` | `{EJECT 34, PARITY 12, TASKS 4}` | eject-decided share flat; parity wins down |
+| accusation-claim ECE / n | 0.275 / 372 | 0.269 / 438 | calibration ~flat, more claims |
+| vote-ballot ECE / n | 0.178 / 753 | **0.115 / 525** | ballots better calibrated (and fewer — earlier ejections shrink the alive-voter pool) |
+
+4p1i (continuity, findings only): R1 21/50 → 17/50 (two-proportion z = 0.824 — not a resolved
+move; Wilson CI [0.224, 0.479] contains BOTH anchors → **UNDERPOWERED, recorded honestly**);
+genuine-class 3/3 → 0/0 NO-DATA (same supply collapse); ejection accuracy 0.808 → 0.895;
+impostor win 0.28 → 0.28 (identical).
+
+Per the DEGRADED-Q3 rule the corpus is quoted as STALE CONTEXT only: `replays/ml_corpus/`
+remains baseline-3/Qwen3-32B substrate (its baseline-3-era 9p2i cells: genuine-class 34/52 =
+0.654, R1 109/150 = 0.727) and is NOT same-substrate evidence for any baseline-4 cell — Phase
+17 re-grounds it.
+
+## 4. Selection referee + evidence-supply floors — PASS (both sets; baseline-4 floors pinned, 16.11 definition)
+
+This task pins the **baseline-4** floors in `eval/watchability.py`'s per-baseline block from
+the committed bytes (each set passes at exact equality — the derivation self-consistency the
+16.11 re-anchor guarantees) and moves `_DEFAULT_BASELINE_ID` to `baseline-4` (the 15.7
+precedent: the committed canonical set scores against its own supply).
+
+| supply gauge (9p2i) | baseline 3 (floor) | **baseline 4 (floor)** |
+|---|---|---|
+| witnessed_event_rate | 0.03247 (5/154) | **0.05056 (9/178)** |
+| flags_per_meeting | 1.863 (259/139) | **0.5375 (86/160)** |
+| testimony_backed_conversion (subject-aware, population-relative) | 0.6636 (71/107) | **0.6260 (77/123)** |
+
+4p1i: witnessed 1/58 = 0.01724 (numerator 1 → ADVISORY, the 15.19 rare-event rule),
+flags_per_meeting 11/39 = 0.28205 (ALL persisted vent flags — the transcript census re-derives
+zero on this set), conversion 17/29 = 0.5862. Both sets PASS the referee (supply floors + the
+D1–D4 geomean; 9p2i mean score 35.19 → **45.81**, 4p1i 8.40 → 6.51).
+
+The reading behind the flags_per_meeting drop (~3.5×): the flag pool is now VENT-DOMINATED (79
+of 86 flags on 9p2i; vent flags themselves ROSE 69 → 79) because the alibi-contradiction
+classes collapsed with the impostor's clean-alibi profile (§6). The gauge the referee actually
+gates — SIGHTING-backed conversion under the 16.11 population-relative derivation — barely
+moved (0.664 → 0.626) and stays density-aware: a future evidence-starved candidate faces a
+sharpened demanded rate (floor = 0.6260 × (0.5375 / measured flags_per_meeting), capped at
+1.0), never a free pass off the smaller pin.
+
+## 5. The champion re-audit (finding, not blocker) — _to be filled from the recording_
+
+## 6. Findings (directions, not pass bars — scoping 16.15 and the close)
+
+- **The structured-alibi channel is starved — the headline.** The bespoke set's impostor
+  profile (the scratch ladder's 0/32 self-flag design, `audit-phase-16-model-lock.md` §3)
+  transferred to live full games: alibi claims fell 281 → 109 set-wide, `alibi_vs_sighting`
+  transcript flags 147 → 7 (every one crew-subject), `alibi_vs_physical` 39 → 0. Consequence:
+  **genuine-class conversion has ZERO supply on both 50-seed sets** (9p2i 13 → 0, 4p1i 3 → 0) —
+  the Phase-10 primary-progress instrument reads NO-DATA on this substrate. The deduction game
+  did not die: it moved to the vent channel (79 vent flags, up from 69; structured vent
+  observations 74/100) and movement/sighting corroboration (corroboration claims 39 → 66,
+  accusations 372 → 437), and convicts BETTER (ejection accuracy 0.697 → 0.865). Routed: 16.15's
+  elicitation batch owns alibi elicitation (crew volunteering checkable alibis is exactly the
+  vent-tail/citations territory), and the 16.17 close + Phase 17 own re-grounding the
+  genuine-class instrument (and the stale corpus) on this substrate.
+- **Crew skip discipline changed shape.** Missed-skip ballots 11 → 86 on 9p2i (crew voting for
+  a target where the recorded skip-threshold reading says skip) while votes-outside-the-set fell
+  30 → 12 and mis-ejects collapsed 33 → 12 — the new model votes MORE decisively inside the
+  candidate set and is right more often, but its ballots more often override the suspicion-gate
+  arithmetic. A dialogue/calibration finding for 16.15 (the ballot ECE actually improved,
+  0.178 → 0.115).
+- **4p1i geomean eased** (8.40 → 6.51, median 2.9 → 1.3) on the reference set — shorter
+  eject-decided games and a smaller ejection census (26 → 19) on the sparse roster; the
+  canonical 9p2i geomean ROSE 35.19 → 45.81. Watch at the 16.17 re-record.
+- **The recording harness carries a real 4-unit concurrency squeeze** on this plan: a game's
+  ballot phase can hold both plan slots, so the OTHER worker's game crashes on HTTP 429 when
+  phases collide (11 retries over the 9p2i run; two synchronized-restart loops observed live on
+  the champion leg before staggering/jitter were added to the operator driver). The per-seed
+  crash-retry budget absorbed every instance; the committed recordings are unaffected
+  (rejected requests consume nothing). Operator note for 16.17: stagger worker starts, jitter
+  the backoff, budget ≥8 attempts.
+
+## 7. Decisions
+
+- **Pinned baseline-4 floors from the committed bytes and moved `_DEFAULT_BASELINE_ID` to
+  `baseline-4`** (the 15.7 precedent — the committed canonical set scores against its own
+  supply; baseline-3's block stays scoreable via `--baseline-id baseline-3`).
+- **The genuine-class canary verdict is NO-DATA, not REGRESSION.** The §0.3 pre-registered test
+  is arithmetically undefined at zero supplied opportunities; the phase-pausing arm requires a
+  below-anchor cell at |z| ≥ 1.96, which cannot exist. Recorded with the supply collapse as a
+  first-order finding (§6) rather than absorbed. The owner ratifies this reading by merging
+  this PR — flagged explicitly in the PR description.
+- **Re-recorded 9p2i seed 5 after its first take recorded a `(deadline_default)` phantom
+  failed-call row** (the corpus-runbook remedy; the gate rejects the phantom class by design).
+  Its MANIFEST row honestly stamps the re-record date.
+- **The 9p2i set records `refreshed_at 2026-07-12` and 4p1i `2026-07-13`** — the operator
+  session crossed UTC midnight; per-set dates are internally consistent and the gate checks
+  per-set coherence, not cross-set date equality.
+- **The Q5 annotated tag `phase-16-baseline-4` is created at the recording commit `a43b178`**
+  (the sha every MANIFEST row stamps) but the execution environment's credential refuses tag
+  pushes (HTTP 403, session-branch-only). The tag re-creation is deterministic; the owner
+  pushes it post-merge: `git tag -a phase-16-baseline-4 a43b178 -m "Q5: Task 16.14 baseline-4
+  recording commit" && git push origin phase-16-baseline-4` (a43b178 is reachable from this
+  PR's branch until squash-merge; the tag is what makes it durable after).
+- **The lab rubric artifacts** (`experiments/lab/results-rubric-*.json`) are committed alongside
+  the 9p2i rubric — the refresh script writes them and the 15.7 baseline-3 PR (#236) committed
+  them the same way.
+- **`AILIBI_SEED_MAX_ATTEMPTS=8` for the 4p1i / seed-5 / champion legs** (the 9p2i run used the
+  script's Featherless default of 4, which held at 4/4 on its deepest seed) — matching the
+  baseline-3 operator record, whose own log shows a 7/8-attempt seed.
+
+## 8. Method + reproduction (all $0 against committed bytes, offline)
+
+```
+uv run python scripts/validity_gate.py replays/samples/9p2i \
+    --expected-model Qwen/Qwen3.6-27B --require-zero-cost    # PASS (10/10)
+uv run python scripts/validity_gate.py replays/samples/4p1i \
+    --expected-model Qwen/Qwen3.6-27B --require-zero-cost    # PASS (10/10)
+uv run python scripts/measure_baseline.py --json                # §3 R-gate + canaries
+uv run python scripts/measure_baseline.py --funnel --json       # §2 funnel (15.3 instrument)
+uv run python scripts/measure_baseline.py --watchability --json # §4 referee (baseline-4 floors)
+bash scripts/verify_samples.sh                                  # byte-identical, BARE env
+```
+
+The BEFORE column is `audits/baseline3-final-measure.json` (captured at tip **beb2c07** by the
+same CLIs — `--json`, `--watchability`, `--funnel` — on the baseline-3 bytes immediately before
+replacement; the baseline-3 bytes survive only in git history there). The canary statistics are
+the two §0.3 pre-registered formulas (pooled two-proportion z; Wilson 95% CI), computed from the
+CLI cells quoted beside them in §3. The record itself ran `scripts/refresh_samples.sh --full`
+per set under `AILIBI_LLM_PROVIDER=featherless AILIBI_PROMPT_SET=qwen3_6_27b` (plus the 9p2i
+roster env block) at the recording commit **a43b178**.
