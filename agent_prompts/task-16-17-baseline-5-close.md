@@ -60,7 +60,7 @@ prior-substrate-anchored; re-ground before any training), and flips this file's 
 - audits/audit-phase-16-close.md (new)
 - tasks/phase-16.md (the STATUS banner flip to CLOSED — or to PAUSED on the slate's pause path; the 15.23 precedent)
 - README.md (sample-provenance paragraph)
-- tests/ (graduation re-pins + the byte-coupled sweep)
+- tests/ (graduation re-pins + the byte-coupled sweep; incl. retiring the 16.15 bump-in-flight prompt archive — `tests/fixtures/prompt_archive/qwen3_6_27b_v1/` + the golden's `ARCHIVED_PROMPT_VERSION_SETS` entry — once the re-recorded stamps re-align with HEAD's registry, per the PR #267 convention)
 
 **Files NOT in scope:**
 - replays/ml_corpus/ (stale; Phase 17 re-grounds — the audit re-states it)
