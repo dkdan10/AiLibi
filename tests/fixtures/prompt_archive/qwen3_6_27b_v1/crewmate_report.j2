@@ -1,37 +1,23 @@
-{#- Crewmate OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15).
+{#- Crewmate OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13).
 
-   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v2
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_6_27b.v1
 
-   Baseline-4 merge (v1, Task 16.13): the owner-directed from-scratch ladder's
-   style base (experiments/lab/qwen36_prompt_scratch/v5/ — tag-sectioned,
-   compact, positive phrasing, hard sentence caps, instructions at both ends;
-   validated 0/32 self-co-location, 0/32 self-flag, 8/8 conversion, README
-   ibid.) with EVERY qwen3_32b v5/v6 mechanical directive merged back in,
-   restyled but semantics-identical (the mechanics-pure contract; the scratch
-   set had deliberately omitted them). On this template that means: the
-   emergency vs body-report opening branch, the full observation/claim
-   vocabulary (saw_player / completed_task / found_body / saw_vent; alibi /
-   accusation / corroboration), the 15.4 vent elicitation, the 14.11 alibi
+   Baseline-4 merge: the owner-directed from-scratch ladder's style base
+   (experiments/lab/qwen36_prompt_scratch/v5/ — tag-sectioned, compact,
+   positive phrasing, hard sentence caps, instructions at both ends; validated
+   0/32 self-co-location, 0/32 self-flag, 8/8 conversion, README ibid.) with
+   EVERY qwen3_32b v5/v6 mechanical directive merged back in, restyled but
+   semantics-identical (the mechanics-pure contract; the scratch set had
+   deliberately omitted them). On this template that means: the emergency vs
+   body-report opening branch, the full observation/claim vocabulary
+   (saw_player / completed_task / found_body / saw_vent; alibi / accusation /
+   corroboration), the 15.4 vent elicitation (ALWAYS speak a witnessed vent as
+   a structured saw_vent, copied exactly; witnessed-only), the 14.11 alibi
    discipline, confidence rubric, observation curation (3-5 most probative),
    dead-roster salience, the accusation-or-"unsure" default, the grounding
    constraints, and the 8-key MeetingTurn contract (the one hard cross-set
    invariant, owner decision 2026-06-30 — the manager overrides the identity
    fields after parsing).
-
-   Elicitation batch (v2, Task 16.15 — baseline-4 audit §6; phase-15 close
-   §11):
-
-   * (c) roll-call: the opening asks the speaker to state where THEY were as
-     one structured "whereabouts" observation (16.7's kind — room + tick, the
-     CHECKABLE placement the contradiction detectors and the Phase-10
-     genuine-class instrument re-supply from; baseline-4 §6: alibi claims
-     281 → 109, alibi_vs_* flags 190 → 7, conversion NO-DATA at 0/0). One
-     rules line + one schema line (the turn-budget cap the contract sets).
-   * (d) the vent tail: the held-vent ask lands harder (close audit §11:
-     samples 53/73 mentioned, corpus 188/255 — ~20/73 held vents unspoken):
-     speak-it-FIRST priority, the every-meeting re-speak, and the worked
-     memory-line → JSON example (the v5 lesson: the example moves uptake more
-     than the instruction).
 
    The "## This meeting" line doubles as the machine anchor
    audits/workflows/extract_gameplay_facts._classify_call_slot reads (the
@@ -40,8 +26,7 @@
 
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,
-     public_transcript, living_ids, dead_ids (persona and
-     suspicion_provenance are accepted by the loader and unreferenced here).
+     public_transcript, living_ids, dead_ids.
 -#}
 {% set emergency = "called an emergency meeting" in meeting_trigger %}
 <persona>
@@ -75,10 +60,9 @@ Dead or ejected — never accuse: {{ dead_ids | join(", ") }}. Naming them waste
 
 <rules>
 Decide who is most likely the impostor and commit to it. Reason only from your memory and the transcript above — assume no roles, kills, or vents you did not witness. Speak your opening as 2-3 short sentences in "free_text", then stop: report what you saw honestly, then either point at ONE living player with a concrete detail or say you are not sure yet.
-A witnessed vent is the single strongest fact this game produces — speak it FIRST, at this meeting, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. If your memory contains one — a line like "- [tick 12] You witnessed p-3 vent in MEDBAY." — put it on the record as a structured "saw_vent" observation copied from that line exactly: {"type": "saw_vent", "tick": 12, "subject": "p-3", "room": "MEDBAY"}. Only the impostor can vent, so that one row identifies the impostor outright and outweighs every path inference. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
-Answer the roll-call: state where YOU were with one structured "whereabouts" observation — the room you were in at the tick that matters (the tick it was reported to have happened, or the tick under discussion), copied from your own record. One room, one tick: that single checkable placement is what lets the crew clear you and corner whoever cannot be placed.
-The crew catches the impostor by establishing who was WHERE and WHEN, so put the sightings that matter on the record as structured "saw_player" observations (player, room, tick, who else was there) — a player's path is what exposes an impossible alibi later, and placing OTHERS at the tick that matters is testimony only you can give.
-Curate, don't dump: pick the 3-5 MOST PROBATIVE observations — always the "found_body" report if you found it, always a witnessed vent, always your own "whereabouts" answer, always the sightings that name your suspect — and leave the rest of your movement log out. Copying dozens of rows buries the signal and rambles past the output cap, which discards your whole turn.
+The crew catches the impostor by establishing who was WHERE and WHEN, so put the sightings that matter on the record as structured "saw_player" observations (player, room, tick, who else was there) — a player's path is what exposes an impossible alibi later.
+If your memory contains a witnessed vent — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright and outweighs every path inference. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
+Curate, don't dump: pick the 3-5 MOST PROBATIVE observations — always the "found_body" report if you found it, always a witnessed vent, always the sightings that name your suspect — and leave the rest of your movement log out. Copying dozens of rows buries the signal and rambles past the output cap, which discards your whole turn.
 Then either name your single best suspect in ONE "accusation" claim — the chain then passes to whoever you accuse — or, only if nothing you recorded points at anyone, write the word "unsure" in "free_text". To accuse, the "accusation" claim is required: naming a suspect only in "free_text" does not count.
 </rules>
 
@@ -90,7 +74,6 @@ Fill "observations" with your curated first-hand records, each item one of these
   {"type": "completed_task", "tick": <int>, "task_id": "<task id>", "room": "<room id>"}
   {"type": "found_body", "tick": <int>, "body_of": "<player id>", "room": "<room id>"}
   {"type": "saw_vent", "tick": <int>, "subject": "<player id>", "room": "<room id>"} — only for a witnessed vent, copied exactly from your memory line.
-  {"type": "whereabouts", "tick": <int>, "room": "<room id>"} — your roll-call answer: the room YOU were in at the tick that matters, copied from your own record (one room, one tick; the speaker is always you, so it names no subject).
 Each "claims" item is one of:
   {"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room id>", "evidence": ["<short ref>", ...]} with from_tick <= to_tick — quote your own memory exactly: ONE room, and only the ticks you actually spent there. If you moved during the window, alibi only the room you were in at the tick that matters — a range that spans rooms you moved between contradicts your own record (your own "completed_task" rows included) and gets you ejected.
   the "accusation" shown in the skeleton above — at most one. Calibrate "confidence" honestly: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction flag corroborates; ~0.5 for a hunch read off movement alone — almost nothing you infer from paths deserves 1.0.

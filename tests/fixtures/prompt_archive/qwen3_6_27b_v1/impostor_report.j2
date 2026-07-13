@@ -1,17 +1,8 @@
-{#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15).
+{#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v2
+   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v1
 
-   Elicitation batch (v2, Task 16.15 — wave-0 close, the 3/851 self-naming
-   artifact): the accusation slot is closed to the speaker's own name in
-   prose ("about THEM ... never yourself"), completing the (e) fix across the
-   impostor surfaces. The roll-call ask (16.15 (c)) deliberately does NOT
-   land here: this cover surface keeps the scratch ladder's accusation-only
-   structure (observations stay []), the 16.8 absence prior prices the
-   resulting silence, and a self-placement slot is exactly the surface the
-   ladder measured minting the >=44% self-flag.
-
-   Baseline-4 merge (v1): the scratch-ladder style base (qwen36_prompt_scratch/v5/
+   Baseline-4 merge: the scratch-ladder style base (qwen36_prompt_scratch/v5/
    — the bystander framing, spotlight-off-self, and the v1+v2 "reported it /
    where it happened" phrasing rules are what took the reply tell and the
    minted self-flag to 0/32) with the qwen3_32b v5 mechanics restyled in:
@@ -82,7 +73,7 @@ Your fellow saboteurs: {{ fellow_impostor_ids | join(", ") }} — never accuse o
 <rules>
 Write your opening as 2-3 short sentences, then stop:
 1. State the meeting trigger the way a bystander who just walked in would — one plain sentence.
-2. Then either point at ONE living player with a concrete movement or timing detail about THEM in one "accusation" claim — the name in "against" is always another player's from the living list, never yourself — or say you are not sure yet.
+2. Then either point at ONE living player with a concrete movement or timing detail about THEM in one "accusation" claim, or say you are not sure yet.
 Keep the spotlight off yourself: every location, room, and timing detail you mention must be about OTHER players. Every concrete detail is cross-checked against the public record, so mention only what your memory can support — a fabricated sighting surfaces as a contradiction and exposes you. Calibrate "confidence" honestly the way a credible crewmate would: 1.0 only for a kill or a vent watched first-hand; ~0.7 for a corroborated case; ~0.5 for a movement hunch — a modest number reads as more credible, and an over-confident accusation you cannot back draws the table's suspicion onto you.
 </rules>
 

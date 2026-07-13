@@ -342,7 +342,14 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # scratch-ladder style base (experiments/lab/qwen36_prompt_scratch/) with the
     # baseline-3 qwen3_32b v5/v6 mechanics merged in. This line serializes
     # 16.13 -> 16.15 -> 16.16 (each later task bumps versions here).
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v1"),
+    # Task 16.15 (the elicitation batch): the single set-level v1 -> v2 bump for
+    # the five coordinated asks (J2a provenance surface, J3 citation-required
+    # confidence, roll-call, the vent tail, the self-accusation fix) — one
+    # attributable prompt layer at the 16.17 re-record. The committed baseline-4
+    # samples still stamp *.qwen3_6_27b.v1; the prompt-byte golden walks them
+    # through the archived v1 bytes (tests/fixtures/prompt_archive/) until 16.17
+    # re-records, so pre- and post-batch bodies never share a version stamp.
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v2"),
 }
 
 

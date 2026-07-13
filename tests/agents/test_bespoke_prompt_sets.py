@@ -497,6 +497,35 @@ class TestQwen332bV5VentElicitation:
                 assert self._SHAPE_MARKER not in text, set_name
 
 
+class TestQwen3627bV2ElicitationBatch:
+    """Task 16.15 version pin: the elicitation batch's single set-level bump.
+
+    The five coordinated asks (J2a provenance surface, J3 citation-required
+    confidence, roll-call, the vent tail, the self-accusation fix) land as ONE
+    registry bump on the locked set — v1 -> v2 across all four templates — so
+    the pre- and post-batch prompt bodies can never share a version stamp (the
+    committed baseline-4 samples keep stamping *.qwen3_6_27b.v1 until the
+    16.17 re-record). The per-ask mechanism fixtures live in
+    ``tests/meetings/test_elicitation_fixtures.py``; this pin holds the stamp.
+    """
+
+    def test_registry_stamps_all_four_templates_v2(self) -> None:
+        versions = prompt_versions_for_set("qwen3_6_27b")
+        assert versions == {
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v2",
+            "impostor_report": "impostor_report.qwen3_6_27b.v2",
+            "accusation_round": "accusation_round.qwen3_6_27b.v2",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v2",
+        }
+
+    def test_bumped_stamps_never_collide_with_the_recorded_v1(self) -> None:
+        # The committed baseline-4 recordings stamp *.qwen3_6_27b.v1; the
+        # bumped registry must never re-mint a v1 stamp for the edited bodies.
+        for value in prompt_versions_for_set("qwen3_6_27b").values():
+            assert value.endswith(".qwen3_6_27b.v2")
+            assert ".v1" not in value
+
+
 def test_cross_set_parse_invariant_is_shared() -> None:
     # The one hard invariant: a canonical MeetingTurn / VoteBallot parses against
     # the shared schema regardless of which set produced it. The set only changes

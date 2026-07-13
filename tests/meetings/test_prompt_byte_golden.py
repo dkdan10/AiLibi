@@ -68,6 +68,22 @@ impostor-opener meeting through the same manager seam so the fourth kind is not 
 blind spot. The one-byte template perturbation leg
 (:func:`test_one_byte_template_perturbation_breaks_the_golden`) proves the gate
 can fail — a golden that cannot fail is not a gate.
+
+Task 16.15 re-parametrization (the elicitation batch, the first prompt-set
+bump since this instrument landed): the committed baseline-4 sets stamp
+``*.qwen3_6_27b.v1`` while HEAD's registry and templates advanced to v2, so an
+exact reverse lookup against :data:`PROMPT_VERSION_SETS` alone would resolve
+nothing and a re-render through the v2 bytes could not byte-match the v1
+recordings. The recorded stamps therefore resolve through
+:data:`ARCHIVED_PROMPT_VERSION_SETS` — byte-copies of the recorded template
+bodies under ``tests/fixtures/prompt_archive/`` — and the walk renders each
+recorded meeting through the templates its own stamps name. Every byte
+assertion keeps its full meaning across the 16.15 → 16.17 bump-in-flight
+window (HEAD's manager, memory, and belief code must still reproduce every
+committed prompt byte-for-byte through the recorded bodies); the 16.17
+re-record re-aligns the recorded stamps with HEAD's registry, after which the
+archive entry covers no committed meeting and can be retired with the v1
+recordings it serves.
 """
 
 from __future__ import annotations
@@ -142,6 +158,25 @@ _SAMPLE_SETS: tuple[Path, ...] = (
     _REPO_ROOT / "replays" / "samples" / "9p2i",
     _REPO_ROOT / "replays" / "samples" / "4p1i",
 )
+
+# Task 16.15: recorded-stamp registry for committed sets that predate a
+# prompt-set bump. Keyed like PROMPT_VERSION_SETS, but each key names a
+# directory of ARCHIVED template bytes under tests/fixtures/prompt_archive/ —
+# the exact bodies the committed recordings rendered through. The walk
+# resolves a recorded ``prompt_versions`` mapping against the live registry
+# first and this archive second, so the byte golden stays a real gate across
+# a bump-in-flight window (16.15 -> 16.17). Retire an entry when no committed
+# set stamps it any longer (the adopting re-record).
+_ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
+    # The baseline-4 record (Task 16.14): both committed sets, pre-16.15 bodies.
+    "qwen3_6_27b_v1": {
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v1",
+        "impostor_report": "impostor_report.qwen3_6_27b.v1",
+        "accusation_round": "accusation_round.qwen3_6_27b.v1",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v1",
+    },
+}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -383,21 +418,25 @@ def _tagging_manager(
 
 
 def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
-    """Reverse-look the recorded ``prompt_versions`` up in the set registry.
+    """Reverse-look the recorded ``prompt_versions`` up in the set registries.
 
     :data:`orchestrator.game.PROMPT_VERSION_SETS` maps each prompt-set name to
     its ``prompt_versions`` mapping; the recording stamped the mapping, not the
     name, so the golden recovers the name by an exact reverse lookup (no
     hardcoded set name) and pairs :func:`build_prompt_renderers` with the SAME
     resolved set — the recording-provenance invariant
-    ``build_default_meeting_runner`` guarantees (DESIGN.md §11.4). Fail loud
-    unless exactly one set matches.
+    ``build_default_meeting_runner`` guarantees (DESIGN.md §11.4). A recorded
+    stamp a later bump moved the live registry past resolves through
+    :data:`ARCHIVED_PROMPT_VERSION_SETS` instead (Task 16.15 — the archived
+    bodies are what those recordings rendered). Fail loud unless exactly one
+    set matches across both registries.
     """
 
     wanted = dict(prompt_versions)
     matches = [
         name
-        for name, versions in PROMPT_VERSION_SETS.items()
+        for registry in (PROMPT_VERSION_SETS, ARCHIVED_PROMPT_VERSION_SETS)
+        for name, versions in registry.items()
         if dict(versions) == wanted
     ]
     if len(matches) != 1:
@@ -783,9 +822,22 @@ def _seed_paths(set_dir: Path) -> list[Path]:
 
 
 def _canonical_renderers() -> dict[str, PromptRenderers]:
-    """Renderers for every registered set, bound to the committed template root."""
+    """Renderers for every registered set, bound to the committed template root.
 
-    return {name: build_prompt_renderers(name) for name in PROMPT_VERSION_SETS}
+    Archived sets (Task 16.15) bind to their byte-copied template directory
+    under :data:`_ARCHIVE_ROOT` — the exact bodies the committed recordings
+    rendered through — so a recorded meeting always re-renders via the
+    templates its own stamps name.
+    """
+
+    renderers = {name: build_prompt_renderers(name) for name in PROMPT_VERSION_SETS}
+    renderers.update(
+        {
+            name: build_prompt_renderers(name, root=_ARCHIVE_ROOT)
+            for name in ARCHIVED_PROMPT_VERSION_SETS
+        }
+    )
+    return renderers
 
 
 def _walk_set(set_dir: Path) -> _SetWalk:
@@ -1035,10 +1087,10 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     renderers = build_prompt_renderers(
         resolve_prompt_set(
             {
-                "accusation_round": "accusation_round.qwen3_6_27b.v1",
-                "crewmate_report": "crewmate_report.qwen3_6_27b.v1",
-                "impostor_report": "impostor_report.qwen3_6_27b.v1",
-                "vote_ballot": "vote_ballot.qwen3_6_27b.v1",
+                "accusation_round": "accusation_round.qwen3_6_27b.v2",
+                "crewmate_report": "crewmate_report.qwen3_6_27b.v2",
+                "impostor_report": "impostor_report.qwen3_6_27b.v2",
+                "vote_ballot": "vote_ballot.qwen3_6_27b.v2",
             }
         )
     )
@@ -1065,7 +1117,7 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
         "impostor opener did not dispatch to the impostor_report renderer; "
         f"kinds rendered: {sorted({r.kind for r in renders})}"
     )
-    # The baseline-4 impostor template (impostor_report.qwen3_6_27b.v1) frames the
+    # The locked-set impostor template (impostor_report.qwen3_6_27b.v2) frames the
     # role as the saboteur — it carries NO "**IMPOSTOR**" literal (the qwen3_32b.v5
     # marker); its role marker is this unconditional persona line, absent from the
     # crewmate template, so its presence proves the impostor kind rendered.
@@ -1082,10 +1134,12 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    Copy the qwen3_6_27b template dir under a scratch root, append one byte to
-    ``crewmate_report.j2`` (the committed dir is never touched), build renderers
-    against the perturbed root, and re-run ONE recorded meeting. At least one
-    recorded prompt must no longer reproduce byte-for-byte — proving the gate can
+    Copy the template dirs under a scratch root, append one byte to the
+    ARCHIVED ``qwen3_6_27b_v1/crewmate_report.j2`` — the body the committed
+    recordings actually resolve to since the 16.15 bump (perturbing the live
+    v2 dir would not touch the walk at all) — build renderers against the
+    perturbed root, and re-run ONE recorded meeting. At least one recorded
+    prompt must no longer reproduce byte-for-byte — proving the gate can
     fail. Kept cheap: the first meeting-bearing seed of 9p2i, one meeting.
     """
 
@@ -1093,12 +1147,14 @@ def test_one_byte_template_perturbation_breaks_the_golden(
     perturbed_root = tmp_path / "prompts"
     for name in PROMPT_VERSION_SETS:
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
+    for name in ARCHIVED_PROMPT_VERSION_SETS:
+        shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
+    victim = perturbed_root / "qwen3_6_27b_v1" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
         name: build_prompt_renderers(name, root=perturbed_root)
-        for name in PROMPT_VERSION_SETS
+        for name in (*PROMPT_VERSION_SETS, *ARCHIVED_PROMPT_VERSION_SETS)
     }
     game_map = load_canonical_map()
     reproduced_all = True
