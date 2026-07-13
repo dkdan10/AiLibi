@@ -25,6 +25,7 @@ Usage::
     uv run python scripts/measure_baseline.py replays/samples/9p2i
     uv run python scripts/measure_baseline.py --json
     uv run python scripts/measure_baseline.py --funnel --json   # Task-15.3 funnel
+    uv run python scripts/measure_baseline.py --vj --json       # Task-16.10 V&J
 
 ``--json`` emits a JSON array of :class:`BaselineMeasurementReport` (schema below),
 the machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume.
@@ -32,7 +33,12 @@ the machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consum
 array of :class:`eval.funnel.InformationFunnelReport` (schema in that module),
 consumed by Task 15.7 for the before/after close finding. The flag is the funnel
 fold region's entry point; the 15.1 core folds and the 15.2 watchability folds are
-disjoint regions selected by their own (absence of a) flag.
+disjoint regions selected by their own (absence of a) flag. ``--vj`` selects the
+Task-16.10 V&J instruments — a JSON array of
+:class:`eval.vj_instruments.VJInstrumentReport` (judgment metrics + deterministic
+voice tier + the embedded ``eval.funnel`` pooling census; schema in that module's
+docstring), the machine-readable before/after report the Task 16.17 close
+consumes.
 
 JSON report schema (one object per measured set) — STABLE::
 
@@ -84,6 +90,15 @@ from eval.funnel import (  # noqa: E402
 from eval.meeting_quality import compute_meeting_rate  # noqa: E402
 from eval.report_schema import TournamentReport  # noqa: E402
 from eval.validity import assemble_tournament_report, seeds_on_disk  # noqa: E402
+
+# Task-16.10 V&J fold region (disjoint from the 15.1 core folds, the 15.2
+# watchability folds, and the 15.3 funnel folds): judgment metrics + the
+# deterministic voice tier + the embedded pooling census, emitted under
+# ``--vj`` for the 16.17 close.
+from eval.vj_instruments import (  # noqa: E402
+    VJInstrumentReport,
+    compute_vj_instruments,
+)
 from eval.vote_correctness import (  # noqa: E402
     compute_genuine_class_conversion,
     compute_vote_correctness,
@@ -324,6 +339,85 @@ def _emit_funnel_json(reports: Sequence[InformationFunnelReport]) -> str:
     return json.dumps([report.model_dump() for report in reports], indent=2)
 
 
+# --------------------------------------------------------------------------- #
+# Task-16.10 --vj fold region (disjoint from the 15.1 core folds, the 15.2    #
+# watchability folds, and the 15.3 funnel folds): the V&J instruments —       #
+# judgment metrics + the deterministic voice tier + the embedded pooling      #
+# census — emitted under `--vj` for the 16.17 close (diagnostics the close    #
+# quotes; the referee alone gates).                                           #
+# --------------------------------------------------------------------------- #
+
+
+def _round(value: float | None) -> float | None:
+    return value if value is None else round(value, 4)
+
+
+def _render_vj_human(report: VJInstrumentReport) -> str:
+    pooling = report.pooling
+    return "\n".join(
+        [
+            f"V&J instruments over {report.replay_set_dir} "
+            f"({report.games_total} games, {report.meetings_total} meetings):",
+            f"  zero-flag convictions: {report.zero_flag_convictions}/"
+            f"{report.convictions_total}"
+            f" (rate {_round(report.zero_flag_conviction_rate)};"
+            f" crew {report.zero_flag_crew_convictions} /"
+            f" impostor {report.zero_flag_impostor_convictions})",
+            f"  typed split: hard {report.zero_flag_hard_backed}"
+            f" / soft {report.zero_flag_soft_only}"
+            f" / unattributed {report.zero_flag_unattributed_only}"
+            f" / no-row {report.zero_flag_no_row};"
+            f" proxy: hard {report.zero_flag_proxy_hard_backed}"
+            f" / soft {report.zero_flag_proxy_soft_only}"
+            f" / sub-gate {report.zero_flag_proxy_sub_gate}"
+            f" / no-render {report.zero_flag_proxy_no_render}"
+            f" (hard-axis agreement {report.zero_flag_split_agreements}/"
+            f"{report.zero_flag_split_agreements + report.zero_flag_split_disagreements})",
+            f"  reconstruction: provenance sums {report.provenance_sum_breaches}"
+            f" breaches / {report.provenance_rows_checked} rows;"
+            f" rendered values {report.rendered_row_mismatches} mismatches /"
+            f" {report.rendered_rows_compared} compared",
+            f"  citations: turn {report.turn_citations_valid} valid /"
+            f" {report.turn_citations_dangling} dangling;"
+            f" observation {report.observation_citations_valid} valid /"
+            f" {report.observation_citations_dangling} dangling;"
+            f" cited eject ballots {report.cited_eject_ballots}/"
+            f"{report.eject_ballots}"
+            f" (rate {_round(report.citation_compliance_rate)};"
+            f" markers {report.nulled_reason_id_markers}/"
+            f"{report.nulled_observation_id_markers}/"
+            f"{report.coerced_zero_flag_markers})",
+            f"  ballot calibration: Brier "
+            f"{_round(report.ballot_confidence_brier)}"
+            f" / ECE {_round(report.ballot_confidence_ece)}"
+            f" (n={report.ballot_calibration_total}"
+            f"{', LOW POWER' if report.ballot_calibration_low_power else ''})",
+            f"  voice: echo {report.echo_ballots}/{report.voice_ballots_total}"
+            f" (rate {_round(report.within_meeting_echo_rate)});"
+            f" skeleton share {_round(report.response_skeleton_share)};"
+            f" distinct skeletons {report.distinct_skeletons}"
+            f" ({_round(report.distinct_skeleton_ratio)});"
+            f" distinct-1 {_round(report.distinct_1)}"
+            f" / distinct-2 {_round(report.distinct_2)}",
+            f"  pooling: roll-call {_round(pooling.roll_call_coverage_mean)}"
+            f" ({pooling.whereabouts_claims_total} whereabouts claims);"
+            f" vouch {_round(pooling.vouch_rate_mean)}"
+            f" / grounded {_round(pooling.grounded_vouch_rate_mean)}"
+            f" (share {_round(pooling.grounded_vouch_share)});"
+            f" absence mean {_round(pooling.absence_set_size_mean)}"
+            f" median {pooling.absence_set_size_median};"
+            f" whereabouts lies {pooling.whereabouts_lies_detected}"
+            f" (rate {_round(pooling.whereabouts_lie_detection_rate)})",
+        ]
+    )
+
+
+def _emit_vj_json(reports: Sequence[VJInstrumentReport]) -> str:
+    import json
+
+    return json.dumps([report.model_dump() for report in reports], indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -372,6 +466,17 @@ def main(argv: list[str] | None = None) -> int:
             "pass baseline-2 to score against the pre-Wave-0 floors)"
         ),
     )
+    parser.add_argument(
+        "--vj",
+        action="store_true",
+        help=(
+            "emit the Task-16.10 V&J instruments (zero-flag conviction channel "
+            "+ citation compliance + ballot calibration + deterministic voice "
+            "tier + the pooling census) instead of the core R-gate folds; the "
+            "16.17 close consumes the --vj --json rows for the before/after "
+            "finding"
+        ),
+    )
     args = parser.parse_args(argv)
     explicit_dir: Path | None = args.replay_set_dir
     emit_json: bool = args.json
@@ -411,6 +516,14 @@ def main(argv: list[str] | None = None) -> int:
             print(_emit_funnel_json(funnel_reports))
         else:
             print("\n\n".join(_render_funnel_human(r) for r in funnel_reports))
+        return 0
+
+    if args.vj:
+        vj_reports = [compute_vj_instruments(d) for d in targets]
+        if emit_json:
+            print(_emit_vj_json(vj_reports))
+        else:
+            print("\n\n".join(_render_vj_human(r) for r in vj_reports))
         return 0
 
     reports = [measure_baseline(sample_dir) for sample_dir in targets]

@@ -1,0 +1,454 @@
+"""Unit tests for eval/funnel.py's Task 16.10 pooling-folds extension region.
+
+Two layers, mirroring tests/eval/test_funnel.py:
+
+* scripted-fixture unit tests over hand-built ``_VJMeeting`` carriers,
+  exercising each pooling fold in isolation AND proving every fold can MOVE
+  on a synthetic fixture (the DoD's "an instrument that cannot move is not an
+  instrument");
+* the baseline-3 REPRODUCTION PINS — ``compute_pooling_funnel`` over the
+  committed 9p2i / 4p1i bytes must read zero/empty exactly where the pooling
+  mechanisms don't exist yet (no roll-call elicitation → coverage 0; no
+  whereabouts claims → lie rate ``None``) while the folds whose inputs DO
+  exist (vouches, groundable sightings, the unplaced share) pin non-zero.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from engine.entities import PlayerId
+from eval.funnel import (
+    MeetingPoolingRow,
+    PoolingFunnelReport,
+    _absence_set,
+    _grounded_vouch_set,
+    _pooling_row,
+    _roll_call_placed,
+    _VJMeeting,
+    _vouch_census,
+    _whereabouts_claim_event_ids,
+    _whereabouts_lies_detected,
+    compute_pooling_funnel,
+)
+from meetings.schemas import (
+    ContradictionRef,
+    MeetingTranscript,
+    MeetingTurn,
+    ObservationClaim,
+    SawPlayerObservation,
+    SightingRecord,
+    WhereaboutsClaim,
+)
+from meetings.transcript import MeetingTriggerKind
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+_FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+
+# Canonical rooms so the transcript helpers' room parsing and the relevance
+# gate see real map locations (spawn-window ticks are avoided via tick 10+).
+_ROOM_A = "MEDBAY"
+_ROOM_B = "ENGINEERING"
+
+
+def _turn(
+    speaker: PlayerId,
+    index: int,
+    *,
+    observations: tuple[ObservationClaim, ...] = (),
+    free_text: str = "...",
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=f"m-0:turn-{index}",
+        turn_index=index,
+        speaker=speaker,
+        turn_kind="opening" if index == 0 else "opt_in",
+        reply_to=None,
+        observations=observations,
+        claims=(),
+        free_text=free_text,
+    )
+
+
+def _meeting(
+    *,
+    turns: tuple[MeetingTurn, ...] = (),
+    living: frozenset[PlayerId] = frozenset({"p-1", "p-2", "p-3", "p-4"}),
+    contradictions: tuple[ContradictionRef, ...] = (),
+    sighting_records: dict[PlayerId, tuple[SightingRecord, ...]] | None = None,
+    trigger_kind: MeetingTriggerKind = "emergency",
+) -> _VJMeeting:
+    return _VJMeeting(
+        seed=0,
+        meeting_id="m-0",
+        tick=20,
+        trigger_kind=trigger_kind,
+        triggered_by="p-1",
+        outcome="SKIPPED",
+        ejected=None,
+        living=living,
+        transcript=MeetingTranscript(turns=turns),
+        ballots=(),
+        contradictions=contradictions,
+        llm_calls=(),
+        suspicion_graph_by_voter={},
+        sighting_records_by_speaker=sighting_records or {},
+        observation_ids_by_voter={},
+        fellow_impostor_ids_by_voter={},
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Roll-call coverage (whereabouts channel ONLY)                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_roll_call_counts_only_whereabouts_self_placements() -> None:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        # A saw_player placement is NOT a roll-call answer.
+        _turn(
+            "p-2",
+            1,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-3", room=_ROOM_B
+                ),
+            ),
+        ),
+    )
+    placed = _roll_call_placed(_meeting(turns=turns))
+    assert placed == frozenset({"p-1"})
+
+
+def test_roll_call_moves_on_synthetic_fixture() -> None:
+    turns = tuple(
+        _turn(
+            pid,
+            index,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        )
+        for index, pid in enumerate(("p-1", "p-2"))
+    )
+    row = _pooling_row(_meeting(turns=turns))
+    assert row.whereabouts_claims == 2
+    assert row.roll_call_placed == 2
+    assert row.roll_call_coverage == pytest.approx(0.5)
+
+
+def test_roll_call_reads_zero_without_whereabouts() -> None:
+    row = _pooling_row(_meeting(turns=(_turn("p-1", 0),)))
+    assert row.whereabouts_claims == 0
+    assert row.roll_call_placed == 0
+    assert row.roll_call_coverage == 0.0
+
+
+def test_dead_speaker_whereabouts_never_counts() -> None:
+    turns = (
+        _turn(
+            "p-9",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+    )
+    meeting = _meeting(turns=turns)  # p-9 not in the living set
+    assert _roll_call_placed(meeting) == frozenset()
+    assert _whereabouts_claim_event_ids(meeting) == ()
+
+
+# --------------------------------------------------------------------------- #
+# Vouch rate + GROUNDED-vouch rate                                             #
+# --------------------------------------------------------------------------- #
+
+
+def test_vouch_census_counts_other_living_subjects_only() -> None:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(
+                # A vouch: another living player.
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-2", room=_ROOM_A
+                ),
+                # Self-placement is the whereabouts channel, never a vouch.
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-1", room=_ROOM_A
+                ),
+                # A dead / non-roster subject places no living player.
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-9", room=_ROOM_A
+                ),
+            ),
+        ),
+    )
+    observations, subjects = _vouch_census(_meeting(turns=turns))
+    assert observations == 1
+    assert subjects == frozenset({"p-2"})
+
+
+def test_grounded_vouch_requires_matching_speaker_record() -> None:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-2", room=_ROOM_A
+                ),
+            ),
+        ),
+    )
+    grounded_fixture = _meeting(
+        turns=turns,
+        sighting_records={
+            "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
+        },
+    )
+    assert _grounded_vouch_set(grounded_fixture) == frozenset({"p-2"})
+    # The same spoken vouch with NO matching record grounds nothing (the
+    # anti-collusion floor): a fabricated vouch contributes zero.
+    ungrounded_fixture = _meeting(turns=turns, sighting_records={})
+    assert _grounded_vouch_set(ungrounded_fixture) == frozenset()
+    wrong_room = _meeting(
+        turns=turns,
+        sighting_records={
+            "p-1": (SightingRecord(subject="p-2", room=_ROOM_B, tick=10),)
+        },
+    )
+    assert _grounded_vouch_set(wrong_room) == frozenset()
+
+
+def test_vouch_rates_move_on_synthetic_fixture() -> None:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-2", room=_ROOM_A
+                ),
+                SawPlayerObservation(
+                    type="saw_player", tick=11, subject="p-3", room=_ROOM_A
+                ),
+            ),
+        ),
+    )
+    row = _pooling_row(
+        _meeting(
+            turns=turns,
+            sighting_records={
+                "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
+            },
+        )
+    )
+    assert row.vouch_observations == 2
+    assert row.vouched_subjects == 2
+    assert row.vouch_rate == pytest.approx(0.5)
+    assert row.grounded_vouch_subjects == 1
+    assert row.grounded_vouch_rate == pytest.approx(0.25)
+
+
+# --------------------------------------------------------------------------- #
+# Absence set                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_absence_set_is_the_unplaced_living_complement() -> None:
+    turns = (
+        # p-1 self-places (whereabouts); p-2 is placed by p-3's sighting.
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        _turn(
+            "p-3",
+            1,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-2", room=_ROOM_B
+                ),
+            ),
+        ),
+    )
+    absence = _absence_set(_meeting(turns=turns))
+    # The sighting's SPEAKER states, it does not self-place; p-4 said nothing.
+    assert absence == ("p-3", "p-4")
+
+
+def test_absence_set_shrinks_as_placements_land() -> None:
+    empty = _pooling_row(_meeting(turns=()))
+    assert empty.absence_set_size == 4
+    placed = _pooling_row(
+        _meeting(
+            turns=(
+                _turn(
+                    "p-1",
+                    0,
+                    observations=(
+                        WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),
+                    ),
+                ),
+            )
+        )
+    )
+    assert placed.absence_set_size == 3
+
+
+# --------------------------------------------------------------------------- #
+# Whereabouts-lie detection                                                    #
+# --------------------------------------------------------------------------- #
+
+
+def _whereabouts_lie_fixture() -> _VJMeeting:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        _turn(
+            "p-2",
+            1,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-1", room=_ROOM_B
+                ),
+            ),
+        ),
+    )
+    # The recorded flag names the whereabouts claim by its event id — the
+    # exact ``turn:{turn_id}:whereabouts:{index}`` shape the production
+    # detector mints for the degenerate single-tick self-alibi.
+    flag = ContradictionRef(
+        contradiction_id="c-0",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-0:turn-0:whereabouts:0",
+        event_b_id="turn:m-0:turn-1:obs:0",
+        subjects=("p-1",),
+        description="whereabouts contradicted by a sighting",
+    )
+    return _meeting(turns=turns, contradictions=(flag,))
+
+
+def test_whereabouts_lie_detected_via_recorded_flag_event_id() -> None:
+    meeting = _whereabouts_lie_fixture()
+    assert _whereabouts_claim_event_ids(meeting) == ("turn:m-0:turn-0:whereabouts:0",)
+    assert _whereabouts_lies_detected(meeting) == 1
+    row = _pooling_row(meeting)
+    assert row.whereabouts_claims == 1
+    assert row.whereabouts_lies_detected == 1
+
+
+def test_unflagged_whereabouts_claim_is_not_a_detected_lie() -> None:
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+    )
+    assert _whereabouts_lies_detected(_meeting(turns=turns)) == 0
+
+
+def test_lie_rate_aggregates_from_synthetic_rows() -> None:
+    row = _pooling_row(_whereabouts_lie_fixture())
+    assert row.whereabouts_lies_detected / row.whereabouts_claims == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Report invariants                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_pooling_row_is_frozen_and_round_trips() -> None:
+    row = _pooling_row(_whereabouts_lie_fixture())
+    assert isinstance(row, MeetingPoolingRow)
+    with pytest.raises(ValidationError):
+        row.living = 99
+    assert MeetingPoolingRow.model_validate_json(row.model_dump_json()) == row
+
+
+# --------------------------------------------------------------------------- #
+# Baseline-3 reproduction pins (committed bytes)                               #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module")
+def nine_pooling() -> PoolingFunnelReport:
+    return compute_pooling_funnel(_NINE)
+
+
+@pytest.fixture(scope="module")
+def four_pooling() -> PoolingFunnelReport:
+    return compute_pooling_funnel(_FOUR)
+
+
+def test_9p2i_pooling_reads_zero_where_mechanism_absent(
+    nine_pooling: PoolingFunnelReport,
+) -> None:
+    # No roll-call elicitation exists on baseline 3 (16.15 lands it): the
+    # whereabouts channel is empty, coverage reads 0, and the lie rate is
+    # UNDEFINED (None) — not 0.0 — with zero claims.
+    assert nine_pooling.games_total == 50
+    assert nine_pooling.meetings_total == 139
+    assert nine_pooling.whereabouts_claims_total == 0
+    assert nine_pooling.roll_call_meetings == 0
+    assert nine_pooling.roll_call_coverage_mean == 0.0
+    assert nine_pooling.whereabouts_lies_detected == 0
+    assert nine_pooling.whereabouts_lie_detection_rate is None
+
+
+def test_9p2i_pooling_reproduces_baseline_3_exactly(
+    nine_pooling: PoolingFunnelReport,
+) -> None:
+    # Vouching and the unplaced share DO exist on committed bytes — the
+    # before column the 16.17 close reads.
+    assert nine_pooling.vouch_observations_total == 1098
+    assert nine_pooling.vouch_rate_mean == pytest.approx(0.572593353888318)
+    assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(0.4560123329907503)
+    assert nine_pooling.grounded_vouch_share == pytest.approx(0.7898089171974523)
+    assert nine_pooling.absence_set_size_mean == pytest.approx(2.633093525179856)
+    assert nine_pooling.absence_set_size_median == pytest.approx(2.0)
+    assert dict(nine_pooling.absence_set_size_histogram) == {
+        0: 24,
+        1: 25,
+        2: 23,
+        3: 18,
+        4: 24,
+        5: 12,
+        6: 8,
+        7: 3,
+        8: 2,
+    }
+    assert len(nine_pooling.per_meeting) == 139
+
+
+def test_4p1i_pooling_reproduces_baseline_3_exactly(
+    four_pooling: PoolingFunnelReport,
+) -> None:
+    assert four_pooling.games_total == 50
+    assert four_pooling.meetings_total == 39
+    assert four_pooling.whereabouts_claims_total == 0
+    assert four_pooling.roll_call_coverage_mean == 0.0
+    assert four_pooling.whereabouts_lie_detection_rate is None
+    assert four_pooling.vouch_observations_total == 286
+    assert four_pooling.vouch_rate_mean == pytest.approx(0.8888888888888888)
+    assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.6410256410256411)
+    assert four_pooling.grounded_vouch_share == pytest.approx(0.7211538461538461)
+    assert four_pooling.absence_set_size_mean == pytest.approx(0.8717948717948718)
+    assert dict(four_pooling.absence_set_size_histogram) == {0: 15, 1: 15, 2: 8, 3: 1}
+
+
+def test_pooling_report_round_trips(four_pooling: PoolingFunnelReport) -> None:
+    text = four_pooling.model_dump_json()
+    assert PoolingFunnelReport.model_validate_json(text) == four_pooling
