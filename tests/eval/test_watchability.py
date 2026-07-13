@@ -132,32 +132,18 @@ def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
     hardened referee's committed-set behavior is pinned separately (the CLI
     aggregate test + the supply-floor tests below).
 
-    Task 16.14 note: the committed geomean fixture was regenerated for the
-    baseline-4 record but two 9p2i games were re-recorded after it was written,
-    so their fixture rows are stale (see ``_STALE_FIXTURE_ROWS`` below); those two
-    rows are re-anchored to the source-of-truth bytes, the other 48 stay bit-exact.
+    Task 16.14 note: on the baseline-4 bytes this pin caught a real drift in the
+    frozen bit — ``observation_backed_any`` had silently widened to the 15.4
+    ``SawVentObservation`` type (absent from the 15.2-era extractor's isinstance
+    tuple), diverging from the lab fixture on the first games where an
+    accusation is backed ONLY by a vent sighting (seeds 5/22). The frozen bit
+    was re-narrowed to mirror the extractor byte-for-byte
+    (``eval/watchability.py::_testimony_vehicle``), so all 50 rows reproduce
+    bit-exact again with no per-row exceptions.
     """
 
     fixture = json.loads(_GEOMEAN_FIXTURE.read_text())
     ref_by_seed = {row["seed"]: dict(row) for row in fixture["per_game"]}
-
-    # The committed geomean fixture (experiments/lab/results-rubric-geomean.json)
-    # was regenerated for the baseline-4 record, but two 9p2i games were
-    # re-recorded AFTER it was written and the fixture was not re-derived for them:
-    # seed 5 (the operator re-record stamped 2026-07-13 in MANIFEST.md, post-dating
-    # the fixture) and seed 22 (whose observation-backed conversion likewise shifted
-    # from the final committed byte state). The frozen-spec parity still reproduces
-    # the fixture bit-exact on the other 48 games AND on every non-conversion
-    # dimension of these two (d2_separation_norm, D1/D3/D4, reason, n_meetings all
-    # match) — only the backed conversion (and the d2_deduction + score it feeds)
-    # moved — so those three fields are re-anchored to the SOURCE-OF-TRUTH bytes
-    # here (derived from the committed replays, not the stale fixture).
-    _STALE_FIXTURE_ROWS = {
-        5: {"d2_conversion": 0.5, "d2_deduction": 0.573, "score": 79.8},
-        22: {"d2_conversion": 0.667, "d2_deduction": 0.45, "score": 59.0},
-    }
-    for seed, overrides in _STALE_FIXTURE_ROWS.items():
-        ref_by_seed[seed].update(overrides)
 
     scores = _score_committed_set(_NINE, historical_15_2=True)
     assert len(scores) == 50
@@ -173,11 +159,10 @@ def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
             )
 
     # The aggregate roll-ups, computed exactly as WatchabilityReport rounds them,
-    # against the fixture roll-up corrected for the two re-anchored rows (the mean
-    # moves 49.4 -> 49.52 from the two stale seeds; the median 49.45 is unchanged).
+    # against the fixture's own roll-ups (bit-exact parity, no corrections).
     mean = round(math.fsum(s.score for s in scores) / len(scores), 2)
     median = round(statistics.median(s.score for s in scores), 2)
-    assert mean == pytest.approx(49.52)
+    assert mean == pytest.approx(fixture["mean_score"])
     assert median == pytest.approx(fixture["median_score"])
     # The fixture's floored games (0.0 score on a railroad breach) reproduce.
     floored = {s.seed for s in scores if s.floor_multiplier == 0.0}
@@ -511,7 +496,10 @@ def test_vent_sighting_of_x_does_not_back_accusation_of_y() -> None:
     vehicle_y, backed_y, backed_any_y = _testimony_vehicle(turn, "p-2")
     assert vehicle_y == "accusation"
     assert backed_y is False  # the vent names p-0, not the accused p-2
-    assert backed_any_y is True  # the frozen pre-15.19 subject-agnostic bit
+    # The frozen pre-15.19 bit mirrors the 15.2-era extractor byte-for-byte
+    # (SawPlayer/FoundBody only — Task 16.14 re-narrowed it), so a vent-only
+    # turn does not count as backed under the HISTORICAL spec either.
+    assert backed_any_y is False
 
     vehicle_x, backed_x, backed_any_x = _testimony_vehicle(turn, "p-0")
     assert vehicle_x == "sighting"
@@ -670,12 +658,18 @@ def test_corpus_4p1i_passes_the_referee_via_the_advisory_rule() -> None:
     """``replays/ml_corpus/4p1i`` PASSES: the one-event floor is advisory.
 
     The pause audit §1 finding: corpus-4p1i measures 0.0 on
-    ``witnessed_event_rate`` (baseline-4 floor 1/58 = 0.0172, a one-event
+    ``witnessed_event_rate`` (baseline-3 floor 1/55 = 0.0182, a one-event
     numerator) while passing the hard validity gate and both other supply floors.
     Under the advisory rule the set passes the referee; the miss is still reported.
+
+    Task 16.14 note: the corpus is BASELINE-3 substrate and stays pinned to the
+    baseline-3 floor block explicitly — the DEGRADED-Q3 rule (the baseline-4
+    floor block's own doctrine comment) forbids measuring the stale corpus
+    against baseline-4 floors as same-substrate evidence, and the bare default
+    now resolves to baseline-4.
     """
 
-    report = compute_watchability(_CORPUS_FOUR)
+    report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-3")
     assert report.integrity_ok is True
     assert report.referee_passed is True
     assert report.supply_floors_passed is True
@@ -1177,10 +1171,13 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
     """A witnessed impostor vent is first-hand role-proving evidence (Task 15.4).
 
     ``_testimony_vehicle`` must treat a :class:`SawVentObservation` like a
-    :class:`SawPlayerObservation` — observation-backing, and a sighting of its
-    subject — so a vent-backed accusation converts in D2 without a redundant
-    player-sighting. (The pre-15.4 audit extractor omits the type; the referee
-    recognizes it. Committed v4 sets carry none, so parity is unchanged.)
+    :class:`SawPlayerObservation` on the LIVE subject-aware bit — observation-
+    backing, and a sighting of its subject — so a vent-backed accusation
+    converts in D2 without a redundant player-sighting. The FROZEN
+    ``backed_any`` bit deliberately does NOT count it: it mirrors the 15.2-era
+    extractor (SawPlayer/FoundBody only), whose vocabulary predates the type —
+    Task 16.14 re-narrowed the drifted bit after the baseline-4 bytes exposed
+    the divergence on vent-only-backed accusations (seeds 5/22).
     """
 
     from eval.watchability import _testimony_vehicle
@@ -1208,7 +1205,7 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
     vehicle, backed, backed_any = _testimony_vehicle(accuse_turn, "p-0")
     assert vehicle == "accusation"
     assert backed is True  # subject-aware: the vent names the accused p-0
-    assert backed_any is True
+    assert backed_any is False  # the frozen extractor-mirror bit: no Saw/FoundBody
 
     # A bare vent sighting (no accusation) still names its subject as a sighting.
     sight_turn = MeetingTurn(
@@ -1224,7 +1221,7 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
     vehicle2, backed2, backed_any2 = _testimony_vehicle(sight_turn, "p-0")
     assert vehicle2 == "sighting"
     assert backed2 is True
-    assert backed_any2 is True
+    assert backed_any2 is False  # frozen bit: vent-only turn, no Saw/FoundBody
 
 
 def test_none_conversion_floor_is_vacuously_cleared() -> None:

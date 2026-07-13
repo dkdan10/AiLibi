@@ -1231,19 +1231,24 @@ def _testimony_vehicle(
     subject-AGNOSTIC bit (ANY grounded observation in the turn — the audit
     extractor's definition), retained ONLY for the 15.2 historical parity pin.
 
-    VENT-AWARE (Task 15.4): a :class:`SawVentObservation` is a first-hand,
-    role-proving structured sighting (a witnessed impostor vent — the game's
-    HARDEST evidence), so it counts as observation-backing and as a sighting of
-    its subject, exactly like a :class:`SawPlayerObservation`. The audit extractor
-    this mirrors predates 15.4 and omits the type; recognizing it here keeps a
-    vent-backed accusation from being scored as an unbacked vibe (which would
-    undercount D2 conversion on baseline-3+).
+    VENT-AWARE (Task 15.4) — the LIVE bit only: a :class:`SawVentObservation`
+    is a first-hand, role-proving structured sighting (a witnessed impostor
+    vent — the game's HARDEST evidence), so it counts toward the subject-aware
+    ``observation_backed`` bit exactly like a :class:`SawPlayerObservation`,
+    keeping a vent-backed accusation from being scored as an unbacked vibe.
+    The FROZEN ``observation_backed_any`` bit deliberately does NOT count it:
+    that bit exists solely to reproduce the 15.2-era lab scorer
+    (``extract_gameplay_facts._testimony_vehicle``), whose isinstance tuple is
+    ``(SawPlayerObservation, FoundBodyObservation)`` — the vocabulary at the
+    15.2 freeze. Widening the frozen bit to the 15.4 vent type silently broke
+    the bit-exact geomean parity on the first bytes where an accusation is
+    backed ONLY by a vent sighting (the baseline-4 record, seeds 5/22 —
+    Task 16.14's re-pin found the drift), so the frozen bit now mirrors the
+    extractor byte-for-byte.
     """
 
     has_observation = any(
-        isinstance(
-            obs, (SawPlayerObservation, FoundBodyObservation, SawVentObservation)
-        )
+        isinstance(obs, (SawPlayerObservation, FoundBodyObservation))
         for obs in turn.observations
     )
     subject_observed = any(

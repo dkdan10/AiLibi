@@ -384,11 +384,15 @@ gate then PASSES 10/10 with `--expected-model Qwen/Qwen3.6-27B --require-zero-co
   session crossed UTC midnight; per-set dates are internally consistent and the gate checks
   per-set coherence, not cross-set date equality.
 - **The Q5 annotated tag `phase-16-baseline-4` is created at the recording commit `a43b178`**
-  (the sha every MANIFEST row stamps) but the execution environment's credential refuses tag
-  pushes (HTTP 403, session-branch-only). The tag re-creation is deterministic; the owner
-  pushes it post-merge: `git tag -a phase-16-baseline-4 a43b178 -m "Q5: Task 16.14 baseline-4
-  recording commit" && git push origin phase-16-baseline-4` (a43b178 is reachable from this
-  PR's branch until squash-merge; the tag is what makes it durable after).
+  (the sha every MANIFEST row stamps) but the execution environment's credential refuses TAG
+  pushes (HTTP 403). Branch refs are permitted, so the recording commit is made durably
+  reachable server-side by the holding branch **`phase-16-baseline-4-recording`** (pushed at
+  `a43b178`) — squash-merge cannot orphan it. The owner completes the tag arm at leisure and
+  drops the holder:
+  `git fetch origin phase-16-baseline-4-recording && git tag -a phase-16-baseline-4 a43b178
+  -m "Q5: Task 16.14 baseline-4 recording commit" && git push origin phase-16-baseline-4 &&
+  git push origin :phase-16-baseline-4-recording`. (Belt-and-braces: GitHub also retains the
+  commit via `refs/pull/266/head` after merge.)
 - **The lab rubric artifacts** (`experiments/lab/results-rubric-*.json`) are committed alongside
   the 9p2i rubric — the refresh script writes them and the 15.7 baseline-3 PR (#236) committed
   them the same way.
