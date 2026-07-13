@@ -32,7 +32,11 @@ wall-clock-miss `(deadline_default)` phantom failed-call row ("opening turn (tur
 (validation); p-1 submitted no turn", 0 tokens, no real call) — the validity gate rejects the
 phantom class by design, and the seed was re-recorded clean per the corpus-runbook remedy (its
 MANIFEST row honestly stamps `refreshed_at 2026-07-13`; the other 99 rows span 2026-07-12/13
-across the UTC midnight the session crossed).
+across the UTC midnight the session crossed). The champion leg (51 recorded games incl. one
+phantom-remedy re-record of seed 33) ran the same discipline over a longer wall (~11h with two
+container restarts absorbed by resume-skip): 75 transient 429 retries, 2 seed-budget
+exhaustions recovered by re-run (seed 39 recorded first-try once the tail went single-worker —
+the plan's 4-unit cap makes 2 concurrent champion games collide in ballot phases; §6).
 
 **Verdict in one line:** the model swap is a VALID baseline — both sets PASS the hard gate
 (`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`, 10/10 checks) and reconstruct
@@ -43,8 +47,11 @@ TRANSFERRED to live games: structured alibi lies vanished (alibi_vs_* transcript
 all crew-subject), the vent/sighting channels strengthened, crew mis-ejections collapsed 33 → 12,
 and ejection accuracy rose 0.697 → 0.865 while the impostor win rate eased 0.30 → 0.24. The
 alibi-channel instruments (genuine-class conversion and its supply) are STARVED on this
-substrate — routed to 16.15's elicitation scope and the 16.17 close, not absorbed (§6). GO
-stands; no phase pause.
+substrate — routed to 16.15's elicitation scope and the 16.17 close, not absorbed (§6). The
+champion re-audit (§5) is stamp-proven on all 50 games with a PASSING gate: the champion's win
+edge over the same-substrate FSM baseline SURVIVES the swap (+12pp, 0.36 vs 0.24) while the
+16.11 referee now rejects its evidence-starved meeting economy — a finding routed to the close
++ Phase 17, never a blocker. GO stands; no phase pause.
 
 ---
 
@@ -271,7 +278,63 @@ moved (0.664 → 0.626) and stays density-aware: a future evidence-starved candi
 sharpened demanded rate (floor = 0.6260 × (0.5375 / measured flags_per_meeting), capped at
 1.0), never a free pass off the smaller pin.
 
-## 5. The champion re-audit (finding, not blocker) — _to be filled from the recording_
+## 5. The champion re-audit (finding, not blocker)
+
+Second artifact, same operator session, per the §0.4 pre-registration: the opt-in champion
+(`utility-es`, measured, never modified) re-run over the audit seeds (0..49, 9p/2i/tasks=2)
+against the NEW meeting substrate via
+`scripts/run_tournament.py --agent-factory learned-champion --force` (one seed per process,
+per-seed staging + crash-retry; the 429-squeeze tail recorded single-worker). Measurement
+committed as `training/reports/results-champion-qwen36-audit.jsonl` in the champion-close
+stamp-proof row shape; raw recordings uncommitted (outside the repo tree, re-recordable from
+this recipe). Recorded at checkout **1e28da2** (code byte-identical to the recording commit
+a43b178 — 1e28da2 adds only the replaced sample bytes and audit artifacts).
+
+**The stamp proof (read back from bytes, never echoed):** all 50 recordings carry an identical
+five-field `TacticalPolicyStamp` read back via `orchestrator.replay.read_tactical_policy_stamp`
+— `policy_id utility-es`, `method utility-scorer-es`, `encoder impostor-option-features-v1`,
+`anchor fsm-default`, `weights_sha256 6d327dcb…f71d0` — and the sha equals the committed sidecar
+digest (`stamp_equals_committed_sha256: true`, `stamp_verified_games: 50`). One recording edge
+case: seed 33's first take carried the same `(deadline_default)` phantom failed-call class as
+the canonical set's seed 5 and was re-recorded clean per the same remedy; the committed row's
+gate then PASSES 10/10 with `--expected-model Qwen/Qwen3.6-27B --require-zero-cost`.
+
+**The reading (all cells from the committed row's CLI blocks):**
+
+| term | champion @ close (Qwen3-32B meetings) | **champion @ re-audit (Qwen3.6-27B meetings)** | FSM baseline-4 (same substrate) |
+|---|---|---|---|
+| impostor win rate | 20/50 = 0.40 | **18/50 = 0.36** | 12/50 = 0.24 |
+| edge over the contemporary FSM baseline | +0.10 (0.40 vs 0.30) | **+0.12 (0.36 vs 0.24)** | — |
+| R1 eject-decided win share | 29/50 | **27/50** | 34/50 |
+| ejection accuracy | 0.6195 | **0.8171 (67 imp / 15 crew of 82)** | 0.8652 |
+| genuine-class conversion | 20/24 = 0.833 | **0/0 — NO DATA** (the §6 substrate-wide alibi collapse) | 0/0 |
+| meeting rate / resolved meetings | 1.0 / 139 | **1.0 / 164** | 1.0 / 160 |
+| witnessed_event_rate | 0.2195 | **0.2071** | 0.0506 |
+| flags_per_meeting | 3.0432 | **0.2988** | 0.5375 |
+| testimony-backed conversion (16.11 derived floor) | 0.5743 (derived floor 0.4063 → PASS) | **0.4887 (derived floor CAPPED at 1.0 → FAIL)** | 0.6260 (= pin, PASS at equality) |
+| referee | FAIL as recorded (absolute floor), PASS under the 16.11 derivation | **FAIL** (flags floor + starvation-sharpened conversion) | PASS |
+| validity gate | PASS | **PASS** | PASS |
+
+**Read as pre-registered — a finding routed to the 16.17 close and Phase 17, not a blocker:**
+
+1. **The champion's competitive edge SURVIVES the model swap.** Against its own-substrate FSM
+   baseline it wins +12pp (0.36 vs 0.24), slightly wider than its selection-era +10pp
+   (0.40 vs 0.30). The honest re-reading does NOT find a degraded champion in win terms.
+2. **The referee now rejects the champion's evidence economy, and that is the instrument
+   working.** Under Qwen3-32B meetings the champion's games were flag-rich (3.04/meeting);
+   under the new substrate its games carry LESS per-meeting testimony evidence (0.299) than
+   even the FSM baseline (0.5375), so the 16.11 population-relative conversion floor sharpens
+   past its cap (demanded 1.0, measured 0.489 → FAIL) and the flags floor fails outright. The
+   champion's open-kill style (witnessed-kill rate 4× baseline) no longer converts to
+   testimony under a meeting model that volunteers fewer claims. A Phase-17 retrain/re-select
+   under the baseline-4 substrate — with this referee as the selection bar — is the routed
+   action; the champion stays opt-in-only meanwhile (the 15.20/15.21 deployment posture is
+   unchanged by this task).
+3. **The genuine-class NO-DATA cell replicates on the champion substrate** (0/0 at 164
+   meetings) — corroborating §6's reading that the collapse is a property of the new meeting
+   model's alibi behavior, not of the tactical layer (the champion changes only impostor
+   tactical decisions; the supply collapse appears identically under FSM and champion
+   tactics).
 
 ## 6. Findings (directions, not pass bars — scoping 16.15 and the close)
 
