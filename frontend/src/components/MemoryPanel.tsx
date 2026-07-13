@@ -23,7 +23,7 @@
 // observations and passed in as `coverTasks`.
 // Presentational: the connected MindInspector owns the fetch + the gate.
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { tokens } from "../tokens";
 import type {
@@ -46,7 +46,15 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="text-xs italic text-ink-400">{children}</p>;
 }
 
-function ObservationLine({ obs }: { obs: ObservationClaimView }) {
+// Task 16.7.1: this local switch renders the FULL `ObservationClaimView` union
+// even though the runtime producer here (`api.replay_loader._observations_from_memory`)
+// only ever emits saw_player / completed_task / found_body. The explicit
+// `ReactElement` return type + a case for every union member means a future
+// producer widening can never SILENTLY blank a memory line (the 15-midwave
+// dormant trap, closed): saw_vent was the 15.4.1 gap, and whereabouts is 16.7.1.
+// The wording mirrors `ui/ObservationLine.tsx`; the styling keeps this file's
+// local convention (`text-ink-900` on the root span).
+function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
   switch (obs.type) {
     case "saw_player":
       return (
@@ -70,6 +78,20 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }) {
         <span className="min-w-0 break-words text-ink-900">
           <span className="font-semibold">found body</span> of {obs.body_of} in{" "}
           {obs.room} at tick {obs.tick}
+        </span>
+      );
+    case "saw_vent":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">saw</span> {obs.subject}{" "}
+          <span className="font-semibold">vent</span> in {obs.room} at tick{" "}
+          {obs.tick}
+        </span>
+      );
+    case "whereabouts":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">was in</span> {obs.room} at tick {obs.tick}
         </span>
       );
   }

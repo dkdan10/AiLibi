@@ -116,6 +116,7 @@ _UNION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
         "CompletedTaskObsView",
         "FoundBodyObsView",
         "SawVentObservationView",
+        "WhereaboutsClaimView",
     ),
     "StatementClaimView": (
         "AlibiClaimView",

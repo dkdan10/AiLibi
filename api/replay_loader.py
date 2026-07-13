@@ -96,6 +96,7 @@ from api.schemas import (
     VentView,
     VisibleBodyView,
     VisiblePlayerView,
+    WhereaboutsClaimView,
 )
 from engine.actions import Action
 from engine.events import (
@@ -134,6 +135,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
     VoteBallot,
+    WhereaboutsClaim,
 )
 from meetings.transcript import is_weak_contradiction
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET
@@ -2035,7 +2037,13 @@ def _observations_from_memory(
 
 def _observation_claim_view(
     claim: ObservationClaim,
-) -> SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView:
+) -> (
+    SawPlayerView
+    | CompletedTaskObsView
+    | FoundBodyObsView
+    | SawVentObservationView
+    | WhereaboutsClaimView
+):
     if isinstance(claim, SawPlayerObservation):
         return SawPlayerView(
             type="saw_player",
@@ -2067,6 +2075,15 @@ def _observation_claim_view(
             type="saw_vent",
             tick=claim.tick,
             subject=claim.subject,
+            room=claim.room,
+        )
+    if isinstance(claim, WhereaboutsClaim):
+        # Task 16.7.1: the spectator mirror of the Task 16.7 roll-call
+        # self-placement. It carries no subject -- the speaker IS the subject
+        # (``TurnView.speaker``), so the view surfaces only room/tick.
+        return WhereaboutsClaimView(
+            type="whereabouts",
+            tick=claim.tick,
             room=claim.room,
         )
     raise TypeError(f"unsupported observation claim: {type(claim).__name__}")
@@ -2159,6 +2176,10 @@ def _ballot_view(ballot: VoteBallot) -> BallotView:
         target=ballot.target,
         confidence=ballot.confidence,
         primary_reason_id=ballot.primary_reason_id,
+        # Task 16.7.1: the voter's own-episodic-observation citation (Task 16.5)
+        # mirrored display-only -- the manager validated it against the voter's
+        # memory; the spectator surface never re-validates.
+        primary_reason_observation_id=ballot.primary_reason_observation_id,
         considered_alternatives=tuple(ballot.considered_alternatives),
         rationale_text=ballot.rationale_text,
         rewrite_reasons=reasons,

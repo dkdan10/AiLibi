@@ -77,6 +77,8 @@ function ballot(voter: string, target: string): BallotView {
     target,
     confidence: 0.68,
     primary_reason_id: null,
+    // Task 16.7.1: the own-episodic-observation citation (display-only).
+    primary_reason_observation_id: null,
     considered_alternatives: ["p-2"],
     rationale_text: "raw rationale",
     rewrite_reasons: [],

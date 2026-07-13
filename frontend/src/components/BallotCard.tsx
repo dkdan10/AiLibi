@@ -116,6 +116,23 @@ export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
         </div>
       )}
 
+      {/* Task 16.7.1: the voter's own-episodic-observation citation
+          (`VoteBallot.primary_reason_observation_id`), display-only — the
+          manager already validated it against the voter's memory, so the chip
+          just surfaces the raw `{agent_id}:{tick}:{seq}` id (mono, role-neutral,
+          no linking logic). */}
+      {ballot.primary_reason_observation_id !== null && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-paper-2 px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink-700"
+            title="the voter cited this observation from its own memory"
+          >
+            <span className="uppercase tracking-wide text-ink-400">cites</span>
+            {ballot.primary_reason_observation_id}
+          </span>
+        </div>
+      )}
+
       {rationale !== "" ? (
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-900">
           {rationale}
