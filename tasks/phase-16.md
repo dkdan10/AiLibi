@@ -1130,7 +1130,7 @@ cells 15.7's didn't (different dialogue → different transcript pins).
 ### Task 16.15 — The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix
 **Branch:** `phase-16-elicitation-batch`
 **Depends on:** 16.2, 16.5, 16.6, 16.7, 16.14
-**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); experiments/lab/qwen36_prompt_scratch/README.md (the model's proven style manual on the GO path — structural contracts over prohibitions, positive phrasing, one worked example per ask, hard length caps); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery)
+**Section refs:** audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); audits/audit-phase-16-baseline-4.md §6 (the two baseline-4 findings this batch inherits: the alibi-supply starvation the roll-call ask re-supplies; the missed-skip shape the J3 rewrite must respect); experiments/lab/qwen36_prompt_scratch/README.md (the model's proven style manual on the GO path — structural contracts over prohibitions, positive phrasing, one worked example per ask, hard length caps); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery)
 **Complexity:** Integration
 
 The prompt surface that makes the Wave-1 machinery SPEAK, all four templates, ONE version bump
@@ -1142,9 +1142,16 @@ template renders each candidate's suspicion WITH its provenance split (carried p
 this-meeting evidence, soft-only rows annotated) via 16.3's kwargs; (b) **J3 citation-required
 confidence** — the ballot asks for a cited turn id or observation id with every EJECT (16.5's
 rendered ids give it something to cite; the sanctioned gut-read example is REWRITTEN to cite or
-skip), with confidence verbalized against the citation; (c) **roll-call elicitation** — the
+skip), with confidence verbalized against the citation AND the skip discipline re-anchored
+(baseline-4 §6: missed-skip ballots moved 11 → 86 on 9p2i — the new model votes decisively past
+the recorded skip-threshold arithmetic; the rewrite must not bless threshold-override ejects
+even though accuracy rose); (c) **roll-call elicitation** — the
 opening/turn templates ask each speaker to state where they were (emitting 16.7's
-`WhereaboutsClaim`) and to voice relevant sightings of others; (d) **the vent tail** — the
+`WhereaboutsClaim`) and to voice relevant sightings of others — now the named RE-SUPPLY channel
+for the starved alibi substrate (baseline-4 §6: alibi claims 281 → 109, `alibi_vs_*` flags
+190 → 7, genuine-class conversion NO-DATA at 0/0 supply on both sets): elicited placements must
+be CHECKABLE (room + timing), or the contradiction detectors and the Phase-10 primary-progress
+instrument stay starved at the 16.17 re-measure; (d) **the vent tail** — the
 elicitation ask that targets the ~20/73 unspoken held vents (close audit cells; the mechanism
 exists, the ask must land harder); (e) **the self-accusation fix** — the impostor turn/ballot
 framing that closes the 3/851 self-naming artifact. Every ask is mechanism-tested by fixture
