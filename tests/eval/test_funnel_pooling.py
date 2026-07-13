@@ -340,6 +340,35 @@ def _whereabouts_lie_fixture() -> _VJMeeting:
     return _meeting(turns=turns, contradictions=(flag,))
 
 
+def test_whereabouts_event_ids_match_the_production_detector() -> None:
+    """The fold's event-id construction is pinned to the detector's own helper.
+
+    Lie detection matches RECORDED flags by event id, so a drift between this
+    fold's ``turn:{turn_id}:whereabouts:{index}`` construction and
+    ``meetings.transcript._turn_whereabouts_id`` would silently read 0 on the
+    very substrate the instrument exists for — pin the two byte-identical.
+    """
+
+    from meetings.transcript import _turn_whereabouts_id
+
+    turn = _turn(
+        "p-1",
+        0,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=10, subject="p-2", room=_ROOM_B
+            ),
+            WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),
+        ),
+    )
+    meeting = _meeting(turns=(turn,))
+    # The whereabouts claim sits at observation index 1 — the index is the
+    # position in turn.observations, exactly _event_speaker_index's read.
+    assert _whereabouts_claim_event_ids(meeting) == (
+        _turn_whereabouts_id(turn=turn, index=1),
+    )
+
+
 def test_whereabouts_lie_detected_via_recorded_flag_event_id() -> None:
     meeting = _whereabouts_lie_fixture()
     assert _whereabouts_claim_event_ids(meeting) == ("turn:m-0:turn-0:whereabouts:0",)
@@ -376,6 +405,39 @@ def test_pooling_row_is_frozen_and_round_trips() -> None:
     with pytest.raises(ValidationError):
         row.living = 99
     assert MeetingPoolingRow.model_validate_json(row.model_dump_json()) == row
+
+
+# --------------------------------------------------------------------------- #
+# Walk — fail-loud on a drifted state hash (the 15.3 walk's guard, mirrored)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_vj_walk_raises_on_corrupted_state_hash(tmp_path: Path) -> None:
+    """A tampered recorded ``state_hash`` fails the memory-augmented walk loud."""
+
+    import json
+
+    from engine.world import load_canonical_map
+    from eval.funnel import FunnelReconstructionError, _walk_game_vj
+
+    src = _FOUR / "replay-seed-0.jsonl"
+    dst = tmp_path / "replay-seed-0.jsonl"
+    lines = src.read_text(encoding="utf-8").splitlines()
+    first = json.loads(lines[0])
+    first["state_hash"] = "0" * 64
+    lines[0] = json.dumps(first)
+    dst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(FunnelReconstructionError):
+        _walk_game_vj(
+            dst,
+            seed=0,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            roles={f"p-{i}": "CREWMATE" for i in range(1, 5)},
+            game_map=load_canonical_map(),
+        )
 
 
 # --------------------------------------------------------------------------- #
