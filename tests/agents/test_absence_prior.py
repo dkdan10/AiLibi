@@ -882,6 +882,7 @@ class _AbsenceCounterfactual:
     determinism_ok: bool
     new_over_gate_meetings: int
     top_candidate_change_meetings: int
+    emergency_meetings: int
 
 
 class TestAbsencePriorOnCommittedBytes:
@@ -897,8 +898,15 @@ class TestAbsencePriorOnCommittedBytes:
     then re-derives the per-voter vote-time fold TWICE via
     :func:`meetings.manager._suspicion_graph_with_contradictions` -- OFF (``env={}``)
     and ON (``env={AILIBI_ABSENCE_PRIOR: "1"}``), threading each voter's real
-    ``fellow_impostor_ids`` (from the recorded roles) and ``reporter`` so the
-    measurement is production-faithful.
+    ``fellow_impostor_ids`` (from the recorded roles) and the manager's exact
+    reporter predicate so the measurement is production-faithful:
+    ``_collect_one_ballot`` passes ``reporter=None`` for an EMERGENCY meeting
+    (``_trigger_is_emergency``), and since ``reporter_exculpation_enabled`` is
+    unconditional, getting this wrong is NOT inert -- a spuriously-threaded
+    emergency reporter would have its soft lift zeroed on both sides of the
+    re-derivation (the committed set has 15 emergency meetings; the recorded
+    ``MeetingReplayEntry`` carries no trigger description, so the kind rides
+    the walk's reconstructed trigger via ``ReconstructedMeeting.trigger_kind``).
 
     Absence only LIFTS (it never lowers), so a recorded conviction is never lost
     under the lever -- the counterfactual measures only the NEW-must-vote channel
@@ -915,7 +923,7 @@ class TestAbsencePriorOnCommittedBytes:
         self,
     ) -> dict[
         tuple[int, str],
-        tuple[MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]]],
+        tuple[MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None],
     ]:
         from engine.world import load_canonical_map
         from tests.meetings.test_prompt_byte_golden import (
@@ -928,14 +936,20 @@ class TestAbsencePriorOnCommittedBytes:
         renderers = _canonical_renderers()
         collected: dict[
             tuple[int, str],
-            tuple[MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]]],
+            tuple[
+                MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None
+            ],
         ] = {}
         for path in _seed_paths(self._SET_DIR):
             for meeting in walk_replay_meetings(
                 path, game_map=game_map, renderers_for_set=renderers
             ):
                 graphs = {p.agent_id: p.suspicion_graph for p in meeting.participants}
-                collected[(meeting.seed, meeting.meeting_id)] = (meeting.entry, graphs)
+                collected[(meeting.seed, meeting.meeting_id)] = (
+                    meeting.entry,
+                    graphs,
+                    meeting.trigger_kind,
+                )
         return collected
 
     @pytest.fixture(scope="class")
@@ -965,9 +979,16 @@ class TestAbsencePriorOnCommittedBytes:
         evidence: MeetingBeliefEvidence,
         voters: list[str],
         *,
+        reporter: str | None,
         env: dict[str, str],
     ) -> dict[str, dict[str, SuspicionEntry]]:
-        """Re-derive each voter's post-fold rows under ``env`` (OFF or ON)."""
+        """Re-derive each voter's post-fold rows under ``env`` (OFF or ON).
+
+        ``reporter`` is the manager's exact predicate, computed by the caller:
+        ``entry.triggered_by`` for a body report, ``None`` for an emergency
+        meeting (``_collect_one_ballot``'s ``_trigger_is_emergency`` branch) --
+        the unconditional 15.5 exculpation makes a spurious reporter non-inert.
+        """
 
         impostors = sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
         rows: dict[str, dict[str, SuspicionEntry]] = {}
@@ -985,7 +1006,7 @@ class TestAbsencePriorOnCommittedBytes:
                 fellow_impostor_ids=fellow,
                 evidence=evidence,
                 transcript=entry.transcript,
-                reporter=entry.triggered_by,
+                reporter=reporter,
                 env=env,
             )
             rows[voter] = {e.player_id: e for e in emitted}
@@ -996,7 +1017,9 @@ class TestAbsencePriorOnCommittedBytes:
         self,
         walk: dict[
             tuple[int, str],
-            tuple[MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]]],
+            tuple[
+                MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None
+            ],
         ],
         roles_by_seed: dict[int, dict[str, str]],
     ) -> _AbsenceCounterfactual:
@@ -1009,11 +1032,19 @@ class TestAbsencePriorOnCommittedBytes:
         determinism_ok = True
         new_over_gate = 0
         top_changes = 0
+        emergency_meetings = 0
 
-        for (seed, _meeting_id), (entry, graphs) in walk.items():
+        for (seed, _meeting_id), (entry, graphs, trigger_kind) in walk.items():
             voters = sorted({ballot.voter for ballot in entry.ballots})
             roster = frozenset(voters)
             roles = roles_by_seed[seed]
+            # The manager's exact reporter predicate (_collect_one_ballot): an
+            # emergency meeting has no body-reporter, so the 15.5 exculpation
+            # never applies there -- reporter=None on that branch.
+            is_emergency = trigger_kind == "emergency"
+            if is_emergency:
+                emergency_meetings += 1
+            reporter = None if is_emergency else entry.triggered_by
             evidence = derive_belief_evidence(
                 entry.transcript, contradictions=entry.contradictions, roster=roster
             )
@@ -1033,13 +1064,25 @@ class TestAbsencePriorOnCommittedBytes:
                 subset_ok = False
 
             off_rows = self._voter_rows(
-                entry, graphs, roles, evidence, voters, env=_LEVER_OFF
+                entry,
+                graphs,
+                roles,
+                evidence,
+                voters,
+                reporter=reporter,
+                env=_LEVER_OFF,
             )
             off_rows_again = self._voter_rows(
-                entry, graphs, roles, evidence, voters, env=_LEVER_OFF
+                entry,
+                graphs,
+                roles,
+                evidence,
+                voters,
+                reporter=reporter,
+                env=_LEVER_OFF,
             )
             on_rows = self._voter_rows(
-                entry, graphs, roles, evidence, voters, env=_LEVER_ON
+                entry, graphs, roles, evidence, voters, reporter=reporter, env=_LEVER_ON
             )
             # Determinism: two OFF derivations agree row-for-row.
             for voter in voters:
@@ -1082,6 +1125,7 @@ class TestAbsencePriorOnCommittedBytes:
             determinism_ok=determinism_ok,
             new_over_gate_meetings=new_over_gate,
             top_candidate_change_meetings=top_changes,
+            emergency_meetings=emergency_meetings,
         )
 
     # -- the census this counterfactual is measured over ---------------------
@@ -1144,11 +1188,23 @@ class TestAbsencePriorOnCommittedBytes:
     def test_top_candidate_change_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # In 75 meetings some voter's §4.6 TOP candidate (argmax by rendered
+        # In 74 meetings some voter's §4.6 TOP candidate (argmax by rendered
         # suspicion, ties by sorted id) CHANGES identity under the lever -- high
         # because a near-neutral graph is tie-broken by id, so a fresh 0.58 absence
-        # row readily becomes (or displaces) the rendered argmax.
-        assert counterfactual.top_candidate_change_meetings == 75
+        # row readily becomes (or displaces) the rendered argmax. The count is
+        # sensitive to the reporter predicate: threading a reporter into the 15
+        # emergency meetings (where production passes None) would zero the
+        # opener's soft lift on both sides and mis-count seed-26 meeting-1 as a
+        # 75th change -- the production-faithful figure is 74.
+        assert counterfactual.top_candidate_change_meetings == 74
+
+    def test_emergency_meeting_census(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # 15 of the 139 committed meetings are EMERGENCY meetings (the walk's
+        # reconstructed trigger kind) -- the meetings whose re-derivation must
+        # pass reporter=None to mirror _collect_one_ballot.
+        assert counterfactual.emergency_meetings == 15
 
     # -- determinism ---------------------------------------------------------
 

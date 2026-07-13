@@ -113,6 +113,7 @@ from meetings.manager import (
     SuspicionEntry,
 )
 from meetings.schemas import MeetingResult
+from meetings.transcript import MeetingTriggerKind
 from observation.service import ObservationService
 from orchestrator.game import (
     DEFAULT_NUM_IMPOSTORS,
@@ -229,6 +230,14 @@ class ReconstructedMeeting:
     # Each carries the live suspicion_graph (with the game builder's provenance
     # fields) the live-population assertions decompose.
     participants: tuple[MeetingParticipant, ...] = ()
+    # Task 16.8: the reconstructed trigger's kind ("report" / "emergency"), from
+    # the same ``_build_meeting_trigger`` rebuild the walk drives the manager
+    # with. A downstream re-derivation needs it to mirror the manager's
+    # emergency-reporter predicate (``reporter=None`` for an emergency meeting
+    # -- the recorded ``MeetingReplayEntry`` carries no trigger description, so
+    # this is the only faithful channel). ``None`` = a direct construction that
+    # never threaded it.
+    trigger_kind: MeetingTriggerKind | None = None
 
 
 @dataclass(frozen=True)
@@ -631,6 +640,7 @@ def _run_recorded_meeting(
         complete_calls=tuple(stub.calls),
         hit_prompts=hit_prompts,
         participants=tuple(participants),
+        trigger_kind=trigger_kind,
     )
     return reconstructed, result, body_id, trigger_kind
 
