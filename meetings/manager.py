@@ -90,6 +90,7 @@ from agents.memory.beliefs import (
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
     SuspicionProvenance,
+    absence_prior_enabled,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     reporter_exculpation_enabled,
@@ -128,6 +129,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     MeetingTriggerKind,
+    absent_players,
     accusation_target,
     canonical_rooms,
     detect_contradictions,
@@ -2198,6 +2200,20 @@ def _suspicion_graph_with_contradictions(
     reads as guilt; OFF (the default) it is inert and this path is byte-identical.
     ``env`` lets the offline counterfactual toggle the lever deterministically
     without mutating ``os.environ``.
+
+    Absence prior (Task 16.8; default-OFF). ``evidence.absent`` -- the living
+    roster minus the players public testimony placed
+    (:func:`meetings.transcript.absent_players`) -- is threaded into the same
+    pre-vote fold, where each absent subject takes the TRANSIENT
+    :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA` behind the
+    default-OFF :func:`agents.memory.beliefs.absence_prior_enabled` lever
+    (``env``-resolved, like the reporter damp). The lift composes through the
+    fold's existing ceilings AND this function's joint cap below -- absence +
+    a strong flag caps at ``prior + 0.30`` like every other stack -- and it
+    moves suspicion only (no :class:`ContradictionRef` is minted), so the 16.6
+    citation gate's zero-flag boundary never sees it. OFF (the default) the
+    fold path is not even entered for an absence-only meeting (the ``folds``
+    guard re-checks the lever), so the graph is byte-identical.
     """
 
     # Task 14.10 fail-loud seam guard (PR #217 review; unconditional since the
@@ -2215,8 +2231,17 @@ def _suspicion_graph_with_contradictions(
         )
 
     teammates = frozenset(fellow_impostor_ids)
+    # Task 16.8: a meeting whose ONLY pre-vote evidence is a non-empty absent
+    # set takes the fold path solely when the default-OFF absence_prior lever
+    # is ON -- gating the path (not just the delta) keeps the lever-OFF
+    # control flow, and therefore the emitted rows, structurally identical to
+    # the pre-16.8 graph (the byte-identity discipline; the fold re-checks the
+    # same resolver before applying the delta).
     folds = evidence is not None and bool(
-        evidence.pre_vote_folded or evidence.pre_vote_informed or evidence.corroborated
+        evidence.pre_vote_folded
+        or evidence.pre_vote_informed
+        or evidence.corroborated
+        or (evidence.absent and absence_prior_enabled(env))
     )
 
     if not contradictions and not folds:
@@ -2260,6 +2285,13 @@ def _suspicion_graph_with_contradictions(
             # the default-OFF reporter_exculpation lever (``env``-resolved), so
             # this is inert unless the lever is ON -- OFF stays byte-identical.
             reporter=reporter,
+            # Task 16.8: the publicly-unplaced set, taking the TRANSIENT
+            # absence delta behind the default-OFF absence_prior lever (the
+            # fold gates on the same ``env``-resolved resolver as the path
+            # guard above). Like the voice counts, it rides the meeting
+            # context only -- the persistent absorb never passes it, so only
+            # this vote-time graph ever sees the lift.
+            absent=frozenset(evidence.absent),
             env=env,
         )
 
@@ -3117,6 +3149,19 @@ class MeetingBeliefEvidence:
       post-meeting absorb passes no counts, so only the flat +0.05
       persists (no cross-round railroad). Empty when no subject is voiced,
       which keeps a no-witness meeting byte-identical.
+    * ``absent`` -- the Task 16.8 absent set: the meeting's living roster
+      minus the players public testimony placed
+      (:func:`meetings.transcript.absent_players` -- a sighting names you
+      or your own Task 16.7 whereabouts answer places you; otherwise you
+      are absent). Derived unconditionally (pure, PUBLIC-transcript-only,
+      so the replay path re-derives the identical set), but CONSUMED only
+      by the vote-time pre-vote fold behind the default-OFF
+      :func:`agents.memory.beliefs.absence_prior_enabled` lever, where
+      each absent subject takes the TRANSIENT
+      :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. The
+      persistent post-meeting absorb never reads it, so absence never
+      accumulates across meetings (the sizing contract on the delta's
+      docstring).
     """
 
     accused: tuple[PlayerId, ...]
@@ -3125,6 +3170,7 @@ class MeetingBeliefEvidence:
     pre_vote_folded: tuple[PlayerId, ...] = ()
     pre_vote_informed: tuple[PlayerId, ...] = ()
     pre_vote_voice_counts: tuple[tuple[PlayerId, int], ...] = ()
+    absent: tuple[PlayerId, ...] = ()
 
 
 def derive_belief_evidence(
@@ -3273,6 +3319,12 @@ def derive_belief_evidence(
         pre_vote_folded=pre_vote_folded,
         pre_vote_informed=pre_vote_informed,
         pre_vote_voice_counts=pre_vote_voice_counts,
+        # Task 16.8: the absent set rides the SAME derivation (same roster,
+        # same trigger_kind) as every other evidence fold here, so the replay
+        # path re-derives it bit-identically from the public record alone.
+        # Inert data unless the default-OFF absence_prior lever is ON at the
+        # vote-time fold -- deriving it unconditionally changes no bytes.
+        absent=absent_players(transcript, roster=roster, trigger_kind=trigger_kind),
     )
 
 
