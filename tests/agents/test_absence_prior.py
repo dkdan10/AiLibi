@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
 from typing import TYPE_CHECKING
@@ -80,6 +80,8 @@ from meetings.schemas import ContradictionRef, MeetingTranscript, VoteBallot
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_SELF_STATED,
+    MeetingTriggerKind,
+    absent_players,
 )
 from orchestrator.replay import _TOGGLEABLE_LEVER_RESOLVERS  # noqa: PLC2701
 
@@ -923,7 +925,11 @@ class TestAbsencePriorOnCommittedBytes:
         self,
     ) -> dict[
         tuple[int, str],
-        tuple[MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None],
+        tuple[
+            MeetingReplayEntry,
+            dict[str, tuple[SuspicionEntry, ...]],
+            MeetingTriggerKind | None,
+        ],
     ]:
         from engine.world import load_canonical_map
         from tests.meetings.test_prompt_byte_golden import (
@@ -937,7 +943,9 @@ class TestAbsencePriorOnCommittedBytes:
         collected: dict[
             tuple[int, str],
             tuple[
-                MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None
+                MeetingReplayEntry,
+                dict[str, tuple[SuspicionEntry, ...]],
+                MeetingTriggerKind | None,
             ],
         ] = {}
         for path in _seed_paths(self._SET_DIR):
@@ -1018,7 +1026,9 @@ class TestAbsencePriorOnCommittedBytes:
         walk: dict[
             tuple[int, str],
             tuple[
-                MeetingReplayEntry, dict[str, tuple[SuspicionEntry, ...]], str | None
+                MeetingReplayEntry,
+                dict[str, tuple[SuspicionEntry, ...]],
+                MeetingTriggerKind | None,
             ],
         ],
         roles_by_seed: dict[int, dict[str, str]],
@@ -1045,12 +1055,27 @@ class TestAbsencePriorOnCommittedBytes:
             if is_emergency:
                 emergency_meetings += 1
             reporter = None if is_emergency else entry.triggered_by
-            evidence = derive_belief_evidence(
-                entry.transcript, contradictions=entry.contradictions, roster=roster
+            # The manager's exact evidence shape (PR #264 review): the sibling
+            # folds derive with the standing trigger_kind=None call, then the
+            # ABSENT set alone is re-derived with the ENGINE trigger kind so a
+            # fabricated emergency-opening body never widens the kill-scene
+            # exclusion into spurious absence (the Task 10.11 gate).
+            evidence = replace(
+                derive_belief_evidence(
+                    entry.transcript, contradictions=entry.contradictions, roster=roster
+                ),
+                absent=absent_players(
+                    entry.transcript, roster=roster, trigger_kind=trigger_kind
+                ),
             )
             # Determinism: re-deriving the evidence yields the identical absent set.
-            evidence_again = derive_belief_evidence(
-                entry.transcript, contradictions=entry.contradictions, roster=roster
+            evidence_again = replace(
+                derive_belief_evidence(
+                    entry.transcript, contradictions=entry.contradictions, roster=roster
+                ),
+                absent=absent_players(
+                    entry.transcript, roster=roster, trigger_kind=trigger_kind
+                ),
             )
             if evidence.absent != evidence_again.absent:
                 determinism_ok = False

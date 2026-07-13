@@ -80,7 +80,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -1089,6 +1089,25 @@ class MeetingManager:
         # widen-the-contract-inert pattern; the 16.3 persona precedent).
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
+        )
+        # Task 16.8 (PR #264 review): re-derive the ABSENT set with the
+        # ENGINE-derived trigger kind. The sibling folds above keep their
+        # standing ``trigger_kind=None`` call shape (threading the kind into
+        # them would change lever-OFF emergency-meeting behavior for the
+        # corroboration/voices gates -- the 16.7 sighting-records precedent
+        # declines exactly that), but the absent set is lever-gated data and
+        # must honor the Task 10.11 emergency gate: under ``None`` a
+        # model-FABRICATED opening body in an emergency transcript reads as a
+        # report kill scene, relevance-gates away real public sightings at
+        # that room, and would mint spurious absence lever-ON. The true-kind
+        # derivation is also what the replay path already computes
+        # (:func:`extract_belief_evidence` receives the trigger kind), so
+        # live and replay agree on every meeting.
+        evidence = replace(
+            evidence,
+            absent=absent_players(
+                transcript, roster=roster, trigger_kind=meeting_trigger_kind
+            ),
         )
         ballots = await self._collect_ballots(
             trigger=trigger,
@@ -3158,8 +3177,13 @@ class MeetingBeliefEvidence:
       by the vote-time pre-vote fold behind the default-OFF
       :func:`agents.memory.beliefs.absence_prior_enabled` lever, where
       each absent subject takes the TRANSIENT
-      :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. The
-      persistent post-meeting absorb never reads it, so absence never
+      :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. Derived with
+      THIS function's ``trigger_kind`` -- both live paths supply the true
+      engine-derived kind (the manager's pre-vote region re-derives this
+      field with it, PR #264 review; :func:`extract_belief_evidence`
+      threads it), so a fabricated emergency-opening body never widens the
+      kill-scene exclusion into spurious absence (the Task 10.11 gate).
+      The persistent post-meeting absorb never reads it, so absence never
       accumulates across meetings (the sizing contract on the delta's
       docstring).
     """

@@ -291,6 +291,24 @@ class TestKillSceneSightingAsymmetry:
             self._body_room_sighting(), roster=_ROSTER, trigger_kind="emergency"
         )
 
+    def test_none_trigger_kind_reads_the_body_as_a_kill_scene(self) -> None:
+        # The PR #264 review hazard, pinned: ``trigger_kind=None`` keeps the
+        # pre-10.11 behaviour and reads the opening body off the transcript --
+        # so for an EMERGENCY meeting whose opening carries a model-FABRICATED
+        # ``found_body``, a None-kind derivation gates away the real sighting
+        # and reads p-5 as spuriously absent, exactly like a report meeting.
+        # This is why the manager's pre-vote region re-derives the absent set
+        # with the ENGINE trigger kind (never None) before the fold consumes
+        # it: the Task 10.11 emergency gate must hold on the absence channel.
+        assert "p-5" in absent_players(
+            self._body_room_sighting(), roster=_ROSTER, trigger_kind=None
+        )
+        assert absent_players(
+            self._body_room_sighting(), roster=_ROSTER, trigger_kind=None
+        ) == absent_players(
+            self._body_room_sighting(), roster=_ROSTER, trigger_kind="report"
+        )
+
 
 # --- 6. Dead players excluded by construction (living-only roster) -----------
 
