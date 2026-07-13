@@ -191,9 +191,9 @@ sets (10/10 checks green each), cross-checked by `bash scripts/check.sh`:
 | meeting_rate / resolved meetings (bar ≥0.60 / ≥30) | 1.00 / 160 | 0.78 / 39 |
 | tick-1 kills | 0 | 0 |
 | friendly-fire (impostor-on-impostor) kills | 0 | 0 |
-| betrayal ballots/accusations (§7.12 firewall) | 0 / 964 | 0 (single-impostor, vacuous) |
-| railroaded crew ejections | 0 / 1420 | 0 |
-| dangling `primary_reason_id` | 0 / 964 | 0 |
+| betrayal ballots/accusations (§7.12 firewall) | 0 / 964 | 0 / 0 (single-impostor, vacuous) |
+| railroaded crew ejections | 0 / 1417 | 0 / 35 |
+| dangling `primary_reason_id` | 0 / 964 | 0 / 117 |
 | cost rows ($0 Featherless flat-rate, `--require-zero-cost`) | exact | exact |
 | provenance rows (`Qwen/Qwen3.6-27B`, 4 × `*.qwen3_6_27b.v1`, 6 levers stamped) | exact | exact |
 | byte-identical reconstruction (BARE env) | 0 drift | 0 drift |
@@ -380,9 +380,11 @@ gate then PASSES 10/10 with `--expected-model Qwen/Qwen3.6-27B --require-zero-co
 - **Re-recorded 9p2i seed 5 after its first take recorded a `(deadline_default)` phantom
   failed-call row** (the corpus-runbook remedy; the gate rejects the phantom class by design).
   Its MANIFEST row honestly stamps the re-record date.
-- **The 9p2i set records `refreshed_at 2026-07-12` and 4p1i `2026-07-13`** — the operator
-  session crossed UTC midnight; per-set dates are internally consistent and the gate checks
-  per-set coherence, not cross-set date equality.
+- **`refreshed_at` provenance shape:** 9p2i stamps `2026-07-12` on 49 rows and `2026-07-13` on
+  seed 5 alone (the phantom-remedy re-record, per the bullet above); 4p1i stamps `2026-07-13`
+  on all 50 (the operator session crossed UTC midnight between the sets). The gate checks
+  model/version/flag/cost coherence, not date uniformity — the mixed dates are the honest
+  record of when each row's bytes were produced.
 - **The Q5 annotated tag `phase-16-baseline-4` is created at the recording commit `a43b178`**
   (the sha every MANIFEST row stamps) but the execution environment's credential refuses TAG
   pushes (HTTP 403). Branch refs are permitted, so the recording commit is made durably

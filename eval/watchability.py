@@ -732,10 +732,14 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
 }
 
 # baseline 4 is the committed canonical set since Task 16.14 (the model-swap
-# re-record), so a bare ``measure_baseline.py --watchability`` (and the 15.15
-# harness's default) reads baseline 4's own floors — the referee accepts the
-# committed bytes at equality. (Baseline 3 moved here from Task 15.7's pin the
-# same way; its block above stays scoreable via an explicit --baseline-id.)
+# re-record), so a bare ``measure_baseline.py --watchability`` reads baseline
+# 4's own floors — the referee accepts the committed bytes at equality.
+# (Baseline 3 moved here from Task 15.7's pin the same way; its block above
+# stays scoreable via an explicit --baseline-id.) The 15.15 bake-off harness
+# deliberately does NOT track this default: ``BAKEOFF_BASELINE_ID`` stays
+# pinned to ``baseline-3`` (the substrate its committed candidates were
+# selected under) until Phase 17 re-selects under the baseline-4 referee
+# (audits/audit-phase-16-baseline-4.md §5).
 _DEFAULT_BASELINE_ID: Final[str] = "baseline-4"
 
 
