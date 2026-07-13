@@ -297,7 +297,7 @@ def test_fails_on_railroaded_crew_row(
         meeting: MeetingReport = game.meetings[0]
         call = LLMCallRecord(
             call_kind="meeting",
-            model="Qwen/Qwen3-32B",
+            model="Qwen/Qwen3.6-27B",
             prompt=(
                 "## Your suspicion of each player\n"
                 f"- `{crew}`: suspicion 1.0, trust 0.0\n## Next\n"
@@ -392,7 +392,7 @@ def test_verifier_crash_reported_not_raised(
 def test_expected_model_flag_pins_provenance(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert validity_gate.main([str(_NINE), "--expected-model", "Qwen/Qwen3-32B"]) == 0
+    assert validity_gate.main([str(_NINE), "--expected-model", "Qwen/Qwen3.6-27B"]) == 0
     capsys.readouterr()
     assert (
         validity_gate.main([str(_NINE), "--expected-model", "WrongModel", "--json"])

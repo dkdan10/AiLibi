@@ -12,10 +12,10 @@ finding as the evidence):
 * **The synthetic starved FAIL** — a set with a high meeting rate and ZERO
   backed accusations fails the conversion floor regardless of its population's
   supply: the floor's reason to exist survives the re-anchor.
-* **The FSM-baseline consistency check** — the committed baseline-3 sets still
-  pass at EXACT floor == measured equality (at the baseline's own evidence
-  density the derived floor IS the pin, bit-exact), and the frozen baseline-2
-  block stays absolute.
+* **The FSM-baseline consistency check** — the committed default sets (baseline-4
+  since the Task 16.14 model swap) still pass at EXACT floor == measured equality
+  (at the baseline's own evidence density the derived floor IS the pin, bit-exact),
+  and the frozen baseline-2 block stays absolute.
 
 Plus the derivation's own properties (:func:`population_relative_conversion_floor`
 is the public symbol downstream 16.14/16.17 quote): equality at the anchor
@@ -253,15 +253,17 @@ def test_zero_conversion_with_backed_supply_also_fails() -> None:
 
 
 def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
-    """The committed baseline-3 sets clear their own DERIVED floor at equality.
+    """The committed default (baseline-4) sets clear their own DERIVED floor.
 
     At the baseline's own evidence density the supply ratio is exactly 1.0 and
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
-    "the baseline passes at equality" survives the re-anchor bit-exact).
+    "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
+    to the Task 16.14 baseline-4 conversion pins (9p2i 77/123, 4p1i 17/29; the
+    baseline-3 record was 71/107 and 20/33).
     """
 
-    expected = {_NINE: 71 / 107, _FOUR: 20 / 33}
+    expected = {_NINE: 77 / 123, _FOUR: 17 / 29}
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name
@@ -286,9 +288,15 @@ def test_remeasured_corpus_sets_keep_their_close_audit_verdicts() -> None:
     re-anchor (close audit §1). A regression that silently reverted the
     conversion gauge to the absolute pin would flip these floor values even
     though every verdict here would stay green.
+
+    The ml_corpus was NOT re-recorded at Task 16.14 — it stays baseline-3 /
+    Qwen3-32B substrate — so it is scored against the ``baseline-3`` block it
+    belongs to (the DEGRADED-Q3 rule: the corpus is never measured against the
+    baseline-4 floors as same-substrate evidence). Before the default moved to
+    baseline-4 this was the implicit default; naming it keeps the pins bit-exact.
     """
 
-    corpus_nine = compute_watchability(_CORPUS_NINE)
+    corpus_nine = compute_watchability(_CORPUS_NINE, baseline_id="baseline-3")
     assert corpus_nine.integrity_ok is True
     assert corpus_nine.supply_floors_passed is True
     assert corpus_nine.referee_passed is True
@@ -299,7 +307,7 @@ def test_remeasured_corpus_sets_keep_their_close_audit_verdicts() -> None:
     assert conversion_nine.floor == 0.5738572515937326  # derived < the 71/107 pin
     assert conversion_nine.passed is True
 
-    corpus_four = compute_watchability(_CORPUS_FOUR)
+    corpus_four = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-3")
     assert corpus_four.integrity_ok is True
     assert corpus_four.supply_floors_passed is True  # witnessed miss is advisory
     assert corpus_four.referee_passed is True
