@@ -57,9 +57,16 @@ Reconstruction + cross-checks. The walk (``eval.funnel._walk_game_vj``)
 rebuilds each agent's memory by feeding it exactly what the live game fed it;
 every recorded state hash is verified. Two instrument-integrity gauges ride
 the report: ``provenance_sum_breaches`` counts reconstructed pre-vote rows
-violating the 16.3 invariant ``0.5 + sum(the eight fields) == suspicion``
-(tolerance :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`), and
-``rendered_row_mismatches`` counts per-player suspicion values in the
+whose rendered scalar matches NEITHER the raw 16.3 sum
+``0.5 + sum(the eight fields)`` NOR the graduated J1 clamp of that sum
+(tolerance :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`;
+:func:`_row_sum_breaches`) — the J1 gate (Task 16.4) CLAMPS an entirely-soft
+conviction-grade render to :data:`~agents.memory.beliefs.
+HARD_EVIDENCE_GATE_RENDER_CEIL` while keeping the raw typed provenance, so a
+by-design clamped row (five committed seed-12 9p2i rows; the close §2
+signature) is EXEMPT by the production predicate itself, never a phantom
+breach — while a scalar matching neither the raw sum nor the clamp value still
+counts. ``rendered_row_mismatches`` counts per-player suspicion values in the
 recorded vote prompts that the reconstruction fails to reproduce (tolerance
 0.005 — the prompts render 2 decimals). Both are 0 on every committed set
 (pinned in ``tests/eval/test_vj_instruments.py``). The typed-vs-proxy split
@@ -143,7 +150,10 @@ from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
-from agents.memory.beliefs import SUSPICION_PROVENANCE_ATOL
+from agents.memory.beliefs import (
+    SUSPICION_PROVENANCE_ATOL,
+    hard_evidence_gated_suspicion,
+)
 from engine.entities import PlayerId
 from engine.world import load_canonical_map
 from eval._suspicion_parse import parse_rendered_max_suspicion
@@ -164,6 +174,7 @@ from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
+    _provenance_from_entry,
     _suspicion_graph_with_contradictions,
     derive_belief_evidence,
 )
@@ -466,6 +477,72 @@ def _proxy_split(
     return "sub_gate"
 
 
+def _row_expected_scalars(entry: SuspicionEntry) -> tuple[float, float]:
+    """The two legitimate rendered scalars for a reconstructed row: (raw, J1-clamped).
+
+    ``raw`` is the Task-16.3 provenance sum ``0.5 + Σ(the eight channels)``; the
+    second is the graduated J1 gate applied to that sum -- the SAME production
+    predicate the live runner renders through (Task 16.4,
+    :func:`~agents.memory.beliefs.hard_evidence_gated_suspicion`, off the 16.3
+    decomposition rebuilt by the manager's own
+    :func:`~meetings.manager._provenance_from_entry`). The two coincide on every
+    row except an entirely-soft conviction-grade one, where the gate clamps the
+    render to :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL` one
+    notch below the raw sum while KEEPING the raw typed provenance.
+    """
+
+    provenance = _provenance_from_entry(entry)
+    raw = 0.5 + provenance.total
+    return raw, hard_evidence_gated_suspicion(raw, provenance)
+
+
+def _row_sum_breaches(entry: SuspicionEntry) -> bool:
+    """Whether a reconstructed pre-vote row breaks the 16.3 provenance-sum
+    invariant, accounting for the graduated J1 clamp.
+
+    The raw 16.3 invariant is ``0.5 + Σ(the eight channels) == suspicion``. The
+    reconstruction legitimately emits EITHER the raw scalar -- the pre-vote fold
+    path (``meetings.manager._suspicion_graph_with_contradictions``) keeps
+    ``0.5 + Σ == suspicion`` -- OR the J1-CLAMPED scalar, when an entirely-soft
+    conviction-grade meeting-open snapshot the live runner already clamped passes
+    through un-folded (the J1 render gate fired at record time, so the snapshot
+    carries the clamped scalar beside its raw typed provenance). A row is SOUND
+    when its rendered ``suspicion`` matches EITHER; a REAL breach matches NEITHER.
+    The clamp arm is the production Task-16.4 gate verbatim
+    (:func:`~agents.memory.beliefs.hard_evidence_gated_suspicion`, tolerance
+    :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`) -- never a looser
+    re-derivation -- so a by-design clamped row is exempt by exactly the arithmetic
+    the render applied, while a genuinely-wrong scalar on a clamped row (matching
+    neither the raw sum nor the clamp value) still counts.
+    """
+
+    raw, clamped = _row_expected_scalars(entry)
+    return (
+        abs(raw - entry.suspicion) > SUSPICION_PROVENANCE_ATOL
+        and abs(clamped - entry.suspicion) > SUSPICION_PROVENANCE_ATOL
+    )
+
+
+def _row_is_j1_clamp_exempt(entry: SuspicionEntry) -> bool:
+    """A row the RAW 16.3 invariant would flag but the J1 clamp legitimately exempts.
+
+    True iff the rendered ``suspicion`` breaks ``0.5 + Σ == suspicion`` yet equals
+    the J1-clamped value -- the "phantom breach" class the Phase-16 close routed
+    here (audits/audit-phase-16-close.md §2, §8 routed contract (a)): an
+    entirely-soft conviction-grade row whose scalar the gate clamped to
+    :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL` while keeping the
+    raw typed provenance. A diagnostic predicate (not aggregated into the report);
+    every such row is, by construction, NOT a breach under :func:`_row_sum_breaches`.
+    The per-row pins assert it on the five committed seed-12 rows.
+    """
+
+    raw, clamped = _row_expected_scalars(entry)
+    return (
+        abs(raw - entry.suspicion) > SUSPICION_PROVENANCE_ATOL
+        and abs(clamped - entry.suspicion) <= SUSPICION_PROVENANCE_ATOL
+    )
+
+
 def _cross_check_graphs(
     meeting: _VJMeeting,
     graphs: Mapping[PlayerId, tuple[SuspicionEntry, ...]],
@@ -474,10 +551,12 @@ def _cross_check_graphs(
     """(rows_checked, sum_breaches, rendered_compared, rendered_mismatches).
 
     Two instrument-integrity gauges over EVERY living voter's pre-vote graph:
-    the 16.3 provenance-sum invariant on each reconstructed row, and the
-    reconstructed scalar vs the per-player value the recorded vote prompt
-    actually rendered (2-decimal tolerance). Both read 0 breaches/mismatches
-    on every committed set.
+    the 16.3 provenance-sum invariant on each reconstructed row (J1-clamp-aware,
+    :func:`_row_sum_breaches`), and the reconstructed scalar vs the per-player
+    value the recorded vote prompt actually rendered (2-decimal tolerance). Both
+    read 0 breaches/mismatches on every committed set -- the five by-design
+    J1-clamped seed-12 rows are exempt (:func:`_row_is_j1_clamp_exempt`), not
+    breaches.
     """
 
     rows_checked = 0
@@ -488,17 +567,7 @@ def _cross_check_graphs(
         graph = graphs[voter]
         for entry in graph:
             rows_checked += 1
-            total = (
-                entry.flag_lift
-                + entry.body_proximity
-                + entry.kill_or_vent_pin
-                + entry.testimony_spread
-                + entry.accusation_carry
-                + entry.carried_hard
-                + entry.carried_soft
-                + entry.unattributed
-            )
-            if abs(0.5 + total - entry.suspicion) > SUSPICION_PROVENANCE_ATOL:
+            if _row_sum_breaches(entry):
                 sum_breaches += 1
         prompt = vote_prompts.get(voter)
         if prompt is None:

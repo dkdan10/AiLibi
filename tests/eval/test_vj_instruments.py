@@ -18,11 +18,12 @@ Three layers:
   unattributed / no-row / sub-gate / no-render classes are an honest zero. The
   soft/hard split's rendered-value axis still pins clean (0 rendered-value
   mismatches), and the typed and proxy splits AGREE on every zero-flag
-  conviction (2/2 on the hard axis). The provenance axis now carries 5 sum
-  breaches — all the J1 hard-evidence-gate clamp signature (see
-  ``test_9p2i_soft_hard_split_cross_checks``), a by-design clamp of the
-  ballot-graph scalar that keeps the raw typed provenance, not an integrity
-  failure;
+  conviction (2/2 on the hard axis). The provenance axis reads 0 sum breaches:
+  the gauge learned the J1 clamp-exemption (Task 17.1), so the five by-design
+  J1-clamped seed-12 rows — the ballot-graph scalar clamped to 0.59 while the
+  raw typed provenance sums to 0.60 — are exempt by the production predicate,
+  not integrity failures (their identities pinned per-row in
+  ``test_9p2i_j1_clamp_exempt_rows_pinned``);
 * the CLI surface — ``measure_baseline.py --vj [--json]`` emits the report
   and round-trips, plus the DoD determinism double-run (two computes of the
   same set are identical).
@@ -47,23 +48,32 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import measure_baseline  # noqa: E402
 
+from agents.memory.beliefs import (  # noqa: E402
+    HARD_EVIDENCE_GATE_RENDER_CEIL,
+    SUSPICION_PROVENANCE_ATOL,
+)
 from eval.accusation_calibration import (  # noqa: E402
     _vote_ballot_samples,
     compute_accusation_calibration,
 )
-from eval.funnel import _VJMeeting  # noqa: E402
+from eval.funnel import _VJGameWalk, _VJMeeting, _walk_set_vj  # noqa: E402
 from eval.validity import assemble_tournament_report  # noqa: E402
 from eval.vj_instruments import (  # noqa: E402
     VJInstrumentReport,
     VJMeetingRow,
     _citation_counts,
+    _cross_check_graphs,
     _distinct_n,
     _flagged_subjects,
     _is_near_dup,
     _meeting_echo,
     _normalize_voice,
+    _pre_vote_graphs,
     _proxy_split,
     _room_pattern,
+    _row_expected_scalars,
+    _row_is_j1_clamp_exempt,
+    _row_sum_breaches,
     _strip_leading_markers,
     _typed_split,
     compute_vj_instruments,
@@ -330,6 +340,15 @@ def four() -> VJInstrumentReport:
     return compute_vj_instruments(_FOUR)
 
 
+@pytest.fixture(scope="module")
+def nine_walk() -> list[_VJGameWalk]:
+    # The raw memory-augmented walk of the committed 9p2i set — the same walk
+    # ``compute_vj_instruments`` folds internally, exposed so the J1-clamp-exempt
+    # rows can be reconstructed and pinned per-row (their pre-vote graphs).
+    walks, *_ = _walk_set_vj(_NINE)
+    return walks
+
+
 def test_9p2i_zero_flag_channel_pins(nine: VJInstrumentReport) -> None:
     # The residual zero-flag conviction channel (close audit §11 bullet 3),
     # measured on baseline 5 (Task 16.17 re-record) — convictions_total ==
@@ -364,19 +383,119 @@ def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # mismatches), and the typed/proxy splits AGREE on both zero-flag
     # convictions (2/2 on the hard axis, 0 disagreements).
     assert nine.provenance_rows_checked == 2879
-    # 5 sum breaches, all the J1 hard-evidence-gate clamp signature: seed 12,
-    # meeting headless-seed-12:meeting-2, subject p-2 — the ballot-graph
-    # scalar is clamped to 0.59 while the raw typed provenance sums to 0.60,
-    # across 5 voters' graphs. The clamp keeps the raw provenance BY DESIGN
-    # (tests/agents/test_beliefs_hard_evidence_gate.py::
-    # test_clamps_the_scalar_but_keeps_raw_provenance), so these are not
-    # integrity failures — the gauge's clamp-exemption is a Phase-17
-    # eval-region contract (this instrument predates the lever-ON recordings).
-    assert nine.provenance_sum_breaches == 5
+    # 0 sum breaches: the gauge now mirrors the graduated J1 clamp (Task 17.1;
+    # audits/audit-phase-16-close.md §8 routed contract (a)). The five rows that
+    # read as phantom breaches on the lever-ON baseline-5 record — seed 12,
+    # meeting headless-seed-12:meeting-2, subject p-2, whose ballot-graph scalar
+    # is clamped to 0.59 while the raw typed provenance sums to 0.60, across five
+    # voters' graphs — are J1-clamp-exempt by the production predicate (the clamp
+    # keeps the raw provenance BY DESIGN, tests/agents/test_beliefs_hard_evidence_
+    # gate.py::test_clamps_the_scalar_but_keeps_raw_provenance). Their identities
+    # are pinned per-row in test_9p2i_j1_clamp_exempt_rows_pinned below.
+    assert nine.provenance_sum_breaches == 0
     assert nine.rendered_rows_compared == 2879
     assert nine.rendered_row_mismatches == 0
     assert nine.zero_flag_split_agreements == 2
     assert nine.zero_flag_split_disagreements == 0
+
+
+def _seed12_meeting2(walks: list[_VJGameWalk]) -> _VJMeeting:
+    for walk in walks:
+        if walk.seed != 12:
+            continue
+        for meeting in walk.meetings:
+            if meeting.meeting_id == "headless-seed-12:meeting-2":
+                return meeting
+    raise AssertionError(
+        "seed-12 headless-seed-12:meeting-2 not in the committed 9p2i walk"
+    )
+
+
+def test_9p2i_j1_clamp_exempt_rows_pinned(nine_walk: list[_VJGameWalk]) -> None:
+    # DoD: the five previously-phantom provenance-sum breaches (the Phase-16
+    # close §2 signature, routed to this task by §8 contract (a)) are asserted
+    # INDIVIDUALLY as J1-clamp-exempt, identities pinned. They are one subject in
+    # one meeting — seed 12, headless-seed-12:meeting-2, subject p-2 — whose
+    # entirely-soft conviction-grade row (raw 0.5 + Σ = 0.60, all carried_soft) is
+    # clamped to the J1 render ceiling 0.59 in five voters' pre-vote graphs while
+    # the raw typed provenance is kept. Each is exempt by the PRODUCTION predicate
+    # (agents.memory.beliefs.hard_evidence_gated_suspicion), so none is a breach.
+    meeting = _seed12_meeting2(nine_walk)
+    graphs = _pre_vote_graphs(meeting)
+    exempt_voters: list[str] = []
+    for voter in sorted(meeting.living):
+        for entry in graphs[voter]:
+            if not _row_is_j1_clamp_exempt(entry):
+                # every non-exempt row is sound under the J1-aware invariant
+                assert not _row_sum_breaches(entry)
+                continue
+            exempt_voters.append(voter)
+            # identity: the clamped subject is p-2, rendered at the J1 ceiling
+            assert entry.player_id == "p-2"
+            assert entry.suspicion == pytest.approx(HARD_EVIDENCE_GATE_RENDER_CEIL)
+            raw, clamped = _row_expected_scalars(entry)
+            # the raw 16.3 invariant WOULD flag it (raw 0.60 != rendered 0.59) ...
+            assert raw == pytest.approx(0.60)
+            assert abs(raw - entry.suspicion) > SUSPICION_PROVENANCE_ATOL
+            # ... but the clamp arithmetic reproduces the rendered scalar exactly,
+            # so the gauge does NOT count it as a breach.
+            assert clamped == pytest.approx(entry.suspicion)
+            assert not _row_sum_breaches(entry)
+    # exactly the five voters' graphs, in sorted order
+    assert exempt_voters == ["p-1", "p-3", "p-5", "p-7", "p-9"]
+
+
+def test_cross_check_exempts_the_j1_clamp_but_catches_real_breaches() -> None:
+    # DoD: a synthetic genuinely-broken clamped row still counts as a breach, and
+    # the gauge does NOT introduce phantom breaches on the two legitimate render
+    # shapes (a clamped soft-only row, and a soft-only row emitted RAW by the fold
+    # path — the 4p1i case that a naive "always clamp" gauge would mis-flag).
+    meeting = _judgment_meeting()  # living {p-1, p-2, p-3}
+    by_design = _entry(
+        "p-9", 0.59, carried_soft=0.10
+    )  # raw 0.60 clamped to 0.59 → sound
+    raw_soft = _entry("p-8", 0.60, carried_soft=0.10)  # soft-only emitted RAW → sound
+    broken_clamped = _entry(
+        "p-7", 0.72, carried_soft=0.10
+    )  # neither 0.60 nor 0.59 → breach
+    hard_broken = _entry(
+        "p-6", 0.90, flag_lift=0.10
+    )  # hard row (no clamp), raw 0.60 → breach
+    graphs = {
+        "p-1": (by_design, raw_soft),
+        "p-2": (broken_clamped,),
+        "p-3": (hard_broken,),
+    }
+    checked, breaches, compared, mismatches = _cross_check_graphs(meeting, graphs, {})
+    assert checked == 4
+    assert compared == 0  # no vote prompts passed
+    assert mismatches == 0
+    assert breaches == 2  # only the two genuinely-broken rows
+
+
+def test_row_predicates_classify_raw_clamp_and_breach() -> None:
+    # The exemption predicate is the 16.4 soft-only classification: only an
+    # entirely-soft row over the ceiling, rendered at the clamp value, is exempt.
+    clamped = _entry("p-2", 0.59, carried_soft=0.10)  # raw 0.60 → clamped 0.59
+    raw_soft = _entry("p-2", 0.60, carried_soft=0.10)  # soft-only, emitted raw
+    sub_ceiling = _entry("p-2", 0.55, testimony_spread=0.05)  # soft, below the ceiling
+    hard_raw = _entry("p-2", 0.60, flag_lift=0.10)  # hard channel present → no clamp
+    broken = _entry("p-2", 0.72, carried_soft=0.10)  # matches neither raw nor clamp
+    hard_broken = _entry(
+        "p-2", 0.59, flag_lift=0.10
+    )  # hard row rendered 0.59 (raw 0.60)
+
+    # only the clamped soft-only row is J1-clamp-exempt
+    assert _row_is_j1_clamp_exempt(clamped)
+    for entry in (raw_soft, sub_ceiling, hard_raw, broken, hard_broken):
+        assert not _row_is_j1_clamp_exempt(entry)
+
+    # the raw invariant accepts a scalar matching EITHER the raw sum or the clamp;
+    # a hard row gets no clamp exemption, so 0.59 against a raw 0.60 is a breach
+    for entry in (clamped, raw_soft, sub_ceiling, hard_raw):
+        assert not _row_sum_breaches(entry)
+    for entry in (broken, hard_broken):
+        assert _row_sum_breaches(entry)
 
 
 def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
