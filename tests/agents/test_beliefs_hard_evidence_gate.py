@@ -31,7 +31,7 @@ Test layout mirrors the Task-15.5
 * the two production render read-sites (store + game builder), incl. the override
   pass-through and the trust-vs-suspicion selection consequence;
 * the pre-vote re-render path and the clamp-before-joint-cap ordering pin;
-* the offline counterfactual RE-MEASURED on the committed baseline-4 9p2i bytes (the
+* the offline counterfactual RE-MEASURED on the committed baseline-5 9p2i bytes (the
   over-damping canary -- zero hard-flag-backed conviction outcomes change).
 """
 
@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -628,7 +628,7 @@ class TestPreVoteRerenderAndOrdering:
 
 
 # --------------------------------------------------------------------------- #
-# G. The offline counterfactual on committed baseline-4 bytes (DoD bullet 3)   #
+# G. The offline counterfactual on committed baseline-5 bytes (DoD bullet 3)   #
 # --------------------------------------------------------------------------- #
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -679,21 +679,56 @@ def _entry_provenance(entry: SuspicionEntry) -> SuspicionProvenance:
     )
 
 
-class TestHardEvidenceGateOnCommittedBytes:
-    """The J1 counterfactual, RE-MEASURED offline on the committed baseline-4 9p2i
-    bytes (Task 16.4 DoD bullet 3; the 14.8 analysis-only machinery; re-pinned at the
-    Task-16.14 baseline-4 re-record).
+def _unclamped_seed(entry: SuspicionEntry) -> SuspicionEntry:
+    """Recover the RAW (lever-OFF) scalar from a recorded builder row.
 
-    Baseline 4 was recorded with the lever OFF (it did not yet exist), so the
-    recorded builder rows are the lever-OFF (raw) suspicion graph. This class walks
-    every committed 9p2i meeting ONCE (CPU-only, ~1-2 min, class-scoped), collecting
-    each participant's meeting-open suspicion graph, then per EJECTED report meeting
-    re-derives the per-voter vote-time fold TWICE:
+    Since the Task-16.17 baseline-5 re-record the builder clamp is unconditional
+    (:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` always ON), so the
+    committed ``suspicion_graph`` rows are the CLAMPED (lever-ON) graph -- a
+    soft-only row's ``suspicion`` reads the sub-gate ceil while its eight
+    provenance kwargs stay the untouched Task-16.3 decomposition. The lever-OFF
+    scalar is exactly ``0.5 + sum(the eight components)`` (the module sum
+    invariant, which holds verbatim for every un-clamped row and reconstructs the
+    pre-clamp scalar for a clamped one), so recomputing it restores the raw OFF
+    baseline the pre-baseline-5 bytes carried directly. A no-op on hard-backed /
+    already-sub-gate rows; only soft-only clamped rows move (0.59 -> their raw
+    scalar). The provenance kwargs ride through untouched.
+    """
+
+    raw = 0.5 + (
+        entry.flag_lift
+        + entry.body_proximity
+        + entry.kill_or_vent_pin
+        + entry.testimony_spread
+        + entry.accusation_carry
+        + entry.carried_hard
+        + entry.carried_soft
+        + entry.unattributed
+    )
+    return replace(entry, suspicion=raw)
+
+
+class TestHardEvidenceGateOnCommittedBytes:
+    """The J1 counterfactual, RE-MEASURED offline on the committed baseline-5 9p2i
+    bytes (Task 16.4 DoD bullet 3; the 14.8 analysis-only machinery; re-pinned at the
+    Task-16.17 baseline-5 re-record).
+
+    Baseline 5 was recorded with the builder clamp UNCONDITIONAL (the Task-16.17
+    graduation), so the recorded builder rows are now the lever-ON (CLAMPED)
+    suspicion graph -- OFF can no longer be read straight off the bytes. Because the
+    clamp leaves the eight Task-16.3 provenance kwargs RAW, the lever-OFF scalar is
+    exactly ``0.5 + sum(components)`` (the module sum invariant), so the OFF baseline
+    is reconstructed losslessly per row (:func:`_unclamped_seed`) before the fold.
+    This class walks every committed 9p2i meeting ONCE (CPU-only, ~1-2 min,
+    class-scoped), collecting each participant's meeting-open suspicion graph, then
+    per EJECTED report meeting re-derives the per-voter vote-time fold TWICE:
 
     * OFF -- :func:`meetings.manager._suspicion_graph_with_contradictions` on the raw
-      meeting-open graph (the recorded fold);
-    * ON -- the identical call with each seeded row first passed through the builder
-      lever-ON clamp (:func:`_clamped_seed`: scalar clamped, provenance kwargs raw).
+      meeting-open graph, the clamp UNDONE via :func:`_unclamped_seed` (the
+      pre-baseline-5 recorded fold, reconstructed);
+    * ON -- the identical call with each raw-recovered row re-passed through the
+      builder clamp (:func:`_clamped_seed`: scalar clamped, provenance kwargs raw) --
+      byte-identical to the recorded graph.
 
     An ejectee is HARD-BACKED iff any voter's OFF post-fold row for it carries
     provenance with ``hard_total > SUSPICION_PROVENANCE_ATOL`` (the exact typed split
@@ -765,7 +800,15 @@ class TestHardEvidenceGateOnCommittedBytes:
         )
         rows: dict[str, dict[str, SuspicionEntry]] = {}
         for voter in voters:
-            graph = graphs.get(voter, ())
+            # The committed baseline-5 graph is recorded lever-ON (the builder
+            # clamp is unconditional since Task 16.17), so ``graphs[voter]`` is
+            # the CLAMPED suspicion graph -- OFF can no longer be read straight
+            # off the bytes. Recover the raw OFF baseline from the Task-16.3
+            # decomposition first (:func:`_unclamped_seed`), then re-apply the
+            # pure clamp for the ON leg -- keeping the counterfactual a true
+            # raw-vs-clamped comparison rather than the degenerate clamp-vs-clamp
+            # it would be against the recorded bytes alone.
+            graph = tuple(_unclamped_seed(e) for e in graphs.get(voter, ()))
             if clamp:
                 graph = tuple(_clamped_seed(e) for e in graph)
             fellow = (
@@ -893,40 +936,43 @@ class TestHardEvidenceGateOnCommittedBytes:
     def test_report_ejection_census(
         self, funnel: InformationFunnelReport, counterfactual: _GateCounterfactual
     ) -> None:
-        # 79 EJECTED report meetings on the committed baseline-4 9p2i set (down
-        # from the 95 baseline-3 recorded; the Qwen3.6-27B / qwen3_6_27b.v1
-        # re-record thinned the ejection rate further).
-        assert funnel.report_ejections == 79
-        assert counterfactual.total_ejections == 79
+        # 61 EJECTED report meetings on the committed baseline-5 9p2i set (down
+        # from the 79 baseline-4 recorded; the baseline-5 re-record under the
+        # qwen3_6_27b v3 prompt set with the three levers graduated to
+        # unconditional thinned the ejection rate further).
+        assert funnel.report_ejections == 61
+        assert counterfactual.total_ejections == 61
 
     # -- (i) the soft-only split, by ejectee role ----------------------------
 
     def test_soft_only_split_by_role(self, counterfactual: _GateCounterfactual) -> None:
-        # Over the 15 soft-only (non-hard-backed) ejections the clamp would:
+        # Over the 2 soft-only (non-hard-backed) ejections the clamp would:
         #   kept        = off >= 0.60 AND on < 0.60 (the deciding soft lift damped);
         #   already     = off < 0.60 at graph level (render-side / LLM-read eject);
         #   still_over  = off >= 0.60 AND on >= 0.60 (fresh same-meeting lift holds).
         # Split by ejectee role -- CREWMATE = mis-ejects the clamp neutralises,
-        # IMPOSTOR = genuine catches the clamp risks. On baseline-4 the polarity
-        # is favourable: the clamp neutralises 1 soft-decided crew mis-eject and
-        # risks ZERO impostor catches (the 14 still-over ejections carry fresh
-        # same-meeting hard lift), inverting the baseline-3 0-crew / 2-impostor
-        # split -- exactly why the DoD re-measures rather than carrying a prior
-        # figure. (The baseline-2-era 24/31-vs-6/16 hypothesis is long superseded.)
-        assert counterfactual.kept == {"CREWMATE": 1, "IMPOSTOR": 0}
+        # IMPOSTOR = genuine catches the clamp risks. On baseline-5 the polarity is
+        # NEUTRAL: both soft-only ejections (1 crew, 1 impostor) carry fresh
+        # same-meeting hard lift that holds over the gate ON as well as OFF, so the
+        # clamp neutralises ZERO crew mis-ejects and risks ZERO impostor catches --
+        # no soft-only ejection outcome moves. (The baseline-4 split was 1-crew
+        # kept / 14 still-over; the baseline-2-era 24/31-vs-6/16 hypothesis is long
+        # superseded -- exactly why the DoD re-measures rather than carrying a prior
+        # figure.)
+        assert counterfactual.kept == {"CREWMATE": 0, "IMPOSTOR": 0}
         assert counterfactual.already_sub_gate == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.still_over == {"CREWMATE": 5, "IMPOSTOR": 9}
-        assert counterfactual.soft_only_total == 15
+        assert counterfactual.still_over == {"CREWMATE": 1, "IMPOSTOR": 1}
+        assert counterfactual.soft_only_total == 2
 
     # -- (ii) the hard-backed count (non-vacuity floor) ----------------------
 
     def test_hard_backed_count_is_non_vacuous(
         self, counterfactual: _GateCounterfactual
     ) -> None:
-        # There ARE hard-flag-backed convictions to guard: 64 of the 79 ejections
+        # There ARE hard-flag-backed convictions to guard: 59 of the 61 ejections
         # carry a grounded (hard_total > atol) post-fold row for the ejectee.
         assert counterfactual.hard_backed >= _HARD_BACKED_FLOOR
-        assert counterfactual.hard_backed == 64
+        assert counterfactual.hard_backed == 59
         assert (
             counterfactual.hard_backed + counterfactual.soft_only_total
             == counterfactual.total_ejections
@@ -946,7 +992,7 @@ class TestHardEvidenceGateOnCommittedBytes:
         self, counterfactual: _GateCounterfactual
     ) -> None:
         # The broader sweep: NO hard-backed subject row (ejectee or not, any voter)
-        # flips across the 0.60 verdict under the clamp, anywhere in the 95 meetings.
+        # flips across the 0.60 verdict under the clamp, anywhere in the 179 meetings.
         assert counterfactual.subject_level_flips == ()
 
     def test_the_clamp_never_raises_an_ejectee_row(
