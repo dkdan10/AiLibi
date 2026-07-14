@@ -12,7 +12,7 @@ Implement Task 17.17 — Baseline 6: the mover record + the phase close (operato
 The authoritative task contract is copied below from tasks/phase-17.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-17-baseline-6-close`
-**Depends on:** 17.1, 17.6, 17.13, 17.15, 17.16
+**Depends on:** 17.1, 17.3, 17.6, 17.13, 17.15, 17.16
 **Section refs:** tasks/phase-16.md 16.17 (the close runbook: atomic record, validity gates, floors, canaries, Q5, banner); audits/audit-phase-16-close.md §0.4 (the canary-band discipline + the R1 band-edge warning) + §8 (the staleness rule this close re-states for Phase 18); eval/vote_correctness.py (17.6's successor instrument — canary-eligible for the first time); replays/ml_corpus/ (the Q3-restored canonical denominator)
 **Complexity:** Integration
 

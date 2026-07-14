@@ -109,7 +109,7 @@ Wave 3 (training):
 
 Wave 4 (adoption + close):
   17.14 -> 17.16 champion productization + the evidence-gated default flip
-  (17.1, 17.6, 17.13, 17.15, 17.16) -> 17.17 mover baseline record + phase close [OPERATOR + OWNER]
+  (17.1, 17.3, 17.6, 17.13, 17.15, 17.16) -> 17.17 mover baseline record + phase close [OPERATOR + OWNER]
 ```
 
 Critical path: 17.5 → 17.7 → 17.9 → 17.10 → 17.12 → 17.14 → 17.16 → 17.17. Wave 0 is
@@ -121,7 +121,11 @@ FOUR enumerated steps: (1) 17.8 stays, its record becomes baseline 6 (the meetin
 adoption); (2) **17.8 is inserted into 17.9's `Depends on:` line** — the parsed graph
 (not the diagram below) is what `compute_next_task.py` reads, and rule 2 requires the
 corpus to wait for the adopting record; (3) the mover record renumbers to baseline 7,
-re-pointing 17.11/17.12/17.17's floor references at the 17.8-pinned floors; (4) 17.17's
+re-pointing EVERY downstream substrate/floor reference at the 17.8-pinned baseline —
+17.11/17.12/17.17's floors, 17.10's fit-side substrate language (the max-uses count and
+the substrate-specific validations derive from the corpus actually recorded, i.e. the
+17.8 baseline), and 17.16's locked-decision-2 referee reading (the selection floors are
+the ladder tip at selection time); (4) 17.17's
 BEFORE-column artifact renames `baseline5-final-measure.json` →
 `baseline6-final-measure.json` and its capture re-points to the 17.8 substrate (the
 before column is always the ladder tip the record replaces). Under STAY-OFF the surgery
@@ -137,7 +141,8 @@ chain. `meetings/transcript.py` is touched by 17.5 (the inert flag) then 17.8 (G
 if the widening ships) — the same serialization. `eval/funnel.py` single-toucher 17.4;
 `eval/meeting_quality.py` 17.2; `eval/vj_instruments.py` 17.1; `eval/vote_correctness.py`
 17.6; `api/` + frontend 17.3 — Wave 0 is pairwise disjoint. `agents/tactical/learned/`
-is touched only by 17.16. `eval/watchability.py`: 17.11 touches ONLY the :794-798 lag
+is touched only by 17.16. `meetings/manager.py` is touched only by 17.8 (GO+widening —
+the absent-set derivation call sites). `eval/watchability.py`: 17.11 touches ONLY the :794-798 lag
 note; the floor BLOCKS are touched by 17.8 (GO only) then 17.17 — serialized by the
 GO-surgery edge (17.8 → 17.9 → … → 17.17).
 
@@ -477,6 +482,7 @@ Q5 annotated tag (owner completes the push if the credential refuses), before/af
 - agents/memory/beliefs.py (resolver graduation + the widening consumer if shipped)
 - orchestrator/replay.py (registry → retired)
 - meetings/transcript.py (the widening flag's always-on flip — only if the gate shipped it)
+- meetings/manager.py (the absent-set derivation call sites — the pre-vote re-derivation region — thread the manager's `vent_witness_records` grounding into `absent_players` so the shipped widening is live in production meetings, not just the eval path; only if the gate shipped the widening)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
 - eval/watchability.py (baseline-6 floors)
 - audits/audit-phase-17-absence-gate.md (the record section)
@@ -586,8 +592,8 @@ re-pin ONLY what this record moves, in this PR, so the suite is green at merge (
 
 Rebuild the meeting table on the new corpus, re-fit the predictor, re-measure the
 owner-ratified three-axis GO/NO-GO, re-commit the artifact bundle (weights + sha
-sidecar + a max-uses cap RE-DERIVED from the baseline-5 fit-side meeting count under
-the ~143× rule), and regenerate the report end-to-end — every baseline-3 anchor
+sidecar + a max-uses cap RE-DERIVED from the recorded corpus's fit-side meeting count under
+the ~143× rule — baseline 5, or the 17.8 baseline under the gate's GO), and regenerate the report end-to-end — every baseline-3 anchor
 (honest ceiling, FO-6 re-baseline, always-eject constant 0.802) re-measured, never
 copied. Three baseline-5-specific validations are load-bearing: (1) coerced-SKIP rows
 are EXCLUDED from the fit and counted in the report (designer ruling — forced ejects
@@ -874,13 +880,19 @@ prices this); say the implication, don't re-plan the bake-off.
 **Section refs:** locked decision 2 (the flip criterion: referee PASS + retained win edge at 17.14); agents/tactical/learned/factory.py + forward.py (the opt-in surface, swapped in place); training/reports/report-finalist-eval.md (the evidence); tasks/phase-15.md 15.20/15.21 (the productization + factory precedents); orchestrator/replay.py `TacticalPolicyStamp` + `FSM_DEFAULT_POLICY_ID` (the default-mover identity the flip moves)
 **Complexity:** Integration
 
-Read 17.14's evidence against locked decision 2 and act on the ruled branch. PASS
+Read 17.14's evidence against locked decision 2 and act on the ruled branch — the
+referee floors are the ladder tip's at selection time (baseline 5, or the 17.8 baseline
+under the gate's GO; 17.7's surgery pins the literal). PASS
 (referee floors + conversion + retained win edge): swap the committed champion artifact
 to the winning finalist (weights + sha + config + stamp constants), then flip the
-DEFAULT mover — the scripted-default factory yields to the learned factory as the
-default policy (the run_tournament default, the orchestrator's default policy id, and
-every surface that names `fsm-default` as the mover default), with the scripted FSM
-retained as the named fallback/opt-out. FAIL: swap nothing OR swap the opt-in artifact
+DEFAULT mover — the scripted-default factory yields to the learned factory at the
+DEFAULT-SELECTOR surfaces (the run_tournament default and the orchestrator's default
+factory selection). `FSM_DEFAULT_POLICY_ID` and the absent-stamp fallback
+interpretation are PRESERVED untouched: an absent `tactical_policy` stamp is read as
+`fsm_default_tactical_policy_stamp()` today, so moving that identity would reinterpret
+historical/unstamped replays as champion games — the flip changes what future runs
+SELECT, never how recorded bytes are READ. The scripted FSM stays the named
+fallback/opt-out. FAIL: swap nothing OR swap the opt-in artifact
 only if the new finalist referee-dominates the old one — either way the default stays
 scripted and the finding is recorded. Both branches are contracted; the evidence
 reading is quoted in the PR and ratified by the owner merging it. NO baseline records
@@ -897,7 +909,7 @@ here — 17.17 records the flipped substrate.
 - training/ (evidence is committed; this task consumes)
 
 **Definition of done:**
-- [ ] The evidence reading is stated against locked decision 2's criterion verbatim (each floor, the conversion figure, the win edge) and the ruled branch is fully implemented; on PASS the default-mover identity changes in every surface that names it (grepped and listed), the opt-out to the scripted FSM works and is fixture-pinned; on FAIL the default provably does not move.
+- [ ] The evidence reading is stated against locked decision 2's criterion verbatim (each floor, the conversion figure, the win edge) and the ruled branch is fully implemented; on PASS the default-SELECTOR surfaces change (grepped and listed) while `FSM_DEFAULT_POLICY_ID` and the absent-stamp fallback interpretation are provably untouched — a fixture pins that an unstamped/absent-stamp replay still resolves to the FSM stamp; the opt-out to the scripted FSM works and is fixture-pinned; on FAIL the default provably does not move.
 - [ ] The committed artifact (if swapped) is sha-coherent (weights, sidecar, stamp constants, factory verification) and the provenance stamp names the new policy exactly.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -926,7 +938,7 @@ the flipped default first meets a canonical set — keep this task record-free.
 
 ### Task 17.17 — Baseline 6: the mover record + the phase close (operator + owner, $0)
 **Branch:** `phase-17-baseline-6-close`
-**Depends on:** 17.1, 17.6, 17.13, 17.15, 17.16
+**Depends on:** 17.1, 17.3, 17.6, 17.13, 17.15, 17.16
 **Section refs:** tasks/phase-16.md 16.17 (the close runbook: atomic record, validity gates, floors, canaries, Q5, banner); audits/audit-phase-16-close.md §0.4 (the canary-band discipline + the R1 band-edge warning) + §8 (the staleness rule this close re-states for Phase 18); eval/vote_correctness.py (17.6's successor instrument — canary-eligible for the first time); replays/ml_corpus/ (the Q3-restored canonical denominator)
 **Complexity:** Integration
 

@@ -18,8 +18,8 @@ The authoritative task contract is copied below from tasks/phase-17.md. Follow i
 
 Rebuild the meeting table on the new corpus, re-fit the predictor, re-measure the
 owner-ratified three-axis GO/NO-GO, re-commit the artifact bundle (weights + sha
-sidecar + a max-uses cap RE-DERIVED from the baseline-5 fit-side meeting count under
-the ~143× rule), and regenerate the report end-to-end — every baseline-3 anchor
+sidecar + a max-uses cap RE-DERIVED from the recorded corpus's fit-side meeting count under
+the ~143× rule — baseline 5, or the 17.8 baseline under the gate's GO), and regenerate the report end-to-end — every baseline-3 anchor
 (honest ceiling, FO-6 re-baseline, always-eject constant 0.802) re-measured, never
 copied. Three baseline-5-specific validations are load-bearing: (1) coerced-SKIP rows
 are EXCLUDED from the fit and counted in the report (designer ruling — forced ejects

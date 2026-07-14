@@ -30,6 +30,7 @@ Q5 annotated tag (owner completes the push if the credential refuses), before/af
 - agents/memory/beliefs.py (resolver graduation + the widening consumer if shipped)
 - orchestrator/replay.py (registry → retired)
 - meetings/transcript.py (the widening flag's always-on flip — only if the gate shipped it)
+- meetings/manager.py (the absent-set derivation call sites — the pre-vote re-derivation region — thread the manager's `vent_witness_records` grounding into `absent_players` so the shipped widening is live in production meetings, not just the eval path; only if the gate shipped the widening)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
 - eval/watchability.py (baseline-6 floors)
 - audits/audit-phase-17-absence-gate.md (the record section)

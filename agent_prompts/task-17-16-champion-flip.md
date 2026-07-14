@@ -16,13 +16,19 @@ The authoritative task contract is copied below from tasks/phase-17.md. Follow i
 **Section refs:** locked decision 2 (the flip criterion: referee PASS + retained win edge at 17.14); agents/tactical/learned/factory.py + forward.py (the opt-in surface, swapped in place); training/reports/report-finalist-eval.md (the evidence); tasks/phase-15.md 15.20/15.21 (the productization + factory precedents); orchestrator/replay.py `TacticalPolicyStamp` + `FSM_DEFAULT_POLICY_ID` (the default-mover identity the flip moves)
 **Complexity:** Integration
 
-Read 17.14's evidence against locked decision 2 and act on the ruled branch. PASS
+Read 17.14's evidence against locked decision 2 and act on the ruled branch — the
+referee floors are the ladder tip's at selection time (baseline 5, or the 17.8 baseline
+under the gate's GO; 17.7's surgery pins the literal). PASS
 (referee floors + conversion + retained win edge): swap the committed champion artifact
 to the winning finalist (weights + sha + config + stamp constants), then flip the
-DEFAULT mover — the scripted-default factory yields to the learned factory as the
-default policy (the run_tournament default, the orchestrator's default policy id, and
-every surface that names `fsm-default` as the mover default), with the scripted FSM
-retained as the named fallback/opt-out. FAIL: swap nothing OR swap the opt-in artifact
+DEFAULT mover — the scripted-default factory yields to the learned factory at the
+DEFAULT-SELECTOR surfaces (the run_tournament default and the orchestrator's default
+factory selection). `FSM_DEFAULT_POLICY_ID` and the absent-stamp fallback
+interpretation are PRESERVED untouched: an absent `tactical_policy` stamp is read as
+`fsm_default_tactical_policy_stamp()` today, so moving that identity would reinterpret
+historical/unstamped replays as champion games — the flip changes what future runs
+SELECT, never how recorded bytes are READ. The scripted FSM stays the named
+fallback/opt-out. FAIL: swap nothing OR swap the opt-in artifact
 only if the new finalist referee-dominates the old one — either way the default stays
 scripted and the finding is recorded. Both branches are contracted; the evidence
 reading is quoted in the PR and ratified by the owner merging it. NO baseline records
@@ -39,7 +45,7 @@ here — 17.17 records the flipped substrate.
 - training/ (evidence is committed; this task consumes)
 
 **Definition of done:**
-- [ ] The evidence reading is stated against locked decision 2's criterion verbatim (each floor, the conversion figure, the win edge) and the ruled branch is fully implemented; on PASS the default-mover identity changes in every surface that names it (grepped and listed), the opt-out to the scripted FSM works and is fixture-pinned; on FAIL the default provably does not move.
+- [ ] The evidence reading is stated against locked decision 2's criterion verbatim (each floor, the conversion figure, the win edge) and the ruled branch is fully implemented; on PASS the default-SELECTOR surfaces change (grepped and listed) while `FSM_DEFAULT_POLICY_ID` and the absent-stamp fallback interpretation are provably untouched — a fixture pins that an unstamped/absent-stamp replay still resolves to the FSM stamp; the opt-out to the scripted FSM works and is fixture-pinned; on FAIL the default provably does not move.
 - [ ] The committed artifact (if swapped) is sha-coherent (weights, sidecar, stamp constants, factory verification) and the provenance stamp names the new policy exactly.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
