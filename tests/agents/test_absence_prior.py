@@ -36,6 +36,14 @@ flag-independence pin, the OFF-path byte-identity pins, and the offline
 counterfactual RE-MEASURED on the committed baseline-5 9p2i bytes (the DoD-bullet-4
 calibration evidence, cloned from
 :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
+
+Task 17.5 extends the committed-bytes sweep with the DOUBLE-COUNT counterfactual
+(the widened column the 17.7 gate reads beside the unwidened cells): the
+vent-sighted∩absent population per meeting, and the absent-set-size /
+new-over-gate / top-churn cells re-measured with the
+``include_vent_sightings`` widening hypothetically applied
+(:func:`meetings.transcript.absent_players`; grounded via channels rebuilt from
+the recorded ``vent_sighting`` flags -- typed ids only, never a text parse).
 """
 
 from __future__ import annotations
@@ -76,11 +84,18 @@ from meetings.manager import (
     derive_belief_evidence,
     guard_ballot_citation,
 )
-from meetings.schemas import ContradictionRef, MeetingTranscript, VoteBallot
+from meetings.schemas import (
+    ContradictionRef,
+    MeetingTranscript,
+    SawVentObservation,
+    VentWitnessRecord,
+    VoteBallot,
+)
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_SELF_STATED,
     MeetingTriggerKind,
+    _turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
 from orchestrator.replay import _TOGGLEABLE_LEVER_RESOLVERS  # noqa: PLC2701
@@ -872,7 +887,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass(frozen=True)
 class _AbsenceCounterfactual:
-    """The full 9p2i absence-prior sweep, aggregated once (class-scoped)."""
+    """The full 9p2i absence-prior sweep, aggregated once (class-scoped).
+
+    The ``widened_*`` / ``vent_*`` fields are the Task 17.5 double-count
+    counterfactual: the same sweep with the ``include_vent_sightings``
+    widening hypothetically applied -- the evidence row the 17.7 gate reads
+    beside the unwidened cells.
+    """
 
     total_meetings: int
     nonempty_absent: int
@@ -885,6 +906,18 @@ class _AbsenceCounterfactual:
     new_over_gate_meetings: int
     top_candidate_change_meetings: int
     emergency_meetings: int
+    vent_flag_count: int
+    vent_flag_meetings: int
+    vent_double_count_histogram: tuple[tuple[int, int], ...]
+    vent_double_count_meetings: int
+    widened_matches_recorded_flags: bool
+    widened_nonempty_absent: int
+    widened_absent_histogram: tuple[tuple[int, int], ...]
+    widened_absent_min: int
+    widened_absent_max: int
+    widened_absent_median: float
+    widened_new_over_gate_meetings: int
+    widened_top_candidate_change_meetings: int
 
 
 class TestAbsencePriorOnCommittedBytes:
@@ -922,6 +955,20 @@ class TestAbsencePriorOnCommittedBytes:
     the argmax TOP-candidate churn. The measured aggregates are PINNED exactly:
     committed bytes are frozen, so these numbers are the calibration evidence
     Phase 17 re-checks when it re-measures the lever on the live-roll-call substrate.
+
+    Task 17.5 extends the sweep with the DOUBLE-COUNT counterfactual -- the
+    widened column the 17.7 gate reads beside these cells. The committed bytes
+    persist no :class:`~meetings.schemas.VentWitnessRecord` channel (the replay
+    boundary the 15.4 chokepoint documents), but every GROUNDING VERDICT is on
+    the record as a ``vent_sighting`` :class:`ContradictionRef` -- so per meeting
+    the sweep rebuilds each speaker's groundable channel from the recorded flags
+    (resolving ``event_a_id`` to the spoken typed
+    :class:`~meetings.schemas.SawVentObservation` -- ids and typed fields only,
+    never a text parse) and re-derives the absent set through the REAL widened
+    mechanism (``absent_players(include_vent_sightings=True, ...)``), asserting
+    it agrees with recorded-flag-subject subtraction on every meeting. The
+    widened column re-runs the same ON fold on the widened evidence to measure
+    the absent-set-size / new-over-gate / top-churn deltas.
     """
 
     _SET_DIR = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -984,6 +1031,47 @@ class TestAbsencePriorOnCommittedBytes:
             rows.values(),
             key=lambda entry: (-float(_rendered(entry.suspicion)), entry.player_id),
         ).player_id
+
+    @staticmethod
+    def _vent_records_from_recorded_flags(
+        entry: MeetingReplayEntry,
+    ) -> dict[str, tuple[VentWitnessRecord, ...]]:
+        """Each speaker's groundable channel, rebuilt from the RECORDED verdicts.
+
+        The replay persists no private :class:`VentWitnessRecord`s, but a
+        recorded ``vent_sighting`` flag IS the record-time grounding verdict:
+        its ``event_a_id`` names the spoken
+        :class:`~meetings.schemas.SawVentObservation` that matched the
+        speaker's own channel. Minting a record from that observation's TYPED
+        fields (subject/room/tick -- grounding at record time guarantees the
+        spoken label is spatial and the tick in-window, so the rebuilt record
+        re-grounds the same observation through
+        :func:`meetings.transcript._vent_observation_matches_record` by
+        construction) lets the sweep run the REAL widened mechanism on
+        committed bytes -- ids and typed fields only, never a text parse.
+        """
+
+        flagged_event_ids = {
+            flag.event_a_id
+            for flag in entry.contradictions
+            if flag.kind == "vent_sighting"
+        }
+        records: dict[str, list[VentWitnessRecord]] = {}
+        for turn in entry.transcript.turns:
+            for index, observation in enumerate(turn.observations):
+                if not isinstance(observation, SawVentObservation):
+                    continue
+                event_id = _turn_observation_id(turn=turn, index=index)
+                if event_id not in flagged_event_ids:
+                    continue
+                records.setdefault(turn.speaker, []).append(
+                    VentWitnessRecord(
+                        subject=observation.subject,
+                        room=observation.room,
+                        tick=observation.tick,
+                    )
+                )
+        return {speaker: tuple(rows) for speaker, rows in records.items()}
 
     def _voter_rows(
         self,
@@ -1049,6 +1137,16 @@ class TestAbsencePriorOnCommittedBytes:
         new_over_gate = 0
         top_changes = 0
         emergency_meetings = 0
+        vent_flag_count = 0
+        vent_flag_meetings = 0
+        double_histogram: Counter[int] = Counter()
+        double_meetings = 0
+        widened_matches_recorded_flags = True
+        widened_sizes: list[int] = []
+        widened_histogram: Counter[int] = Counter()
+        widened_nonempty = 0
+        widened_new_over_gate = 0
+        widened_top_changes = 0
 
         for (seed, _meeting_id), (entry, graphs, trigger_kind) in walk.items():
             voters = sorted({ballot.voter for ballot in entry.ballots})
@@ -1094,6 +1192,41 @@ class TestAbsencePriorOnCommittedBytes:
             if not set(evidence.absent) <= roster:
                 subset_ok = False
 
+            # Task 17.5: the widened leg. The recorded ``vent_sighting``
+            # flags are the grounding verdicts; rebuild each speaker's
+            # channel from them and re-derive the absent set through the
+            # REAL widened mechanism, then cross-check against plain
+            # flag-subject subtraction -- the two must never disagree
+            # (one chokepoint predicate behind both).
+            vent_flags = tuple(
+                flag for flag in entry.contradictions if flag.kind == "vent_sighting"
+            )
+            vent_flag_count += len(vent_flags)
+            if vent_flags:
+                vent_flag_meetings += 1
+            vent_subjects = {
+                subject for flag in vent_flags for subject in flag.subjects
+            }
+            widened_absent = absent_players(
+                entry.transcript,
+                roster=roster,
+                trigger_kind=trigger_kind,
+                include_vent_sightings=True,
+                vent_witness_records=self._vent_records_from_recorded_flags(entry),
+            )
+            if set(widened_absent) != set(evidence.absent) - vent_subjects:
+                widened_matches_recorded_flags = False
+            double_count = len(set(evidence.absent) & vent_subjects)
+            double_histogram[double_count] += 1
+            if double_count:
+                double_meetings += 1
+            widened_size = len(widened_absent)
+            widened_sizes.append(widened_size)
+            widened_histogram[widened_size] += 1
+            if widened_size:
+                widened_nonempty += 1
+            widened_evidence = replace(evidence, absent=widened_absent)
+
             off_rows = self._voter_rows(
                 entry,
                 graphs,
@@ -1115,6 +1248,15 @@ class TestAbsencePriorOnCommittedBytes:
             on_rows = self._voter_rows(
                 entry, graphs, roles, evidence, voters, reporter=reporter, env=_LEVER_ON
             )
+            on_rows_widened = self._voter_rows(
+                entry,
+                graphs,
+                roles,
+                widened_evidence,
+                voters,
+                reporter=reporter,
+                env=_LEVER_ON,
+            )
             # Determinism: two OFF derivations agree row-for-row.
             for voter in voters:
                 if {k: e.suspicion for k, e in off_rows[voter].items()} != {
@@ -1124,9 +1266,12 @@ class TestAbsencePriorOnCommittedBytes:
 
             meeting_new_over = False
             meeting_top_change = False
+            widened_meeting_new_over = False
+            widened_meeting_top_change = False
             for voter in voters:
                 off_v = off_rows[voter]
                 on_v = on_rows[voter]
+                on_widened_v = on_rows_widened[voter]
                 for subject, on_entry in on_v.items():
                     off_entry = off_v.get(subject)
                     off_rendered = (
@@ -1136,14 +1281,34 @@ class TestAbsencePriorOnCommittedBytes:
                     )
                     if float(_rendered(on_entry.suspicion)) >= _GATE > off_rendered:
                         meeting_new_over = True
+                # The widened column: the SAME new-over-gate / top-churn reads,
+                # against the SAME OFF baseline, with the widened absent set
+                # feeding the ON fold.
+                for subject, on_entry in on_widened_v.items():
+                    off_entry = off_v.get(subject)
+                    off_rendered = (
+                        float(_rendered(off_entry.suspicion))
+                        if off_entry is not None
+                        else 0.0
+                    )
+                    if float(_rendered(on_entry.suspicion)) >= _GATE > off_rendered:
+                        widened_meeting_new_over = True
                 if self._rendered_max_candidate(off_v) != self._rendered_max_candidate(
                     on_v
                 ):
                     meeting_top_change = True
+                if self._rendered_max_candidate(off_v) != self._rendered_max_candidate(
+                    on_widened_v
+                ):
+                    widened_meeting_top_change = True
             if meeting_new_over:
                 new_over_gate += 1
             if meeting_top_change:
                 top_changes += 1
+            if widened_meeting_new_over:
+                widened_new_over_gate += 1
+            if widened_meeting_top_change:
+                widened_top_changes += 1
 
         return _AbsenceCounterfactual(
             total_meetings=len(walk),
@@ -1157,6 +1322,18 @@ class TestAbsencePriorOnCommittedBytes:
             new_over_gate_meetings=new_over_gate,
             top_candidate_change_meetings=top_changes,
             emergency_meetings=emergency_meetings,
+            vent_flag_count=vent_flag_count,
+            vent_flag_meetings=vent_flag_meetings,
+            vent_double_count_histogram=tuple(sorted(double_histogram.items())),
+            vent_double_count_meetings=double_meetings,
+            widened_matches_recorded_flags=widened_matches_recorded_flags,
+            widened_nonempty_absent=widened_nonempty,
+            widened_absent_histogram=tuple(sorted(widened_histogram.items())),
+            widened_absent_min=min(widened_sizes),
+            widened_absent_max=max(widened_sizes),
+            widened_absent_median=float(median(widened_sizes)),
+            widened_new_over_gate_meetings=widened_new_over_gate,
+            widened_top_candidate_change_meetings=widened_top_changes,
         )
 
     # -- the census this counterfactual is measured over ---------------------
@@ -1238,6 +1415,92 @@ class TestAbsencePriorOnCommittedBytes:
         # reconstructed trigger kind) -- the meetings whose re-derivation must
         # pass reporter=None to mirror _collect_one_ballot.
         assert counterfactual.emergency_meetings == 9
+
+    # -- (4) Task 17.5: the double-count counterfactual (the widened column) --
+
+    def test_recorded_vent_flag_census(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # The grounding-verdict supply the widening reads: 75 recorded
+        # ``vent_sighting`` flags across 66 of the 179 committed meetings --
+        # the substrate DOES speak grounded vents at scale (the 17.6
+        # re-anchor's same supply reading).
+        assert counterfactual.vent_flag_count == 75
+        assert counterfactual.vent_flag_meetings == 66
+
+    def test_vent_double_count_population(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # THE double-count population (the 17.7 gate's first cell): 46 of the
+        # 179 meetings hold a vent-sighted subject who is ALSO priced as
+        # absent -- and never more than ONE such subject per meeting, so the
+        # widening would re-place exactly 46 subject-meetings. In the other
+        # 20 vent-flagged meetings the flagged subject was already placed by
+        # a sighting/whereabouts, so the widening is a no-op there.
+        assert counterfactual.vent_double_count_histogram == ((0, 133), (1, 46))
+        assert counterfactual.vent_double_count_meetings == 46
+
+    def test_widened_mechanism_agrees_with_recorded_flags(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # The mechanism cross-check: on every meeting, the REAL widened
+        # derivation (``include_vent_sightings=True`` over channels rebuilt
+        # from the recorded flags) equals the unwidened absent set minus the
+        # recorded flag subjects -- one 15.4 chokepoint predicate behind both
+        # reads, so the flag channel and the placement channel can never
+        # disagree about who was seen venting.
+        assert counterfactual.widened_matches_recorded_flags is True
+
+    def test_widened_absent_set_size_distribution(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # The widened absent-set sizes beside the unwidened cells: 159 (vs
+        # 163) meetings keep a non-empty absent set, the max falls 7 -> 6,
+        # the median holds at 3.0, and the histogram shifts exactly the 46
+        # re-placed subject-meetings down one bucket each.
+        assert counterfactual.widened_absent_histogram == (
+            (0, 20),
+            (1, 22),
+            (2, 32),
+            (3, 39),
+            (4, 34),
+            (5, 23),
+            (6, 9),
+        )
+        assert counterfactual.widened_nonempty_absent == 159
+        assert counterfactual.widened_absent_min == 0
+        assert counterfactual.widened_absent_max == 6
+        assert counterfactual.widened_absent_median == 3.0
+
+    def test_widened_new_over_gate_meeting_count(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # The widened new-must-vote channel: 53 meetings -- UNCHANGED from the
+        # unwidened column, structurally: a vent-sighted subject carries the
+        # STRONG vent flag (+0.30, joint-capped at prior+0.30) in BOTH env
+        # legs, so they are already at/over the rendered gate OFF-side and can
+        # never be a NEW over-gate candidate; retiring their absence lift
+        # therefore removes nothing this cell counts.
+        assert counterfactual.widened_new_over_gate_meetings == 53
+        assert (
+            counterfactual.widened_new_over_gate_meetings
+            == counterfactual.new_over_gate_meetings
+        )
+
+    def test_widened_top_candidate_change_meeting_count(
+        self, counterfactual: _AbsenceCounterfactual
+    ) -> None:
+        # The widened top-churn cell: 114 meetings -- also UNCHANGED. The
+        # flag-carrying subject's ~0.80 joint-capped row dominates the §4.6
+        # argmax with or without the stacked absence +0.08 (0.80 either way
+        # under the cap), so removing the double-count moves no voter's top
+        # candidate on these bytes: the widening's whole measured effect is
+        # the absent-set shrinkage above, not the fold outcomes.
+        assert counterfactual.widened_top_candidate_change_meetings == 114
+        assert (
+            counterfactual.widened_top_candidate_change_meetings
+            == counterfactual.top_candidate_change_meetings
+        )
 
     # -- determinism ---------------------------------------------------------
 
