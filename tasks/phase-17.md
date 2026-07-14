@@ -100,37 +100,46 @@ Wave 2 (re-grounding, the critical path):
   (17.2, 17.7[, 17.8]) -> 17.9 corpus re-record [OPERATOR ~14-15h]
   17.9 -> 17.10 surrogate re-ground + re-verdict
   17.9 -> 17.11 selection-bar re-pins
-  (17.10, 17.11) -> 17.15 Goodhart re-probe
 
 Wave 3 (training):
   (17.10, 17.11) -> 17.12 impostor bake-off re-run [OPERATOR compute]
   (17.10, 17.11) -> 17.13 crew track re-run
+  (17.10, 17.11) -> 17.15 Goodhart re-probe
   17.12 -> 17.14 multi-finalist recorder + real-LLM finalist eval [OPERATOR]
 
 Wave 4 (adoption + close):
   17.14 -> 17.16 champion productization + the evidence-gated default flip
-  (17.13, 17.15, 17.16) -> 17.17 mover baseline record + phase close [OPERATOR + OWNER]
+  (17.1, 17.6, 17.13, 17.15, 17.16) -> 17.17 mover baseline record + phase close [OPERATOR + OWNER]
 ```
 
 Critical path: 17.5 → 17.7 → 17.9 → 17.10 → 17.12 → 17.14 → 17.16 → 17.17. Wave 0 is
 six independent roots; nothing outside the gate chain waits on the owner.
 
 **Baseline numbering.** Contracts below are written on the gate's STAY-OFF path: the
-mover record at 17.17 is **baseline 6**. Under a GO ruling, 17.7's surgery keeps 17.8
-(whose record becomes baseline 6, the meeting-layer adoption) and renumbers the mover
-record to baseline 7, re-pointing 17.11/17.12/17.17's floor references at the
-17.8-pinned floors. Under STAY-OFF the surgery REMOVES 17.8's contract and prompt
-(`scripts/compute_next_task.py` has no dropped state — the 16.2 precedent). One
-direction adds nothing; both directions are one bounded rewrite, validator-green.
+mover record at 17.17 is **baseline 6**. Under a GO ruling, 17.7's surgery performs
+FOUR enumerated steps: (1) 17.8 stays, its record becomes baseline 6 (the meeting-layer
+adoption); (2) **17.8 is inserted into 17.9's `Depends on:` line** — the parsed graph
+(not the diagram below) is what `compute_next_task.py` reads, and rule 2 requires the
+corpus to wait for the adopting record; (3) the mover record renumbers to baseline 7,
+re-pointing 17.11/17.12/17.17's floor references at the 17.8-pinned floors; (4) 17.17's
+BEFORE-column artifact renames `baseline5-final-measure.json` →
+`baseline6-final-measure.json` and its capture re-points to the 17.8 substrate (the
+before column is always the ladder tip the record replaces). Under STAY-OFF the surgery
+REMOVES 17.8's contract and prompt (`scripts/compute_next_task.py` has no dropped
+state — the 16.2 precedent) and SCRUBS the GO-conditional 17.8 clauses from 17.9's DoD
+and 17.11's body — dependencies and scopes stay untouched, but no orphan 17.8 reference
+survives. Both directions are one bounded rewrite, validator-green.
 
 **Collision discipline.** `training/bakeoff/harness.py` is touched by 17.11 (constants)
 then 17.12 (protocol run) — serialized by the dep edge. `tests/agents/test_absence_prior.py`
-is touched by 17.5 (counterfactual) then 17.7/17.8 — serialized by the gate chain.
-`eval/funnel.py` single-toucher 17.4; `eval/meeting_quality.py` 17.2;
-`eval/vj_instruments.py` 17.1; `eval/vote_correctness.py` 17.6; `meetings/transcript.py`
-17.5; `api/` + frontend 17.3 — Wave 0 is pairwise disjoint. `agents/tactical/learned/`
-is touched only by 17.16. `eval/watchability.py` floor blocks: 17.8 (GO only) then
-17.17 — serialized by the chain.
+is touched by 17.5 (counterfactual) then 17.8 (GO re-pins) — serialized by the gate
+chain. `meetings/transcript.py` is touched by 17.5 (the inert flag) then 17.8 (GO, only
+if the widening ships) — the same serialization. `eval/funnel.py` single-toucher 17.4;
+`eval/meeting_quality.py` 17.2; `eval/vj_instruments.py` 17.1; `eval/vote_correctness.py`
+17.6; `api/` + frontend 17.3 — Wave 0 is pairwise disjoint. `agents/tactical/learned/`
+is touched only by 17.16. `eval/watchability.py`: 17.11 touches ONLY the :794-798 lag
+note; the floor BLOCKS are touched by 17.8 (GO only) then 17.17 — serialized by the
+GO-surgery edge (17.8 → 17.9 → … → 17.17).
 
 **Operator/owner gates.** Operator sessions: 17.8 (GO only, ~5h), 17.9 (~14–15h — the
 long pole; plan it like the 15.12 session, with the 16.14/16.17 concurrency notes:
@@ -408,11 +417,15 @@ owner ratifies or amends (the close never defined one — this memo must propose
 numeric bar, e.g. a new-over-gate ceiling at a stated roll-call coverage, so the ruling
 is a criterion, not a vibe). The owner rules THREE couplings together: graduate/stay-OFF,
 ship/hold the vent widening (a widening that ships travels WITH the graduation record —
-it is meeting-layer), and (if stay-OFF) the Phase-18 routing note. Then the surgery:
-GO ⇒ 17.8 stays, the mover baseline renumbers 6 → 7 across 17.11/17.12/17.17, and this
-doc's banner records the ruling; STAY-OFF ⇒ 17.8's contract + prompt are REMOVED with
-the reason recorded (the 16.2 surgery discipline), downstream contracts untouched.
-Prompts regenerate; validator green either way.
+it is meeting-layer), and (if stay-OFF) the Phase-18 routing note. Then the surgery,
+exactly as the preamble's Baseline-numbering block enumerates: GO ⇒ 17.8 stays, 17.8
+enters 17.9's `Depends on:` line (the parsed edge that makes the corpus wait), the
+mover baseline renumbers 6 → 7 across 17.11/17.12/17.17, 17.17's before-column artifact
+renames to `baseline6-final-measure.json`, and this doc's banner records the ruling;
+STAY-OFF ⇒ 17.8's contract + prompt are REMOVED with the reason recorded (the 16.2
+surgery discipline) and the GO-conditional 17.8 clauses in 17.9's DoD and 17.11's body
+are scrubbed — dependencies and scopes otherwise untouched. Prompts regenerate;
+validator green either way.
 
 **Files in scope:**
 - audits/audit-phase-17-absence-gate.md (new: the memo + the recorded ruling)
@@ -645,10 +658,11 @@ the floors the phase selects on.
 - training/bakeoff/harness.py (the two constants + the probe re-measure)
 - training/bakeoff/goodhart.py (the default)
 - training/crew/scorer.py (only if the import shape needs the explicit id)
+- eval/watchability.py (the :794-798 lag note ONLY — the note says the bake-off constant deliberately lags until Phase 17; this task closes it. Floor BLOCKS stay record-pinned and are not touched)
 - tests/training/test_bakeoff_harness.py + test_goodhart_probe.py (constant + probe re-pins)
 
 **Files NOT in scope:**
-- eval/watchability.py (floors are pinned by records, never by this task)
+- eval/watchability.py floor blocks (floors are pinned by records — 17.8 [GO] and 17.17 — never by this task; only the :794-798 note region above is in scope)
 - training/surrogate/ (17.10)
 
 **Definition of done:**
@@ -912,7 +926,7 @@ the flipped default first meets a canonical set — keep this task record-free.
 
 ### Task 17.17 — Baseline 6: the mover record + the phase close (operator + owner, $0)
 **Branch:** `phase-17-baseline-6-close`
-**Depends on:** 17.13, 17.15, 17.16
+**Depends on:** 17.1, 17.6, 17.13, 17.15, 17.16
 **Section refs:** tasks/phase-16.md 16.17 (the close runbook: atomic record, validity gates, floors, canaries, Q5, banner); audits/audit-phase-16-close.md §0.4 (the canary-band discipline + the R1 band-edge warning) + §8 (the staleness rule this close re-states for Phase 18); eval/vote_correctness.py (17.6's successor instrument — canary-eligible for the first time); replays/ml_corpus/ (the Q3-restored canonical denominator)
 **Complexity:** Integration
 

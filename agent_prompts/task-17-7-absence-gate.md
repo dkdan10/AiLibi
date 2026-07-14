@@ -24,11 +24,15 @@ owner ratifies or amends (the close never defined one — this memo must propose
 numeric bar, e.g. a new-over-gate ceiling at a stated roll-call coverage, so the ruling
 is a criterion, not a vibe). The owner rules THREE couplings together: graduate/stay-OFF,
 ship/hold the vent widening (a widening that ships travels WITH the graduation record —
-it is meeting-layer), and (if stay-OFF) the Phase-18 routing note. Then the surgery:
-GO ⇒ 17.8 stays, the mover baseline renumbers 6 → 7 across 17.11/17.12/17.17, and this
-doc's banner records the ruling; STAY-OFF ⇒ 17.8's contract + prompt are REMOVED with
-the reason recorded (the 16.2 surgery discipline), downstream contracts untouched.
-Prompts regenerate; validator green either way.
+it is meeting-layer), and (if stay-OFF) the Phase-18 routing note. Then the surgery,
+exactly as the preamble's Baseline-numbering block enumerates: GO ⇒ 17.8 stays, 17.8
+enters 17.9's `Depends on:` line (the parsed edge that makes the corpus wait), the
+mover baseline renumbers 6 → 7 across 17.11/17.12/17.17, 17.17's before-column artifact
+renames to `baseline6-final-measure.json`, and this doc's banner records the ruling;
+STAY-OFF ⇒ 17.8's contract + prompt are REMOVED with the reason recorded (the 16.2
+surgery discipline) and the GO-conditional 17.8 clauses in 17.9's DoD and 17.11's body
+are scrubbed — dependencies and scopes otherwise untouched. Prompts regenerate;
+validator green either way.
 
 **Files in scope:**
 - audits/audit-phase-17-absence-gate.md (new: the memo + the recorded ruling)

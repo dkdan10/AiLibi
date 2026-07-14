@@ -28,10 +28,11 @@ the floors the phase selects on.
 - training/bakeoff/harness.py (the two constants + the probe re-measure)
 - training/bakeoff/goodhart.py (the default)
 - training/crew/scorer.py (only if the import shape needs the explicit id)
+- eval/watchability.py (the :794-798 lag note ONLY — the note says the bake-off constant deliberately lags until Phase 17; this task closes it. Floor BLOCKS stay record-pinned and are not touched)
 - tests/training/test_bakeoff_harness.py + test_goodhart_probe.py (constant + probe re-pins)
 
 **Files NOT in scope:**
-- eval/watchability.py (floors are pinned by records, never by this task)
+- eval/watchability.py floor blocks (floors are pinned by records — 17.8 [GO] and 17.17 — never by this task; only the :794-798 note region above is in scope)
 - training/surrogate/ (17.10)
 
 **Definition of done:**
