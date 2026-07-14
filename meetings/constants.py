@@ -23,7 +23,6 @@ Keep this module stdlib-only (no ``meetings.*`` / ``agents.*`` /
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from typing import Final
 
@@ -37,46 +36,41 @@ from typing import Final
 DEFAULT_SKIP_CONFIDENCE_THRESHOLD: Final[float] = 0.6
 
 
-# Task 16.6 citation-gate lever — DEFAULT-OFF (the 16.4/16.5 live-toggle
-# pattern, env-gated, NOT retired). Third entry in the
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` registry chain, behind
-# 16.5's ``observation_id_rendering``: OFF (the default) leaves the ballot
-# guard chain byte-identical to the committed baseline-3 substrate, and the
-# 16.17 graduation decision re-measures the soundness counterfactual on the
-# adopting baseline's bytes and may record it with the lever measured ON.
+# Task 16.6 citation-gate lever — UNCONDITIONAL since the Task-16.17 baseline-5
+# record (the graduation slate, audits/audit-phase-16-close.md §0.1.3). The
+# lever was adopted by the baseline-5 re-record, so — mirroring the
+# 14.9/14.12/15.7 graduations — it is now the default substrate rather than an
+# env-gated toggle: the J2 ballot citation guard always applies. This is
+# byte-identical to the baseline-5 recording (which ran the lever ON), and it
+# lets the committed set reconstruct/serve under a BARE environment (no
+# AILIBI_* export). The lever is stamped unconditionally ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF
+# is a legacy (baseline-3/4) artifact that fails loud (no cross-substrate
+# replay). ``ENV_CITATION_GATE`` is retained (no longer read) for the stamp
+# key's naming provenance and backward-compatible imports.
 ENV_CITATION_GATE: Final[str] = "AILIBI_CITATION_GATE"
-_CITATION_GATE_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
 
 
 def citation_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.6 citation-gate (J2) lever is ON. DEFAULT OFF.
+    """Whether the Task 16.6 citation-gate (J2) lever is ON — now always True.
 
-    Reads :data:`ENV_CITATION_GATE` from ``env`` (defaulting to the real
-    process environment), mirroring the 16.4 ``hard_evidence_gate`` / 16.5
-    ``observation_id_rendering`` resolvers it clones. Default OFF: an unset /
-    empty / unrecognised value is ``False`` so the ballot guard chain stays
-    byte-identical to the committed baseline-3 substrate
-    (``scripts/verify_samples.sh`` reconstructs clean); the live re-measure of
-    the soundness counterfactual and the graduation decision are Task 16.17.
-    Accepts ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets
-    tests + the offline counterfactual toggle the lever deterministically
-    without mutating ``os.environ``.
-
-    ON gates the J2 citation guard at exactly ONE read-site --
+    Retired to UNCONDITIONAL at the Task-16.17 baseline-5 record (the 15.7 move,
+    applied to this lever once baseline 5 adopted it per the graduation slate —
+    the soundness counterfactual read near-zero honest catches blocked, and
+    16.5's rendered ids + 16.15's citation asks supply the citation channel the
+    gate honors). The J2 citation guard applies at exactly ONE read-site --
     :meth:`meetings.manager.MeetingManager._collect_one_ballot`, where a
     zero-flag EJECT ballot (its target carries NO contradiction flag this
     meeting) whose ``primary_reason_id`` AND ``primary_reason_observation_id``
     are both null after validation is coerced to SKIP with an audit marker
     (:func:`meetings.manager.guard_ballot_citation`) -- never a crash, never a
-    re-prompt. Lever gating lives at the call site (the 15.5/16.4 in-line
-    pattern), never inside the pure guard helper.
+    re-prompt. The ``env`` argument is accepted and ignored (retained so the
+    call site and the substrate stamp read one source of truth without a
+    signature churn).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_CITATION_GATE, "").strip().lower()
-        in _CITATION_GATE_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 __all__ = [
