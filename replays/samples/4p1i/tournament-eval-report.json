@@ -9998,6 +9998,7 @@
     "correct_skip_ballots": 87,
     "missed_skip_ballots": 6,
     "unclassified_skip_ballots": 0,
+    "citation_coerced_skip_ballots": 0,
     "missed_skip_impostor_voters": 3,
     "missed_skip_teammate_coerced": 0,
     "missed_skip_invalid_target": 0,

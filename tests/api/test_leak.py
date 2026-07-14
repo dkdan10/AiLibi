@@ -364,6 +364,13 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ``survivals_sheltered_sub_gate`` / ``survivals_unevidenced``). All are pure
 # aggregate counts, rates, and a pinned string (no roles, transcripts, or
 # engine types), so they stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
+# The Task 17.2 coerced-SKIP bucket (DESIGN.md §11.3, §5.5;
+# audits/audit-phase-16-close.md §8 routed contract (b)) adds
+# ``citation_coerced_skip_ballots`` to the ``conversion`` block: the 16.6
+# citation-gate coercions diverted out of the correct/missed/unclassified
+# partition. It is a pure aggregate count (no roles, transcripts, or engine
+# types), so it stays out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -385,6 +392,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "by_model",
         "call_kind",
         "cap_defaulted_turns",
+        "citation_coerced_skip_ballots",
         "claims",
         "co_present",
         "confidence",

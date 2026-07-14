@@ -102,6 +102,25 @@ census in this module:
   impossible on post-guard recordings. Same single-era rule: off the
   frozen wrapper until the 10.9 re-record.
 
+Phase 17 Wave 0 (Task 17.2) teaches the SKIP partition the citation-gate
+coercion in this module:
+
+* *Citation-coerced SKIPs* — the ballots the Task 16.6 citation gate
+  (``citation_gate_enabled`` lever ON) rewrote from an uncited zero-flag
+  EJECT to SKIP, keyed on
+  :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` and censused as a
+  fourth by-design bucket of the SKIP partition
+  (``citation_coerced_skip_ballots``, beside correct / missed /
+  unclassified). :func:`compute_conversion_report` diverts these ballots
+  BEFORE the tri-split, role- and verdict-blind: the gate working is never a
+  voter decision, so a coerced SKIP is never a missed skip and never a §4.6
+  ``threshold_inversions`` entry (audits/audit-phase-16-close.md §8 routed
+  contract (b); the 17.2 designer ruling tasks/phase-17.md, the
+  invalid-target / teammate precedent). Unlike the Task 10.6 / 10.9 surfaces
+  this is a field ON the frozen :class:`ConversionReport`, defaulting to 0 so
+  the committed single-era reports (predating the field) still parse until
+  the 17.9 re-record.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -157,6 +176,7 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
     derive_belief_evidence,
 )
@@ -195,6 +215,35 @@ _VOTE_PARSE_DEFAULT_MARKER_PREFIX: Final[str] = VOTE_PARSE_DEFAULT_MARKER.split(
 _BALLOT_REDIRECT_MARKER_PREFIX: Final[str] = BALLOT_TARGET_REDIRECT_MARKER.split(
     "{target!r}"
 )[0]
+
+# The Task 17.2 citation-gate coercion marker (Task 16.6, J2). UNLIKE the four
+# naive prefix constants above, this one is matched with the established
+# ``{x!r}`` repr-aware convention rather than a raw ``in``/prefix scan:
+#
+# * The pattern is built from the imported production literal
+#   (:data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`), never
+#   re-spelled here -- the head and tail are sliced off the constant so a
+#   change to the marker text can never silently desync the parse.
+# * The marker interpolates its payload with ``{target!r}`` -- a Python repr,
+#   always a quoted literal -- so matching the QUOTED value (rather than the
+#   static tail alone) makes the parse robust when the original target text
+#   itself contains the marker's tail (``... coerced to SKIP] ``): the
+#   quote-matching consumes the whole repr first, so the match ends at the
+#   REAL marker boundary, not inside the payload.
+# * Anchored ``^`` because the citation gate is the LAST guard in the
+#   manager's ballot chain (Task 16.6), so the coercion marker is always the
+#   OUTERMOST prefix; any stacked 16.5/16.6-era markers (e.g. a nulled
+#   :data:`~meetings.manager.INVALID_OBSERVATION_ID_MARKER`) ride INSIDE it.
+# * Mirrors :func:`api.replay_loader._marker_pattern`, replicated locally
+#   because that helper is private to the api layer (a cross-layer import of
+#   it would couple eval to api internals).
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+_UNCITED_ZERO_FLAG_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(
+    "^"
+    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0])
+    + _MARKER_REPR_VALUE
+    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("}")[2])
+)
 
 # ---------------------------------------------------------------------------
 # Task 10.4 gate-metric parses (ported from the audit extractor's derivations,
@@ -507,8 +556,10 @@ class ConversionReport(BaseModel):
       (rendered max suspicion over the LIVING ejection targets was below
       :data:`~eval._suspicion_parse.SKIP_SUSPICION_THRESHOLD`),
       ``missed_skip_ballots`` (rendered max met the threshold yet the voter
-      SKIPped), and ``unclassified_skip_ballots`` (no rendered gate line was
-      found for the voter — older prompt version or missing vote call).
+      SKIPped), ``unclassified_skip_ballots`` (no rendered gate line was
+      found for the voter — older prompt version or missing vote call), and
+      ``citation_coerced_skip_ballots`` (the 16.6 citation-gate coercion; see
+      the dedicated bullet below).
       Task 10.9.1 narrows the census to voter DECISIONS: a SKIP stamped with
       the parse-default marker
       (:data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER`, the manager's
@@ -518,6 +569,29 @@ class ConversionReport(BaseModel):
       standalone :class:`DefaultedBallotReport` census instead, so a
       degraded SKIP can never read as a missed skip or a genuine
       ``threshold_inversions`` entry.
+    * ``citation_coerced_skip_ballots`` is the 16.6 citation-gate coercion
+      class (:func:`meetings.manager.guard_ballot_citation`, marker
+      :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`): the gate
+      rewrote an uncited zero-flag EJECT to SKIP — the gate working, never
+      the voter's decision, so a marker-anchored SKIP is neither a correct
+      skip, a missed skip, nor a §4.6 ``threshold_inversions`` entry. It is
+      diverted BEFORE the correct/missed/unclassified tri-split and the
+      divert is role- and verdict-blind (Task 17.2 designer ruling
+      tasks/phase-17.md; audits/audit-phase-16-close.md §8 routed contract
+      (b)): a sub-threshold coerced SKIP is never a chosen correct skip and
+      an impostor's coerced SKIP is never an in-character decline, because a
+      coerced ballot is a forced eject, not a decision (the 17.10 ruling).
+      On the committed baseline-5 9p2i bytes it is 2 — one crew ballot the
+      pre-17.2 partition mis-filed as a ``threshold_inversions`` entry and
+      one impostor ballot the role-first impostor bucket absorbed — which is
+      why moving them out drops the recorded inversions 99 → 98 and the
+      impostor voters 42 → 41. The field DEFAULTS to 0: the committed
+      single-era eval reports (the baseline-5 samples and the stale
+      ml_corpus reports) predate this field and are NOT regenerated before
+      the 17.9 corpus re-record, so the model must still parse them; on those
+      artifacts the coerced ballots stay folded where the old partition put
+      them (the recorded truth), and every FRESH recompute populates the
+      bucket.
     * ``missed_skip_ballots`` is a **SENTINEL, not a down-is-good metric**:
       it partitions exactly into ``missed_skip_impostor_voters`` (the voter
       is an impostor — the audited exclusion class: impostor in-character
@@ -549,7 +623,7 @@ class ConversionReport(BaseModel):
       (the old facts-only name read as "the model obeyed the verdict", audit
       F-F-5).
 
-    **Leak-safety.** Every field is a pure aggregate (two rates and twelve
+    **Leak-safety.** Every field is a pure aggregate (two rates and thirteen
     integers). The report carries no roles, no transcripts, and no
     engine-owned types, so it adds no leak risk to the
     ``/eval/tournament-report`` surface (``tests/api/test_leak.py``).
@@ -571,6 +645,7 @@ class ConversionReport(BaseModel):
     correct_skip_ballots: int
     missed_skip_ballots: int
     unclassified_skip_ballots: int
+    citation_coerced_skip_ballots: int = 0
     missed_skip_impostor_voters: int
     missed_skip_teammate_coerced: int
     missed_skip_invalid_target: int
@@ -587,6 +662,7 @@ class ConversionReport(BaseModel):
             self.correct_skip_ballots,
             self.missed_skip_ballots,
             self.unclassified_skip_ballots,
+            self.citation_coerced_skip_ballots,
             self.missed_skip_impostor_voters,
             self.missed_skip_teammate_coerced,
             self.missed_skip_invalid_target,
@@ -609,13 +685,14 @@ class ConversionReport(BaseModel):
             self.correct_skip_ballots
             + self.missed_skip_ballots
             + self.unclassified_skip_ballots
+            + self.citation_coerced_skip_ballots
         )
         if skip_parts != self.skip_ballots:
             raise ValueError(
-                "correct + missed + unclassified skip ballots must equal "
-                f"skip_ballots: {self.correct_skip_ballots} + "
-                f"{self.missed_skip_ballots} + {self.unclassified_skip_ballots} "
-                f"!= {self.skip_ballots}"
+                "correct + missed + unclassified + citation_coerced skip "
+                f"ballots must equal skip_ballots: {self.correct_skip_ballots} "
+                f"+ {self.missed_skip_ballots} + {self.unclassified_skip_ballots} "
+                f"+ {self.citation_coerced_skip_ballots} != {self.skip_ballots}"
             )
         missed_parts = (
             self.missed_skip_impostor_voters
@@ -704,8 +781,13 @@ def compute_conversion_report(
     10.9.1: the ``VOTE_PARSE_DEFAULT_MARKER``-stamped fail-soft ballot) is
     counted here only as a correct skip under a MUST-skip render; otherwise
     it is diverted to :func:`compute_defaulted_ballots` (see the
-    :class:`ConversionReport` docstring). A voter with no parsed gate line
-    is ``unclassified``, never assumed correct. MISSED ballots partition
+    :class:`ConversionReport` docstring). A SKIP whose ``rationale_text`` is
+    anchored by the 16.6 citation-gate coercion marker
+    (:data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`) is diverted to
+    ``citation_coerced_skip_ballots`` BEFORE the correct/missed/unclassified
+    tri-split, regardless of the voter's role or rendered verdict (Task 17.2;
+    audits/audit-phase-16-close.md §8 routed contract (b)). A voter with no
+    parsed gate line is ``unclassified``, never assumed correct. MISSED ballots partition
     role-first: an impostor voter lands in ``missed_skip_impostor_voters``
     regardless of any normalization marker (the audited exclusion class —
     impostor in-character voting is sanctioned by the vote prompt, so it is
@@ -728,6 +810,7 @@ def compute_conversion_report(
     correct_skip_ballots = 0
     missed_skip_ballots = 0
     unclassified_skip_ballots = 0
+    citation_coerced_skip_ballots = 0
     missed_skip_impostor_voters = 0
     missed_skip_teammate_coerced = 0
     missed_skip_invalid_target = 0
@@ -810,6 +893,26 @@ def compute_conversion_report(
                     rendered_max is None or rendered_max >= SKIP_SUSPICION_THRESHOLD
                 ):
                     continue
+                # CITATION-COERCED diversion (Task 17.2; audit §8 routed
+                # contract (b)): a SKIP whose rationale is anchored by the
+                # 16.6 citation-gate coercion marker is the gate working,
+                # never the voter's decision, so it is diverted to its own
+                # by-design bucket BEFORE the correct/missed/unclassified
+                # tri-split and stays out of every decision read -- an
+                # impostor's coerced SKIP is not an in-character decline, a
+                # crew voter's is not a threshold inversion, and a
+                # sub-threshold one is not a chosen correct skip (the 17.10
+                # ruling: a forced eject poisons the decision channel the
+                # verdict hinges on). The role- and verdict-blind divert
+                # matches the invalid-target / teammate precedent. The
+                # anchored match is sound because the citation gate is the
+                # LAST guard in the manager's ballot chain, so this marker is
+                # always the outermost prefix; any stacked 16.5/16.6 markers
+                # ride inside it.
+                if _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text):
+                    skip_ballots += 1
+                    citation_coerced_skip_ballots += 1
+                    continue
                 skip_ballots += 1
                 if rendered_max is None:
                     unclassified_skip_ballots += 1
@@ -843,6 +946,7 @@ def compute_conversion_report(
         correct_skip_ballots=correct_skip_ballots,
         missed_skip_ballots=missed_skip_ballots,
         unclassified_skip_ballots=unclassified_skip_ballots,
+        citation_coerced_skip_ballots=citation_coerced_skip_ballots,
         missed_skip_impostor_voters=missed_skip_impostor_voters,
         missed_skip_teammate_coerced=missed_skip_teammate_coerced,
         missed_skip_invalid_target=missed_skip_invalid_target,
