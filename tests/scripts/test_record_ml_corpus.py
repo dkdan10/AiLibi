@@ -9,7 +9,7 @@ Every case is hermetic and makes NO network call and NO real-provider record:
 * the preflight cases fail loud BEFORE any tournament invocation (wrong
   provider / missing key / wrong prompt set), so no record ever starts — the
   ambient FEATHERLESS_API_KEY / ANTHROPIC_API_KEY are stripped by _clean_env so
-  a test can never accidentally kick off the ~7h operator recording;
+  a test can never accidentally kick off the ~14–15h operator recording;
 * --splits-only derives splits.json from stub replay files in a tmp corpus root
   (AILIBI_ML_CORPUS_ROOT) with no provider call at all.
 """
@@ -21,42 +21,74 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+
+from orchestrator.replay import substrate_flag_snapshot
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RECORD_SH = _REPO_ROOT / "scripts" / "record_ml_corpus.sh"
 
 # The committed corpus under replays/ml_corpus/ is the PRIOR baseline-3 recording
 # (Qwen/Qwen3-32B), byte-frozen PENDING the Phase-17 re-grounding (Task 16.17).
-# The recorder now pins the BASELINE-5 substrate, so its freeze-path provenance
-# guard (check_replay_provenance) legitimately REFUSES the committed bytes as
-# off-substrate. The record-path fixtures below need a substrate-CURRENT replay to
-# exercise the guard's positive / stamp / model paths, and no committed baseline-5
-# corpus exists yet — so they rebase the one committed replay's model id from the
-# stale baseline-3 model to the baseline-5 model. read_tactical_policy_stamp reads
-# the untouched game_over block and compute_cost_usd sums the recorded (all-$0)
-# cost fields, so rebasing only the model id leaves the canonical fsm-default
-# stamp and the $0 provenance intact.
+# The recorder now pins the BASELINE-5 substrate on TWO axes its freeze-path
+# provenance guard (check_replay_provenance) gates: the recorded MODEL id AND the
+# game_over substrate_flags stamp (the committed bytes carry the baseline-3
+# six-lever slate, missing the three 16.4/16.5/16.6 graduations). It legitimately
+# REFUSES the committed bytes as off-substrate on both. The record-path fixtures
+# below need a substrate-CURRENT replay to exercise the guard's positive / stamp /
+# model paths, and no committed baseline-5 corpus exists yet — so they rebase the
+# one committed replay's model id AND its substrate slate onto baseline 5.
+# read_tactical_policy_stamp reads the untouched stamp block and compute_cost_usd
+# sums the recorded (all-$0) cost fields, so the rebase leaves the canonical
+# fsm-default stamp and the $0 provenance intact.
 _STALE_CORPUS_MODEL = "Qwen/Qwen3-32B"
 _BASELINE_MODEL = "Qwen/Qwen3.6-27B"
 _COMMITTED_CORPUS_REPLAY = (
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
 )
 
+# The bare baseline-5 graduated-lever slate a substrate-current recording stamps
+# (Task 17.9): the nine retired always-on levers True + absence_prior OFF (the
+# 16.17 recorded stay-OFF). Derived from the build snapshot with an explicit bare
+# env so the fixture always tracks the recorder's documented substrate — the same
+# slate check_replay_provenance now asserts positively in the recorded bytes.
+_BASELINE5_SUBSTRATE_SLATE = substrate_flag_snapshot(env={})
 
-def _baseline5_corpus_replay_text() -> str:
-    """The one committed corpus replay, rebased onto the baseline-5 model.
 
-    Yields a replay that carries the canonical fsm-default stamp, the baseline-5
-    model on every recorded call, and $0 cost — the substrate the re-pinned
-    recorder now accepts.
+def _rewrite_game_over_substrate(text: str, flags: Mapping[str, bool]) -> str:
+    """Return ``text`` with the game_over row's substrate_flags stamp set to ``flags``.
+
+    Line-wise: parse the one game_over row, replace its substrate_flags, re-dump
+    that line. The recorder reads the stamp via Pydantic (read_substrate_flags),
+    so the re-serialized key order is immaterial; every other row is left
+    byte-untouched.
     """
 
-    return _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        record = json.loads(line)
+        if record.get("kind") == "game_over":
+            record["substrate_flags"] = dict(flags)
+            lines[i] = json.dumps(record, separators=(",", ":"))
+    return "\n".join(lines) + "\n"
+
+
+def _baseline5_corpus_replay_text() -> str:
+    """The one committed corpus replay, rebased onto the baseline-5 substrate.
+
+    Yields a replay that carries the canonical fsm-default stamp, the baseline-5
+    model on every recorded call, $0 cost, AND the baseline-5 graduated-lever
+    slate on its game_over stamp — the substrate the re-pinned recorder now
+    accepts on every check_replay_provenance axis.
+    """
+
+    text = _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
         f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
     )
+    return _rewrite_game_over_substrate(text, _BASELINE5_SUBSTRATE_SLATE)
 
 
 pytestmark = pytest.mark.skipif(
@@ -68,7 +100,7 @@ def _clean_env() -> dict[str, str]:
     """Ambient env with every ``AILIBI_*`` override AND every provider key stripped.
 
     Stripping the keys is a SAFETY invariant: a test must never be able to fall
-    into the real record path (which would start the ~7h operator recording).
+    into the real record path (which would start the ~14–15h operator recording).
     """
 
     return {
@@ -613,6 +645,103 @@ def test_record_path_refuses_non_baseline_model_in_replay_bytes(
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
     assert "non-baseline model(s) recorded: Other/Model-32B" in out
+
+
+def test_record_path_refuses_stale_baseline3_substrate_slate(tmp_path: Path) -> None:
+    # The 17.9 POSITIVE slate gate, negative direction: a present replay carrying
+    # the STALE baseline-3 substrate slate (the six-lever set, missing the three
+    # 16.4/16.5/16.6 graduations) is refused by its BYTES, not just by the env
+    # preflight — so the committed stale corpus can never be resumed-over and
+    # silently frozen. Fixture: the committed corpus replay rebased onto the
+    # baseline-5 MODEL only, its stale baseline-3 substrate_flags left intact, so
+    # the model check passes and the substrate slate check is what fires.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    stale_substrate = _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
+        f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
+    )
+    (set_dir / "replay-seed-1000.jsonl").write_text(stale_substrate, encoding="utf-8")
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_replay_provenance" in out
+    assert "disagrees with the baseline-5 graduated-lever slate" in out
+    # The three missing Phase-16 graduations are named — the substrate axis this
+    # re-record discharges.
+    assert "hard_evidence_gate" in out
+    assert "observation_id_rendering" in out
+    assert "citation_gate" in out
+
+
+def test_record_path_refuses_absence_prior_on_in_recorded_slate(tmp_path: Path) -> None:
+    # The slate gate also refuses a replay whose game_over stamp records
+    # absence_prior ON: the baseline-5 substrate's absence_prior is the 16.17
+    # recorded STAY-OFF, so a lever-ON recording (e.g. bytes from a Phase-17
+    # counterfactual session) must be refused by its BYTES even though the model +
+    # stamp + cost are all baseline-current. Fixture: the substrate-current replay
+    # with absence_prior flipped True in the stamp.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    lever_on = dict(_BASELINE5_SUBSTRATE_SLATE)
+    lever_on["absence_prior"] = True
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        _rewrite_game_over_substrate(_baseline5_corpus_replay_text(), lever_on),
+        encoding="utf-8",
+    )
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_replay_provenance" in out
+    assert "disagrees with the baseline-5 graduated-lever slate" in out
+    assert "absence_prior" in out
+
+
+def test_record_path_refuses_missing_substrate_stamp(tmp_path: Path) -> None:
+    # A replay carrying the canonical fsm-default stamp, the baseline model, and $0
+    # cost but NO game_over substrate_flags stamp (a pre-14.7 recording) is refused:
+    # presence + a policy stamp is not enough, the graduated-lever slate must be
+    # positively present in the bytes. Fixture: the substrate-current replay with
+    # its game_over substrate_flags stripped out entirely.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    lines = _baseline5_corpus_replay_text().splitlines()
+    for i, line in enumerate(lines):
+        record = json.loads(line)
+        if record.get("kind") == "game_over":
+            record.pop("substrate_flags", None)
+            lines[i] = json.dumps(record, separators=(",", ":"))
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_replay_provenance" in out
+    assert "no substrate_flags stamp on game_over" in out
 
 
 # -- splits-only (hermetic; no network, no record) ----------------------------
