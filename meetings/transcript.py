@@ -1207,6 +1207,9 @@ def absent_players(
     *,
     roster: frozenset[PlayerId],
     trigger_kind: MeetingTriggerKind | None = None,
+    include_vent_sightings: bool = False,
+    vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
+    | None = None,
 ) -> tuple[PlayerId, ...]:
     """The publicly UNPLACED living players -- Task 16.8's absent set.
 
@@ -1238,6 +1241,30 @@ def absent_players(
     here). ``trigger_kind`` threads through to the reconstruction's
     relevance gate unchanged.
 
+    ``include_vent_sightings`` (Task 17.5, the PR #264 vent-placement
+    widening; default ``False`` -> byte-identical for every existing
+    caller, and NOTHING in production passes it -- whether the widening
+    SHIPS is the 17.7 gate's ruling). When ``True``, a GROUNDED vent
+    sighting also places its subject: a spoken
+    :class:`~meetings.schemas.SawVentObservation` matched against the
+    SPEAKER'S OWN typed :class:`~meetings.schemas.VentWitnessRecord`
+    channel (``vent_witness_records``, keyed by speaker id -- the 15.4
+    chokepoint, :func:`_vent_observation_matches_record`, never a fresh
+    text parse) removes its subject from the absent set. A witnessed vent
+    is as much a public account of the subject as a ``saw_player`` row --
+    the double-count the widening retires is a vent-flagged subject ALSO
+    priced as absent -- but only the GROUNDED class may place: a spoken
+    but ungrounded vent claim stays ordinary testimony and places nobody
+    (speech alone never re-places a player), and ``None`` / an absent
+    speaker entry grounds nothing, exactly as the flag detector treats
+    legacy callers. Like the 16.7 whereabouts asymmetry, grounding is the
+    ONLY gate -- the §6.3 relevance gate does not apply, because whether a
+    grounded vent account EXISTS is a different question from whether it
+    exculpates. The widening feeds ONLY this derivation:
+    :func:`reconstruct_stated_paths` -- the alibi-contradiction substrate
+    -- never learns vents, so every stated-path contradiction read is
+    untouched.
+
     Returns a sorted tuple (replay-deterministic, like every fold in this
     module). Pure: the transcript is not mutated.
     """
@@ -1245,7 +1272,12 @@ def absent_players(
     placed = reconstruct_stated_paths(
         transcript, roster=roster, trigger_kind=trigger_kind
     )
-    return tuple(sorted(player for player in roster if player not in placed))
+    unplaced = frozenset(player for player in roster if player not in placed)
+    if include_vent_sightings and vent_witness_records is not None:
+        unplaced -= _grounded_vent_subjects(
+            transcript, vent_witness_records=vent_witness_records, roster=roster
+        )
+    return tuple(sorted(unplaced))
 
 
 def detect_contradictions(
@@ -2667,6 +2699,53 @@ def _detect_grounded_vent_flags(
                     speaker=turn.speaker, record=matched
                 ),
             )
+
+
+def _grounded_vent_subjects(
+    transcript: MeetingTranscript,
+    *,
+    vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
+    roster: frozenset[PlayerId],
+) -> frozenset[PlayerId]:
+    """Subjects of GROUNDED vent sightings -- Task 17.5's placement input.
+
+    The subject set behind :func:`absent_players`'s
+    ``include_vent_sightings`` widening: exactly the subjects
+    :func:`_detect_grounded_vent_flags` would flag, computed through the
+    SAME 15.4 chokepoint gates -- for every spoken
+    :class:`~meetings.schemas.SawVentObservation` on any turn, the
+    SPEAKER'S OWN typed records are searched for a match
+    (:func:`_vent_observation_matches_record`; roster-filtered subjects,
+    no relevance gate -- grounding is the only gate, see the flag
+    detector's docstring). Because a recorded ``vent_sighting`` flag and a
+    grounded placement share one predicate, the widened absent set can
+    never disagree with the flag channel about WHO was seen venting.
+
+    Only the SUBJECT set is returned (the widening removes players; it
+    mints no event ids and no descriptions), mirroring
+    :func:`grounded_vouch_subjects` -- the 16.7 sibling that reduces the
+    same turn walk to a subject fold. Pure and deterministic; a caller
+    with no records gets the empty set.
+    """
+
+    grounded: set[PlayerId] = set()
+    for turn in transcript.turns:
+        records = vent_witness_records.get(turn.speaker, ())
+        if not records:
+            continue
+        for observation in turn.observations:
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if observation.subject in grounded:
+                continue
+            if not _subject_in_roster(observation.subject, roster):
+                continue
+            if any(
+                _vent_observation_matches_record(observation, record)
+                for record in records
+            ):
+                grounded.add(observation.subject)
+    return frozenset(grounded)
 
 
 def _weak_signal_reasons(

@@ -25,6 +25,15 @@ WHEREABOUTS self-placement needs only a spatial label -- it deliberately
 BYPASSES that gate, because whether a self-placement EXISTS on the record is a
 different question from whether it EXCULPATES (the Task 16.7 asymmetry documented
 on :func:`~meetings.transcript.reconstruct_stated_paths`).
+
+Task 17.5 adds the INERT vent-placement widening behind
+``include_vent_sightings`` (default OFF -- nothing in production passes it;
+whether it ships is the 17.7 gate's ruling): a spoken
+:class:`~meetings.schemas.SawVentObservation` GROUNDED against the SPEAKER'S OWN
+:class:`~meetings.schemas.VentWitnessRecord` channel (the 15.4 chokepoint)
+removes its subject from the absent set, while a spoken but UNGROUNDED vent
+claim never places anybody. Sections 12+ pin those semantics and the
+default-OFF byte-identity.
 """
 
 from __future__ import annotations
@@ -43,10 +52,16 @@ from meetings.schemas import (
     ObservationClaim,
     PlayerId,
     SawPlayerObservation,
+    SawVentObservation,
     SightingRecord,
+    VentWitnessRecord,
     WhereaboutsClaim,
 )
-from meetings.transcript import absent_players
+from meetings.transcript import (
+    VENT_GROUNDING_TICK_TOLERANCE,
+    _grounded_vent_subjects,  # noqa: PLC2701
+    absent_players,
+)
 
 # --- Builders (cloned from tests/meetings/test_vouch_grounding.py) ----------
 
@@ -87,6 +102,21 @@ def _found_body(
 
 def _whereabouts(*, tick: int = 7, room: str = "ADMIN") -> WhereaboutsClaim:
     return WhereaboutsClaim(type="whereabouts", tick=tick, room=room)
+
+
+# Task 17.5 builders (cloned from tests/meetings/test_transcript_vent_flag.py).
+
+
+def _saw_vent(
+    *, tick: int = 14, subject: str = "p-5", room: str = "STORAGE"
+) -> SawVentObservation:
+    return SawVentObservation(type="saw_vent", tick=tick, subject=subject, room=room)
+
+
+def _vent_record(
+    *, tick: int = 14, subject: str = "p-5", room: str = "STORAGE"
+) -> VentWitnessRecord:
+    return VentWitnessRecord(subject=subject, room=room, tick=tick)
 
 
 def _turn(
@@ -506,3 +536,258 @@ class TestEvidenceDerivationMatchesHelper:
         expected = absent_players(transcript, roster=_ROSTER, trigger_kind="report")
         assert evidence.absent == expected
         assert evidence.absent == ("p-1", "p-2", "p-8")
+
+
+# --- 12. Task 17.5: grounded vent sightings place (flag ON) -------------------
+
+
+def _vent_transcript(
+    observation: SawVentObservation | None = None,
+) -> MeetingTranscript:
+    # One turn: p-2 speaks a vent sighting naming p-5 (STORAGE@14 by default).
+    spoken = observation if observation is not None else _saw_vent()
+    return _transcript(_turn(turn_index=0, speaker="p-2", observations=(spoken,)))
+
+
+class TestGroundedVentSightingPlaces:
+    """The Task 17.5 widening, flag ON: a spoken vent sighting GROUNDED against
+    the SPEAKER'S OWN :class:`VentWitnessRecord` channel (the 15.4 chokepoint:
+    same subject, canonically intersecting rooms, tick within
+    :data:`~meetings.transcript.VENT_GROUNDING_TICK_TOLERANCE`) places its
+    subject -- a witnessed vent accounts for the subject on the public record,
+    so they leave the absent set. Grounding is the ONLY gate (the 16.7
+    whereabouts asymmetry applied to vents): the §6.3 relevance prongs never
+    apply, and the widening reads the transcript + the typed channel only --
+    :func:`~meetings.transcript.reconstruct_stated_paths` never learns vents."""
+
+    def test_grounded_vent_sighting_removes_its_subject(self) -> None:
+        records = {"p-2": (_vent_record(),)}
+
+        widened = absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+        assert "p-5" not in widened
+        # Only the vent-sighted subject is re-placed; everyone else -- the
+        # speaker included (talking is not being seen) -- stays absent.
+        assert widened == ("p-1", "p-2", "p-3", "p-7", "p-8")
+
+    def test_without_the_flag_the_same_subject_stays_absent(self) -> None:
+        # The contrast pin: the identical transcript WITHOUT the widening reads
+        # p-5 as absent -- the double-count population the 17.7 gate prices.
+        assert "p-5" in absent_players(_vent_transcript(), roster=_ROSTER)
+
+    def test_tick_within_tolerance_grounds_and_beyond_does_not(self) -> None:
+        # The chokepoint's exact tick window, reused verbatim: a spoken tick
+        # VENT_GROUNDING_TICK_TOLERANCE away still grounds; one tick further
+        # is an ungrounded claim and places nobody.
+        records = {"p-2": (_vent_record(tick=14),)}
+        at_edge = _vent_transcript(_saw_vent(tick=14 + VENT_GROUNDING_TICK_TOLERANCE))
+        beyond = _vent_transcript(_saw_vent(tick=15 + VENT_GROUNDING_TICK_TOLERANCE))
+
+        assert "p-5" not in absent_players(
+            at_edge,
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+        assert "p-5" in absent_players(
+            beyond,
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+    def test_kill_scene_vent_sighting_still_places_under_report(self) -> None:
+        # Grounding is the ONLY gate: a grounded vent at the meeting's body room
+        # (MEDBAY -- the kill scene, which relevance-gates a SIGHTING under a
+        # report meeting) still places its subject. Whether a grounded vent
+        # account EXISTS is a different question from whether it exculpates.
+        transcript = _transcript(
+            _turn(turn_index=0, speaker="p-1", observations=(_found_body(),)),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                observations=(_saw_vent(subject="p-5", room="MEDBAY", tick=14),),
+            ),
+        )
+        records = {"p-2": (_vent_record(subject="p-5", room="MEDBAY", tick=14),)}
+
+        assert "p-5" not in absent_players(
+            transcript,
+            roster=_ROSTER,
+            trigger_kind="report",
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+
+# --- 13. Task 17.5: ungrounded vent claims never place ------------------------
+
+
+class TestUngroundedVentClaimPlacesNobody:
+    """Speech alone never re-places a player: a spoken vent claim with NO
+    matching record in the SPEAKER'S OWN channel -- no records at all, a
+    mismatched subject/room, or another player's records -- grounds nothing,
+    so its subject stays absent even with the widening ON. The anti-collusion
+    floor the 15.4 chokepoint draws, inherited verbatim."""
+
+    def test_no_records_at_all_places_nobody(self) -> None:
+        widened = absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records={},
+        )
+
+        assert "p-5" in widened
+        assert widened == tuple(sorted(_ROSTER))
+
+    def test_none_records_ground_nothing(self) -> None:
+        # ``vent_witness_records=None`` (the legacy-caller shape the 15.4
+        # detector documents) grounds nothing even with the flag ON.
+        widened = absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=None,
+        )
+
+        assert widened == tuple(sorted(_ROSTER))
+
+    def test_mismatched_subject_or_room_places_nobody(self) -> None:
+        # A record naming a DIFFERENT subject, and one in a disjoint room,
+        # both fail the chokepoint match -- the spoken claim stays testimony.
+        records = {
+            "p-2": (
+                _vent_record(subject="p-3"),
+                _vent_record(room="ADMIN"),
+            )
+        }
+
+        assert "p-5" in absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+    def test_another_speakers_record_never_grounds(self) -> None:
+        # The channel is the SPEAKER'S OWN: p-7 holding a perfectly matching
+        # record does not ground p-2's spoken claim (no cross-speaker vouching
+        # into hard placement -- the collusion shape the chokepoint refuses).
+        records = {"p-7": (_vent_record(),)}
+
+        assert "p-5" in absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+    def test_non_roster_vent_subject_is_inert(self) -> None:
+        # A grounded vent naming a non-roster id (dead / hallucinated) mirrors
+        # the flag detector's roster filter: it neither surfaces nor removes.
+        # Through ``absent_players`` alone the filter is UNOBSERVABLE --
+        # subtracting a non-roster id from a roster-subset set is always a
+        # no-op -- so the guard is pinned on the helper directly: the phantom
+        # subject never even enters the grounded set.
+        records = {"p-2": (_vent_record(subject="p-99"),)}
+        transcript = _vent_transcript(_saw_vent(subject="p-99"))
+
+        assert (
+            _grounded_vent_subjects(
+                transcript, vent_witness_records=records, roster=_ROSTER
+            )
+            == frozenset()
+        )
+
+        widened = absent_players(
+            transcript,
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+        assert "p-99" not in widened
+        assert widened == tuple(sorted(_ROSTER))
+
+
+# --- 14. Task 17.5: already-placed subjects and default-OFF byte-identity -----
+
+
+class TestVentWideningIdempotenceAndByteIdentity:
+    """A grounded vent sighting of an ALREADY-PLACED subject changes nothing
+    (the widening only ever shrinks the absent set, and removal is idempotent),
+    and the flag OFF -- the default and the ONLY production state -- is
+    byte-identical to the pre-17.5 derivation no matter what records ride
+    alongside."""
+
+    def test_grounded_vent_on_already_placed_subject_changes_nothing(self) -> None:
+        # p-5 is already placed by a spoken sighting (ADMIN@14); a grounded vent
+        # naming p-5 too changes no byte of the result.
+        transcript = _transcript(
+            _turn(
+                turn_index=0,
+                speaker="p-2",
+                observations=(
+                    _saw(subject="p-5", room="ADMIN", tick=14),
+                    _saw_vent(subject="p-5", room="STORAGE", tick=20),
+                ),
+            )
+        )
+        records = {"p-2": (_vent_record(subject="p-5", room="STORAGE", tick=20),)}
+
+        widened = absent_players(
+            transcript,
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+        assert widened == absent_players(transcript, roster=_ROSTER)
+        assert widened == ("p-1", "p-2", "p-3", "p-7", "p-8")
+
+    def test_flag_off_is_byte_identical_even_with_records_supplied(self) -> None:
+        # Default-OFF byte-identity: the flag unset (and explicitly False) with
+        # a groundable record supplied returns the identical tuple the bare
+        # derivation returns -- records are never even consulted.
+        records = {"p-2": (_vent_record(),)}
+        transcript = _vent_transcript()
+
+        bare = absent_players(transcript, roster=_ROSTER)
+        defaulted = absent_players(
+            transcript, roster=_ROSTER, vent_witness_records=records
+        )
+        explicit_off = absent_players(
+            transcript,
+            roster=_ROSTER,
+            include_vent_sightings=False,
+            vent_witness_records=records,
+        )
+
+        assert bare == defaulted == explicit_off
+        assert "p-5" in bare
+
+    def test_widened_derivation_is_deterministic(self) -> None:
+        # The widening inherits the fold's replay determinism: two widened calls
+        # on the same transcript + records return byte-identical tuples.
+        records = {"p-2": (_vent_record(),)}
+
+        first = absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+        second = absent_players(
+            _vent_transcript(),
+            roster=_ROSTER,
+            include_vent_sightings=True,
+            vent_witness_records=records,
+        )
+
+        assert first == second
