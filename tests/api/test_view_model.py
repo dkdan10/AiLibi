@@ -48,8 +48,10 @@ from engine.world import WorldState, load_canonical_map
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
 )
 from meetings.schemas import ContradictionRef, VoteBallot
@@ -319,6 +321,28 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     redirect = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-7") + "argmax pick"
     assert _parse_rewrite_reasons(redirect) == (("under_gate_redirect",), "argmax pick")
 
+    # Task 17.3: the 16.5 nulled-observation marker (mirrors invalid_reason_id).
+    obs = INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-7:9:4") + "saw a vent"
+    assert _parse_rewrite_reasons(obs) == (("invalid_observation_id",), "saw a vent")
+
+    # Task 17.3: the 16.6 coercion marker (mirrors teammate_coerced).
+    coerced = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-6") + "over threshold"
+    assert _parse_rewrite_reasons(coerced) == (("uncited_coerced",), "over threshold")
+
+    # Task 17.3: the live stacking order on the committed 9p2i set (seed 48) --
+    # 16.5 nulls the citation first, 16.6 then coerces the now-uncited ballot, so
+    # the coercion marker is prepended OUTSIDE the observation marker and both
+    # chips surface front-to-back. The observation payload carries spaces/colons
+    # (``'obs p-7:9:4'``) -- the repr-quoted match consumes it whole.
+    stacked_gate = (
+        UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-6")
+        + INVALID_OBSERVATION_ID_MARKER.format(observation_id="obs p-7:9:4")
+        + "I found p-3."
+    )
+    reasons_gate, clean_gate = _parse_rewrite_reasons(stacked_gate)
+    assert reasons_gate == ("uncited_coerced", "invalid_observation_id")
+    assert clean_gate == "I found p-3."
+
     # VOTE_PARSE_DEFAULT is the WHOLE rationale -> clean is empty.
     parse_default = VOTE_PARSE_DEFAULT_MARKER.format(head="<<garbage>>")
     assert _parse_rewrite_reasons(parse_default) == (("parse_default",), "")
@@ -348,6 +372,59 @@ def test_ballot_markers_parse_on_the_real_9p2i_set(
                     assert ballot.rationale_text_clean != ballot.rationale_text
                     assert ballot.rationale_text.endswith(ballot.rationale_text_clean)
     assert saw_rewrite, "expected at least one rewritten ballot in the 9p2i set"
+
+
+def test_gate_marker_chips_on_committed_9p2i_bytes(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """Task 17.3: the 16.5/16.6 markers surface as spectator chips on the two
+    live cases the committed baseline-5 9p2i set carries.
+
+    seed 39 holds a lone 16.6 coercion (an uncited zero-flag eject coerced to
+    SKIP); seed 48 holds the STACKED case (16.5 nulled the observation citation,
+    16.6 then coerced the now-uncited ballot) -- both chips in stack order, the
+    coercion outside the observation-null. These are the DoD fixtures: the two
+    real cases found on the committed sets, pinned so a future substrate cannot
+    silently drop the chips.
+    """
+
+    # seed 39: the lone coercion chip.
+    replay_39 = nine_p_two_i_loader.load_replay("headless-seed-39")
+    coerced = [
+        b
+        for meeting in replay_39.meetings
+        for b in meeting.ballots
+        if "uncited_coerced" in b.rewrite_reasons
+    ]
+    assert len(coerced) == 1, "expected exactly one coerced ballot in seed 39"
+    (ballot_39,) = coerced
+    assert ballot_39.rewrite_reasons == ("uncited_coerced",)
+    assert ballot_39.target == SKIP_TARGET
+    # The coercion marker is stripped; the model prose survives, and the chip is
+    # NOT a fabricated addition to the served text.
+    assert ballot_39.rationale_text_clean
+    assert UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0] not in (
+        ballot_39.rationale_text_clean
+    )
+    assert ballot_39.rationale_text.endswith(ballot_39.rationale_text_clean)
+
+    # seed 48: the stacked case -- both chips, coercion outside observation-null.
+    replay_48 = nine_p_two_i_loader.load_replay("headless-seed-48")
+    stacked = [
+        b
+        for meeting in replay_48.meetings
+        for b in meeting.ballots
+        if "invalid_observation_id" in b.rewrite_reasons
+    ]
+    assert len(stacked) == 1, "expected exactly one stacked ballot in seed 48"
+    (ballot_48,) = stacked
+    assert ballot_48.rewrite_reasons == ("uncited_coerced", "invalid_observation_id")
+    assert ballot_48.target == SKIP_TARGET
+    assert (
+        ballot_48.rationale_text_clean
+        == "I found p-3. p-6 reported it. Suspicion holds."
+    )
+    assert ballot_48.rationale_text.endswith(ballot_48.rationale_text_clean)
 
 
 # ---------------------------------------------------------------------------

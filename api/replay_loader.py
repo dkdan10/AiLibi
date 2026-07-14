@@ -115,8 +115,10 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     EMERGENCY_BODY_STRIP_MARKER,
+    INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
     derive_reported_testimony,
     extract_belief_evidence,
@@ -2422,11 +2424,21 @@ def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
 # rename must break loudly here. The label is the stable, frontend-renderable
 # chip id. ``VOTE_PARSE_DEFAULT`` is handled separately: it is the WHOLE
 # rationale, not a prefix.
+#
+# The last two rows (Task 17.3) register the audit rewrites that fired unseen on
+# baseline-5 committed bytes: ``INVALID_OBSERVATION_ID_MARKER`` (16.5, C8 — a
+# hallucinated ``primary_reason_observation_id`` nulled, mirroring
+# ``invalid_reason_id``) and ``UNCITED_ZERO_FLAG_EJECT_MARKER`` (16.6, J2 — an
+# uncited zero-flag eject coerced to SKIP, mirroring ``teammate_coerced``). They
+# stack (16.5 nulls the citation, 16.6 then coerces the now-uncited ballot), so
+# both chips surface in stack order via the front-to-back strip below.
 _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
     ("invalid_target", INVALID_VOTE_TARGET_MARKER),
     ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
     ("under_gate_redirect", BALLOT_TARGET_REDIRECT_MARKER),
     ("invalid_reason_id", INVALID_REASON_ID_MARKER),
+    ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
+    ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 
