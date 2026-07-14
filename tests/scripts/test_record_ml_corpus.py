@@ -367,6 +367,36 @@ def test_preflight_refuses_non_baseline_model_override(
     assert not corpus_root.exists()  # refused before any record
 
 
+@pytest.mark.parametrize("lever_value", ["1", "true", "0"])
+def test_preflight_refuses_absence_prior_export(
+    tmp_path: Path, lever_value: str
+) -> None:
+    # absence_prior is the ONE live env-gated toggle left after the 16.17
+    # graduation slate, and the baseline-5 substrate this recorder freezes is
+    # its recorded stay-OFF (audits/audit-phase-16-close.md §0.1.4). A leftover
+    # AILIBI_ABSENCE_PRIOR export (e.g. from a Phase-17 counterfactual session)
+    # would record the whole corpus lever-ON while the preflight echo claims
+    # the OFF substrate — and an acceptance gate run in the SAME polluted shell
+    # would then PASS coherently (substrate_flag_snapshot() reads the same
+    # env). The preflight refuses ANY set value, truthy or not (the documented
+    # recording environment is BARE), BEFORE any record (PR #269 review).
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    env["AILIBI_ABSENCE_PRIOR"] = lever_value
+    proc = _run("--set", "4p1i", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "absence_prior lever is the recorded stay-OFF" in out
+    assert "Unset AILIBI_ABSENCE_PRIOR" in out
+    assert not corpus_root.exists()  # refused before any record
+
+
 def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
     # build_default_client also honors AILIBI_FEATHERLESS_BASE_URL for
     # featherless, so a leftover mock/staging export would record the whole

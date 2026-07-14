@@ -611,7 +611,25 @@ if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
   echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
   exit 1
 fi
-echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (the graduated lever slate: hard_evidence_gate/observation_id_rendering/citation_gate unconditional, absence_prior default-OFF)."
+
+# ... and the ONE live substrate toggle: absence_prior (Task 16.8) is the sole
+# remaining env-gated lever after the 16.17 graduation slate, and the baseline-5
+# substrate this recorder freezes is its recorded stay-OFF
+# (audits/audit-phase-16-close.md §0.1.4). A leftover AILIBI_ABSENCE_PRIOR export
+# (e.g. from a Phase-17 counterfactual session) would record the whole multi-hour
+# corpus lever-ON while this preflight's echo claims the OFF substrate — and an
+# acceptance gate run in the SAME polluted shell would then PASS coherently
+# (substrate_flag_snapshot() reads the same env), which is exactly the C6
+# recording-preflight hazard the graduations discharge. Refuse ANY set value,
+# truthy or not (the documented recording environment is BARE — no AILIBI_*
+# lever export; never silently discard an operator's explicit setting).
+if [[ -n "${AILIBI_ABSENCE_PRIOR:-}" ]]; then
+  echo "Error: the corpus must record the baseline-5 substrate, whose absence_prior lever is the recorded stay-OFF (Task 16.17 slate)." >&2
+  echo "       AILIBI_ABSENCE_PRIOR='${AILIBI_ABSENCE_PRIOR}' would stamp (and record) a substrate this recorder does not document." >&2
+  echo "       Unset AILIBI_ABSENCE_PRIOR and re-run under a bare lever environment; nothing was recorded." >&2
+  exit 1
+fi
+echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (the graduated lever slate: hard_evidence_gate/observation_id_rendering/citation_gate unconditional, absence_prior default-OFF — bare lever environment verified)."
 
 # Baseline-5 also locks the MODEL: build_default_client honors
 # AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL for featherless, so a
