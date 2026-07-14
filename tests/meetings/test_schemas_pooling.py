@@ -195,12 +195,16 @@ class TestContradictionRefRejectsWhereaboutsKind:
 
 class TestCommittedMeetingEntryStillParses:
     def test_committed_9p2i_seed_0_loads_and_round_trips(self) -> None:
-        # The backward-compat pin (Task 16.7 DoD): a COMMITTED meeting entry
-        # recorded BEFORE the whereabouts kind existed loads through the extended
-        # schema and round-trips unchanged. Because the union extension is
-        # additive, adding WhereaboutsClaim as a fifth member never rejects the
-        # pre-whereabouts committed shape. Read the committed path directly (no
-        # tmp_path) so the additive guarantee is pinned against the real corpus.
+        # The additive-union pin (Task 16.7 DoD): a COMMITTED meeting entry loads
+        # through the extended schema and round-trips unchanged. Because the union
+        # extension is additive, adding WhereaboutsClaim as a fifth member never
+        # rejects the committed shape. The baseline-5 re-record (qwen3_6_27b.v3
+        # prompts) now ELICITS whereabouts claims via the roll-call surface, so the
+        # committed corpus exercises the new member directly — a stronger guarantee
+        # than the pre-whereabouts shape it superseded (a committed shape that USES
+        # the new kind round-trips, not merely one that predates it). Read the
+        # committed path directly (no tmp_path) so it is pinned against the real
+        # corpus.
         meetings = [
             entry
             for entry in read_all_entries(_COMMITTED_9P2I_SEED_0)
@@ -217,12 +221,17 @@ class TestCommittedMeetingEntryStillParses:
             assert (
                 MeetingReplayEntry.model_validate_json(entry.model_dump_json()) == entry
             )
-            # No committed turn carries a whereabouts claim — the kind predates
-            # nothing (no template elicits it yet) — and every recorded turn
-            # re-validates as-is.
+            # Every recorded turn — whereabouts-bearing or not — re-validates as-is
+            # through the additive union.
             for turn in transcript.turns:
                 assert MeetingTurn.model_validate(turn.model_dump()) == turn
-                assert not any(
-                    isinstance(observation, WhereaboutsClaim)
-                    for observation in turn.observations
-                )
+        # The fifth member is exercised on the committed set (the v3 roll-call
+        # elicitation): whereabouts claims are present and round-trip.
+        whereabouts = [
+            observation
+            for entry in meetings
+            for turn in entry.transcript.turns
+            for observation in turn.observations
+            if isinstance(observation, WhereaboutsClaim)
+        ]
+        assert whereabouts
