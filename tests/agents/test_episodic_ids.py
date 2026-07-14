@@ -8,9 +8,10 @@ The unit home for the C8 identity substrate
   (:func:`agents.memory.episodic.derive_observation_id`), stamped at write time
   by :func:`agents.perception.ingest_packet` on every first-hand OBSERVED row and
   guarded for uniqueness by :meth:`agents.memory.episodic.MemoryStore.append`;
-* the default-OFF ``AILIBI_OBSERVATION_ID_RENDERING`` render lever
-  (:func:`agents.memory.store.observation_id_rendering_enabled`), whose ON path
-  folds ``[obs {id}]`` into each first-hand remembered observation line.
+* the ``AILIBI_OBSERVATION_ID_RENDERING`` render lever
+  (:func:`agents.memory.store.observation_id_rendering_enabled`), graduated to
+  unconditional at Task 16.17, which folds ``[obs {id}]`` into each first-hand
+  remembered observation line.
 
 This file also hosts the committed-set two-walk determinism pin (added by the
 second worker), which walks committed replays twice and asserts the two
@@ -380,24 +381,27 @@ def _lever_memory() -> AgentMemory:
 
 
 class TestObservationIdRenderLever:
-    def test_off_is_byte_inert(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # DEFAULT-OFF: env=None (unset), env={}, and an explicit "0" all render
-        # identically, and no ``[obs `` prefix appears anywhere (the OFF proof the
-        # 16.3 prompt-byte golden enforces on the committed set).
+    def test_env_is_ignored_and_ids_always_render(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # UNCONDITIONAL since Task 16.17: env=None (unset), env={}, an explicit
+        # "0", and an explicit "1" all render IDENTICALLY, and every render carries
+        # the ``[obs `` prefix -- the lever ignores its env argument.
         monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
         memory = _lever_memory()
         default = render_for_prompt(memory)
         empty = render_for_prompt(memory, env={})
         zero = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "0"})
-        assert default == empty == zero
-        assert "[obs " not in default
+        one = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        assert default == empty == zero == one
+        assert "[obs " in default
 
-    def test_on_prefixes_each_first_hand_observation_with_its_id(self) -> None:
-        # ON folds ``[obs {agent}:{tick}:{seq}]`` into each first-hand observation
-        # line with the EXACT id of its source event; the belief line, the role
-        # line, and the reported-testimony line carry none.
+    def test_prefixes_each_first_hand_observation_with_its_id(self) -> None:
+        # The fold puts ``[obs {agent}:{tick}:{seq}]`` into each first-hand
+        # observation line with the EXACT id of its source event; the belief line,
+        # the role line, and the reported-testimony line carry none.
         memory = _lever_memory()
-        rendered = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        rendered = render_for_prompt(memory)
         assert "[obs p1:5:1] [tick 5] You saw p2 task in ADMIN." in rendered
         assert "[obs p1:5:2] [tick 5] You saw p4 in ELECTRICAL." in rendered
         assert (
@@ -413,35 +417,32 @@ class TestObservationIdRenderLever:
         assert "## Your current beliefs:" in rendered
         assert "[meeting] CLAIM by p2 (unverified): accused p4." in rendered
 
-    def test_resolver_default_off_truthy_and_garbage(self) -> None:
-        # Resolver semantics mirror the 16.4 lever: default OFF, the four truthy
-        # tokens ON (case-insensitive), anything else OFF.
-        assert observation_id_rendering_enabled({}) is False
-        assert (
-            observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: "0"})
-            is False
-        )
-        assert (
-            observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: "garbage"})
-            is False
-        )
-        for truthy in ("1", "true", "yes", "on", "TRUE", "On", " yes "):
+    def test_resolver_is_unconditionally_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Graduated to unconditional at Task 16.17 (mirrors the 16.4 lever's
+        # graduation): the resolver ignores its env and always returns True -- a
+        # bare mapping, an explicit "0", junk, the truthy tokens, and the ambient
+        # process environment all read ON.
+        assert observation_id_rendering_enabled() is True
+        assert observation_id_rendering_enabled({}) is True
+        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
+        assert observation_id_rendering_enabled() is True
+        for value in ("0", "garbage", "1", "true", "on", ""):
             assert (
-                observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: truthy})
+                observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: value})
                 is True
             )
 
-    def test_on_ids_survive_a_tight_token_budget_shed(self) -> None:
+    def test_ids_survive_a_tight_token_budget_shed(self) -> None:
         # The id is folded BEFORE the salience sort and budget shed, so a surviving
         # line keeps its ORIGINAL id even when lower-salience lines are dropped. The
         # highest-salience body line (salience 100) survives with its id under a
         # tight budget; some lower-salience observations are shed.
         memory = _lever_memory()
-        full = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        full = render_for_prompt(memory)
         assert full.count("[obs ") == 4
-        tight = render_for_prompt(
-            memory, env={ENV_OBSERVATION_ID_RENDERING: "1"}, token_budget=70
-        )
+        tight = render_for_prompt(memory, token_budget=70)
         assert 0 < tight.count("[obs ") < 4
         assert "[obs p1:5:3] [tick 5] You discovered p3's body in ELECTRICAL." in tight
 

@@ -16,9 +16,9 @@ Four pillars:
   referee-failing) so ``replays/ml_corpus/4p1i`` passes the referee.
 * **Floor trips** — a railroaded crew ejection, a friendly-fire kill, and a
   determinism breach each force a game's score to 0 (synthetic ``_GameFacts``).
-* **Evidence-supply floors** — the committed baseline (baseline-4) passes its own
-  pinned floors (subject-aware since 15.19, re-recorded for the model swap at
-  Task 16.14); a synthetic evidence-starved set (high meeting rate, zero flags,
+* **Evidence-supply floors** — the committed baseline (baseline-5) passes its own
+  pinned floors (subject-aware since 15.19, re-recorded on the graduated slate at
+  Task 16.17); a synthetic evidence-starved set (high meeting rate, zero flags,
   zero witnesses) FAILS.
 """
 
@@ -428,7 +428,7 @@ def test_persisted_vent_flag_keeps_separation_live_without_conversion() -> None:
 def test_meeting_facts_carry_the_persisted_vent_flag_census() -> None:
     """``_meeting_facts`` surfaces the persisted vent flags off the recorded bytes.
 
-    The committed baseline-4 4p1i set carries 11 persisted ``vent_sighting``
+    The committed baseline-5 4p1i set carries 11 persisted ``vent_sighting``
     flags (the same census ``test_flags_per_meeting_is_vent_aware`` pins for the
     supply gauge); the per-meeting facts must total the same so the D2 gate
     actually sees them on real bytes.
@@ -596,7 +596,7 @@ def test_rare_event_floor_with_numerator_at_most_one_is_advisory() -> None:
     """A floor pinned on a baseline numerator <= 1 is reported, never failing.
 
     The pause audit §1/§5.1 one-event floor degeneracy: the 4p1i
-    ``witnessed_event_rate`` floor is pinned to 1/58 (baseline-4; was 1/55), so a
+    ``witnessed_event_rate`` floor is pinned to 1/61 (baseline-5; was 1/58), so a
     same-substrate set can miss it by pure variance. The gauge row keeps the honest
     measured-vs-floor verdict (``passed=False``) and is marked ``advisory``,
     but ``supply_floors_passed`` excludes it.
@@ -663,10 +663,10 @@ def test_corpus_4p1i_passes_the_referee_via_the_advisory_rule() -> None:
     Under the advisory rule the set passes the referee; the miss is still reported.
 
     Task 16.14 note: the corpus is BASELINE-3 substrate and stays pinned to the
-    baseline-3 floor block explicitly — the DEGRADED-Q3 rule (the baseline-4
+    baseline-3 floor block explicitly — the DEGRADED-Q3 rule (the baseline-5
     floor block's own doctrine comment) forbids measuring the stale corpus
-    against baseline-4 floors as same-substrate evidence, and the bare default
-    now resolves to baseline-4.
+    against baseline-5 floors as same-substrate evidence, and the bare default
+    now resolves to baseline-5.
     """
 
     report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-3")
@@ -694,13 +694,13 @@ _BASELINE_2_9P2I_FLOORS = SupplyFloors(
 )
 
 
-def test_baseline_4_sets_pass_the_hardened_referee_end_to_end() -> None:
-    """The committed scripted-FSM baseline-4 sets clear their own re-pinned floors.
+def test_baseline_5_sets_pass_the_hardened_referee_end_to_end() -> None:
+    """The committed scripted-FSM baseline-5 sets clear their own re-pinned floors.
 
-    The DoD anchor (15.19, re-recorded for the model swap at Task 16.14): every
+    The DoD anchor (15.19, re-recorded on the graduated slate at Task 16.17): every
     gauge row passes, not just the composed verdict (the exact floor == measured
     equality is pinned separately by
-    ``test_baseline_4_floor_pins_equal_the_measured_bytes``).
+    ``test_baseline_5_floor_pins_equal_the_measured_bytes``).
     """
 
     for sample_dir in (_NINE, _FOUR):
@@ -710,26 +710,26 @@ def test_baseline_4_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert all(gauge.passed for gauge in report.supply_gauges)
 
 
-def test_baseline_4_floor_pins_equal_the_measured_bytes() -> None:
+def test_baseline_5_floor_pins_equal_the_measured_bytes() -> None:
     """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
 
     ``passed`` alone is one-sided (any floor at or below the true measured value
     clears it), so an under-pinned floor would silently weaken the gate with CI
-    green. This pins BOTH sides at the Task 16.14 baseline-4 re-record: the
+    green. This pins BOTH sides at the Task 16.17 baseline-5 re-record: the
     measured gauge IS the recorded fraction, and the pinned floor IS the measured
     gauge — "the baseline passes at equality", made an assertion not a comment.
     """
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 9 / 178,  # crew-witnessed kills (was 5/154)
-            "flags_per_meeting": 86 / 160,  # 79 vent + 7 transcript (was 259/139)
-            "testimony_backed_conversion": 77 / 123,  # SUBJECT-AWARE (was 71/107)
+            "witnessed_event_rate": 7 / 203,  # crew-witnessed kills (was 9/178)
+            "flags_per_meeting": 90 / 179,  # 75 vent + 15 transcript (was 86/160)
+            "testimony_backed_conversion": 64 / 135,  # SUBJECT-AWARE (was 77/123)
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 58,  # numerator 1 -> ADVISORY (was 1/55)
-            "flags_per_meeting": 11 / 39,  # all 11 persisted vent (was 42/39)
-            "testimony_backed_conversion": 17 / 29,  # SUBJECT-AWARE (was 20/33)
+            "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (was 1/58)
+            "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (was 11/39)
+            "testimony_backed_conversion": 10 / 28,  # SUBJECT-AWARE (was 17/29)
         },
     }
     for sample_dir, fractions in expected.items():
@@ -743,15 +743,19 @@ def test_baseline_4_floor_pins_equal_the_measured_bytes() -> None:
 
 
 def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
-    """LIVE-PATH SNAPSHOT: both 15.19 patches demonstrably fire on real bytes.
+    """LIVE-PATH SNAPSHOT: the 15.19 D2 patch demonstrably fires on real bytes.
 
     The historical parity pin guards only the FROZEN path, and the CLI aggregate
-    (mean 45.81) is a single scalar — neither shows the patches acting on any
+    (mean 42.25) is a single scalar — neither shows the patches acting on any
     real committed game. This pins the live-vs-historical per-game delta on the
-    baseline-4 9p2i bytes: the subject-aware railroad floor (patch 2) newly floors
-    exactly seed 29, and the conversion-coupled D2 gate (patch 1) zeroes the
-    separation term on seeds 13/24 (games with live separation but no converted
-    backed accusation and no flag) without flooring them.
+    baseline-5 9p2i bytes: the subject-aware railroad floor (patch 2) newly floors
+    NO committed game (the graduated slate's citation gate leaves ZERO
+    evidence-free crew railroads on the committed bytes — the mechanism stays
+    covered by the synthetic ``test_subject_aware_backing_gates_conversion_and_railroad``;
+    baseline 4 floored one, 29; baseline 3 four, 19/27/29/31), while the
+    conversion-coupled D2 gate (patch 1) zeroes the separation term on seeds
+    2/4/10/12/37/47 (games with live separation but no converted backed
+    accusation and no flag) without flooring them.
     """
 
     live = {s.seed: s for s in _score_committed_set(_NINE)}
@@ -762,16 +766,16 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # Patch 2 (subject-aware backing -> the railroad floor's backed leg): the
     # hardened floor only ever ADDS railroads on the same bytes...
     assert hist_floored <= live_floored
-    # ...and on baseline-4 9p2i it adds exactly this one crew ejection whose only
-    # "backing" was a grounded observation about someone else (the bespoke set's
-    # near-zero structured alibi material leaves far fewer such railroads than
-    # baseline-3's four, 19/27/29/31).
-    assert live_floored - hist_floored == {29}
+    # ...and on baseline-5 9p2i it adds NONE — the graduated slate (J1/J2 citation
+    # gate) leaves zero evidence-free crew railroads on the committed bytes (the
+    # honest-zero census of a scenario class that collapsed with the substrate;
+    # the mechanism itself is pinned on synthetic bytes elsewhere in this file).
+    assert live_floored - hist_floored == set()
 
     # Patch 1 (conversion-coupled D2): these games carry rendered-suspicion
     # separation but no converted backed accusation and no contradiction flag —
     # suspicion theater, gated to 0 live, intact under the frozen spec.
-    for seed in (13, 24):
+    for seed in (2, 4, 10, 12, 37, 47):
         assert live[seed].floor_multiplier == 1.0
         assert live[seed].d2_separation_norm == 0.0
         assert hist[seed].d2_separation_norm > 0.0
@@ -1054,20 +1058,19 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
     assert report.per_game == ()
 
 
-def test_baseline_4_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 9/178 = 5.06% crew-witnessed anchor.
+def test_baseline_5_witnessed_event_rate_is_the_measured_anchor() -> None:
+    """The 9p2i witnessed-event rate is the 7/203 = 3.45% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    default baseline: baseline 4 records 9 crew-witnessed of 178 kills in 9p2i
-    (the witnessed-kill supply ROSE with the model swap; baseline 3 was
-    5/154 = 3.25%).
+    default baseline: baseline 5 records 7 crew-witnessed of 203 kills in 9p2i
+    (baseline 4 was 9/178 = 5.06%; baseline 3 was 5/154 = 3.25%).
     """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(9 / 178)
+    assert witnessed.measured == pytest.approx(7 / 203)
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1117,11 +1120,11 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     ``compute_supply_gauges`` re-derives flags from the transcript and cannot
     reproduce a grounded ``vent_sighting`` flag (its grounding channel has no
     transcript id, Task 15.4), so the referee merges the persisted vent flags —
-    else a vent-rich baseline-4 candidate's strongest evidence reads as starved.
-    The committed baseline-4 4p1i set carries 11 such vent flags (the retained
-    Wave-0 vent substrate) — now the ENTIRE pinned flags/meeting floor (11/39 =
-    0.2821), since the transcript re-derivation yields ZERO on the bespoke set, so
-    all 11 total_flags are vent; injecting one more must add exactly 1.
+    else a vent-rich baseline-5 candidate's strongest evidence reads as starved.
+    The committed baseline-5 4p1i set carries 11 such vent flags (the retained
+    Wave-0 vent substrate) — 11 of the 16 total behind the pinned flags/meeting
+    floor (16/39 = 0.4103; the other 5 are re-derived transcript flags on the
+    graduated substrate); injecting one more vent must add exactly 1.
     """
 
     from eval.validity import assemble_tournament_report
@@ -1129,7 +1132,7 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     from meetings.schemas import ContradictionRef
 
     report = assemble_tournament_report(_FOUR)
-    # The committed baseline-4 4p1i set carries 11 grounded vent flags that the
+    # The committed baseline-5 4p1i set carries 11 grounded vent flags that the
     # transcript re-derivation cannot reproduce, so they are merged in (baseline 2's
     # v4 set carried none).
     assert _persisted_vent_flag_count(report) == 11
@@ -1290,17 +1293,17 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-4"
+    assert report["baseline_id"] == "baseline-5"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
     # one-event floor on this roster).
     assert [g["advisory"] for g in report["supply_gauges"]] == [False, False, False]
-    # The HARDENED mean over the committed baseline-4 bytes (the frozen
-    # pre-15.19 instrument read 49.52 on the same bytes — the conversion-coupled
+    # The HARDENED mean over the committed baseline-5 bytes (the frozen
+    # pre-15.19 instrument read 44.12 on the same bytes — the conversion-coupled
     # D2 gate sinks the suspicion-theater games; the historical parity pin above
     # keeps the frozen number reproducible).
-    assert report["mean_score"] == pytest.approx(45.81)
+    assert report["mean_score"] == pytest.approx(42.25)
 
 
 def test_cli_watchability_human_output() -> None:

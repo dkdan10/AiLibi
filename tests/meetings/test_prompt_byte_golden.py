@@ -69,21 +69,20 @@ blind spot. The one-byte template perturbation leg
 (:func:`test_one_byte_template_perturbation_breaks_the_golden`) proves the gate
 can fail — a golden that cannot fail is not a gate.
 
-Task 16.15 re-parametrization (the elicitation batch, the first prompt-set
-bump since this instrument landed): the committed baseline-4 sets stamp
-``*.qwen3_6_27b.v1`` while HEAD's registry and templates advanced past it (v2
-at 16.15, v3 at 16.16's persona voice layer), so an exact reverse lookup
-against :data:`PROMPT_VERSION_SETS` alone would resolve nothing and a
-re-render through the HEAD bytes could not byte-match the v1 recordings. The recorded stamps therefore resolve through
+The archive seam (Task 16.15, the bump-in-flight instrument): when a committed
+set stamps a prompt-set the live :data:`PROMPT_VERSION_SETS` has advanced past,
+its recorded stamps resolve instead through
 :data:`ARCHIVED_PROMPT_VERSION_SETS` — byte-copies of the recorded template
-bodies under ``tests/fixtures/prompt_archive/`` — and the walk renders each
-recorded meeting through the templates its own stamps name. Every byte
-assertion keeps its full meaning across the 16.15 → 16.17 bump-in-flight
-window (HEAD's manager, memory, and belief code must still reproduce every
-committed prompt byte-for-byte through the recorded bodies); the 16.17
-re-record re-aligns the recorded stamps with HEAD's registry, after which the
-archive entry covers no committed meeting and can be retired with the v1
-recordings it serves.
+bodies under ``tests/fixtures/prompt_archive/`` — so the walk renders each
+recorded meeting through the templates its own stamps name and every byte
+assertion keeps its meaning across the window. The Task 16.17 baseline-5
+re-record RE-ALIGNED both committed sets onto ``*.qwen3_6_27b.v3``, which HEAD's
+live registry resolves directly, so the ``qwen3_6_27b_v1`` archive entry (which
+served the baseline-4 v1 recordings) now covers no committed meeting and is
+RETIRED with those recordings — its fixture bytes are deleted and the registry
+is empty. The seam itself is kept (an empty, documented
+:data:`ARCHIVED_PROMPT_VERSION_SETS` plus the two-registry resolution in
+:func:`resolve_prompt_set`) so the next bump-in-flight can re-use it.
 """
 
 from __future__ import annotations
@@ -100,7 +99,11 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from agents.memory.beliefs import SUSPICION_PROVENANCE_ATOL
+from agents.memory.beliefs import (
+    SUSPICION_PROVENANCE_ATOL,
+    SuspicionProvenance,
+    hard_evidence_gated_suspicion,
+)
 from agents.memory.store import DEFAULT_TOKEN_BUDGET
 from agents.perception import ingest_packet
 from agents.strategic.prompts.loader import (
@@ -165,18 +168,17 @@ _SAMPLE_SETS: tuple[Path, ...] = (
 # the exact bodies the committed recordings rendered through. The walk
 # resolves a recorded ``prompt_versions`` mapping against the live registry
 # first and this archive second, so the byte golden stays a real gate across
-# a bump-in-flight window (16.15 -> 16.17). Retire an entry when no committed
-# set stamps it any longer (the adopting re-record).
+# a bump-in-flight window. Retire an entry when no committed set stamps it any
+# longer (the adopting re-record).
+#
+# CURRENTLY EMPTY: the Task 16.17 baseline-5 re-record re-aligned both committed
+# sets onto ``*.qwen3_6_27b.v3`` (resolved directly by PROMPT_VERSION_SETS), so
+# the baseline-4 ``qwen3_6_27b_v1`` entry was retired and its fixture bytes under
+# tests/fixtures/prompt_archive/ deleted. The seam is retained for the next
+# bump-in-flight: add an entry here (and its byte-copied template dir) whenever a
+# committed set stamps a prompt-set the live registry has advanced past.
 _ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
-ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
-    # The baseline-4 record (Task 16.14): both committed sets, pre-16.15 bodies.
-    "qwen3_6_27b_v1": {
-        "crewmate_report": "crewmate_report.qwen3_6_27b.v1",
-        "impostor_report": "impostor_report.qwen3_6_27b.v1",
-        "accusation_round": "accusation_round.qwen3_6_27b.v1",
-        "vote_ballot": "vote_ballot.qwen3_6_27b.v1",
-    },
-}
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -1134,10 +1136,10 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    Copy the template dirs under a scratch root, append one byte to the
-    ARCHIVED ``qwen3_6_27b_v1/crewmate_report.j2`` — the body the committed
-    recordings actually resolve to since the 16.15 bump (perturbing the live
-    v2 dir would not touch the walk at all) — build renderers against the
+    Copy the template dirs under a scratch root, append one byte to the LIVE
+    ``qwen3_6_27b/crewmate_report.j2`` — the body the committed baseline-5
+    recordings resolve to (the ``*.qwen3_6_27b.v3`` stamps HEAD's registry serves
+    directly, now that the v1 archive is retired) — build renderers against the
     perturbed root, and re-run ONE recorded meeting. At least one recorded
     prompt must no longer reproduce byte-for-byte — proving the gate can
     fail. Kept cheap: the first meeting-bearing seed of 9p2i, one meeting.
@@ -1147,9 +1149,9 @@ def test_one_byte_template_perturbation_breaks_the_golden(
     perturbed_root = tmp_path / "prompts"
     for name in PROMPT_VERSION_SETS:
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
-    for name in ARCHIVED_PROMPT_VERSION_SETS:
+    for name in ARCHIVED_PROMPT_VERSION_SETS:  # empty since the v1 retirement
         shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b_v1" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
@@ -1225,10 +1227,41 @@ _MIN_POPULATED_BALLOT_ROWS = 50
 
 
 def _entry_sum_error(entry: SuspicionEntry) -> float:
-    """Absolute error in ``0.5 + sum(the eight fields) == suspicion`` for a row."""
+    """Error in the sum invariant, accounting for the J1 render clamp (Task 16.4).
+
+    The eight provenance fields decompose the PRE-clamp suspicion
+    (``0.5 + sum == raw_suspicion``, the belief store's own invariant). A row's
+    rendered scalar is then EITHER that raw sum (a post-fold ballot row the fold
+    lifted above the sub-gate, or a row the manager's ``seed_player`` reconciled)
+    OR its J1 clamp: the graph builder
+    (``orchestrator.game.TacticalAgent.suspicion_graph_for_meeting``) folds an
+    entirely-soft conviction-grade row down to
+    :func:`~agents.memory.beliefs.hard_evidence_gated_suspicion` while leaving the
+    raw decomposition as the true evidence record, and the manager's ballot seam
+    passes such a row through verbatim when nothing reconciles it. So the faithful
+    invariant is that the scalar matches the raw sum OR its clamp (``min`` of the
+    two errors). For an unclamped row the clamp is a no-op and this is exactly the
+    original ``0.5 + sum == suspicion`` check; a clamped row's deliberate shortfall
+    (raw sum >= 0.60 rendered at the 0.59 sub-gate ceiling) is accounted for without
+    masking a row inconsistent with BOTH (the game builder's ``suspicion_graph``
+    docstring qualifies the raw invariant to the lever-OFF case)."""
 
     total = sum(float(getattr(entry, name)) for name in _PROVENANCE_COMPONENTS)
-    return abs((0.5 + total) - entry.suspicion)
+    provenance = SuspicionProvenance(
+        flag_lift=entry.flag_lift,
+        body_proximity=entry.body_proximity,
+        kill_or_vent_pin=entry.kill_or_vent_pin,
+        testimony_spread=entry.testimony_spread,
+        accusation_carry=entry.accusation_carry,
+        carried_hard=entry.carried_hard,
+        carried_soft=entry.carried_soft,
+        unattributed=entry.unattributed,
+    )
+    raw_error = abs((0.5 + total) - entry.suspicion)
+    clamp_error = abs(
+        hard_evidence_gated_suspicion(0.5 + total, provenance) - entry.suspicion
+    )
+    return min(raw_error, clamp_error)
 
 
 def _has_hard_or_soft(entry: SuspicionEntry) -> bool:
@@ -1258,11 +1291,13 @@ def test_live_suspicion_graph_rows_decompose_to_the_scalar(
     DoD bullets 1 + 5, over both committed sets: the participants
     ``_build_participants`` produced VERBATIM carry the game builder's
     ``suspicion_graph_for_meeting`` rows, whose eight provenance fields are read
-    straight off ``belief.provenance``. Every row must satisfy
-    ``0.5 + sum(components) == suspicion`` within
-    :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`, and a non-vacuous
-    floor of rows must carry a real hard/soft decomposition (not all-default) --
-    proving 16.15's future surface has genuine data, not zeros.
+    straight off ``belief.provenance``. Every row must satisfy the sum invariant
+    ``0.5 + sum(components) == suspicion`` -- or, for an entirely-soft
+    conviction-grade row the now-unconditional J1 render clamp (Task 16.4) folds to
+    the 0.59 sub-gate ceiling, that clamped scalar (see :func:`_entry_sum_error`) --
+    within :data:`~agents.memory.beliefs.SUSPICION_PROVENANCE_ATOL`, and a
+    non-vacuous floor of rows must carry a real hard/soft decomposition (not
+    all-default) -- proving 16.15's future surface has genuine data, not zeros.
     """
 
     assert set_walk.participant_rows, (
@@ -1272,7 +1307,7 @@ def test_live_suspicion_graph_rows_decompose_to_the_scalar(
         err = _entry_sum_error(entry)
         assert err <= SUSPICION_PROVENANCE_ATOL, (
             f"{set_walk.set_dir.name}: live graph row {entry.player_id!r} violates "
-            f"0.5 + sum(provenance) == suspicion (error {err}, suspicion "
+            f"the sum invariant (raw or J1-clamped) (error {err}, suspicion "
             f"{entry.suspicion})"
         )
     populated = sum(1 for e in set_walk.participant_rows if _has_hard_or_soft(e))
@@ -1293,8 +1328,11 @@ def test_folded_ballot_provenance_rows_decompose_to_the_scalar(
     ``suspicion_provenance`` as into ``suspicion_graph`` -- the rows
     ``_suspicion_graph_with_contradictions`` emits after the Rule-2 lift, the
     pre-vote fold, and the Task 13.14 joint cap. The joint cap's provenance
-    scaling must keep ``0.5 + sum(components) == suspicion`` on every emitted row
-    (the render-after-fold consistency pin), over both committed sets. A
+    scaling must keep the sum invariant ``0.5 + sum(components) == suspicion`` on
+    every emitted row (the render-after-fold consistency pin) -- a fold can lift a
+    subject above the J1 sub-gate ceiling (the raw sum stands), while a row the
+    seam passes through verbatim carries the graph builder's clamp
+    (:func:`_entry_sum_error` admits either), over both committed sets. A
     non-vacuous floor must again carry a real hard/soft split.
     """
 
@@ -1305,7 +1343,7 @@ def test_folded_ballot_provenance_rows_decompose_to_the_scalar(
         err = _entry_sum_error(entry)
         assert err <= SUSPICION_PROVENANCE_ATOL, (
             f"{set_walk.set_dir.name}: folded ballot row {entry.player_id!r} "
-            f"violates 0.5 + sum(provenance) == suspicion (error {err}, suspicion "
+            f"violates the sum invariant (raw or J1-clamped) (error {err}, suspicion "
             f"{entry.suspicion})"
         )
     populated = sum(1 for e in set_walk.ballot_prov_rows if _has_hard_or_soft(e))

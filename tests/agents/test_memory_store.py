@@ -164,9 +164,20 @@ class TestAbsorbMeetingEvidencePersistence:
         absorb_meeting_evidence(memory, accused=("p-5",))
         absorb_meeting_evidence(memory, accused=("p-5",))
 
+        # The STORED belief carries the full accumulated score (two accusations,
+        # 0.5 + 0.05 + 0.05 = 0.60) -- persistence is a fold-level fact.
+        assert memory.beliefs.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + 2 * ACCUSATION_SUSPICION_DELTA
+        )
+
         view = render_for_prompt(memory)
         assert "## Your current beliefs:" in view
-        assert "p-5: suspicion 0.60" in view
+        # The RENDER clamps it one notch to 0.59: the accumulated 0.60 is entirely
+        # SOFT (two accusation bumps, no hard/grounded component), so the Task-16.4
+        # J1 hard-evidence render gate -- unconditional since the Task-16.17 close --
+        # renders a soft-only at-or-over-gate row one display notch below the §4.6
+        # eject gate. The stored scalar above is untouched; only the read-site clamps.
+        assert "p-5: suspicion 0.59" in view
 
 
 class TestAbsorbMeetingEvidenceGuards:

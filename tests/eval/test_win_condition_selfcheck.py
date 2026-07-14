@@ -117,16 +117,16 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
         if check.first_zero_impostor_tick is not None:
             eliminations += 1
             assert check.game_over_tick == check.first_zero_impostor_tick
-    # Ground truth of the Task 16.14 canonical re-record (baseline 4, model
-    # Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v1 across all four templates, all
-    # six substrate levers unconditionally ON): the flat 4p/1i set ejects the
-    # impostor in 17 of 50 games (CREWMATE_EJECT) — matching the set's
-    # impostor_ejections=17 (ejection_accuracy 17/19 = 0.8947). Each elimination's
+    # Ground truth of the Task 16.17 canonical re-record (baseline 5, model
+    # Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3 across all four templates, the
+    # substrate levers unconditionally ON): the flat 4p/1i set ejects the
+    # impostor in 10 of 50 games (CREWMATE_EJECT) — matching the set's
+    # impostor_ejections=10 (ejection_accuracy 10/10 = 1.0). Each elimination's
     # first_zero == game_over tick is asserted above (the A-A-3 invariant, which
     # still holds set-wide); this pins the count the re-record produced, so the
     # §6.3 elimination path runs on the committed bytes, not only the hermetic
     # apply_meeting_result eject tests.
-    assert eliminations == 17
+    assert eliminations == 10
 
 
 def _roster(replay_dir: Path) -> tuple[int, int, int]:

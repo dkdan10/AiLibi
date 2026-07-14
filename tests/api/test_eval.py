@@ -181,23 +181,23 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
     # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator). Re-anchored to the baseline-4 re-record (Qwen/Qwen3.6-27B,
-    # prompt set qwen3_6_27b.v1 across all four templates) with the six retired
-    # substrate levers unchanged/on — the flat 4p/1i set still ejects decisively:
-    # the committed ground truth is now 19 ejections, 17 impostors + 2 crew
-    # (accuracy 17/19 ≈ 0.895). With that supply the set is still not small-n
-    # (flag False). vote_correctness_rate 11/17 ≈ 0.647 — under baseline-4 only
-    # 11 of the 17 impostor ejections are transcript-evidence-backed (was 1.0 on
-    # baseline-3). flagged_but_ignored 0: baseline-4's transcript contradiction
-    # flags collapsed to ZERO on the 4p/1i set (only vent_sighting flags persist),
-    # so there is no flagged-then-ignored ejection left to count.
-    assert report.vote_correctness.total_ejections == 19
-    assert report.vote_correctness.ejection_accuracy == pytest.approx(17 / 19)
-    assert report.vote_correctness.impostor_ejections == 17
-    assert report.vote_correctness.crewmate_ejections == 2
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(11 / 17)
+    # validator). Re-anchored to the Task-16.17 baseline-5 re-record
+    # (Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3 across all four templates) with
+    # the nine retired substrate levers stamped ON. The flat 4p/1i set now ejects
+    # in only 10 of its 39 meetings, but every ejection is a correct impostor call:
+    # the committed ground truth is now 10 ejections, all 10 impostors + 0 crew
+    # (accuracy 10/10 = 1.0). With that supply the set is still not small-n
+    # (flag False). vote_correctness_rate 10/10 = 1.0 — every one of the 10 impostor
+    # ejections is transcript-evidence-backed on baseline-5 (was 11/17 ≈ 0.647 on
+    # baseline-4). flagged_but_ignored is now 3: baseline-5 records three ejections
+    # that fired despite a flagged transcript contradiction (was 0 on baseline-4).
+    assert report.vote_correctness.total_ejections == 10
+    assert report.vote_correctness.ejection_accuracy == pytest.approx(1.0)
+    assert report.vote_correctness.impostor_ejections == 10
+    assert report.vote_correctness.crewmate_ejections == 0
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(1.0)
     assert report.vote_correctness.vote_correctness_small_n is False
-    assert report.vote_correctness.contradictions_flagged_but_ignored == 0
+    assert report.vote_correctness.contradictions_flagged_but_ignored == 3
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
     assert (
         report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings

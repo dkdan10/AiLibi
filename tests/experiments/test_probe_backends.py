@@ -66,14 +66,15 @@ _FLAGS_OFF = {
     "movement_perception": False,
     "unfreeze_memory": False,
 }
-# The live snapshot under a bare env: the six graduated levers unconditionally ON
+# The live snapshot under a bare env: the nine graduated levers unconditionally ON
 # -- the four 13.5 levers since Task 14.9, the Task-14.10 evidence-quality lever
-# since the Task-14.12 close, and Task 15.5's reporter_exculpation since the
-# Task-15.7 baseline-3 record (each env gate retired once the baseline adopted
-# it, so the snapshot no longer reads an AILIBI_* var for any of them) -- plus the
-# FOUR LIVE default-OFF toggles, Task 16.4's hard_evidence_gate, Task 16.5's
-# observation_id_rendering, Task 16.6's citation_gate, and Task 16.8's
-# absence_prior, all stamped False under the bare env.
+# since the Task-14.12 close, Task 15.5's reporter_exculpation since the
+# Task-15.7 baseline-3 record, and the three Phase-16 levers graduated at the
+# Task-16.17 baseline-5 record (16.4's hard_evidence_gate, 16.5's
+# observation_id_rendering, 16.6's citation_gate) -- each env gate retired once the
+# baseline adopted it, so the snapshot no longer reads an AILIBI_* var for any of
+# them -- plus the ONE remaining LIVE default-OFF toggle, Task 16.8's
+# absence_prior, stamped False under the bare env.
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
@@ -81,11 +82,11 @@ _FLAGS_ON = {
     "unfreeze_memory": True,
     "evidence_quality_lift": True,
     "reporter_exculpation": True,
-    # The four live toggles: DEFAULT-OFF, so the bare/default snapshot stamps
-    # them False alongside the six unconditional levers.
-    "hard_evidence_gate": False,
-    "observation_id_rendering": False,
-    "citation_gate": False,
+    "hard_evidence_gate": True,
+    "observation_id_rendering": True,
+    "citation_gate": True,
+    # The one remaining live toggle: DEFAULT-OFF, so the bare/default snapshot
+    # stamps it False alongside the nine unconditional levers.
     "absence_prior": False,
 }
 
@@ -400,12 +401,14 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No explicit substrate_flags: call_turn snapshots the live substrate. All
-    # six levers are unconditionally ON -- the four 13.5 levers since Task 14.9,
-    # the 14.10 evidence-quality lever since the Task-14.12 close, and Task 15.5's
-    # reporter_exculpation since the Task-15.7 baseline-3 record -- so the snapshot
-    # is env-independent (a stray AILIBI_EVIDENCE_QUALITY_LIFT export cannot flip
-    # it).
+    # No explicit substrate_flags: call_turn snapshots the live substrate. Nine
+    # levers are unconditionally ON -- the four 13.5 levers since Task 14.9, the
+    # 14.10 evidence-quality lever since the Task-14.12 close, Task 15.5's
+    # reporter_exculpation since the Task-15.7 baseline-3 record, and the three
+    # Phase-16 levers graduated at the Task-16.17 baseline-5 record -- so no
+    # AILIBI_* var can flip any of THEM (a stray AILIBI_EVIDENCE_QUALITY_LIFT
+    # export cannot). Task 16.8's absence_prior is the lone live default-OFF
+    # toggle, stamped False under this bare env.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     send = _RecordingOllama(text=_VALID)
     monkeypatch.setattr(pb, "_ollama_send", send)
@@ -507,17 +510,23 @@ def test_featherless_explicit_base_url_wins(
     assert send.seen["base_url"] == "http://explicit.local/v1"
 
 
-def test_active_substrate_flags_every_lever_unconditional(
+def test_active_substrate_flags_every_graduated_lever_unconditional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Every substrate lever is unconditionally ON: the four 13.5 gates retired
-    # at Task 14.9, the Task-14.10 evidence-quality gate at the Task-14.12 close,
-    # and Task 15.5's reporter_exculpation gate at the Task-15.7 baseline-3 record.
-    # So active_substrate_flags reads all-True under ANY env — bare, a legacy
-    # all-ON export, a legacy "0", or a stray lever export — and no AILIBI_* var
-    # can flip any of them (the delegation to
-    # orchestrator.replay.substrate_flag_snapshot carries this for free).
+    # The nine GRADUATED substrate levers are unconditionally ON: the four 13.5
+    # gates retired at Task 14.9, the Task-14.10 evidence-quality gate at the
+    # Task-14.12 close, Task 15.5's reporter_exculpation gate at the Task-15.7
+    # baseline-3 record, and the three Phase-16 gates (16.4's hard_evidence_gate,
+    # 16.5's observation_id_rendering, 16.6's citation_gate) at the Task-16.17
+    # baseline-5 record. So active_substrate_flags reads them all-True under ANY
+    # env — bare, a legacy all-ON export, a legacy "0", or a stray lever export
+    # (either polarity) — and no AILIBI_* var can flip any of them (the delegation
+    # to orchestrator.replay.substrate_flag_snapshot carries this for free). Task
+    # 16.8's absence_prior is the lone live default-OFF toggle, so a bare env keeps
+    # the snapshot at _FLAGS_ON (absence_prior False); its env-liveness is pinned
+    # separately below.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
+    monkeypatch.delenv("AILIBI_ABSENCE_PRIOR", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     assert active_substrate_flags() == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == _FLAGS_ON
@@ -531,6 +540,38 @@ def test_active_substrate_flags_every_lever_unconditional(
     # stray AILIBI_REPORTER_EXCULPATION export (either polarity) cannot flip it.
     assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "0"}) == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "1"}) == _FLAGS_ON
+    # The three Phase-16 levers graduated at the Task-16.17 baseline-5 record are
+    # env-independent the same way: a stray export of any of them (either polarity)
+    # cannot flip the now-unconditional stamp.
+    assert active_substrate_flags(env={"AILIBI_HARD_EVIDENCE_GATE": "0"}) == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_HARD_EVIDENCE_GATE": "1"}) == _FLAGS_ON
+    assert (
+        active_substrate_flags(env={"AILIBI_OBSERVATION_ID_RENDERING": "0"})
+        == _FLAGS_ON
+    )
+    assert (
+        active_substrate_flags(env={"AILIBI_OBSERVATION_ID_RENDERING": "1"})
+        == _FLAGS_ON
+    )
+    assert active_substrate_flags(env={"AILIBI_CITATION_GATE": "0"}) == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_CITATION_GATE": "1"}) == _FLAGS_ON
+
+
+def test_active_substrate_flags_absence_prior_is_the_live_toggle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Task 16.8's absence_prior is the ONE lever active_substrate_flags still reads
+    # from env (the graduation slate's recorded STAY-OFF; Phase 17 re-measures on
+    # the baseline-5 bytes). A bare / unset / "0" env stamps it False — the
+    # _FLAGS_ON default — while a truthy AILIBI_ABSENCE_PRIOR export flips it True,
+    # yielding a DIFFERENT mapping that diverges from _FLAGS_ON in exactly that one
+    # key (the nine graduated levers stay ON).
+    monkeypatch.delenv("AILIBI_ABSENCE_PRIOR", raising=False)
+    assert active_substrate_flags(env={}) == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_ABSENCE_PRIOR": "0"}) == _FLAGS_ON
+    flipped = active_substrate_flags(env={"AILIBI_ABSENCE_PRIOR": "1"})
+    assert flipped != _FLAGS_ON
+    assert flipped == {**_FLAGS_ON, "absence_prior": True}
 
 
 # --------------------------------------------------------------------------- #

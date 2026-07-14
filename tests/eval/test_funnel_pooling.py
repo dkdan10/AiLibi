@@ -6,17 +6,15 @@ Two layers, mirroring tests/eval/test_funnel.py:
   exercising each pooling fold in isolation AND proving every fold can MOVE
   on a synthetic fixture (the DoD's "an instrument that cannot move is not an
   instrument");
-* the baseline-4 REPRODUCTION PINS — ``compute_pooling_funnel`` over the
-  committed 9p2i / 4p1i bytes must read zero/empty exactly where the pooling
-  mechanisms don't exist yet (no roll-call elicitation → coverage 0; no
-  whereabouts claims → lie rate ``None``) while the folds whose inputs DO
-  exist (vouches, groundable sightings, the unplaced share) pin non-zero.
+* the baseline-5 REPRODUCTION PINS — ``compute_pooling_funnel`` over the
+  committed 9p2i / 4p1i bytes. 16.15's roll-call elicitation has now LANDED, so
+  the whereabouts channel is LIVE (non-zero claims, defined coverage, a defined
+  lie rate) alongside the folds whose inputs already existed (vouches,
+  groundable sightings, the unplaced share).
 
 The reproduction pins were re-derived from the committed bytes on the Task
-16.14 baseline-4 re-record (model Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v1;
-9p2i: 160 meetings / 50 games, 4p1i: 39 meetings / 50 games) via eval.funnel —
-the pooling mechanism remains default-OFF in that substrate, so every zero-cell
-still reads zero.
+16.17 baseline-5 re-record (model Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3;
+9p2i: 179 meetings / 50 games, 4p1i: 39 meetings / 50 games) via eval.funnel.
 """
 
 from __future__ import annotations
@@ -461,64 +459,67 @@ def four_pooling() -> PoolingFunnelReport:
     return compute_pooling_funnel(_FOUR)
 
 
-def test_9p2i_pooling_reads_zero_where_mechanism_absent(
+def test_9p2i_pooling_reads_the_live_roll_call_channel(
     nine_pooling: PoolingFunnelReport,
 ) -> None:
-    # No roll-call elicitation exists on baseline 4 (16.15 lands it): the
-    # whereabouts channel is empty, coverage reads 0, and the lie rate is
-    # UNDEFINED (None) — not 0.0 — with zero claims.
+    # 16.15's roll-call elicitation has landed on baseline 5: the whereabouts
+    # channel is now populated (non-zero claims, defined coverage), and the lie
+    # rate is DEFINED (not None) — lies detected over claims placed.
     assert nine_pooling.games_total == 50
-    assert nine_pooling.meetings_total == 160
-    assert nine_pooling.whereabouts_claims_total == 0
-    assert nine_pooling.roll_call_meetings == 0
-    assert nine_pooling.roll_call_coverage_mean == 0.0
-    assert nine_pooling.whereabouts_lies_detected == 0
-    assert nine_pooling.whereabouts_lie_detection_rate is None
+    assert nine_pooling.meetings_total == 179
+    assert nine_pooling.whereabouts_claims_total == 360
+    assert nine_pooling.roll_call_meetings == 179
+    assert nine_pooling.roll_call_coverage_mean == pytest.approx(0.3628558127161479)
+    assert nine_pooling.whereabouts_lies_detected == 6
+    assert nine_pooling.whereabouts_lie_detection_rate == pytest.approx(
+        0.016666666666666666
+    )
 
 
-def test_9p2i_pooling_reproduces_baseline_4_exactly(
+def test_9p2i_pooling_reproduces_baseline_5_exactly(
     nine_pooling: PoolingFunnelReport,
 ) -> None:
-    # Vouching and the unplaced share DO exist on committed bytes — the
-    # before column the 16.17 close reads. Re-derived from the committed
-    # baseline-4 9p2i bytes (Task 16.14 re-record) via eval.funnel.
-    assert nine_pooling.vouch_observations_total == 659
-    assert nine_pooling.vouch_rate_mean == pytest.approx(0.39233630952380955)
-    assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(0.26734375)
-    assert nine_pooling.grounded_vouch_share == pytest.approx(0.6854838709677419)
-    assert nine_pooling.absence_set_size_mean == pytest.approx(3.6375)
-    assert nine_pooling.absence_set_size_median == pytest.approx(4.0)
+    # Vouching and the unplaced share on committed bytes. Re-derived from the
+    # committed baseline-5 9p2i bytes (Task 16.17 re-record) via eval.funnel.
+    assert nine_pooling.vouch_observations_total == 545
+    assert nine_pooling.vouch_rate_mean == pytest.approx(0.32791300877893054)
+    assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(0.21798350625166268)
+    assert nine_pooling.grounded_vouch_share == pytest.approx(0.6616766467065869)
+    assert nine_pooling.absence_set_size_mean == pytest.approx(3.094972067039106)
+    assert nine_pooling.absence_set_size_median == pytest.approx(3.0)
     assert dict(nine_pooling.absence_set_size_histogram) == {
-        0: 6,
-        1: 15,
-        2: 24,
-        3: 27,
-        4: 37,
-        5: 31,
-        6: 12,
-        7: 1,
-        8: 7,
+        0: 16,
+        1: 23,
+        2: 26,
+        3: 39,
+        4: 32,
+        5: 28,
+        6: 11,
+        7: 4,
     }
-    assert len(nine_pooling.per_meeting) == 160
+    assert len(nine_pooling.per_meeting) == 179
 
 
-def test_4p1i_pooling_reproduces_baseline_4_exactly(
+def test_4p1i_pooling_reproduces_baseline_5_exactly(
     four_pooling: PoolingFunnelReport,
 ) -> None:
-    # Re-derived from the committed baseline-4 4p1i bytes (Task 16.14
-    # re-record) via eval.funnel; roll-call is still absent so the
-    # whereabouts channel reads zero / None.
+    # Re-derived from the committed baseline-5 4p1i bytes (Task 16.17
+    # re-record) via eval.funnel; 16.15's roll-call elicitation has landed so
+    # the whereabouts channel reads live here too (non-zero claims, defined
+    # coverage and lie rate).
     assert four_pooling.games_total == 50
     assert four_pooling.meetings_total == 39
-    assert four_pooling.whereabouts_claims_total == 0
-    assert four_pooling.roll_call_coverage_mean == 0.0
-    assert four_pooling.whereabouts_lie_detection_rate is None
-    assert four_pooling.vouch_observations_total == 115
+    assert four_pooling.whereabouts_claims_total == 67
+    assert four_pooling.roll_call_coverage_mean == pytest.approx(0.5726495726495726)
+    assert four_pooling.whereabouts_lie_detection_rate == pytest.approx(
+        0.029850746268656716
+    )
+    assert four_pooling.vouch_observations_total == 102
     assert four_pooling.vouch_rate_mean == pytest.approx(0.4957264957264957)
-    assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.2735042735042735)
-    assert four_pooling.grounded_vouch_share == pytest.approx(0.5517241379310345)
-    assert four_pooling.absence_set_size_mean == pytest.approx(1.8974358974358974)
-    assert dict(four_pooling.absence_set_size_histogram) == {0: 4, 1: 7, 2: 17, 3: 11}
+    assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.29059829059829057)
+    assert four_pooling.grounded_vouch_share == pytest.approx(0.5862068965517241)
+    assert four_pooling.absence_set_size_mean == pytest.approx(0.6923076923076923)
+    assert dict(four_pooling.absence_set_size_histogram) == {0: 20, 1: 11, 2: 8}
 
 
 def test_pooling_report_round_trips(four_pooling: PoolingFunnelReport) -> None:

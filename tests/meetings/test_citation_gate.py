@@ -2,7 +2,8 @@
 
 Pins the enforcement tooth of the citation chain
 (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2) end to end,
-behind the default-OFF ``citation_gate_enabled`` lever:
+behind the ``citation_gate_enabled`` lever (graduated to unconditional at Task
+16.17):
 
 * the pure guard (:func:`meetings.manager.guard_ballot_citation`): a zero-flag
   EJECT ballot (its target carries NO contradiction flag this meeting) whose
@@ -15,11 +16,10 @@ behind the default-OFF ``citation_gate_enabled`` lever:
 * the guard ORDERING pin: the citation gate runs AFTER
   :func:`meetings.manager.guard_ballot_target_graph`, so a redirected eject is
   judged on the REDIRECTED target's flag status, never the original's;
-* lever scope: OFF (the default) the guard is never consulted and an uncited
-  zero-flag eject stands exactly as the committed baseline-3 substrate
-  recorded it (the byte-identity instruments are ``scripts/verify_samples.sh``
-  + the 16.3 prompt-byte golden, both lever-blind here since the gate renders
-  nothing); ON changes ONLY the gated case;
+* lever scope: the gate is UNCONDITIONAL since the Task-16.17 graduation, so an
+  uncited zero-flag eject is always coerced -- the guard renders nothing (the
+  byte-identity instruments ``scripts/verify_samples.sh`` + the 16.3 prompt-byte
+  golden stay blind to it); only the gated case is ever changed;
 * the Task 16.8 non-interaction pin: the gate's zero-flag predicate reads
   ONLY this meeting's detected ``contradictions`` -- suspicion never reaches
   it, so an absence-prior suspicion delta (which mints no flag) cannot move
@@ -127,31 +127,27 @@ def _conflict_claims() -> dict[str, tuple[Claim, ...]]:
 
 
 class TestCitationGateLever:
-    """The ``citation_gate_enabled`` resolver (clones the 16.4/16.5 shape)."""
+    """The ``citation_gate_enabled`` resolver -- UNCONDITIONAL since Task 16.17.
 
-    def test_default_off(self) -> None:
-        assert citation_gate_enabled(env={}) is False
-        assert citation_gate_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is False
+    Graduated to the always-ON substrate (the Task-15.7 ``reporter_exculpation``
+    move, applied once baseline 5 adopted it): the resolver ignores its ``env``
+    argument and always returns ``True``, so the J2 citation guard is always
+    consulted at its one read-site.
+    """
 
-    @pytest.mark.parametrize(
-        "value", ["1", "true", "TRUE", "yes", "Yes", "on", " on ", "ON"]
-    )
-    def test_truthy_values_enable(self, value: str) -> None:
-        assert citation_gate_enabled(env={ENV_CITATION_GATE: value}) is True
-
-    @pytest.mark.parametrize("value", ["", "0", "false", "off", "no", "garbage"])
-    def test_everything_else_is_off(self, value: str) -> None:
-        assert citation_gate_enabled(env={ENV_CITATION_GATE: value}) is False
-
-    def test_none_env_reads_process_environment(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env can turn it off any more -- every mapping, and the ambient
+        # process environment, resolves ON.
         assert citation_gate_enabled() is True
-        assert citation_gate_enabled(env=None) is True
-        monkeypatch.delenv(ENV_CITATION_GATE)
-        assert citation_gate_enabled() is False
-        assert citation_gate_enabled(env=None) is False
+        assert citation_gate_enabled(env={}) is True
+        monkeypatch.delenv(ENV_CITATION_GATE, raising=False)
+        assert citation_gate_enabled() is True
+
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "garbage"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # The ``env`` argument is accepted and ignored (retained for signature
+        # stability); any value -- truthy, falsy, or junk -- reads ON.
+        assert citation_gate_enabled(env={ENV_CITATION_GATE: value}) is True
 
     def test_marker_literal_pinned_exactly(self) -> None:
         # Downstream eval greps this literal and the spectator marker parser
@@ -329,17 +325,16 @@ class TestCitationGuardRunsAfterRedirect:
         assert direct.target == "p-3"
 
     def test_production_chain_redirects_then_gates_the_redirected_target(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
     ) -> None:
         # The same ordering proven through the REAL _collect_one_ballot chain
         # (not a hand-composed pair): p-1's rendered graph reads MUST-vote off
         # p-3's 0.80 row while the named target p-2 renders 0.40 (under-gate),
         # so guard_ballot_target_graph redirects the eject to p-3 FIRST; the
-        # citation gate then judges the REDIRECTED zero-flag target and
-        # coerces. The recorded marker stack pins the production order: the
-        # gate's prefix names p-3 (never p-2) and sits OUTSIDE the redirect
-        # marker.
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
+        # citation gate (unconditional since 16.17) then judges the REDIRECTED
+        # zero-flag target and coerces. The recorded marker stack pins the
+        # production order: the gate's prefix names p-3 (never p-2) and sits
+        # OUTSIDE the redirect marker.
         participants = (
             _participant(
                 "p-1",
@@ -370,23 +365,11 @@ class TestCitationGateOnProductionPath:
 
     _EJECT_VOTES = {"p-1": "p-3", "p-2": "p-3", "p-4": "p-3"}
 
-    def test_lever_off_uncited_zero_flag_eject_stands(self) -> None:
-        # DEFAULT OFF (bare env): the guard is never consulted, so today's
-        # sanctioned null-citation ballots (vote_ballot.j2: "use null when
-        # your call rests on your own memory") eject exactly as the committed
-        # baseline-3 substrate recorded -- the lever-OFF behavior contract.
-        result, _ = _run_meeting(_make_responder(vote_targets=self._EJECT_VOTES))
-
-        assert result.outcome == "EJECTED"
-        assert result.ejected_player_id == "p-3"
-        assert not any(
-            "coerced to SKIP" in ballot.rationale_text for ballot in result.ballots
-        )
-
-    def test_lever_on_uncited_zero_flag_ejects_coerce_and_flip_to_skip(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
+    def test_uncited_zero_flag_ejects_coerce_and_flip_to_skip(self) -> None:
+        # DEFAULT (the gate is unconditional since 16.17): today's sanctioned
+        # null-citation ballots (vote_ballot.j2: "use null when your call rests on
+        # your own memory") are coerced to SKIP -- a zero-flag eject with no
+        # citation never stands.
         result, _ = _run_meeting(_make_responder(vote_targets=self._EJECT_VOTES))
 
         assert result.outcome == "SKIPPED"
@@ -398,13 +381,10 @@ class TestCitationGateOnProductionPath:
                 UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3")
             )
 
-    def test_lever_on_flagged_target_ejects_uncited(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_flagged_target_ejects_uncited(self) -> None:
         # The conflicting-alibi recipe mints exactly one alibi_conflict flag
         # with subjects == ("p-2",): an uncited EJECT of p-2 is flag-backed
         # and must ride through the gate untouched.
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
         result, _ = _run_meeting(
             _make_responder(
                 accusations={"p-1": "p-3", "p-3": None},
@@ -421,13 +401,10 @@ class TestCitationGateOnProductionPath:
             "coerced to SKIP" in ballot.rationale_text for ballot in result.ballots
         )
 
-    def test_lever_on_turn_citation_satisfies(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_turn_citation_satisfies(self) -> None:
         # "m-1:turn-0" is the canonical id of this meeting's opening turn
         # (turn ids are "{meeting_id}:turn-{N}" and _run_meeting pins
         # meeting_id="m-1"), so the citation validates and the eject stands.
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
         result, _ = _run_meeting(
             _make_responder(
                 vote_targets=self._EJECT_VOTES,
@@ -442,14 +419,11 @@ class TestCitationGateOnProductionPath:
             assert ballot.target == "p-3"
             assert ballot.primary_reason_id == "m-1:turn-0"
 
-    def test_lever_on_observation_citation_satisfies(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_observation_citation_satisfies(self) -> None:
         # The 16.5 private-citation path: each voter cites an id from their
         # OWN threaded valid-id set, so the citation validates and the
         # zero-flag eject stands -- the honest-witness path the gate must
         # never silence (the C3 catch).
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
         cited = {"p-1": "p-1:410:0", "p-2": "p-2:410:0", "p-4": "p-4:410:0"}
         by_voter: dict[str, ObservationId | None] = dict(cited)
         result, _ = _run_meeting(
@@ -469,15 +443,12 @@ class TestCitationGateOnProductionPath:
             assert ballot.target == "p-3"
             assert ballot.primary_reason_observation_id == obs_id
 
-    def test_lever_on_fabricated_observation_citation_nulls_then_coerces(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fabricated_observation_citation_nulls_then_coerces(self) -> None:
         # The nulls-then-coerces composition: 16.5's validator nulls the
         # fabricated id with its own marker FIRST (the voter's valid set is
         # p-2:410:0, the citation is not), then the gate sees a bare null on
         # a zero-flag eject and coerces -- two markers, stacked in chain
         # order (the gate's prefix outermost).
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
         result, _ = _run_meeting(
             _obs_vote_responder(
                 observation_ids_by_voter={"p-2": "p-2:999:9"},
@@ -495,13 +466,10 @@ class TestCitationGateOnProductionPath:
         )
         assert result.outcome == "SKIPPED"
 
-    def test_lever_on_fabricated_turn_citation_nulls_then_coerces(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fabricated_turn_citation_nulls_then_coerces(self) -> None:
         # Same composition through the turn-id channel: a dangling reason id
         # with an unrecoverable ordinal nulls (INVALID_REASON_ID_MARKER),
         # then the gate coerces the now-uncited zero-flag eject.
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
         result, _ = _run_meeting(
             _make_responder(
                 vote_targets={"p-2": "p-3"},

@@ -70,9 +70,7 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from agents.memory.beliefs import absence_prior_enabled, hard_evidence_gate_enabled
-from agents.memory.store import observation_id_rendering_enabled
-from meetings.constants import citation_gate_enabled
+from agents.memory.beliefs import absence_prior_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -390,13 +388,17 @@ ReplayLogEntry: TypeAlias = Annotated[
 # stamp all describe the same substrate levers with identical keys. The four
 # merged Phase-13.5 levers (Task 14.9), the Task-14.10 ``evidence_quality_lift``
 # lever (retired to unconditional at the Task-14.12 close, once baseline 2 adopted
-# it), AND Task 15.5's ``reporter_exculpation`` (graduated to unconditional at the
-# Task-15.7 baseline-3 record, once baseline 3 adopted it) are ALL RETIRED as
-# toggles — unconditionally ON, env gates deleted — but stay in the snapshot as
-# provenance. The default-OFF Phase-16 levers (16.4's ``hard_evidence_gate``
-# first, then 16.5's ``observation_id_rendering`` and 16.6's ``citation_gate``)
-# are the live toggles registered in ``_TOGGLEABLE_LEVER_RESOLVERS`` below --
-# the first entries back into that table since the 15.7 graduation emptied it.
+# it), Task 15.5's ``reporter_exculpation`` (graduated to unconditional at the
+# Task-15.7 baseline-3 record, once baseline 3 adopted it), AND the three
+# Phase-16 levers graduated at the Task-16.17 baseline-5 record per the
+# graduation slate (16.4's ``hard_evidence_gate``, 16.5's
+# ``observation_id_rendering``, 16.6's ``citation_gate`` — the slate rulings are
+# audits/audit-phase-16-close.md §0.1) are ALL RETIRED as toggles —
+# unconditionally ON, env gates deleted — but stay in the snapshot as
+# provenance. Task 16.8's ``absence_prior`` is the ONE live toggle left in
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` below — the slate's recorded STAY-OFF (the
+# set-size evidence was pre-roll-call; Phase 17 re-measures on the baseline-5
+# bytes and graduates at its own adopting record if warranted).
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -404,6 +406,9 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "unfreeze_memory",
     "evidence_quality_lift",
     "reporter_exculpation",
+    "hard_evidence_gate",
+    "observation_id_rendering",
+    "citation_gate",
 )
 
 # (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
@@ -411,27 +416,20 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). FOUR live toggles now, all DEFAULT-OFF: Task
-# 16.4's ``hard_evidence_gate`` (the belief-render clamp), Task 16.5's
-# ``observation_id_rendering`` (the §6.6 observation-id render prefix), Task
-# 16.6's ``citation_gate`` (the uncited zero-flag EJECT -> SKIP ballot guard),
-# and Task 16.8's ``absence_prior`` (the transient pre-vote delta on the
-# publicly-unplaced), registered in task order (the 16.4 -> 16.5 -> 16.6 ->
-# 16.8 registry-chain serialization). A bare-environment snapshot stamps ALL
-# FOUR ``False`` and the committed baseline-3 replays (recorded before any of
-# the keys existed) reconstruct byte-identically -- ``_assert_substrate_matches``
-# reads a missing key as ``False`` on both sides. The previous live toggle, Task
-# 15.5's ``reporter_exculpation``, graduated to ``_RETIRED_ALWAYS_ON_LEVERS`` at
-# the Task-15.7 baseline-3 record (``evidence_quality_lift`` graduated the same
-# way at the 14.12 close).
+# ``*_enabled()`` signature). ONE live toggle now, DEFAULT-OFF: Task 16.8's
+# ``absence_prior`` (the transient pre-vote delta on the publicly-unplaced) —
+# the Task-16.17 graduation slate's recorded stay-OFF. A bare-environment
+# snapshot stamps it ``False``, matching the committed baseline-5 recording
+# (made bare), so the committed replays reconstruct byte-identically --
+# ``_assert_substrate_matches`` reads a missing key as ``False`` on both sides.
+# The other three Phase-16 levers (16.4's ``hard_evidence_gate``, 16.5's
+# ``observation_id_rendering``, 16.6's ``citation_gate``) graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-16.17 baseline-5 record
+# (``reporter_exculpation`` graduated the same way at 15.7, and
+# ``evidence_quality_lift`` at the 14.12 close).
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (
-    ("hard_evidence_gate", hard_evidence_gate_enabled),
-    ("observation_id_rendering", observation_id_rendering_enabled),
-    ("citation_gate", citation_gate_enabled),
-    ("absence_prior", absence_prior_enabled),
-)
+] = (("absence_prior", absence_prior_enabled),)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -454,25 +452,26 @@ def substrate_flag_snapshot(
 ) -> dict[str, bool]:
     """Snapshot the active substrate-lever config (Task 14.7).
 
-    The six retired levers report unconditionally ``True``. The four merged
+    The nine retired levers report unconditionally ``True``. The four merged
     Phase-13.5 levers (Task 14.9), Task 14.10's ``evidence_quality_lift`` (retired
-    at the Task-14.12 close once baseline 2 adopted it), and Task 15.5's
+    at the Task-14.12 close once baseline 2 adopted it), Task 15.5's
     ``reporter_exculpation`` (graduated at the Task-15.7 baseline-3 record once
-    baseline 3 adopted it) all had their ``*_enabled()`` env gates retired, so the
-    unconditional derivation is the only substrate this build can produce. They
-    stay in the snapshot so the MANIFEST ``flags`` column and the replay stamp keep
-    self-describing recordings (and so the loader's substrate-mismatch guard can
-    still validate legacy stamped replays — a baseline-2 stamp recording
-    ``reporter_exculpation`` OFF now fails loud, no cross-substrate replay). Task
-    16.4's ``hard_evidence_gate``, Task 16.5's ``observation_id_rendering``, and
-    Task 16.6's ``citation_gate`` are the THREE LIVE env-gated toggles: their
-    resolvers are read from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table
-    with ``env`` threaded through (defaulting to the live process environment), so
-    a bare environment stamps ALL THREE ``False`` (DEFAULT-OFF, byte-identical to
-    baseline 3) while an ``AILIBI_HARD_EVIDENCE_GATE`` /
-    ``AILIBI_OBSERVATION_ID_RENDERING`` / ``AILIBI_CITATION_GATE`` export stamps
-    the respective key ``True`` -- preserving the deterministic-snapshot seam
-    tests and sweep configs rely on.
+    baseline 3 adopted it), and the three Phase-16 levers graduated at the
+    Task-16.17 baseline-5 record (``hard_evidence_gate``,
+    ``observation_id_rendering``, ``citation_gate`` — the graduation slate,
+    audits/audit-phase-16-close.md §0.1) all had their ``*_enabled()`` env gates
+    retired, so the unconditional derivation is the only substrate this build can
+    produce. They stay in the snapshot so the MANIFEST ``flags`` column and the
+    replay stamp keep self-describing recordings (and so the loader's
+    substrate-mismatch guard can still validate legacy stamped replays — a
+    baseline-4 stamp recording ``citation_gate`` OFF now fails loud, no
+    cross-substrate replay). Task 16.8's ``absence_prior`` is the ONE LIVE
+    env-gated toggle (the slate's recorded stay-OFF): its resolver is read from
+    the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded
+    through (defaulting to the live process environment), so a bare environment
+    stamps it ``False`` (DEFAULT-OFF, byte-identical to the committed baseline-5
+    recording) while an ``AILIBI_ABSENCE_PRIOR`` export stamps it ``True`` --
+    preserving the deterministic-snapshot seam tests and sweep configs rely on.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)

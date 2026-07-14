@@ -12,8 +12,8 @@ finding as the evidence):
 * **The synthetic starved FAIL** — a set with a high meeting rate and ZERO
   backed accusations fails the conversion floor regardless of its population's
   supply: the floor's reason to exist survives the re-anchor.
-* **The FSM-baseline consistency check** — the committed default sets (baseline-4
-  since the Task 16.14 model swap) still pass at EXACT floor == measured equality
+* **The FSM-baseline consistency check** — the committed default sets (baseline-5
+  since the Task 16.17 close re-record) still pass at EXACT floor == measured equality
   (at the baseline's own evidence density the derived floor IS the pin, bit-exact),
   and the frozen baseline-2 block stays absolute.
 
@@ -253,17 +253,17 @@ def test_zero_conversion_with_backed_supply_also_fails() -> None:
 
 
 def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
-    """The committed default (baseline-4) sets clear their own DERIVED floor.
+    """The committed default (baseline-5) sets clear their own DERIVED floor.
 
     At the baseline's own evidence density the supply ratio is exactly 1.0 and
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
     "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the Task 16.14 baseline-4 conversion pins (9p2i 77/123, 4p1i 17/29; the
-    baseline-3 record was 71/107 and 20/33).
+    to the Task 16.17 baseline-5 conversion pins (9p2i 64/135, 4p1i 10/28; the
+    baseline-4 record was 77/123 and 17/29).
     """
 
-    expected = {_NINE: 77 / 123, _FOUR: 17 / 29}
+    expected = {_NINE: 64 / 135, _FOUR: 10 / 28}
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name

@@ -729,18 +729,74 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             population_relative_conversion=True,
         ),
     },
+    "baseline-5": {
+        # Measured on replays/samples/9p2i (baseline 5, the Task-16.17 close
+        # record: locked model + qwen3_6_27b v3 + the graduated slate — J1,
+        # id-rendering, citation gate unconditional; absence_prior OFF), via
+        # the committed CLIs / the compute_watchability gauge seam:
+        #   witnessed_event_rate        = 7/203  = 0.034482758620689655
+        #   flags_per_meeting           = 90/179 = 0.5027932960893855 (75
+        #                                 persisted vent flags + 15 re-derived
+        #                                 transcript flags)
+        #   testimony_backed_conversion = 64/135 = 0.4740740740740741
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (population_relative_conversion=True): the
+        # evaluated floor per scored population is
+        #   floor = 0.4740740740740741 * (0.5027932960893855 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 90/179 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.4740740740740741; measured 64/135 -> PASS at exact
+        # equality (self-consistency). The conversion drop vs baseline 4
+        # (77/123 = 0.6260 -> 0.4741) is the graduated judgment layer working
+        # as designed — J1 clamps conviction-grade soft-only renders sub-gate
+        # and J2 coerces uncited zero-flag EJECTs — so convictions demand
+        # cited evidence (audits/audit-phase-16-close.md §5 quotes this
+        # derivation and the direction read).
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.034482758620689655, numerator=7),
+            flags_per_meeting=FloorPin(value=0.5027932960893855, numerator=90),
+            testimony_backed_conversion=FloorPin(
+                value=0.4740740740740741, numerator=64
+            ),
+            population_relative_conversion=True,
+        ),
+        # Measured on replays/samples/4p1i (baseline 5, this record):
+        #   witnessed_event_rate        = 1/61  = 0.01639344262295082
+        #                                 (numerator 1 -> ADVISORY, the 15.19
+        #                                 rare-event rule)
+        #   flags_per_meeting           = 16/39 = 0.41025641025641024 (11
+        #                                 persisted vent flags + 5 re-derived
+        #                                 transcript flags)
+        #   testimony_backed_conversion = 10/28 = 0.35714285714285715
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (same shape, this roster's pins):
+        #   floor = 0.35714285714285715 * (0.41025641025641024 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 16/39 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.35714285714285715; measured 10/28 -> PASS at exact
+        # equality (self-consistency).
+        "4p1i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.01639344262295082, numerator=1),
+            flags_per_meeting=FloorPin(value=0.41025641025641024, numerator=16),
+            testimony_backed_conversion=FloorPin(
+                value=0.35714285714285715, numerator=10
+            ),
+            population_relative_conversion=True,
+        ),
+    },
 }
 
-# baseline 4 is the committed canonical set since Task 16.14 (the model-swap
-# re-record), so a bare ``measure_baseline.py --watchability`` reads baseline
-# 4's own floors — the referee accepts the committed bytes at equality.
-# (Baseline 3 moved here from Task 15.7's pin the same way; its block above
-# stays scoreable via an explicit --baseline-id.) The 15.15 bake-off harness
-# deliberately does NOT track this default: ``BAKEOFF_BASELINE_ID`` stays
-# pinned to ``baseline-3`` (the substrate its committed candidates were
-# selected under) until Phase 17 re-selects under the baseline-4 referee
-# (audits/audit-phase-16-baseline-4.md §5).
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-4"
+# baseline 5 is the committed canonical set since Task 16.17 (the phase-close
+# re-record on the graduated slate), so a bare ``measure_baseline.py
+# --watchability`` reads baseline 5's own floors — the referee accepts the
+# committed bytes at equality. (Baselines 3 and 4 moved here from Tasks 15.7
+# and 16.14 the same way; their blocks above stay scoreable via an explicit
+# --baseline-id.) The 15.15 bake-off harness deliberately does NOT track this
+# default: ``BAKEOFF_BASELINE_ID`` stays pinned to ``baseline-3`` (the
+# substrate its committed candidates were selected under) until Phase 17
+# re-selects under the close-substrate referee
+# (audits/audit-phase-16-close.md §8).
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-5"
 
 
 @dataclass(frozen=True)

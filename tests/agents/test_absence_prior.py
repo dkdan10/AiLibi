@@ -33,7 +33,7 @@ Layout mirrors the Task-16.4 hard-evidence-gate suite
 / truthy-ON contract, the sizing invariants, the documented boundary table, the
 transient-only + guard + reporter + ceiling + joint-cap composition pins, the
 flag-independence pin, the OFF-path byte-identity pins, and the offline
-counterfactual RE-MEASURED on the committed baseline-4 9p2i bytes (the DoD-bullet-4
+counterfactual RE-MEASURED on the committed baseline-5 9p2i bytes (the DoD-bullet-4
 calibration evidence, cloned from
 :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 """
@@ -154,7 +154,7 @@ class TestAbsencePriorResolver:
     Clones :func:`agents.memory.beliefs.hard_evidence_gate_enabled` (itself the
     retired 13.5 / 14.10 / 15.5 pattern): an unset / empty / unrecognised value
     reads ``False`` so the pre-vote fold stays byte-identical to the committed
-    baseline-4 substrate; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed)
+    baseline-5 substrate; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed)
     reads ``True``. ``env=None`` falls back to the live process environment.
     """
 
@@ -864,7 +864,7 @@ class TestAbsenceOffPathByteIdentity:
 
 
 # --------------------------------------------------------------------------- #
-# K. The offline counterfactual on committed baseline-4 9p2i bytes (DoD 4)     #
+# K. The offline counterfactual on committed baseline-5 9p2i bytes (DoD 4)     #
 # --------------------------------------------------------------------------- #
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -889,15 +889,21 @@ class _AbsenceCounterfactual:
 
 class TestAbsencePriorOnCommittedBytes:
     """The absence-prior counterfactual, MEASURED offline on the committed
-    baseline-4 9p2i bytes (Task 16.8 DoD bullet 4, re-measured on the Task 16.14
-    baseline-4 re-record; the 14.8 analysis-only machinery, cloned from
+    baseline-5 9p2i bytes (Task 16.8 DoD bullet 4, re-measured on the Task 16.17
+    baseline-5 re-record; the 14.8 analysis-only machinery, cloned from
     :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 
-    Baseline 4 was recorded with the lever default-OFF (it graduates at 16.17), so
-    the recorded builder rows are the lever-OFF suspicion graph. This class walks every
-    committed 9p2i meeting ONCE (CPU-only, ~10s, class-scoped), and per meeting
-    derives ``evidence = derive_belief_evidence(...)`` to measure the absent set,
-    then re-derives the per-voter vote-time fold TWICE via
+    The absence-prior lever stays default-OFF at baseline 5: it did NOT graduate at
+    16.17 (the slate keeps it OFF -- Phase 17 re-measures it on the roll-call
+    substrate), so the recorded builder rows carry NO absence lift and the OFF leg
+    is the recorded fold. The one thing that DID change under the feet of this
+    counterfactual is the 16.15 roll-call elicitation, now LIVE: agents state their
+    whereabouts, so far fewer living players are left publicly unplaced and the
+    absent sets are markedly SMALLER than baseline-4 (mean |absent| ~3.09, median
+    3.0, down from ~3.6 / 4.0). This class walks every committed 9p2i meeting ONCE
+    (CPU-only, ~10s, class-scoped), and per meeting derives
+    ``evidence = derive_belief_evidence(...)`` to measure the absent set, then
+    re-derives the per-voter vote-time fold TWICE via
     :func:`meetings.manager._suspicion_graph_with_contradictions` -- OFF (``env={}``)
     and ON (``env={AILIBI_ABSENCE_PRIOR: "1"}``), threading each voter's real
     ``fellow_impostor_ids`` (from the recorded roles) and the manager's exact
@@ -906,7 +912,7 @@ class TestAbsencePriorOnCommittedBytes:
     (``_trigger_is_emergency``), and since ``reporter_exculpation_enabled`` is
     unconditional, getting this wrong is NOT inert -- a spuriously-threaded
     emergency reporter would have its soft lift zeroed on both sides of the
-    re-derivation (the committed set has 10 emergency meetings; the recorded
+    re-derivation (the committed set has 9 emergency meetings; the recorded
     ``MeetingReplayEntry`` carries no trigger description, so the kind rides
     the walk's reconstructed trigger via ``ReconstructedMeeting.trigger_kind``).
 
@@ -914,8 +920,8 @@ class TestAbsencePriorOnCommittedBytes:
     under the lever -- the counterfactual measures only the NEW-must-vote channel
     (a candidate ON pushes to/over the rendered gate that OFF left under it) and
     the argmax TOP-candidate churn. The measured aggregates are PINNED exactly:
-    committed bytes are frozen, so these numbers are the calibration evidence the
-    16.17 graduation decision re-checks on the adopting baseline.
+    committed bytes are frozen, so these numbers are the calibration evidence
+    Phase 17 re-checks when it re-measures the lever on the live-roll-call substrate.
     """
 
     _SET_DIR = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -1156,18 +1162,20 @@ class TestAbsencePriorOnCommittedBytes:
     # -- the census this counterfactual is measured over ---------------------
 
     def test_meeting_census(self, counterfactual: _AbsenceCounterfactual) -> None:
-        # 160 reconstructed meetings on the committed baseline-4 9p2i set.
-        assert counterfactual.total_meetings == 160
+        # 179 reconstructed meetings on the committed baseline-5 9p2i set.
+        assert counterfactual.total_meetings == 179
 
     # -- (1) how many meetings carry a non-empty absent set ------------------
 
     def test_nonempty_absent_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 154 of the 160 meetings have at least one publicly-unplaced living
-        # player -- the absent set is often LARGE (the 16.15 roll-call elicitation
-        # does not exist yet), exactly why the lever stays OFF until 16.17.
-        assert counterfactual.nonempty_absent == 154
+        # 163 of the 179 meetings still have at least one publicly-unplaced living
+        # player, but the sets are SMALLER now the 16.15 roll-call elicitation is
+        # LIVE and populates whereabouts claims (mean |absent| ~3.09 / median 3.0,
+        # down from baseline-4's ~3.6 / 4.0). Absence still stays OFF per the
+        # baseline-5 slate -- Phase 17 re-measures the lever on this substrate.
+        assert counterfactual.nonempty_absent == 163
 
     def test_every_absent_set_is_a_subset_of_the_living_roster(
         self, counterfactual: _AbsenceCounterfactual
@@ -1181,55 +1189,55 @@ class TestAbsencePriorOnCommittedBytes:
     def test_absent_set_size_distribution(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The full histogram of |absent| across the 160 meetings, and its min /
-        # max / median. Sizes span 0..8 (a 9-player set minus the reporter and any
-        # placed players); the median meeting leaves 4 players unplaced.
+        # The full histogram of |absent| across the 179 meetings, and its min /
+        # max / median. Sizes span 0..7 (a 9-player set minus the reporter and any
+        # placed players); with live roll-call the median meeting now leaves 3
+        # players unplaced (baseline-4 left 4, and reached 8).
         assert counterfactual.absent_histogram == (
-            (0, 6),
-            (1, 15),
-            (2, 24),
-            (3, 27),
-            (4, 37),
-            (5, 31),
-            (6, 12),
-            (7, 1),
-            (8, 7),
+            (0, 16),
+            (1, 23),
+            (2, 26),
+            (3, 39),
+            (4, 32),
+            (5, 28),
+            (6, 11),
+            (7, 4),
         )
         assert counterfactual.absent_min == 0
-        assert counterfactual.absent_max == 8
-        assert counterfactual.absent_median == 4.0
+        assert counterfactual.absent_max == 7
+        assert counterfactual.absent_median == 3.0
 
     # -- (3) how many meetings the delta WOULD flip --------------------------
 
     def test_new_over_gate_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The new-must-vote channel: in 39 meetings the lever ON creates at least
+        # The new-must-vote channel: in 53 meetings the lever ON creates at least
         # one NEW at-or-over-the-rendered-gate candidate (for some voter) that OFF
         # had under it. Absence only lifts, so no recorded conviction is ever lost
         # -- this is a pure ADDITION of vote-worthy candidates.
-        assert counterfactual.new_over_gate_meetings == 39
+        assert counterfactual.new_over_gate_meetings == 53
 
     def test_top_candidate_change_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # In 106 meetings some voter's §4.6 TOP candidate (argmax by rendered
+        # In 114 meetings some voter's §4.6 TOP candidate (argmax by rendered
         # suspicion, ties by sorted id) CHANGES identity under the lever -- high
         # because a near-neutral graph is tie-broken by id, so a fresh 0.58 absence
         # row readily becomes (or displaces) the rendered argmax. The re-derivation
-        # uses the production-faithful reporter predicate (reporter=None on the 10
+        # uses the production-faithful reporter predicate (reporter=None on the 9
         # emergency meetings, where _collect_one_ballot passes None); on the
-        # baseline-4 bytes (Task 16.14 re-record) threading a reporter into those
-        # emergency meetings leaves this count unchanged at 106.
-        assert counterfactual.top_candidate_change_meetings == 106
+        # baseline-5 bytes (Task 16.17 re-record) threading a reporter into those
+        # emergency meetings leaves this count unchanged at 114.
+        assert counterfactual.top_candidate_change_meetings == 114
 
     def test_emergency_meeting_census(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 10 of the 160 committed meetings are EMERGENCY meetings (the walk's
+        # 9 of the 179 committed meetings are EMERGENCY meetings (the walk's
         # reconstructed trigger kind) -- the meetings whose re-derivation must
         # pass reporter=None to mirror _collect_one_ballot.
-        assert counterfactual.emergency_meetings == 10
+        assert counterfactual.emergency_meetings == 9
 
     # -- determinism ---------------------------------------------------------
 

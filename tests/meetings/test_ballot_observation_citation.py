@@ -38,6 +38,7 @@ from agents.tactical.crewmate_policy import CrewmatePolicy
 from engine.world import load_canonical_map
 from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     MeetingParticipant,
     _default_vote,  # noqa: PLC2701
 )
@@ -223,10 +224,16 @@ class TestBallotObservationIdSchema:
 
 class TestCommittedBallotsBackwardCompatible:
     def test_committed_9p2i_seed_0_ballots_parse_with_null_field(self) -> None:
-        # The backward-compat pin (verbatim shape of test_schemas_pooling's
-        # committed pin): every committed ballot -- recorded before the field
-        # existed -- parses, carries a None citation, and the whole entry
-        # round-trips byte-for-byte through the extended schema.
+        # The additive-field pin (verbatim shape of test_schemas_pooling's committed
+        # pin): every committed ballot parses, carries a well-typed citation
+        # (ObservationId or None), and the whole entry round-trips byte-for-byte
+        # through the extended schema. The baseline-5 re-record (citation_gate ON,
+        # 16.15 citation asks) now POPULATES the field where the voter cited an
+        # observation and leaves it None otherwise, so the committed corpus exercises
+        # the additive field on real bytes (a stronger round-trip than the
+        # pre-citation all-None shape it superseded). The "no key -> None"
+        # backward-compat contract itself is pinned synthetically by
+        # ``TestBallotObservationIdSchema.test_payload_without_the_key_parses_to_none``.
         meetings = [
             entry
             for entry in read_all_entries(_COMMITTED_9P2I_SEED_0)
@@ -234,13 +241,20 @@ class TestCommittedBallotsBackwardCompatible:
         ]
 
         assert meetings, "committed 9p2i seed 0 carries no meeting entry"
+        cited = 0
         for entry in meetings:
             assert entry.ballots, "committed meeting entry carries no ballot"
             for ballot in entry.ballots:
-                assert ballot.primary_reason_observation_id is None
+                citation = ballot.primary_reason_observation_id
+                assert citation is None or isinstance(citation, str)
+                if citation is not None:
+                    cited += 1
             assert (
                 MeetingReplayEntry.model_validate_json(entry.model_dump_json()) == entry
             )
+        # The field is exercised on the committed set: at least one recorded ballot
+        # carries a real observation citation (e.g. p-5:8:1, p-3:22:1 in seed 0).
+        assert cited
 
 
 class TestBallotObservationIdValidation:
@@ -317,11 +331,15 @@ class TestPrivateWitnessedKillCitation:
         )
 
 
-class TestBallotObservationIdIsEnforcementFree:
-    def test_valid_vs_null_citation_produce_the_same_outcome(self) -> None:
-        # No gate/guard/tally consults the field (Task 16.6 enforces): two runs
-        # identical except p-2's citation (a valid id vs None) resolve to the
-        # SAME outcome, ejectee, and per-voter targets.
+class TestBallotObservationIdSatisfiesTheGraduatedGate:
+    def test_valid_citation_keeps_the_eject_where_null_coerces(self) -> None:
+        # The 16.5-era "enforcement-free" invariant (no gate consults the
+        # field) was the PRE-graduation contract; Task 16.17 graduated the
+        # 16.6 citation gate to unconditional, so the enforcement has
+        # arrived and the two runs now DIVERGE exactly at the citation: an
+        # observation-cited zero-flag EJECT stands (the C3 honest-witness
+        # path), while the identical uncited ballot is coerced to SKIP with
+        # the audit marker.
         targets = {voter: "p-3" for voter in ("p-1", "p-2", "p-3", "p-4")}
 
         def _run(observation_ids_by_voter: dict[str, ObservationId | None]):  # type: ignore[no-untyped-def]
@@ -336,11 +354,16 @@ class TestBallotObservationIdIsEnforcementFree:
         cited = _run({"p-2": "p-2:410:0"})
         uncited = _run({})
 
-        assert cited.outcome == uncited.outcome
-        assert cited.ejected_player_id == uncited.ejected_player_id
-        assert {b.voter: b.target for b in cited.ballots} == {
-            b.voter: b.target for b in uncited.ballots
-        }
+        p2_cited = next(b for b in cited.ballots if b.voter == "p-2")
+        p2_uncited = next(b for b in uncited.ballots if b.voter == "p-2")
+        gate_prefix = UNCITED_ZERO_FLAG_EJECT_MARKER.split("{", 1)[0]
+        assert p2_cited.target == "p-3"
+        assert p2_cited.primary_reason_observation_id == "p-2:410:0"
+        assert gate_prefix not in p2_cited.rationale_text
+        assert p2_uncited.target == "SKIP"
+        assert p2_uncited.rationale_text.startswith(
+            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3")
+        )
 
     def test_default_vote_carries_a_null_citation(self) -> None:
         # The manager's fail-soft default ballot cites nothing.

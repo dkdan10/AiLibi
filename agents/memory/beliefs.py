@@ -267,52 +267,44 @@ outcomes change) is the contract's hard line. The magnitude is a single tuning
 point should 15.7's live measurement warrant a non-zero cap."""
 
 
-# Task 16.4 hard-evidence-gate lever — DEFAULT-OFF (the 13.5/14.10 live-toggle
-# pattern, still env-gated, NOT retired). This is the FIRST live toggle registered
-# back into ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` since the 15.7
-# graduation emptied it: OFF (the default) is byte-identical to the committed
-# baseline-3 substrate, so the committed replays reconstruct clean, and the 16.17
-# graduation decision re-measures the counterfactual on the adopting baseline's
-# bytes and may record it with the lever measured ON. Unlike the six retired
-# levers above, this one stays a live env read and is stamped per-recording.
+# Task 16.4 hard-evidence-gate lever — UNCONDITIONAL since the Task-16.17
+# baseline-5 record (the graduation slate, audits/audit-phase-16-close.md §0.1.1).
+# The lever was adopted by the baseline-5 re-record, so — mirroring the
+# 14.9/14.12/15.7 graduations — it is now the default substrate rather than an
+# env-gated toggle: the J1 render clamp always applies at the two belief-render
+# read-sites. This is byte-identical to the baseline-5 recording (which ran the
+# lever ON), and it lets the committed set reconstruct/serve under a BARE
+# environment (no AILIBI_* export) — discharging the C6 recording-preflight
+# hazard for this lever. The lever is stamped unconditionally ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is
+# a legacy (baseline-3/4) artifact that fails loud (no cross-substrate replay).
+# ``ENV_HARD_EVIDENCE_GATE`` is retained (no longer read) for the stamp key's
+# naming provenance and backward-compatible imports.
 ENV_HARD_EVIDENCE_GATE: Final[str] = "AILIBI_HARD_EVIDENCE_GATE"
-_HARD_EVIDENCE_GATE_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def hard_evidence_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.4 hard-evidence-gate (J1) lever is ON. DEFAULT OFF.
+    """Whether the Task 16.4 hard-evidence-gate (J1) lever is ON — now always True.
 
-    Reads :data:`ENV_HARD_EVIDENCE_GATE` from ``env`` (defaulting to the real
-    process environment), mirroring the retired 13.5 / 14.10 resolvers, the 15.5
-    ``reporter_exculpation`` resolver it clones, and
-    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF: an
-    unset / empty / unrecognised value is ``False`` so the two belief-render
-    read-sites stay byte-identical to the committed baseline-3 substrate
-    (``scripts/verify_samples.sh`` reconstructs clean); the live re-measure of the
-    counterfactual and the graduation decision are Task 16.17. Accepts
-    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests + the
-    offline counterfactual toggle the lever deterministically without mutating
-    ``os.environ``.
-
-    ON gates the J1 render clamp at exactly the two belief-render read-sites -- the
-    store's §6.6 belief lines (:func:`agents.memory.store._build_belief_lines`) and
-    the vote-ballot suspicion-graph builder
+    Retired to UNCONDITIONAL at the Task-16.17 baseline-5 record (the 15.7 move,
+    applied to this lever once baseline 5 adopted it per the graduation slate —
+    the over-damping canary held on the baseline-4 committed-bytes counterfactual:
+    zero hard-flag-backed conviction outcomes change). The J1 render clamp applies
+    at exactly the two belief-render read-sites -- the store's §6.6 belief lines
+    (:func:`agents.memory.store._build_belief_lines`) and the vote-ballot
+    suspicion-graph builder
     (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`) -- where a
     row whose typed provenance is ENTIRELY soft is clamped to
     :data:`HARD_EVIDENCE_GATE_RENDER_CEIL`. The classification is a pure function of
     the 16.3 provenance (:func:`hard_evidence_gated_suspicion`); the HARD channels,
     the stored scalar, and the fold arithmetic are never touched, so a hard-backed
-    row renders unchanged. Lever gating lives at the call sites (the 15.5 in-line
-    pattern), never inside the pure helper.
+    row renders unchanged. The ``env`` argument is accepted and ignored (retained
+    so the render call sites and the substrate stamp read one source of truth
+    without a signature churn).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_HARD_EVIDENCE_GATE, "").strip().lower()
-        in _HARD_EVIDENCE_GATE_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 HARD_EVIDENCE_GATE_RENDER_CEIL: Final[float] = 0.59
@@ -324,16 +316,15 @@ One display-precision notch under the §4.6 0.60 eject gate
 ``0.59`` renders exactly ``"0.59"`` under the vote template's ``"%.2f"`` format, so
 the model reads a MUST-SKIP row rather than the MUST-vote a raw ``>= 0.60`` scalar
 would surface. Mirrors the :data:`CONTRADICTION_RENDER_CEIL` naming (a
-render-time ceiling, not a fold-time cap) and sits behind the default-OFF
-:func:`hard_evidence_gate_enabled` lever. The measured trade is a HYPOTHESIS this
-task re-measures: the planning-doc §3.4 J1 static counterfactual read 24/31 crew
-mis-ejects neutralised vs 6/16 impostor catches risked, but those are
-baseline-2-era figures and the champion close reshaped exactly the relevant
-distribution (witnessed kills 5 -> 32, structured vents 0 -> 55, innocent-reporter
-ejections 22 -> 4), so Task 16.4's DoD re-measures the counterfactual on the
-committed baseline-3 bytes and the 16.17 graduation decision re-checks it on the
-adopting baseline's bytes. The over-damping canary -- zero hard-flag-backed
-conviction outcomes change -- is the contract's hard line."""
+render-time ceiling, not a fold-time cap) and sits behind the now-unconditional
+:func:`hard_evidence_gate_enabled` lever (graduated to always-on at the Task-16.17
+baseline-5 record). The measured trade was re-checked per rung of the ladder: the
+planning-doc §3.4 J1 static counterfactual read 24/31 crew mis-ejects neutralised
+vs 6/16 impostor catches risked (baseline-2-era figures); the 16.4 re-measure on
+the committed baseline-3 bytes found 0 kept / 2 catches risked; the 16.14-era
+re-measure on the baseline-4 bytes found 1 crew mis-eject neutralised / 0 catches
+risked. The over-damping canary -- zero hard-flag-backed conviction outcomes
+change -- is the contract's hard line and held on every measured substrate."""
 
 
 def hard_evidence_gated_suspicion(

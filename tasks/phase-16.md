@@ -1,22 +1,29 @@
 # Phase 16 — Voice & Judgment on a probe-locked model (Wave 0: model probe → lock; Wave 1: judgment/pooling substrate; Wave 2: baseline 4 [GO]; Wave 3: elicitation + personas; Wave 4: baseline 5 close)
 
-> **STATUS: OPEN (authored 2026-07-11) — MODEL LOCK: GO (owner, 2026-07-12).** The 16.2 mid-phase
-> gate is decided: **GO** on the exact served id **`Qwen/Qwen3.6-27B`**, recorded in
-> `audits/audit-phase-16-model-lock.md` (the 14.6 LOCKED-DECISION shape, weighing BOTH evidence
-> sets — the held-constant 16.1 probe and the owner-directed from-scratch v0→v5 ladder whose v5
-> validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking).
-> All eighteen contracts below are dispatchable; the Wave-2 tasks (16.12–16.14) are ACTIVE as
-> written, and 16.15/16.16's template paths are confirmed at `agents/strategic/prompts/qwen3_6_27b/`.
-> The NO-GO surgery this banner formerly promised (removing 16.12–16.14 and rewriting 16.15/16.16's
-> edges, paths, and per-template version arithmetic) was NOT performed; the rejected path's
-> rationale is §5 of the lock audit. One owner gate remains: the baseline-5 GRADUATION SLATE
-> (16.17's preflight — which levers graduate is an owner
-> decision on committed counterfactuals, named here so it is not discovered mid-record). Scoping
-> inputs: `audits/audit-phase-15-close.md` §10–§11, `audits/audit-phase-15-pause.md` §9,
-> `audits/post-phase-14-Voice-and-Judgment-planning.md` (the program design; its "Phase 15 / 15.x"
-> labels predate the roadmap renumbering), `tasks/post-phase-14-plan.md` (the ladder). Phase 15
-> closed on branch A: baseline 3 stays canonical, the `utility-es` champion is opt-in, and
-> `_TOGGLEABLE_LEVER_RESOLVERS` is empty — this phase repopulates it.
+> **STATUS: CLOSED 2026-07-14 on baseline 5 (Task 16.17).** The phase closes on the graduated
+> slate — the owner gate this banner promised, ruled on committed counterfactuals and ratified by
+> the 16.17 PR merge (the 15.18 convention): **J1 `hard_evidence_gate`, `observation_id_rendering`,
+> and J2 `citation_gate` GRADUATE-ON** (resolvers constant-true, registry entries retired);
+> **`absence_prior` STAYS OFF as a recorded decision** (the baseline-4 set-size evidence was
+> pre-roll-call; Phase 17 re-measures on the baseline-5 bytes, deciding the PR #264
+> placement-substrate widening with it). Both canonical sets re-recorded atomically at the close
+> substrate (`Qwen/Qwen3.6-27B` held from the 16.2 lock — GO, 2026-07-12, recorded in
+> `audits/audit-phase-16-model-lock.md` — with `qwen3_6_27b` **v3**: 16.15's elicitation batch +
+> 16.16's persona layer), recording commit `2428044` on every MANIFEST row: **both sets PASS the
+> hard gate** (10/10, `--expected-model` + `--require-zero-cost`) **and the 16.11 referee** on the
+> baseline-5 floor pins, byte-verifying BARE (C6 discharged). Neither pre-registered canary fired —
+> R1 landed exactly ON its band's inclusive edge (25/50, z = 1.830; flagged, not absorbed) and
+> genuine-class conversion reads NO-DATA (0/0) a second consecutive substrate — and the named
+> NO-GO pairing resolved NO: the zero-flag conviction rate **collapsed 0.281 → 0.029** (both
+> survivors cited) while voices diversified (echo 0.244 → 0.004), so no persona-attributable rise
+> exists. Citation compliance hit **1.000** (405/405 EJECTs cite; 146 observation-id citations),
+> ejection accuracy rose 0.865 → **0.914** with mis-ejects halved, and the recorded costs are
+> findings routed forward (impostor win 0.24 → 0.36, eject-decided wins 34 → 25, conversion
+> 0.626 → 0.474, roll-call coverage 0.363, vouching eased). Full close:
+> `audits/audit-phase-16-close.md` (slate §0.1, canaries §4, uptake §6, the Phase-17 staleness
+> rule §8: the surrogate, `replays/ml_corpus/`, and the champion's numbers are
+> prior-substrate-anchored — re-ground before any training). Phase-17 scoping inputs: close audit
+> §6 + §8; `audits/audit-phase-16-baseline-4.md` §5–§6; `audits/audit-phase-15-close.md` §10–§11.
 
 Goal: make the meeting layer's TALK worth the evidence the substrate now carries — and, first,
 decide the model that talk runs on. Phase 15 proved the game generates and keeps hard evidence
