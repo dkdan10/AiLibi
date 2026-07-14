@@ -46,9 +46,15 @@ from eval.report_schema import (
 )
 from eval.vote_correctness import (
     KILL_WITNESS_TICK_WINDOW,
+    LEGACY_ALIBI_CELL_NOTE,
+    SUPPLIED_CHANNEL_GATE_NOTE,
     VOTE_CORRECTNESS_MIN_SAMPLE,
+    SuppliedChannelConversionReport,
     VoteCorrectnessReport,
+    compute_genuine_class_conversion,
+    compute_supplied_channel_conversion,
     compute_vote_correctness,
+    supplied_channel_subjects,
 )
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
@@ -59,6 +65,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    AlibiClaim,
     ContradictionRef,
     FoundBodyObservation,
     MeetingOutcome,
@@ -67,6 +74,12 @@ from meetings.schemas import (
     PlayerId,
     SawPlayerObservation,
     VoteBallot,
+    WhereaboutsClaim,
+)
+from meetings.transcript import (
+    WEAK_REASON_ENDPOINT_TICK,
+    WEAK_REASON_PROXY_INTRA_TURN,
+    WEAK_REASON_RETARGETED_PROXY,
 )
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 
@@ -1910,3 +1923,816 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
     assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.9143, abs=1e-4)
     assert raw["conversion"]["missed_skip_ballots"] == 141
+
+
+# ---------------------------------------------------------------------------
+# Task 17.6 — the successor instrument: supplied-channel conversion
+# (audits/audit-phase-16-close.md §8 routing; §6 second consecutive 0/0;
+#  audits/audit-phase-16-baseline-4.md §6 supply collapse)
+# ---------------------------------------------------------------------------
+
+_COMMITTED_FLAT_4P1I_REPORT = (
+    Path(__file__).resolve().parents[2]
+    / "replays"
+    / "samples"
+    / "4p1i"
+    / "tournament-eval-report.json"
+)
+
+# The successor reads RECORDED ContradictionRef rows, so each channel's
+# fixture is a recorded flag (plus, for the whereabouts channel, the spoken
+# roll-call claim the flag's event id references). Builders mirror the file's
+# conventions: keyword-only, one model each, conservative defaults.
+
+_WHEREABOUTS_CLAIM_EVENT_ID = "turn:m-0:turn-1:whereabouts:0"
+
+
+def _vent_flag(
+    *, subject: PlayerId, contradiction_id: str = "c-vent-1"
+) -> ContradictionRef:
+    """A recorded role-proving ``vent_sighting`` flag (Task 15.4 shape).
+
+    Both event ids reference the SAME spoken observation — the single public
+    artifact; the private grounding record has no transcript id by design.
+    """
+
+    return ContradictionRef(
+        contradiction_id=contradiction_id,
+        kind="vent_sighting",
+        event_a_id="turn:m-0:turn-1:obs:0",
+        event_b_id="turn:m-0:turn-1:obs:0",
+        subjects=(subject,),
+        description="grounded witnessed vent",
+    )
+
+
+def _sighting_flag(
+    *,
+    subject: PlayerId,
+    contradiction_id: str = "c-sight-1",
+    description: str = "",
+) -> ContradictionRef:
+    """A recorded ``alibi_vs_sighting`` flag referencing no whereabouts claim."""
+
+    return ContradictionRef(
+        contradiction_id=contradiction_id,
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-0:turn-0:claim:0",
+        event_b_id="turn:m-0:turn-1:obs:0",
+        subjects=(subject,),
+        description=description,
+    )
+
+
+def _whereabouts_flag(
+    *,
+    subject: PlayerId,
+    claim_event_id: str = _WHEREABOUTS_CLAIM_EVENT_ID,
+    kind: str = "alibi_vs_sighting",
+    contradiction_id: str = "c-where-1",
+    description: str = f"single-tick roll-call answer ({WEAK_REASON_ENDPOINT_TICK})",
+) -> ContradictionRef:
+    """A recorded flag whose event id names a roll-call whereabouts claim.
+
+    The default description carries the endpoint band deliberately: a
+    single-tick claim is an endpoint of its own degenerate range by
+    construction, and admitting the banded flag by event id IS the eval-side
+    re-anchor under test. ``kind`` is validated by the model itself (an
+    unknown kind fails loud), which is why this builder goes through
+    ``model_validate`` rather than the typed constructor.
+    """
+
+    return ContradictionRef.model_validate(
+        {
+            "contradiction_id": contradiction_id,
+            "kind": kind,
+            "event_a_id": "turn:m-0:turn-2:obs:0",
+            "event_b_id": claim_event_id,
+            "subjects": (subject,),
+            "description": description,
+        }
+    )
+
+
+def _whereabouts_turn(
+    *,
+    speaker: PlayerId,
+    turn_index: int = 1,
+    tick: int = 40,
+    room: str = "STORAGE",
+    preceding: tuple[SawPlayerObservation, ...] = (),
+) -> MeetingTurn:
+    """A chain turn whose roll-call answer sits at index ``len(preceding)``.
+
+    The whereabouts claim's contradiction event id is
+    ``turn:{turn_id}:whereabouts:{index}`` with ``index`` its position in
+    ``turn.observations`` — the ``preceding`` observations shift it, which is
+    what the id-scheme test pins.
+    """
+
+    return MeetingTurn(
+        turn_id=f"m-0:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="reply",
+        reply_to=None,
+        observations=(
+            *preceding,
+            WhereaboutsClaim(type="whereabouts", tick=tick, room=room),
+        ),
+        claims=(),
+        free_text="",
+    )
+
+
+def _supplied_report_payload(**overrides: object) -> dict[str, object]:
+    """An all-zero, internally consistent successor-report payload."""
+
+    payload: dict[str, object] = {
+        "supplied": 0,
+        "converted": 0,
+        "conversion_rate": None,
+        "witnessed_vent_supplied": 0,
+        "witnessed_vent_converted": 0,
+        "sighting_contradiction_supplied": 0,
+        "sighting_contradiction_converted": 0,
+        "whereabouts_lie_supplied": 0,
+        "whereabouts_lie_converted": 0,
+        "legacy_alibi_supplied": 0,
+        "legacy_alibi_converted": 0,
+        "legacy_alibi_conversion_rate": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_witnessed_vent_subject_ejected_counts_supplied_and_converted() -> None:
+    """The DoD's first fixture: a witnessed-vent subject ejected counts 1/1."""
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            contradictions=(_vent_flag(subject=_IMPOSTOR),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.supplied == 1
+    assert result.converted == 1
+    assert result.conversion_rate == 1.0
+    assert result.witnessed_vent_supplied == 1
+    assert result.witnessed_vent_converted == 1
+
+
+def test_witnessed_vent_subject_skipped_counts_denominator_only() -> None:
+    """The DoD's second fixture: the same subject skipped supplies, never converts."""
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="SKIPPED",
+            ejected=None,
+            contradictions=(_vent_flag(subject=_IMPOSTOR),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.supplied == 1
+    assert result.converted == 0
+    assert result.conversion_rate == 0.0
+    assert result.witnessed_vent_supplied == 1
+    assert result.witnessed_vent_converted == 0
+
+
+def test_unsupplied_channels_contribute_nothing() -> None:
+    """The DoD's third fixture: channels the meeting did not supply stay 0.
+
+    A vent-only meeting leaves the sighting and whereabouts cells at zero,
+    and a meeting with no recorded contradictions supplies nothing anywhere
+    (rate ``None`` — undefined, not ``0.0``).
+    """
+
+    vent_only = compute_supplied_channel_conversion(
+        _one_meeting_report(
+            _meeting(
+                outcome="EJECTED",
+                ejected=_IMPOSTOR,
+                contradictions=(_vent_flag(subject=_IMPOSTOR),),
+            )
+        )
+    )
+    assert vent_only.sighting_contradiction_supplied == 0
+    assert vent_only.sighting_contradiction_converted == 0
+    assert vent_only.whereabouts_lie_supplied == 0
+    assert vent_only.whereabouts_lie_converted == 0
+
+    unsupplied = compute_supplied_channel_conversion(
+        _one_meeting_report(_meeting(outcome="SKIPPED", ejected=None))
+    )
+    assert unsupplied.supplied == 0
+    assert unsupplied.converted == 0
+    assert unsupplied.conversion_rate is None
+    assert unsupplied.witnessed_vent_supplied == 0
+    assert unsupplied.sighting_contradiction_supplied == 0
+    assert unsupplied.whereabouts_lie_supplied == 0
+
+
+def test_interior_sighting_contradiction_supplies_the_sighting_channel() -> None:
+    """A recorded interior (unbanded) alibi_vs_sighting flag is the sighting channel."""
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            contradictions=(_sighting_flag(subject=_IMPOSTOR),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.sighting_contradiction_supplied == 1
+    assert result.sighting_contradiction_converted == 1
+    assert result.supplied == 1
+    assert result.converted == 1
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        WEAK_REASON_ENDPOINT_TICK,
+        WEAK_REASON_RETARGETED_PROXY,
+        WEAK_REASON_PROXY_INTRA_TURN,
+    ],
+)
+def test_banded_sighting_flag_is_not_the_sighting_channel(marker: str) -> None:
+    """The sighting channel keeps the legacy exclusions (endpoint + both proxies).
+
+    A recorded ``alibi_vs_sighting`` flag whose description carries one of
+    the legacy genuine-class exclusion markers stays out of the sighting
+    channel — the multi-tick class keeps the CANON-interior discipline; only
+    the whereabouts channel (matched by event id, below) admits the endpoint
+    band.
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            contradictions=(
+                _sighting_flag(subject=_IMPOSTOR, description=f"weak ({marker})"),
+            ),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.sighting_contradiction_supplied == 0
+    assert result.supplied == 0
+    assert result.conversion_rate is None
+
+
+def test_whereabouts_lie_supplies_despite_the_endpoint_band() -> None:
+    """THE re-anchor case: a flagged roll-call answer counts, endpoint band and all.
+
+    The impostor self-places via a whereabouts claim; a recorded
+    ``alibi_vs_sighting`` flag references that claim by event id and carries
+    the endpoint band (a single-tick claim is an endpoint of its own range
+    by construction — exactly what banded roll-call out of the legacy
+    class). The successor attributes it to the whereabouts channel, never
+    the sighting channel.
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            statements=(_whereabouts_turn(speaker=_IMPOSTOR),),
+            contradictions=(_whereabouts_flag(subject=_IMPOSTOR),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.whereabouts_lie_supplied == 1
+    assert result.whereabouts_lie_converted == 1
+    assert result.sighting_contradiction_supplied == 0
+    assert result.supplied == 1
+    assert result.converted == 1
+
+
+def test_whereabouts_channel_matches_by_event_id_whatever_the_kind() -> None:
+    """A lying roll-call answer is prosecuted through the EXISTING flag paths.
+
+    The 16.7 design mints no new kind, so the channel anchors on the claim's
+    event id, not the flag kind: an ``alibi_conflict`` flag referencing the
+    whereabouts claim attributes to the whereabouts channel exactly like an
+    ``alibi_vs_sighting`` one.
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="SKIPPED",
+            ejected=None,
+            statements=(_whereabouts_turn(speaker=_IMPOSTOR),),
+            contradictions=(
+                _whereabouts_flag(subject=_IMPOSTOR, kind="alibi_conflict"),
+            ),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.whereabouts_lie_supplied == 1
+    assert result.whereabouts_lie_converted == 0
+    assert result.supplied == 1
+
+
+def test_whereabouts_event_id_tracks_the_observation_position() -> None:
+    """The id scheme is ``turn:{turn_id}:whereabouts:{index}`` over ALL observations.
+
+    Mirroring ``meetings.transcript._turn_whereabouts_id`` (and 16.10's fold),
+    ``index`` is the claim's position in ``turn.observations`` — a preceding
+    sighting shifts it. A flag referencing the shifted id matches; one
+    referencing the stale index-0 id does not.
+    """
+
+    turn = _whereabouts_turn(
+        speaker=_IMPOSTOR,
+        preceding=(_saw(subject=_CREWMATE, tick=39, room="STORAGE"),),
+    )
+    shifted_id = "turn:m-0:turn-1:whereabouts:1"
+
+    matched = compute_supplied_channel_conversion(
+        _one_meeting_report(
+            _meeting(
+                outcome="SKIPPED",
+                ejected=None,
+                statements=(turn,),
+                contradictions=(
+                    _whereabouts_flag(subject=_IMPOSTOR, claim_event_id=shifted_id),
+                ),
+            )
+        )
+    )
+    assert matched.whereabouts_lie_supplied == 1
+
+    stale = compute_supplied_channel_conversion(
+        _one_meeting_report(
+            _meeting(
+                outcome="SKIPPED",
+                ejected=None,
+                statements=(turn,),
+                contradictions=(_whereabouts_flag(subject=_IMPOSTOR),),
+            )
+        )
+    )
+    assert stale.whereabouts_lie_supplied == 0
+    # The unmatched flag falls through to the sighting channel's rules and is
+    # endpoint-banded there, so it supplies nothing anywhere.
+    assert stale.supplied == 0
+
+
+def test_whereabouts_flag_naming_someone_else_attributes_nothing() -> None:
+    """A flag referencing a claim while naming another player supplies nobody.
+
+    The whereabouts channel prosecutes the CLAIMANT: the flagged claim's
+    speaker must be among the flag's subjects, so a proxy-shaped row cannot
+    smuggle a different player into the denominator.
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="SKIPPED",
+            ejected=None,
+            statements=(_whereabouts_turn(speaker=_IMPOSTOR),),
+            contradictions=(_whereabouts_flag(subject=_CREWMATE),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.whereabouts_lie_supplied == 0
+    assert result.supplied == 0
+
+
+def test_plain_alibi_kind_flags_are_not_a_supplied_channel() -> None:
+    """alibi_conflict / alibi_vs_physical without a whereabouts claim supply nothing.
+
+    They are the starved alibi-anchored substrate the legacy cell already
+    reports (7 flags on baseline 4, every one crew-subject) — not one of the
+    close §8 channels.
+    """
+
+    conflict = ContradictionRef(
+        contradiction_id="c-plain-1",
+        kind="alibi_conflict",
+        event_a_id="turn:m-0:turn-0:claim:0",
+        event_b_id="turn:m-0:turn-1:claim:0",
+        subjects=(_IMPOSTOR,),
+        description="",
+    )
+    physical = ContradictionRef(
+        contradiction_id="c-plain-2",
+        kind="alibi_vs_physical",
+        event_a_id="turn:m-0:turn-0:claim:0",
+        event_b_id="turn:m-0:turn-2:obs:0",
+        subjects=(_IMPOSTOR,),
+        description="",
+    )
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            contradictions=(conflict, physical),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.supplied == 0
+    assert result.conversion_rate is None
+
+
+def test_crew_subjects_never_enter_the_denominator() -> None:
+    """The successor measures the legacy question: evidence against IMPOSTORS.
+
+    Flags naming crewmates — the actual shape of baseline 5's whereabouts
+    lies and residual sighting flags — supply nothing on any channel; the
+    role-blind membership itself still reports them (the caller applies
+    ground truth, mirroring ``genuine_class_subjects``).
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        statements=(_whereabouts_turn(speaker=_CREWMATE),),
+        contradictions=(
+            _vent_flag(subject=_CREWMATE),
+            _sighting_flag(subject=_CREWMATE),
+            _whereabouts_flag(subject=_CREWMATE, contradiction_id="c-where-2"),
+        ),
+    )
+
+    membership = supplied_channel_subjects(meeting)
+    assert membership["witnessed_vent"] == frozenset({_CREWMATE})
+    assert membership["sighting_contradiction"] == frozenset({_CREWMATE})
+    assert membership["whereabouts_lie"] == frozenset({_CREWMATE})
+
+    result = compute_supplied_channel_conversion(_one_meeting_report(meeting))
+    assert result.supplied == 0
+    assert result.witnessed_vent_supplied == 0
+    assert result.sighting_contradiction_supplied == 0
+    assert result.whereabouts_lie_supplied == 0
+
+
+def test_supply_dedupes_per_meeting_and_across_channels() -> None:
+    """The denominator-inflation guard: one meeting, one subject, one headline pair.
+
+    Two vent flags against the same subject supply the vent channel once
+    (the gp-2 flag-fountain lesson), and a subject supplied on two channels
+    counts once in the headline while each channel cell keeps its own count.
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            statements=(_whereabouts_turn(speaker=_IMPOSTOR),),
+            contradictions=(
+                _vent_flag(subject=_IMPOSTOR),
+                _vent_flag(subject=_IMPOSTOR, contradiction_id="c-vent-2"),
+                _whereabouts_flag(subject=_IMPOSTOR),
+            ),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.witnessed_vent_supplied == 1
+    assert result.whereabouts_lie_supplied == 1
+    assert result.supplied == 1
+    assert result.converted == 1
+    assert result.witnessed_vent_converted == 1
+    assert result.whereabouts_lie_converted == 1
+
+
+def test_same_subject_in_two_meetings_supplies_twice() -> None:
+    """Dedup is per meeting, never per game: a repeat offender re-supplies."""
+
+    game = _game(
+        meetings=(
+            _meeting(
+                meeting_id="m-0",
+                outcome="SKIPPED",
+                ejected=None,
+                contradictions=(_vent_flag(subject=_IMPOSTOR),),
+            ),
+            _meeting(
+                meeting_id="m-1",
+                outcome="EJECTED",
+                ejected=_IMPOSTOR,
+                contradictions=(_vent_flag(subject=_IMPOSTOR),),
+            ),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(_tournament(game))
+
+    assert result.supplied == 2
+    assert result.converted == 1
+    assert result.conversion_rate == 0.5
+
+
+def test_malformed_ejected_meeting_supplies_but_never_converts() -> None:
+    """An EJECTED meeting with no ejected id can supply, never convert.
+
+    ``MeetingReport`` does not enforce the outcome/ejection coupling, so the
+    malformed shape is type-possible; the conversion join requires an exact
+    ejected-subject match (partial-replay robustness, the module convention).
+    """
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="EJECTED",
+            ejected=None,
+            contradictions=(_vent_flag(subject=_IMPOSTOR),),
+        )
+    )
+
+    result = compute_supplied_channel_conversion(report)
+
+    assert result.supplied == 1
+    assert result.converted == 0
+
+
+def test_supplied_subject_absent_from_roles_fails_loud() -> None:
+    """A flagged subject missing from the ground truth is an internal inconsistency."""
+
+    report = _one_meeting_report(
+        _meeting(
+            outcome="SKIPPED",
+            ejected=None,
+            contradictions=(_vent_flag(subject="p-99"),),
+        )
+    )
+
+    with pytest.raises(KeyError):
+        compute_supplied_channel_conversion(report)
+
+
+def test_legacy_cells_mirror_compute_genuine_class_conversion() -> None:
+    """The legacy column is the one-home fold, mirrored — never re-implemented.
+
+    A transcript the repaired detector flags as genuine CANON-interior (the
+    impostor's self-stated alibi against a crewmate's interior-tick sighting
+    in a disjoint canonical room) supplies the LEGACY cell via re-derivation
+    even with NO recorded rows — while the successor's own channels, which
+    read only recorded rows, stay empty. The divergence is the proof that
+    the two cells are independent instruments on one report.
+    """
+
+    meeting = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        reports=(
+            MeetingTurn(
+                turn_id="m-0:turn-0",
+                turn_index=0,
+                speaker=_IMPOSTOR,
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject=_IMPOSTOR,
+                        from_tick=2,
+                        to_tick=8,
+                        room="CAFETERIA",
+                    ),
+                ),
+                free_text="",
+            ),
+        ),
+        statements=(
+            MeetingTurn(
+                turn_id="m-0:turn-1",
+                turn_index=1,
+                speaker=_CREWMATE,
+                turn_kind="reply",
+                reply_to=None,
+                observations=(_saw(subject=_IMPOSTOR, tick=5, room="STORAGE"),),
+                claims=(),
+                free_text="",
+            ),
+        ),
+        ballots=tuple(
+            _ballot(target="SKIP", voter=voter, reason_id=None) for voter in _ROLES
+        ),
+    )
+    report = _one_meeting_report(meeting)
+
+    result = compute_supplied_channel_conversion(report)
+    legacy = compute_genuine_class_conversion(report)
+
+    assert legacy.supplied == 1
+    assert result.legacy_alibi_supplied == legacy.supplied
+    assert result.legacy_alibi_converted == legacy.converted
+    assert result.legacy_alibi_conversion_rate == legacy.conversion_rate
+    # The successor's own channels read recorded rows only — none here.
+    assert result.supplied == 0
+    assert result.conversion_rate is None
+
+
+def test_successor_report_ships_both_notes_verbatim() -> None:
+    """Both cells are labeled: the canary-eligible successor and the starved legacy."""
+
+    result = compute_supplied_channel_conversion(_tournament())
+
+    assert result.note == SUPPLIED_CHANNEL_GATE_NOTE
+    assert result.legacy_note == LEGACY_ALIBI_CELL_NOTE
+    assert "canary-eligible" in SUPPLIED_CHANNEL_GATE_NOTE
+    assert "NEVER a canary" in LEGACY_ALIBI_CELL_NOTE
+    assert "STARVED" in LEGACY_ALIBI_CELL_NOTE
+    # The re-examination pointer for a future substrate that re-supplies
+    # alibi lies (the DoD's docstring/provenance requirement, on the report).
+    assert "re-supplies checkable alibi lies" in LEGACY_ALIBI_CELL_NOTE
+
+
+def test_successor_accepts_bare_sequence_and_empty_tournament() -> None:
+    """Signature parity with the module's other analyzers."""
+
+    meeting = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        contradictions=(_vent_flag(subject=_IMPOSTOR),),
+    )
+    game = _game(meetings=(meeting,))
+
+    assert compute_supplied_channel_conversion(
+        [game]
+    ) == compute_supplied_channel_conversion(_tournament(game))
+
+    empty = compute_supplied_channel_conversion(_tournament())
+    assert empty.supplied == 0
+    assert empty.converted == 0
+    assert empty.conversion_rate is None
+    assert empty.legacy_alibi_supplied == 0
+    assert empty.legacy_alibi_conversion_rate is None
+
+
+def test_successor_model_validators_fail_loud() -> None:
+    """An inconsistent successor report can never be constructed."""
+
+    with pytest.raises(ValidationError, match="non-negative"):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(supplied=-1)
+        )
+    with pytest.raises(ValidationError, match="converted cannot exceed supplied"):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(converted=1)
+        )
+    with pytest.raises(
+        ValidationError, match="channel's converted cannot exceed its supplied"
+    ):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(
+                supplied=1,
+                converted=1,
+                conversion_rate=1.0,
+                witnessed_vent_supplied=0,
+                witnessed_vent_converted=1,
+            )
+        )
+    with pytest.raises(
+        ValidationError, match="channel's supplied cannot exceed the headline"
+    ):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(witnessed_vent_supplied=1)
+        )
+    with pytest.raises(
+        ValidationError, match="headline supplied cannot exceed the sum"
+    ):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(supplied=1, conversion_rate=0.0)
+        )
+    with pytest.raises(ValidationError, match="must be None when nothing was supplied"):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(conversion_rate=0.0)
+        )
+    with pytest.raises(ValidationError, match="must be set when supplied > 0"):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(supplied=1, converted=0, witnessed_vent_supplied=1)
+        )
+    with pytest.raises(
+        ValidationError, match="legacy converted cannot exceed legacy supplied"
+    ):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(legacy_alibi_converted=1)
+        )
+    with pytest.raises(ValidationError, match="legacy_alibi_conversion_rate"):
+        SuppliedChannelConversionReport.model_validate(
+            _supplied_report_payload(legacy_alibi_conversion_rate=0.5)
+        )
+
+    frozen = compute_supplied_channel_conversion(_tournament())
+    with pytest.raises(ValidationError):
+        frozen.supplied = 1
+
+
+def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
+    """The successor's committed-bytes cells on the baseline-5 9p2i set.
+
+    Re-anchored to the Task-16.17 baseline-5 re-record (model
+    Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3, the substrate levers ON);
+    NOT immutable — the next re-record regenerates the report and updates
+    these pins, the standard re-record pattern.
+
+    The substrate supplies the successor a NON-ZERO denominator where the
+    legacy cell reads 0/0: 75 recorded ``vent_sighting`` rows dedupe to 70
+    (meeting, impostor) pairs, 63 of them converted (rate 0.9). The residual
+    ``alibi_vs_sighting`` rows are endpoint-banded or crew-subject (the
+    baseline-4 §6 anatomy persisting) and the 6 recorded whereabouts-lie
+    flags — the close §6 roll-call finding — all name CREW liars, so the
+    sighting and whereabouts channels honestly read 0 impostor pairs on
+    these bytes: supplied channels, empty cells, proven semantics.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+    )
+    result = compute_supplied_channel_conversion(report.report)
+
+    assert result.supplied == 70
+    assert result.converted == 63
+    assert result.conversion_rate == pytest.approx(63 / 70)
+    assert result.witnessed_vent_supplied == 70
+    assert result.witnessed_vent_converted == 63
+    assert result.sighting_contradiction_supplied == 0
+    assert result.sighting_contradiction_converted == 0
+    assert result.whereabouts_lie_supplied == 0
+    assert result.whereabouts_lie_converted == 0
+
+    # The legacy alibi-anchored cell: preserved, labeled, reading 0/0 — the
+    # second consecutive NO-DATA substrate (close §6/§8), mirrored exactly
+    # from the committed gate block (one home, never recomputed differently).
+    assert result.legacy_alibi_supplied == 0
+    assert result.legacy_alibi_converted == 0
+    assert result.legacy_alibi_conversion_rate is None
+    committed_legacy = report.gate_metrics.genuine_class_conversion
+    assert result.legacy_alibi_supplied == committed_legacy.supplied
+    assert result.legacy_alibi_converted == committed_legacy.converted
+    assert result.legacy_alibi_conversion_rate == committed_legacy.conversion_rate
+
+    assert result.note == SUPPLIED_CHANNEL_GATE_NOTE
+    assert result.legacy_note == LEGACY_ALIBI_CELL_NOTE
+
+    # Cross-surface sanity: converted pairs are impostor ejections, so the
+    # successor's numerator is bounded by the recorded impostor-ejection
+    # census (63 of the set's 64).
+    assert result.converted <= report.vote_correctness.impostor_ejections
+
+    # Per-seed identity: the aggregate is the sum of its per-seed parts
+    # (dedup is per meeting, never cross-game — no masked cancellation).
+    per_seed = [
+        compute_supplied_channel_conversion((game,)) for game in report.report.games
+    ]
+    assert sum(row.supplied for row in per_seed) == result.supplied
+    assert sum(row.converted for row in per_seed) == result.converted
+    assert (
+        sum(row.witnessed_vent_supplied for row in per_seed)
+        == result.witnessed_vent_supplied
+    )
+
+
+def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
+    """The flat 4p/1i set's successor cells, pinned at the baseline-5 re-record.
+
+    NOT immutable — the next re-record regenerates and updates these. The
+    reference set supplies 10 witnessed-vent pairs and converts all 10; the
+    2 recorded whereabouts-lie flags (the close §2 4p1i census) name crew
+    liars, so the whereabouts cell reads 0 impostor pairs; the legacy cell
+    reads its 0/0.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_FLAT_4P1I_REPORT.read_text(encoding="utf-8")
+    )
+    result = compute_supplied_channel_conversion(report.report)
+
+    assert result.supplied == 10
+    assert result.converted == 10
+    assert result.conversion_rate == 1.0
+    assert result.witnessed_vent_supplied == 10
+    assert result.witnessed_vent_converted == 10
+    assert result.sighting_contradiction_supplied == 0
+    assert result.whereabouts_lie_supplied == 0
+
+    assert result.legacy_alibi_supplied == 0
+    assert result.legacy_alibi_converted == 0
+    assert result.legacy_alibi_conversion_rate is None
+    committed_legacy = report.gate_metrics.genuine_class_conversion
+    assert result.legacy_alibi_supplied == committed_legacy.supplied
+    assert result.legacy_alibi_converted == committed_legacy.converted
