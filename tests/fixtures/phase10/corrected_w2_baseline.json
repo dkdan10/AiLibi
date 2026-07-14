@@ -1,17 +1,17 @@
 {
   "conversion_per_meeting": {
-    "conversion_per_meeting": 0.48125,
-    "impostor_ejections": 77,
-    "resolved_meetings": 160
+    "conversion_per_meeting": 0.3575418994413408,
+    "impostor_ejections": 64,
+    "resolved_meetings": 179
   },
   "effective_deflection": {
-    "accused_impostor_events": 123,
-    "accused_impostor_survivals": 46,
-    "active_survivals": 40,
-    "effective_deflections": 16,
-    "named_target_deflections": 7,
-    "skip_saved_active_survivals": 24,
-    "third_party_deflections": 9
+    "accused_impostor_events": 139,
+    "accused_impostor_survivals": 75,
+    "active_survivals": 69,
+    "effective_deflections": 11,
+    "named_target_deflections": 4,
+    "skip_saved_active_survivals": 58,
+    "third_party_deflections": 7
   },
   "genuine_class_conversion": {
     "conversion_rate": null,
@@ -26,24 +26,19 @@
     "seed-0:m2": [
       "vent_witness"
     ],
-    "seed-10:m0": [
-      "body_proximity"
-    ],
-    "seed-10:m2": [
-      "vent_witness"
-    ],
     "seed-11:m0": [
       "vent_witness"
     ],
     "seed-11:m2": [
       "vent_witness"
     ],
-    "seed-14:m0": [
-      "body_proximity"
-    ],
     "seed-14:m2": [
       "prior_meeting_carry",
       "vent_witness"
+    ],
+    "seed-14:m3": [
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-15:m0": [
       "vent_witness"
@@ -70,9 +65,6 @@
     "seed-19:m0": [
       "vent_witness"
     ],
-    "seed-19:m2": [
-      "vent_witness"
-    ],
     "seed-1:m1": [
       "body_proximity"
     ],
@@ -92,7 +84,7 @@
     "seed-22:m0": [
       "vent_witness"
     ],
-    "seed-22:m3": [
+    "seed-22:m4": [
       "prior_meeting_carry",
       "vent_witness"
     ],
@@ -102,14 +94,14 @@
     "seed-23:m2": [
       "vent_witness"
     ],
+    "seed-24:m0": [
+      "vent_witness"
+    ],
+    "seed-24:m1": [
+      "vent_witness"
+    ],
     "seed-25:m0": [
       "vent_witness"
-    ],
-    "seed-25:m3": [
-      "vent_witness"
-    ],
-    "seed-26:m2": [
-      "body_proximity"
     ],
     "seed-27:m0": [
       "vent_witness"
@@ -118,20 +110,21 @@
       "vent_witness"
     ],
     "seed-28:m3": [
-      "body_proximity",
-      "prior_meeting_carry"
+      "prior_meeting_carry",
+      "vent_witness"
     ],
     "seed-29:m0": [
       "vent_witness"
     ],
-    "seed-29:m2": [
+    "seed-29:m3": [
+      "prior_meeting_carry",
       "vent_witness"
-    ],
-    "seed-30:m1": [
-      "body_proximity"
     ],
     "seed-30:m2": [
       "prior_meeting_carry",
+      "vent_witness"
+    ],
+    "seed-31:m2": [
       "vent_witness"
     ],
     "seed-32:m0": [
@@ -141,7 +134,7 @@
       "vent_witness"
     ],
     "seed-33:m0": [
-      "body_proximity"
+      "vent_witness"
     ],
     "seed-33:m3": [
       "prior_meeting_carry",
@@ -153,18 +146,15 @@
     "seed-34:m1": [
       "vent_witness"
     ],
-    "seed-35:m1": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
     "seed-35:m2": [
       "vent_witness"
     ],
+    "seed-35:m3": [
+      "body_proximity",
+      "prior_meeting_carry"
+    ],
     "seed-36:m2": [
       "vent_witness"
-    ],
-    "seed-38:m0": [
-      "body_proximity"
     ],
     "seed-38:m1": [
       "vent_witness"
@@ -179,13 +169,6 @@
     "seed-3:m1": [
       "body_proximity"
     ],
-    "seed-40:m2": [
-      "vent_witness"
-    ],
-    "seed-40:m3": [
-      "prior_meeting_carry",
-      "vent_witness"
-    ],
     "seed-41:m0": [
       "vent_witness"
     ],
@@ -193,9 +176,9 @@
       "prior_meeting_carry",
       "vent_witness"
     ],
-    "seed-42:m3": [
-      "prior_meeting_carry",
-      "vent_witness"
+    "seed-42:m1": [
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-43:m0": [
       "vent_witness"
@@ -203,38 +186,21 @@
     "seed-43:m1": [
       "vent_witness"
     ],
-    "seed-44:m3": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
     "seed-45:m0": [
       "vent_witness"
     ],
-    "seed-45:m1": [
-      "body_proximity"
+    "seed-45:m2": [
+      "prior_meeting_carry",
+      "vent_witness"
     ],
     "seed-46:m1": [
       "body_proximity"
-    ],
-    "seed-46:m3": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
-    "seed-47:m0": [
-      "body_proximity"
-    ],
-    "seed-47:m1": [
-      "vent_witness"
-    ],
-    "seed-48:m1": [
-      "prior_meeting_carry",
-      "vent_witness"
     ],
     "seed-49:m0": [
       "vent_witness"
     ],
     "seed-49:m1": [
-      "body_proximity"
+      "vent_witness"
     ],
     "seed-5:m0": [
       "vent_witness"
@@ -250,64 +216,58 @@
       "prior_meeting_carry",
       "vent_witness"
     ],
-    "seed-7:m0": [
-      "body_proximity"
-    ],
     "seed-7:m1": [
       "vent_witness"
     ],
     "seed-8:m0": [
       "vent_witness"
     ],
-    "seed-8:m3": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
-    "seed-9:m1": [
-      "body_proximity"
-    ],
     "seed-9:m3": [
+      "prior_meeting_carry",
+      "vent_witness"
+    ],
+    "seed-9:m4": [
       "body_proximity",
       "prior_meeting_carry"
     ]
   },
   "indistinguishability": {
-    "crewmate_actions_total": 7948,
-    "crewmate_do_task": 3666,
-    "crewmate_wait": 1297,
-    "crewmate_wait_share": 0.16318570709612482,
-    "impostor_actions_total": 2349,
-    "impostor_do_task": 388,
-    "impostor_wait": 142,
-    "impostor_wait_share": 0.0604512558535547,
-    "top_idler_wait_share": 0.5451289929584482
+    "crewmate_actions_total": 8320,
+    "crewmate_do_task": 3776,
+    "crewmate_wait": 1416,
+    "crewmate_wait_share": 0.1701923076923077,
+    "impostor_actions_total": 2592,
+    "impostor_do_task": 412,
+    "impostor_wait": 184,
+    "impostor_wait_share": 0.07098765432098765,
+    "top_idler_wait_share": 0.5220729283303128
   },
   "multi_signal_conversion": {
-    "conversions_with_body_proximity": 22,
+    "conversions_with_body_proximity": 9,
     "conversions_with_contradiction_flag": 0,
-    "conversions_with_prior_meeting_carry": 18,
+    "conversions_with_prior_meeting_carry": 17,
     "conversions_with_single_witness_inform": 1,
     "conversions_with_vent_witness": 55,
-    "impostor_ejections": 77,
-    "multi_signal_conversions": 19,
-    "multi_signal_rate": 0.24675324675324675,
-    "single_signal_conversions": 58,
+    "impostor_ejections": 64,
+    "multi_signal_conversions": 18,
+    "multi_signal_rate": 0.28125,
+    "single_signal_conversions": 46,
     "unattributed_conversions": 0
   },
   "sample_dir": "9p2i",
   "supply_gauges": {
-    "accused_impostor_meetings": 118,
-    "flag_subjects_crew": 7,
-    "flag_subjects_impostor": 0,
+    "accused_impostor_meetings": 135,
+    "flag_subjects_crew": 14,
+    "flag_subjects_impostor": 1,
     "genuine_subject_meetings": 1,
-    "genuine_subject_share": 0.00625,
-    "meetings_total": 160,
-    "over_gate_listener_rows": 398,
-    "over_gate_listeners_per_accused_impostor_meeting": 3.3728813559322033,
-    "strong_flags": 1,
-    "total_flags": 7,
-    "weak_flags": 6,
-    "zero_contradiction_meetings": 155,
-    "zero_contradiction_share": 0.96875
+    "genuine_subject_share": 0.00558659217877095,
+    "meetings_total": 179,
+    "over_gate_listener_rows": 411,
+    "over_gate_listeners_per_accused_impostor_meeting": 3.0444444444444443,
+    "strong_flags": 2,
+    "total_flags": 15,
+    "weak_flags": 13,
+    "zero_contradiction_meetings": 167,
+    "zero_contradiction_share": 0.9329608938547486
   }
 }

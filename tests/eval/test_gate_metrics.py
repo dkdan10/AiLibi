@@ -822,17 +822,17 @@ def _load_committed(path: Path) -> TournamentEvalReport:
 def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     """The shipped 9p/2i report carries the recorded gp-7 gate values exactly.
 
-    These pin the baseline-4 Qwen/Qwen3.6-27B (prompt set qwen3_6_27b.v1, all
-    four templates, all six substrate levers ON) re-record and are NOT
+    These pin the baseline-5 Qwen/Qwen3.6-27B (prompt set qwen3_6_27b.v3, all
+    four templates, the substrate levers ON) re-record and are NOT
     immutable — the next re-record regenerates the report and updates these
     pins, the standard re-record pattern.
 
-    Recorded values: genuine-class 0 converted / 0 supplied — on the baseline-4
+    Recorded values: genuine-class 0 converted / 0 supplied — on the baseline-5
     model/set the genuine (interior, non-proxy) impostor-subject flag class has
     ZERO instances (the transcript contradiction channel collapsed), so the
-    PRIMARY gate reads undefined; lost openings 5 against 0 cap-defaulted turns;
-    accused-impostor survival 46/123 with the partition 19 rendered-met + 0
-    sheltered + 27 unevidenced.
+    PRIMARY gate reads undefined; lost openings 0 against 0 cap-defaulted turns;
+    accused-impostor survival 75/139 with the partition 37 rendered-met + 0
+    sheltered + 38 unevidenced.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
@@ -844,28 +844,29 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert genuine.conversion_rate is None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 5
+    assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 123
-    assert gate.accused_impostor_survivals == 46
-    # The 46 accused-impostor survivals partition into rendered-met (voters saw a
+    assert gate.accused_impostor_events == 139
+    assert gate.accused_impostor_survivals == 75
+    # The 75 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
-    # and unevidenced. On the baseline-4 re-record the sheltered class is empty —
+    # and unevidenced. On the baseline-5 re-record the sheltered class is empty —
     # sheltering needs a re-derived transcript flag and that channel collapsed —
-    # so survivors split rendered-met (19) and unevidenced (27), the largest share
+    # so survivors split rendered-met (37) and unevidenced (38), the largest share
     # still unevidenced.
-    assert gate.survivals_rendered_met == 19
+    assert gate.survivals_rendered_met == 37
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 27
+    assert gate.survivals_unevidenced == 38
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply, the lost openings, and the sheltered survivals sit
     # exactly where documented above. The per-seed fold confirms each aggregate
-    # is the sum of its per-seed parts, not a masked cancellation. On baseline-4
-    # the genuine-class-supply and sheltered folds are EMPTY (both aggregates read
-    # 0 — the transcript contradiction channel collapsed), so the fold proves the
-    # zeros are a genuine absence across every seed, not a single-seed masking.
+    # is the sum of its per-seed parts, not a masked cancellation. On baseline-5
+    # the genuine-class-supply, lost-opening, and sheltered folds are all EMPTY
+    # (every aggregate reads 0 — the transcript contradiction channel collapsed),
+    # so the fold proves the zeros are a genuine absence across every seed, not a
+    # single-seed masking.
     supplied_seeds = {
         game.seed
         for game in report.report.games
@@ -883,7 +884,7 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         for game in report.report.games
         if compute_gate_metrics((game,)).lost_opening_accusations > 0
     }
-    assert lost_opening_seeds == {21, 22, 28, 36, 40}
+    assert lost_opening_seeds == set()
     sheltered_seeds = {
         game.seed
         for game in report.report.games
@@ -904,15 +905,15 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
 
 def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
-    """The flat 4p/1i set's gate block, pinned at the baseline-4 Qwen/Qwen3.6-27B
-    (prompt set qwen3_6_27b.v1, all four templates, all six substrate levers ON)
+    """The flat 4p/1i set's gate block, pinned at the baseline-5 Qwen/Qwen3.6-27B
+    (prompt set qwen3_6_27b.v3, all four templates, the substrate levers ON)
     re-record.
 
     NOT immutable — the next re-record regenerates and updates these. On the
-    baseline-4 model/set the genuine (interior, non-proxy) impostor-subject flag
+    baseline-5 model/set the genuine (interior, non-proxy) impostor-subject flag
     class has ZERO instances, so the set supplies 0 genuine-class flags and
-    converts 0 (rate undefined), loses 6 openings and defaults 0 turns, and its 12
-    accused-impostor survivals split 2 rendered-met / 0 sheltered / 10 unevidenced.
+    converts 0 (rate undefined), loses 0 openings and defaults 0 turns, and its 19
+    accused-impostor survivals split 3 rendered-met / 0 sheltered / 16 unevidenced.
     """
 
     report = _load_committed(_COMMITTED_FLAT_REPORT)
@@ -924,11 +925,11 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert genuine.conversion_rate is None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 6
+    assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
     assert gate.accused_impostor_events == 29
-    assert gate.accused_impostor_survivals == 12
-    assert gate.survivals_rendered_met == 2
+    assert gate.accused_impostor_survivals == 19
+    assert gate.survivals_rendered_met == 3
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 10
+    assert gate.survivals_unevidenced == 16
