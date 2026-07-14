@@ -1,8 +1,15 @@
 # Phase 17 — Co-adaptation: re-ground, re-run, re-select on baseline 5
 
-STATUS: OPEN (authored 2026-07-14). Baseline 5 is canonical (`Qwen/Qwen3.6-27B`,
-`qwen3_6_27b` v3, nine always-on levers, `absence_prior` the sole live toggle —
-`audits/audit-phase-16-close.md`). Phase 17 is the roadmap's co-adaptation phase
+STATUS: OPEN (authored 2026-07-14) — ABSENCE GATE: STAY-OFF (owner, 2026-07-14,
+`audits/audit-phase-17-absence-gate.md` §7; sign-off rides the 17.7 PR merge — the 15.18
+convention). The 17.7 gate is decided: `absence_prior` STAYS OFF (the ratified bar —
+new-over-gate ≤ 0.20 at crew roll-call coverage ≥ 0.60 — fails both clauses at 53/179 = 0.296
+and 0.4624), the PR #264 vent widening HOLDS (the flag stays inert; both travel to Phase 18 as
+one package under the ratified routing note), and the corpus re-record (17.9) is unblocked at
+the baseline-5 meeting layer. The GO-only adopting-record task was REMOVED by the gate's
+surgery (the 16.2 discipline); its drop record sits in Wave 1. Baseline 5 is canonical
+(`Qwen/Qwen3.6-27B`, `qwen3_6_27b` v3, nine always-on levers, `absence_prior` the sole
+live toggle — `audits/audit-phase-16-close.md`). Phase 17 is the roadmap's co-adaptation phase
 (`tasks/post-phase-14-plan.md` owner goal 3): everything trained or selected before the
 Phase-16 close is PRIOR-SUBSTRATE-ANCHORED (the close §8 staleness rule), so this phase
 re-grounds the calibration corpus and the ballot surrogate on baseline-5 meetings, re-runs
@@ -50,7 +57,8 @@ same gates with the 16.11 population-relative referee as the selection bar.
   whereabouts-lies) and keeps the old alibi-class cell as a reported column. The
   alternative — relaxing the detector's endpoint band so roll-call lies mint interior
   flags — is a RECORD-TIME substrate change (one-layer-per-baseline) and is routed to
-  the absence gate's record (GO path) or Phase 18, never done inside an instrument task.
+  the absence gate's record (GO path) or Phase 18, never done inside an instrument task
+  (the gate ruled STAY-OFF, so: Phase 18).
 - **Coerced SKIPs are a by-design bucket, not inversions** (17.2): the conversion
   report's SKIP partition learns `UNCITED_ZERO_FLAG_EJECT_MARKER` as a new by-design
   sub-bucket (the invalid-target/teammate precedent) — never a missed skip, never a
@@ -72,8 +80,9 @@ same gates with the 16.11 population-relative referee as the selection bar.
   absent-set derivation behind an `include_vent_sightings` flag — stated-path
   contradiction detection reads exactly what it read before (byte-preserving). Feeding
   vent placements into the physical-contradiction detector is a flag-minting substrate
-  move, routed with the detector-band option above. Whether the widening SHIPS is the
-  17.7 gate's ruling (the close routes the two decisions together).
+  move, routed with the detector-band option above. Whether the widening SHIPS was the
+  17.7 gate's ruling (the close routes the two decisions together) — ruled HOLD (owner,
+  2026-07-14, the gate audit's Ruling 2).
 - **The staleness cap re-derives** (17.10): `max-uses.json` was ~143× the 349
   baseline-3 fit-side meetings; the re-fit re-derives the cap from the baseline-5
   fit-side count under the same rule, not held at 50000 by habit.
@@ -94,10 +103,10 @@ Wave 0 (all roots, dispatch in parallel):
   17.6 (genuine-class re-anchor)
 
 Wave 1 (the gate):
-  (17.4, 17.5) -> 17.7 THE ABSENCE GATE [OWNER] -> [GO only] 17.8 adopting record [OPERATOR]
+  (17.4, 17.5) -> 17.7 THE ABSENCE GATE [OWNER] (RULED: STAY-OFF, 2026-07-14)
 
 Wave 2 (re-grounding, the critical path):
-  (17.2, 17.7[, 17.8]) -> 17.9 corpus re-record [OPERATOR ~14-15h]
+  (17.2, 17.7) -> 17.9 corpus re-record [OPERATOR ~14-15h]
   17.9 -> 17.10 surrogate re-ground + re-verdict
   17.9 -> 17.11 selection-bar re-pins
 
@@ -115,43 +124,35 @@ Wave 4 (adoption + close):
 Critical path: 17.5 → 17.7 → 17.9 → 17.10 → 17.12 → 17.14 → 17.16 → 17.17. Wave 0 is
 six independent roots; nothing outside the gate chain waits on the owner.
 
-**Baseline numbering.** Contracts below are written on the gate's STAY-OFF path: the
-mover record at 17.17 is **baseline 6**. Under a GO ruling, 17.7's surgery performs
-FOUR enumerated steps: (1) 17.8 stays, its record becomes baseline 6 (the meeting-layer
-adoption); (2) **17.8 is inserted into 17.9's `Depends on:` line** — the parsed graph
-(not the diagram below) is what `compute_next_task.py` reads, and rule 2 requires the
-corpus to wait for the adopting record; (3) the mover record renumbers to baseline 7,
-re-pointing EVERY downstream substrate/floor reference at the 17.8-pinned baseline —
-17.11/17.12/17.17's floors, 17.10's fit-side substrate language (the max-uses count and
-the substrate-specific validations derive from the corpus actually recorded, i.e. the
-17.8 baseline), and 17.16's locked-decision-2 referee reading (the selection floors are
-the ladder tip at selection time); (4) 17.17's
-BEFORE-column artifact renames `baseline5-final-measure.json` →
-`baseline6-final-measure.json` and its capture re-points to the 17.8 substrate (the
-before column is always the ladder tip the record replaces). Under STAY-OFF the surgery
-REMOVES 17.8's contract and prompt (`scripts/compute_next_task.py` has no dropped
-state — the 16.2 precedent) and SCRUBS the GO-conditional 17.8 clauses from 17.9's DoD
-and 17.11's body — dependencies and scopes stay untouched, but no orphan 17.8 reference
-survives. Both directions are one bounded rewrite, validator-green.
+**Baseline numbering.** Contracts below are written on the gate's STAY-OFF path — and
+the gate RULED STAY-OFF (owner, 2026-07-14, `audits/audit-phase-17-absence-gate.md` §7),
+so this numbering is final: the mover record at 17.17 is **baseline 6**, its BEFORE
+column is `baseline5-final-measure.json`, and the corpus (17.9) records at the
+baseline-5 meeting layer. The GO-only surgery this block formerly enumerated (an
+adopting-record task kept between the gate and the corpus, its edge inserted into 17.9's
+`Depends on:` line, a 6 → 7 mover renumber across 17.11/17.12/17.17, and a
+BEFORE-column rename) was NOT performed — the rejected path's rationale is §6–§7 of the
+gate audit (the 16.2 GO-banner convention, inverted). The STAY-OFF surgery WAS performed
+by the 17.7 PR: the adopting-record contract and its prompt are removed with a drop
+record in Wave 1, and the GO-conditional clauses in 17.9/17.10/17.11/17.16 are
+scrubbed — dependencies and scopes otherwise untouched, validator-green.
 
 **Collision discipline.** `training/bakeoff/harness.py` is touched by 17.11 (constants)
 then 17.12 (protocol run) — serialized by the dep edge. `tests/agents/test_absence_prior.py`
-is touched by 17.5 (counterfactual) then 17.8 (GO re-pins) — serialized by the gate
-chain. `meetings/transcript.py` is touched by 17.5 (the inert flag) then 17.8 (GO, only
-if the widening ships) — the same serialization. `eval/funnel.py` single-toucher 17.4;
-`eval/meeting_quality.py` 17.2; `eval/vj_instruments.py` 17.1; `eval/vote_correctness.py`
-17.6; `api/` + frontend 17.3 — Wave 0 is pairwise disjoint. `agents/tactical/learned/`
-is touched only by 17.16. `meetings/manager.py` is touched only by 17.8 (GO+widening —
-the absent-set derivation call sites). `eval/watchability.py`: 17.11 touches ONLY the :794-798 lag
-note; the floor BLOCKS are touched by 17.8 (GO only) then 17.17 — serialized by the
-GO-surgery edge (17.8 → 17.9 → … → 17.17).
+and `meetings/transcript.py` are single-toucher 17.5 (the STAY-OFF ruling removed the
+adopting record's GO re-pins and the widening's always-on flip). `eval/funnel.py`
+single-toucher 17.4; `eval/meeting_quality.py` 17.2; `eval/vj_instruments.py` 17.1;
+`eval/vote_correctness.py` 17.6; `api/` + frontend 17.3 — Wave 0 is pairwise disjoint.
+`agents/tactical/learned/` is touched only by 17.16. `meetings/manager.py` is untouched
+this phase (the widening HOLDS). `eval/watchability.py`: 17.11 touches ONLY the :794-798
+lag note; the floor BLOCKS are touched only by 17.17.
 
-**Operator/owner gates.** Operator sessions: 17.8 (GO only, ~5h), 17.9 (~14–15h — the
+**Operator/owner gates.** Operator sessions: 17.9 (~14–15h — the
 long pole; plan it like the 15.12 session, with the 16.14/16.17 concurrency notes:
 staggered workers, jittered backoff, `AILIBI_SEED_MAX_ATTEMPTS=8`), 17.12 (compute),
 17.14 (real-LLM eval), 17.17 (~5h). Owner gates: **17.7** (the absence ruling + the
-vent-widening ruling) and **17.16/17.17** (the default-flip evidence reading + the
-close).
+vent-widening ruling — RULED: STAY-OFF + HOLD, 2026-07-14) and **17.16/17.17** (the
+default-flip evidence reading + the close).
 
 ---
 
@@ -462,64 +463,20 @@ absent set.
 
 **Ready-to-paste prompt:** `agent_prompts/task-17-7-absence-gate.md`
 
-### Task 17.8 — [GATE-GO ONLY] The absence adopting record (its own meeting-layer baseline)
-**Branch:** `phase-17-absence-adopting-record`
-**Depends on:** 17.7
-**Section refs:** audits/audit-phase-17-absence-gate.md (the GO ruling + whether the vent widening ships with it); tasks/phase-16.md 16.17 (the graduate-at-record runbook: resolver constant-true, registry → retired, floors re-pin, Q5 tag); audits/audit-phase-16-close.md §0.5 (the operator concurrency notes)
-**Complexity:** Integration
-
-GO path only — under STAY-OFF this contract is removed by 17.7's surgery. Graduate the
-absence prior exactly as 16.17 graduated its slate: `absence_prior_enabled` constant-true
-with the env override removed, the registry entry moves to the retired list, and — if
-the gate shipped it — the vent widening's flag flips to the always-on path at the same
-record (ONE meeting-layer change: the absence package). Atomic re-record of both sample
-sets (baseline 6), MANIFEST provenance exact, validity gates, byte-identical bare
-reconstruction, floors re-pinned in `eval/watchability.py` under the 16.11 definition,
-Q5 annotated tag (owner completes the push if the credential refuses), before/after on
-16.10's instruments, close-style audit section appended to the gate memo.
-
-**Files in scope:**
-- agents/memory/beliefs.py (resolver graduation + the widening consumer if shipped)
-- orchestrator/replay.py (registry → retired)
-- meetings/transcript.py (the widening flag's always-on flip — only if the gate shipped it)
-- meetings/manager.py (the absent-set derivation call sites — the pre-vote re-derivation region — thread the manager's `vent_witness_records` grounding into `absent_players` so the shipped widening is live in production meetings, not just the eval path; only if the gate shipped the widening)
-- replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
-- eval/watchability.py (baseline-6 floors)
-- audits/audit-phase-17-absence-gate.md (the record section)
-- tests/ (graduation re-pins + the byte-coupled sweep)
-- .env.example (the lever block retires)
-
-**Files NOT in scope:**
-- replays/ml_corpus/ (17.9 records AFTER this — the sequencing the gate exists for)
-- training/ (nothing trains until the corpus lands)
-
-**Definition of done:**
-- [ ] Both sets re-recorded at the graduated substrate and PASS `scripts/validity_gate.py --expected-model Qwen/Qwen3.6-27B --require-zero-cost`; byte-identical bare reconstruction; MANIFEST rows stamp the new flag set exactly.
-- [ ] The graduated lever is unconditional (no env read survives), the registry's live-toggle set is empty again, and the prompt-byte golden is green on the new bytes.
-- [ ] Baseline-6 floors pinned from the committed bytes under the 16.11 definition; the before/after instrument read (16.10's report) is committed in the audit with the absent-set shrinkage vs the gate memo's prediction quoted.
-- [ ] `uv run mypy .` passes.
-- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
-- [ ] `uv run lint-imports` passes.
-- [ ] `uv run python scripts/generate_prompts.py --check` passes.
-- [ ] `uv run python scripts/validate_task_docs.py` passes.
-- [ ] `uv run pytest` passes.
-- [ ] `bash scripts/check.sh` passes locally.
-
-**Implementation hint:**
-
-Clone the 16.17 graduation commit shape exactly (resolver → registry → record → floors →
-audit); the only novelty is the optional widening flip, which follows the same
-constant-true pattern on its flag. Preflight the golden + bare verify BEFORE any spend.
-
-**Integration risk:**
-
-This is a meeting-layer record between the gate and the corpus run — if it slips, the
-corpus (17.9) waits; never let them interleave (rule 1). The 16.14/16.17 concurrency
-notes apply verbatim (staggered workers, jittered backoff, attempts ≥8). The widening,
-if shipped, changes the absent set the record's own instruments measure — the audit
-must report the realized shrinkage against 17.5's counterfactual prediction.
-
-**Ready-to-paste prompt:** `agent_prompts/task-17-8-absence-adopting-record.md`
+**Dropped — Task 17.8, the [GATE-GO ONLY] absence adopting record.** Removed by the
+17.7 STAY-OFF ruling (owner, 2026-07-14, `audits/audit-phase-17-absence-gate.md` §7–§8),
+per the 16.2 surgery discipline: removal, not labeling — `scripts/compute_next_task.py`
+computes dispatchability from `### Task` headers and has no dropped state, so a
+surviving header would surface forever as dispatchable. The task would have graduated
+`absence_prior` at its own meeting-layer baseline (the 16.17 runbook) and optionally
+shipped the vent widening with it; the gate audit's ratified bar failed both clauses
+(new-over-gate 53/179 = 0.296 > 0.20; crew roll-call coverage 0.4624 < 0.60), so NO
+adopting record exists this phase and the corpus records at the baseline-5 meeting
+layer. Its generated prompt is deleted; graduation re-enters at Phase 18 through the
+audit's Ruling-3 routing note and must pass the same bar there. The lever and widening
+MECHANISMS stay in the tree, tested and inert (`agents/memory/beliefs.py`'s
+`absence_prior` resolver; `meetings/transcript.py`'s `include_vent_sightings` flag) —
+the surgery removed a contract, never code.
 
 ## Wave 2 — re-grounding (the critical path)
 
@@ -554,7 +511,7 @@ operative again from this record).
 - training/ (17.10 consumes; this task records)
 
 **Definition of done:**
-- [ ] Both corpus sets recorded at the final meeting layer and PASS the validity gate (`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`); byte-identical reconstruction; MANIFEST provenance exact (model, v3 versions — or the 17.8 substrate under GO — flags, git_sha, $0); splits.json regenerated under the same rule with the eval/train/val partition non-degenerate.
+- [ ] Both corpus sets recorded at the final meeting layer and PASS the validity gate (`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`); byte-identical reconstruction; MANIFEST provenance exact (model, v3 versions, flags, git_sha, $0); splits.json regenerated under the same rule with the eval/train/val partition non-degenerate.
 - [ ] The recorder asserts the graduated-lever slate POSITIVELY in recorded bytes (the `substrate_flag_snapshot` stamp checked, not just env refusal), fixture-pinned.
 - [ ] The corpus README agrees with the script on every operative line (model, set, versions, env, duration), and the Q3 restoration is stated in both the README and the PR.
 - [ ] The conversion report (17.2's partition) over the new corpus is quoted in the PR — the coerced-SKIP bucket populated, inversions honest.
@@ -593,7 +550,7 @@ re-pin ONLY what this record moves, in this PR, so the suite is green at merge (
 Rebuild the meeting table on the new corpus, re-fit the predictor, re-measure the
 owner-ratified three-axis GO/NO-GO, re-commit the artifact bundle (weights + sha
 sidecar + a max-uses cap RE-DERIVED from the recorded corpus's fit-side meeting count under
-the ~143× rule — baseline 5, or the 17.8 baseline under the gate's GO), and regenerate the report end-to-end — every baseline-3 anchor
+the ~143× rule — baseline 5), and regenerate the report end-to-end — every baseline-3 anchor
 (honest ceiling, FO-6 re-baseline, always-eject constant 0.802) re-measured, never
 copied. Three baseline-5-specific validations are load-bearing: (1) coerced-SKIP rows
 are EXCLUDED from the fit and counted in the report (designer ruling — forced ejects
@@ -653,8 +610,8 @@ walk precedent: measure fidelity, don't assume it) before any fit is trusted.
 **Complexity:** Small
 
 Flip the training-side selection anchors to the close-era floors: `BAKEOFF_BASELINE_ID`
-→ `"baseline-5"` (or the 17.8 baseline under the gate's GO — 17.7's surgery pins the
-literal), the goodhart default with it, and re-measure `GOODHART_9P2I_BASELINE`'s
+→ `"baseline-5"` (the literal pinned by the 17.7 STAY-OFF ruling), the goodhart
+default with it, and re-measure `GOODHART_9P2I_BASELINE`'s
 fake-provider probe numbers at the current tree ($0, offline). `CORPUS_SPLITS_PATH`
 stays put — 17.9 regenerated its file in place. Re-pin the training tests that read
 these constants. After this task, every candidate the harness scores is judged against
@@ -668,7 +625,7 @@ the floors the phase selects on.
 - tests/training/test_bakeoff_harness.py + test_goodhart_probe.py (constant + probe re-pins)
 
 **Files NOT in scope:**
-- eval/watchability.py floor blocks (floors are pinned by records — 17.8 [GO] and 17.17 — never by this task; only the :794-798 note region above is in scope)
+- eval/watchability.py floor blocks (floors are pinned by records — 17.17 — never by this task; only the :794-798 note region above is in scope)
 - training/surrogate/ (17.10)
 
 **Definition of done:**
@@ -881,8 +838,8 @@ prices this); say the implication, don't re-plan the bake-off.
 **Complexity:** Integration
 
 Read 17.14's evidence against locked decision 2 and act on the ruled branch — the
-referee floors are the ladder tip's at selection time (baseline 5, or the 17.8 baseline
-under the gate's GO; 17.7's surgery pins the literal). PASS
+referee floors are the ladder tip's at selection time (baseline 5 — the literal pinned
+by the 17.7 STAY-OFF ruling). PASS
 (referee floors + conversion + retained win edge): swap the committed champion artifact
 to the winning finalist (weights + sha + config + stamp constants), then flip the
 DEFAULT mover — the scripted-default factory yields to the learned factory at the

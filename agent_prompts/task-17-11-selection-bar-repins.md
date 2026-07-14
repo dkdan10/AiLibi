@@ -17,8 +17,8 @@ The authoritative task contract is copied below from tasks/phase-17.md. Follow i
 **Complexity:** Small
 
 Flip the training-side selection anchors to the close-era floors: `BAKEOFF_BASELINE_ID`
-→ `"baseline-5"` (or the 17.8 baseline under the gate's GO — 17.7's surgery pins the
-literal), the goodhart default with it, and re-measure `GOODHART_9P2I_BASELINE`'s
+→ `"baseline-5"` (the literal pinned by the 17.7 STAY-OFF ruling), the goodhart
+default with it, and re-measure `GOODHART_9P2I_BASELINE`'s
 fake-provider probe numbers at the current tree ($0, offline). `CORPUS_SPLITS_PATH`
 stays put — 17.9 regenerated its file in place. Re-pin the training tests that read
 these constants. After this task, every candidate the harness scores is judged against
@@ -32,7 +32,7 @@ the floors the phase selects on.
 - tests/training/test_bakeoff_harness.py + test_goodhart_probe.py (constant + probe re-pins)
 
 **Files NOT in scope:**
-- eval/watchability.py floor blocks (floors are pinned by records — 17.8 [GO] and 17.17 — never by this task; only the :794-798 note region above is in scope)
+- eval/watchability.py floor blocks (floors are pinned by records — 17.17 — never by this task; only the :794-798 note region above is in scope)
 - training/surrogate/ (17.10)
 
 **Definition of done:**

@@ -41,7 +41,7 @@ operative again from this record).
 - training/ (17.10 consumes; this task records)
 
 **Definition of done:**
-- [ ] Both corpus sets recorded at the final meeting layer and PASS the validity gate (`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`); byte-identical reconstruction; MANIFEST provenance exact (model, v3 versions — or the 17.8 substrate under GO — flags, git_sha, $0); splits.json regenerated under the same rule with the eval/train/val partition non-degenerate.
+- [ ] Both corpus sets recorded at the final meeting layer and PASS the validity gate (`--expected-model Qwen/Qwen3.6-27B --require-zero-cost`); byte-identical reconstruction; MANIFEST provenance exact (model, v3 versions, flags, git_sha, $0); splits.json regenerated under the same rule with the eval/train/val partition non-degenerate.
 - [ ] The recorder asserts the graduated-lever slate POSITIVELY in recorded bytes (the `substrate_flag_snapshot` stamp checked, not just env refusal), fixture-pinned.
 - [ ] The corpus README agrees with the script on every operative line (model, set, versions, env, duration), and the Q3 restoration is stated in both the README and the PR.
 - [ ] The conversion report (17.2's partition) over the new corpus is quoted in the PR — the coerced-SKIP bucket populated, inversions honest.
