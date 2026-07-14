@@ -154,6 +154,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
+    TurnKind,
     VoteBallot,
     WhereaboutsClaim,
 )
@@ -1488,6 +1489,82 @@ def _whereabouts_lies_detected(meeting: _VJMeeting) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Task 17.4 roll-call uptake breakdown (per-role / per-surface / answered-asked)#
+#                                                                              #
+# These helpers DECOMPOSE the roll-call aggregate the folds above already      #
+# report — they move no committed cell (the 0.363 / 0.573 coverage means are   #
+# baseline-5 findings, audits/audit-phase-16-close.md §6) but answer WHY the   #
+# coverage sits where it does: whether the ~⅓ answer rate is uniform silence   #
+# or STRUCTURED refusal. The impostor prompt templates instruct impostors to   #
+# explain nothing about their own whereabouts, so the crew-vs-impostor split   #
+# is the calibration signal the §0.1.4 absence-prior re-measure needs (a lever #
+# that removes roll-call answerers from the absent set must know whether a     #
+# non-answerer is crew going quiet or an impostor refusing by design); and the #
+# living − asked gap separates never-took-the-mic from the asked − answered    #
+# structured refusal (every speaking turn carries the 16.15 roll-call ask).    #
+# --------------------------------------------------------------------------- #
+
+
+def _living_speakers(meeting: _VJMeeting) -> frozenset[PlayerId]:
+    """Living players who took at least one turn — the roll-call ASKED set.
+
+    Every speaking turn carries the Task 16.15 roll-call ask, so taking a turn
+    IS being asked; the answered set (:func:`_roll_call_placed`) is a subset of
+    this one (self-placing requires speaking). The ``living − asked`` gap is the
+    never-took-the-mic share, kept distinct from the ``asked − answered``
+    structured-refusal share (audits/audit-phase-16-close.md §6).
+    """
+
+    return frozenset(
+        turn.speaker
+        for turn in meeting.transcript.turns
+        if turn.speaker in meeting.living
+    )
+
+
+def _whereabouts_claims_by_surface(meeting: _VJMeeting) -> dict[TurnKind, int]:
+    """Living speakers' whereabouts claims partitioned by the carrying turn kind.
+
+    Uses the SAME living-speaker filter and per-observation count as
+    :func:`_whereabouts_claim_event_ids` (a speaker with two claims contributes
+    two), so the three surface cells sum to ``whereabouts_claims``. Surfaces are
+    the DESIGN.md §5.2 :data:`~meetings.schemas.TurnKind` roles — ``opening``
+    (the reporter / emergency caller), ``reply`` (the reactive accusation chain)
+    and ``opt_in`` (the terminal info-share volunteer).
+    """
+
+    counts: dict[TurnKind, int] = {"opening": 0, "reply": 0, "opt_in": 0}
+    for turn in meeting.transcript.turns:
+        if turn.speaker not in meeting.living:
+            continue
+        for obs in turn.observations:
+            if isinstance(obs, WhereaboutsClaim):
+                counts[turn.turn_kind] += 1
+    return counts
+
+
+def _partition_living_by_role(
+    players: frozenset[PlayerId], *, roles: Mapping[PlayerId, Role]
+) -> tuple[int, int]:
+    """Count ``(crew, impostor)`` over ``players`` against a VALIDATED role map.
+
+    The caller (:func:`_pooling_row`) fails loud on any living player missing
+    from ``roles`` before reaching here, so the lookup is total. Callers pass a
+    subset of the living set (the living roster itself, or the self-placed set),
+    so both partitions are exact decompositions of their aggregate.
+    """
+
+    crew = 0
+    impostor = 0
+    for pid in players:
+        if roles[pid] == "IMPOSTOR":
+            impostor += 1
+        else:
+            crew += 1
+    return crew, impostor
+
+
+# --------------------------------------------------------------------------- #
 # Pooling report types (public, stable)                                       #
 # --------------------------------------------------------------------------- #
 
@@ -1498,6 +1575,28 @@ class MeetingPoolingRow(BaseModel):
     Rates are shares of ``living`` (the meeting's living-player count, always
     positive). ``absence_set`` exposes the raw unplaced roster so any variant
     definition can be re-derived from the rows without another walk.
+
+    The Task 17.4 roll-call uptake breakdown (the ``living_*`` / ``roll_call_*``
+    / ``whereabouts_claims_{opening,reply,opt_in}`` cells) is ADDITIVE — it
+    decomposes the aggregate roll-call cells above, never moves them
+    (audits/audit-phase-16-close.md §6). Its identities hold on every row:
+
+    * ``living_crew + living_impostor == living``;
+    * ``roll_call_placed_crew + roll_call_placed_impostor == roll_call_placed``;
+    * ``whereabouts_claims_opening + _reply + _opt_in == whereabouts_claims``;
+    * ``roll_call_answered == roll_call_placed`` (self-placing IS answering) and
+      ``roll_call_answered <= roll_call_asked <= living`` (answering requires
+      speaking; being asked requires taking a turn; not everyone speaks).
+
+    ``roll_call_coverage_{crew,impostor}`` is the per-role placed / per-role
+    living share, ``None`` (undefined, never ``0.0`` — the report's
+    None-means-undefined convention) exactly when that role has zero living
+    members. The crew-vs-impostor split is the §0.1.4 calibration signal:
+    impostor prompt templates instruct impostors to explain nothing about their
+    own whereabouts, so it reads whether the roll-call silence is structured
+    refusal. ``roll_call_asked`` (living players who took ≥1 turn) minus
+    ``roll_call_answered`` isolates that asked-but-refused share from the
+    ``living − roll_call_asked`` never-took-the-mic share.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1519,6 +1618,19 @@ class MeetingPoolingRow(BaseModel):
     absence_set: tuple[PlayerId, ...]
     absence_set_size: int
     whereabouts_lies_detected: int
+    # -- Task 17.4 roll-call uptake breakdown (additive; decomposes the
+    #    roll-call cells above, moves none of them) --
+    living_crew: int
+    living_impostor: int
+    roll_call_placed_crew: int
+    roll_call_placed_impostor: int
+    roll_call_coverage_crew: float | None
+    roll_call_coverage_impostor: float | None
+    whereabouts_claims_opening: int
+    whereabouts_claims_reply: int
+    whereabouts_claims_opt_in: int
+    roll_call_asked: int
+    roll_call_answered: int
 
 
 class PoolingFunnelReport(BaseModel):
@@ -1533,6 +1645,19 @@ class PoolingFunnelReport(BaseModel):
     ``absence_set_size_histogram`` maps set size to meeting count. Emitted
     inside :class:`eval.vj_instruments.VJInstrumentReport` (the ``pooling``
     field of the ``--vj`` report; JSON shape documented there).
+
+    The Task 17.4 roll-call uptake breakdown adds the ADDITIVE aggregate cells
+    that decompose ``roll_call_coverage_mean`` — none of the pre-existing cells
+    move (audits/audit-phase-16-close.md §6). ``roll_call_placed_{crew,
+    impostor}_total`` and the surface totals are plain row sums.
+    ``roll_call_coverage_{crew,impostor}_mean`` is ``statistics.fmean`` over the
+    rows where that role's coverage is DEFINED (not ``None`` — i.e. the role had
+    living members), and ``None`` when no row defines it (the same
+    None-means-undefined convention as the means above). ``roll_call_answer_rate``
+    is ``roll_call_answered_total / roll_call_asked_total`` — the set-wide share
+    of asked players who answered — ``None`` when the denominator is zero. The
+    per-role coverage split is the §0.1.4 absence-prior re-measure's calibration
+    input (whether the roll-call silence is impostor structured refusal).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1555,20 +1680,51 @@ class PoolingFunnelReport(BaseModel):
     absence_set_size_histogram: Mapping[int, int]
     whereabouts_lies_detected: int
     whereabouts_lie_detection_rate: float | None
+    # -- Task 17.4 roll-call uptake breakdown (additive; decomposes
+    #    roll_call_coverage_mean, moves no cell above) --
+    roll_call_placed_crew_total: int
+    roll_call_placed_impostor_total: int
+    roll_call_coverage_crew_mean: float | None
+    roll_call_coverage_impostor_mean: float | None
+    whereabouts_claims_opening_total: int
+    whereabouts_claims_reply_total: int
+    whereabouts_claims_opt_in_total: int
+    roll_call_asked_total: int
+    roll_call_answered_total: int
+    roll_call_answer_rate: float | None
     per_meeting: tuple[MeetingPoolingRow, ...]
 
 
-def _pooling_row(meeting: _VJMeeting) -> MeetingPoolingRow:
+def _pooling_row(
+    meeting: _VJMeeting, *, roles: Mapping[PlayerId, Role]
+) -> MeetingPoolingRow:
     living = len(meeting.living)
     if living <= 0:
         raise FunnelReconstructionError(
             f"meeting {meeting.meeting_id!r} reconstructed an empty living set"
+        )
+    unroled = sorted(pid for pid in meeting.living if pid not in roles)
+    if unroled:
+        # The per-role breakdown must attribute every living player; a missing
+        # role would silently under-count one partition (AGENTS.md: no silent
+        # fallbacks).
+        raise FunnelReconstructionError(
+            f"meeting {meeting.meeting_id!r} has living player(s) {unroled} "
+            "absent from the role map — the Task 17.4 per-role roll-call "
+            "breakdown cannot attribute their uptake"
         )
     placed = _roll_call_placed(meeting)
     claims = _whereabouts_claim_event_ids(meeting)
     vouch_observations, vouched = _vouch_census(meeting)
     grounded = _grounded_vouch_set(meeting)
     absence = _absence_set(meeting)
+    living_crew, living_impostor = _partition_living_by_role(
+        meeting.living, roles=roles
+    )
+    placed_crew, placed_impostor = _partition_living_by_role(placed, roles=roles)
+    surface = _whereabouts_claims_by_surface(meeting)
+    asked = len(_living_speakers(meeting))
+    answered = len(placed)
     return MeetingPoolingRow(
         seed=meeting.seed,
         meeting_id=meeting.meeting_id,
@@ -1587,6 +1743,19 @@ def _pooling_row(meeting: _VJMeeting) -> MeetingPoolingRow:
         absence_set=absence,
         absence_set_size=len(absence),
         whereabouts_lies_detected=_whereabouts_lies_detected(meeting),
+        living_crew=living_crew,
+        living_impostor=living_impostor,
+        roll_call_placed_crew=placed_crew,
+        roll_call_placed_impostor=placed_impostor,
+        roll_call_coverage_crew=(placed_crew / living_crew if living_crew else None),
+        roll_call_coverage_impostor=(
+            placed_impostor / living_impostor if living_impostor else None
+        ),
+        whereabouts_claims_opening=surface["opening"],
+        whereabouts_claims_reply=surface["reply"],
+        whereabouts_claims_opt_in=surface["opt_in"],
+        roll_call_asked=asked,
+        roll_call_answered=answered,
     )
 
 
@@ -1605,7 +1774,11 @@ def _pooling_report_from_walks(
     embeds the pooling census off ONE walk of the set.
     """
 
-    rows = [_pooling_row(meeting) for walk in walks for meeting in walk.meetings]
+    rows = [
+        _pooling_row(meeting, roles=walk.roles)
+        for walk in walks
+        for meeting in walk.meetings
+    ]
     sizes = [row.absence_set_size for row in rows]
     histogram: dict[int, int] = {}
     for size in sizes:
@@ -1614,6 +1787,16 @@ def _pooling_report_from_walks(
     lies_total = sum(row.whereabouts_lies_detected for row in rows)
     vouched_total = sum(row.vouched_subjects for row in rows)
     grounded_total = sum(row.grounded_vouch_subjects for row in rows)
+    # Task 17.4 per-role coverage means fold over the rows where that role's
+    # coverage is DEFINED (not None — the role had living members that meeting).
+    crew_coverages = [
+        c for c in (row.roll_call_coverage_crew for row in rows) if c is not None
+    ]
+    impostor_coverages = [
+        c for c in (row.roll_call_coverage_impostor for row in rows) if c is not None
+    ]
+    asked_total = sum(row.roll_call_asked for row in rows)
+    answered_total = sum(row.roll_call_answered for row in rows)
     return PoolingFunnelReport(
         replay_set_dir=str(sample_dir),
         num_players=num_players,
@@ -1645,6 +1828,28 @@ def _pooling_report_from_walks(
         whereabouts_lie_detection_rate=(
             lies_total / claims_total if claims_total else None
         ),
+        roll_call_placed_crew_total=sum(row.roll_call_placed_crew for row in rows),
+        roll_call_placed_impostor_total=sum(
+            row.roll_call_placed_impostor for row in rows
+        ),
+        roll_call_coverage_crew_mean=(
+            statistics.fmean(crew_coverages) if crew_coverages else None
+        ),
+        roll_call_coverage_impostor_mean=(
+            statistics.fmean(impostor_coverages) if impostor_coverages else None
+        ),
+        whereabouts_claims_opening_total=sum(
+            row.whereabouts_claims_opening for row in rows
+        ),
+        whereabouts_claims_reply_total=sum(
+            row.whereabouts_claims_reply for row in rows
+        ),
+        whereabouts_claims_opt_in_total=sum(
+            row.whereabouts_claims_opt_in for row in rows
+        ),
+        roll_call_asked_total=asked_total,
+        roll_call_answered_total=answered_total,
+        roll_call_answer_rate=(answered_total / asked_total if asked_total else None),
         per_meeting=tuple(rows),
     )
 
