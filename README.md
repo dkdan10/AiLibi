@@ -45,7 +45,7 @@ These are the architectural invariants every contributor (human or agent) must r
 
 ## Project status
 
-MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. Phases 0–16 are merged and closed (Phase 16 — Voice & Judgment — closed 2026-07-14 on baseline 5); Phase 17 (co-adaptation) is next to be authored.
+MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. Phases 0–16 are merged and closed (Phase 16 — Voice & Judgment — closed 2026-07-14 on baseline 5); Phase 17 (co-adaptation, [tasks/phase-17.md](tasks/phase-17.md)) is open and dispatching.
 
 | Phase | Description |
 | --- | --- |

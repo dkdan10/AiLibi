@@ -101,7 +101,7 @@ baseline 6                      co-adapted movers · upgraded meetings
   playable deduction, now including typed-grounded vouching and a capped absence prior). Adds the
   probe-first Qwen3.6-27b model decision (GO ⇒ baseline 4 = the model swap, its own layer). Closes on
   baseline 5 with the funnel + the new V&J instruments as the before/after.
-- **Phase 17 — co-adaptation (owner goal 3).** Re-ground the ballot surrogate on baseline 5, re-run the
+- **Phase 17 — co-adaptation (owner goal 3; contracted, `tasks/phase-17.md`, opened 2026-07-14).** Re-ground the ballot surrogate on baseline 5, re-run the
   Phase-15 bake-off recipe for both sides against the upgraded meeting model, re-select champions
   through the same gates. Structurally cheap by design: the surrogate staleness/re-grounding machinery
   and the single bake-off harness were contracted in Phase 15 precisely so this phase is a re-run.
