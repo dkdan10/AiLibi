@@ -24,8 +24,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from engine.entities import PlayerId
+from engine.entities import PlayerId, Role
 from eval.funnel import (
+    FunnelReconstructionError,
     MeetingPoolingRow,
     PoolingFunnelReport,
     _absence_set,
@@ -45,6 +46,7 @@ from meetings.schemas import (
     ObservationClaim,
     SawPlayerObservation,
     SightingRecord,
+    TurnKind,
     WhereaboutsClaim,
 )
 from meetings.transcript import MeetingTriggerKind
@@ -58,6 +60,11 @@ _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _ROOM_A = "MEDBAY"
 _ROOM_B = "ENGINEERING"
 
+# The default scripted-fixture role map: every player of the default living set
+# is CREWMATE, so the Task 17.4 breakdown attributes each fixture's placements
+# to crew unless a test overrides the map (the impostor-attribution fixture).
+_ALL_CREW: dict[PlayerId, Role] = {f"p-{i}": "CREWMATE" for i in range(1, 5)}
+
 
 def _turn(
     speaker: PlayerId,
@@ -65,13 +72,18 @@ def _turn(
     *,
     observations: tuple[ObservationClaim, ...] = (),
     free_text: str = "...",
+    turn_kind: TurnKind | None = None,
+    reply_to: str | None = None,
 ) -> MeetingTurn:
+    kind: TurnKind = (
+        turn_kind if turn_kind is not None else ("opening" if index == 0 else "opt_in")
+    )
     return MeetingTurn(
         turn_id=f"m-0:turn-{index}",
         turn_index=index,
         speaker=speaker,
-        turn_kind="opening" if index == 0 else "opt_in",
-        reply_to=None,
+        turn_kind=kind,
+        reply_to=reply_to,
         observations=observations,
         claims=(),
         free_text=free_text,
@@ -142,14 +154,14 @@ def test_roll_call_moves_on_synthetic_fixture() -> None:
         )
         for index, pid in enumerate(("p-1", "p-2"))
     )
-    row = _pooling_row(_meeting(turns=turns))
+    row = _pooling_row(_meeting(turns=turns), roles=_ALL_CREW)
     assert row.whereabouts_claims == 2
     assert row.roll_call_placed == 2
     assert row.roll_call_coverage == pytest.approx(0.5)
 
 
 def test_roll_call_reads_zero_without_whereabouts() -> None:
-    row = _pooling_row(_meeting(turns=(_turn("p-1", 0),)))
+    row = _pooling_row(_meeting(turns=(_turn("p-1", 0),)), roles=_ALL_CREW)
     assert row.whereabouts_claims == 0
     assert row.roll_call_placed == 0
     assert row.roll_call_coverage == 0.0
@@ -252,7 +264,8 @@ def test_vouch_rates_move_on_synthetic_fixture() -> None:
             sighting_records={
                 "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
             },
-        )
+        ),
+        roles=_ALL_CREW,
     )
     assert row.vouch_observations == 2
     assert row.vouched_subjects == 2
@@ -290,7 +303,7 @@ def test_absence_set_is_the_unplaced_living_complement() -> None:
 
 
 def test_absence_set_shrinks_as_placements_land() -> None:
-    empty = _pooling_row(_meeting(turns=()))
+    empty = _pooling_row(_meeting(turns=()), roles=_ALL_CREW)
     assert empty.absence_set_size == 4
     placed = _pooling_row(
         _meeting(
@@ -303,7 +316,8 @@ def test_absence_set_shrinks_as_placements_land() -> None:
                     ),
                 ),
             )
-        )
+        ),
+        roles=_ALL_CREW,
     )
     assert placed.absence_set_size == 3
 
@@ -377,7 +391,7 @@ def test_whereabouts_lie_detected_via_recorded_flag_event_id() -> None:
     meeting = _whereabouts_lie_fixture()
     assert _whereabouts_claim_event_ids(meeting) == ("turn:m-0:turn-0:whereabouts:0",)
     assert _whereabouts_lies_detected(meeting) == 1
-    row = _pooling_row(meeting)
+    row = _pooling_row(meeting, roles=_ALL_CREW)
     assert row.whereabouts_claims == 1
     assert row.whereabouts_lies_detected == 1
 
@@ -394,8 +408,164 @@ def test_unflagged_whereabouts_claim_is_not_a_detected_lie() -> None:
 
 
 def test_lie_rate_aggregates_from_synthetic_rows() -> None:
-    row = _pooling_row(_whereabouts_lie_fixture())
+    row = _pooling_row(_whereabouts_lie_fixture(), roles=_ALL_CREW)
     assert row.whereabouts_lies_detected / row.whereabouts_claims == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Task 17.4 roll-call uptake breakdown (per-role / per-surface / answered-asked)#
+# --------------------------------------------------------------------------- #
+
+
+def test_impostor_placement_attributes_to_impostor_never_crew() -> None:
+    """The DoD role-attribution fixture: an impostor self-placement lands under
+    ``roll_call_placed_impostor`` and NEVER under ``roll_call_placed_crew``.
+
+    p-1 is the lone IMPOSTOR and answers roll-call beside a crew answerer
+    (p-2); the split identities and the per-role coverage cells decompose the
+    aggregate exactly.
+    """
+
+    roles: dict[PlayerId, Role] = {
+        "p-1": "IMPOSTOR",
+        "p-2": "CREWMATE",
+        "p-3": "CREWMATE",
+        "p-4": "CREWMATE",
+    }
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        _turn(
+            "p-2",
+            1,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=11, room=_ROOM_B),),
+        ),
+    )
+    row = _pooling_row(_meeting(turns=turns), roles=roles)
+    # Living split partitions the roster by role and sums back to living.
+    assert row.living_crew == 3
+    assert row.living_impostor == 1
+    assert row.living_crew + row.living_impostor == row.living
+    # The impostor placement is attributed to the impostor partition ONLY.
+    assert row.roll_call_placed == 2
+    assert row.roll_call_placed_crew == 1
+    assert row.roll_call_placed_impostor == 1
+    assert row.roll_call_placed_crew + row.roll_call_placed_impostor == (
+        row.roll_call_placed
+    )
+    # Per-role coverage is per-role placed / per-role living.
+    assert row.roll_call_coverage_crew == pytest.approx(1 / 3)
+    assert row.roll_call_coverage_impostor == pytest.approx(1.0)
+
+
+def test_whereabouts_claims_split_by_carrying_turn_surface() -> None:
+    """Claims on opening / reply / opt_in turns land in their surface cells and
+    sum to ``whereabouts_claims`` (the same living-speaker filter, per claim)."""
+
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            turn_kind="opening",
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        _turn(
+            "p-2",
+            1,
+            turn_kind="reply",
+            reply_to="m-0:turn-0",
+            observations=(WhereaboutsClaim(type="whereabouts", tick=11, room=_ROOM_B),),
+        ),
+        _turn(
+            "p-3",
+            2,
+            turn_kind="opt_in",
+            observations=(WhereaboutsClaim(type="whereabouts", tick=12, room=_ROOM_A),),
+        ),
+    )
+    row = _pooling_row(_meeting(turns=turns), roles=_ALL_CREW)
+    assert row.whereabouts_claims_opening == 1
+    assert row.whereabouts_claims_reply == 1
+    assert row.whereabouts_claims_opt_in == 1
+    assert (
+        row.whereabouts_claims_opening
+        + row.whereabouts_claims_reply
+        + row.whereabouts_claims_opt_in
+        == row.whereabouts_claims
+    )
+
+
+def test_answered_asked_census_separates_silence_from_refusal() -> None:
+    """The answered/asked census: a living speaker who does not self-place is
+    ASKED but not ANSWERED; a living non-speaker is neither; a dead speaker is
+    counted nowhere; and ``roll_call_answered == roll_call_placed``."""
+
+    turns = (
+        # p-1 speaks AND self-places → asked and answered.
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+        # p-2 speaks with no whereabouts → asked but not answered (refusal).
+        _turn(
+            "p-2",
+            1,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=10, subject="p-3", room=_ROOM_B
+                ),
+            ),
+        ),
+        # p-9 is dead (not in the living set) → counted in neither census.
+        _turn(
+            "p-9",
+            2,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+    )
+    # p-3 and p-4 never take the mic → never-took-the-mic, not asked.
+    row = _pooling_row(_meeting(turns=turns), roles=_ALL_CREW)
+    assert row.roll_call_asked == 2  # p-1, p-2 (living speakers)
+    assert row.roll_call_answered == 1  # p-1 self-placed
+    assert row.roll_call_answered == row.roll_call_placed
+    assert row.roll_call_answered <= row.roll_call_asked <= row.living
+
+
+def test_per_role_coverage_is_none_when_role_has_no_living_members() -> None:
+    """Per-role coverage is ``None`` (undefined, never ``0.0``) when that role
+    has zero living members — the report's None-means-undefined convention."""
+
+    living = frozenset({"p-1", "p-2"})
+    roles: dict[PlayerId, Role] = {"p-1": "CREWMATE", "p-2": "CREWMATE"}
+    turns = (
+        _turn(
+            "p-1",
+            0,
+            observations=(WhereaboutsClaim(type="whereabouts", tick=10, room=_ROOM_A),),
+        ),
+    )
+    row = _pooling_row(_meeting(turns=turns, living=living), roles=roles)
+    assert row.living_impostor == 0
+    assert row.roll_call_coverage_impostor is None
+    assert row.living_crew == 2
+    assert row.roll_call_coverage_crew == pytest.approx(0.5)
+
+
+def test_missing_role_for_living_player_raises() -> None:
+    """A living player absent from the role map fails loud (no silent
+    fallback) — the per-role breakdown cannot attribute their uptake."""
+
+    partial: dict[PlayerId, Role] = {
+        "p-1": "CREWMATE",
+        "p-2": "CREWMATE",
+        "p-3": "CREWMATE",
+    }  # p-4 (living) is missing
+    with pytest.raises(FunnelReconstructionError):
+        _pooling_row(_meeting(turns=(_turn("p-1", 0),)), roles=partial)
 
 
 # --------------------------------------------------------------------------- #
@@ -404,7 +574,7 @@ def test_lie_rate_aggregates_from_synthetic_rows() -> None:
 
 
 def test_pooling_row_is_frozen_and_round_trips() -> None:
-    row = _pooling_row(_whereabouts_lie_fixture())
+    row = _pooling_row(_whereabouts_lie_fixture(), roles=_ALL_CREW)
     assert isinstance(row, MeetingPoolingRow)
     with pytest.raises(ValidationError):
         row.living = 99
@@ -520,6 +690,99 @@ def test_4p1i_pooling_reproduces_baseline_5_exactly(
     assert four_pooling.grounded_vouch_share == pytest.approx(0.5862068965517241)
     assert four_pooling.absence_set_size_mean == pytest.approx(0.6923076923076923)
     assert dict(four_pooling.absence_set_size_histogram) == {0: 20, 1: 11, 2: 8}
+
+
+def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
+    nine_pooling: PoolingFunnelReport,
+) -> None:
+    # Task 17.4 per-role / per-surface / answered-asked breakdown. Re-derived
+    # from the committed baseline-5 9p2i bytes via eval.funnel — the breakdown
+    # DECOMPOSES the 0.363 aggregate coverage (audits/audit-phase-16-close.md
+    # §6), it moves no existing cell: the role split shows the ~⅓ answer rate is
+    # STRUCTURED (crew 0.462 vs impostor 0.089 — impostors refuse by prompt
+    # design), not uniform silence.
+    assert nine_pooling.roll_call_placed_crew_total == 331
+    assert nine_pooling.roll_call_placed_impostor_total == 29
+    # The placed split totals partition the answered total exactly.
+    assert (
+        nine_pooling.roll_call_placed_crew_total
+        + nine_pooling.roll_call_placed_impostor_total
+        == nine_pooling.roll_call_answered_total
+    )
+    assert nine_pooling.roll_call_coverage_crew_mean == pytest.approx(
+        0.46238361266294226
+    )
+    assert nine_pooling.roll_call_coverage_impostor_mean == pytest.approx(
+        0.0893854748603352
+    )
+    assert nine_pooling.whereabouts_claims_opening_total == 179
+    assert nine_pooling.whereabouts_claims_reply_total == 100
+    assert nine_pooling.whereabouts_claims_opt_in_total == 81
+    # The surface split totals partition the set-wide claims total exactly.
+    assert (
+        nine_pooling.whereabouts_claims_opening_total
+        + nine_pooling.whereabouts_claims_reply_total
+        + nine_pooling.whereabouts_claims_opt_in_total
+        == nine_pooling.whereabouts_claims_total
+    )
+    assert nine_pooling.roll_call_asked_total == 496
+    assert nine_pooling.roll_call_answered_total == 360
+    assert nine_pooling.roll_call_answer_rate == pytest.approx(0.7258064516129032)
+
+
+def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
+    four_pooling: PoolingFunnelReport,
+) -> None:
+    # Re-derived from the committed baseline-5 4p1i bytes via eval.funnel; the
+    # same structured-refusal signal on the smaller roster (crew 0.782 vs
+    # impostor 0.154).
+    assert four_pooling.roll_call_placed_crew_total == 61
+    assert four_pooling.roll_call_placed_impostor_total == 6
+    assert (
+        four_pooling.roll_call_placed_crew_total
+        + four_pooling.roll_call_placed_impostor_total
+        == four_pooling.roll_call_answered_total
+    )
+    assert four_pooling.roll_call_coverage_crew_mean == pytest.approx(0.782051282051282)
+    assert four_pooling.roll_call_coverage_impostor_mean == pytest.approx(
+        0.15384615384615385
+    )
+    assert four_pooling.whereabouts_claims_opening_total == 39
+    assert four_pooling.whereabouts_claims_reply_total == 13
+    assert four_pooling.whereabouts_claims_opt_in_total == 15
+    assert (
+        four_pooling.whereabouts_claims_opening_total
+        + four_pooling.whereabouts_claims_reply_total
+        + four_pooling.whereabouts_claims_opt_in_total
+        == four_pooling.whereabouts_claims_total
+    )
+    assert four_pooling.roll_call_asked_total == 97
+    assert four_pooling.roll_call_answered_total == 67
+    assert four_pooling.roll_call_answer_rate == pytest.approx(0.6907216494845361)
+
+
+def test_pooling_per_row_decomposition_identities(
+    nine_pooling: PoolingFunnelReport,
+    four_pooling: PoolingFunnelReport,
+) -> None:
+    # The Task 17.4 split identities hold on EVERY committed per-meeting row of
+    # both sets, not only the synthetic fixtures: the role split, the surface
+    # split, and the answered/asked census all decompose their aggregate.
+    for report in (nine_pooling, four_pooling):
+        for row in report.per_meeting:
+            assert row.living_crew + row.living_impostor == row.living
+            assert (
+                row.roll_call_placed_crew + row.roll_call_placed_impostor
+                == row.roll_call_placed
+            )
+            assert (
+                row.whereabouts_claims_opening
+                + row.whereabouts_claims_reply
+                + row.whereabouts_claims_opt_in
+                == row.whereabouts_claims
+            )
+            assert row.roll_call_answered == row.roll_call_placed
+            assert row.roll_call_answered <= row.roll_call_asked <= row.living
 
 
 def test_pooling_report_round_trips(four_pooling: PoolingFunnelReport) -> None:
