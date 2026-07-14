@@ -197,6 +197,7 @@ function baseReport(): TournamentEvalReport {
       correct_skip_ballots: 388,
       missed_skip_ballots: 22,
       unclassified_skip_ballots: 0,
+      citation_coerced_skip_ballots: 0,
       missed_skip_impostor_voters: 18,
       missed_skip_teammate_coerced: 2,
       missed_skip_invalid_target: 4,
