@@ -30,13 +30,9 @@ from agents.memory.beliefs import (
     ENV_HARD_EVIDENCE_GATE,
     ENV_REPORTER_EXCULPATION,
     absence_prior_enabled,
-    hard_evidence_gate_enabled,
 )
-from agents.memory.store import (
-    ENV_OBSERVATION_ID_RENDERING,
-    observation_id_rendering_enabled,
-)
-from meetings.constants import ENV_CITATION_GATE, citation_gate_enabled
+from agents.memory.store import ENV_OBSERVATION_ID_RENDERING
+from meetings.constants import ENV_CITATION_GATE
 from orchestrator.replay import (
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -64,30 +60,28 @@ ENV_EVIDENCE_QUALITY_LIFT_KEY = "evidence_quality_lift"
 # ``ENV_REPORTER_EXCULPATION`` above (retained but no longer read).
 ENV_REPORTER_EXCULPATION_KEY = "reporter_exculpation"
 
-# The Task-16.4 hard-evidence-gate (J1) lever's snapshot key — the FIRST LIVE
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration (the first live toggle re-entered
-# into that table since the Task-15.7 graduation emptied it); its env var is
-# ``ENV_HARD_EVIDENCE_GATE`` above, and its resolver is
-# ``hard_evidence_gate_enabled``. DEFAULT-OFF.
+# The Task-16.4 hard-evidence-gate (J1) lever's snapshot key — graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-16.17 baseline-5 record (the 15.7
+# move, applied once baseline 5 adopted it per the graduation slate); its env var
+# is ``ENV_HARD_EVIDENCE_GATE`` above (retained but no longer read).
 ENV_HARD_EVIDENCE_GATE_KEY = "hard_evidence_gate"
 
-# The Task-16.5 observation-id render lever's snapshot key — the SECOND LIVE
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration (behind 16.4's ``hard_evidence_gate``);
-# its env var is ``ENV_OBSERVATION_ID_RENDERING`` above, and its resolver is
-# ``observation_id_rendering_enabled``. DEFAULT-OFF.
+# The Task-16.5 observation-id render lever's snapshot key — graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-16.17 baseline-5 record alongside
+# 16.4's ``hard_evidence_gate``; its env var is ``ENV_OBSERVATION_ID_RENDERING``
+# above (retained but no longer read).
 ENV_OBSERVATION_ID_RENDERING_KEY = "observation_id_rendering"
 
-# The Task-16.6 citation-gate (J2) lever's snapshot key — the THIRD LIVE
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration (behind 16.5's
-# ``observation_id_rendering``, the 16.4 → 16.5 → 16.6 registry-chain order); its
-# env var is ``ENV_CITATION_GATE`` above, and its resolver is
-# ``meetings.constants.citation_gate_enabled``. DEFAULT-OFF.
+# The Task-16.6 citation-gate (J2) lever's snapshot key — graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-16.17 baseline-5 record, the third of
+# the three Phase-16 graduations (16.4 → 16.5 → 16.6 slate order); its env var is
+# ``ENV_CITATION_GATE`` above (retained but no longer read).
 ENV_CITATION_GATE_KEY = "citation_gate"
 
-# The Task-16.8 absence-prior lever's snapshot key — the FOURTH LIVE
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration (behind 16.6's ``citation_gate``,
-# the 16.4 → 16.5 → 16.6 → 16.8 registry-chain order); its env var is
-# ``ENV_ABSENCE_PRIOR`` above, and its resolver is
+# The Task-16.8 absence-prior lever's snapshot key — the ONE remaining LIVE
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration (the graduation slate's recorded
+# STAY-OFF, so the three sibling Phase-16 levers graduated at 16.17 while this one
+# stayed live); its env var is ``ENV_ABSENCE_PRIOR`` above, and its resolver is
 # ``agents.memory.beliefs.absence_prior_enabled``. DEFAULT-OFF.
 ENV_ABSENCE_PRIOR_KEY = "absence_prior"
 
@@ -188,30 +182,32 @@ class TestGameEndRecording:
 class TestSubstrateFlagStamp:
     """The Task-14.7 substrate-flag stamp on the game_over record.
 
-    A replay self-describes which substrate levers generated it. The SIX
-    original levers are unconditionally ON with their env gates retired: the
-    four 13.5 levers since Task 14.9, Task 14.10's ``evidence_quality_lift``
-    since the Task-14.12 close, and Task 15.5's ``reporter_exculpation`` since
-    the Task-15.7 baseline-3 record. Task 16.4 re-registers the one LIVE
-    env-gated toggle, ``hard_evidence_gate`` (``_TOGGLEABLE_LEVER_RESOLVERS`` —
-    the first entry back into that table since the 15.7 graduation emptied it),
-    DEFAULT-OFF: a bare-environment recording stamps the six retired levers True
-    and the new lever False — byte-identical to the committed baseline-3
-    substrate, which predates the key (``_assert_substrate_matches`` reads a
-    missing key as ``False`` on both sides, so the committed replays reconstruct
-    under a bare env). An ambient ``AILIBI_HARD_EVIDENCE_GATE`` export flips the
-    live toggle's stamp ON; the six retired levers never read env again.
+    A replay self-describes which substrate levers generated it. NINE levers are
+    unconditionally ON with their env gates retired: the four 13.5 levers since
+    Task 14.9, Task 14.10's ``evidence_quality_lift`` since the Task-14.12 close,
+    Task 15.5's ``reporter_exculpation`` since the Task-15.7 baseline-3 record,
+    and the three Phase-16 levers graduated at the Task-16.17 baseline-5 record
+    per the graduation slate — 16.4's ``hard_evidence_gate``, 16.5's
+    ``observation_id_rendering``, 16.6's ``citation_gate``. Task 16.8's
+    ``absence_prior`` is the ONE remaining LIVE env-gated toggle
+    (``_TOGGLEABLE_LEVER_RESOLVERS`` — the slate's recorded STAY-OFF),
+    DEFAULT-OFF: a bare-environment recording stamps the nine retired levers True
+    and ``absence_prior`` False — byte-identical to the committed baseline-5
+    substrate (``_assert_substrate_matches`` reads a missing key as ``False`` on
+    both sides, so the committed replays reconstruct under a bare env). An ambient
+    ``AILIBI_ABSENCE_PRIOR`` export flips the live toggle's stamp ON; the nine
+    retired levers never read env again.
     """
 
     def test_retired_levers_are_all_on_and_env_independent(self) -> None:
-        # All six retired levers report True under ANY env — a bare mapping, an
-        # explicit legacy "0", the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export,
-        # or a stray AILIBI_REPORTER_EXCULPATION export all read identically. The
-        # levers that still read env are Task 16.4's default-OFF hard_evidence_gate,
-        # Task 16.5's default-OFF observation_id_rendering, Task 16.6's
-        # default-OFF citation_gate, and Task 16.8's default-OFF absence_prior
-        # (the four entries in _TOGGLEABLE_LEVER_RESOLVERS), which are scoped out
-        # here so this pin stays about the always-on set.
+        # All nine retired levers report True under ANY env — a bare mapping, an
+        # explicit legacy "0", the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export, a
+        # stray AILIBI_REPORTER_EXCULPATION export, or a stray export of any of the
+        # three Phase-16 levers graduated at the Task-16.17 baseline-5 record
+        # (hard_evidence_gate / observation_id_rendering / citation_gate) all read
+        # identically. The ONLY lever that still reads env is Task 16.8's
+        # default-OFF absence_prior (the single entry in _TOGGLEABLE_LEVER_RESOLVERS),
+        # which is scoped out here so this pin stays about the always-on set.
         retired = tuple(
             key
             for key in SUBSTRATE_FLAG_KEYS
@@ -224,6 +220,9 @@ class TestSubstrateFlagStamp:
             {ENV_EVIDENCE_QUALITY_LIFT: "1"},
             {ENV_REPORTER_EXCULPATION: "0"},
             {ENV_REPORTER_EXCULPATION: "1"},
+            {ENV_HARD_EVIDENCE_GATE: "0"},
+            {ENV_OBSERVATION_ID_RENDERING: "0"},
+            {ENV_CITATION_GATE: "0"},
         ):
             snapshot = substrate_flag_snapshot(env)
             assert all(snapshot[key] is True for key in retired)
@@ -234,13 +233,11 @@ class TestSubstrateFlagStamp:
             "unfreeze_memory",
             "evidence_quality_lift",
             "reporter_exculpation",
-        }
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
             "hard_evidence_gate",
             "observation_id_rendering",
             "citation_gate",
-            "absence_prior",
-        )
+        }
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == ("absence_prior",)
 
     def test_reporter_exculpation_graduated_unconditional_on(self) -> None:
         # Graduated to unconditional-ON at the Task-15.7 baseline-3 record: the
@@ -259,46 +256,114 @@ class TestSubstrateFlagStamp:
             is True
         )
 
+    def test_hard_evidence_gate_graduated_unconditional_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Graduated to unconditional-ON at the Task-16.17 baseline-5 record (the
+        # 15.7 move applied once baseline 5 adopted it per the graduation slate):
+        # the snapshot reports it True under a bare mapping, an unrecognised value,
+        # an explicit "0", or a truthy export alike — env is no longer consulted.
+        # With ``env`` None it is likewise unconditional: an ambient
+        # AILIBI_HARD_EVIDENCE_GATE export (either polarity) no longer flips the
+        # stamp. This REPLACES the retired default-OFF toggle-reads-env and
+        # env-none-honors-process-environment pins (the resolver now
+        # ``del env; return True``).
+        for env in (
+            {},
+            {ENV_HARD_EVIDENCE_GATE: "nope"},
+            {ENV_HARD_EVIDENCE_GATE: "0"},
+        ):
+            assert substrate_flag_snapshot(env)[ENV_HARD_EVIDENCE_GATE_KEY] is True
+        assert (
+            substrate_flag_snapshot({ENV_HARD_EVIDENCE_GATE: "1"})[
+                ENV_HARD_EVIDENCE_GATE_KEY
+            ]
+            is True
+        )
+        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
+        assert substrate_flag_snapshot()[ENV_HARD_EVIDENCE_GATE_KEY] is True
+        monkeypatch.setenv(ENV_HARD_EVIDENCE_GATE, "0")
+        assert substrate_flag_snapshot()[ENV_HARD_EVIDENCE_GATE_KEY] is True
+
+    def test_observation_id_rendering_graduated_unconditional_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Graduated to unconditional-ON at the Task-16.17 baseline-5 record
+        # alongside 16.4's hard_evidence_gate: the snapshot reports it True under a
+        # bare mapping, an unrecognised value, an explicit "0", or a truthy export
+        # alike — env is no longer consulted. With ``env`` None an ambient
+        # AILIBI_OBSERVATION_ID_RENDERING export (either polarity) no longer flips
+        # the stamp. REPLACES the retired default-OFF toggle-reads-env and
+        # env-none-honors-process-environment pins (the resolver now
+        # ``del env; return True``).
+        for env in (
+            {},
+            {ENV_OBSERVATION_ID_RENDERING: "nope"},
+            {ENV_OBSERVATION_ID_RENDERING: "0"},
+        ):
+            assert (
+                substrate_flag_snapshot(env)[ENV_OBSERVATION_ID_RENDERING_KEY] is True
+            )
+        assert (
+            substrate_flag_snapshot({ENV_OBSERVATION_ID_RENDERING: "1"})[
+                ENV_OBSERVATION_ID_RENDERING_KEY
+            ]
+            is True
+        )
+        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
+        assert substrate_flag_snapshot()[ENV_OBSERVATION_ID_RENDERING_KEY] is True
+        monkeypatch.setenv(ENV_OBSERVATION_ID_RENDERING, "0")
+        assert substrate_flag_snapshot()[ENV_OBSERVATION_ID_RENDERING_KEY] is True
+
+    def test_citation_gate_graduated_unconditional_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Graduated to unconditional-ON at the Task-16.17 baseline-5 record, the
+        # third of the three Phase-16 graduations: the snapshot reports it True
+        # under a bare mapping, an unrecognised value, an explicit "0", or a truthy
+        # export alike — env is no longer consulted. With ``env`` None an ambient
+        # AILIBI_CITATION_GATE export (either polarity) no longer flips the stamp.
+        # REPLACES the retired default-OFF toggle-reads-env and
+        # env-none-honors-process-environment pins (the resolver now
+        # ``del env; return True``).
+        for env in (
+            {},
+            {ENV_CITATION_GATE: "nope"},
+            {ENV_CITATION_GATE: "0"},
+        ):
+            assert substrate_flag_snapshot(env)[ENV_CITATION_GATE_KEY] is True
+        assert (
+            substrate_flag_snapshot({ENV_CITATION_GATE: "1"})[ENV_CITATION_GATE_KEY]
+            is True
+        )
+        monkeypatch.delenv(ENV_CITATION_GATE, raising=False)
+        assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is True
+        monkeypatch.setenv(ENV_CITATION_GATE, "0")
+        assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is True
+
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin (Task 16.4 + 16.5 + 16.6 + 16.8 DoD "registered"):
-        # FOUR live toggles in ``_TOGGLEABLE_LEVER_RESOLVERS`` now — 16.4's
-        # ``hard_evidence_gate`` (the first live toggle re-entered since the
-        # Task-15.7 graduation emptied the table), 16.5's
-        # ``observation_id_rendering``, 16.6's ``citation_gate``, then 16.8's
-        # ``absence_prior`` (the registry-chain order the phase preamble
-        # serializes). Each key is bound
-        # to its resolver BY IDENTITY, so the replay stamp and each lever's
-        # read-site(s) share one source of truth: hard_evidence_gate ↔ the two
-        # belief-render read-sites (store._build_belief_lines,
-        # game.suspicion_graph_for_meeting), observation_id_rendering ↔ the §6.6
-        # observation-line render (store.render_for_prompt), citation_gate ↔ the
-        # ballot citation guard (manager._collect_one_ballot →
-        # guard_ballot_citation), absence_prior ↔ the pre-vote absence fold
-        # (manager._suspicion_graph_with_contradictions →
-        # beliefs.apply_meeting_evidence_rules).
-        # ``SUBSTRATE_FLAG_KEYS`` appends the four live keys after the six
-        # retired always-on keys; ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS`` is exactly
-        # the live-toggle subset the loader's mismatch-remediation hint branches
-        # on.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 4
-        (gate_key, gate_resolver) = _TOGGLEABLE_LEVER_RESOLVERS[0]
-        assert gate_key == ENV_HARD_EVIDENCE_GATE_KEY
-        assert gate_resolver is hard_evidence_gate_enabled
-        (obs_key, obs_resolver) = _TOGGLEABLE_LEVER_RESOLVERS[1]
-        assert obs_key == ENV_OBSERVATION_ID_RENDERING_KEY
-        assert obs_resolver is observation_id_rendering_enabled
-        (citation_key, citation_resolver) = _TOGGLEABLE_LEVER_RESOLVERS[2]
-        assert citation_key == ENV_CITATION_GATE_KEY
-        assert citation_resolver is citation_gate_enabled
-        (absence_key, absence_resolver) = _TOGGLEABLE_LEVER_RESOLVERS[3]
+        # Registration pin (Task 16.8 DoD "registered"; the Task-16.17 graduation
+        # slate): ONE live toggle in ``_TOGGLEABLE_LEVER_RESOLVERS`` now — 16.8's
+        # ``absence_prior`` (the slate's recorded STAY-OFF). Its three sibling
+        # Phase-16 levers (16.4's ``hard_evidence_gate``, 16.5's
+        # ``observation_id_rendering``, 16.6's ``citation_gate``) graduated to
+        # ``_RETIRED_ALWAYS_ON_LEVERS`` at the baseline-5 record — exactly as
+        # ``reporter_exculpation`` graduated at 15.7 and ``evidence_quality_lift``
+        # at the 14.12 close — so the table shrank from four back to one. The lone
+        # key is bound to its resolver BY IDENTITY, so the replay stamp and the
+        # lever's read-site share one source of truth: absence_prior ↔ the pre-vote
+        # absence fold (manager._suspicion_graph_with_contradictions →
+        # beliefs.apply_meeting_evidence_rules). ``SUBSTRATE_FLAG_KEYS`` appends the
+        # single live key after the nine retired always-on keys (the overall key
+        # order is UNCHANGED by the graduation — the three graduated keys just moved
+        # from the toggleable tail into the retired block, same positions);
+        # ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS`` is exactly the live-toggle subset the
+        # loader's mismatch-remediation hint branches on.
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 1
+        (absence_key, absence_resolver) = _TOGGLEABLE_LEVER_RESOLVERS[0]
         assert absence_key == ENV_ABSENCE_PRIOR_KEY
         assert absence_resolver is absence_prior_enabled
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
-            ENV_HARD_EVIDENCE_GATE_KEY,
-            ENV_OBSERVATION_ID_RENDERING_KEY,
-            ENV_CITATION_GATE_KEY,
-            ENV_ABSENCE_PRIOR_KEY,
-        )
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_ABSENCE_PRIOR_KEY,)
         assert SUBSTRATE_FLAG_KEYS == (
             "testimony_as_content",
             "witnessed_kill_evidence",
@@ -313,17 +378,19 @@ class TestSubstrateFlagStamp:
         )
 
     def test_absence_prior_resolver_is_a_pure_constant_function(self) -> None:
-        # Resolver constant-ness at graduation readiness (the Task 16.8 DoD
-        # mirror of the 16.4 pin): the registered resolver IS
+        # Resolver constant-ness at graduation readiness (the Task 16.8 DoD): the
+        # sole remaining live toggle's registered resolver IS
         # ``agents.memory.beliefs.absence_prior_enabled`` by identity, and it is
         # a deterministic PURE function of its env mapping — the same mapping in
         # yields the same bool out, repeatedly and independent of the object's
-        # identity, and it never mutates the mapping. This is the seam the Task
-        # 16.17 graduation flips exactly as ``reporter_exculpation`` did at
-        # 15.7: retire the resolver, the table shrinks, and the stamp goes
-        # unconditional — with no other read-site to reconcile because the fold
-        # gate and the manager's fold-path guard both resolve here.
-        (_key, resolver) = _TOGGLEABLE_LEVER_RESOLVERS[3]
+        # identity, and it never mutates the mapping. This is the seam a FUTURE
+        # graduation flips exactly as ``reporter_exculpation`` did at 15.7 and the
+        # three sibling Phase-16 levers did at the Task-16.17 baseline-5 record:
+        # retire the resolver, the table shrinks, and the stamp goes unconditional
+        # — with no other read-site to reconcile because the fold gate and the
+        # manager's fold-path guard both resolve here (absence_prior is the slate's
+        # recorded STAY-OFF; Phase 17 re-measures on the baseline-5 bytes).
+        (_key, resolver) = _TOGGLEABLE_LEVER_RESOLVERS[0]
         assert resolver is absence_prior_enabled
         for env in (
             {},
@@ -338,150 +405,13 @@ class TestSubstrateFlagStamp:
         assert resolver({}) is False
         assert resolver({ENV_ABSENCE_PRIOR: "1"}) is True
 
-    def test_hard_evidence_gate_resolver_is_a_pure_constant_function(self) -> None:
-        # Resolver constant-ness at graduation readiness (the Task 16.4 DoD
-        # phrase): the registered resolver IS
-        # ``agents.memory.beliefs.hard_evidence_gate_enabled`` by identity, and it
-        # is a deterministic PURE function of its env mapping — the same mapping in
-        # yields the same bool out, repeatedly and independent of the object's
-        # identity, and it never mutates the mapping. This is the seam the Task
-        # 16.17 graduation flips exactly as ``reporter_exculpation`` did at 15.7:
-        # retire the resolver, the table empties, and the stamp goes unconditional
-        # — with no other read-site to reconcile because they all resolve here.
-        (_key, resolver) = _TOGGLEABLE_LEVER_RESOLVERS[0]
-        assert resolver is hard_evidence_gate_enabled
-        for env in (
-            {},
-            {ENV_HARD_EVIDENCE_GATE: "1"},
-            {ENV_HARD_EVIDENCE_GATE: "0"},
-        ):
-            before = dict(env)
-            result = resolver(env)
-            assert resolver(env) == result
-            assert resolver(dict(env)) == result
-            assert env == before
-        assert resolver({}) is False
-        assert resolver({ENV_HARD_EVIDENCE_GATE: "1"}) is True
-
-    def test_hard_evidence_gate_toggle_reads_env_default_off(self) -> None:
-        # The live toggle (Task 16.4 DoD "OFF/ON behavior"): OFF (unset / bare /
-        # unrecognised) and ON (a truthy export), env-passed so no ``os.environ``
-        # mutation. DEFAULT-OFF is the byte-identical baseline-3 substrate. Truthy
-        # values mirror the retired 13.5 / 14.10 / 15.5 resolvers
-        # (``1/true/yes/on``, case-insensitive).
-        assert substrate_flag_snapshot({})[ENV_HARD_EVIDENCE_GATE_KEY] is False
-        assert (
-            substrate_flag_snapshot({ENV_HARD_EVIDENCE_GATE: "nope"})[
-                ENV_HARD_EVIDENCE_GATE_KEY
-            ]
-            is False
-        )
-        assert (
-            substrate_flag_snapshot({ENV_HARD_EVIDENCE_GATE: "1"})[
-                ENV_HARD_EVIDENCE_GATE_KEY
-            ]
-            is True
-        )
-        assert (
-            substrate_flag_snapshot({ENV_HARD_EVIDENCE_GATE: "true"})[
-                ENV_HARD_EVIDENCE_GATE_KEY
-            ]
-            is True
-        )
-
-    def test_hard_evidence_gate_snapshot_env_none_honors_process_environment(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Unlike the six retired levers (which no longer read env), the LIVE
-        # toggle resolves the process environment when ``env`` is None: an ambient
-        # ``AILIBI_HARD_EVIDENCE_GATE`` export flips the default-OFF stamp ON, and
-        # deleting it restores OFF. This is the seam the offline counterfactual and
-        # the sweep configs drive the lever through without threading an explicit
-        # mapping (Task 16.4).
-        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        assert substrate_flag_snapshot()[ENV_HARD_EVIDENCE_GATE_KEY] is False
-        monkeypatch.setenv(ENV_HARD_EVIDENCE_GATE, "1")
-        assert substrate_flag_snapshot()[ENV_HARD_EVIDENCE_GATE_KEY] is True
-
-    def test_observation_id_rendering_toggle_reads_env_default_off(self) -> None:
-        # The second live toggle (Task 16.5 DoD "OFF/ON behavior"): OFF (unset /
-        # bare / unrecognised) and ON (a truthy export), env-passed so no
-        # ``os.environ`` mutation. DEFAULT-OFF is the byte-identical baseline-3
-        # substrate. Truthy values mirror the 16.4 resolver it clones
-        # (``1/true/yes/on``, case-insensitive).
-        assert substrate_flag_snapshot({})[ENV_OBSERVATION_ID_RENDERING_KEY] is False
-        assert (
-            substrate_flag_snapshot({ENV_OBSERVATION_ID_RENDERING: "nope"})[
-                ENV_OBSERVATION_ID_RENDERING_KEY
-            ]
-            is False
-        )
-        assert (
-            substrate_flag_snapshot({ENV_OBSERVATION_ID_RENDERING: "1"})[
-                ENV_OBSERVATION_ID_RENDERING_KEY
-            ]
-            is True
-        )
-        assert (
-            substrate_flag_snapshot({ENV_OBSERVATION_ID_RENDERING: "on"})[
-                ENV_OBSERVATION_ID_RENDERING_KEY
-            ]
-            is True
-        )
-
-    def test_observation_id_rendering_snapshot_env_none_honors_process_environment(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Like 16.4's live toggle, the 16.5 toggle resolves the process environment
-        # when ``env`` is None: an ambient ``AILIBI_OBSERVATION_ID_RENDERING`` export
-        # flips the default-OFF stamp ON, and deleting it restores OFF — the seam the
-        # offline counterfactual and sweep configs drive without threading a mapping.
-        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
-        assert substrate_flag_snapshot()[ENV_OBSERVATION_ID_RENDERING_KEY] is False
-        monkeypatch.setenv(ENV_OBSERVATION_ID_RENDERING, "1")
-        assert substrate_flag_snapshot()[ENV_OBSERVATION_ID_RENDERING_KEY] is True
-
-    def test_citation_gate_toggle_reads_env_default_off(self) -> None:
-        # The third live toggle (Task 16.6 DoD "registered, stamped"): OFF
-        # (unset / bare / unrecognised) and ON (a truthy export), env-passed so
-        # no ``os.environ`` mutation. DEFAULT-OFF is the byte-identical
-        # baseline-3 substrate (the ballot guard chain is never consulted OFF).
-        # Truthy values mirror the 16.4/16.5 resolvers it clones
-        # (``1/true/yes/on``, case-insensitive).
-        assert substrate_flag_snapshot({})[ENV_CITATION_GATE_KEY] is False
-        assert (
-            substrate_flag_snapshot({ENV_CITATION_GATE: "nope"})[ENV_CITATION_GATE_KEY]
-            is False
-        )
-        assert (
-            substrate_flag_snapshot({ENV_CITATION_GATE: "1"})[ENV_CITATION_GATE_KEY]
-            is True
-        )
-        assert (
-            substrate_flag_snapshot({ENV_CITATION_GATE: "yes"})[ENV_CITATION_GATE_KEY]
-            is True
-        )
-
-    def test_citation_gate_snapshot_env_none_honors_process_environment(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Like the 16.4/16.5 live toggles, the 16.6 toggle resolves the process
-        # environment when ``env`` is None: an ambient ``AILIBI_CITATION_GATE``
-        # export flips the default-OFF stamp ON, and deleting it restores OFF —
-        # the seam the offline counterfactual and sweep configs drive without
-        # threading a mapping.
-        monkeypatch.delenv(ENV_CITATION_GATE, raising=False)
-        assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is False
-        monkeypatch.setenv(ENV_CITATION_GATE, "1")
-        assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is True
-
     def test_absence_prior_toggle_reads_env_default_off(self) -> None:
-        # The fourth live toggle (Task 16.8 DoD "registered" + lever OFF =
+        # The sole remaining live toggle (Task 16.8 DoD "registered" + lever OFF =
         # byte-identical): OFF (unset / bare / unrecognised) and ON (a truthy
         # export), env-passed so no ``os.environ`` mutation. DEFAULT-OFF is the
-        # byte-identical baseline-3 substrate (the pre-vote absence fold is
-        # never entered OFF). Truthy values mirror the 16.4/16.5/16.6 resolvers
-        # it clones (``1/true/yes/on``, case-insensitive).
+        # byte-identical baseline-5 substrate (the pre-vote absence fold is
+        # never entered OFF). Truthy values mirror the retired 16.4/16.5/16.6
+        # resolvers it clones (``1/true/yes/on``, case-insensitive).
         assert substrate_flag_snapshot({})[ENV_ABSENCE_PRIOR_KEY] is False
         assert (
             substrate_flag_snapshot({ENV_ABSENCE_PRIOR: "nope"})[ENV_ABSENCE_PRIOR_KEY]
@@ -499,7 +429,8 @@ class TestSubstrateFlagStamp:
     def test_absence_prior_snapshot_env_none_honors_process_environment(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Like the 16.4/16.5/16.6 live toggles, the 16.8 toggle resolves the
+        # The 16.8 toggle — now the ONLY live toggle, after the 16.4/16.5/16.6
+        # siblings graduated at the Task-16.17 baseline-5 record — resolves the
         # process environment when ``env`` is None: an ambient
         # ``AILIBI_ABSENCE_PRIOR`` export flips the default-OFF stamp ON, and
         # deleting it restores OFF — the seam the offline counterfactual and
@@ -522,12 +453,11 @@ class TestSubstrateFlagStamp:
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Recording under a bare environment stamps all six retired levers ON
-        # (byte-identical to the committed baseline-3 set — the graduated
-        # reporter_exculpation lever needs no env export) and the FOUR live
-        # default-OFF toggles (Task 16.4's hard_evidence_gate, Task 16.5's
-        # observation_id_rendering, Task 16.6's citation_gate, Task 16.8's
-        # absence_prior) OFF.
+        # Recording under a bare environment stamps all nine retired levers ON
+        # (byte-identical to the committed baseline-5 set — the graduated
+        # reporter_exculpation lever and the three Phase-16 levers graduated at the
+        # Task-16.17 baseline-5 record need no env export) and the ONE remaining
+        # live default-OFF toggle (Task 16.8's absence_prior) OFF.
         monkeypatch.delenv(ENV_REPORTER_EXCULPATION, raising=False)
         monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
         monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
@@ -546,32 +476,32 @@ class TestSubstrateFlagStamp:
             "unfreeze_memory": True,
             "evidence_quality_lift": True,
             "reporter_exculpation": True,
-            "hard_evidence_gate": False,
-            "observation_id_rendering": False,
-            "citation_gate": False,
+            "hard_evidence_gate": True,
+            "observation_id_rendering": True,
+            "citation_gate": True,
             "absence_prior": False,
         }
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
 
-    def test_hard_evidence_gate_on_recording_round_trips_the_stamp(
+    def test_absence_prior_on_recording_round_trips_the_stamp(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # With the live toggle exported, ``record_game_end`` stamps it ON and the
-        # file reader round-trips it — the recording self-describes the substrate
-        # it ran under (the future adopting-baseline shape the Task 16.17
+        # With the sole remaining live toggle exported, ``record_game_end`` stamps
+        # it ON and the file reader round-trips it — the recording self-describes
+        # the substrate it ran under (a future adopting-baseline shape a Phase-17
         # graduation would record; the MANIFEST ``flags`` cell renders from this
-        # same ``read_substrate_flags`` value). The six retired levers stay ON
+        # same ``read_substrate_flags`` value). The nine retired levers stay ON
         # alongside it — a lever-ON recording is NOT byte-identical to the OFF
-        # baseline-3 stamp, so it fails loud against a committed OFF stamp under
+        # baseline-5 stamp, so it fails loud against a committed OFF stamp under
         # ``_assert_substrate_matches`` unless the loader opts into the mismatch.
-        monkeypatch.setenv(ENV_HARD_EVIDENCE_GATE, "1")
-        path = tmp_path / "gate-on.jsonl"
-        ReplayLog(path, game_id="g-gate").record_game_end(
+        monkeypatch.setenv(ENV_ABSENCE_PRIOR, "1")
+        path = tmp_path / "absence-on.jsonl"
+        ReplayLog(path, game_id="g-absence").record_game_end(
             winner="CREWMATES", reason="CREWMATE_EJECT", tick=17
         )
         flags = read_substrate_flags(path)
         assert flags is not None
-        assert flags[ENV_HARD_EVIDENCE_GATE_KEY] is True
+        assert flags[ENV_ABSENCE_PRIOR_KEY] is True
         # The retired always-on levers stay ON alongside the live toggle.
         assert all(
             flags[key]
@@ -596,8 +526,8 @@ class TestSubstrateFlagStamp:
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags[ENV_REPORTER_EXCULPATION_KEY] is True
-        # The retired always-on levers stay ON; Task 16.4's live default-OFF
-        # hard_evidence_gate is scoped out (it is not a retired lever).
+        # The retired always-on levers stay ON; Task 16.8's live default-OFF
+        # absence_prior is scoped out (it is the only non-retired lever).
         assert all(
             flags[key]
             for key in SUBSTRATE_FLAG_KEYS
@@ -619,8 +549,8 @@ class TestSubstrateFlagStamp:
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
-        # The retired always-on levers stay ON; Task 16.4's live default-OFF
-        # hard_evidence_gate is scoped out (it is not a retired lever).
+        # The retired always-on levers stay ON; Task 16.8's live default-OFF
+        # absence_prior is scoped out (it is the only non-retired lever).
         assert all(
             flags[key]
             for key in SUBSTRATE_FLAG_KEYS
