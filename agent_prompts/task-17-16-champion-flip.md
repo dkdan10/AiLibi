@@ -17,8 +17,8 @@ The authoritative task contract is copied below from tasks/phase-17.md. Follow i
 **Complexity:** Integration
 
 Read 17.14's evidence against locked decision 2 and act on the ruled branch — the
-referee floors are the ladder tip's at selection time (baseline 5, or the 17.8 baseline
-under the gate's GO; 17.7's surgery pins the literal). PASS
+referee floors are the ladder tip's at selection time (baseline 5 — the literal pinned
+by the 17.7 STAY-OFF ruling). PASS
 (referee floors + conversion + retained win edge): swap the committed champion artifact
 to the winning finalist (weights + sha + config + stamp constants), then flip the
 DEFAULT mover — the scripted-default factory yields to the learned factory at the
