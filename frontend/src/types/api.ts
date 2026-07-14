@@ -510,6 +510,7 @@ export interface ConversionReport {
   correct_skip_ballots: number;
   missed_skip_ballots: number;
   unclassified_skip_ballots: number;
+  citation_coerced_skip_ballots: number;
   missed_skip_impostor_voters: number;
   missed_skip_teammate_coerced: number;
   missed_skip_invalid_target: number;
