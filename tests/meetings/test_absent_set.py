@@ -57,7 +57,11 @@ from meetings.schemas import (
     VentWitnessRecord,
     WhereaboutsClaim,
 )
-from meetings.transcript import VENT_GROUNDING_TICK_TOLERANCE, absent_players
+from meetings.transcript import (
+    VENT_GROUNDING_TICK_TOLERANCE,
+    _grounded_vent_subjects,  # noqa: PLC2701
+    absent_players,
+)
 
 # --- Builders (cloned from tests/meetings/test_vouch_grounding.py) ----------
 
@@ -687,10 +691,22 @@ class TestUngroundedVentClaimPlacesNobody:
     def test_non_roster_vent_subject_is_inert(self) -> None:
         # A grounded vent naming a non-roster id (dead / hallucinated) mirrors
         # the flag detector's roster filter: it neither surfaces nor removes.
+        # Through ``absent_players`` alone the filter is UNOBSERVABLE --
+        # subtracting a non-roster id from a roster-subset set is always a
+        # no-op -- so the guard is pinned on the helper directly: the phantom
+        # subject never even enters the grounded set.
         records = {"p-2": (_vent_record(subject="p-99"),)}
+        transcript = _vent_transcript(_saw_vent(subject="p-99"))
+
+        assert (
+            _grounded_vent_subjects(
+                transcript, vent_witness_records=records, roster=_ROSTER
+            )
+            == frozenset()
+        )
 
         widened = absent_players(
-            _vent_transcript(_saw_vent(subject="p-99")),
+            transcript,
             roster=_ROSTER,
             include_vent_sightings=True,
             vent_witness_records=records,
