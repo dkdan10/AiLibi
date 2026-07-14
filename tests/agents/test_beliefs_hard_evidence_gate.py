@@ -1,4 +1,4 @@
-"""Tests for the Task 16.4 J1 hard-evidence render gate (default-OFF lever).
+"""Tests for the Task 16.4 J1 hard-evidence render gate (graduated unconditional, Task 16.17).
 
 Covers the J1 render clamp introduced in Task 16.4
 (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1): a belief row whose
@@ -8,13 +8,12 @@ is ENTIRELY soft renders clamped one display notch below the §4.6 eject gate
 carrying ANY grounded (hard) component -- or an ``unattributed`` residual of
 unknown class -- renders untouched. The clamp is a render-time lever, never a
 fold-time cap: the stored :class:`~agents.memory.beliefs.BeliefState` scalar and the
-belief-fold arithmetic are never mutated, and with the lever OFF (the default) every
-touched read-site is byte-identical to pre-task HEAD.
+belief-fold arithmetic are never mutated -- only the two render read-sites clamp.
 
-The clamp sits behind the default-OFF
-:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` resolver (the 13.5/14.10
-live-toggle pattern, cloned from the Task-15.5 ``reporter_exculpation`` resolver) and
-applies at exactly two read-sites: the store's §6.6 belief lines
+The clamp is UNCONDITIONAL since the Task-16.17 baseline-5 graduation
+(:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` now ignores its ``env``
+and always returns ``True`` -- the Task-15.7 ``reporter_exculpation`` move applied to
+this lever) and applies at exactly two read-sites: the store's §6.6 belief lines
 (:func:`agents.memory.store._build_belief_lines`) and the vote-ballot suspicion-graph
 builder (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`). The
 pure classification predicate
@@ -24,7 +23,7 @@ gating lives at the call sites (the 15.5 in-line pattern).
 Test layout mirrors the Task-15.5
 :class:`tests.agents.test_beliefs.TestReporterExculpationOnCommittedBytes` precedent:
 
-* the resolver's default-OFF / truthy-ON contract;
+* the resolver's graduated-unconditional contract;
 * the pure helper's HARD/SOFT/EXEMPT classification (parametrised);
 * the mandatory cross-meeting persistent-hard fixture (a meeting-1 grounded vent
   survives decay + the meeting-boundary roll as ``carried_hard`` and is never
@@ -77,69 +76,36 @@ from orchestrator.game import TacticalAgent
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate
 _CEIL = HARD_EVIDENCE_GATE_RENDER_CEIL  # 0.59, one "%.2f" notch under the gate
-_LEVER_ON: Mapping[str, str] = {ENV_HARD_EVIDENCE_GATE: "1"}
-_LEVER_OFF: Mapping[str, str] = {}
 
 
 # --------------------------------------------------------------------------- #
-# A. The resolver (cloned from the 5febf48 reporter-exculpation resolver)      #
+# A. The resolver (graduated to unconditional at Task 16.17)                    #
 # --------------------------------------------------------------------------- #
 
 
 class TestHardEvidenceGateResolver:
-    """The Task-16.4 lever resolver -- DEFAULT-OFF, the live-toggle pattern.
+    """The Task-16.4 lever resolver -- UNCONDITIONAL since the Task-16.17 close.
 
-    Clones the Task-15.5 ``reporter_exculpation_enabled`` resolver shape (which
-    itself clones the retired 13.5 / 14.10 resolvers): an unset / empty /
-    unrecognised value reads ``False`` so the two render read-sites stay
-    byte-identical to the committed baseline-4 substrate;
-    ``1/true/yes/on`` (case-insensitive, whitespace-trimmed) reads ``True``.
-    ``env=None`` falls back to the live process environment.
+    Retired to the always-ON substrate (the Task-15.7 ``reporter_exculpation``
+    move, applied to this lever once baseline 5 adopted it per the graduation
+    slate): the resolver ignores its ``env`` argument and always returns ``True``,
+    so the J1 render clamp is the default behavior at both belief-render
+    read-sites.
     """
 
-    def test_default_off_on_an_empty_mapping(self) -> None:
-        # The DEFAULT: a bare env cell resolves OFF, so nothing clamps.
-        assert hard_evidence_gate_enabled(env={}) is False
-
-    def test_default_off_when_the_key_is_absent(self) -> None:
-        # An unrelated export leaves the gate OFF -- only its own key counts.
-        assert hard_evidence_gate_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is False
-
-    @pytest.mark.parametrize(
-        "value",
-        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " 1 ", "  true  ", "\tyes\n"],
-    )
-    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
-        self, value: str
-    ) -> None:
-        # Every documented truthy token, plus case + surrounding-whitespace
-        # variants (the resolver strips then lowercases before the set test).
-        assert hard_evidence_gate_enabled(env={ENV_HARD_EVIDENCE_GATE: value}) is True
-
-    @pytest.mark.parametrize(
-        "value", ["0", "false", "", "garbage", "2", "no", "off", "yesno", "  "]
-    )
-    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
-        # Explicit falsy tokens, the empty string, and junk all read OFF: the
-        # resolver is an allow-list membership test, not a truthiness cast.
-        assert hard_evidence_gate_enabled(env={ENV_HARD_EVIDENCE_GATE: value}) is False
-
-    def test_env_none_reads_the_live_process_environment_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # ``env=None`` (and the bare call) reads ``os.environ`` LIVE -- an export
-        # flips the gate on without a mapping argument.
-        monkeypatch.setenv(ENV_HARD_EVIDENCE_GATE, "1")
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env can turn it off any more -- every mapping, and the ambient
+        # process environment, resolves ON.
         assert hard_evidence_gate_enabled() is True
-        assert hard_evidence_gate_enabled(env=None) is True
-
-    def test_env_none_reads_the_live_process_environment_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # With the export deleted the live read is OFF -- the default.
+        assert hard_evidence_gate_enabled(env={}) is True
         monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        assert hard_evidence_gate_enabled() is False
-        assert hard_evidence_gate_enabled(env=None) is False
+        assert hard_evidence_gate_enabled() is True
+
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # The ``env`` argument is accepted and ignored (retained for signature
+        # stability); any value -- truthy, falsy, or junk -- reads ON.
+        assert hard_evidence_gate_enabled(env={ENV_HARD_EVIDENCE_GATE: value}) is True
 
 
 # --------------------------------------------------------------------------- #
@@ -406,50 +372,34 @@ def _memory_with_beliefs(
 class TestStoreBeliefLineReadSite:
     """The store's §6.6 belief-line clamp (:func:`_build_belief_lines`)."""
 
-    def test_lever_on_clamps_soft_only_and_holds_hard(self) -> None:
-        # ON: a soft-only 0.70 renders "suspicion 0.59"; the carried-hard 0.70
-        # renders "suspicion 0.70" untouched -- pinned by the exact substring.
+    def test_clamps_soft_only_and_holds_hard(self) -> None:
+        # By default (the clamp is unconditional): a soft-only 0.70 renders
+        # "suspicion 0.59"; the carried-hard 0.70 renders "suspicion 0.70"
+        # untouched -- pinned by the exact substring.
         memory = _memory_with_beliefs(
             {
                 "p-2": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20)),
                 "p-3": (0.70, 0.5, SuspicionProvenance(carried_hard=0.20)),
             }
         )
-        rendered = render_for_prompt(memory, env=_LEVER_ON)
+        rendered = render_for_prompt(memory)
         assert "p-2: suspicion 0.59" in rendered
         assert "p-3: suspicion 0.70" in rendered
 
-    def test_lever_off_is_byte_identical_to_no_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # OFF (an empty mapping) must render EXACTLY the same bytes as passing no
-        # env at all under a clean environment -- the byte-identity contract.
-        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        memory = _memory_with_beliefs(
-            {"p-2": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20))}
-        )
-        off_render = render_for_prompt(memory, env=_LEVER_OFF)
-        no_env_render = render_for_prompt(memory)
-        assert off_render == no_env_render
-        # The soft-only row renders its RAW stored scalar when the lever is OFF.
-        assert "p-2: suspicion 0.70" in off_render
-
-    def test_override_value_passes_through_untouched_lever_on(self) -> None:
-        # ON with an override: the override VALUE is the post-fold pipeline truth
-        # (the builder already clamped the seed before the manager pre-vote fold),
-        # so it passes through UNCLAMPED even though the STORED provenance is
-        # soft-only -- re-clamping against the stored provenance would misclassify
-        # a row that took fresh HARD lift this meeting. A player ABSENT from the
-        # override still renders its clamped stored scalar.
+    def test_override_value_passes_through_untouched(self) -> None:
+        # An override VALUE is the post-fold pipeline truth (the builder already
+        # clamped the seed before the manager pre-vote fold), so it passes through
+        # UNCLAMPED even though the STORED provenance is soft-only -- re-clamping
+        # against the stored provenance would misclassify a row that took fresh
+        # HARD lift this meeting. A player ABSENT from the override still renders
+        # its clamped stored scalar.
         memory = _memory_with_beliefs(
             {
                 "p-2": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20)),
                 "p-4": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20)),
             }
         )
-        rendered = render_for_prompt(
-            memory, suspicion_override={"p-2": 0.66}, env=_LEVER_ON
-        )
+        rendered = render_for_prompt(memory, suspicion_override={"p-2": 0.66})
         assert "p-2: suspicion 0.66" in rendered  # override value, untouched
         assert "p-4: suspicion 0.59" in rendered  # stored scalar, clamped
 
@@ -458,14 +408,14 @@ class TestStoreBeliefLineReadSite:
     ) -> None:
         # The clamped value is the row's effective signal: a row whose trust
         # deviation sits between the clamped and raw suspicion deviations flips to
-        # the trust line lever-ON. suspicion 0.70 soft-only (dev 0.20), trust 0.35
-        # (dev 0.15): OFF the suspicion line wins (0.20 >= 0.15); ON the clamped
-        # 0.59 (dev 0.09 < 0.15) yields to the trust line.
+        # the trust line under the clamp. suspicion 0.70 soft-only (raw dev 0.20),
+        # trust 0.35 (dev 0.15): the clamped 0.59 (dev 0.09 < 0.15) yields to the
+        # trust line -- where the raw 0.70 (dev 0.20 >= 0.15) would have kept the
+        # suspicion line.
         memory = _memory_with_beliefs(
             {"p-5": (0.70, 0.35, SuspicionProvenance(carried_soft=0.20))}
         )
-        assert "p-5: suspicion 0.70" in render_for_prompt(memory, env=_LEVER_OFF)
-        assert "p-5: trust 0.35" in render_for_prompt(memory, env=_LEVER_ON)
+        assert "p-5: trust 0.35" in render_for_prompt(memory)
 
 
 # --------------------------------------------------------------------------- #
@@ -490,7 +440,7 @@ def _tactical_agent_with_beliefs(
 class TestGameSuspicionGraphBuilderReadSite:
     """The vote-ballot builder clamp (:meth:`TacticalAgent.suspicion_graph_for_meeting`)."""
 
-    def test_lever_on_clamps_the_scalar_but_keeps_raw_provenance(self) -> None:
+    def test_clamps_the_scalar_but_keeps_raw_provenance(self) -> None:
         agent = _tactical_agent_with_beliefs(
             {
                 "p-2": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20)),
@@ -498,9 +448,7 @@ class TestGameSuspicionGraphBuilderReadSite:
                 "p-4": (0.58, 0.5, SuspicionProvenance(carried_soft=0.08)),
             }
         )
-        rows = {
-            e.player_id: e for e in agent.suspicion_graph_for_meeting(env=_LEVER_ON)
-        }
+        rows = {e.player_id: e for e in agent.suspicion_graph_for_meeting()}
 
         # The soft-only over-gate row: the scalar is clamped to 0.59 while the
         # eight provenance kwargs stay the RAW 16.3 decomposition, so the scalar
@@ -526,20 +474,6 @@ class TestGameSuspicionGraphBuilderReadSite:
         # The carried-hard row is untouched; the sub-gate soft row is a min no-op.
         assert rows["p-3"].suspicion == pytest.approx(0.70)
         assert rows["p-4"].suspicion == pytest.approx(0.58)
-
-    def test_lever_off_equals_the_no_env_rows_exactly(self) -> None:
-        agent = _tactical_agent_with_beliefs(
-            {
-                "p-2": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20)),
-                "p-3": (0.70, 0.5, SuspicionProvenance(carried_hard=0.20)),
-            }
-        )
-        off_rows = agent.suspicion_graph_for_meeting(env=_LEVER_OFF)
-        no_env_rows = agent.suspicion_graph_for_meeting()
-        assert off_rows == no_env_rows
-        # OFF the soft-only row carries its RAW over-gate scalar.
-        off = {e.player_id: e.suspicion for e in off_rows}
-        assert off["p-2"] == pytest.approx(0.70)
 
 
 # --------------------------------------------------------------------------- #
@@ -630,7 +564,7 @@ class TestPreVoteRerenderAndOrdering:
         memory = _memory_with_beliefs(
             {"subject": (0.70, 0.5, SuspicionProvenance(carried_soft=0.20))}
         )
-        rendered = render_for_prompt(memory, suspicion_override=rows, env=_LEVER_ON)
+        rendered = render_for_prompt(memory, suspicion_override=rows)
         assert "subject: suspicion 0.59" in rendered
 
     def test_clamp_before_joint_cap_ordering(self) -> None:
