@@ -1,7 +1,7 @@
 """Tests for scripts/record_ml_corpus.sh (Task 15.12).
 
 Exercises argument handling, the --dry-run plan, the provider/substrate/model
-preflight (which the corpus LOCKS to featherless + qwen3_32b + the baseline
+preflight (which the corpus LOCKS to featherless + qwen3_6_27b + the baseline
 model), the locked-seed-range guard, and the hermetic --splits-only emission.
 Every case is hermetic and makes NO network call and NO real-provider record:
 
@@ -27,6 +27,37 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RECORD_SH = _REPO_ROOT / "scripts" / "record_ml_corpus.sh"
+
+# The committed corpus under replays/ml_corpus/ is the PRIOR baseline-3 recording
+# (Qwen/Qwen3-32B), byte-frozen PENDING the Phase-17 re-grounding (Task 16.17).
+# The recorder now pins the BASELINE-5 substrate, so its freeze-path provenance
+# guard (check_replay_provenance) legitimately REFUSES the committed bytes as
+# off-substrate. The record-path fixtures below need a substrate-CURRENT replay to
+# exercise the guard's positive / stamp / model paths, and no committed baseline-5
+# corpus exists yet — so they rebase the one committed replay's model id from the
+# stale baseline-3 model to the baseline-5 model. read_tactical_policy_stamp reads
+# the untouched game_over block and compute_cost_usd sums the recorded (all-$0)
+# cost fields, so rebasing only the model id leaves the canonical fsm-default
+# stamp and the $0 provenance intact.
+_STALE_CORPUS_MODEL = "Qwen/Qwen3-32B"
+_BASELINE_MODEL = "Qwen/Qwen3.6-27B"
+_COMMITTED_CORPUS_REPLAY = (
+    _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
+)
+
+
+def _baseline5_corpus_replay_text() -> str:
+    """The one committed corpus replay, rebased onto the baseline-5 model.
+
+    Yields a replay that carries the canonical fsm-default stamp, the baseline-5
+    model on every recorded call, and $0 cost — the substrate the re-pinned
+    recorder now accepts.
+    """
+
+    return _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
+        f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
+    )
+
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None, reason="bash required to run record_ml_corpus.sh"
@@ -105,7 +136,7 @@ def test_dry_run_default_is_both_sets() -> None:
 
 def test_dry_run_9p2i_seed_range_and_roster() -> None:
     # The primary set: 150 seeds at 1000..1149 (fresh range, disjoint from the
-    # canonical 0–49 sets), roster 9p/2i @ 2 tasks/crewmate (baseline-3 9p2i).
+    # canonical 0–49 sets), roster 9p/2i @ 2 tasks/crewmate (baseline-5 9p2i).
     proc = _run("--set", "9p2i", "--dry-run")
     assert proc.returncode == 0
     assert "seed range: 1000..1149 (150 games)" in proc.stdout
@@ -125,7 +156,7 @@ def test_dry_run_locks_provider_to_featherless() -> None:
     assert proc.returncode == 0
     assert "provider: featherless (LOCKED" in proc.stdout
     assert "would require FEATHERLESS_API_KEY" in proc.stdout
-    assert "prompt set: qwen3_32b" in proc.stdout
+    assert "prompt set: qwen3_6_27b" in proc.stdout
 
 
 def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
@@ -139,9 +170,9 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
     )
     assert (
-        "prompt versions: locked to [accusation_round.qwen3_32b.v5, "
-        "crewmate_report.qwen3_32b.v5, impostor_report.qwen3_32b.v5, "
-        "vote_ballot.qwen3_32b.v6]" in proc.stdout
+        "prompt versions: locked to [accusation_round.qwen3_6_27b.v3, "
+        "crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, "
+        "vote_ballot.qwen3_6_27b.v3]" in proc.stdout
     )
 
 
@@ -184,7 +215,7 @@ def test_dry_run_announces_acceptance_commands() -> None:
     proc = _run("--dry-run")
     assert proc.returncode == 0
     assert "scripts/validity_gate.py" in proc.stdout
-    assert "--expected-model Qwen/Qwen3-32B --require-zero-cost" in proc.stdout
+    assert "--expected-model Qwen/Qwen3.6-27B --require-zero-cost" in proc.stdout
     assert "scripts/verify_samples.sh" in proc.stdout
 
 
@@ -246,7 +277,7 @@ def test_invalid_seed_max_attempts_fails_loud() -> None:
 
 
 def test_preflight_refuses_non_featherless_provider(tmp_path: Path) -> None:
-    # The corpus is baseline-3 == Featherless: any other provider (incl. the fake
+    # The corpus is baseline-5 == Featherless: any other provider (incl. the fake
     # CI provider) is refused so a corpus game can never be recorded off-substrate.
     corpus_root = tmp_path / "ml_corpus"
     env = dict(
@@ -304,8 +335,8 @@ def test_preflight_requires_locked_prompt_set_before_record(tmp_path: Path) -> N
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-3 substrate" in out
-    assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
+    assert "locked baseline-5 substrate" in out
+    assert "AILIBI_PROMPT_SET must be 'qwen3_6_27b'" in out
     assert not corpus_root.exists()
 
 
@@ -317,21 +348,21 @@ def test_preflight_refuses_non_baseline_model_override(
 ) -> None:
     # build_default_client honors the model env knobs for featherless, so a
     # leftover export from a model sweep would record the whole corpus on a
-    # non-baseline model while the MANIFEST stamps Qwen/Qwen3-32B. The preflight
+    # non-baseline model while the MANIFEST stamps Qwen/Qwen3.6-27B. The preflight
     # must refuse it BEFORE any record.
     corpus_root = tmp_path / "ml_corpus"
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     env[model_env] = "some-other/Model-7B"
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-3 model" in out
+    assert "locked baseline-5 model" in out
     assert model_env in out
     assert not corpus_root.exists()  # refused before any record
 
@@ -347,7 +378,7 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_FEATHERLESS_BASE_URL="http://localhost:9999/v1",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
@@ -360,9 +391,9 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
 
 
 def test_prompt_version_registry_matches_locked_script_constant() -> None:
-    # The corpus contract freezes the baseline-3 prompt VERSIONS (turn/opening v5,
-    # vote_ballot v6), not just the set name — the recorder's preflight asserts
-    # the live registry still resolves qwen3_32b to its locked constant. Pin the
+    # The corpus contract freezes the baseline-5 prompt VERSIONS (all four
+    # templates at v3), not just the set name — the recorder's preflight asserts
+    # the live registry still resolves qwen3_6_27b to its locked constant. Pin the
     # two together here: if a later task bumps the registry entry, this test
     # fails and forces the corpus re-lock conversation instead of letting the
     # recorder's guard and the registry drift apart silently.
@@ -372,9 +403,9 @@ def test_prompt_version_registry_matches_locked_script_constant() -> None:
     match = re.search(r'^REQUIRED_PROMPT_VERSIONS="([^"]+)"$', script, re.MULTILINE)
     assert match is not None, "REQUIRED_PROMPT_VERSIONS constant missing from script"
     locked = match.group(1)
-    resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_32b"].values()))
+    resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].values()))
     assert resolved == locked, (
-        "PROMPT_VERSION_SETS['qwen3_32b'] has moved off the locked baseline-3 "
+        "PROMPT_VERSION_SETS['qwen3_6_27b'] has moved off the locked baseline-5 "
         "corpus versions; recording/resuming the 15.12 corpus would now drift. "
         "Re-locking is an owner decision (re-record + re-freeze)."
     )
@@ -399,9 +430,9 @@ def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3-32B",
-        AILIBI_LLM_TRIGGER_MODEL="Qwen/Qwen3-32B",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3.6-27B",
+        AILIBI_LLM_TRIGGER_MODEL="Qwen/Qwen3.6-27B",
         AILIBI_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
@@ -439,7 +470,7 @@ def test_record_path_refuses_unstamped_present_replay(tmp_path: Path) -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     proc = _run("--set", "4p1i", env=env, timeout=120)
@@ -454,15 +485,19 @@ def test_record_path_refuses_unstamped_present_replay(tmp_path: Path) -> None:
 
 def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
     # The positive half: a present replay whose bytes DO carry the explicit
-    # fsm-default stamp (a committed corpus game) passes the policy guard, and
-    # the run proceeds to the next pre-spend step — pinned here by a roster.json
-    # that disagrees with the set's config, which fails loud AFTER the stamp
-    # check and still before any tournament invocation.
+    # fsm-default stamp (the committed corpus game, rebased onto the baseline-5
+    # model) passes the policy guard, and the run proceeds to the next pre-spend
+    # step — pinned here by a roster.json that disagrees with the set's config,
+    # which fails loud AFTER the stamp check and still before any tournament
+    # invocation.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    stamped = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
-    shutil.copyfile(stamped, set_dir / "replay-seed-1000.jsonl")
+    # The committed corpus is stale baseline-3; rebase its model to the baseline-5
+    # substrate so a substrate-current stamped replay is present for the guard.
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        _baseline5_corpus_replay_text(), encoding="utf-8"
+    )
     (set_dir / "roster.json").write_text(
         json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2})
     )
@@ -470,7 +505,7 @@ def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     proc = _run("--set", "4p1i", env=env, timeout=120)
@@ -492,8 +527,9 @@ def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    source = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
-    lines = source.read_text(encoding="utf-8").splitlines()
+    # Baseline-5-rebased committed replay (the committed corpus is stale
+    # baseline-3), then doctor the game_over stamp's method field.
+    lines = _baseline5_corpus_replay_text().splitlines()
     for i, line in enumerate(lines):
         record = json.loads(line)
         if record.get("kind") == "game_over" and record.get("tactical_policy"):
@@ -506,7 +542,7 @@ def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     proc = _run("--set", "4p1i", env=env, timeout=120)
@@ -524,14 +560,14 @@ def test_record_path_refuses_non_baseline_model_in_replay_bytes(
     # resumed replay recorded under another model (but carrying a valid stamp)
     # must be refused by its BYTES before the skip-scan treats it as complete —
     # not left for the external validity gate to fail after the freeze. Fixture:
-    # a committed corpus replay with every recorded model id rewritten. Hermetic:
-    # refused before any tournament invocation.
+    # the baseline-5-rebased committed replay with every recorded model id then
+    # rewritten to a foreign model. Hermetic: refused before any tournament
+    # invocation.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    source = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
-    doctored = source.read_text(encoding="utf-8").replace(
-        '"model":"Qwen/Qwen3-32B"', '"model":"Other/Model-32B"'
+    doctored = _baseline5_corpus_replay_text().replace(
+        '"model":"Qwen/Qwen3.6-27B"', '"model":"Other/Model-32B"'
     )
     assert '"model":"Other/Model-32B"' in doctored  # the fixture has LLM calls
     (set_dir / "replay-seed-1000.jsonl").write_text(doctored, encoding="utf-8")
@@ -539,7 +575,7 @@ def test_record_path_refuses_non_baseline_model_in_replay_bytes(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
-        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     proc = _run("--set", "4p1i", env=env, timeout=120)
