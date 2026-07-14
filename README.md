@@ -45,7 +45,7 @@ These are the architectural invariants every contributor (human or agent) must r
 
 ## Project status
 
-MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. Phases 0–15 are merged and closed; Phase 16 (Voice & Judgment) is open and dispatching.
+MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning quality on the same substrate. Phases 0–16 are merged and closed (Phase 16 — Voice & Judgment — closed 2026-07-14 on baseline 5); Phase 17 (co-adaptation) is next to be authored.
 
 | Phase | Description |
 | --- | --- |
@@ -66,7 +66,7 @@ MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning qual
 | 13.5 | Memory-substrate correctness (truth-up → substrate) |
 | 14 | Featherless AI integration: hosted-provider + model/prompt migration |
 
-The post-Phase-14 roadmap is laid out in [tasks/post-phase-14-plan.md](tasks/post-phase-14-plan.md): Phase 15 ([tasks/phase-15.md](tasks/phase-15.md)) runs an evidence-substrate cleanup wave (charter: [tasks/post-phase-14-clean-up.md](tasks/post-phase-14-clean-up.md)) closing on baseline 3, then the machine-learned tactical-policy program — measurement harness, training environment, calibration corpus, rebuilt meeting surrogate, and a multi-method training bake-off — with a mid-phase pause that picks the winning method on measured numbers before a productization wave is authored. Phase 15 closed 2026-07-11 (branch A: the learned impostor champion ships opt-in; baseline 3 canonical). Phase 16 ([tasks/phase-16.md](tasks/phase-16.md)) is open: Voice & Judgment — citation-gated ballots, information pooling (roll-call/vouching/absence), personas — on a probe-locked model (Qwen3.6-27b evaluated against the incumbent before any swap). Co-adaptation retraining (Phase 17) and presentation (Phase 18) follow.
+The post-Phase-14 roadmap is laid out in [tasks/post-phase-14-plan.md](tasks/post-phase-14-plan.md): Phase 15 ([tasks/phase-15.md](tasks/phase-15.md)) runs an evidence-substrate cleanup wave (charter: [tasks/post-phase-14-clean-up.md](tasks/post-phase-14-clean-up.md)) closing on baseline 3, then the machine-learned tactical-policy program — measurement harness, training environment, calibration corpus, rebuilt meeting surrogate, and a multi-method training bake-off — with a mid-phase pause that picks the winning method on measured numbers before a productization wave is authored. Phase 15 closed 2026-07-11 (branch A: the learned impostor champion ships opt-in; baseline 3 canonical). Phase 16 ([tasks/phase-16.md](tasks/phase-16.md)) closed 2026-07-14 on baseline 5: Voice & Judgment — citation-gated ballots (graduated ON with the hard-evidence gate and observation-id rendering; citation compliance 1.000 at close), information pooling (roll-call/vouching shipped; the absence prior stays OFF as a recorded slate ruling pending roll-call calibration), personas — all on the probe-locked `Qwen/Qwen3.6-27B` (baseline 4 was the model-only swap). Co-adaptation retraining (Phase 17) and presentation (Phase 18) follow.
 
 ---
 

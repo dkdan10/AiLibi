@@ -89,7 +89,10 @@ baseline 6                      co-adapted movers · upgraded meetings
   there. The training-signal doctrine is locked: optimizers maximize measurable side-specific competence
   with a KL anchor to the scripted FSM; the validity gate and the watchability referee are selection
   gates, never rewards.
-- **Phase 16 — Voice & Judgment (contracted, `tasks/phase-16.md`, opened 2026-07-11).** The deferred
+- **Phase 16 — Voice & Judgment (`tasks/phase-16.md`, opened 2026-07-11, CLOSED 2026-07-14 on
+  baseline 5: J1 + observation-id rendering + the citation gate graduated ON; the absence prior
+  stays OFF as a recorded slate ruling pending roll-call calibration — Phase 17 re-runs its
+  counterfactual on baseline-5 bytes).** The deferred
   `audits/post-phase-14-Voice-and-Judgment-planning.md` program, upgraded by what Wave 0 lands: personas
   (deterministic per-seed registry + persona-conditioned prompts), the citation-gated vote surface
   (zero-flag convictions must cite a source — with vent observations now citable, the gate has sources
