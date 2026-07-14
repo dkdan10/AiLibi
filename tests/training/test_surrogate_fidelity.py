@@ -370,17 +370,28 @@ def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
     """The re-run FO-6 decision head degenerates to always-SKIP on 9p2i (§5.2).
 
     Its top-1 clears the ~1/9 base rate (the physical rank has SOME signal) but its
-    binary decision head is worse than the trivial always-eject constant and skips
-    the majority of true ejection meetings — the collapse the single top-1 number
-    hid.
+    binary decision head never predicts an ejection — it skips the majority (in
+    fact all) of true ejection meetings. On the baseline-3/4 bytes that trivial
+    policy was also WORSE than the always-eject constant (eject-majority meeting
+    mix), which is what ``degenerates_to_skip`` encodes; the baseline-5 close
+    record flipped the mix to skip-majority (109 SKIP vs 70 EJECT of 179 — the
+    graduated citation chain convicts less often), so always-skip now trivially
+    BEATS always-eject and that flag reads False. The behavioral collapse is
+    unchanged and still pinned below; the surrogate stays prior-substrate-anchored
+    by design (audits/audit-phase-16-close.md §8 — Phase 17 re-grounds before any
+    training read).
     """
 
     report = fo6_rebaseline(build_meeting_table(_NINE))
     assert report.model_name == "fo6-physical-logistic"
     assert report.top1 > 1.0 / 9.0  # beats the per-candidate base rate
-    assert report.degenerates_to_skip
-    assert report.skip_vs_eject_accuracy < report.always_eject_baseline
+    assert report.ejection_predicted_skips == report.ejection_meetings  # never ejects
     assert 2 * report.ejection_predicted_skips > report.ejection_meetings
+    # The substrate-contingent halves, pinned at their baseline-5 truth: the
+    # meeting mix is skip-majority, so the all-skip head scores above the
+    # always-eject constant and the eject-era degeneracy flag reads False.
+    assert report.skip_vs_eject_accuracy > report.always_eject_baseline
+    assert not report.degenerates_to_skip
 
 
 def test_fidelity_runs_on_the_small_preset() -> None:
