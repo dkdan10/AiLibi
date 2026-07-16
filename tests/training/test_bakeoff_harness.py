@@ -13,6 +13,7 @@ the operator-executed full protocol.
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -43,8 +44,10 @@ from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
 from training.bakeoff import policy_es
 from training.bakeoff.es import ESConfig
+from training.bakeoff.goodhart import run_goodhart_probe
 from training.bakeoff.harness import (
     ANCHOR_CE_CEILING,
+    BAKEOFF_BASELINE_ID,
     BakeoffPolicy,
     BakeoffProtocolConfig,
     BakeoffResult,
@@ -84,6 +87,21 @@ def test_eval_seeds_are_the_frozen_corpus_test_split() -> None:
     assert eval_seeds == tuple(raw["test"])
     assert len(eval_seeds) == 30
     assert all(seed % 5 == 4 for seed in eval_seeds)
+
+
+# --------------------------------------------------------------------------- #
+# 1b. The selection-bar pin (Task 17.11): baseline-5 + goodhart default.       #
+# --------------------------------------------------------------------------- #
+
+
+def test_selection_bar_pins_the_baseline_5_floors() -> None:
+    """Pin Task 17.11: the bake-off selects on the baseline-5 (phase-close)
+    floors and the goodhart probe default tracks the same literal."""
+
+    assert BAKEOFF_BASELINE_ID == "baseline-5"
+    signature = inspect.signature(run_goodhart_probe)
+    probe_default = signature.parameters["baseline_id"].default
+    assert probe_default == BAKEOFF_BASELINE_ID
 
 
 # --------------------------------------------------------------------------- #

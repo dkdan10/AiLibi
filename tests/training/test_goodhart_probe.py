@@ -42,7 +42,7 @@ def _watchability(
 
     return WatchabilityReport(
         replay_set_dir="x",
-        baseline_id="baseline-3",
+        baseline_id="baseline-5",
         roster_key="9p2i",
         games_total=len(per_game),
         integrity_ok=True,
@@ -482,5 +482,5 @@ def test_evaluator_rejects_duplicate_fitness_seeds() -> None:
             num_impostors=1,
             tasks_per_crewmate=1,
             fitness_seeds=(0, 1, 0),
-            baseline_id="baseline-3",
+            baseline_id="baseline-5",
         )
