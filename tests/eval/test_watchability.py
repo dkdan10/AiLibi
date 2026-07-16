@@ -658,18 +658,17 @@ def test_corpus_4p1i_passes_the_referee_via_the_advisory_rule() -> None:
     """``replays/ml_corpus/4p1i`` PASSES: the one-event floor is advisory.
 
     The pause audit §1 finding: corpus-4p1i measures 0.0 on
-    ``witnessed_event_rate`` (baseline-3 floor 1/55 = 0.0182, a one-event
+    ``witnessed_event_rate`` (baseline-5 floor 1/61 ≈ 0.0164, a one-event
     numerator) while passing the hard validity gate and both other supply floors.
     Under the advisory rule the set passes the referee; the miss is still reported.
 
-    Task 16.14 note: the corpus is BASELINE-3 substrate and stays pinned to the
-    baseline-3 floor block explicitly — the DEGRADED-Q3 rule (the baseline-5
-    floor block's own doctrine comment) forbids measuring the stale corpus
-    against baseline-5 floors as same-substrate evidence, and the bare default
-    now resolves to baseline-5.
+    Task 17.9 note: the corpus is now re-recorded at BASELINE-5 (the re-ground),
+    so it is measured against its OWN baseline-5 block — the Q3 restoration:
+    same-substrate evidence again, no longer the DEGRADED-Q3 stale-context read
+    that pinned the prior baseline-3 recording to the baseline-3 floors.
     """
 
-    report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-3")
+    report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-5")
     assert report.integrity_ok is True
     assert report.referee_passed is True
     assert report.supply_floors_passed is True
