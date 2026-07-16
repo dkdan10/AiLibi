@@ -276,46 +276,56 @@ def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
         assert conversion.passed is True, sample_dir.name
 
 
-def test_remeasured_corpus_sets_keep_their_close_audit_verdicts() -> None:
-    """The 16.11 re-measurement, END TO END: both corpus sets stay PASS.
+def test_remeasured_corpus_sets_at_baseline5_referee_verdicts() -> None:
+    """The Task-17.9 re-record re-grounds both corpus sets to baseline 5.
 
-    Measured from the committed bytes through the public referee (not
-    hand-fed gauges), so this is the one pin where the DERIVED floor differs
-    from the absolute anchor on the full ``compute_watchability`` path: the
-    corpus sets' above-baseline flag densities derive floors BELOW the pins
-    (the exact values in the floors-block comments), both measured
-    conversions clear them, and no committed set changes verdict at the
-    re-anchor (close audit §1). A regression that silently reverted the
-    conversion gauge to the absolute pin would flip these floor values even
-    though every verdict here would stay green.
+    The corpus is now measured against its OWN baseline-5 block — the Q3
+    restoration: same-substrate evidence again, no longer the DEGRADED-Q3
+    stale-context read that pinned the prior baseline-3 recording to the
+    baseline-3 floors. The honest baseline-5 verdicts DIVERGE from the
+    baseline-3 close-audit PASS:
 
-    The ml_corpus was NOT re-recorded at Task 16.14 — it stays baseline-3 /
-    Qwen3-32B substrate — so it is scored against the ``baseline-3`` block it
-    belongs to (the DEGRADED-Q3 rule: the corpus is never measured against the
-    baseline-4 floors as same-substrate evidence). Before the default moved to
-    baseline-4 this was the implicit default; naming it keeps the pins bit-exact.
+    * 4p1i still PASSES — its conversion clears the derived population-relative
+      floor and the one-event ``witnessed_event_rate`` floor is advisory.
+    * 9p2i now FAILS the referee on ``witnessed_event_rate`` (0.0334 < the 0.0345
+      floor, a narrow rate miss that is NOT the one-event advisory case) even
+      though its conversion and flag-density floors clear. This is the expected
+      direction under the co-adapted baseline-5 economy (17.5/17.12: a
+      starved-supply rejection is the instrument working, never silent); the
+      surrogate/bake-off consume the corpus as a TRAINING substrate regardless
+      of this watchability verdict.
     """
 
-    corpus_nine = compute_watchability(_CORPUS_NINE, baseline_id="baseline-3")
+    corpus_nine = compute_watchability(_CORPUS_NINE, baseline_id="baseline-5")
     assert corpus_nine.integrity_ok is True
-    assert corpus_nine.supply_floors_passed is True
-    assert corpus_nine.referee_passed is True
+    assert corpus_nine.supply_floors_passed is False  # witnessed_event_rate miss
+    assert corpus_nine.referee_passed is False
+    witnessed_nine = next(
+        g for g in corpus_nine.supply_gauges if g.name == "witnessed_event_rate"
+    )
+    assert witnessed_nine.measured == 0.0333889816360601
+    assert witnessed_nine.floor == 0.034482758620689655
+    assert witnessed_nine.passed is False  # a real rate miss, blocks the floor AND
     conversion_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_nine.measured == 235 / 331
-    assert conversion_nine.floor == 0.5738572515937326  # derived < the 71/107 pin
-    assert conversion_nine.passed is True
+    assert conversion_nine.measured == 0.5333333333333333
+    assert conversion_nine.floor == 0.37816259549905257  # derived population-relative
+    assert (
+        conversion_nine.passed is True
+    )  # conversion clears; the miss is witnessed-supply
 
-    corpus_four = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-3")
+    corpus_four = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-5")
     assert corpus_four.integrity_ok is True
-    assert corpus_four.supply_floors_passed is True  # witnessed miss is advisory
+    assert (
+        corpus_four.supply_floors_passed is True
+    )  # witnessed miss is advisory (one-event)
     assert corpus_four.referee_passed is True
     conversion_four = next(
         g for g in corpus_four.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_four.measured == 26 / 36
-    assert conversion_four.floor == 0.43512043512043513  # derived < the 20/33 pin
+    assert conversion_four.measured == 0.5405405405405406
+    assert conversion_four.floor == 0.29304029304029305  # derived population-relative
     assert conversion_four.passed is True
 
 

@@ -27,6 +27,8 @@ Async ``complete`` calls are driven with ``asyncio.run`` rather than
 from __future__ import annotations
 
 import asyncio
+import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,6 +51,8 @@ from llm.featherless_client import (
     FeatherlessClient,
     FeatherlessRawResponse,
     _build_chat_payload,
+    _HttpResponse,
+    _MAX_SEND_ATTEMPTS,
     _raw_from_response_body,
     _send_with_retry,
     _supports_thinking_kwarg,
@@ -968,6 +972,40 @@ class _FakePoster:
         return self._responses[index]
 
 
+class _ScriptedPoster:
+    """Poster that returns scripted responses OR raises scripted exceptions.
+
+    A ``BaseException`` item is raised (modeling a transport failure from
+    ``client.post``); an ``_HttpResponse`` item is returned. Repeats the last
+    item once the script is exhausted (a single-element script models a stably
+    failing endpoint). Lets the CALL-level transport/parse retry in
+    :func:`_send_with_retry` be driven without importing the transport library
+    at module import (Task 17.9)."""
+
+    def __init__(self, script: Sequence[_HttpResponse | BaseException]) -> None:
+        self._script = list(script)
+        self.calls = 0
+
+    async def __call__(self) -> _HttpResponse:
+        item = self._script[min(self.calls, len(self._script) - 1)]
+        self.calls += 1
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+
+@dataclass
+class _TruncatedJsonResponse:
+    """A 2xx whose body fails JSON parse — a truncated hosted response (the
+    ``response.json()`` failure that dominated the Task-17.9 recording churn)."""
+
+    status_code: int = 200
+    text: str = '{"choices": [{"messa'
+
+    def json(self) -> Any:
+        raise json.JSONDecodeError("Expecting ',' delimiter", self.text, 5)
+
+
 async def _noop_sleep(_seconds: float) -> None:
     return None
 
@@ -1214,3 +1252,96 @@ class TestSendWithRetry:
             )
         # All attempts consumed (no early success).
         assert poster.calls == 3
+
+    # -- call-level transport / parse retry (Task 17.9) -----------------------
+
+    def test_retries_transport_error_then_succeeds(self) -> None:
+        # A dropped / half-read connection mid-stream (httpx.RemoteProtocolError,
+        # a TransportError) is the SAME transient class as a 5xx: retry the call
+        # rather than crash the whole game. _default_send passes the httpx
+        # transport family; model it here so the fake path stays httpx-free.
+        import httpx
+
+        poster = _ScriptedPoster(
+            [
+                httpx.RemoteProtocolError("peer closed connection (incomplete read)"),
+                _FakeResponse(200, _json={"ok": 1}),
+            ]
+        )
+        body = asyncio.run(
+            _send_with_retry(
+                poster,
+                model="m",
+                sleep=_noop_sleep,
+                retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+            )
+        )
+        assert body == {"ok": 1}
+        assert poster.calls == 2
+
+    def test_retries_truncated_json_body_then_succeeds(self) -> None:
+        # A truncated 2xx body fails response.json(); the DEFAULT retryable_exc
+        # (json.JSONDecodeError) retries it, no transport-library import needed.
+        poster = _ScriptedPoster(
+            [_TruncatedJsonResponse(), _FakeResponse(200, _json={"ok": 2})]
+        )
+        body = asyncio.run(_send_with_retry(poster, model="m", sleep=_noop_sleep))
+        assert body == {"ok": 2}
+        assert poster.calls == 2
+
+    def test_exhausted_transport_errors_raise_descriptively(self) -> None:
+        # A persistently-truncating endpoint must fail loud (no silent fallback)
+        # after the bounded budget, naming the transport error and the model.
+        import httpx
+
+        poster = _ScriptedPoster([httpx.RemoteProtocolError("dropped")])
+        with pytest.raises(RuntimeError, match="transport/parse error") as exc_info:
+            asyncio.run(
+                _send_with_retry(
+                    poster,
+                    model="Qwen/Qwen3.6-27B",
+                    sleep=_noop_sleep,
+                    max_attempts=3,
+                    retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+                )
+            )
+        assert poster.calls == 3
+        message = str(exc_info.value)
+        assert "RemoteProtocolError" in message
+        assert "Qwen/Qwen3.6-27B" in message
+
+    def test_permanent_400_still_fails_loud_with_transport_retry_enabled(self) -> None:
+        # Enabling transport retry must not swallow a permanent 4xx: a 400 is a
+        # non-retryable STATUS and still fails loud on the first call.
+        import httpx
+
+        poster = _ScriptedPoster([_FakeResponse(400, text="bad request")])
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            asyncio.run(
+                _send_with_retry(
+                    poster,
+                    model="m",
+                    sleep=_noop_sleep,
+                    retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+                )
+            )
+        assert poster.calls == 1
+
+    def test_default_attempt_budget_is_six(self) -> None:
+        # The default call budget is _MAX_SEND_ATTEMPTS, bumped to 6 for Task-17.9
+        # recording resilience: a persistently-failing transport exhausts exactly
+        # that many attempts. Pins the constant so a change is a deliberate one.
+        import httpx
+
+        poster = _ScriptedPoster([httpx.RemoteProtocolError("dropped")])
+        with pytest.raises(RuntimeError, match="transport/parse error"):
+            asyncio.run(
+                _send_with_retry(
+                    poster,
+                    model="m",
+                    sleep=_noop_sleep,
+                    retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+                )
+            )
+        assert poster.calls == _MAX_SEND_ATTEMPTS
+        assert _MAX_SEND_ATTEMPTS == 6

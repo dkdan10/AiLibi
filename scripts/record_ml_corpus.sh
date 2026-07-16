@@ -13,8 +13,11 @@
 # replays/ml_corpus/ (NOT replays/samples/), at fresh seed ranges so a corpus game
 # can never be confused with a canonical 0–49 game.
 #
-# Two sets, ~3x the canonical 9p2i meeting/ejection volume (~7h wall with 2
-# Featherless seed workers):
+# Two sets, ~3x the canonical 9p2i meeting/ejection volume (~14–15h wall with 2
+# Featherless seed workers — baseline-5 meetings run ~2x baseline-3, so plan
+# roughly double the stale ~7h baseline-3 estimate; the 16.14/16.17 operator
+# notes apply: staggered worker starts, jittered backoff, per-seed atomic
+# staging, AILIBI_SEED_MAX_ATTEMPTS=8):
 #   9p2i  — 150 seeds (1000..1149), roster 9p/2i, 2 tasks/crewmate   [primary]
 #   4p1i  —  50 seeds (1000..1049), roster 4p/1i, 1 task/crewmate    [secondary]
 #
@@ -57,8 +60,9 @@
 # AILIBI_FEATHERLESS_BASE_URL override is refused), and the per-template prompt
 # versions (the registry must still resolve qwen3_6_27b to the locked v3 map,
 # and rows recorded off that map are refused at freeze).
-# ~7h wall; commit is one atomic PR after the gate + byte-verify pass per set. May
-# share the baseline-5 operator session.
+# ~14–15h wall (baseline-5 meetings run ~2x baseline-3); commit is one atomic PR
+# after the gate + byte-verify pass per set. May share the baseline-5 operator
+# session.
 
 set -euo pipefail
 
@@ -429,7 +433,7 @@ PYINNER
 # identically to an explicit one, and its model column derives from the same
 # bytes) — so without this guard a foreign replay dropped into the dir would be
 # resumed-over and silently FROZEN, leaving the external validity gate to fail
-# only AFTER the set was marked frozen. Per replay, three byte-level checks:
+# only AFTER the set was marked frozen. Per replay, four byte-level checks:
 #   * the 15.9 tactical-policy stamp is present and equals the FULL five-field
 #     canonical fsm_default_tactical_policy_stamp() — matching policy_id alone
 #     would accept a hand-crafted stamp with non-canonical method/encoder/
@@ -437,7 +441,17 @@ PYINNER
 #   * every model recorded anywhere in it (meeting llm_calls AND failed-call
 #     rows) is the locked baseline model — this also refuses a wall-clock-miss
 #     "(deadline_default)" phantom, which the validity gate rejects too;
-#   * its summed cost is exactly $0 (the flat-rate provider contract).
+#   * its summed cost is exactly $0 (the flat-rate provider contract);
+#   * its game_over substrate_flags stamp POSITIVELY carries the baseline-5
+#     graduated-lever slate — every retired always-on lever present and True
+#     (incl. the 16.4/16.5/16.6 graduations hard_evidence_gate /
+#     observation_id_rendering / citation_gate) and absence_prior OFF (the 16.17
+#     recorded stay-OFF) — the same tolerant per-lever match the validity gate
+#     (check_cost_and_provenance) and the loader (_assert_substrate_matches)
+#     enforce. The env preflight only REFUSES a polluted AILIBI_ABSENCE_PRIOR;
+#     this asserts the SLATE in the recorded BYTES, so a stale baseline-3 replay
+#     (missing the three graduated levers) is refused here, at the recorder, not
+#     only at the external validity gate.
 # Checked pre-spend (before the skip-scan treats a replay as complete) and again
 # before the freeze. $0, no network.
 check_replay_provenance() {
@@ -448,16 +462,25 @@ from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
 from orchestrator.replay import (  # noqa: E402
+    SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     MeetingReplayEntry,
     compute_cost_usd,
     fsm_default_tactical_policy_stamp,
     read_all_entries,
+    read_substrate_flags,
     read_tactical_policy_stamp,
+    substrate_flag_snapshot,
 )
 
 set_dir, baseline_model = Path(sys.argv[2]), sys.argv[3]
 canonical = fsm_default_tactical_policy_stamp()
+# The documented baseline-5 graduated-lever slate: a BARE recording environment
+# (env={}), so absence_prior is its recorded stay-OFF and every graduated lever
+# is unconditionally ON. The preflight already refuses a polluted
+# AILIBI_ABSENCE_PRIOR, so the bare slate is exactly what this recorder freezes.
+slate = substrate_flag_snapshot(env={})
+canonical_keys = set(SUBSTRATE_FLAG_KEYS)
 bad: list[str] = []
 for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
     stamp = read_tactical_policy_stamp(path)
@@ -480,14 +503,40 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
     cost = compute_cost_usd(path)
     if cost != 0.0:
         bad.append(f"{path.name}: non-zero recorded cost ${cost:.4f}")
+    # POSITIVE substrate-slate assertion (Task 17.9): the game_over stamp must
+    # carry the baseline-5 graduated-lever slate, not just survive the env
+    # refusal. Same tolerant per-lever match as check_cost_and_provenance /
+    # _assert_substrate_matches: an always-on lever must be present and True, a
+    # default-OFF toggleable lever reads False on both sides, and an unknown key
+    # is a stripped/foreign stamp.
+    flags = read_substrate_flags(path)
+    if flags is None:
+        bad.append(f"{path.name}: no substrate_flags stamp on game_over")
+    else:
+        unknown = sorted(set(flags) - canonical_keys)
+        if unknown:
+            bad.append(
+                f"{path.name}: unknown substrate keys {unknown} "
+                f"(not the baseline-5 slate {sorted(canonical_keys)})"
+            )
+        differing = sorted(
+            key for key in canonical_keys if bool(flags.get(key)) != bool(slate.get(key))
+        )
+        if differing:
+            bad.append(
+                f"{path.name}: substrate stamp disagrees with the baseline-5 "
+                f"graduated-lever slate on {differing} "
+                f"(got {dict(sorted(flags.items()))})"
+            )
 if bad:
     listing = "; ".join(bad)
     sys.stderr.write(
         f"check_replay_provenance: {len(bad)} violation(s) in {set_dir} — {listing}\n"
         "A present replay's bytes must prove the full baseline-5 provenance (the\n"
         "canonical 15.9 fsm-default stamp, the locked model on every recorded call,\n"
-        "$0 cost); presence alone must never make it a corpus game. Remove the\n"
-        "file(s) and re-record the seed(s) with this recorder.\n"
+        "$0 cost, and the graduated-lever slate on its game_over stamp); presence\n"
+        "alone must never make it a corpus game. Remove the file(s) and re-record\n"
+        "the seed(s) with this recorder.\n"
     )
     raise SystemExit(1)
 PYINNER
