@@ -1,14 +1,16 @@
-"""Tests for the adversarial Goodhart probe (Task 15.14).
+"""Tests for the adversarial Goodhart probe (Task 15.14; surrogate re-run 17.15).
 
 Exercises the probe machinery on a TINY 4p1i budget (the flat determinism/leak
 roster — short games, fast), not the committed report budget: the point is the
-selector-is-always-legal invariant, the determinism of the run, and the
-report/verdict shape, not a full attack.
+selector-is-always-legal invariant, the determinism of the run, the
+report/verdict shape, and (Task 17.15) the surrogate-path regime pins — not a
+full attack.
 """
 
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import pytest
 
@@ -30,6 +32,12 @@ from training.bakeoff.goodhart import (
     run_goodhart_probe,
 )
 from training.env import TacticalRolloutEnv
+from training.surrogate.ballots import load_staleness_cap
+from training.surrogate.runner import SurrogateUseCounter, load_surrogate_runner_factory
+
+# The COMMITTED re-grounded artifact (Task 17.10) the 17.15 re-run consumes —
+# read-only here; the probe never writes to it.
+_SURROGATE_ARTIFACT_DIR = Path("training/artifacts/surrogate")
 
 
 def _watchability(
@@ -187,6 +195,47 @@ def test_probe_report_round_trips_json() -> None:
     report = _run_tiny()
     restored = GoodhartProbeReport.model_validate_json(report.to_json())
     assert restored == report
+
+
+def test_probe_reruns_end_to_end_on_the_regrounded_surrogate() -> None:
+    # Task 17.15: the probe runs end-to-end with the COMMITTED re-grounded
+    # surrogate (17.10's artifact) threaded through the probe's own
+    # meeting_runner_factory seam. Pins the surrogate-path regime the
+    # regenerated report documents: the evidence text flips to the surrogate
+    # branch, the staleness counter meters real simulated meetings against the
+    # committed cap, and the HARD validity gate FAIL-CLOSES every
+    # surrogate-scored set (cost_and_provenance_exact: surrogate meetings
+    # record no model provenance) — so a surrogate-path HELD is the
+    # wrong-reason regime, never exploit-caught. A future synthetic-provenance
+    # stamp must flip these pins consciously.
+    counter = SurrogateUseCounter(load_staleness_cap(_SURROGATE_ARTIFACT_DIR))
+    factory = load_surrogate_runner_factory(
+        _SURROGATE_ARTIFACT_DIR, use_counter=counter
+    )
+    report = run_goodhart_probe(
+        config=_TINY,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        materiality_bar=0.25,
+        meeting_runner_factory=factory,
+    )
+    assert isinstance(report, GoodhartProbeReport)
+    assert report.baseline_id == "baseline-5"
+    assert report.verdict in ("HELD", "EXPLOITS_FOUND")
+    # The surrogate meeting path was actually exercised and metered.
+    assert counter.uses > 0
+    assert counter.uses <= counter.cap.max_uses
+    # The evidence text is on the surrogate branch, not the fake-meeting one.
+    assert "the surrogate meeting path" in report.supply_floor_note
+    # The validity gate fail-closes surrogate sets (no model provenance rows),
+    # including the scripted-FSM baseline — the structural finding the report
+    # states alongside the verdict.
+    assert report.baseline_validity_passed is False
+    assert report.champion_validity_passed is False
+    # With every set inadmissible, no candidate can clear the composed referee.
+    assert report.baseline_referee_passed is False
+    assert report.champion_referee_passed is False
 
 
 def _champion_eval(
