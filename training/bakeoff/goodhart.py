@@ -1,8 +1,10 @@
 """Adversarial Goodhart probe — red-team the Task 15.2 selection referee (Task 15.14).
 
 Before the mid-phase pause is allowed to use the committed referee
-(:func:`eval.watchability.compute_watchability`, with the baseline-3 floors from
-15.7) as a champion-selection GATE, this probe attacks it: it runs the shared ES
+(:func:`eval.watchability.compute_watchability`, with the pinned selection
+baseline's floors — baseline-5 since Task 17.11; the original 15.14 attack ran
+on the baseline-3 floors from 15.7) as a champion-selection GATE, this probe
+attacks it: it runs the shared ES
 core (:mod:`training.bakeoff.es`) DIRECTLY on the referee score — the
 deliberately-forbidden objective (``eval/watchability.py`` SELECTION-ONLY DOCTRINE)
 — and reports what a tactical genome can extract.
@@ -801,7 +803,7 @@ def run_goodhart_probe(
     num_players: int,
     num_impostors: int,
     tasks_per_crewmate: int,
-    baseline_id: str = "baseline-3",
+    baseline_id: str = "baseline-5",
     materiality_bar: float = 0.25,
     meeting_runner_factory: MeetingRunnerFactory | None = None,
 ) -> GoodhartProbeReport:

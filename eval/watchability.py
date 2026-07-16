@@ -791,11 +791,10 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
 # --watchability`` reads baseline 5's own floors — the referee accepts the
 # committed bytes at equality. (Baselines 3 and 4 moved here from Tasks 15.7
 # and 16.14 the same way; their blocks above stay scoreable via an explicit
-# --baseline-id.) The 15.15 bake-off harness deliberately does NOT track this
-# default: ``BAKEOFF_BASELINE_ID`` stays pinned to ``baseline-3`` (the
-# substrate its committed candidates were selected under) until Phase 17
-# re-selects under the close-substrate referee
-# (audits/audit-phase-16-close.md §8).
+# --baseline-id.) The lag is now CLOSED: Task 17.11 flipped
+# ``BAKEOFF_BASELINE_ID`` to ``baseline-5``, so the bake-off now selects on
+# the same floors as this default (the phase-17 re-selection under the
+# close-substrate referee, audits/audit-phase-16-close.md §8).
 _DEFAULT_BASELINE_ID: Final[str] = "baseline-5"
 
 
