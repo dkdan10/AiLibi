@@ -44,6 +44,10 @@ from agents.base import AgentInterface
 from agents.memory.store import DEFAULT_TOKEN_BUDGET
 from engine.entities import PlayerId, Role
 from engine.world import WorldState, load_canonical_map
+from eval.funnel import (
+    _walk_game_vj,  # noqa: PLC2701 - the production-fold walk the replay reads
+)
+from eval.validity import resolve_roster_knobs, roles_by_seed
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.manager import MeetingTrigger, SuspicionEntry
 from meetings.schemas import ObservationId, SightingRecord, VentWitnessRecord
@@ -644,6 +648,121 @@ def test_go_no_go_reproduces_the_re_measured_go_verdict(
     assert verdict.training_time_runner == "surrogate"
     assert verdict.surrogate_role == "training-time-runner"
     assert verdict.top1_bar == pytest.approx(0.615, abs=1e-12)
+
+
+def test_go_verdict_holds_on_live_served_clamped_features(
+    corpus_table: MeetingTable,
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """The runner-path fidelity replay: the GO survives J1-clamped live serving.
+
+    The promoted live runner reads ``suspicion_graph_for_meeting()`` — the
+    J1-CLAMPED render — while the table (and therefore the §5 verdict's
+    scoring) reads the raw stored scalar; the measured divergence is 29
+    held-out cells (the 17.10 parity census). Codex review on PR #280: the
+    verdict must be shown to hold on the inputs the 17.12 bake-off runner
+    actually serves. So: replace every held-out cell's ``belief_suspicion``
+    with the PRODUCTION-served value (the memory-augmented walk's graphs — the
+    exact channel the runner reads), score the FROZEN committed artifact over
+    the same test views, and assert the verdict inputs reproduce EXACTLY —
+    same decision and same top-1 target on every one of the 104 meetings, so
+    all three GO axes hold unchanged on live-served features. The only
+    movement is a decision-irrelevant reorder from the third rank position
+    down on 2 meetings.
+    """
+
+    assert corpus_table.splits is not None
+    test_seeds = frozenset(corpus_table.splits.test)
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(_CORPUS)
+    game_map = load_canonical_map()
+    per_seed_roles = roles_by_seed(
+        _CORPUS,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    served: dict[tuple[str, PlayerId], dict[PlayerId, float]] = {}
+    for seed in sorted(test_seeds):
+        walk = _walk_game_vj(
+            _CORPUS / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            roles=per_seed_roles[seed],
+            game_map=game_map,
+        )
+        for meeting in walk.meetings:
+            for voter, graph in meeting.suspicion_graph_by_voter.items():
+                served[(meeting.meeting_id, voter)] = {
+                    entry.player_id: entry.suspicion for entry in graph
+                }
+
+    replaced = 0
+
+    def clamp_row(row: MeetingTableRow) -> MeetingTableRow:
+        nonlocal replaced
+        if row.seed not in test_seeds:
+            return row
+        graph = served[(row.meeting_id, row.voter)]
+        candidates = []
+        for cand in row.candidates:
+            # An absent production row is the unseeded neutral prior — the
+            # same 0.5 the table carries (fold parity is exact, so every
+            # non-divergent cell compares bit-equal).
+            live = graph.get(cand.candidate, 0.5)
+            if cand.is_self or live == cand.belief_suspicion:
+                candidates.append(cand)
+            else:
+                replaced += 1
+                candidates.append(cand.model_copy(update={"belief_suspicion": live}))
+        return row.model_copy(update={"candidates": tuple(candidates)})
+
+    clamped = corpus_table.model_copy(
+        update={"rows": tuple(clamp_row(row) for row in corpus_table.rows)}
+    )
+    # Exactly the parity census's held-out J1-divergent cells move — the two
+    # instruments cross-validate each other.
+    assert replaced == 29
+
+    predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    raw_model = BallotSurrogateModel(corpus_table, predictor=predictor)
+    live_model = BallotSurrogateModel(clamped, predictor=predictor)
+    test_views = [
+        view for view in build_meeting_views(corpus_table) if view.seed in test_seeds
+    ]
+    top1_hits = 0
+    predicted_skips = 0
+    correct_skips = 0
+    rank_reorders = 0
+    for view in test_views:
+        raw_pred = raw_model.predict(view)
+        live_pred = live_model.predict(view)
+        # The verdict inputs are IDENTICAL per meeting under live serving.
+        assert live_pred.ejected == raw_pred.ejected
+        assert live_pred.ranking[0] == raw_pred.ranking[0]
+        rank_reorders += int(live_pred.ranking != raw_pred.ranking)
+        if live_pred.ejected is None:
+            predicted_skips += 1
+            if view.ejected is None:
+                correct_skips += 1
+        if view.is_ejection and live_pred.ranking[0] == view.ejected:
+            top1_hits += 1
+    assert top1_hits == 43
+    assert predicted_skips == 104
+    assert correct_skips == 54
+    assert rank_reorders == 2  # third-rank-and-below shuffles only
+
+    # The three GO axes re-stated on the live-served scoring, against the SAME
+    # population bar the §5 verdict used (every decision is SKIP, so the
+    # decision accuracy is exactly the correct-skip share).
+    live_top1 = top1_hits / surrogate_report.ejection_meetings
+    live_accuracy = correct_skips / surrogate_report.meetings_scored
+    assert live_top1 >= 0.75 * surrogate_report.honest_ceiling.max_achievable_top1
+    assert live_top1 > fo6_report.top1
+    assert live_accuracy > surrogate_report.always_eject_baseline
 
 
 def test_fo6_rebaseline_reproduces_pinned_numbers(

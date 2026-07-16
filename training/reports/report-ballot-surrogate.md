@@ -182,6 +182,18 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    instrument semantics mid-re-ground and is a substrate decision for a future
    contract, not a silent side effect here.
 
+   **The runner-path fidelity replay (the measured consequence for the
+   promotion).** Re-scoring the FROZEN committed artifact over the held-out
+   test split with every divergent cell replaced by the live-served CLAMPED
+   value (all 29 held-out cells — the same census as above, the two
+   instruments cross-validating) reproduces the §5 verdict inputs **exactly**:
+   the same decision and the same top-1 target on **every one of the 104
+   meetings** (43/50 top-1, all-SKIP census, 54 correct skips); the only
+   movement is a decision-irrelevant reorder from the third rank position down
+   on 2 meetings. All three GO axes hold unchanged on the features the 17.12
+   runner actually serves — pinned by
+   `test_go_verdict_holds_on_live_served_clamped_features`.
+
 3. **Coerced-SKIP rows are excluded from the fit and counted.** A J2
    citation-gate coerced ballot records `target="SKIP"` with
    `meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` prefixed to its
@@ -469,6 +481,11 @@ nothing.
   the LOADED artifact reproduces the reported numbers):
   ```
   uv run pytest tests/training/test_surrogate_runner.py::test_committed_artifact_round_trips_and_provenance_holds tests/training/test_surrogate_runner.py::test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers -q
+  ```
+- **The runner-path fidelity replay** (§2.1 — the GO verdict inputs reproduce
+  exactly on live-served J1-clamped features):
+  ```
+  uv run pytest tests/training/test_surrogate_runner.py::test_go_verdict_holds_on_live_served_clamped_features -q
   ```
 - **Predicted-ballot calibration** (§4, the surrogate's OWN channel):
   ```
