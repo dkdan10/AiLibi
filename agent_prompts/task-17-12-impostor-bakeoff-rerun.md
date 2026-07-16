@@ -22,7 +22,14 @@ through the same seeds/compute protocol, results table regenerated, finalists ch
 by the same referee-gated ranking. The report must show FLOOR SENSITIVITY per finalist
 (distance to each supply floor and the conversion floor) beside the ranking — the
 designer ruling on selection-bar honesty: a starved-economy rejection must be legible
-as the instrument working. Method ranking changes vs Phase 15 are findings to explain
+as the instrument working. For RARE-EVENT floors the sensitivity read is statistical,
+not just a distance: `witnessed_event_rate`'s baseline-5 floor is a 7/203 point
+estimate (SE ≈ 0.013 — the 17.9 corpus's own 0.0334 "miss" is ~0.07σ, sampling noise),
+so each finalist's cell carries the two-proportion z against the floor's pinned
+numerator/denominator and a sub-1σ miss is labeled within-noise. The floor still gates
+— the verdict column and the noise column sit side by side so the 17.16/17.17 owner
+readings can weigh a coin-flip rejection for what it is. Method ranking changes vs
+Phase 15 are findings to explain
 (what about the baseline-5 economy moved them), not anomalies to smooth.
 
 **Files in scope:**
