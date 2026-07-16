@@ -1,6 +1,6 @@
 """Tests for the surrogate fidelity harness (Task 15.11).
 
-Pins on the committed baseline-3 bytes: by-GAME cross-validation never splits a
+Pins on the committed baseline-5 bytes: by-GAME cross-validation never splits a
 game's meetings across folds (the anti-leakage guarantee), the harness reports
 top-1/top-2, SKIP-vs-eject accuracy, and Brier/ECE TOGETHER (never a single
 headline), the honest ceiling is a measurement bounded in [0, 1], and the re-run
@@ -326,7 +326,8 @@ def test_recon_respects_the_production_render_ceiling() -> None:
                 ceiled_cases += 1
                 assert view.recon_suspicion[cand] == pytest.approx(bound)
     # The bound must actually bind somewhere on the committed bytes — the
-    # pinned-prior+flag shape the 14.10 audit pinned is present in baseline 3.
+    # pinned-prior+flag shape the 14.10 audit pinned persists on the committed
+    # baseline-5 set.
     assert ceiled_cases > 0
 
 

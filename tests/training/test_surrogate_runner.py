@@ -13,12 +13,17 @@ artifact and the committed 9p2i corpus:
   its own ballots;
 * the cross-meeting belief fold consumes the surrogate result's ballot roster;
 * the surrogate path is byte-deterministic (double-run replay hash);
-* the committed artifact round-trips (provenance + determinism) and reproduces the
-  pinned held-out fidelity numbers and the pre-stated NO-GO verdict;
+* the committed artifact round-trips (provenance + determinism, incl. the
+  re-derived ~143× staleness cap) and reproduces the pinned held-out fidelity
+  numbers and the re-measured baseline-5 GO verdict (Task 17.10 — the bar itself
+  is the pre-stated, owner-ratified 15.13 bar);
 * fallback (a) is exercised regardless of the verdict (the bake-off trains today);
 * the §5.6 staleness cap is enforced, cumulatively across runner instances;
 * the fit/predict leakage fence holds (predict never reads labels, fit never reads
   outside the fit side, and a fit fence-violation fails loud);
+* coerced-SKIP rows (the J2 citation-gate marker) are dropped from every fit —
+  their labels are never read — while the recorded bytes stay scored unfiltered
+  (Task 17.10 designer ruling; 0 such rows on the committed corpus);
 * no module under ``training/`` re-implements the tally; and
 * the surrogate's OWN predicted-ballot calibration channel is distinct from the
   harness's recorded-ballot calibration.
@@ -62,6 +67,7 @@ from training.surrogate.ballots import (
     PredictedBallot,
     SurrogateStalenessCap,
     ballot_features_from_row,
+    derive_max_uses,
     fit_corpus_ballot_predictor,
     load_ballot_predictor_artifact,
     load_staleness_cap,
@@ -90,18 +96,6 @@ from training.surrogate.runner import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "surrogate"
-
-# The Task-17.9 baseline-5 corpus re-record moved every corpus-derived surrogate
-# number below: the committed artifact was fit on the PRIOR baseline-3 corpus, so
-# a re-fit/fidelity/verdict measured against the new corpus no longer matches the
-# committed bytes. Re-fitting the artifact + re-pinning these are Task 17.10's
-# explicit scope (surrogate re-ground; training/artifacts/surrogate/ + this file
-# are 17.10's in-scope files). xfail until 17.10 lands rather than pin meaningless
-# stale-artifact-on-new-corpus values (17.10 removes the marker + re-pins).
-_PENDING_SURROGATE_REGROUND_1710 = (
-    "corpus-derived surrogate numbers moved with the Task-17.9 baseline-5 corpus "
-    "re-record; the artifact re-fit + these re-pins are Task 17.10's scope"
-)
 
 
 # --------------------------------------------------------------------------- #
@@ -480,7 +474,6 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
 def test_committed_artifact_round_trips_and_provenance_holds(
     corpus_table: MeetingTable,
 ) -> None:
@@ -493,7 +486,9 @@ def test_committed_artifact_round_trips_and_provenance_holds(
     grouping varies by CPU, so a refit is byte-identical only on the recording
     platform (CI runs on a different one). The committed bytes, never a refit,
     are the frozen ground truth; the frozen-weights evaluation test below pins
-    that they reproduce the reported numbers.
+    that they reproduce the reported numbers. The committed staleness cap is the
+    ~143× rule RE-DERIVED from this corpus's fit-side meeting count (Task 17.10
+    designer ruling — never held at the baseline-3 50 000 by habit).
     """
 
     predictor, sha = load_ballot_predictor_artifact(_ARTIFACT_DIR)
@@ -503,7 +498,15 @@ def test_committed_artifact_round_trips_and_provenance_holds(
 
     cap = load_staleness_cap(_ARTIFACT_DIR)
     assert cap.weights_sha256 == sha
-    assert cap.max_uses == 50_000
+    assert corpus_table.splits is not None
+    fit_seeds = frozenset(corpus_table.splits.train) | frozenset(
+        corpus_table.splits.val
+    )
+    fit_meetings = len(
+        {(r.seed, r.meeting_id) for r in corpus_table.rows if r.seed in fit_seeds}
+    )
+    assert fit_meetings == 437
+    assert cap.max_uses == derive_max_uses(fit_meetings) == 62_491
     assert cap.unit == "meetings"
 
     refit = json.loads(fit_corpus_ballot_predictor(corpus_table).to_artifact_json())
@@ -531,7 +534,6 @@ def test_committed_artifact_round_trips_and_provenance_holds(
             assert refit_value == committed_value, key
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
 def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     corpus_table: MeetingTable,
 ) -> None:
@@ -551,7 +553,7 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     test_views = [
         view for view in build_meeting_views(corpus_table) if view.seed in test_seeds
     ]
-    assert len(test_views) == 91
+    assert len(test_views) == 104
 
     top1_hits = 0
     predicted_ejections = 0
@@ -567,91 +569,107 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
             predicted_ejections += 1
         if view.is_ejection and prediction.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 47
-    assert predicted_ejections == 88
-    assert predicted_skips == 3
-    assert correct_skips == 0
+    assert top1_hits == 43
+    assert predicted_ejections == 0
+    assert predicted_skips == 104
+    assert correct_skips == 54
 
     calibration = frozen.predicted_ballot_calibration(test_views)
-    assert calibration.predicted_ballots == 529
-    assert calibration.predicted_skips == 0
+    assert calibration.predicted_ballots == 84
+    assert calibration.predicted_skips == 518
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
-    assert calibration.brier == pytest.approx(0.3574025827101143, abs=1e-9)
+    assert calibration.brier == pytest.approx(0.2775147125852713, abs=1e-9)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
 def test_surrogate_fidelity_reproduces_pinned_numbers(
     surrogate_report: SurrogateFidelityReport,
 ) -> None:
-    """The held-out surrogate report reproduces the pinned deterministic numbers."""
+    """The held-out surrogate report reproduces the pinned deterministic numbers.
+
+    Baseline-5 truth (Task 17.10 re-ground): the meeting economy flipped to
+    skip-majority (54 of the 104 scored meetings SKIP), the ranking channel is
+    strong (43/50 top-1), and the decision channel predicts SKIP on every
+    meeting — the honest reading is in the report's §5.
+    """
 
     report = surrogate_report
     # Integer census — exact.
-    assert report.meetings_scored == 91
-    assert report.ejection_meetings == 73
-    assert report.skip_meetings == 18
-    assert report.top1_hits == 47
-    assert report.top2_hits == 60
-    assert report.predicted_ejections == 88
-    assert report.predicted_skips == 3
-    assert report.correct_skip_decisions == 0
-    assert report.correct_eject_decisions == 70
-    assert report.ejection_predicted_skips == 3
+    assert report.meetings_scored == 104
+    assert report.ejection_meetings == 50
+    assert report.skip_meetings == 54
+    assert report.top1_hits == 43
+    assert report.top2_hits == 49
+    assert report.predicted_ejections == 0
+    assert report.predicted_skips == 104
+    assert report.correct_skip_decisions == 54
+    assert report.correct_eject_decisions == 0
+    assert report.ejection_predicted_skips == 50
     assert report.degenerates_to_skip is False
-    assert report.ballot_rows == 501
-    assert report.honest_ceiling.ejections_total == 73
-    assert report.honest_ceiling.reachable == 50
+    assert report.ballot_rows == 257
+    assert report.honest_ceiling.ejections_total == 50
+    assert report.honest_ceiling.reachable == 41
     # Floats — deterministic, pinned to the exact literals.
-    assert report.top1 == pytest.approx(0.6438356164383562, abs=1e-12)
-    assert report.top2 == pytest.approx(0.821917808219178, abs=1e-12)
-    assert report.skip_vs_eject_accuracy == pytest.approx(0.7692307692307693, abs=1e-12)
-    assert report.always_eject_baseline == pytest.approx(0.8021978021978022, abs=1e-12)
-    assert report.brier == pytest.approx(0.09837767767162488, abs=1e-12)
-    assert report.ece == pytest.approx(0.07975082915365356, abs=1e-12)
-    assert report.ballot_brier == pytest.approx(0.20695409181636726, abs=1e-12)
-    assert report.ballot_ece == pytest.approx(0.10099800399201568, abs=1e-12)
-    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(
-        0.684931506849315, abs=1e-12
-    )
+    assert report.top1 == pytest.approx(0.86, abs=1e-12)
+    assert report.top2 == pytest.approx(0.98, abs=1e-12)
+    assert report.skip_vs_eject_accuracy == pytest.approx(0.5192307692307693, abs=1e-12)
+    assert report.always_eject_baseline == pytest.approx(0.4807692307692308, abs=1e-12)
+    assert report.brier == pytest.approx(0.05395870952903041, abs=1e-12)
+    assert report.ece == pytest.approx(0.0692479806336306, abs=1e-12)
+    assert report.ballot_brier == pytest.approx(0.12965797665369647, abs=1e-12)
+    assert report.ballot_ece == pytest.approx(0.10626459143968939, abs=1e-12)
+    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.82, abs=1e-12)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
-def test_go_no_go_reproduces_the_pre_stated_no_go_verdict(
+def test_go_no_go_reproduces_the_re_measured_go_verdict(
     surrogate_report: SurrogateFidelityReport,
     fo6_report: SurrogateFidelityReport,
 ) -> None:
-    """``decide_go_no_go`` on the two same-population reports pins NO-GO + fallback (a)."""
+    """``decide_go_no_go`` on the two same-population reports pins the baseline-5 GO.
+
+    The bar is the pre-stated, owner-ratified 15.13 bar, re-MEASURED on the 17.9
+    corpus (locked decision 4): all three population-relative axes pass, so the
+    pre-committed mapping promotes the surrogate to the bake-off's training-time
+    runner tier. The honest diagnosis beside the verdict (the decision channel
+    ties the trivial always-SKIP constant on a skip-majority population) lives in
+    the report's §5 — the verdict and its consequences are exactly what
+    ``decide_go_no_go`` encodes.
+    """
 
     verdict = decide_go_no_go(surrogate_report, fo6_report)
-    assert verdict.verdict == "NO-GO"
+    assert verdict.verdict == "GO"
     assert verdict.meets_ceiling_bar is True
     assert verdict.beats_prior_baseline is True
-    assert verdict.beats_always_eject is False
-    assert verdict.training_time_runner == "fake-provider-meeting-manager"
-    assert verdict.surrogate_role == "diagnostic-only"
-    assert verdict.top1_bar == pytest.approx(0.5136986301369862, abs=1e-12)
+    assert verdict.beats_always_eject is True
+    assert verdict.training_time_runner == "surrogate"
+    assert verdict.surrogate_role == "training-time-runner"
+    assert verdict.top1_bar == pytest.approx(0.615, abs=1e-12)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
 def test_fo6_rebaseline_reproduces_pinned_numbers(
     fo6_report: SurrogateFidelityReport,
 ) -> None:
-    """The FO-6 prior baseline reproduces its always-SKIP collapse on the corpus."""
+    """The FO-6 prior baseline reproduces its all-SKIP decision head on the corpus.
+
+    The behavioral collapse is unchanged on baseline 5 — the tuned head calls
+    SKIP on every one of the 50 true-ejection meetings — but the skip-majority
+    meeting mix now scores an all-skip policy ABOVE the always-eject constant,
+    so the eject-era ``degenerates_to_skip`` flag reads False by its own formula
+    (the same substrate flip the samples-set pin narrates in
+    ``test_surrogate_fidelity.py``).
+    """
 
     report = fo6_report
-    assert report.top1_hits == 13
-    assert report.ejection_meetings == 73
-    assert report.degenerates_to_skip is True
-    assert report.predicted_ejections == 27
-    assert report.predicted_skips == 64
-    assert report.correct_skip_decisions == 11
-    assert report.ejection_predicted_skips == 53
-    assert report.top1 == pytest.approx(0.1780821917808219, abs=1e-12)
-    assert report.top2 == pytest.approx(0.410958904109589, abs=1e-12)
-    assert report.skip_vs_eject_accuracy == pytest.approx(
-        0.34065934065934067, abs=1e-12
-    )
+    assert report.top1_hits == 11
+    assert report.ejection_meetings == 50
+    assert report.degenerates_to_skip is False
+    assert report.predicted_ejections == 0
+    assert report.predicted_skips == 104
+    assert report.correct_skip_decisions == 54
+    assert report.ejection_predicted_skips == 50
+    assert report.top1 == pytest.approx(0.22, abs=1e-12)
+    assert report.top2 == pytest.approx(0.48, abs=1e-12)
+    assert report.skip_vs_eject_accuracy == pytest.approx(0.5192307692307693, abs=1e-12)
 
 
 # --------------------------------------------------------------------------- #
@@ -927,10 +945,10 @@ def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
 def _poison_labels(row: MeetingTableRow) -> MeetingTableRow:
     """Replace a row's LABEL columns with garbage; keep FEATURE columns intact.
 
-    The label set covers the ballot join targets, the meeting outcome, AND the
-    roles ground truth (``voter_role`` / ``voter_is_impostor`` / per-candidate
-    ``role`` / ``is_impostor`` / ``is_ejected``) — a predict path that read ANY
-    of them would diverge from the clean model.
+    The label set covers the ballot join targets, the coercion flag, the meeting
+    outcome, AND the roles ground truth (``voter_role`` / ``voter_is_impostor`` /
+    per-candidate ``role`` / ``is_impostor`` / ``is_ejected``) — a predict path
+    that read ANY of them would diverge from the clean model.
     """
 
     return row.model_copy(
@@ -938,6 +956,7 @@ def _poison_labels(row: MeetingTableRow) -> MeetingTableRow:
             "ballot_target": "poisoned-label",
             "ballot_confidence": 0.0,
             "ballot_primary_reason_id": None,
+            "ballot_coerced_skip": True,
             "ejected_player_id": "poisoned-label",
             "outcome": "EJECTED",
             "voter_role": "IMPOSTOR",
@@ -964,6 +983,7 @@ def _poison_everything(row: MeetingTableRow) -> MeetingTableRow:
             "ballot_target": "poisoned-label",
             "ballot_confidence": 0.0,
             "ballot_primary_reason_id": None,
+            "ballot_coerced_skip": True,
             "ejected_player_id": "poisoned-label",
             "outcome": "EJECTED",
             "voter_role": "IMPOSTOR",
@@ -1074,6 +1094,93 @@ def test_fit_fence_raises_on_a_held_out_view(corpus_table: MeetingTable) -> None
 
 
 # --------------------------------------------------------------------------- #
+# 8b. COERCED-SKIP FIT EXCLUSION (Task 17.10 designer ruling)                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_committed_corpus_carries_zero_coerced_skip_rows(
+    corpus_table: MeetingTable,
+) -> None:
+    """The baseline-5 corpus records NO J2-coerced ballots (the report's census).
+
+    The 17.9 re-record produced zero ``UNCITED_ZERO_FLAG_EJECT_MARKER`` ballots
+    on either set, so the fit-side exclusion drops 0 rows on committed bytes —
+    the count the report states in §2.1. The fence itself is proven on a
+    synthetic marking below (a rule that cannot move is not a rule).
+    """
+
+    assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 0
+    four = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
+    assert sum(row.ballot_coerced_skip for row in four.rows) == 0
+
+
+def _mark_coerced(
+    table: MeetingTable, seeds: frozenset[int], *, poison_labels: bool
+) -> MeetingTable:
+    """Flag every row of ``seeds`` as coerced; optionally poison its labels."""
+
+    def mark(row: MeetingTableRow) -> MeetingTableRow:
+        if row.seed not in seeds:
+            return row
+        update: dict[str, object] = {"ballot_coerced_skip": True}
+        if poison_labels:
+            update["ballot_target"] = "poisoned-label"
+            update["ballot_confidence"] = 0.0
+        return row.model_copy(update=update)
+
+    return table.model_copy(update={"rows": tuple(mark(row) for row in table.rows)})
+
+
+def test_coerced_skip_rows_are_dropped_from_every_fit_path() -> None:
+    """Rows flagged ``ballot_coerced_skip`` leave BOTH fits; their labels are dead.
+
+    On the (fast) 4p1i corpus table: flag one fit-side game's rows as coerced
+    with their labels intact vs with their labels POISONED to a target outside
+    every candidate set — a label that would raise ``ValueError`` inside
+    ``BallotPredictor.fit`` if it were ever read. Both the corpus training entry
+    (:func:`fit_corpus_ballot_predictor`) and the fidelity-adapter path
+    (:meth:`BallotSurrogateModel.fit`) must produce byte-identical predictors
+    for the two tables (the rows were dropped, so the poison is unreachable),
+    and the drop must actually MOVE the fit vs the unmarked table (rows really
+    left). Predict-side blindness to the flag is pinned by the §8 poison tests
+    (``_poison_labels`` poisons ``ballot_coerced_skip`` too) — the fidelity
+    replay scores recorded bytes unfiltered.
+    """
+
+    table = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
+    assert table.splits is not None
+    rows_bearing = {row.seed for row in table.rows}
+    marked_seed = frozenset(
+        {next(seed for seed in table.splits.train if seed in rows_bearing)}
+    )
+
+    marked = _mark_coerced(table, marked_seed, poison_labels=False)
+    poisoned = _mark_coerced(table, marked_seed, poison_labels=True)
+
+    # The corpus training entry: byte-identical with labels intact vs poisoned
+    # (dropped rows are never read), and different from the unmarked fit (the
+    # rows really left the fit side).
+    fit_marked = fit_corpus_ballot_predictor(marked)
+    fit_poisoned = fit_corpus_ballot_predictor(poisoned)
+    assert fit_marked.to_artifact_json() == fit_poisoned.to_artifact_json()
+    fit_clean = fit_corpus_ballot_predictor(table)
+    assert fit_clean.to_artifact_json() != fit_marked.to_artifact_json()
+
+    # The fidelity-adapter path drops the same rows inside per-fold fits.
+    views = build_meeting_views(table)
+    test_seeds = frozenset(table.splits.test)
+    fit_views = [view for view in views if view.seed not in test_seeds]
+    model_marked = BallotSurrogateModel(marked)
+    model_poisoned = BallotSurrogateModel(poisoned)
+    model_marked.fit(fit_views)
+    model_poisoned.fit(fit_views)
+    assert (
+        model_marked.predictor.to_artifact_json()
+        == model_poisoned.predictor.to_artifact_json()
+    )
+
+
+# --------------------------------------------------------------------------- #
 # 9. NO REIMPLEMENTED TALLY                                                   #
 # --------------------------------------------------------------------------- #
 
@@ -1095,7 +1202,6 @@ def test_no_module_under_training_reimplements_the_tally() -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1710, strict=False)
 def test_predicted_ballot_calibration_is_a_distinct_channel(
     module_model: tuple[BallotSurrogateModel, list[MeetingView]],
     surrogate_report: SurrogateFidelityReport,
@@ -1110,9 +1216,9 @@ def test_predicted_ballot_calibration_is_a_distinct_channel(
 
     model, test_views = module_model
     calib = model.predicted_ballot_calibration(test_views)
-    assert calib.predicted_ballots == 529
-    assert calib.predicted_skips == 0
-    assert calib.brier == pytest.approx(0.3574025827101143, abs=1e-12)
+    assert calib.predicted_ballots == 84
+    assert calib.predicted_skips == 518
+    assert calib.brier == pytest.approx(0.2775147125852713, abs=1e-12)
     # Distinct channel by construction.
     assert calib.brier != surrogate_report.ballot_brier
 

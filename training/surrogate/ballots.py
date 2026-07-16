@@ -51,6 +51,16 @@ its side-channel back into the 15.11 table's per-voter rows is fenced —
 outside the declared fit-side seed set. The committed leakage test poisons the
 labels of every non-fit row and proves both directions byte-identical.
 
+**Coerced-SKIP fit exclusion (Task 17.10 designer ruling).** A J2 citation-gate
+coerced ballot records ``target="SKIP"`` but was a FORCED eject, not a chosen
+skip — poison for the decision channel the GO/NO-GO verdict hinges on. Both fit
+paths (:meth:`BallotSurrogateModel.fit` and
+:func:`fit_corpus_ballot_predictor`) DROP rows whose
+``MeetingTableRow.ballot_coerced_skip`` flag is set (the 15.11 table detects
+the production coercion marker at reconstruction); the dropped count is
+reported in ``training/reports/report-ballot-surrogate.md``. Fit-side only:
+the fidelity replay scores the recorded bytes unfiltered.
+
 The predictor itself is a standardized CONDITIONAL LOGIT (the determinism-safe
 default the task hint names): one shared weight vector over the per-candidate
 features plus a learned SKIP alternative over per-voter aggregates, fit by
@@ -69,7 +79,8 @@ frozen surrogate (§5.6, MBPO/Dreamer model-exploitation).
 Public surface (stable — downstream tasks import these):
 :class:`BallotPredictor`, :class:`BallotSurrogateModel`,
 :func:`fit_corpus_ballot_predictor`, :func:`write_ballot_predictor_artifact`,
-:func:`load_ballot_predictor_artifact`, :func:`load_staleness_cap`.
+:func:`load_ballot_predictor_artifact`, :func:`load_staleness_cap`,
+:func:`derive_max_uses`.
 """
 
 from __future__ import annotations
@@ -130,12 +141,32 @@ WEIGHTS_FILENAME: Final[str] = "ballot-predictor.json"
 WEIGHTS_SHA256_FILENAME: Final[str] = "ballot-predictor.json.sha256"
 STALENESS_FILENAME: Final[str] = "max-uses.json"
 
-# The committed staleness cap's default: how many surrogate-simulated MEETINGS a
-# bake-off run may consume against one frozen weights artifact before the counter
-# raises and re-grounding is mandatory (§5.6). Unit and ownership are pinned on
-# :class:`SurrogateStalenessCap`; the rationale for the magnitude lives in
-# ``training/reports/report-ballot-surrogate.md``.
-DEFAULT_MAX_USES: Final[int] = 50_000
+# The staleness-cap rule (§5.6, made mechanical by the Task-17.10 designer
+# ruling): the committed cap is ~143× the fit corpus's FIT-SIDE MEETING COUNT,
+# re-derived at every re-ground — never held at a previous baseline's number by
+# habit. The baseline-3 cap (50 000 ≈ 143 × 349 fit meetings) is the rule's
+# origin; :func:`derive_max_uses` applies it to the current corpus. The
+# rationale for the magnitude lives in
+# ``training/reports/report-ballot-surrogate.md`` §7.
+STALENESS_USES_PER_FIT_MEETING: Final[int] = 143
+
+
+def derive_max_uses(fit_side_meetings: int) -> int:
+    """The ~143× staleness rule: cap = 143 × the fit-side meeting count.
+
+    ``fit_side_meetings`` is the number of distinct meetings in the fit corpus's
+    committed fit side (``train ∪ val`` games) — the grounding data the frozen
+    weights were fit on. Refuses a non-positive count (a cap derived from no
+    grounding data is meaningless — AGENTS.md "no silent fallbacks").
+    """
+
+    if fit_side_meetings <= 0:
+        raise ValueError(
+            f"derive_max_uses needs a positive fit-side meeting count, got "
+            f"{fit_side_meetings}"
+        )
+    return STALENESS_USES_PER_FIT_MEETING * fit_side_meetings
+
 
 _SURROGATE_RATIONALE: Final[str] = (
     "surrogate-predicted ballot (no transcript; Task 15.13 ballot predictor)"
@@ -784,10 +815,16 @@ class BallotSurrogateModel:
                 f"fit received meetings from seeds {leaked} outside the declared "
                 f"fit-side seed set — refusing to read held-out labels"
             )
+        # J2-coerced SKIP rows are EXCLUDED from every fit (Task 17.10 designer
+        # ruling): a coerced ballot records ``target="SKIP"`` but was a forced
+        # eject, not a chosen skip — a poisoned label for the decision channel.
+        # Fit-side only: predict/fidelity still score the recorded bytes
+        # unfiltered (a coerced meeting is still scored exactly as recorded).
         examples = [
             ballot_example_from_row(row)
             for meeting in meetings
             for row in self._rows(meeting)
+            if not row.ballot_coerced_skip
         ]
         predictor = BallotPredictor(epochs=self._epochs, lr=self._lr)
         predictor.fit(examples)
@@ -895,8 +932,14 @@ def fit_corpus_ballot_predictor(
             "use the 15.12 corpus, not a baseline sample set"
         )
     fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
+    # Coerced-SKIP rows are dropped from the fit (Task 17.10 designer ruling —
+    # see :meth:`BallotSurrogateModel.fit`); the dropped count is reported in
+    # ``training/reports/report-ballot-surrogate.md`` (0 on the committed
+    # baseline-5 corpus), never silently absorbed.
     examples = [
-        ballot_example_from_row(row) for row in table.rows if row.seed in fit_seeds
+        ballot_example_from_row(row)
+        for row in table.rows
+        if row.seed in fit_seeds and not row.ballot_coerced_skip
     ]
     predictor = BallotPredictor(epochs=epochs, lr=lr)
     predictor.fit(examples)
@@ -911,7 +954,7 @@ def write_ballot_predictor_artifact(
     predictor: BallotPredictor,
     artifact_dir: Path,
     *,
-    max_uses: int = DEFAULT_MAX_USES,
+    max_uses: int,
 ) -> str:
     """Commit the weights + sha256 sidecar + staleness cap under ``artifact_dir``.
 
@@ -921,6 +964,11 @@ def write_ballot_predictor_artifact(
     references), and :data:`STALENESS_FILENAME` (the committed
     :class:`SurrogateStalenessCap`, keyed on the same sha256). Returns the
     sha256 hex digest.
+
+    ``max_uses`` is REQUIRED and derived from the fit corpus via
+    :func:`derive_max_uses` (the ~143× rule) — deliberately no default, so a
+    re-ground can never hold a previous baseline's cap by habit (the Task-17.10
+    designer ruling that retired the old 50 000 constant).
     """
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -985,9 +1033,9 @@ __all__ = [
     "BALLOT_FEATURE_NAMES",
     "DEFAULT_EPOCHS",
     "DEFAULT_LEARNING_RATE",
-    "DEFAULT_MAX_USES",
     "SKIP_FEATURE_NAMES",
     "STALENESS_FILENAME",
+    "STALENESS_USES_PER_FIT_MEETING",
     "WEIGHTS_FILENAME",
     "WEIGHTS_SHA256_FILENAME",
     "BallotExample",
@@ -999,6 +1047,7 @@ __all__ = [
     "VoterBallotView",
     "ballot_example_from_row",
     "ballot_features_from_row",
+    "derive_max_uses",
     "fit_corpus_ballot_predictor",
     "load_ballot_predictor_artifact",
     "load_staleness_cap",

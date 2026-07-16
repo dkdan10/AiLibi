@@ -50,17 +50,37 @@ ballot. EVERY recorded ballot joins exactly one row (100% join rate, asserted by
 The builder takes ANY replay-set directory and reads a committed ``splits.json``
 when present (:func:`load_splits`), so it runs identically on the 15.12 corpus.
 
+Baseline-5 re-ground (Task 17.10) — two additions, both re-validated on the 17.9
+corpus bytes (which now carry whereabouts turns, observation-cited ballots, and
+marker-prefixed rationales): (1) every row carries ``ballot_coerced_skip`` —
+whether the recorded ballot's ``rationale_text`` opens with the J2 citation-gate
+coercion marker (:data:`meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`) — so
+the 15.13 fit can DROP coerced rows (designer ruling, tasks/phase-17.md: a
+coerced ballot records ``target="SKIP"`` but was a forced eject, not a chosen
+skip) while the fidelity replay still scores the recorded bytes unfiltered; and
+(2) :func:`measure_belief_render_parity` — the 16.10-precedent end-to-end
+cross-check of this module's hand-mirrored belief fold against the PRODUCTION
+fold (``eval.funnel``'s memory-augmented walk: real ``TacticalAgent`` instances
+fed reconstructed packets, read through the exact
+``suspicion_graph_for_meeting()`` accessor a live meeting consumes), which also
+measures the graduated-J1 live-parity divergence — the raw ``belief_suspicion``
+column this table serves vs the CLAMPED rendered value the live runner would be
+served (the Task-16.4 render clamp, unconditional since the 16.17 baseline-5
+record).
+
 Pure and offline: no network, no ``AILIBI_*`` env, no LLM call; the only engine
 imports are the reconstruction path (seeder + ``advance_tick`` + the orchestrator's
 ``apply_meeting_result``), mirroring the committed 15.3 / 15.8 folds.
 
 Public surface (stable — downstream tasks import these): :class:`MeetingTableRow`,
 :class:`CandidateFeatures`, :class:`MeetingTable`, :class:`SurrogateSplits`,
-:func:`build_meeting_table`, :func:`load_splits`.
+:class:`BeliefRenderParity`, :func:`build_meeting_table`, :func:`load_splits`,
+:func:`measure_belief_render_parity`.
 """
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -76,6 +96,7 @@ from pydantic import (
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
     BODY_PROXIMITY_WINDOW_TICKS,
+    SUSPICION_PROVENANCE_ATOL,
     VENTING_SUSPICION_DELTA,
     WITNESSED_KILL_SUSPICION_DELTA,
     BeliefState,
@@ -96,18 +117,27 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
+
+# The production-fold walk the 17.10 parity cross-check joins against
+# (:func:`measure_belief_render_parity`): eval.funnel's memory-augmented walk is
+# the 16.10 instrument's machinery (real TacticalAgents fed reconstructed
+# packets), imported rather than forked — a re-implementation here would be a
+# second hand-mirror of exactly the fold this cross-check exists to verify.
+from eval.funnel import _walk_game_vj
 from eval.validity import (
     assemble_tournament_report,
     resolve_roster_knobs,
     roles_by_seed,
     seeds_on_disk,
 )
-from meetings.manager import extract_belief_evidence
+from meetings.manager import UNCITED_ZERO_FLAG_EJECT_MARKER, extract_belief_evidence
+from meetings.render_contract import SuspicionEntry
 from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
     MeetingResult,
     MeetingTranscript,
+    VoteBallot,
 )
 from meetings.transcript import MeetingTriggerKind, is_weak_contradiction
 from orchestrator.game import apply_meeting_result
@@ -129,6 +159,44 @@ SEEN_AT_KILL_WINDOW_TICKS: int = 2
 # The committed ``splits.json`` filename the builder reads when present (Task 15.12
 # writes it; the baseline sets ship none, so folds are derived by the harness).
 SPLITS_FILENAME: str = "splits.json"
+
+# The ``{x!r}``-repr payload of a production ``.format()`` marker — the
+# established ``api.replay_loader._marker_pattern`` convention, replicated
+# locally exactly as ``eval.meeting_quality`` replicates it (the api helper is
+# private to the api layer; a cross-layer import would couple training to api
+# internals). Matching the QUOTED repr value (not the static tail alone) keeps
+# the match at the REAL marker boundary even when the coerced target text
+# itself contains the marker's tail.
+_MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+
+# The J2 citation-gate coercion marker (Task 16.6), anchored ``^``: the gate is
+# the LAST guard in the manager's ballot chain, so on a coerced ballot this
+# marker is always the OUTERMOST rationale prefix (a stacked 16.5-era
+# nulled-citation marker rides INSIDE it). Built from the imported production
+# literal, never re-spelled — a marker rename must break loudly here.
+_UNCITED_ZERO_FLAG_MARKER_PATTERN: re.Pattern[str] = re.compile(
+    "^"
+    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0])
+    + _MARKER_REPR_VALUE
+    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("}")[2])
+)
+
+
+def _ballot_is_coerced_skip(ballot: VoteBallot) -> bool:
+    """Whether a recorded ballot is a J2 citation-gate coerced SKIP (Task 17.10).
+
+    True iff the ballot's ``rationale_text`` opens with the
+    :data:`meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` audit marker — the
+    mark-and-coerce trail production prepends when an uncited zero-flag eject
+    ballot is coerced to SKIP. Such a ballot records ``target="SKIP"`` but was
+    a FORCED eject, not a chosen skip (designer ruling, tasks/phase-17.md), so
+    a fit that read it as a skip label would learn the decision channel from a
+    choice the voter never made. Fit-side consumers
+    (``training/surrogate/ballots.py``) drop and count these rows; the
+    fidelity replay scores the recorded bytes unfiltered.
+    """
+
+    return _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text) is not None
 
 
 class MeetingTableReconstructionError(RuntimeError):
@@ -236,6 +304,13 @@ class MeetingTableRow(BaseModel):
     ballot_target: PlayerId | str
     ballot_confidence: float
     ballot_primary_reason_id: str | None
+    # Whether the recorded ballot is a J2 citation-gate coerced SKIP — its
+    # ``rationale_text`` opens with the production coercion marker
+    # (:func:`_ballot_is_coerced_skip`), so ``target="SKIP"`` records a FORCED
+    # eject, never a chosen skip. Fit-side consumers drop and count these rows
+    # (Task 17.10 designer ruling); the fidelity replay scores recorded bytes
+    # unfiltered.
+    ballot_coerced_skip: bool
     candidates: tuple[CandidateFeatures, ...]
 
 
@@ -300,9 +375,9 @@ class MeetingTable(BaseModel):
     ``rows`` is every (meeting, voter) row, sorted deterministically (by seed,
     meeting_index, voter). The count aggregates are DERIVED from the set's assembled
     tournament report (:func:`eval.validity.assemble_tournament_report`), not
-    hard-coded, and asserted equal to the reconstruction — the sets are baseline 3
-    by this task's dependency order. ``model_dump_json()`` is byte-stable across
-    rebuilds (the determinism pin).
+    hard-coded, and asserted equal to the reconstruction — substrate-agnostic (the
+    committed sets are baseline 5 since the 17.9 re-record). ``model_dump_json()``
+    is byte-stable across rebuilds (the determinism pin).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -317,10 +392,11 @@ class MeetingTable(BaseModel):
     skips_total: int
     ballots_total: int
     # EVERY recorded game seed in the set, sorted — including games with no
-    # meetings (a real shape: 11 of the baseline-3 4p1i games end before any
-    # meeting fires, so they carry no rows). Split validation and by-game folds
-    # partition THIS list, so a committed 15.12 split that legitimately assigns a
-    # no-meeting game is never falsely rejected, and ``games_total == len(seeds)``.
+    # meetings (a real shape on every recorded substrate: 10 of the baseline-5
+    # 4p1i corpus games end before any meeting fires, so they carry no rows).
+    # Split validation and by-game folds partition THIS list, so a committed
+    # 15.12 split that legitimately assigns a no-meeting game is never falsely
+    # rejected, and ``games_total == len(seeds)``.
     seeds: tuple[int, ...]
     splits: SurrogateSplits | None
     rows: tuple[MeetingTableRow, ...]
@@ -918,6 +994,7 @@ def _walk_game(
                     ballot_target=ballot.target,
                     ballot_confidence=ballot.confidence,
                     ballot_primary_reason_id=ballot.primary_reason_id,
+                    ballot_coerced_skip=_ballot_is_coerced_skip(ballot),
                     candidates=candidate_features,
                 )
             )
@@ -1061,9 +1138,201 @@ def build_meeting_table(
     )
 
 
+class BeliefRenderParity(BaseModel):
+    """The 17.10 walk re-validation: hand-mirrored fold vs the production fold.
+
+    Measured per non-self (meeting, voter, candidate) cell over a whole replay
+    set by :func:`measure_belief_render_parity`, joining this module's
+    reconstructed rows to the PRODUCTION fold's meeting-open suspicion graphs
+    (``eval.funnel``'s memory-augmented walk: real ``TacticalAgent`` instances
+    ingest every reconstructed packet and serve
+    ``suspicion_graph_for_meeting()`` exactly as a live meeting reads it — the
+    16.10 instrument's machinery; measured, never assumed).
+
+    Two independent gauges:
+
+    * FOLD FIDELITY — ``raw_mismatches`` / ``trust_mismatches``: the table's
+      ``belief_suspicion`` / ``belief_trust`` vs the production row's RAW
+      stored scalar. The graph entry's scalar is the CLAMPED render, so the
+      raw side is recovered from the 16.3 sum invariant (``0.5 + Σ`` of the
+      eight provenance channels the entry carries beside it — the invariant
+      the vj gauge pins on every committed set). A nonzero count means the
+      hand-mirrored perception→belief pins (:class:`_WindowStats`) drifted
+      from a baseline-5 belief rule — the silent corruption the 17.10
+      integration risk names — and no fit over the table can be trusted.
+    * J1 LIVE-PARITY DIVERGENCE — ``j1_divergent_cells`` / ``j1_divergent_rows``:
+      cells where the CLAMPED rendered value the live runner would be served
+      (``SuspicionEntry.suspicion`` under the graduated Task-16.4 J1 gate,
+      unconditional since the 16.17 baseline-5 record) differs from the raw
+      ``belief_suspicion`` the table — and therefore the 15.13 fit — reads.
+      The fit-side/test-side split localizes the divergence under the
+      committed ``splits.json`` (``None`` when the set ships none).
+
+    Tolerance is the production ``SUSPICION_PROVENANCE_ATOL`` throughout. The
+    voter's own ``is_self`` cell is excluded: the table pins it at the neutral
+    0.5 prior by construction and production holds no self-row.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    replay_set_dir: str
+    games_total: int
+    meetings_total: int
+    rows_total: int
+    cells_compared: int
+    raw_mismatches: int
+    trust_mismatches: int
+    max_raw_abs_delta: float
+    j1_divergent_cells: int
+    j1_divergent_rows: int
+    j1_divergent_fit_cells: int | None
+    j1_divergent_test_cells: int | None
+    j1_max_abs_divergence: float
+
+
+def measure_belief_render_parity(sample_dir: Path) -> BeliefRenderParity:
+    """Cross-check the table's belief fold against the production fold (17.10).
+
+    Walks every recorded game TWICE — this module's reconstruction
+    (:func:`_walk_game`) and the production-fold walk (``eval.funnel``'s
+    memory-augmented walk: real agents, reconstructed packets, the exact
+    ``suspicion_graph_for_meeting()`` accessor a live meeting reads) — and
+    joins them per non-self (meeting, voter, candidate) cell into
+    :class:`BeliefRenderParity`. Both walks are hash-verified and offline; a
+    (meeting, voter) present in one walk but absent from the other fails loud
+    rather than silently under-comparing.
+    """
+
+    if not sample_dir.is_dir():
+        raise NotADirectoryError(f"replay-set directory not found: {sample_dir}")
+    seeds = seeds_on_disk(sample_dir)
+    if not seeds:
+        raise ValueError(f"no replay-seed-*.jsonl found under {sample_dir}")
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    per_seed_roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    splits = load_splits(sample_dir)
+    fit_seeds = (
+        frozenset(splits.train) | frozenset(splits.val) if splits is not None else None
+    )
+    test_seeds = frozenset(splits.test) if splits is not None else None
+
+    meetings_total = 0
+    rows_total = 0
+    cells_compared = 0
+    raw_mismatches = 0
+    trust_mismatches = 0
+    max_raw_abs_delta = 0.0
+    j1_cells = 0
+    j1_rows = 0
+    j1_fit_cells = 0
+    j1_test_cells = 0
+    j1_max = 0.0
+    for seed in seeds:
+        replay_path = sample_dir / f"replay-seed-{seed}.jsonl"
+        roles = per_seed_roles[seed]
+        rows = _walk_game(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            roles=roles,
+            game_map=game_map,
+        )
+        walk = _walk_game_vj(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            roles=roles,
+            game_map=game_map,
+        )
+        served: dict[tuple[str, PlayerId], dict[PlayerId, SuspicionEntry]] = {
+            (meeting.meeting_id, voter): {entry.player_id: entry for entry in graph}
+            for meeting in walk.meetings
+            for voter, graph in meeting.suspicion_graph_by_voter.items()
+        }
+        meetings_total += len(walk.meetings)
+        for row in rows:
+            graph = served.get((row.meeting_id, row.voter))
+            if graph is None:
+                raise MeetingTableReconstructionError(
+                    f"{sample_dir}: meeting {row.meeting_id!r} voter {row.voter!r} "
+                    "reconstructed a table row but no production-fold graph — the "
+                    "two walks disagree on the meeting roster"
+                )
+            rows_total += 1
+            row_divergent = False
+            for feat in row.candidates:
+                if feat.is_self:
+                    continue
+                entry = graph.get(feat.candidate)
+                if entry is None:
+                    # An absent graph row is production's unseeded neutral
+                    # prior — the same 0.5 the table's ``view()`` default
+                    # carries for a never-evidenced player.
+                    rendered, raw, trust = 0.5, 0.5, 0.5
+                else:
+                    rendered = entry.suspicion
+                    raw = 0.5 + (
+                        entry.flag_lift
+                        + entry.body_proximity
+                        + entry.kill_or_vent_pin
+                        + entry.testimony_spread
+                        + entry.accusation_carry
+                        + entry.carried_hard
+                        + entry.carried_soft
+                        + entry.unattributed
+                    )
+                    trust = entry.trust
+                cells_compared += 1
+                raw_delta = abs(feat.belief_suspicion - raw)
+                if raw_delta > SUSPICION_PROVENANCE_ATOL:
+                    raw_mismatches += 1
+                    max_raw_abs_delta = max(max_raw_abs_delta, raw_delta)
+                if abs(feat.belief_trust - trust) > SUSPICION_PROVENANCE_ATOL:
+                    trust_mismatches += 1
+                divergence = abs(rendered - feat.belief_suspicion)
+                if divergence > SUSPICION_PROVENANCE_ATOL:
+                    j1_cells += 1
+                    row_divergent = True
+                    j1_max = max(j1_max, divergence)
+                    if fit_seeds is not None and row.seed in fit_seeds:
+                        j1_fit_cells += 1
+                    if test_seeds is not None and row.seed in test_seeds:
+                        j1_test_cells += 1
+            if row_divergent:
+                j1_rows += 1
+
+    return BeliefRenderParity(
+        replay_set_dir=str(sample_dir),
+        games_total=len(seeds),
+        meetings_total=meetings_total,
+        rows_total=rows_total,
+        cells_compared=cells_compared,
+        raw_mismatches=raw_mismatches,
+        trust_mismatches=trust_mismatches,
+        max_raw_abs_delta=max_raw_abs_delta,
+        j1_divergent_cells=j1_cells,
+        j1_divergent_rows=j1_rows,
+        j1_divergent_fit_cells=j1_fit_cells if fit_seeds is not None else None,
+        j1_divergent_test_cells=j1_test_cells if test_seeds is not None else None,
+        j1_max_abs_divergence=j1_max,
+    )
+
+
 __all__ = [
     "SEEN_AT_KILL_WINDOW_TICKS",
     "SPLITS_FILENAME",
+    "BeliefRenderParity",
     "CandidateFeatures",
     "MeetingTable",
     "MeetingTableReconstructionError",
@@ -1071,4 +1340,5 @@ __all__ = [
     "SurrogateSplits",
     "build_meeting_table",
     "load_splits",
+    "measure_belief_render_parity",
 ]

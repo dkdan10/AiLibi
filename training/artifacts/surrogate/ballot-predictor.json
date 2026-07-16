@@ -1,12 +1,12 @@
 {
   "confidence_weights": [
-    "0x1.3090d3aeef131p-5",
+    "0x1.f9193e219453fp-8",
     "0x0.0p+0",
-    "-0x1.08821b59b1c05p-5",
-    "0x1.8c0cf917a3500p-8",
-    "-0x1.0ecef7b9d7d99p-7",
-    "-0x1.dfb4b9a3ab7e2p-9",
-    "0x1.5c2d89f6e5a36p-1"
+    "-0x1.38756c850beadp-8",
+    "0x1.54ce7f1319072p-7",
+    "-0x1.1b9825541af59p-7",
+    "-0x1.d4fa869754ef1p-9",
+    "0x1.b5d653f1c390fp-1"
   ],
   "epochs": 300,
   "feature_names": [
@@ -20,49 +20,49 @@
   "format": "ballot-predictor.v1",
   "lr": "0x1.3333333333333p-2",
   "mean": [
-    "0x1.0ae1d8c23fac3p-1",
+    "0x1.0d18a73eb789ap-1",
     "0x1.0000000000000p-1",
-    "0x1.40d3c5a69caf7p-3",
-    "0x1.da4008f2b7b75p-6",
-    "0x1.4b148d7df9026p-1",
-    "0x1.aad1711c1a490p+2"
+    "0x1.475ac208c3494p-3",
+    "0x1.0280f05a21ccbp-5",
+    "0x1.d6c489b3a35d4p-1",
+    "0x1.a3493b764c5cap+2"
   ],
-  "skip_bias": "-0x1.35e5cea7df3d4p-1",
-  "skip_confidence": "0x1.2d0a896c7c113p-1",
+  "skip_bias": "0x1.2cb6ed0a1b50fp+1",
+  "skip_confidence": "0x1.c874f1179f2a5p-2",
   "skip_feature_names": [
     "max_belief_suspicion",
     "meeting_index",
     "alive_count"
   ],
   "skip_mean": [
-    "0x1.33e7dbfca2d6bp-1",
-    "0x1.b6c956529cd0cp-1",
-    "0x1.93a9ecb50e194p+2"
+    "0x1.3937547ba8487p-1",
+    "0x1.31e780dc446dcp+0",
+    "0x1.8b35f40e2bee9p+2"
   ],
   "skip_std": [
-    "0x1.62e70c294d7eep-3",
-    "0x1.d6fd5968c5f5ep-1",
-    "0x1.62bb87e702a9ep+0"
+    "0x1.607bf7495cb8ap-3",
+    "0x1.29a6d956fb3d3p+0",
+    "0x1.6530658770d4dp+0"
   ],
   "skip_weights": [
-    "0x1.eeeec069eea18p-1",
-    "-0x1.17815b048227fp-4",
-    "0x1.5af3821667051p-7"
+    "0x1.0c70e38bd37b1p-1",
+    "-0x1.0ab2dbd8c129cp-2",
+    "0x1.de1b69efdc8d5p-2"
   ],
   "std": [
-    "0x1.68fb0c5846531p-4",
+    "0x1.7795e1fe89cdfp-4",
     "0x1.0000000000000p+0",
-    "0x1.74329293265c7p-2",
-    "0x1.575b4b3dc5409p-3",
-    "0x1.9a822671da613p-1",
-    "0x1.3c33c97ccdc11p+0"
+    "0x1.7740ec6b63773p-2",
+    "0x1.6604c79b86c1cp-3",
+    "0x1.0680238d40f27p+0",
+    "0x1.3f2662a190365p+0"
   ],
   "weights": [
-    "0x1.8e2efec2dddaep+0",
+    "0x1.16537be2e12a8p+0",
     "0x0.0p+0",
-    "-0x1.5f348c7a7de59p-5",
-    "-0x1.8c6ed80de0feep-1",
-    "0x1.e593d77579f78p-3",
-    "-0x1.8368f3d38fe17p-3"
+    "-0x1.fe4bf910ad4b9p-2",
+    "-0x1.cb62cd9b13244p-4",
+    "-0x1.57e176074a2edp-2",
+    "0x1.7da1ada6cd10bp-3"
   ]
 }
