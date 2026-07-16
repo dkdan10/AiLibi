@@ -36,7 +36,7 @@ bake-off consumes it as a training-time runner either way).
 - training/surrogate/ballots.py (fit-side filter wiring; feature set UNCHANGED)
 - training/artifacts/surrogate/ (ballot-predictor.json + .sha256 + max-uses.json)
 - training/reports/report-ballot-surrogate.md (regenerated)
-- tests/training/test_surrogate_dataset.py + test_surrogate_fidelity.py + test_surrogate_runner.py (re-pins + the stale baseline-3 docstrings corrected)
+- tests/training/test_surrogate_dataset.py + test_surrogate_fidelity.py + test_surrogate_runner.py (re-pins + the stale baseline-3 docstrings corrected; 17.9 xfail'd six runner fit/fidelity/verdict tests "pending 17.10 re-ground" — REMOVE those markers and re-pin on the new artifact)
 
 **Files NOT in scope:**
 - training/bakeoff/ (17.11/17.12)
