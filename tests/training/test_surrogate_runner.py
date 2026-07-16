@@ -669,7 +669,9 @@ def test_go_verdict_holds_on_live_served_clamped_features(
     same decision and same top-1 target on every one of the 104 meetings, so
     all three GO axes hold unchanged on live-served features. The only
     movement is a decision-irrelevant reorder from the third rank position
-    down on 2 meetings.
+    down on at most 2 meetings (2 on the recording platform, 1 on CI —
+    sub-top-rank order near probability ties is libm/ULP-sensitive across
+    CPUs, the same platform variance the artifact round-trip tolerates).
     """
 
     assert corpus_table.splits is not None
@@ -753,7 +755,11 @@ def test_go_verdict_holds_on_live_served_clamped_features(
     assert top1_hits == 43
     assert predicted_skips == 104
     assert correct_skips == 54
-    assert rank_reorders == 2  # third-rank-and-below shuffles only
+    # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
+    # sits on near-ties in the softmax shares, so it is libm/ULP-sensitive
+    # across CPUs (2 on the recording platform, 1 on CI). The per-meeting
+    # decision/top-1 equality above is the load-bearing claim.
+    assert rank_reorders <= 2
 
     # The three GO axes re-stated on the live-served scoring, against the SAME
     # population bar the §5 verdict used (every decision is SKIP, so the

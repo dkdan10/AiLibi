@@ -190,8 +190,10 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    the same decision and the same top-1 target on **every one of the 104
    meetings** (43/50 top-1, all-SKIP census, 54 correct skips); the only
    movement is a decision-irrelevant reorder from the third rank position down
-   on 2 meetings. All three GO axes hold unchanged on the features the 17.12
-   runner actually serves — pinned by
+   on at most 2 meetings (2 on the recording platform, 1 on CI — sub-top-rank
+   order near probability ties is libm/ULP-sensitive across CPUs, the same
+   platform variance the artifact round-trip tolerates). All three GO axes
+   hold unchanged on the features the 17.12 runner actually serves — pinned by
    `test_go_verdict_holds_on_live_served_clamped_features`.
 
 3. **Coerced-SKIP rows are excluded from the fit and counted.** A J2
