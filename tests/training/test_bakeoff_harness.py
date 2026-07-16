@@ -17,6 +17,7 @@ import inspect
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -491,3 +492,131 @@ def test_filtered_rerun_keeps_bc_warm_start() -> None:
     assert len(entrants) == 1
     candidate = entrants[0].train()
     assert candidate.train_metadata["warm_start_used"] is True
+
+
+# --------------------------------------------------------------------------- #
+# 9. The committed re-run protocol pins (Task 17.12).                          #
+#                                                                              #
+# The bake-off re-run under the baseline-5 floors + re-grounded surrogate      #
+# regenerated the committed rows (baseline-3 -> baseline-5) while reproducing  #
+# the Phase-15 genomes byte-identically. Nothing else in this module reads the #
+# committed jsonl/artifacts, so these are pure-file-read pins on the SHIPPED   #
+# state: a future re-run that moves the rows or the floor constants must trip  #
+# a pin HERE (not only in a downstream champion test). No game rollouts.       #
+# --------------------------------------------------------------------------- #
+
+_RESULTS_JSONL: Path = Path("training/reports/results-impostor-bakeoff.jsonl")
+_IMPOSTOR_ARTIFACT_ROOT: Path = Path("training/artifacts/impostor")
+
+# The canonical entrant order the committed slate ships in (locked decision 1:
+# the full four-method slate), one row each.
+_CANONICAL_ENTRANTS: tuple[str, ...] = (
+    "bc-dagger",
+    "utility-es",
+    "policy-es",
+    "map-elites",
+)
+
+# The baseline-5 supply-gauge floor pins (eval/watchability.py:755-762), carried
+# as LITERALS so a pin trips if EITHER the committed rows OR the floor constants
+# drift apart. 7/203 and 90/179 round-trip exactly through the row's JSON.
+_WITNESSED_EVENT_RATE_FLOOR: float = 7 / 203  # 0.034482758620689655
+_FLAGS_PER_MEETING_FLOOR: float = 90 / 179  # 0.5027932960893855
+
+# The four re-run genomes reproduced Phase 15 byte-for-byte; these full digests
+# are also depended on downstream (tests/agents/test_learned_policy.py pins the
+# utility-es sha), so a weights move must trip THIS pin in the bake-off's own
+# test file too.
+_COMMITTED_WEIGHTS_SHA256: dict[str, str] = {
+    "bc-dagger": "ddb1e706ae1a827e68b359f1bd4d491e77d1761f6d8ccf66571987b06d784d94",
+    "utility-es": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "policy-es": "561e5ff36478dacf4806782e57f3411fc8a6c38a5a52f22bb85b3abd1e86ca89",
+    "map-elites": "b4469dec6f95def6ba53b9ca37b81b4285b02501374047f290c6a579de0f84bb",
+}
+
+
+def _committed_bakeoff_rows() -> list[dict[str, Any]]:
+    """The committed re-run rows, one parsed dict per entrant, in file order."""
+
+    rows: list[dict[str, Any]] = [
+        json.loads(line)
+        for line in _RESULTS_JSONL.read_text().splitlines()
+        if line.strip()
+    ]
+    return rows
+
+
+def _supply_gauges_by_name(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The row's supply gauges keyed by ``name`` (three per candidate row)."""
+
+    return {str(gauge["name"]): gauge for gauge in row["supply_gauges"]}
+
+
+def test_rerun_rows_are_the_four_canonical_entrants() -> None:
+    rows = _committed_bakeoff_rows()
+    entrants = tuple(str(row["entrant"]) for row in rows)
+    # Exactly the four entrants, in canonical order, one row each.
+    assert entrants == _CANONICAL_ENTRANTS
+    assert len(set(entrants)) == len(_CANONICAL_ENTRANTS)
+
+
+def test_rerun_rows_pin_the_baseline_5_protocol() -> None:
+    frozen_eval_seeds = load_eval_seeds()
+    for row in _committed_bakeoff_rows():
+        # The rows moved to the baseline-5 (phase-close) floors; every row is a
+        # candidate-tier row (no determinism demotion under the frozen genomes).
+        assert row["baseline_id"] == "baseline-5"
+        assert row["tier"] == "candidate"
+        # The recorded protocol trains on the fake-provider meeting path (no
+        # surrogate meetings), and meters the surrogate divergence column only
+        # during eval.
+        assert row["surrogate_uses_training"] == 0
+        assert int(row["surrogate_uses_eval"]) > 0
+        # The eval set is the frozen corpus test split: 30 seeds, all seed%5==4.
+        eval_seeds = tuple(int(seed) for seed in row["eval_seeds"])
+        assert eval_seeds == frozen_eval_seeds
+        assert len(eval_seeds) == 30
+        assert all(seed % 5 == 4 for seed in eval_seeds)
+
+
+def test_rerun_rows_carry_the_baseline_5_supply_floors() -> None:
+    for row in _committed_bakeoff_rows():
+        gauges = _supply_gauges_by_name(row)
+        assert set(gauges) == {
+            "witnessed_event_rate",
+            "flags_per_meeting",
+            "testimony_backed_conversion",
+        }
+        # The two absolute floors are the baseline-5 point estimates, pinned as
+        # literals: 7/203 (rare-event witnessed rate) and 90/179 (flags/meeting).
+        assert gauges["witnessed_event_rate"]["floor"] == _WITNESSED_EVENT_RATE_FLOOR
+        assert gauges["flags_per_meeting"]["floor"] == _FLAGS_PER_MEETING_FLOOR
+        # The conversion floor is the 16.11 population-relative DERIVED value:
+        #   min(1.0, (64/135) * ((90/179) / measured flags_per_meeting)).
+        # On the fake-provider path measured flags_per_meeting is 0.0, so the
+        # ratio diverges and the derived floor caps at exactly 1.0.
+        assert gauges["flags_per_meeting"]["measured"] == 0.0
+        assert gauges["testimony_backed_conversion"]["floor"] == 1.0
+
+
+def test_rerun_rows_match_the_committed_artifact_digests() -> None:
+    for row in _committed_bakeoff_rows():
+        entrant = str(row["entrant"])
+        entrant_dir = _IMPOSTOR_ARTIFACT_ROOT / entrant
+        row_sha = str(row["weights_sha256"])
+
+        # The full 64-hex digest, pinned as a literal (Phase-15 genome byte-
+        # identical): a re-run that moves the weights trips here.
+        assert len(row_sha) == 64
+        assert row_sha == _COMMITTED_WEIGHTS_SHA256[entrant]
+
+        # The digest the loader verifies against on reload (``<64-hex>  <name>``).
+        sidecar = (entrant_dir / "weights.json.sha256").read_text()
+        assert sidecar.split()[0] == row_sha
+
+        # The loader sha-verifies the artifact bytes on reload and raises on
+        # drift; a successful reload proves the row digest == sha256(committed
+        # weights bytes), closing row -> sidecar -> bytes.
+        weights = load_candidate_weights(entrant_dir)
+        assert isinstance(weights, tuple)
+        assert len(weights) > 0
