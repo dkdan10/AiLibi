@@ -311,11 +311,15 @@ def test_remeasured_corpus_sets_at_baseline5_referee_verdicts() -> None:
     )
     assert conversion_nine.measured == 0.5333333333333333
     assert conversion_nine.floor == 0.37816259549905257  # derived population-relative
-    assert conversion_nine.passed is True  # conversion clears; the miss is witnessed-supply
+    assert (
+        conversion_nine.passed is True
+    )  # conversion clears; the miss is witnessed-supply
 
     corpus_four = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-5")
     assert corpus_four.integrity_ok is True
-    assert corpus_four.supply_floors_passed is True  # witnessed miss is advisory (one-event)
+    assert (
+        corpus_four.supply_floors_passed is True
+    )  # witnessed miss is advisory (one-event)
     assert corpus_four.referee_passed is True
     conversion_four = next(
         g for g in corpus_four.supply_gauges if g.name == "testimony_backed_conversion"
