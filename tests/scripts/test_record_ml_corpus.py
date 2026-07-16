@@ -57,6 +57,20 @@ _COMMITTED_CORPUS_REPLAY = (
 # slate check_replay_provenance now asserts positively in the recorded bytes.
 _BASELINE5_SUBSTRATE_SLATE = substrate_flag_snapshot(env={})
 
+# The stale baseline-3 slate (the committed corpus's PRE-re-record substrate): the
+# six baseline-3 levers True, MISSING the three 16.4/16.5/16.6 graduations and
+# absence_prior. Synthesized here because the committed bytes are now themselves
+# the baseline-5 re-record (Task 17.9), so the negative slate test can no longer
+# borrow a genuinely-stale replay off disk.
+_STALE_BASELINE3_SLATE = {
+    "testimony_as_content": True,
+    "witnessed_kill_evidence": True,
+    "movement_perception": True,
+    "unfreeze_memory": True,
+    "evidence_quality_lift": True,
+    "reporter_exculpation": True,
+}
+
 
 def _rewrite_game_over_substrate(text: str, flags: Mapping[str, bool]) -> str:
     """Return ``text`` with the game_over row's substrate_flags stamp set to ``flags``.
@@ -652,14 +666,16 @@ def test_record_path_refuses_stale_baseline3_substrate_slate(tmp_path: Path) -> 
     # the STALE baseline-3 substrate slate (the six-lever set, missing the three
     # 16.4/16.5/16.6 graduations) is refused by its BYTES, not just by the env
     # preflight — so the committed stale corpus can never be resumed-over and
-    # silently frozen. Fixture: the committed corpus replay rebased onto the
-    # baseline-5 MODEL only, its stale baseline-3 substrate_flags left intact, so
-    # the model check passes and the substrate slate check is what fires.
+    # silently frozen. Fixture: the baseline-5-model replay with its game_over
+    # substrate stamp rewritten to the six-lever baseline-3 slate (missing the
+    # three graduations), so the model check passes and the slate check fires.
+    # (Synthesized rather than read off disk: the committed corpus is itself the
+    # baseline-5 re-record now, so it no longer carries a stale slate to borrow.)
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    stale_substrate = _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
-        f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
+    stale_substrate = _rewrite_game_over_substrate(
+        _baseline5_corpus_replay_text(), _STALE_BASELINE3_SLATE
     )
     (set_dir / "replay-seed-1000.jsonl").write_text(stale_substrate, encoding="utf-8")
     env = dict(

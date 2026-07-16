@@ -29,18 +29,17 @@ canonical 0–49 game.
 > record**. Future phase closes re-adopt it (`tasks/phase-17.md`, designer
 > rulings).
 
-> **Current committed bytes (operator re-record pending).** The baseline-5
-> re-record is an operator step (below): it needs a real `FEATHERLESS_API_KEY`, a
-> ~14–15h hosted session, and the network — it is never run in CI or by an agent
-> session. Until an operator runs it and commits the result, the bytes under
-> `9p2i/` and `4p1i/` remain the **prior baseline-3 recording** (`Qwen/Qwen3-32B`,
-> `qwen3_32b`, the six-lever baseline-3 slate), byte-frozen pending this
-> re-grounding (Task 16.17). Because the recorder's pin block and this README both
-> describe baseline 5 while the committed bytes are baseline 3, the freeze-path
-> provenance guards (`check_replay_provenance` — the model, the `$0` cost, and now
-> the **graduated-lever slate** on every recorded `game_over` stamp) and the
-> external validity gate **legitimately refuse the committed bytes as
-> off-substrate**. That refusal is correct and stands until the re-record lands.
+> **These bytes are the baseline-5 re-record (Task 17.9).** Both sets under
+> `9p2i/` and `4p1i/` were re-recorded at baseline 5 by an operator session and
+> pass the acceptance gate: `validity_gate.py --expected-model Qwen/Qwen3.6-27B
+> --require-zero-cost` is 10/10 green on each, reconstruction is byte-identical,
+> every recorded `game_over` stamp carries the graduated-lever slate + the locked
+> model + `$0` cost, and the `FROZEN` line in each `MANIFEST.md` names the
+> recording commit. The recorder's freeze-path guards (`check_replay_provenance`
+> — the model, the `$0` cost, and the **graduated-lever slate** on every recorded
+> stamp) now PASS over the committed bytes by construction; they refuse anything
+> off-substrate (the prior baseline-3 recording, a phantom seed) from being
+> resumed-over and frozen.
 
 ## Layout
 
