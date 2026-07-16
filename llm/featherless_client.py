@@ -104,6 +104,7 @@ contract Ollama already carries).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Final, Literal, Protocol
@@ -677,31 +678,62 @@ async def _send_with_retry(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     max_attempts: int = _MAX_SEND_ATTEMPTS,
     backoff_base: float = _SEND_BACKOFF_BASE_S,
+    retryable_exc: tuple[type[BaseException], ...] = (json.JSONDecodeError,),
 ) -> Any:
-    """Call ``poster`` with bounded exponential backoff on transient statuses.
+    """Call ``poster`` with bounded exponential backoff on transient failures.
 
-    Returns the parsed JSON body on a 2xx. Retries the
-    :data:`_RETRYABLE_STATUS` family (rate-limit + 5xx, e.g. Featherless's
-    "model is busy" 500) up to ``max_attempts``; a non-retryable status (e.g. a
-    permanent 400 for an unsupported ``json_schema`` request) raises
-    immediately — no silent fallback (AGENTS.md). On exhaustion the last
-    status/body is surfaced via :func:`_format_send_error`. ``sleep`` is
-    injectable so the loop is unit-testable without real delay.
+    Returns the parsed JSON body on a 2xx. Retries up to ``max_attempts`` on the
+    transient families a hosted, flat-rate endpoint produces under load:
+
+    * a :data:`_RETRYABLE_STATUS` response (rate-limit + 5xx, e.g. Featherless's
+      "model is busy" 500 or a 504 gateway timeout);
+    * a ``retryable_exc`` raised while sending/parsing — by default a truncated
+      2xx body that fails JSON parsing (``json.JSONDecodeError`` out of
+      ``response.json()``); :func:`_default_send` also passes
+      ``httpx.TransportError`` so a dropped / half-read connection
+      (``RemoteProtocolError`` "incomplete chunked read"), a read/connect
+      timeout, etc. retry too.
+
+    The exception families are the SAME transient class as a 5xx and are retried
+    at the CALL level (Task 17.9): before this, a single mid-stream truncation on
+    ANY of a game's ~25 sequential meeting calls propagated out and either
+    crashed the whole game (a wasted re-record) or forced a validation-default
+    phantom row, which made recording against an intermittently-impaired
+    Featherless impractical. A non-retryable status (e.g. a permanent 400 for an
+    unsupported ``json_schema`` request) raises immediately — no silent fallback
+    (AGENTS.md). On exhaustion the last status/body — or the last transport/parse
+    error — is surfaced. ``sleep`` is injectable so the loop is unit-testable
+    without real delay; ``retryable_exc`` is injectable so the fake-poster tests
+    exercise it without importing the transport library.
     """
 
     last_status = 0
     last_text = ""
+    last_exc: BaseException | None = None
     for attempt in range(max_attempts):
-        response = await poster()
-        if 200 <= response.status_code < 300:
-            return response.json()
-        last_status = response.status_code
-        last_text = response.text
-        retryable = response.status_code in _RETRYABLE_STATUS
+        try:
+            response = await poster()
+            if 200 <= response.status_code < 300:
+                return response.json()
+            last_status = response.status_code
+            last_text = response.text
+            last_exc = None
+            retryable = response.status_code in _RETRYABLE_STATUS
+        except retryable_exc as exc:
+            last_exc = exc
+            last_status = 0
+            last_text = ""
+            retryable = True
         if retryable and attempt < max_attempts - 1:
             await sleep(backoff_base * (2**attempt))
             continue
         break
+    if last_exc is not None:
+        raise RuntimeError(
+            f"Featherless chat-completions POST failed after {max_attempts} "
+            f"attempt(s) on a transport/parse error (model={model!r}): "
+            f"{type(last_exc).__name__}: {str(last_exc)[:_ERROR_MESSAGE_CHARS]}"
+        ) from last_exc
     raise RuntimeError(_format_send_error(last_status, last_text, model))
 
 
@@ -743,10 +775,18 @@ async def _default_send(
                 url, headers=headers, json=payload, timeout=httpx.Timeout(600.0)
             )
 
-        # Bounded retry on transient 5xx / rate-limit; a permanent 4xx (e.g. an
-        # unsupported json_schema request) fails loud with a descriptive error
-        # rather than a raw httpx.HTTPStatusError.
-        body = await _send_with_retry(_post, model=model)
+        # Bounded retry on transient 5xx / rate-limit AND on transport failures
+        # (a dropped/half-read connection, a read/connect timeout — all
+        # httpx.TransportError subclasses) plus a truncated 2xx body that fails
+        # JSON parse; a permanent 4xx (e.g. an unsupported json_schema request)
+        # fails loud with a descriptive error rather than a raw httpx exception.
+        # The call-level transport retry (Task 17.9) keeps a single mid-stream
+        # truncation from crashing a whole game against a flaky hosted endpoint.
+        body = await _send_with_retry(
+            _post,
+            model=model,
+            retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+        )
 
     return _raw_from_response_body(body, model=model)
 
