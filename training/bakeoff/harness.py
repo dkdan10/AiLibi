@@ -167,14 +167,17 @@ SURROGATE_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/surrogate")
 # ``run_goodhart_probe(config=ESConfig(generations=6, population=6, sigma=0.5,
 # seed=0, fitness_seeds=tuple(range(8))), num_players=9, num_impostors=2,
 # tasks_per_crewmate=2, materiality_bar=0.25)`` with the fake provider ($0,
-# offline) — never hand-copied.
+# offline) — never hand-copied. ES-core digest of the pinned run:
+# a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14. The ES
+# champion and the forced-report lever tie at the strongest reachable score
+# (the ES converged to the same corner), so the tactic names the lever.
 GOODHART_9P2I_BASELINE: Final[Mapping[str, float | str]] = {
-    "baseline_mean_score": 6.51,
-    "champion_mean_score": 6.63,
-    "relative_gain": 0.017,
-    "strongest_reachable_score": 16.62,
-    "strongest_reachable_tactic": "kill",
-    "verdict": "EXPLOITS_FOUND",
+    "baseline_mean_score": 3.28,
+    "champion_mean_score": 3.7,
+    "relative_gain": 0.1298,
+    "strongest_reachable_score": 3.7,
+    "strongest_reachable_tactic": "report",
+    "verdict": "HELD",
 }
 
 _ROSTER_FILENAME: Final[str] = "roster.json"
