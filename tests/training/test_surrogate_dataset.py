@@ -1,11 +1,15 @@
-"""Tests for the meeting training table (Task 15.11).
+"""Tests for the meeting training table (Task 15.11; baseline-5 re-ground 17.10).
 
-Pins on the committed baseline-3 bytes: the reconstructed table reproduces the
+Pins on the committed baseline-5 bytes: the reconstructed table reproduces the
 sets' tournament-report meeting / ejection / ballot totals EXACTLY (every recorded
 ballot joins a feature row — 100% join rate), every feature derives offline, the
 table rebuilds byte-identically (determinism), the belief-fold suspicion is the
 neutral prior at the first meeting and diverges later (the cross-meeting
-accumulator), and a committed ``splits.json`` is honoured.
+accumulator), and a committed ``splits.json`` is honoured. The Task-17.10
+additions are pinned end-to-end: the coerced-SKIP column follows the anchored
+repr-aware marker convention, and :func:`measure_belief_render_parity` proves the
+hand-mirrored belief fold IS the production fold on the frozen corpus (0 raw
+mismatches) while measuring the graduated-J1 live-parity divergence.
 """
 
 from __future__ import annotations
@@ -27,22 +31,30 @@ from engine.events import KilledEvent, VentEnteredEvent
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
+from meetings.manager import (
+    INVALID_OBSERVATION_ID_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
+)
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import (
     CompletedTaskObservation,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
+    VoteBallot,
 )
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
     MeetingTableReconstructionError,
     MeetingTableRow,
+    _ballot_is_coerced_skip,
     _contradiction_lifts,
     _WindowStats,
     build_meeting_table,
     load_splits,
+    measure_belief_render_parity,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -65,9 +77,9 @@ def _report_totals(sample_dir: Path) -> tuple[int, int, int, int]:
 def test_table_counts_reproduce_the_committed_report(sample_dir: Path) -> None:
     """Meeting / ejection / ballot totals match the set's assembled report exactly.
 
-    Derived from the report, not hard-coded — the sets are baseline 3 by this
-    task's dependency order. The table's aggregates AND its actual row set both
-    reproduce the report; a drift in either fails here.
+    Derived from the report, not hard-coded — substrate-agnostic, so the pins
+    survived the baseline-5 re-records unchanged. The table's aggregates AND its
+    actual row set both reproduce the report; a drift in either fails here.
     """
 
     meetings, ejections, skips, ballots = _report_totals(sample_dir)
@@ -149,16 +161,17 @@ def test_belief_fold_is_neutral_at_first_meeting_and_diverges_later() -> None:
 
 
 def test_vent_flags_are_counted_in_their_own_band() -> None:
-    """The Task-15.4 ``vent_sighting`` flag is a first-class column (baseline 3).
+    """The Task-15.4 ``vent_sighting`` flag is a first-class column.
 
-    Baseline 3 is the first set recorded with grounded vent flags; at least one
-    candidate carries a ``vent_flags`` count, and it is never folded into the
-    ``strong_flags`` / ``weak_flags`` bands.
+    Grounded vent flags have been recorded since baseline 3 and persist on the
+    committed baseline-5 bytes; at least one candidate carries a ``vent_flags``
+    count, and it is never folded into the ``strong_flags`` / ``weak_flags``
+    bands.
     """
 
     table = build_meeting_table(_NINE)
     vent_rows = [c for row in table.rows for c in row.candidates if c.vent_flags > 0]
-    assert vent_rows, "baseline 3 9p2i should carry at least one vent_sighting flag"
+    assert vent_rows, "the committed 9p2i set should carry a vent_sighting flag"
 
 
 def test_witnessed_kill_marks_the_killer_not_a_bystander() -> None:
@@ -166,15 +179,15 @@ def test_witnessed_kill_marks_the_killer_not_a_bystander() -> None:
 
     Every candidate flagged ``witnessed_kill`` must be an IMPOSTOR — only impostors
     kill, so the event-derived pin marks the killer (``event.actor``), never a
-    co-present bystander. Baseline 3 9p2i carries crew-witnessed kills, so the
-    column is non-empty (the +1.0 role-proving pin the belief store folds).
+    co-present bystander. The committed 9p2i set carries crew-witnessed kills, so
+    the column is non-empty (the +1.0 role-proving pin the belief store folds).
     """
 
     table = build_meeting_table(_NINE)
     witnessed = [
         cand for row in table.rows for cand in row.candidates if cand.witnessed_kill
     ]
-    assert witnessed, "baseline 3 9p2i should carry at least one crew-witnessed kill"
+    assert witnessed, "the committed 9p2i set should carry a crew-witnessed kill"
     assert all(cand.is_impostor for cand in witnessed), (
         "witnessed_kill must mark the killer (an impostor), never a bystander"
     )
@@ -193,7 +206,7 @@ def test_witnessed_vent_marks_the_venter_from_events() -> None:
     vented = [
         cand for row in table.rows for cand in row.candidates if cand.witnessed_vent
     ]
-    assert vented, "baseline 3 9p2i should carry at least one crew-witnessed vent"
+    assert vented, "the committed 9p2i set should carry a crew-witnessed vent"
     assert all(cand.is_impostor for cand in vented), (
         "witnessed_vent must mark the venter (an impostor)"
     )
@@ -314,6 +327,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
         10,
         10,
     )
+    # The 17.10 coerced-SKIP census: the baseline-5 re-record produced ZERO
+    # J2-coerced ballots on this set (the report §2.1 count), so the fit-side
+    # exclusion drops nothing on committed bytes — the fence is proven on
+    # synthetic markings instead.
+    assert sum(row.ballot_coerced_skip for row in table.rows) == 0
 
 
 def test_splits_count_metadata_must_agree_with_seed_lists(tmp_path: Path) -> None:
@@ -771,3 +789,107 @@ def test_perception_pins_decay_through_the_real_fold() -> None:
     # The FLAG persists (the voter once held first-hand evidence) — the decayed
     # MAGNITUDE lives in the belief row, never re-applied at full strength.
     assert witness in stats.witnessed_kill[killer]
+
+
+# --------------------------------------------------------------------------- #
+# Task 17.10 — the coerced-SKIP column + the walk re-validation               #
+# --------------------------------------------------------------------------- #
+
+
+def _skip_ballot(rationale: str) -> VoteBallot:
+    return VoteBallot(
+        voter="p-1",
+        target="SKIP",
+        confidence=0.2,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=rationale,
+    )
+
+
+def test_coerced_skip_detection_follows_the_marker_convention() -> None:
+    """``_ballot_is_coerced_skip`` is the anchored repr-aware marker parse.
+
+    Built from the imported production literal via the established
+    ``api.replay_loader._marker_pattern`` convention (the ``eval.meeting_quality``
+    17.2 precedent): a rendered coercion marker matches; a 16.5 nulled-citation
+    marker stacked INSIDE it still matches (the gate is the last guard, so the
+    coercion marker is the outermost prefix); a coerced-target payload that
+    itself contains the marker's tail parses to the real boundary; the TEAMMATE
+    coercion marker (which shares the "coerced to SKIP" suffix) does NOT match;
+    and the marker mid-string does not match (anchored ``^``).
+    """
+
+    marker = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-3")
+    assert _ballot_is_coerced_skip(_skip_ballot(marker + "I still think p-3."))
+    # The bare marker (empty original rationale) matches too.
+    assert _ballot_is_coerced_skip(_skip_ballot(marker))
+
+    stacked = (
+        marker
+        + INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-9:12:3")
+        + "cited a ghost observation"
+    )
+    assert _ballot_is_coerced_skip(_skip_ballot(stacked))
+
+    tricky = UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="x' coerced to SKIP] y")
+    assert _ballot_is_coerced_skip(_skip_ballot(tricky + "payload survives"))
+
+    teammate = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-7")
+    assert not _ballot_is_coerced_skip(_skip_ballot(teammate + "skipping"))
+    assert not _ballot_is_coerced_skip(_skip_ballot("no marker at all"))
+    assert not _ballot_is_coerced_skip(_skip_ballot("prefix " + marker))
+
+
+def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
+    """The 17.10 re-validation: the hand-mirrored fold IS the production fold.
+
+    The 16.10 walk precedent (measure fidelity, don't assume it): join every
+    non-self (meeting, voter, candidate) cell of the reconstructed table to the
+    production fold's meeting-open graphs — real ``TacticalAgent``s fed
+    reconstructed packets, read through ``suspicion_graph_for_meeting()`` — over
+    the frozen 4p1i corpus. Fold fidelity must be EXACT (0 raw / trust
+    mismatches), or the ``belief_suspicion`` column has silently corrupted and
+    no fit over the table can be trusted (the 17.10 integration risk).
+    """
+
+    parity = measure_belief_render_parity(Path("replays/ml_corpus/4p1i"))
+    assert parity.games_total == 50
+    assert parity.meetings_total == 40
+    assert parity.rows_total == 120
+    assert parity.cells_compared == 240
+    assert parity.raw_mismatches == 0
+    assert parity.trust_mismatches == 0
+    assert parity.max_raw_abs_delta == 0.0
+    # No entirely-soft conviction-grade rows on this tiny set: the live J1
+    # render never diverges from the raw column here.
+    assert parity.j1_divergent_cells == 0
+    assert parity.j1_divergent_rows == 0
+    assert parity.j1_divergent_fit_cells == 0
+    assert parity.j1_divergent_test_cells == 0
+
+
+def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus() -> None:
+    """The J1 live-parity census the report records (§2.1), pinned end-to-end.
+
+    Two full walks over the 150-game corpus (~20s — the load-bearing 17.10
+    re-validation, kept in-suite deliberately). Fold fidelity is EXACT on all
+    16 198 cells, and the graduated J1 render clamp (unconditional since the
+    16.17 baseline-5 record) makes the live-served scalar diverge from the raw
+    ``belief_suspicion`` column the fit reads on exactly the measured cells —
+    the recorded train/serve skew the report states beside the verdict.
+    """
+
+    parity = measure_belief_render_parity(Path("replays/ml_corpus/9p2i"))
+    assert parity.games_total == 150
+    assert parity.meetings_total == 541
+    assert parity.rows_total == 3131
+    assert parity.cells_compared == 16198
+    assert parity.raw_mismatches == 0
+    assert parity.trust_mismatches == 0
+    assert parity.max_raw_abs_delta == 0.0
+    assert parity.j1_divergent_cells == 280
+    assert parity.j1_divergent_rows == 254
+    assert parity.j1_divergent_fit_cells == 251
+    assert parity.j1_divergent_test_cells == 29
+    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)
