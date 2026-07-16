@@ -796,11 +796,15 @@ class BallotSurrogateModel:
         return rows
 
     def fit(self, meetings: Sequence[MeetingView]) -> None:
-        """Fit on exactly the given meetings' rows (labels read here ONLY).
+        """Fit on the given meetings' rows minus coerced-SKIP rows (labels here ONLY).
 
         The fit half of the leakage fence: when a fit-side seed set is declared
         (a committed split), a view from outside it is refused — the fidelity
-        run must never fold a held-out game's labels into the fit.
+        run must never fold a held-out game's labels into the fit. Rows whose
+        ``ballot_coerced_skip`` flag is set are DROPPED before the fit (Task
+        17.10 designer ruling — a J2-coerced ballot's SKIP label records a
+        forced eject, never a chosen skip); predict/fidelity still score the
+        recorded bytes unfiltered.
         """
 
         if not meetings:

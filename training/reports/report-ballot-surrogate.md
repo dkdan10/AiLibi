@@ -11,7 +11,7 @@
 > `training/surrogate/runner.py` (the `MeetingRunner` implementation),
 > `training/surrogate/fidelity.py` (the GO/NO-GO region — 15.11 owns the metrics
 > core), `training/surrogate/dataset.py` (the table + the 17.10 re-validation
-> instrument), `eval/balance_eval.py:228` (the additive `meeting_runner_factory`
+> instrument), `eval/balance_eval.py:241` (the additive `meeting_runner_factory`
 > keyword). This report sits beside the 15.11 harness report
 > (`report-meeting-table.md`) — the table is the substrate every number below is
 > measured on.
@@ -494,7 +494,7 @@ nothing.
   recognized by the decision head), so the probe reports the surrogate's
   ejection/SKIP rate alongside its verdict.
 - The additive `meeting_runner_factory` keyword on `run_tournament_eval`
-  (`eval/balance_eval.py:228`) remains the seam: surrogate-driven tournaments
+  (`eval/balance_eval.py:241`) remains the seam: surrogate-driven tournaments
   produce standard reports at `$0`, with the default path byte-identical (existing
   balance-eval tests stay green untouched).
 
