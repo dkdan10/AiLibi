@@ -52,6 +52,7 @@ from llm.featherless_client import (
     FeatherlessRawResponse,
     _build_chat_payload,
     _HttpResponse,
+    _MAX_SEND_ATTEMPTS,
     _raw_from_response_body,
     _send_with_retry,
     _supports_thinking_kwarg,
@@ -1325,3 +1326,22 @@ class TestSendWithRetry:
                 )
             )
         assert poster.calls == 1
+
+    def test_default_attempt_budget_is_six(self) -> None:
+        # The default call budget is _MAX_SEND_ATTEMPTS, bumped to 6 for Task-17.9
+        # recording resilience: a persistently-failing transport exhausts exactly
+        # that many attempts. Pins the constant so a change is a deliberate one.
+        import httpx
+
+        poster = _ScriptedPoster([httpx.RemoteProtocolError("dropped")])
+        with pytest.raises(RuntimeError, match="transport/parse error"):
+            asyncio.run(
+                _send_with_retry(
+                    poster,
+                    model="m",
+                    sleep=_noop_sleep,
+                    retryable_exc=(httpx.TransportError, json.JSONDecodeError),
+                )
+            )
+        assert poster.calls == _MAX_SEND_ATTEMPTS
+        assert _MAX_SEND_ATTEMPTS == 6

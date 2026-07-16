@@ -527,7 +527,17 @@ def _strip_reasoning_segment(text: str) -> str:
 # than burn retries. The 50-seed re-record (Task 14.7) will hit transient 5xx,
 # so a small backoff keeps an atomic run from aborting on a blip.
 _RETRYABLE_STATUS: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 504})
-_MAX_SEND_ATTEMPTS: Final[int] = 3
+# Six call-level attempts (Task 17.9). A meeting-heavy corpus game is ~25
+# sequential provider calls, and an intermittently-impaired Featherless can fail
+# a given large call ~1-in-3 (a 504 gateway timeout, a mid-stream truncation).
+# At 6 attempts a single call succeeds ~99.9% of the time, so ~97% of games
+# complete first-try WITHOUT crashing/phantoming the whole game; 8+ adds only a
+# fraction of a percent while the UNCAPPED exponential backoff below grows
+# painful (2**attempt s: 16s at attempt 5, 64s at 7, 256s at 9) and piles load
+# on a struggling backend, and the recorder's per-seed shell retry already
+# backstops the rare residual miss. Kept modest so a PERMANENT outage still
+# fails loud in bounded time rather than hanging.
+_MAX_SEND_ATTEMPTS: Final[int] = 6
 _SEND_BACKOFF_BASE_S: Final[float] = 1.0
 
 
