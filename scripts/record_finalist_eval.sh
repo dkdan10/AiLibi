@@ -63,6 +63,16 @@ except Exception:
 PY
 }
 
+# Seconds -> compact "Hh MMm" / "MMm SSs" for per-seed timing + ETA.
+fmt_dur() {
+  local s="$1"
+  if ((s >= 3600)); then
+    printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60))
+  else
+    printf '%dm%02ds' $((s / 60)) $((s % 60))
+  fi
+}
+
 record_finalist() {
   local entrant="$1"
   local dir="$STAGE_ROOT/$entrant"
@@ -71,15 +81,20 @@ record_finalist() {
   printf '{"num_impostors": 2, "num_players": 9, "tasks_per_crewmate": 2}\n' \
     >"$dir/roster.json"
   local last=$((NUM_SEEDS - 1))
+  # Running stats for the ETA: average wall-time over seeds recorded THIS run
+  # (skipped/resumed seeds cost ~0 and are excluded from the average).
+  local completed=0 recorded_count=0 recorded_secs=0
   for seed in $(seq 0 "$last"); do
     local replay="$dir/replay-seed-$seed.jsonl"
     if [[ -f "$replay" ]] && is_complete "$replay"; then
-      echo "[$entrant] seed $seed already complete — skip"
+      completed=$((completed + 1))
+      echo "[$entrant] seed $seed already complete (resume) | $completed/$NUM_SEEDS"
       continue
     fi
-    local ok=0
+    local ok=0 t0 dt
+    t0=$(date +%s)
     for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-      echo "[$entrant] seed $seed attempt $attempt/$MAX_ATTEMPTS ($(date -u +%H:%M:%S)Z)"
+      echo "[$entrant] seed $seed recording (attempt $attempt/$MAX_ATTEMPTS) $(date -u +%H:%M:%S)Z"
       if uv run python scripts/run_tournament.py \
           --candidate-artifact "training/artifacts/impostor/$entrant" \
           --start-seed "$seed" --num-games 1 \
@@ -91,9 +106,17 @@ record_finalist() {
       fi
       sleep $((attempt * 15))
     done
+    dt=$(($(date +%s) - t0))
     # Drop the audit sidecar (huge, gitignored, unused by scoring) as we go.
     rm -f "$dir/replay-seed-$seed.audit.jsonl"
-    if [[ "$ok" -ne 1 ]]; then
+    if [[ "$ok" -eq 1 ]]; then
+      completed=$((completed + 1))
+      recorded_count=$((recorded_count + 1))
+      recorded_secs=$((recorded_secs + dt))
+      local avg=$((recorded_secs / recorded_count))
+      local eta=$((avg * (NUM_SEEDS - completed)))
+      echo "[$entrant] seed $seed done in $(fmt_dur "$dt") | $completed/$NUM_SEEDS | avg $(fmt_dur "$avg")/seed | ETA ~$(fmt_dur "$eta")"
+    else
       echo "[$entrant] seed $seed FAILED after $MAX_ATTEMPTS attempts — re-run to retry." >&2
     fi
   done
