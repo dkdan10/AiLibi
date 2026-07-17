@@ -248,23 +248,54 @@ track: gate-invalid 0.600; owned-task base: gate-valid 0.000 vs FSM 0.100),
 every referee verdict is unchanged, and no crew candidate is any closer to
 the selection bar than Phase 15 left it.
 
-## 6. Provenance — every artifact row stamped
+## 6. Provenance — what each row serializes, and where the rest lives
 
-Every row in both regenerated jsonl files carries the full stamp set (the
-crew-track projection of the 15.9 five-field discipline — the crew rows are
-eval rows, not recorded-game stamps, so `policy_id`/`method` live in
-`entrant`/`train_metadata` rather than a `tactical_policy` block):
+The crew rows are eval rows, not recorded-game stamps: there is no
+`tactical_policy` block, and the row schema (`CrewTrackResult`, fixed at
+15.16 and deliberately untouched by this re-run) serializes no free-standing
+`method` or anchor-policy field. A consumer of the jsonl alone recovers,
+exactly:
 
-| stamp field | `crew-fsm-baseline` | `crew-utility-es` | `crew-owned-tasks-es` |
-|---|---|---|---|
-| policy id (`entrant`) | `crew-fsm-baseline` | `crew-utility-es` | `crew-owned-tasks-es` |
-| method | scripted delegate (no learning) | utility scorer + 15.14 ES | utility scorer + 15.14 ES, owned-task basis |
-| `encoder_version` | `crew-fsm-delegate-v1` | `crew-option-features-v1` | `crew-option-features-v2` |
-| `weights_sha256` | `37517e5f3dc66819…` | `888046d082daf628…` | `bd6fdd0a030a01cc…` |
-| anchor | — (it IS the anchor) | `CrewmatePolicy` (CE 0.676) | `CrewmatePolicy` (CE 0.441) |
-| ES digest (`train_metadata`) | — | `e138688372ced468…` | `eb2426c9a5abaafa…` |
-| artifact | `training/artifacts/crew/crew-fsm-baseline/` | `…/crew-utility-es/` | `…/crew-owned-tasks-es/` |
-| `baseline_id` | `baseline-5` | `baseline-5` | `baseline-5` |
+- **Serialized per row:** `entrant` (the policy id), `encoder_version`,
+  `weights_sha256`, `artifact_path`, `baseline_id`, `eval_seeds` + the roster
+  fields, `genome_length`, the anchor columns (`anchor_cross_entropy`,
+  `anchor_ce_ceiling`, `anchor_offmenu_decisions`, `fsm_intent_agreement`),
+  and `train_metadata` — `es_digest` / `num_evaluations` / `fitness_trace` /
+  `champion_fitness` for the ES entrants; `{"warm_start_used": false}` alone
+  for the FSM delegate, which trains nothing.
+- **Serialized per artifact**, one hop from the row (`artifact_path`, with
+  `weights.json` sha-verified against the row's `weights_sha256` by
+  `harness.load_candidate_weights` — fail-loud on drift): `config.json`
+  carries `entrant`, `encoder_version`, and, for the ES entrants, the full
+  training method (`es` block — generations / population / sigma / seed /
+  `fitness_seeds` — plus `anchor_weight`, `train_max_ticks`,
+  `feature_names`, `genome_length`); the FSM delegate's config carries the
+  `note` naming it the scripted `CrewmatePolicy` delegate.
+- **Structural to the track, not serialized anywhere:** the method NAME and
+  the anchor IDENTITY are conventions of the crew track's code — the method
+  is recoverable from the artifact's `config.json` shape (an `es` block ⇒
+  the 15.14 ES over the named feature basis; the delegate `note` ⇒ no
+  learning), and the anchor is pinned by `training/crew/scorer.py` itself
+  (`CrewDecisionTrace` / `crew_inner_episode_fitness` anchor every candidate
+  to the scripted `CrewmatePolicy`; the row's anchor columns quantify it,
+  they do not name it).
+
+Mapped onto the 15.9 five-field discipline, with each cell's serialized
+source named (adding an explicit `method`/anchor field to the row schema
+would be a `CrewTrackResult` change in `training/crew/scorer.py` — out of
+scope for a re-run; if the 17.17 close tooling wants the stamp fully
+row-resident, that is a one-field schema ask for the close to route):
+
+| 15.9 stamp field | serialized source | `crew-fsm-baseline` | `crew-utility-es` | `crew-owned-tasks-es` |
+|---|---|---|---|---|
+| policy id | row `entrant` | `crew-fsm-baseline` | `crew-utility-es` | `crew-owned-tasks-es` |
+| method | artifact `config.json` (not a row field) | scripted delegate (`note`) | 15.14 ES (`es` block) | 15.14 ES, owned-task basis (`es` block, v2 basis) |
+| encoder version | row `encoder_version` | `crew-fsm-delegate-v1` | `crew-option-features-v1` | `crew-option-features-v2` |
+| weights sha | row `weights_sha256` (= the `.sha256` sidecar) | `37517e5f3dc66819…` | `888046d082daf628…` | `bd6fdd0a030a01cc…` |
+| anchor | structural (scorer code); quantified by the row anchor columns | — (it IS the anchor) | `CrewmatePolicy` (CE 0.676) | `CrewmatePolicy` (CE 0.441) |
+| ES digest | row `train_metadata.es_digest` | — | `e138688372ced468…` | `eb2426c9a5abaafa…` |
+| artifact | row `artifact_path` | `training/artifacts/crew/crew-fsm-baseline/` | `…/crew-utility-es/` | `…/crew-owned-tasks-es/` |
+| floors bar | row `baseline_id` | `baseline-5` | `baseline-5` | `baseline-5` |
 
 The artifacts were re-frozen by this run and are byte-identical to the
 Phase-15 commits (`weights.json`, `.sha256` sidecar, and `config.json` all
@@ -272,7 +303,8 @@ unchanged in the diff — the sha equalities above are the proof, per
 `harness.load_candidate_weights`'s fail-loud sidecar verification). The
 regenerated rows additionally pin the run's identity: `eval_seeds` (the 30
 test seeds verbatim), roster fields, `anchor_ce_ceiling`, and the full
-`train_metadata` (budget, `num_evaluations` 241, fitness trace).
+`train_metadata` (`es_digest`, `num_evaluations` 241, the fitness trace —
+the ES budget itself is `config.json`'s `es` block, per the table above).
 
 ## 7. The measurement-only posture (locked decision 1) + the Phase-18 routing note
 
