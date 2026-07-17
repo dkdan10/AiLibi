@@ -620,3 +620,61 @@ def test_rerun_rows_match_the_committed_artifact_digests() -> None:
         weights = load_candidate_weights(entrant_dir)
         assert isinstance(weights, tuple)
         assert len(weights) > 0
+
+
+# The persisted 15.9 provenance stamp fields, per entrant (the machine-readable
+# source Task 17.14's multi-finalist recorder stamps games from — "stamp fields
+# come from the candidate's own config, never from the committed champion's
+# constants"). ``method`` uses the productized single-line tokens: utility-es
+# carries the SAME token as the shipped champion's production stamp
+# (`agents/tactical/learned/factory.py::CHAMPION_METHOD`) so one policy never
+# wears two stamps.
+_STAMP_FILENAME: str = "stamp.json"
+_STAMP_FIELDS: frozenset[str] = frozenset(
+    {"policy_id", "method", "encoder_version", "weights_sha256", "anchor_policy"}
+)
+_COMMITTED_STAMP_METHODS: dict[str, str] = {
+    "bc-dagger": "bc-dagger",
+    "utility-es": "utility-scorer-es",
+    "policy-es": "policy-net-es",
+    "map-elites": "map-elites",
+}
+
+
+def test_rerun_artifacts_carry_the_15_9_provenance_stamp() -> None:
+    from agents.tactical.learned.factory import (
+        CHAMPION_ANCHOR_POLICY,
+        CHAMPION_METHOD,
+        CHAMPION_POLICY_ID,
+    )
+
+    for row in _committed_bakeoff_rows():
+        entrant = str(row["entrant"])
+        stamp_path = _IMPOSTOR_ARTIFACT_ROOT / entrant / _STAMP_FILENAME
+        stamp = json.loads(stamp_path.read_text())
+
+        # Exactly the five 15.9 fields (orchestrator.replay.TacticalPolicyStamp's
+        # shape), no extras, all plain strings.
+        assert set(stamp) == _STAMP_FIELDS
+        assert all(isinstance(value, str) for value in stamp.values())
+
+        # The stamp names THIS candidate and closes against the committed bytes:
+        # stamp sha == row sha == sidecar sha (test above), so a future harness
+        # regeneration that moves the weights without refreshing the stamp trips
+        # loudly here.
+        assert stamp["policy_id"] == entrant
+        assert stamp["method"] == _COMMITTED_STAMP_METHODS[entrant]
+        assert stamp["encoder_version"] == row["encoder_version"]
+        assert stamp["weights_sha256"] == row["weights_sha256"]
+        assert stamp["anchor_policy"] == "fsm-default"
+
+    # The utility-es stamp agrees field-for-field with the shipped champion's
+    # production stamp constants — the 17.14 conflation guard: one policy, one
+    # stamp, whether recorded through the champion factory or the finalist
+    # recorder.
+    utility_stamp = json.loads(
+        (_IMPOSTOR_ARTIFACT_ROOT / "utility-es" / _STAMP_FILENAME).read_text()
+    )
+    assert utility_stamp["policy_id"] == CHAMPION_POLICY_ID
+    assert utility_stamp["method"] == CHAMPION_METHOD
+    assert utility_stamp["anchor_policy"] == CHAMPION_ANCHOR_POLICY

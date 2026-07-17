@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "v2",
+  "method": "bc-dagger",
+  "policy_id": "bc-dagger",
+  "weights_sha256": "ddb1e706ae1a827e68b359f1bd4d491e77d1761f6d8ccf66571987b06d784d94"
+}

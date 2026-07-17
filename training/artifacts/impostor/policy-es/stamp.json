@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "v2",
+  "method": "policy-net-es",
+  "policy_id": "policy-es",
+  "weights_sha256": "561e5ff36478dacf4806782e57f3411fc8a6c38a5a52f22bb85b3abd1e86ca89"
+}

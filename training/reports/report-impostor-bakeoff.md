@@ -465,24 +465,35 @@ FAIL is now against 0.503 rather than 1.863 — not the fake-path verdicts.
 
 ---
 
-## Provenance — the 15.9 stamp, per entrant (all values from committed bytes)
+## Provenance — the 15.9 stamp, per entrant (persisted with the artifacts)
 
-Every field below is read from committed bytes: `entrant` / `encoder_version` /
-`weights_sha256` from the jsonl row, `method` from the entrant's `config.json`
-family, `anchor_policy = "fsm-default"` (the frozen FSM anchor all four entrants
-regularize toward). The `policy_id` equals the entrant id. The stamp `method`
-string is `bc-dagger` for the clone and `neuroevolution` for the three ES/QD
-entrants (the audit §3.1 precedent), with the algorithm family stated in prose.
-The harness writes no stamp file (out of scope; the jsonl schema is frozen,
-`extra="forbid"`); this table discharges the 15.9 stamp report-side. The artifact
-tree is the Phase-15 tree **re-verified** — every sha256 is unchanged.
+The five 15.9 stamp fields are **persisted machine-readably** beside each
+entrant's weights: `training/artifacts/impostor/<entrant>/stamp.json` carries
+exactly `{policy_id, method, encoder_version, weights_sha256, anchor_policy}` —
+the committed source Task 17.14's multi-finalist recorder stamps games from
+("stamp fields come from the candidate's own config, never from the committed
+champion's constants"). The table below mirrors those files. Every value closes
+against committed bytes: `policy_id` = the entrant id, `encoder_version` /
+`weights_sha256` equal the jsonl row's fields and the sha256 sidecar,
+`anchor_policy = "fsm-default"` (the frozen FSM anchor all four entrants
+regularize toward). The `method` strings are the productized single-line tokens;
+utility-es carries the SAME token as the shipped champion's production stamp
+(`agents/tactical/learned/factory.py::CHAMPION_METHOD = "utility-scorer-es"`),
+so one policy never wears two stamps — the 17.14 conflation guard. The stamp
+files are pinned by `test_rerun_artifacts_carry_the_15_9_provenance_stamp`
+(stamp sha == row sha == sidecar sha, and the utility-es stamp == the champion
+constants), so a future regeneration that moves the weights without refreshing
+the stamps trips loudly. The harness itself writes only the
+weights/sidecar/config triplet (out of scope; the jsonl row schema is frozen,
+`extra="forbid"`). The artifact tree is the Phase-15 tree **re-verified** —
+every sha256 is unchanged.
 
-| policy_id | method (stamp / family) | encoder_version | anchor_policy | weights sha256 (full 64-hex) |
+| policy_id | method (stamp token — family) | encoder_version | anchor_policy | weights sha256 (full 64-hex) |
 |---|---|---|---|---|
 | bc-dagger | `bc-dagger` — behavior-cloning + DAgger | v2 | fsm-default | `ddb1e706ae1a827e68b359f1bd4d491e77d1761f6d8ccf66571987b06d784d94` |
-| utility-es | `neuroevolution` — learned utility scorer + (1+λ)-ES | impostor-option-features-v1 | fsm-default | `6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0` |
-| policy-es | `neuroevolution` — masked policy net + (1+λ)-ES | v2 | fsm-default | `561e5ff36478dacf4806782e57f3411fc8a6c38a5a52f22bb85b3abd1e86ca89` |
-| map-elites | `neuroevolution` — quality-diversity / MAP-Elites | v2 | fsm-default | `b4469dec6f95def6ba53b9ca37b81b4285b02501374047f290c6a579de0f84bb` |
+| utility-es | `utility-scorer-es` — learned utility scorer + (1+λ)-ES | impostor-option-features-v1 | fsm-default | `6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0` |
+| policy-es | `policy-net-es` — masked policy net + (1+λ)-ES | v2 | fsm-default | `561e5ff36478dacf4806782e57f3411fc8a6c38a5a52f22bb85b3abd1e86ca89` |
+| map-elites | `map-elites` — quality-diversity / MAP-Elites | v2 | fsm-default | `b4469dec6f95def6ba53b9ca37b81b4285b02501374047f290c6a579de0f84bb` |
 
 ---
 
@@ -606,7 +617,10 @@ committed weights + sha256 sidecars are the frozen ground truth;
   named finalists — **`utility-es` and `policy-es`** — and reloads their exact
   committed artifacts from `training/artifacts/impostor/<entrant>/` (sha256
   verified) for the real-LLM finalist evaluation, the only meeting model left that
-  discriminates them (§7). It carries forward the open risks: the anchor-CE flag
+  discriminates them (§7). Each finalist dir carries its five-field 15.9
+  `stamp.json` (the Provenance section) — the recorder's committed stamp source,
+  so finalist recordings stamp from the candidate's own artifact, never from the
+  champion's constants. It carries forward the open risks: the anchor-CE flag
   on policy-es, the thin +1.40σ witnessed margin, the take-rate shape.
 - **Task 17.15 (the Goodhart re-run)** runs the probe under the re-grounded
   surrogate meeting path and reports its delta against this report's §6 bar
