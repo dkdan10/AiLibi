@@ -199,14 +199,19 @@ citation-era economy is unreachable from inside this track's games — so what
 crew utility LEARNS cannot move, only what it is WORTH under the bar that
 selects on it.
 
-**What the flipped floors re-price** (the row-recorded gauges; 9p2i floors
-from `eval/watchability.py`, baseline-3 block vs baseline-5 block):
+**What the flipped floors re-price.** The witnessed/flags floors are absolute
+pins and the rows record them verbatim. The conversion floor is NOT: under
+the 16.11 population-relative rule the value a row records is the DERIVED
+floor at that row's own measured flags density — `min(1.0, pin ×
+pinned_flags / measured_flags)` — so the `eval/watchability.py` baseline-5
+pin (0.4741) never appears in these rows; at their zero/null measured flags
+the derivation caps, and **1.0 is the floor all three b5 rows record**:
 
-| gauge | b3 floor | b5 floor | FSM measured | utility-es | owned-tasks-es |
+| gauge | b3 floor (= row-recorded) | b5 floor (row-recorded) | FSM measured | utility-es | owned-tasks-es |
 |---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.0325 | 0.0345 | 0.0270 FAIL→FAIL | 0.0702 PASS→PASS | 0.0149 FAIL→FAIL |
-| `flags_per_meeting` | 1.8633 | 0.5028 | 0.0 FAIL→FAIL | null FAIL→FAIL | 0.0 FAIL→FAIL |
-| `testimony_backed_conversion` (pin) | 0.6636 (0.6068 at the 15.16-era rows) | 0.4741, population-relative | null, derived floor 1.0: FAIL→FAIL | null, 1.0: FAIL→FAIL | null, 1.0: FAIL→FAIL |
+| `witnessed_event_rate` | 0.0325 | 0.0345 (absolute pin) | 0.0270 FAIL→FAIL | 0.0702 PASS→PASS | 0.0149 FAIL→FAIL |
+| `flags_per_meeting` | 1.8633 | 0.5028 (absolute pin) | 0.0 FAIL→FAIL | null FAIL→FAIL | 0.0 FAIL→FAIL |
+| `testimony_backed_conversion` | 0.6636 (0.6068 at the 15.16-era rows) | **1.0** — derived from the 0.4741 pin, capped at these rows' zero/null flags | null FAIL→FAIL | null FAIL→FAIL | null FAIL→FAIL |
 
 Floor sensitivity, read honestly (the selection-bar-honesty ruling's crew
 analog — a starved-economy rejection must be legible as the instrument
@@ -220,7 +225,8 @@ working, never silent):
 - **The conversion bar got HARDER exactly where these rows sit.** The pin
   dropped 0.664 → 0.474, but under the 16.11 population-relative rule the
   demanded conversion scales by `pinned_flags / measured_flags` (capped at
-  1.0): at zero measured flags the derived floor is the cap, 1.0. An
+  1.0): at zero measured flags the derived floor is the cap, and 1.0 is the
+  floor value all three b5 rows serialize in their `supply_gauges`. An
   evidence-starved crew game now faces the maximally demanding conversion bar
   rather than a fixed pin it silently undershoots — the instrument pricing
   starvation as starvation.
