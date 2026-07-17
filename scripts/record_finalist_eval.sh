@@ -123,6 +123,31 @@ record_finalist() {
   echo "[$entrant] done ($(ls "$dir"/replay-seed-*.jsonl 2>/dev/null | wc -l) replays)"
 }
 
+# --- single-instance lock ----------------------------------------------------
+# Only ONE recording run may be active: two instances would --force the same
+# replay-seed files and quadruple the Featherless concurrency, corrupting bytes
+# and 429-storming every game. Portable mkdir lock (atomic on macOS + Linux),
+# kept OUTSIDE the staged tree so it never gets committed.
+LOCK="${TMPDIR:-/tmp}/ailibi_finalist_eval.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  if [[ -f "$LOCK/pid" ]] && kill -0 "$(cat "$LOCK/pid" 2>/dev/null)" 2>/dev/null; then
+    echo "Error: another finalist recording run is active (PID $(cat "$LOCK/pid"))." >&2
+    echo "       Stop it first: pkill -f record_finalist_eval.sh; pkill -f run_tournament" >&2
+    exit 1
+  fi
+  rm -rf "$LOCK"; mkdir "$LOCK"   # reclaim a stale lock (previous run died)
+fi
+echo "$$" >"$LOCK/pid"
+_cleanup() {
+  echo "" >&2
+  echo "Stopping workers and releasing lock…" >&2
+  # Kill this run's whole process tree so no uv/python game is orphaned.
+  pkill -P $$ 2>/dev/null
+  rm -rf "$LOCK"
+}
+trap '_cleanup' EXIT
+trap 'exit 130' INT TERM
+
 echo "Recording finalists ${FINALISTS[*]} -> $STAGE_ROOT"
 echo "Substrate: Qwen/Qwen3.6-27B, qwen3_6_27b v3, \$0; 2 parallel workers; resumable."
 
