@@ -50,6 +50,24 @@ byte-identical to the Phase-15 commits (§6). Every number in this report is
 read from those rows or from the committed Phase-15 rows it deltas against
 (`git show` the pre-17.13 files); nothing is hand-computed.
 
+**Section map for Phase-15-era references.** Documents written against the
+superseded 15.16 reading cite THIS FILE's old section numbers — the 15.22
+contract's section refs in `tasks/phase-15.md` ("§5 the unmeasured gate-valid
+ceiling, §7 the surface ask"), `report-crew-owned-tasks.md`'s header and §1,
+and `audits/audit-phase-15-pause.md` (old §4/§5/§6 as decision evidence).
+Those sections live in the Phase-15 version of this file, retrievable
+verbatim with `git show 73891ea:training/reports/report-crew-track.md`
+(commit 73891ea = the 15.16 merge; the file was untouched from then until
+this re-run), and this reading's section numbers do NOT correspond to them.
+Where each cited old section went: old §4 (the 15.16 results table) → the
+"before" columns of §3 here; old §5 (anchor-KL + the FO-8 prior; "the
+unmeasured gate-valid ceiling") → the ceiling was MEASURED by 15.22 (zero
+gate-valid win advantage, `report-crew-owned-tasks.md` §5) and re-confirmed
+here (§4); old §6 (the Q6 coverage-cue diagnostic) → its columns are
+byte-identical in the regenerated rows (§2); old §7 (the crew-surface ask) →
+LANDED by 15.22 (`SelfView.owned_task_ids` exists); old §8 (the
+harness-generalization ask) → still open, unchanged by this re-run.
+
 ---
 
 ## 1. What re-ran — the protocol verbatim, and the three inputs that moved
@@ -287,10 +305,18 @@ exactly:
   they do not name it).
 
 Mapped onto the 15.9 five-field discipline, with each cell's serialized
-source named (adding an explicit `method`/anchor field to the row schema
-would be a `CrewTrackResult` change in `training/crew/scorer.py` — out of
-scope for a re-run; if the 17.17 close tooling wants the stamp fully
-row-resident, that is a one-field schema ask for the close to route):
+source named. Two DoD wordings must not be conflated here: **17.13's
+contract requires "provenance stamps" on every artifact row** — the crew
+track's recorded stamp set above, which every regenerated row carries —
+while the fully row-resident 15.9 stamp ("policy_id, method,
+encoder_version, weights sha, anchor") is **17.12's** DoD for the impostor
+bake-off, whose recorder serializes a `tactical_policy` block; the 15.9
+frame appears in this section as a MAPPING to that discipline, not as a row
+schema the crew track has ever had. Making the crew stamp fully
+row-resident means adding fields to `CrewTrackResult` in
+`training/crew/scorer.py`, a file outside 17.13's scope ("a re-run, not a
+redesign") — so it is routed as a one-field schema ask to the 17.17 close,
+whose tooling is the first consumer that could want it:
 
 | 15.9 stamp field | serialized source | `crew-fsm-baseline` | `crew-utility-es` | `crew-owned-tasks-es` |
 |---|---|---|---|---|
