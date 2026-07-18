@@ -33,11 +33,34 @@ digest) can never be forgotten on a learned run. Flipping the scripted default
 to the champion is deliberately NOT this task's call — the Q3 corollary recorded
 with decision 2 re-evaluates it at phase close / Phase 17, behind the
 Task-15.19-hardened referee plus a corpus-scale companion record.
+
+The multi-finalist recorder (Task 17.14; audits/audit-phase-15-pause.md:145-184)
+productizes the pause's uncommitted per-finalist driver as a thin loader
+parameter beside the committed champion: ``--candidate-artifact
+training/artifacts/impostor/<entrant>`` records with an ARBITRARY committed
+candidate artifact loaded by path — the genome is sha-verified against the
+artifact's ``weights.json.sha256`` sidecar (a mismatch fails loud BEFORE any
+spend, reusing ``training.bakeoff.harness.load_candidate_weights`` rather than a
+second loader), rebuilt through the committed policy builder its
+``encoder_version`` selects (``utility_es.build_utility_scorer_policy`` for the
+``impostor-option-features-v1`` family, ``policy_es.build_masked_mlp_policy`` for
+the ``v2`` masked-MLP family), wrapped by
+``training.bakeoff.harness.build_candidate_factory``, and AUTO-STAMPED from the
+artifact's OWN ``stamp.json`` — never the committed champion's constants (the
+17.14 conflation guard: one candidate per invocation, the stamp names it, and
+``stamp.weights_sha256`` must equal the sidecar digest). The committed champion
+surface (``agents/tactical/learned/``) is never touched. This is the recording
+seam for the 50-seed real-LLM finalist eval; measurement is assembled by the
+committed scoring CLIs (``scripts/validity_gate.py``, ``scripts/measure_baseline.py``)
+and the stamp read back from every recording via
+``orchestrator.replay.read_tactical_policy_stamp`` (see
+``training/reports/report-finalist-eval.md``).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Final
@@ -202,6 +225,25 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "--tactical-policy-stamp is rejected loudly."
         ),
     )
+    parser.add_argument(
+        "--candidate-artifact",
+        type=Path,
+        default=None,
+        metavar="ARTIFACT_DIR",
+        help=(
+            "record with an arbitrary committed impostor candidate artifact "
+            "loaded by path (Task 17.14, the multi-finalist recorder). "
+            "ARTIFACT_DIR is a training/artifacts/impostor/<entrant> dir carrying "
+            "weights.json + its .sha256 sidecar + stamp.json + config.json. The "
+            "genome is sha-verified against the sidecar (a mismatch fails loud "
+            "BEFORE any spend), rebuilt through the committed policy builder its "
+            "encoder_version selects, wrapped by the bake-off candidate factory, "
+            "and AUTO-STAMPED from the artifact's own stamp.json — never the "
+            "committed champion's constants. Mutually exclusive with "
+            "--agent-factory learned-champion; an explicit --tactical-policy-stamp "
+            "must match the artifact stamp field-for-field."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -265,8 +307,166 @@ def _build_learned_champion_factory() -> LearnedAgentFactory:
     return build_learned_agent_factory(inner)
 
 
+_CANDIDATE_STAMP_FILENAME: Final[str] = "stamp.json"
+_CANDIDATE_CONFIG_FILENAME: Final[str] = "config.json"
+_CANDIDATE_SIDECAR_FILENAME: Final[str] = "weights.json.sha256"
+
+
+def _read_candidate_stamp(artifact_dir: Path) -> TacticalPolicyStamp:
+    """Load a candidate's five-field 15.9 stamp from its ``stamp.json`` (Task 17.14).
+
+    The stamp fields come from the candidate's OWN artifact — never the committed
+    champion's constants (the implementation-hint contract). A missing file,
+    unreadable JSON, or a schema mismatch (including a blank / pipe-bearing field
+    the :class:`TacticalPolicyStamp` validator rejects) is fail-loud
+    (``SystemExit``) rather than a silent fallback (AGENTS.md "no silent
+    fallbacks").
+    """
+
+    stamp_path = artifact_dir / _CANDIDATE_STAMP_FILENAME
+    try:
+        raw = stamp_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(
+            f"--candidate-artifact: cannot read {str(stamp_path)!r}: {exc}. The "
+            "artifact dir must carry a five-field stamp.json (policy_id, method, "
+            "encoder_version, weights_sha256, anchor_policy)."
+        ) from exc
+    try:
+        return TacticalPolicyStamp.model_validate_json(raw)
+    except ValueError as exc:
+        raise SystemExit(
+            f"--candidate-artifact: {stamp_path} is not a valid TacticalPolicyStamp "
+            f"(need the five string fields policy_id/method/encoder_version/"
+            f"weights_sha256/anchor_policy): {exc}"
+        ) from exc
+
+
+def _read_candidate_hidden(artifact_dir: Path) -> int:
+    """Read the masked-MLP ``hidden`` width from a candidate's ``config.json``.
+
+    The ``v2`` policy family (policy-es / bc-dagger / map-elites) rebuilds through
+    :func:`training.bakeoff.policy_es.build_masked_mlp_policy`, whose ``hidden``
+    width is a committed artifact parameter, not a hard-coded champion constant.
+    A missing / non-integer ``hidden`` is fail-loud.
+    """
+
+    config_path = artifact_dir / _CANDIDATE_CONFIG_FILENAME
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(
+            f"--candidate-artifact: cannot read {str(config_path)!r}: {exc}. The "
+            "masked-MLP policy family needs an integer 'hidden' in config.json."
+        ) from exc
+    try:
+        config = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"--candidate-artifact: {config_path} is not valid JSON: {exc}"
+        ) from exc
+    hidden = config.get("hidden") if isinstance(config, dict) else None
+    if not isinstance(hidden, int) or isinstance(hidden, bool):
+        raise SystemExit(
+            f"--candidate-artifact: {config_path} must carry an integer 'hidden' "
+            f"for the masked-MLP policy family (got {hidden!r})."
+        )
+    return hidden
+
+
+def _resolve_candidate_artifact(
+    artifact_dir: Path,
+) -> tuple[AgentFactory, TacticalPolicyStamp]:
+    """Load an arbitrary finalist artifact by path into a factory + stamp (Task 17.14).
+
+    Productizes the pause's uncommitted per-finalist driver
+    (audits/audit-phase-15-pause.md:145-184) by REUSING the committed loaders
+    rather than writing a second one (the implementation hint): the genome is
+    read + sha-verified against the artifact's sidecar via
+    :func:`training.bakeoff.harness.load_candidate_weights` (fail loud on drift,
+    BEFORE any spend), the inference policy is rebuilt through the committed
+    builder its ``encoder_version`` selects, and the factory is
+    :func:`training.bakeoff.harness.build_candidate_factory` — the exact reload
+    seam the bake-off froze the artifact with. The stamp comes from the
+    candidate's OWN ``stamp.json`` and its ``weights_sha256`` MUST equal the
+    sidecar digest (the 17.14 conflation guard: one candidate per invocation, the
+    stamp names it, no ambient state leaks between runs). Imports live inside this
+    function so the default ``fsm-default`` path's module graph stays byte-identical.
+    """
+
+    from engine.world import load_canonical_map
+    from training.bakeoff import policy_es, utility_es
+    from training.bakeoff.harness import (
+        BakeoffPolicy,
+        build_candidate_factory,
+        load_candidate_weights,
+    )
+
+    if not artifact_dir.is_dir():
+        raise SystemExit(
+            f"--candidate-artifact: {str(artifact_dir)!r} is not a directory; pass "
+            "a committed impostor artifact dir (e.g. "
+            "training/artifacts/impostor/utility-es)."
+        )
+
+    stamp = _read_candidate_stamp(artifact_dir)
+
+    # sha verification against the artifact sidecar — fail loud BEFORE any spend.
+    try:
+        weights = load_candidate_weights(artifact_dir)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"--candidate-artifact: weights load/verify failed for "
+            f"{artifact_dir}: {exc}"
+        ) from exc
+
+    sidecar_digest = (
+        (artifact_dir / _CANDIDATE_SIDECAR_FILENAME)
+        .read_text(encoding="utf-8")
+        .split()[0]
+    )
+    if stamp.weights_sha256 != sidecar_digest:
+        raise SystemExit(
+            f"--candidate-artifact: stamp.json weights_sha256 "
+            f"{stamp.weights_sha256!r} != sidecar digest {sidecar_digest!r} for "
+            f"{artifact_dir}; the stamp must name THIS artifact (the 17.14 "
+            "conflation guard — two learned movers must never share one recording)."
+        )
+
+    # Dispatch the reload seam on the stamp's encoder_version so an arbitrary
+    # finalist rebuilds through the SAME committed builder the bake-off froze it
+    # with — never a hard-coded champion assumption.
+    game_map = load_canonical_map()
+    policy: BakeoffPolicy
+    if stamp.encoder_version == utility_es.ENCODER_VERSION:
+        policy = utility_es.build_utility_scorer_policy(weights, game_map=game_map)
+    else:
+        hidden = _read_candidate_hidden(artifact_dir)
+        try:
+            policy = policy_es.build_masked_mlp_policy(
+                weights, game_map=game_map, hidden=hidden
+            )
+        except ValueError as exc:
+            raise SystemExit(
+                f"--candidate-artifact: could not rebuild the masked-MLP policy "
+                f"for {artifact_dir}: {exc}"
+            ) from exc
+    if policy.encoder_version != stamp.encoder_version:
+        raise SystemExit(
+            f"--candidate-artifact: rebuilt policy encoder "
+            f"{policy.encoder_version!r} != stamp encoder_version "
+            f"{stamp.encoder_version!r} for {artifact_dir} (unknown encoder / "
+            "artifact-stamp mismatch)."
+        )
+
+    factory = build_candidate_factory(policy, game_map=game_map)
+    return factory, stamp
+
+
 def _resolve_agent_factory(
     choice: str,
+    *,
+    candidate_artifact: Path | None = None,
 ) -> tuple[AgentFactory | None, TacticalPolicyStamp | None]:
     """Resolve ``--agent-factory`` into a factory + auto-stamp pair (Task 15.21).
 
@@ -280,8 +480,24 @@ def _resolve_agent_factory(
     ``scripts/`` from the factory's five plain-string stamp fields — the factory
     itself stays engine-free per Task 15.20 — so the auto-stamp always carries
     the digest of the artifact actually loaded, never a hard-coded sha.
+
+    ``candidate_artifact`` (Task 17.14, the multi-finalist recorder) takes
+    precedence when set: it loads an arbitrary committed candidate artifact by
+    path (:func:`_resolve_candidate_artifact`) and auto-stamps from the artifact's
+    own ``stamp.json``. It is mutually exclusive with a non-default
+    ``--agent-factory`` — the artifact, not the flag, selects the impostor policy
+    — so combining the two is rejected loudly.
     """
 
+    if candidate_artifact is not None:
+        if choice != FSM_DEFAULT_POLICY_ID:
+            raise SystemExit(
+                f"--candidate-artifact is mutually exclusive with --agent-factory "
+                f"{choice!r}: the artifact selects the impostor policy and "
+                "auto-stamps from its own stamp.json. Drop --agent-factory (it "
+                f"defaults to {FSM_DEFAULT_POLICY_ID!r})."
+            )
+        return _resolve_candidate_artifact(candidate_artifact)
     if choice == FSM_DEFAULT_POLICY_ID:
         return None, None
     factory = _build_learned_champion_factory()
@@ -298,25 +514,25 @@ def _resolve_agent_factory(
 
 def _resolve_recorded_stamp(
     *,
-    factory_choice: str,
     auto_stamp: TacticalPolicyStamp | None,
     explicit_stamp: TacticalPolicyStamp | None,
 ) -> TacticalPolicyStamp | None:
-    """Reconcile the selected factory's stamp with any explicit stamp (Task 15.21).
+    """Reconcile the running factory's stamp with any explicit stamp (Task 15.21).
 
     The Task-15.21 mis-stamp guard, in BOTH directions (the owner-ratified
-    PR-#248 amendment to the 15.21 contract). The stamp of the factory actually
-    running is authoritative: an explicit ``--tactical-policy-stamp`` is
-    accepted only when it matches that stamp field-for-field (an idempotent
-    re-statement), and any contradiction exits non-zero naming the differing
-    field — a learned recording can never carry an FSM label, an FSM recording
-    can never carry a learned one, and the Task-15.18 finalist-eval proof
-    (``stamp.weights_sha256`` equals the committed sidecar) becomes impossible
-    to forget AND impossible to counterfeit from this CLI. What is RECORDED is
-    unchanged from Task 15.9 for every accepted combination: the champion
-    auto-stamp on the learned path, the explicit stamp (or ``None``, the
-    absent = FSM default) on the ``fsm-default`` path — so an unflagged,
-    unstamped run stays byte-identical to the pre-15.9 recorder.
+    PR-#248 amendment to the 15.21 contract), now shared by the champion path and
+    the Task-17.14 candidate-artifact path. The stamp of the factory actually
+    running is authoritative — the champion auto-stamp on ``learned-champion``,
+    the candidate's own ``stamp.json`` on ``--candidate-artifact``, or ``None``
+    (the absent = FSM default) on ``fsm-default``. An explicit
+    ``--tactical-policy-stamp`` is accepted only when it matches that stamp
+    field-for-field (an idempotent re-statement), and any contradiction exits
+    non-zero naming the differing field — a learned recording can never carry an
+    FSM label, an FSM recording can never carry a learned one, and the Task-15.18
+    finalist-eval proof (``stamp.weights_sha256`` equals the committed sidecar)
+    becomes impossible to forget AND impossible to counterfeit from this CLI.
+    What is RECORDED is unchanged from Task 15.9 for every accepted combination,
+    so an unflagged, unstamped run stays byte-identical to the pre-15.9 recorder.
     """
 
     reference = (
@@ -334,19 +550,19 @@ def _resolve_recorded_stamp(
             explicit_value = getattr(explicit_stamp, field_name)
             if reference_value != explicit_value:
                 descriptor = (
-                    "auto-stamps every recording from the loaded champion artifact"
+                    "auto-stamps every recording from the loaded policy artifact "
+                    f"(policy_id={reference.policy_id!r})"
                     if auto_stamp is not None
                     else "records the scripted FSM default"
                 )
                 raise SystemExit(
-                    f"--agent-factory {factory_choice!r} {descriptor}; the "
-                    "explicit --tactical-policy-stamp contradicts it on "
-                    f"{field_name!r} (explicit {explicit_value!r} != factory "
-                    f"{reference_value!r}). Drop the explicit stamp (the champion "
-                    f"stamp is auto-wired by --agent-factory "
-                    f"{LEARNED_CHAMPION_FACTORY_ID!r}; the FSM default needs at "
+                    f"the running recorder {descriptor}; the explicit "
+                    "--tactical-policy-stamp contradicts it on "
+                    f"{field_name!r} (explicit {explicit_value!r} != recorder "
+                    f"{reference_value!r}). Drop the explicit stamp (the selected "
+                    "factory auto-wires its own stamp; the FSM default needs at "
                     f"most the literal {FSM_DEFAULT_POLICY_ID!r}) or pass one "
-                    "matching the running factory exactly."
+                    "matching the running factory field-for-field."
                 )
     if auto_stamp is not None:
         return auto_stamp
@@ -472,9 +688,10 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
-    agent_factory, auto_stamp = _resolve_agent_factory(args.agent_factory)
+    agent_factory, auto_stamp = _resolve_agent_factory(
+        args.agent_factory, candidate_artifact=args.candidate_artifact
+    )
     tactical_policy_stamp = _resolve_recorded_stamp(
-        factory_choice=args.agent_factory,
         auto_stamp=auto_stamp,
         explicit_stamp=explicit_stamp,
     )
