@@ -76,11 +76,27 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
  stands as the ladder tip —        exists; a mover baseline re-enters only via a future
  audits/audit-phase-17-close.md)   adopting record that passes the referee + win-edge bar
         │
-        │   Phase 18 — presentation: mixed-model lobbies + deduction/deception leaderboard,
-        │   auto-highlight reels from the referee, a turn-paced human seat, the public
-        │   deception-dataset packaging, and the workflow retrospective write-up
+        │   Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18,
+        │   audits/audit-phase-18-planning.md; tasks/phase-18.md): emergent
+        │   deception/deduction under environmental pressure — the meeting-layer
+        │   package behind an evidence gate (its adopting record, if any arm ships,
+        │   is baseline 6), the conviction-economy training signal, alternating-
+        │   freeze co-evolution impostor-first, pre-registered emergence
+        │   instruments; an evidence-gated mover flip at the close records the
+        │   next baseline number after whatever the phase adopted
         ▼
-      (ship)
+baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 gate's
+        │                       ruling; mover record only on a §1.3-bar PASS at 18.27
+        │
+        │   Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18): a deep
+        │   review of the existing code (dead spots, dead code, refactor
+        │   opportunities) + an updated presentation of the frontend and the data
+        │   displays. NOT a feature phase. Heterogeneous-model lobbies are NOT in
+        │   Phase 19 — a model-vs-model comparison feature comes only AFTER the
+        │   review/refresh work, as its own later decision. The human seat is OUT
+        │   (not deferred-to-19; out).
+        ▼
+      (presentation, re-scoped as a later decision)
 ```
 
 ## 3. Phase-by-phase summary
@@ -121,11 +137,24 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
   ranking unchanged); the absence-prior graduation + vent widening, the pooling-prompt uptake
   work, the crew deployment surface, and the detector-band relaxation route to Phase 18 as
   recorded contracts (the close audit §6).
-- **Phase 18 — presentation (owner goal 4).** Heterogeneous-model lobbies (per-agent model routing +
-  per-player provenance — plumbing already sized in the V&J planning doc) and a which-model-deceives/
-  deduces-best leaderboard; referee-driven auto-highlight reels in the spectator UI; a turn-paced
-  human seat; packaging the recorded corpora as a labeled deception benchmark; the agentic-workflow
-  retrospective write-up. Ordering inside the phase is flexible; nothing here changes game substance.
+- **Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18; `tasks/phase-18.md`, opened
+  2026-07-18).** The owner ruled presentation DEFERRED and re-chartered Phase 18 as the ML phase:
+  advance the learned agents until deception and deduction arise from environmental pressure rather
+  than scripting. Five owner-ratified locked decisions (`audits/audit-phase-18-planning.md` §8):
+  layered training signal (a conviction-economy proxy model in the loop + per-generation real-path
+  re-ranks), the meeting-layer absence/uptake package in-phase and FIRST behind an evidence gate
+  (roll-call round + endpoint-band relaxation + impostor-answer arm + vent widening + absence
+  graduation, with pre-registered bars and a crew-only fallback), alternating-freeze co-evolution
+  with the stabilizer stack impostor-first, the §1.3 flip bar as target with pre-registered
+  emergence instruments co-equal, and encoder work riding the co-evolution wave (first-principles
+  primitives rejected on code evidence).
+- **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18).** Not a feature phase: (a) a
+  deep review of the code that already exists — dead spots, dead code, refactor opportunities; (b)
+  an updated presentation of the frontend and the data displays. The human seat is OUT (not
+  deferred-to-19; out). Heterogeneous-model lobbies are NOT in Phase 19 either — a feature comparing
+  how models perform relative to one another comes only AFTER the review/refresh work, as its own
+  later decision. The former presentation scope (leaderboards, highlight reels, dataset packaging,
+  the retrospective) re-enters only through that later decision.
 
 ## 4. Standing rules (carried from the Phase-15 preamble and the planning audits)
 

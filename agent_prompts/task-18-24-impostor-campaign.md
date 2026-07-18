@@ -1,0 +1,110 @@
+# Agent Prompt — 18.24 THE IMPOSTOR CAMPAIGN (operator, multi-session)
+
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session), anchored to audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at). Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+**Branch:** `phase-18-impostor-campaign`
+**Depends on:** 18.17, 18.21, 18.22
+**Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
+**Complexity:** Integration
+
+The phase's first live campaign: evolve the impostor side against the frozen scripted crew
+plus hall-of-fame opponents (as the crew side gains members, later swaps use them),
+entrants seeded from the committed champion, the 18.5 anchor-study candidates, and (for the
+free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate path with the
+conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
+before every real spend, all meters quoted. Report: campaign rows, the cycling-detector
+reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
+sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
+cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;
+real-path legs total ~40–50 h spread across sessions — checkpoint-push per generation.
+
+**Files in scope:**
+- training/reports/report-impostor-campaign.md (new) + training/reports/results-impostor-campaign.jsonl (new)
+- training/artifacts/coevo/ (the campaign's frozen artifacts, via the driver)
+- tests/training/test_coevo_driver.py (campaign-row pins from the committed rows ONLY)
+
+**Files NOT in scope:**
+- training/coevo/*.py + training/bakeoff/ (the machinery froze at Wave 3 — a campaign is a run, not a redesign)
+- agents/tactical/learned/ (no champion swap here — 18.27's evidence decides)
+
+**Definition of done:**
+- [ ] The campaign report carries every generation's row (fitness, anchor benchmarks both directions, opponent slates, exploiter outcomes, meter consumption), the cycling-detector verdict stated against the pre-registered signature, and the real-path re-rank tables with stamp proofs and floor sensitivity per the 17.14 discipline.
+- [ ] The emergence instruments are swept over the campaign's real-path recordings with deltas quoted against the 18.4 baseline cells (claims deferred to 18.27 — this task reports, never rules), and the finalists for 18.26 are named with their artifacts frozen.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+## Implementation hint
+
+Run the standing runbook per real-path leg (2 staggered workers, jittered backoff,
+`AILIBI_SEED_MAX_ATTEMPTS=8`, per-seed atomic staging, checkpoint-push). If a meter (cap)
+exhausts mid-campaign, the swap-boundary stop is the design working — re-ground and
+resume, and say so in the report.
+
+## Integration risk
+
+The first run composes every new subsystem (conviction term, pre-screen, HoF sampling,
+driver, real re-ranks) — expect integration findings. The discipline: a defect found
+mid-campaign becomes a routed contract or an in-report finding; the campaign never patches
+machinery silently (merge-equals-done applies to the tools it runs on).
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import agents.tactical.features"`
+- `uv run python -c "import training.coevo.factory"`
+- `uv run python -c "import training.coevo.rollout"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import training.bakeoff.harness"`
+- `uv run python -c "import training.conviction.model"`
+- `uv run python -c "import training.conviction.dataset"`
+- `uv run python -c "import training.conviction.fidelity"`
+- `uv run python -c "import agents.strategic.prompts.loader"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
+- `uv run python -c "import eval.off_menu"`
+- `uv run python -c "import eval.kill_craft"`
+- `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import training.coevo.driver"`
+- `uv run python -c "import training.coevo.hall_of_fame"`
+- `uv run python -c "import training.bakeoff.map_elites"`
+- `uv run python -c "import training.realpath"`
+
+## Pre-flight checklist
+- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+
+## Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify AGENT_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
+Do not implement work outside this task.
+
+## Verification checklist
+- Run every command listed in the Definition of done.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `phase-18-impostor-campaign` with a title like `task 18.24: the impostor campaign (operator, multi-session)`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
