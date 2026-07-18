@@ -1,6 +1,7 @@
 """Off-menu action diagnostics — behaviour outside the FSM option menu.
 
-Task 18.3 (tasks/phase-18.md; DESIGN.md §3.2) builds the byte-grounded gauge of
+Task 18.3 (tasks/phase-18.md; audits/audit-phase-18-planning.md §3.2) builds the
+byte-grounded gauge of
 impostor behaviour that lies OUTSIDE the FSM option menu. At each recorded
 impostor decision the agent-visible packet + episodic memory is reconstructed
 offline, the oracle's :func:`~agents.tactical.learned.forward.enumerate_options`
@@ -8,8 +9,9 @@ menu is materialised for that exact packet, and the recorded action's intent is
 tested for membership in the menu — yielding an *off-menu RATE* over a recording
 and a per-decision census of WHAT kind of novelty appeared.
 
-Honest scoping (DESIGN.md §3.2, corrected finding) — carried in the module
-docstring AND in every report's ``scope_note`` field:
+Honest scoping (audits/audit-phase-18-planning.md §3.2, the corrected off-menu
+finding) — carried in the module docstring AND in every report's ``scope_note``
+field:
 
 * The **menu-bounded champion is on-menu by construction**: it can only emit an
   action the menu offered, so its off-menu rate is **0 always**. The instrument
@@ -148,7 +150,8 @@ from orchestrator.seeder import seed_initial_state
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
-# The honest-scoping statement (DESIGN.md §3.2). Carried verbatim in every
+# The honest-scoping statement (audits/audit-phase-18-planning.md §3.2, the
+# corrected off-menu finding). Carried verbatim in every
 # report's ``scope_note`` so a consumer reading a single report — not the
 # module — still sees why rate 0 is expected on the committed FSM bytes and what
 # the instrument is (and is NOT) for.
