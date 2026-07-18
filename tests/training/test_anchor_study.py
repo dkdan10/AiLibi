@@ -338,9 +338,12 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
     round_trip = AnchorStudyReport.model_validate(index)
     assert round_trip == report
 
-    # The rendered report names the seeds section and the entrants.
+    # The rendered report carries the cell (the sweep table's canonical λ
+    # header + its weights sha — NOT just the recommendation section, which
+    # only names Pareto survivors), the anchor, and the substrate sha.
     rendered = report_path.read_text()
-    assert "lambda-1.0" in rendered
+    assert "λ=1.0" in rendered
+    assert row.weights_sha256[:12] in rendered
     assert FILTERED_BC_ENTRANT in rendered
     assert substrate_sha in rendered
 
@@ -349,6 +352,43 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
     assert FILTERED_BC_ENTRANT in report.recommended_campaign_seeds
     for name in report.recommended_campaign_seeds:
         assert (artifact_root / name / "weights.json").exists()
+
+
+def test_lambda_1_cross_check_raises_on_a_drifted_full_budget_champion() -> None:
+    # The fail-loud guard the definition of done hinges on: a full-budget
+    # λ=1.0 champion that does NOT byte-match the committed artifact must
+    # refuse the whole sweep. Exercised directly on the private helper (the
+    # full 285 s training is never paid in CI).
+    from training.anchor_study import _cross_check_committed_champion
+    from training.bakeoff.harness import TrainedCandidate
+    from training.bakeoff.utility_es import build_utility_scorer_policy
+
+    drifted_genome = tuple(float(i) for i in range(utility_genome_length()))
+    drifted = TrainedCandidate(
+        entrant="lambda-1.0",
+        policy=build_utility_scorer_policy(drifted_genome),
+        weights=drifted_genome,
+        config={},
+    )
+    with pytest.raises(RuntimeError, match="byte-identically"):
+        _cross_check_committed_champion(drifted, enforce=True)
+    # The ci-budget path compares WITHOUT enforcement: the mismatch is
+    # reported, never raised.
+    check = _cross_check_committed_champion(drifted, enforce=False)
+    assert check.byte_identical is False
+    assert check.committed_weights_sha256 != check.sweep_weights_sha256
+
+    # And the committed genome itself passes the enforced check.
+    committed_genome = load_candidate_weights(_COMMITTED_CHAMPION_DIR)
+    committed = TrainedCandidate(
+        entrant="lambda-1.0",
+        policy=build_utility_scorer_policy(committed_genome),
+        weights=committed_genome,
+        config={},
+    )
+    passing = _cross_check_committed_champion(committed, enforce=True)
+    assert passing.byte_identical is True
+    assert passing.committed_weights_sha256 == passing.sweep_weights_sha256
 
 
 # --------------------------------------------------------------------------- #

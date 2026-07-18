@@ -25,7 +25,7 @@
 
 ## 1. Protocol (fixed before any run)
 
-- **Sweep grid:** λ ∈ {0.25, 0.5, 1, 2, 4} over
+- **Sweep grid:** λ ∈ {0.25, 0.5, 1.0, 2.0, 4.0} over
   the committed utility-es full budget (ES 20 gen × 12 pop × 6 train seeds,
   σ 0.3, seed 0 — `utility_es_budget("full", anchor_weight=λ)`); every champion
   scored through the standing fake-path protocol
@@ -61,7 +61,7 @@
 
 ## 2. The λ sweep (5 cells, standing 30-seed protocol)
 
-| Metric | λ=0.25 | λ=0.5 | λ=1 | λ=2 | λ=4 |
+| Metric | λ=0.25 | λ=0.5 | λ=1.0 | λ=2.0 | λ=4.0 |
 |---|---|---|---|---|---|
 | inner fitness (real path, standing λ=1.0 gauge) | 18.2537 | 18.2537 | 18.6707 | 18.6707 | 19.2181 |
 | mean shaped reward (real path) | 19.3000 | 19.3000 | 19.6667 | 19.6667 | 19.8000 |
@@ -78,7 +78,7 @@
 
 ### 2.1 Descriptor footprint (per-game means over the eval set)
 
-| Descriptor | λ=0.25 | λ=0.5 | λ=1 | λ=2 | λ=4 |
+| Descriptor | λ=0.25 | λ=0.5 | λ=1.0 | λ=2.0 | λ=4.0 |
 |---|---|---|---|---|---|
 | do_task_cadence | 2.839 | 2.839 | 2.920 | 2.920 | 3.070 |
 | do_task_emissions | 74.333 | 74.333 | 72.767 | 72.767 | 79.000 |
@@ -91,8 +91,8 @@
 
 ### 2.2 Reading
 
-- **The dial has plateaus:** λ=0.25/λ=0.5 froze the SAME genome (`702ac797b50d`); λ=1/λ=2 froze the SAME genome (`6d327dcbde94`) — at this ES budget no accept/reject comparison flips anywhere inside those bands (the fitness gap the λ change makes never re-orders an offspring against the incumbent).
-- **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is `lambda-4.0`:** every other cell is weakly dominated — at this budget on the fake path a HEAVIER anchor did not cost shaped reward (λ=0.25 shaped 19.30 / CE 1.055 → λ=4 shaped 19.80 / CE 0.611). The fake path mints no convictions, so fitness and legibility are not yet in tension here — the tension the champion failed on lives in the referee gauges, and NO cell passes the supply floors (the flip bar stays open; this study only positions seeds).
+- **The dial has plateaus:** λ=0.25/λ=0.5 froze the SAME genome (`702ac797b50d`); λ=1.0/λ=2.0 froze the SAME genome (`6d327dcbde94`) — at this ES budget no accept/reject comparison flips anywhere inside those bands (the fitness gap the λ change makes never re-orders an offspring against the incumbent).
+- **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is `lambda-4.0`:** every other cell is weakly dominated — at this budget on the fake path a HEAVIER anchor did not cost shaped reward (λ=0.25 shaped 19.30 / CE 1.055 → λ=4.0 shaped 19.80 / CE 0.611). The fake path mints no convictions, so fitness and legibility are not yet in tension here — the tension the champion failed on lives in the referee gauges, and NO cell passes the supply floors (the flip bar stays open; this study only positions seeds).
 - **The refined anchor vs the committed champion, on the corpus stream:** the
   filtered-BC anchor matches the FSM's choice on
   0.7970 of decisions (CE

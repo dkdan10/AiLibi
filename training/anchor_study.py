@@ -1287,7 +1287,7 @@ def render_report(
     summary = bc.filter_summary
 
     def sweep_table() -> str:
-        header = "| Metric | " + " | ".join(f"λ={row.lambda_value:g}" for row in rows)
+        header = "| Metric | " + " | ".join(f"λ={row.lambda_value}" for row in rows)
         sep = "|---|" + "---|" * len(rows)
         lines = [header + " |", sep]
         metric_rows: list[tuple[str, list[str]]] = [
@@ -1353,7 +1353,7 @@ def render_report(
         plateaus = [group for group in by_sha.values() if len(group) > 1]
         if plateaus:
             cells = "; ".join(
-                "/".join(f"λ={row.lambda_value:g}" for row in group)
+                "/".join(f"λ={row.lambda_value}" for row in group)
                 + f" froze the SAME genome (`{group[0].weights_sha256[:12]}`)"
                 for group in plateaus
             )
@@ -1374,10 +1374,10 @@ def render_report(
                 + ", ".join(f"`{name}`" for name in front)
                 + ":** every other cell is weakly dominated — at this budget on "
                 "the fake path a HEAVIER anchor did not cost shaped reward "
-                f"(λ={rows[0].lambda_value:g} shaped "
+                f"(λ={rows[0].lambda_value} shaped "
                 f"{_fmt(rows[0].mean_shaped_reward_real, 2)} / CE "
                 f"{_fmt(rows[0].anchor_cross_entropy, 3)} → "
-                f"λ={rows[-1].lambda_value:g} shaped "
+                f"λ={rows[-1].lambda_value} shaped "
                 f"{_fmt(rows[-1].mean_shaped_reward_real, 2)} / CE "
                 f"{_fmt(rows[-1].anchor_cross_entropy, 3)}). The fake path "
                 "mints no convictions, so fitness and legibility are not yet "
@@ -1389,9 +1389,7 @@ def render_report(
 
     def descriptor_table() -> str:
         names = sorted(rows[0].descriptor_footprint) if rows else []
-        header = "| Descriptor | " + " | ".join(
-            f"λ={row.lambda_value:g}" for row in rows
-        )
+        header = "| Descriptor | " + " | ".join(f"λ={row.lambda_value}" for row in rows)
         lines = [header + " |", "|---|" + "---|" * len(rows)]
         for name in names:
             lines.append(
@@ -1481,7 +1479,7 @@ def render_report(
 
 ## 1. Protocol (fixed before any run)
 
-- **Sweep grid:** λ ∈ {{{", ".join(f"{value:g}" for value in report.lambda_grid)}}} over
+- **Sweep grid:** λ ∈ {{{", ".join(str(value) for value in report.lambda_grid)}}} over
   the committed utility-es full budget (ES 20 gen × 12 pop × 6 train seeds,
   σ 0.3, seed 0 — `utility_es_budget("full", anchor_weight=λ)`); every champion
   scored through the standing fake-path protocol
