@@ -343,8 +343,9 @@ record; Wave 0 is layer-neutral by construction.
   conviction-model dataset/fidelity groundwork that is layer-independent.
 - **Wave 1 (the Q2 package, if ratified):** template/surface contracts → evidence-memo gate
   (owner; pre-registered bars incl. the impostor-answer arm's self-flag/win-band bars) →
-  adopting record → corpus re-record (operator, ~15–18 h at the widened turn budget) →
-  surrogate re-ground + conviction-model re-fit → floor/bar re-pins.
+  adopting record → corpus re-record (operator, ~18–20 h at the widened turn budget —
+  14–15 h × the measured 1.36 call multiplier) → surrogate re-ground + conviction-model
+  re-fit → floor/bar re-pins.
 - **Wave 2 (training signal):** conviction-economy model fit + GO verdict; fitness-term
   integration; real-path selection recorder (design B/C) productized.
 - **Wave 3 (co-evolution):** dual-role rollout + frozen HoF + alternating-freeze driver +
