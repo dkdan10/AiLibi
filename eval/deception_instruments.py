@@ -96,7 +96,17 @@ Predicate definitions (each landed on the corpus bytes):
    impostor ``saw_player`` false vouch names that co-impostor subject (the
    chokepoint's per-meeting-per-subject granularity); ``false_vouch_grounded`` is
    the pairs whose subject is in the restricted grounded set;
-   ``false_vouch_fabricated`` is the rest.
+   ``false_vouch_fabricated`` is the rest. The split therefore partitions
+   SUBJECT EVENTS, deliberately NOT the observation numerator (34 observations
+   vs 28 subject events on the corpus: repeat placements of the same teammate
+   within one meeting collapse). This granularity is the production function's
+   own -- it dedups subjects internally (``meetings/transcript.py``,
+   "``if observation.subject in grounded``") and returns a per-meeting subject
+   set, so no per-observation verdict exists to adopt. Labeling each duplicate
+   observation with its subject's verdict would misclassify a non-matching
+   duplicate vouch as grounded, and re-matching records per observation would
+   be the re-derivation the 18.1 DoD forbids; the observation-level numerator
+   is reported beside the split with its own denominator instead.
 9. Adoption wrappers (pure assembly, no metric math re-implemented -- the
    ``build_tournament_eval_report`` doctrine, ``eval/meeting_quality.py:2649``):
    :func:`eval.validity.assemble_tournament_report` feeds
@@ -596,7 +606,12 @@ def _grounded_split(
 
     Chokepoint granularity is per-meeting-per-subject: each co-impostor subject a
     living impostor false-vouches for is one subject event, classified grounded
-    iff it is in the impostor-restricted grounded set, else fabricated.
+    iff it is in the impostor-restricted grounded set, else fabricated. The split
+    partitions subject events, NOT the observation count -- the production
+    chokepoint dedups subjects internally and returns a subject set, so repeat
+    placements of the same teammate in one meeting are one event here (see the
+    module docstring, predicate 8, for why no per-observation verdict is
+    derivable without the re-derivation the DoD forbids).
     """
 
     subjects = _false_vouch_subjects(meeting, roles)
