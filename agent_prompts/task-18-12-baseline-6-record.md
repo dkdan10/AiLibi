@@ -34,6 +34,8 @@ this record moves is re-pinned in the same PR.
 - tests/scripts/test_record_ml_corpus.py; (the registry-equality pin re-lock ONLY)
 - tests/scripts/test_manifest_writer.py (the MANIFEST substrate-flags string pins — the new true flags in recorded bytes)
 - agents/memory/beliefs.py (the absence graduation component if ruled)
+- orchestrator/replay.py; (the graduation reclassification ONLY — shipped levers move out of `TOGGLEABLE_SUBSTRATE_FLAG_KEYS` so baseline-6 recordings stamp them always-on, never env-toggleable; the snapshot/key ordering follows)
+- tests/orchestrator/ (the reclassification pins)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
 - eval/watchability.py; (the baseline-6 floor block)
 - audits/audit-phase-18-baseline-6.md (new: the record audit)
@@ -76,11 +78,11 @@ seam.
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import agents.strategic.prompts.loader"`
-- `uv run python -c "import meetings.transcript"`
-- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import agents.tactical.learned.crew_forward"`
 - `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`

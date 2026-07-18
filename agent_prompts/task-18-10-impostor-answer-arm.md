@@ -12,7 +12,7 @@ Implement Task 18.10 — The impostor-answer template arm (variant, default unto
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-impostor-answer-arm`
-**Depends on:** none (root)
+**Depends on:** 18.7 (an `orchestrator/game.py` serialization edge — the crew-stamp threading before the prompt-version registry entries; a collision edge, not a semantic prerequisite)
 **Section refs:** audits/audit-phase-18-planning.md §3.4 (the structural refusal: hard-coded empty observations); agents/strategic/prompts/qwen3_6_27b/impostor_report.j2:8-12, 29-36, 76, 109-110 (the ladder history + the ≥44% self-flag caution) + accusation_round.j2:179, 198-200; agents/strategic/prompts/loader.py:155-157, 481-483 (role-selected routing); audits/audit-phase-17-absence-gate.md Ruling 3(d) (template changes re-read the bar on new bytes)
 **Complexity:** Medium
 
@@ -57,6 +57,13 @@ conventions so validity-gate provenance can tell variant bytes from default byte
 - `agents.strategic.prompts.loader.impostor_roll_call_enabled`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

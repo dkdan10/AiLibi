@@ -28,6 +28,7 @@ the continuity anchor).
 - replays/ml_corpus/9p2i/ + replays/ml_corpus/4p1i/ (the re-recorded bytes + MANIFESTs + splits.json)
 - replays/ml_corpus/README.md (full substrate refresh)
 - scripts/record_ml_corpus.sh (the substrate pin flip + duration note)
+- tests/eval/ (the corpus-pinned cells ONLY — test_watchability.py / test_watchability_reanchor.py corpus verdicts and the 18.1/18.2/18.3 instrument corpus pins; samples pins moved at 18.12)
 - tests/training/test_bakeoff_harness.py; (corpus-derived re-pins ONLY — the constant flips are 18.14's)
 - tests/training/test_surrogate_runner.py; (corpus-derived re-pins ONLY — the re-fit is 18.14's)
 - tests/training/test_crew_options.py (corpus-derived re-pins ONLY)
@@ -65,11 +66,11 @@ constants to 18.14 (the 17.9/17.11 split, kept).
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import agents.strategic.prompts.loader"`
-- `uv run python -c "import meetings.transcript"`
-- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import agents.tactical.learned.crew_forward"`
 - `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`

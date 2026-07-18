@@ -147,11 +147,12 @@ prompts/` 18.10 then 18.12 (same); `agents/memory/beliefs.py` 18.12 only;
 18.16 (term/pre-screen), serialized by the dep chain; `training/bakeoff/map_elites.py` 18.6;
 `agents/tactical/learned/` 18.7 then 18.27 (ordered via the dep chain);
 `scripts/run_tournament.py` 18.7 then 18.19 (dep edge); `orchestrator/replay.py` is 18.7
-(crew-stamp schema) then 18.11 (substrate-flag snapshot registry) then 18.19 (dual-stamp
-coherence), all dep-ordered;
-`orchestrator/game.py` is 18.10 (prompt-version registry) then 18.12 (registry graduation)
-then 18.23 (the `initial_state` seam) then 18.28 (FLIP-path default selector), all
-dep-ordered; `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
+(crew-stamp schema) then 18.11 (substrate-flag snapshot registry) then 18.12 (flag
+graduation reclassification) then 18.19 (dual-stamp coherence), all dep-ordered;
+`orchestrator/game.py` is 18.7 (crew-stamp threading) then 18.10 (prompt-version registry;
+the dep edge is this file's serialization) then 18.12 (registry graduation) then 18.22 (the
+concluded-hook payload) then 18.23 (the `initial_state` seam) then 18.28 (FLIP-path default
+selector), all dep-ordered; `eval/balance_eval.py` 18.7 only; `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
 `training/coevo/` is 18.19/18.20/18.21 in dep order with per-task module files;
 `tasks/phase-18.md` is 18.11 (surgery) then 18.27 (ruling banner) then 18.28 (close banner),
 all dep-ordered; `agent_prompts/` surgery 18.11.
@@ -486,6 +487,8 @@ emergency-uses bookkeeping via the meeting-concluded hook.
 **Files in scope:**
 - agents/tactical/learned/crew_forward.py (new) + agents/tactical/learned/factory.py (the crew factory + stamp) + the committed crew weights artifact under agents/tactical/learned/
 - orchestrator/replay.py; (the ADDITIVE crew-stamp record + reader — `CrewTacticalPolicyStamp` lands HERE so a learned-crew recording has a schema slot from day one; a game with no crew stamp parses byte-identically, committed-set round-trip pinned; 18.19 consumes this for dual-stamp recordings)
+- eval/balance_eval.py; (the ADDITIVE `crew_policy_stamp` kwarg on `run_tournament_eval` — the recording path only threads the single tactical stamp today; default None is byte-identical)
+- orchestrator/game.py; (the crew-stamp threading into the `ReplayLog` construction ONLY — the mirror of the existing tactical-stamp plumbing)
 - scripts/run_tournament.py; (the `learned-crew` factory arm + stamp wiring)
 - tests/training/test_learned_factory_acceptance.py (the crew twin: Q4 bit-exact gate vs `CrewOptionScorer`, determinism double-run, leak-mode scan)
 - tests/scripts/test_run_tournament_candidate_artifact.py; (the crew factory arm's guards)
@@ -635,7 +638,7 @@ transcripts, the 17.5 pin pattern.
 
 ### Task 18.10 — The impostor-answer template arm (variant, default untouched)
 **Branch:** `phase-18-impostor-answer-arm`
-**Depends on:** none (root)
+**Depends on:** 18.7 (an `orchestrator/game.py` serialization edge — the crew-stamp threading before the prompt-version registry entries; a collision edge, not a semantic prerequisite)
 **Section refs:** audits/audit-phase-18-planning.md §3.4 (the structural refusal: hard-coded empty observations); agents/strategic/prompts/qwen3_6_27b/impostor_report.j2:8-12, 29-36, 76, 109-110 (the ladder history + the ≥44% self-flag caution) + accusation_round.j2:179, 198-200; agents/strategic/prompts/loader.py:155-157, 481-483 (role-selected routing); audits/audit-phase-17-absence-gate.md Ruling 3(d) (template changes re-read the bar on new bytes)
 **Complexity:** Medium
 
@@ -708,6 +711,7 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 - audits/audit-phase-18-meeting-gate.md (new: the memo + the recorded ruling)
 - orchestrator/replay.py; (the substrate-flag snapshot registry ONLY: the four new lever flags — roll-call round, endpoint exemption, vent-flag variant, impostor-answer — wired in BEFORE any probe seed records, so probe/adoption recordings self-describe the arms under test; today the snapshot knows only `absence_prior`)
 - tests/orchestrator/ (the snapshot-registry fixtures)
+- tests/experiments/test_probe_backends.py (the hard-coded `_FLAGS_ON`/default-snapshot pins — `active_substrate_flags` delegates to the snapshot and grows with it)
 - tasks/phase-18.md; (the surgery + the banner note)
 - agent_prompts/ (regenerated)
 
@@ -768,6 +772,8 @@ this record moves is re-pinned in the same PR.
 - tests/scripts/test_record_ml_corpus.py; (the registry-equality pin re-lock ONLY)
 - tests/scripts/test_manifest_writer.py (the MANIFEST substrate-flags string pins — the new true flags in recorded bytes)
 - agents/memory/beliefs.py (the absence graduation component if ruled)
+- orchestrator/replay.py; (the graduation reclassification ONLY — shipped levers move out of `TOGGLEABLE_SUBSTRATE_FLAG_KEYS` so baseline-6 recordings stamp them always-on, never env-toggleable; the snapshot/key ordering follows)
+- tests/orchestrator/ (the reclassification pins)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
 - eval/watchability.py; (the baseline-6 floor block)
 - audits/audit-phase-18-baseline-6.md (new: the record audit)
@@ -826,6 +832,7 @@ the continuity anchor).
 - replays/ml_corpus/9p2i/ + replays/ml_corpus/4p1i/ (the re-recorded bytes + MANIFESTs + splits.json)
 - replays/ml_corpus/README.md (full substrate refresh)
 - scripts/record_ml_corpus.sh (the substrate pin flip + duration note)
+- tests/eval/ (the corpus-pinned cells ONLY — test_watchability.py / test_watchability_reanchor.py corpus verdicts and the 18.1/18.2/18.3 instrument corpus pins; samples pins moved at 18.12)
 - tests/training/test_bakeoff_harness.py; (corpus-derived re-pins ONLY — the constant flips are 18.14's)
 - tests/training/test_surrogate_runner.py; (corpus-derived re-pins ONLY — the re-fit is 18.14's)
 - tests/training/test_crew_options.py (corpus-derived re-pins ONLY)
@@ -1304,6 +1311,8 @@ v3.
 - agents/memory/store.py (the meeting-history memory channel the v3 encoder reads — populated at the existing deterministic meeting-conclusion fold; today `absorb_meeting_evidence` records no per-meeting outcome history the encoder can consume)
 - agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - orchestrator/game.py; (the meeting-concluded hook payload ONLY — `_notify_meeting_concluded`/`note_meeting_concluded` carry the public meeting outcome the memory channel folds; today the hook updates only the emergency tracker)
+- training/crew/scorer.py; (the `_CrewCandidateAgent.note_meeting_concluded` signature widening ONLY — the wrapper implements the exact current keyword-only signature and would TypeError on the widened payload)
+- agents/tactical/learned/; (the learned wrappers' hook signature widening ONLY, if they override the hook)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
 - tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
 - tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)

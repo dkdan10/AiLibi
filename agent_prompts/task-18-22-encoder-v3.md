@@ -30,6 +30,8 @@ v3.
 - agents/memory/store.py (the meeting-history memory channel the v3 encoder reads — populated at the existing deterministic meeting-conclusion fold; today `absorb_meeting_evidence` records no per-meeting outcome history the encoder can consume)
 - agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - orchestrator/game.py; (the meeting-concluded hook payload ONLY — `_notify_meeting_concluded`/`note_meeting_concluded` carry the public meeting outcome the memory channel folds; today the hook updates only the emergency tracker)
+- training/crew/scorer.py; (the `_CrewCandidateAgent.note_meeting_concluded` signature widening ONLY — the wrapper implements the exact current keyword-only signature and would TypeError on the widened payload)
+- agents/tactical/learned/; (the learned wrappers' hook signature widening ONLY, if they override the hook)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
 - tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
 - tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
@@ -71,11 +73,11 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.conviction.dataset"`
 - `uv run python -c "import training.conviction.fidelity"`
 - `uv run python -c "import agents.strategic.prompts.loader"`
-- `uv run python -c "import meetings.transcript"`
-- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import agents.tactical.learned.crew_forward"`
 - `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`

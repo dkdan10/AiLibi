@@ -37,6 +37,7 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 - audits/audit-phase-18-meeting-gate.md (new: the memo + the recorded ruling)
 - orchestrator/replay.py; (the substrate-flag snapshot registry ONLY: the four new lever flags — roll-call round, endpoint exemption, vent-flag variant, impostor-answer — wired in BEFORE any probe seed records, so probe/adoption recordings self-describe the arms under test; today the snapshot knows only `absence_prior`)
 - tests/orchestrator/ (the snapshot-registry fixtures)
+- tests/experiments/test_probe_backends.py (the hard-coded `_FLAGS_ON`/default-snapshot pins — `active_substrate_flags` delegates to the snapshot and grows with it)
 - tasks/phase-18.md; (the surgery + the banner note)
 - agent_prompts/ (regenerated)
 
@@ -75,11 +76,11 @@ pattern) — never merge a ruling that has not happened.
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import agents.strategic.prompts.loader"`
-- `uv run python -c "import meetings.transcript"`
-- `uv run python -c "import meetings.manager"`
 - `uv run python -c "import agents.tactical.learned.crew_forward"`
 - `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
