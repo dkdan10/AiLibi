@@ -189,14 +189,24 @@ class DescriptorConfiguration:
     edges: Mapping[str, tuple[float, ...]]
 
     def __post_init__(self) -> None:
-        # Fail loud (AGENTS.md "no silent fallbacks"): exactly three axes (the
-        # cell key is a 3-tuple), the edge map keys the axes exactly, and every
-        # axis' edges are a non-empty strictly-increasing sequence (so the
-        # ``bisect_right`` bins are well-ordered and non-degenerate).
+        # Fail loud (AGENTS.md "no silent fallbacks"): exactly three DISTINCT
+        # axes (the cell key is a 3-tuple), the edge map keys the axes exactly,
+        # and every axis' edges are a non-empty strictly-increasing sequence (so
+        # the ``bisect_right`` bins are well-ordered and non-degenerate).
         if len(self.axes) != 3:
             raise ValueError(
                 f"DescriptorConfiguration {self.name!r} needs exactly 3 axes "
                 f"(the archive cell key is a 3-tuple); got {self.axes!r}"
+            )
+        if len(set(self.axes)) != len(self.axes):
+            # A repeated axis degenerates the grid (two coordinates bin the same
+            # value) and collapses the per-cell descriptor dict — never silent.
+            duplicates = sorted(
+                {axis for axis in self.axes if self.axes.count(axis) > 1}
+            )
+            raise ValueError(
+                f"DescriptorConfiguration {self.name!r} axes {self.axes!r} must "
+                f"be distinct; repeated axis {duplicates}"
             )
         if set(self.edges) != set(self.axes):
             raise ValueError(
@@ -746,6 +756,13 @@ def write_archive_cell_artifacts(
     frozen run always illuminates at least one cell). Returns the ``cells/``
     directory.
 
+    ``descriptor_configuration`` MUST be the configuration the archive was binned
+    on — the writer verifies this BEFORE any file I/O: each cell's descriptor key
+    set must equal the configuration's axes, and each cell-key component must fall
+    within that axis' bin range. A mismatch (e.g. persisting a referee-tension
+    archive while recording the behavior-v1 index block) fails loud rather than
+    writing an internally-inconsistent tree the loader cannot later detect.
+
     Operator regeneration recipe (reproduces the committed tree byte-for-byte)::
 
         from pathlib import Path
@@ -773,6 +790,33 @@ def write_archive_cell_artifacts(
             "cannot persist an empty MAP-Elites archive; a frozen run always "
             "illuminates at least one cell"
         )
+
+    # Fail loud BEFORE any file I/O if the configuration being recorded is not the
+    # one the archive was binned on: every cell's descriptor keys must equal the
+    # configuration's axes, and every cell-key component must fall in that axis'
+    # bin range. Otherwise the index block (axes / total_cells) would misdescribe
+    # the persisted cells — an inconsistency the loader cannot detect (the tension
+    # cell keys fit inside the behavior bin ranges).
+    axis_set = set(configuration.axes)
+    axis_bin_counts = [
+        len(configuration.edges[axis]) + 1 for axis in configuration.axes
+    ]
+    for cell_key in sorted(archive):
+        cell = archive[cell_key]
+        if set(cell.descriptors) != axis_set:
+            raise ValueError(
+                f"cell {cell_key} was binned on axes {sorted(cell.descriptors)} "
+                f"but the configuration being recorded is "
+                f"{configuration.name!r} over {sorted(axis_set)}; the writer's "
+                "descriptor_configuration must be the one the archive was binned on"
+            )
+        for axis_index, component in enumerate(cell_key):
+            if not 0 <= component < axis_bin_counts[axis_index]:
+                raise ValueError(
+                    f"cell key {cell_key} component {component} is out of range "
+                    f"[0, {axis_bin_counts[axis_index]}) for axis "
+                    f"{configuration.axes[axis_index]!r}"
+                )
 
     cells_dir = artifact_dir / _CELLS_DIRNAME
     if cells_dir.exists():

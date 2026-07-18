@@ -63,6 +63,7 @@ from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
     REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
     TOTAL_CELLS,
+    DescriptorConfiguration,
     MapElitesEntrant,
     bakeoff_substrate_sha,
     bin_descriptors,
@@ -793,6 +794,26 @@ def test_map_elites_tiny_budget() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_descriptor_configuration_rejects_duplicate_axis() -> None:
+    """A repeated axis fails loud at construction (Task 18.6).
+
+    Three axes that are not DISTINCT would degenerate the grid (two coordinates
+    bin the same value) and collapse the per-cell descriptor dict, so the
+    ``__post_init__`` validation refuses it even though the len==3 and edge-key
+    checks would both pass.
+    """
+
+    with pytest.raises(ValueError, match="must be distinct"):
+        DescriptorConfiguration(
+            name="dup",
+            axes=("kill_count", "kill_count", "vent_usage"),
+            edges={
+                "kill_count": (0.5, 1.5),
+                "vent_usage": (0.5, 2.5),
+            },
+        )
+
+
 def test_map_elites_persisted_cells_round_trip(
     tmp_path: Path,
     map_elites_run: tuple[MapElitesEntrant, TrainedCandidate],
@@ -879,16 +900,21 @@ def test_map_elites_cell_loader_fails_loud(
     good_dir = tmp_path / "good"
     write_archive_cell_artifacts(archive, good_dir, config=map_elites_budget("ci"))
     load_archive_cell_genomes(good_dir, expected_substrate_sha=bakeoff_substrate_sha())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="adopted substrate"):
         load_archive_cell_genomes(good_dir, expected_substrate_sha="deadbeef")
 
-    # (b) Corrupting one cell's weights.json trips the sha cross-check.
+    # (b) Tamper the victim's weights with DIFFERENT but VALID float-hex JSON, so
+    # the loader must reach the sha cross-check (not merely fail to parse the
+    # bytes): a loader with the sha check deleted would happily reload this.
     corrupt_dir = tmp_path / "corrupt"
     cells = write_archive_cell_artifacts(
         archive, corrupt_dir, config=map_elites_budget("ci")
     )
-    (cells / victim_name / "weights.json").write_text("corrupted")
-    with pytest.raises(ValueError):
+    weights_file = cells / victim_name / "weights.json"
+    tampered = json.loads(weights_file.read_text())
+    tampered[0] = float(float.fromhex(tampered[0]) + 1.0).hex()
+    weights_file.write_text(json.dumps(tampered) + "\n")
+    with pytest.raises(ValueError, match="hashes to"):
         load_archive_cell_genomes(corrupt_dir)
 
     # (c) Deleting a cell dir the index still references fails loud.
@@ -897,7 +923,7 @@ def test_map_elites_cell_loader_fails_loud(
         archive, missing_dir, config=map_elites_budget("ci")
     )
     shutil.rmtree(cells / victim_name)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="do not match the index"):
         load_archive_cell_genomes(missing_dir)
 
     # (d) A stray cell dir the index does NOT list fails loud too.
@@ -906,22 +932,25 @@ def test_map_elites_cell_loader_fails_loud(
         archive, stray_dir, config=map_elites_budget("ci")
     )
     (cells / "9-9-9").mkdir()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="do not match the index"):
         load_archive_cell_genomes(stray_dir)
 
 
-def test_map_elites_referee_tension_configuration_is_additive() -> None:
+def test_map_elites_referee_tension_configuration_is_additive(tmp_path: Path) -> None:
     """The referee-tension map is a selectable, deterministic alternative (18.6).
 
     Selecting :data:`REFEREE_TENSION_DESCRIPTOR_CONFIGURATION` tessellates the
     archive over the three watchability-tension axes (never as fitness), records
     the config name + 64-cell shape, carries the tension descriptors in every
     best-per-cell row with ``impostor_win`` in [0, 1], and reproduces the champion
-    + rows bit-for-bit on a second identical run.
+    + rows bit-for-bit on a second identical run. Its archive also persists +
+    reloads bit-exactly under the tension configuration, and the writer REFUSES
+    that archive when the configuration is omitted (the FIX-2 mislabel guard).
     """
 
+    config = map_elites_budget("ci")
     entrant = MapElitesEntrant(
-        config=map_elites_budget("ci"),
+        config=config,
         descriptor_configuration=REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
     )
     candidate = entrant.train()
@@ -954,6 +983,30 @@ def test_map_elites_referee_tension_configuration_is_additive() -> None:
     ).train()
     assert again.weights == candidate.weights
     assert again.train_metadata["best_per_cell"] == best_per_cell
+
+    # The non-default persistence path round-trips bit-exactly under its own
+    # configuration, and the index block records the tension name + 64-cell shape.
+    tension_archive = entrant.last_archive
+    assert tension_archive is not None
+    cells_dir = write_archive_cell_artifacts(
+        tension_archive,
+        tmp_path / "tension",
+        config=config,
+        descriptor_configuration=REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
+    )
+    reloaded = load_archive_cell_genomes(tmp_path / "tension")
+    assert reloaded == dict(tension_archive)
+    index = json.loads((cells_dir / "index.json").read_text())
+    assert index["descriptor_config"]["name"] == "referee-tension-v1"
+    assert index["descriptor_config"]["total_cells"] == 64
+
+    # FIX-2 regression pin: omitting descriptor_configuration would record a
+    # behavior-v1 index block around tension-binned cells — the writer refuses it
+    # BEFORE any file I/O rather than write an undetectable mislabel.
+    with pytest.raises(ValueError, match="was binned on axes"):
+        write_archive_cell_artifacts(
+            tension_archive, tmp_path / "mislabel", config=config
+        )
 
 
 def test_map_elites_default_run_config_is_byte_stable(
