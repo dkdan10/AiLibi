@@ -1,0 +1,44 @@
+{
+  "anchor_weight": 2.0,
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "utility-es",
+  "es": {
+    "fitness_seeds": [
+      1000,
+      1001,
+      1002,
+      1005,
+      1006,
+      1007
+    ],
+    "generations": 20,
+    "init_scale": 0.5,
+    "population": 12,
+    "seed": 0,
+    "sigma": 0.3
+  },
+  "feature_names": [
+    "kind_kill_now",
+    "kind_stalk_toward",
+    "kind_vent_exit",
+    "kind_cover_vent",
+    "kind_cover_move",
+    "kind_sabotage",
+    "kind_fake_task",
+    "kind_reposition",
+    "kind_wait",
+    "isolation",
+    "witness_risk",
+    "cooldown_ready",
+    "cooldown_norm",
+    "path_hops_norm",
+    "body_in_own_room",
+    "task_completion_percent",
+    "sabotage_active",
+    "visible_players_norm"
+  ],
+  "genome_length": 19,
+  "study": "anchor-study",
+  "substrate_sha": "02b7dfa80e802f0c4b6cb7a6e4a6f7dcc6515a7d1f9905eeda95940427e45ad7",
+  "train_budget": "full"
+}

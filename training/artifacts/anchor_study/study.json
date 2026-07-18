@@ -1,0 +1,740 @@
+{
+  "baseline_id": "baseline-5",
+  "corpus_set": "9p2i",
+  "determinism_cross_check": {
+    "byte_identical": true,
+    "committed_weights_sha256": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "lambda_value": 1.0,
+    "sweep_weights_sha256": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0"
+  },
+  "eval_seeds": [
+    1004,
+    1009,
+    1014,
+    1019,
+    1024,
+    1029,
+    1034,
+    1039,
+    1044,
+    1049,
+    1054,
+    1059,
+    1064,
+    1069,
+    1074,
+    1079,
+    1084,
+    1089,
+    1094,
+    1099,
+    1104,
+    1109,
+    1114,
+    1119,
+    1124,
+    1129,
+    1134,
+    1139,
+    1144,
+    1149
+  ],
+  "filtered_bc": {
+    "artifact_path": "training/artifacts/anchor_study/filtered-bc-anchor",
+    "committed_champion_overall": {
+      "agreement": 0.41310282074613286,
+      "agreement_hits": 3178,
+      "decisions": 7693,
+      "divergence": [
+        {
+          "anchor_intent_kind": "wait",
+          "count": 1441,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 1141,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 800,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 474,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 225,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 196,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 62,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 49,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 37,
+          "fsm_intent_kind": "sabotage"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 31,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 31,
+          "fsm_intent_kind": "sabotage"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 16,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 11,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 1,
+          "fsm_intent_kind": "move"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "committed utility-es champion",
+      "mean_anchor_ce": 1.0800190834499102,
+      "per_kind_agreement": {
+        "do_task": [
+          1183,
+          0
+        ],
+        "kill": [
+          746,
+          746
+        ],
+        "move": [
+          4221,
+          1505
+        ],
+        "sabotage": [
+          114,
+          46
+        ],
+        "vent": [
+          957,
+          667
+        ],
+        "wait": [
+          472,
+          214
+        ]
+      }
+    },
+    "entrant": "filtered-bc-anchor",
+    "epochs": 300,
+    "filter_summary": {
+      "both_criteria_games": 70,
+      "both_criteria_weight": 2.0,
+      "crew_winning_games": 101,
+      "fit_decisions": 5573,
+      "fit_weight_total": 8439.0,
+      "fsm_offmenu_decisions": 0,
+      "games_walked": 150,
+      "high_flag_floor": 0.5027932960893855,
+      "high_flag_games": 86,
+      "qualifying_games": 117,
+      "qualifying_seeds": [
+        1000,
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1014,
+        1015,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1023,
+        1024,
+        1025,
+        1026,
+        1028,
+        1029,
+        1030,
+        1031,
+        1034,
+        1036,
+        1037,
+        1038,
+        1039,
+        1041,
+        1042,
+        1043,
+        1044,
+        1047,
+        1050,
+        1051,
+        1052,
+        1053,
+        1054,
+        1055,
+        1056,
+        1057,
+        1058,
+        1060,
+        1062,
+        1063,
+        1064,
+        1066,
+        1067,
+        1070,
+        1071,
+        1072,
+        1074,
+        1075,
+        1078,
+        1079,
+        1080,
+        1081,
+        1082,
+        1083,
+        1084,
+        1085,
+        1087,
+        1090,
+        1091,
+        1092,
+        1094,
+        1095,
+        1096,
+        1097,
+        1098,
+        1100,
+        1101,
+        1103,
+        1104,
+        1105,
+        1107,
+        1108,
+        1109,
+        1110,
+        1111,
+        1112,
+        1113,
+        1115,
+        1117,
+        1118,
+        1119,
+        1120,
+        1121,
+        1122,
+        1123,
+        1124,
+        1125,
+        1126,
+        1127,
+        1128,
+        1129,
+        1131,
+        1132,
+        1133,
+        1134,
+        1136,
+        1138,
+        1140,
+        1141,
+        1142,
+        1143,
+        1144,
+        1145,
+        1146,
+        1147,
+        1148,
+        1149
+      ],
+      "total_decisions": 7693
+    },
+    "in_filter": {
+      "agreement": 0.7936479454512829,
+      "agreement_hits": 4423,
+      "decisions": 5573,
+      "divergence": [
+        {
+          "anchor_intent_kind": "move",
+          "count": 389,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 238,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 177,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 143,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 98,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 63,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 15,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 11,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 8,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 6,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 2,
+          "fsm_intent_kind": "move"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "in-filter games",
+      "mean_anchor_ce": 0.46851806242064153,
+      "per_kind_agreement": {
+        "do_task": [
+          858,
+          837
+        ],
+        "kill": [
+          524,
+          513
+        ],
+        "move": [
+          3026,
+          2299
+        ],
+        "sabotage": [
+          86,
+          86
+        ],
+        "vent": [
+          727,
+          550
+        ],
+        "wait": [
+          352,
+          138
+        ]
+      }
+    },
+    "learning_rate": 0.3,
+    "out_of_filter": {
+      "agreement": 0.8056603773584906,
+      "agreement_hits": 1708,
+      "decisions": 2120,
+      "divergence": [
+        {
+          "anchor_intent_kind": "move",
+          "count": 144,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 91,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 66,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 39,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 28,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 25,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 10,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 5,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 4,
+          "fsm_intent_kind": "kill"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "out-of-filter games",
+      "mean_anchor_ce": 0.43369338010088804,
+      "per_kind_agreement": {
+        "do_task": [
+          325,
+          310
+        ],
+        "kill": [
+          222,
+          218
+        ],
+        "move": [
+          1195,
+          935
+        ],
+        "sabotage": [
+          28,
+          28
+        ],
+        "vent": [
+          230,
+          164
+        ],
+        "wait": [
+          120,
+          53
+        ]
+      }
+    },
+    "overall": {
+      "agreement": 0.796958273755362,
+      "agreement_hits": 6131,
+      "decisions": 7693,
+      "divergence": [
+        {
+          "anchor_intent_kind": "move",
+          "count": 533,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 329,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "vent",
+          "count": 243,
+          "fsm_intent_kind": "vent"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 182,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 123,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "do_task",
+          "count": 91,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 20,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 16,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 15,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 8,
+          "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 2,
+          "fsm_intent_kind": "move"
+        }
+      ],
+      "fsm_offmenu_decisions": 0,
+      "label": "all corpus games",
+      "mean_anchor_ce": 0.45892124368700293,
+      "per_kind_agreement": {
+        "do_task": [
+          1183,
+          1147
+        ],
+        "kill": [
+          746,
+          731
+        ],
+        "move": [
+          4221,
+          3234
+        ],
+        "sabotage": [
+          114,
+          114
+        ],
+        "vent": [
+          957,
+          714
+        ],
+        "wait": [
+          472,
+          191
+        ]
+      }
+    },
+    "weights_sha256": "396c863a4bde0ec1159daabecce845e861bcc3ecee39bff8c23ac15d109c8f8c"
+  },
+  "lambda_grid": [
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    4.0
+  ],
+  "recommended_campaign_seeds": [
+    "lambda-4.0",
+    "filtered-bc-anchor"
+  ],
+  "substrate_sha": "02b7dfa80e802f0c4b6cb7a6e4a6f7dcc6515a7d1f9905eeda95940427e45ad7",
+  "sweep_rows": [
+    {
+      "anchor_ce_flagged": false,
+      "anchor_cross_entropy": 1.0548295120984519,
+      "anchor_offmenu_decisions": 0,
+      "artifact_path": "training/artifacts/anchor_study/lambda-0.25",
+      "descriptor_footprint": {
+        "do_task_cadence": 2.8391166043240066,
+        "do_task_emissions": 74.33333333333333,
+        "kill_count": 4.933333333333334,
+        "median_kill_tick": 12.916666666666666,
+        "meeting_count": 3.4,
+        "meeting_trigger_rate": 0.13064224305678593,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.15500000000000005
+      },
+      "determinism_deterministic": true,
+      "entrant": "lambda-0.25",
+      "es_digest": "8d07d2cbcf7d50766a861b318d7edc4572a170bdbee52a86e22d1c5d6dbb1e5e",
+      "fsm_intent_agreement": 0.3054906542056075,
+      "impostor_win_rate": 0.9333333333333333,
+      "inner_fitness_real": 18.253726391282566,
+      "inner_fitness_surrogate": 18.33649277079837,
+      "lambda_value": 0.25,
+      "leak_test_passed": true,
+      "mean_shaped_reward_real": 19.3,
+      "referee_mean_score": 3.42,
+      "referee_passed": false,
+      "supply_floors_passed": false,
+      "take_opportunities": 242,
+      "take_rate": 0.768595041322314,
+      "train_champion_fitness": 20.4102,
+      "truncated_episodes_real": 0,
+      "validity_passed": true,
+      "weights_sha256": "702ac797b50dafbc715e4d6724b7cfc2e8a363e1828e8ac9243918db7006febb"
+    },
+    {
+      "anchor_ce_flagged": false,
+      "anchor_cross_entropy": 1.0548295120984519,
+      "anchor_offmenu_decisions": 0,
+      "artifact_path": "training/artifacts/anchor_study/lambda-0.5",
+      "descriptor_footprint": {
+        "do_task_cadence": 2.8391166043240066,
+        "do_task_emissions": 74.33333333333333,
+        "kill_count": 4.933333333333334,
+        "median_kill_tick": 12.916666666666666,
+        "meeting_count": 3.4,
+        "meeting_trigger_rate": 0.13064224305678593,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.15500000000000005
+      },
+      "determinism_deterministic": true,
+      "entrant": "lambda-0.5",
+      "es_digest": "350fa3a0fc809b7f0f946d02d7568c67d8e52949d8d8bec9ca8d69121cfc3315",
+      "fsm_intent_agreement": 0.3054906542056075,
+      "impostor_win_rate": 0.9333333333333333,
+      "inner_fitness_real": 18.253726391282566,
+      "inner_fitness_surrogate": 18.33649277079837,
+      "lambda_value": 0.5,
+      "leak_test_passed": true,
+      "mean_shaped_reward_real": 19.3,
+      "referee_mean_score": 3.42,
+      "referee_passed": false,
+      "supply_floors_passed": false,
+      "take_opportunities": 242,
+      "take_rate": 0.768595041322314,
+      "train_champion_fitness": 20.1538,
+      "truncated_episodes_real": 0,
+      "validity_passed": true,
+      "weights_sha256": "702ac797b50dafbc715e4d6724b7cfc2e8a363e1828e8ac9243918db7006febb"
+    },
+    {
+      "anchor_ce_flagged": false,
+      "anchor_cross_entropy": 0.9953009725077251,
+      "anchor_offmenu_decisions": 0,
+      "artifact_path": "training/artifacts/anchor_study/lambda-1.0",
+      "descriptor_footprint": {
+        "do_task_cadence": 2.9204137912697083,
+        "do_task_emissions": 72.76666666666667,
+        "kill_count": 5.0,
+        "median_kill_tick": 13.933333333333334,
+        "meeting_count": 3.3666666666666667,
+        "meeting_trigger_rate": 0.13383367758829526,
+        "vent_usage": 4.7,
+        "witness_exposure_rate": 0.14000000000000004
+      },
+      "determinism_deterministic": true,
+      "entrant": "lambda-1.0",
+      "es_digest": "6070436321747ac9fda9bc99b5e108ffce333391dd29230ad3a7a5f83219b21e",
+      "fsm_intent_agreement": 0.39724310776942356,
+      "impostor_win_rate": 1.0,
+      "inner_fitness_real": 18.67066179678415,
+      "inner_fitness_surrogate": 18.8023610659817,
+      "lambda_value": 1.0,
+      "leak_test_passed": true,
+      "mean_shaped_reward_real": 19.666666666666668,
+      "referee_mean_score": 3.63,
+      "referee_passed": false,
+      "supply_floors_passed": false,
+      "take_opportunities": 232,
+      "take_rate": 0.7629310344827587,
+      "train_champion_fitness": 19.7483,
+      "truncated_episodes_real": 0,
+      "validity_passed": true,
+      "weights_sha256": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0"
+    },
+    {
+      "anchor_ce_flagged": false,
+      "anchor_cross_entropy": 0.9953009725077251,
+      "anchor_offmenu_decisions": 0,
+      "artifact_path": "training/artifacts/anchor_study/lambda-2.0",
+      "descriptor_footprint": {
+        "do_task_cadence": 2.9204137912697083,
+        "do_task_emissions": 72.76666666666667,
+        "kill_count": 5.0,
+        "median_kill_tick": 13.933333333333334,
+        "meeting_count": 3.3666666666666667,
+        "meeting_trigger_rate": 0.13383367758829526,
+        "vent_usage": 4.7,
+        "witness_exposure_rate": 0.14000000000000004
+      },
+      "determinism_deterministic": true,
+      "entrant": "lambda-2.0",
+      "es_digest": "5e851474306c2f7a2b9b16844bd5dbd00fd6c0b0201c95ec86a173f68d2b0693",
+      "fsm_intent_agreement": 0.39724310776942356,
+      "impostor_win_rate": 1.0,
+      "inner_fitness_real": 18.67066179678415,
+      "inner_fitness_surrogate": 18.8023610659817,
+      "lambda_value": 2.0,
+      "leak_test_passed": true,
+      "mean_shaped_reward_real": 19.666666666666668,
+      "referee_mean_score": 3.63,
+      "referee_passed": false,
+      "supply_floors_passed": false,
+      "take_opportunities": 232,
+      "take_rate": 0.7629310344827587,
+      "train_champion_fitness": 18.83,
+      "truncated_episodes_real": 0,
+      "validity_passed": true,
+      "weights_sha256": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0"
+    },
+    {
+      "anchor_ce_flagged": false,
+      "anchor_cross_entropy": 0.6108765815170428,
+      "anchor_offmenu_decisions": 0,
+      "artifact_path": "training/artifacts/anchor_study/lambda-4.0",
+      "descriptor_footprint": {
+        "do_task_cadence": 3.0698949037710572,
+        "do_task_emissions": 79.0,
+        "kill_count": 5.033333333333333,
+        "median_kill_tick": 12.6,
+        "meeting_count": 3.433333333333333,
+        "meeting_trigger_rate": 0.1305866137937794,
+        "vent_usage": 4.8,
+        "witness_exposure_rate": 0.14666666666666667
+      },
+      "determinism_deterministic": true,
+      "entrant": "lambda-4.0",
+      "es_digest": "e7dcd8c70656f3656ad75578bf26122f2812865c16af1205a36a6dc2c458d23c",
+      "fsm_intent_agreement": 0.7743097238895558,
+      "impostor_win_rate": 1.0,
+      "inner_fitness_real": 19.218116373117702,
+      "inner_fitness_surrogate": 18.777622773019168,
+      "lambda_value": 4.0,
+      "leak_test_passed": true,
+      "mean_shaped_reward_real": 19.8,
+      "referee_mean_score": 3.62,
+      "referee_passed": false,
+      "supply_floors_passed": false,
+      "take_opportunities": 236,
+      "take_rate": 0.864406779661017,
+      "train_champion_fitness": 18.0083,
+      "truncated_episodes_real": 0,
+      "validity_passed": true,
+      "weights_sha256": "3cc4058be554985db25ee09a01570938c5cc4d62bf021397d48601d45bcd21b6"
+    }
+  ],
+  "train_budget": "full"
+}

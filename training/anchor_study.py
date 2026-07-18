@@ -1345,6 +1345,48 @@ def render_report(
             lines.append("| " + name + " | " + " | ".join(cells) + " |")
         return "\n".join(lines)
 
+    def sweep_reading() -> str:
+        by_sha: dict[str, list[SweepRow]] = {}
+        for row in rows:
+            by_sha.setdefault(row.weights_sha256, []).append(row)
+        lines: list[str] = []
+        plateaus = [group for group in by_sha.values() if len(group) > 1]
+        if plateaus:
+            cells = "; ".join(
+                "/".join(f"λ={row.lambda_value:g}" for row in group)
+                + f" froze the SAME genome (`{group[0].weights_sha256[:12]}`)"
+                for group in plateaus
+            )
+            lines.append(
+                f"- **The dial has plateaus:** {cells} — at this ES budget no "
+                "accept/reject comparison flips anywhere inside those bands "
+                "(the fitness gap the λ change makes never re-orders an "
+                "offspring against the incumbent)."
+            )
+        front = [
+            row.entrant
+            for row in rows
+            if row.entrant in report.recommended_campaign_seeds
+        ]
+        if front:
+            lines.append(
+                "- **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is "
+                + ", ".join(f"`{name}`" for name in front)
+                + ":** every other cell is weakly dominated — at this budget on "
+                "the fake path a HEAVIER anchor did not cost shaped reward "
+                f"(λ={rows[0].lambda_value:g} shaped "
+                f"{_fmt(rows[0].mean_shaped_reward_real, 2)} / CE "
+                f"{_fmt(rows[0].anchor_cross_entropy, 3)} → "
+                f"λ={rows[-1].lambda_value:g} shaped "
+                f"{_fmt(rows[-1].mean_shaped_reward_real, 2)} / CE "
+                f"{_fmt(rows[-1].anchor_cross_entropy, 3)}). The fake path "
+                "mints no convictions, so fitness and legibility are not yet "
+                "in tension here — the tension the champion failed on lives "
+                "in the referee gauges, and NO cell passes the supply floors "
+                "(the flip bar stays open; this study only positions seeds)."
+            )
+        return "\n".join(lines)
+
     def descriptor_table() -> str:
         names = sorted(rows[0].descriptor_footprint) if rows else []
         header = "| Descriptor | " + " | ".join(
@@ -1480,6 +1522,22 @@ def render_report(
 ### 2.1 Descriptor footprint (per-game means over the eval set)
 
 {descriptor_table()}
+
+### 2.2 Reading
+
+{sweep_reading()}
+- **The refined anchor vs the committed champion, on the corpus stream:** the
+  filtered-BC anchor matches the FSM's choice on
+  {_fmt(bc.overall.agreement)} of decisions (CE
+  {_fmt(bc.overall.mean_anchor_ce)}); the committed champion matches on
+  {_fmt(bc.committed_champion_overall.agreement)} (CE
+  {_fmt(bc.committed_champion_overall.mean_anchor_ce)}) — the champion has
+  drifted far from the legible anchor, which is the under-anchoring symptom
+  the §2.4 reading predicts.
+- **Structurally-zero anchor weights are expected:** a conditional logit over
+  a menu can only learn from features that VARY within the menu; the
+  decision-level constants (cooldown, sabotage state, crowd density …) carry
+  exactly zero gradient and stay at their zeros init — not a degenerate fit.
 
 ## 3. The filtered-BC anchor
 
