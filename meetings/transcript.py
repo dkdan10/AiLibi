@@ -194,10 +194,42 @@ with a fabricated sighting must not earn the subject an ungrounded -0.05,
 the anti-collusion floor -- and :func:`_carries_relevant_observation`'s
 accusation-backing gate -- a self-placement is no evidence about the
 accused, so it cannot promote a bare accusation into an independent voice.
+
+Task 18.9 (audit-phase-18-planning.md §3.3; audit-phase-17-close.md §6 item 4):
+two INDEPENDENT default-OFF flag-minting levers, each cloning the 16.8
+absence-prior resolver's env-gated shape and leaving the committed substrate
+byte-identical when OFF (graduation is Task 18.11). (1) The endpoint-band
+whereabouts exemption (:func:`whereabouts_interior_flags_enabled`): a spoken
+:class:`~meetings.schemas.WhereaboutsClaim` indexes as a DEGENERATE SINGLE-TICK
+SELF-ALIBI (``from_tick == to_tick``, speaker is subject), so a contradicting
+first-hand sighting today sits on an endpoint tick and is banded WEAK -- §3.3's
+finding that roll-call lies can NEVER mint a STRONG flag (25 corpus lies, all
+weak). ON, the exemption adjudicates that single tick as the claim's INTERIOR
+(not its edge) for exactly this class: the narrow-window and endpoint-tick weak
+reasons drop and a contradicting sighting mints a STRONG ``alibi_vs_sighting``
+flag. Genuine multi-tick alibis keep the endpoint band and the two-source
+discipline unchanged; a genuine single-tick self-stated
+:class:`~meetings.schemas.AlibiClaim` is the SAME class by construction and is
+exempted too. (2) The vent-placement flag variant
+(:func:`vent_placement_contradictions_enabled`): the 17.5 scope firewall's
+flag-minting arm, routed by the close. A spoken
+:class:`~meetings.schemas.SawVentObservation` GROUNDED against the speaker's own
+typed :class:`~meetings.schemas.VentWitnessRecord` (the 15.4 chokepoint reused
+VERBATIM) whose RECORD contradicts the subject's OWN stated path mints a STRONG
+``alibi_vs_physical`` flag. Grounded-only is the whole firewall: an UNGROUNDED
+spoken vent claim mints NOTHING (a fabrication channel otherwise). STRONG with
+no weak band mirrors the 15.4 vent doctrine -- the grounding chain proves a
+genuine venter (impostor-only), so the "STRONG flag naming a CREWMATE" false
+positive is structurally unreachable, which is also why the record-side window
+is INCLUSIVE here (endpoint band prices coarse spoken recollection fuzz between
+two testimonies, but the record side is typed engine truth). No corroboration
+suppression and no adversarial-pair guard: engine truth beats forgeable
+testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
 """
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -1280,6 +1312,86 @@ def absent_players(
     return tuple(sorted(unplaced))
 
 
+# Task 18.9 lever 1 -- the endpoint-band whereabouts exemption (audit-phase-18-
+# planning.md §3.3; audit-phase-17-close.md §6 item 4). DEFAULT-OFF, cloning the
+# 16.8 ``absence_prior_enabled`` resolver (agents/memory/beliefs.py) -- itself the
+# 16.4 hard-evidence-gate pattern. Registered/graduated at Task 18.11; OFF keeps
+# the committed detector output byte-identical.
+ENV_WHEREABOUTS_INTERIOR_FLAGS: Final[str] = "AILIBI_WHEREABOUTS_INTERIOR_FLAGS"
+_WHEREABOUTS_INTERIOR_FLAGS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+# Task 18.9 lever 2 -- the vent-placement flag variant (the 17.5 scope firewall's
+# flag-minting arm). DEFAULT-OFF, same resolver shape / same graduation gate.
+ENV_VENT_PLACEMENT_CONTRADICTIONS: Final[str] = "AILIBI_VENT_PLACEMENT_CONTRADICTIONS"
+_VENT_PLACEMENT_CONTRADICTIONS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def whereabouts_interior_flags_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 18.9 endpoint-band whereabouts exemption is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_WHEREABOUTS_INTERIOR_FLAGS` from ``env`` (defaulting to the
+    real process environment), cloning
+    :func:`agents.memory.beliefs.absence_prior_enabled` byte-for-byte. Default
+    OFF: an unset / empty / unrecognised value is ``False`` so
+    :func:`detect_contradictions` re-derives the committed baseline substrate
+    byte-identically (``scripts/verify_samples.sh`` reconstructs clean); the live
+    measurement and the graduation decision are Task 18.11. Accepts
+    ``1/true/yes/on`` (case-insensitive, whitespace-trimmed). The ``env``
+    argument lets tests + the offline counterfactual toggle the lever
+    deterministically without mutating ``os.environ``.
+
+    ON, a DEGENERATE SINGLE-TICK SELF-ALIBI (``from_tick == to_tick`` with the
+    speaker its own subject -- exactly how a
+    :class:`~meetings.schemas.WhereaboutsClaim` indexes per :func:`_iter_alibis`,
+    and how a genuine single-tick self-stated
+    :class:`~meetings.schemas.AlibiClaim` reads too) contradicted by a first-hand
+    sighting mints a STRONG ``alibi_vs_sighting`` flag: the exemption adjudicates
+    the single tick as the claim's INTERIOR, so the narrow-window and
+    endpoint-tick weak reasons (:func:`_detect_alibi_vs_sightings`) that would
+    otherwise band it WEAK do not apply. Multi-tick alibis keep the endpoint band
+    and the two-source discipline unchanged (audit §3.3: roll-call answers become
+    conviction-economy currency, nothing else moves).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_WHEREABOUTS_INTERIOR_FLAGS, "").strip().lower()
+        in _WHEREABOUTS_INTERIOR_FLAGS_FLAG_TRUE
+    )
+
+
+def vent_placement_contradictions_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 18.9 vent-placement flag variant is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_VENT_PLACEMENT_CONTRADICTIONS` from ``env`` (defaulting to
+    the real process environment), the sibling of
+    :func:`whereabouts_interior_flags_enabled` and the same clone of
+    :func:`agents.memory.beliefs.absence_prior_enabled`. Default OFF: an unset /
+    empty / unrecognised value is ``False`` so the committed detector output is
+    byte-identical (graduation is Task 18.11). Accepts ``1/true/yes/on``
+    (case-insensitive, whitespace-trimmed). The ``env`` argument toggles the
+    lever deterministically for tests + the offline counterfactual.
+
+    ON, a spoken :class:`~meetings.schemas.SawVentObservation` GROUNDED against
+    the speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the
+    15.4 chokepoint, :func:`_vent_observation_matches_record`, reused verbatim)
+    whose RECORD contradicts the subject's OWN stated path -- inclusive window,
+    disjoint room -- mints a STRONG ``alibi_vs_physical`` flag
+    (:func:`_detect_vent_placement_contradictions`). Grounded-only is the
+    firewall: an UNGROUNDED spoken vent claim mints nothing.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_VENT_PLACEMENT_CONTRADICTIONS, "").strip().lower()
+        in _VENT_PLACEMENT_CONTRADICTIONS_FLAG_TRUE
+    )
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -1287,6 +1399,7 @@ def detect_contradictions(
     trigger_kind: MeetingTriggerKind | None = None,
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
     | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1388,9 +1501,40 @@ def detect_contradictions(
     disagreement and the impostor-frames-innocent deception frame --
     untouched.
 
+    Task 18.9 lever 1 (:func:`whereabouts_interior_flags_enabled`, DEFAULT
+    OFF; audit-phase-18-planning.md §3.3): ON, a DEGENERATE SINGLE-TICK
+    SELF-ALIBI (a :class:`~meetings.schemas.WhereaboutsClaim` roll-call
+    answer, or a genuine single-tick self-stated
+    :class:`~meetings.schemas.AlibiClaim` -- the same class by construction)
+    contradicted by a first-hand sighting mints a STRONG ``alibi_vs_sighting``
+    flag instead of the endpoint-banded WEAK one, the single tick adjudicated
+    as the claim's interior (:func:`_detect_alibi_vs_sightings`). Multi-tick
+    endpoint semantics and the narrow-window band are untouched. OFF: the
+    ``alibi_vs_sighting`` path is byte-identical. The gate reads THIS resolver
+    once and threads the boolean down (one call site); graduation is Task
+    18.11.
+
+    Task 18.9 lever 2 (:func:`vent_placement_contradictions_enabled`, DEFAULT
+    OFF; audit-phase-17-close.md §6 item 4): ON, a spoken
+    :class:`~meetings.schemas.SawVentObservation` GROUNDED against the
+    speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the 15.4
+    chokepoint) whose RECORD contradicts the subject's OWN stated path mints a
+    STRONG ``alibi_vs_physical`` flag beside the ``vent_sighting`` flag
+    (:func:`_detect_vent_placement_contradictions`, joined after the 10.10
+    proxy guard). Grounded-only is the firewall -- an ungrounded spoken vent
+    claim mints nothing. OFF: the block is never entered. Both levers resolve
+    from ``env`` (defaulting to :data:`os.environ`).
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
+
+    # Task 18.9: read BOTH default-OFF levers ONCE and thread the booleans down
+    # (the graduated-lever convention -- one resolver read, one call site per
+    # lever), so a lever-OFF meeting takes the identical code path (and bytes) as
+    # before the lever existed.
+    whereabouts_interior_flags = whereabouts_interior_flags_enabled(env)
+    vent_placement_contradictions = vent_placement_contradictions_enabled(env)
 
     effective_roster = _NO_ROSTER if roster is None else roster
     indexed_alibis = tuple(
@@ -1415,6 +1559,7 @@ def detect_contradictions(
             subject_accounts=_subject_account_index(
                 alibis=indexed_alibis, sightings=sightings
             ),
+            whereabouts_interior_flags=whereabouts_interior_flags,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -1485,6 +1630,22 @@ def detect_contradictions(
                 roster=effective_roster,
             )
         )
+        # Task 18.9 lever 2: the vent-placement variant joins AFTER the grounded
+        # vent flags -- and, like them, after the 10.10 proxy-intra-turn guard.
+        # The join point is deliberate (grounded evidence must never be
+        # re-targeted; structurally the guard could not hit these flags anyway --
+        # two distinct speakers: the venter subject and the witness). Gated on
+        # the default-OFF lever, so OFF the block is never entered and the bytes
+        # are identical.
+        if vent_placement_contradictions:
+            guarded.extend(
+                _detect_vent_placement_contradictions(
+                    transcript,
+                    self_alibis=self_alibis,
+                    vent_witness_records=vent_witness_records,
+                    roster=effective_roster,
+                )
+            )
     return tuple(sorted(guarded, key=lambda flag: flag.contradiction_id))
 
 
@@ -2201,16 +2362,42 @@ def _detect_alibi_vs_sightings(
     alibis: tuple[_IndexedAlibi, ...],
     sightings: tuple[_IndexedSighting, ...],
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
+    whereabouts_interior_flags: bool = False,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
             continue
+        # Task 18.9 lever 1 (DEFAULT OFF): the endpoint-band whereabouts
+        # exemption. A DEGENERATE SINGLE-TICK SELF-ALIBI -- ``from_tick ==
+        # to_tick`` AND the speaker is its own subject -- is exactly how a
+        # :class:`~meetings.schemas.WhereaboutsClaim` roll-call answer indexes
+        # per :func:`_iter_alibis` (and how a genuine single-tick self-stated
+        # :class:`~meetings.schemas.AlibiClaim` reads too -- the same class by
+        # construction, exempted identically). ON, the exemption adjudicates
+        # the single tick as the claim's INTERIOR, not its edge: a contradicting
+        # first-hand sighting mints a STRONG flag. For this class the only weak
+        # reason ``base_reasons`` could ever carry is WEAK_REASON_NARROW_WINDOW
+        # (``to - from == 0 < NARROW_ALIBI_WINDOW_TICKS``), whose transit-fuzz
+        # rationale does not apply to an adjudicated interior tick, so
+        # ``base_reasons`` is emptied and the endpoint-tick append below is
+        # skipped. Proxy alibis (speaker != subject) never satisfy the class, so
+        # the re-targeted-proxy path is structurally untouched; multi-tick
+        # alibis keep the endpoint band and narrow-window band verbatim. OFF
+        # (the default): byte-identical to the pre-18.9 path.
+        interior_exempt = whereabouts_interior_flags and (
+            alibi.claim.from_tick == alibi.claim.to_tick
+            and alibi.speaker == alibi.claim.subject
+        )
         # Task 13.14: the sighting path no longer down-weights a self-stated
         # alibi (the owner LONE-STRONG reversal of audit-9.7) -- a self-stated
         # alibi contradicted by a third party's sighting now classifies STRONG.
         # The narrow-window guard (and the endpoint-tick guard appended below)
-        # STAY weak.
-        base_reasons = _weak_signal_reasons(alibi, include_self_stated=False)
+        # STAY weak, EXCEPT for the 18.9-exempt interior class above.
+        base_reasons = (
+            ()
+            if interior_exempt
+            else _weak_signal_reasons(alibi, include_self_stated=False)
+        )
         for sighting in sightings:
             if sighting.observation.subject != alibi.claim.subject:
                 continue
@@ -2262,8 +2449,10 @@ def _detect_alibi_vs_sightings(
             # Endpoint-tick weak band (Task 10.1, audit gp-2 C-C-1): a
             # sighting exactly on the window's edge tick is movement fuzz
             # -- weak-banded rather than excluded, because an endpoint
-            # mismatch can still be a real signal once corroborated.
-            if sighting.observation.tick in (
+            # mismatch can still be a real signal once corroborated. Task
+            # 18.9: skipped for the interior-exempt single-tick self-alibi
+            # class -- its one tick IS the claim's interior, not an edge.
+            if not interior_exempt and sighting.observation.tick in (
                 alibi.claim.from_tick,
                 alibi.claim.to_tick,
             ):
@@ -2701,6 +2890,98 @@ def _detect_grounded_vent_flags(
             )
 
 
+def _detect_vent_placement_contradictions(
+    transcript: MeetingTranscript,
+    *,
+    self_alibis: tuple[_IndexedAlibi, ...],
+    vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
+    roster: frozenset[PlayerId],
+) -> Iterator[ContradictionRef]:
+    """Yield STRONG ``alibi_vs_physical`` flags for grounded vent placements.
+
+    Task 18.9 lever 2 (DEFAULT OFF; audit-phase-17-close.md §6 item 4): the 17.5
+    scope firewall's flag-minting arm. Today the vent-placement widening feeds
+    only :func:`absent_players`' absent-set derivation; ON, this arm feeds the
+    DETECTOR. For every spoken :class:`~meetings.schemas.SawVentObservation` on
+    any turn (indexed with :func:`_turn_observation_id`) whose subject is in the
+    roster, the SPEAKER'S OWN typed records must exist; for each of the
+    SUBJECT'S OWN de-echoed self-alibis (``self_alibis``, the tuple
+    :func:`detect_contradictions` already computes) with non-empty canonical
+    rooms and ``claim.subject == observation.subject``, the flag mints iff SOME
+    record BOTH:
+
+    * matches the spoken observation via
+      :func:`_vent_observation_matches_record` (the 15.4 chokepoint reused
+      VERBATIM -- never a re-derivation), AND
+    * contradicts the alibi reading the RECORD's fields:
+      ``from_tick <= record.tick <= to_tick`` (INCLUSIVE window) and
+      ``canonical_rooms(record.room)`` non-empty and disjoint from
+      ``alibi.rooms``.
+
+    Testing match-AND-contradict per record (the 16.7 lesson) means a
+    matching-but-CONSISTENT record never masks a later matching-and-contradicting
+    one; the first such record in channel order (the accessor's append/tick
+    order -- deterministic) grounds the flag. One flag per (grounded observation,
+    contradicted self-alibi) pair.
+
+    Doctrine (mirrors the 15.4 ``vent_sighting`` firewall). GROUNDED-ONLY is the
+    whole defense: an UNGROUNDED spoken vent claim mints NOTHING (a fabrication
+    channel otherwise). STRONG with NO weak band: the grounding chain (engine
+    event -> witness-gated packet -> episodic record -> typed channel) proves the
+    subject a genuine venter (impostor-only, DESIGN.md §3.4), so the "STRONG flag
+    naming a CREWMATE" false-positive class is structurally unreachable -- which
+    is ALSO why the record-side window is INCLUSIVE here (the endpoint band
+    prices coarse spoken recollection fuzz between two TESTIMONIES, but the record
+    side is typed engine truth and the flag can never name a crewmate). No
+    corroboration suppression (engine truth beats forgeable testimony -- a
+    colluder corroborating the false alibi must not suppress it) and no
+    voice-counting / adversarial-pair guard (the record grounds regardless of
+    chain position), mirroring kill_scene's "can only CONTRADICT, never
+    corroborate". The description QUOTES THE RECORD (room/tick), never the spoken
+    values, and both event ids reference the public surface (the alibi's event id
+    and the observation's turn id). Pure and deterministic; a caller with no
+    records yields nothing.
+    """
+
+    for turn in transcript.turns:
+        records = vent_witness_records.get(turn.speaker, ())
+        if not records:
+            continue
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if not _subject_in_roster(observation.subject, roster):
+                continue
+            observation_id = _turn_observation_id(turn=turn, index=index)
+            for alibi in self_alibis:
+                if not alibi.rooms:
+                    continue
+                if alibi.claim.subject != observation.subject:
+                    continue
+                matched = next(
+                    (
+                        record
+                        for record in records
+                        if _vent_observation_matches_record(observation, record)
+                        and alibi.claim.from_tick <= record.tick <= alibi.claim.to_tick
+                        and canonical_rooms(record.room)
+                        and not (canonical_rooms(record.room) & alibi.rooms)
+                    ),
+                    None,
+                )
+                if matched is None:
+                    continue
+                yield _build_contradiction(
+                    kind="alibi_vs_physical",
+                    event_a_id=alibi.event_id,
+                    event_b_id=observation_id,
+                    subjects=(observation.subject,),
+                    description=_describe_vent_placement(
+                        speaker=turn.speaker, record=matched, alibi=alibi.claim
+                    ),
+                )
+
+
 def _grounded_vent_subjects(
     transcript: MeetingTranscript,
     *,
@@ -2954,6 +3235,25 @@ def _describe_vent_sighting(*, speaker: PlayerId, record: VentWitnessRecord) -> 
     )
 
 
+def _describe_vent_placement(
+    *, speaker: PlayerId, record: VentWitnessRecord, alibi: AlibiClaim
+) -> str:
+    # Task 18.9 lever 2: quote the RECORD (the witness's deterministic memory),
+    # never the spoken observation's values -- the grounded fact is exactly what
+    # the 15.4 chokepoint confirmed -- and name the contradicted STATED account
+    # so the rendered memory view carries the deductive content (§5.4 "flags are
+    # information"). No weak-marker branch exists for this variant: a grounded
+    # vent placement is only ever minted STRONG (the grounding chain proves an
+    # impostor-only venter, so the STRONG-flag-naming-a-crewmate false positive is
+    # structurally unreachable -- :func:`_detect_vent_placement_contradictions`).
+    return (
+        f"{speaker} witnessed {record.subject} vent in {record.room} at tick "
+        f"{record.tick}, but {record.subject}'s own account places them in "
+        f"{alibi.room} (ticks {alibi.from_tick}-{alibi.to_tick}) -- venting is "
+        f"impostor-only, physically incompatible with the stated account."
+    )
+
+
 def _describe_retargeted_proxy(
     *,
     speaker: PlayerId,
@@ -3162,6 +3462,8 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "CANONICAL_ROOMS",
+    "ENV_VENT_PLACEMENT_CONTRADICTIONS",
+    "ENV_WHEREABOUTS_INTERIOR_FLAGS",
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
     "SIGHTING_GROUNDING_TICK_TOLERANCE",
@@ -3199,5 +3501,7 @@ __all__ = [
     "self_refuted_alibi_claim_ids",
     "sort_turns_canonically",
     "triggering_body_rooms",
+    "vent_placement_contradictions_enabled",
     "walk_chain",
+    "whereabouts_interior_flags_enabled",
 ]
