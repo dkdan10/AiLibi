@@ -68,7 +68,13 @@ baseline 5                      scripted movers (champion opt-in) · upgraded me
         │   Phase 17 — co-adaptation: re-ground the meeting surrogate on baseline 5, re-run the
         │   bake-off recipe (cheap now — the Phase-15 harness makes this a re-run, not a rebuild)
         ▼
-baseline 6                      co-adapted movers · upgraded meetings
+baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
+ 2026-07-18: Phase 17's          → the evidence-gated flip ruled FAIL — utility-es keeps a
+ evidence-gated flip ruled         +0.16 win edge but fails the conversion-economy floors;
+ FAIL; the champion stays          policy-es passes the referee at a 0.02 win rate — so the
+ opt-in and baseline 5             scripted FSM stays the default mover and no mover baseline
+ stands as the ladder tip —        exists; a mover baseline re-enters only via a future
+ audits/audit-phase-17-close.md)   adopting record that passes the referee + win-edge bar
         │
         │   Phase 18 — presentation: mixed-model lobbies + deduction/deception leaderboard,
         │   auto-highlight reels from the referee, a turn-paced human seat, the public
@@ -101,10 +107,20 @@ baseline 6                      co-adapted movers · upgraded meetings
   playable deduction, now including typed-grounded vouching and a capped absence prior). Adds the
   probe-first Qwen3.6-27b model decision (GO ⇒ baseline 4 = the model swap, its own layer). Closes on
   baseline 5 with the funnel + the new V&J instruments as the before/after.
-- **Phase 17 — co-adaptation (owner goal 3; contracted, `tasks/phase-17.md`, opened 2026-07-14).** Re-ground the ballot surrogate on baseline 5, re-run the
+- **Phase 17 — co-adaptation (owner goal 3; `tasks/phase-17.md`, opened 2026-07-14, CLOSED
+  2026-07-18 with no mover flip: locked decision 2 failed both finalists — `utility-es` keeps a
+  +0.16 win edge over the same-seed scripted FSM but fails the baseline-5 conversion-economy
+  floors; `policy-es` passes the referee at a 0.02 win rate — so the scripted FSM stays the
+  default mover, the champion stays opt-in, and NO baseline 6 is recorded;
+  `audits/audit-phase-17-close.md`).** Re-ground the ballot surrogate on baseline 5, re-run the
   Phase-15 bake-off recipe for both sides against the upgraded meeting model, re-select champions
   through the same gates. Structurally cheap by design: the surrogate staleness/re-grounding machinery
   and the single bake-off harness were contracted in Phase 15 precisely so this phase is a re-run.
+  The re-grounding shipped and stands (corpus re-recorded at baseline 5, restoring the Q3
+  canary-denominator ruling; surrogate first-GO at training-time-runner tier; ordinal bake-off
+  ranking unchanged); the absence-prior graduation + vent widening, the pooling-prompt uptake
+  work, the crew deployment surface, and the detector-band relaxation route to Phase 18 as
+  recorded contracts (the close audit §6).
 - **Phase 18 — presentation (owner goal 4).** Heterogeneous-model lobbies (per-agent model routing +
   per-player provenance — plumbing already sized in the V&J planning doc) and a which-model-deceives/
   deduces-best leaderboard; referee-driven auto-highlight reels in the spectator UI; a turn-paced
