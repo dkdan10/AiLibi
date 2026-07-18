@@ -12,7 +12,7 @@ Implement Task 18.21 — The alternating-freeze driver + stabilizers, anchored t
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-alternating-driver`
-**Depends on:** 18.20
+**Depends on:** 18.17, 18.20
 **Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the stabilizer kit); audits/audit-phase-15-pause.md decision 4 (the barred naive form; the entry condition this satisfies); experiments/lab/ml_spike/fo2_coevolution.py (the absolute-anchor cycling detector precedent); training/coevo/ (18.19/18.20's seams)
 **Complexity:** Integration
 
@@ -25,7 +25,10 @@ anchor = cycling, monotone anchor = progress), a per-side short-horizon exploite
 small ES bred purely to beat the current champion; its found exploits join the hall of
 fame), and the anchor-CE term retained toward the FIXED scripted FSM on both sides (never
 toward the moving opponent). One side moves at a time, always — the barred simultaneous
-form is structurally unreachable. Deterministic end-to-end on the fake/surrogate path;
+form is structurally unreachable. The driver additionally exposes an ADDITIVE
+scenario-leg seam: an optional per-swap scenario-provider callable, inert when unset
+(digest-identical), so 18.23's scenarios can be mixed into later campaign swaps without
+ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
 **Files in scope:**
@@ -87,6 +90,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
 - `uv run python -c "import training.bakeoff.map_elites"`
+- `uv run python -c "import training.realpath"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

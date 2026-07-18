@@ -30,6 +30,8 @@ this record moves is re-pinned in the same PR.
 - meetings/transcript.py; (same)
 - agents/strategic/prompts/; (same)
 - orchestrator/game.py; (the `prompt_versions_for_set` registry graduation flip ONLY — if the impostor-answer arm ships, the variant versions become the default-served entries)
+- scripts/refresh_samples.sh (the substrate-lever preflight: the wrapper preflights only prompt/model today — it gains a positive check that the live lever slate equals the RULED shipped/unshipped state, refusing a stale `AILIBI_*` export BEFORE any seed of the ~6-7h record stages)
+- tests/scripts/test_refresh_samples.py (the preflight fixtures)
 - scripts/record_ml_corpus.sh; (the `REQUIRED_PROMPT_VERSIONS` re-lock ONLY — the recorder's version pin must move WITH the registry or check.sh fails at this PR; the duration/guard edits stay 18.13's)
 - tests/scripts/test_record_ml_corpus.py; (the registry-equality pin re-lock ONLY)
 - tests/scripts/test_manifest_writer.py (the MANIFEST substrate-flags string pins — the new true flags in recorded bytes)

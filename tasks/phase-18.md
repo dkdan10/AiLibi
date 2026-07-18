@@ -107,7 +107,7 @@ Wave 2 (training signal):
 Wave 3 (co-evolution):
   (18.7, 18.16) -> 18.19 dual-role rollout + two-identity stamp
   (18.6, 18.19) -> 18.20 hall-of-fame + PFSP-lite sampler
-  18.20 -> 18.21 alternating-freeze driver + stabilizers
+  (18.17, 18.20) -> 18.21 alternating-freeze driver + stabilizers
   18.19 -> 18.22 encoder v3 + within-kind target resolution
   (18.16, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
@@ -771,6 +771,8 @@ this record moves is re-pinned in the same PR.
 - meetings/transcript.py; (same)
 - agents/strategic/prompts/; (same)
 - orchestrator/game.py; (the `prompt_versions_for_set` registry graduation flip ONLY — if the impostor-answer arm ships, the variant versions become the default-served entries)
+- scripts/refresh_samples.sh (the substrate-lever preflight: the wrapper preflights only prompt/model today — it gains a positive check that the live lever slate equals the RULED shipped/unshipped state, refusing a stale `AILIBI_*` export BEFORE any seed of the ~6-7h record stages)
+- tests/scripts/test_refresh_samples.py (the preflight fixtures)
 - scripts/record_ml_corpus.sh; (the `REQUIRED_PROMPT_VERSIONS` re-lock ONLY — the recorder's version pin must move WITH the registry or check.sh fails at this PR; the duration/guard edits stay 18.13's)
 - tests/scripts/test_record_ml_corpus.py; (the registry-equality pin re-lock ONLY)
 - tests/scripts/test_manifest_writer.py (the MANIFEST substrate-flags string pins — the new true flags in recorded bytes)
@@ -1214,7 +1216,7 @@ everything reloadable bit-exactly.
 - training/bakeoff/map_elites.py (its cell artifacts are read via 18.6's public loader)
 
 **Definition of done:**
-- [ ] The store round-trips frozen genomes with sha verification (fail-loud on drift), the index carries full provenance, and MAP-Elites cells ingest as founders through 18.6's loader.
+- [ ] The store round-trips frozen genomes with sha verification (fail-loud on drift), the index carries full provenance, and MAP-Elites cells ingest as founders through 18.6's loader — with the founder's SUBSTRATE sha verified against the current campaign substrate at the ingest point: a mismatch refuses ingestion loudly pending the cheap deterministic re-run at the adopted substrate (the stale-seed fence moves here from 18.24, BEFORE the pool is built or sampled).
 - [ ] The sampler is deterministic under its seed, its hardness weighting is computed from supplied payoff entries (no hidden state), and the staleness cap raises loudly at exhaustion — all fixture-pinned.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1239,7 +1241,7 @@ benefit; resist meta-Nash solvers).
 
 ### Task 18.21 — The alternating-freeze driver + stabilizers
 **Branch:** `phase-18-alternating-driver`
-**Depends on:** 18.20
+**Depends on:** 18.17, 18.20
 **Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the stabilizer kit); audits/audit-phase-15-pause.md decision 4 (the barred naive form; the entry condition this satisfies); experiments/lab/ml_spike/fo2_coevolution.py (the absolute-anchor cycling detector precedent); training/coevo/ (18.19/18.20's seams)
 **Complexity:** Integration
 
@@ -1252,7 +1254,10 @@ anchor = cycling, monotone anchor = progress), a per-side short-horizon exploite
 small ES bred purely to beat the current champion; its found exploits join the hall of
 fame), and the anchor-CE term retained toward the FIXED scripted FSM on both sides (never
 toward the moving opponent). One side moves at a time, always — the barred simultaneous
-form is structurally unreachable. Deterministic end-to-end on the fake/surrogate path;
+form is structurally unreachable. The driver additionally exposes an ADDITIVE
+scenario-leg seam: an optional per-swap scenario-provider callable, inert when unset
+(digest-identical), so 18.23's scenarios can be mixed into later campaign swaps without
+ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
 **Files in scope:**
@@ -1315,13 +1320,14 @@ v3.
 - agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - orchestrator/game.py; (the meeting-concluded hook payload ONLY — `_notify_meeting_concluded`/`note_meeting_concluded` carry the public meeting outcome the memory channel folds; today the hook updates only the emergency tracker)
 - training/crew/scorer.py; (the `_CrewCandidateAgent.note_meeting_concluded` signature widening ONLY — the wrapper implements the exact current keyword-only signature and would TypeError on the widened payload)
+- training/env.py; (the same hook-signature widening ONLY — its wrapper at :454 also implements the exact current signature)
 - agents/tactical/learned/; (the learned wrappers' hook signature widening ONLY, if they override the hook)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
 - tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
 - tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
 
 **Files NOT in scope:**
-- agents/tactical/learned/; (the shipping champion is v1-featured; untouched)
+- agents/tactical/learned/forward.py + the committed champion weights (the shipping champion's forward pass and artifact are untouched — only wrapper hook SIGNATURES may move, per the in-scope entry)
 - training/bakeoff/utility_es.py (the menu family does not move)
 
 **Definition of done:**
@@ -1361,8 +1367,9 @@ kill-with-witness-nearby-then-survive-the-meeting, vent-unseen-under-patrol,
 force-parity-endgame, body-discovery-latency. Scenario episodes are truncated by
 construction and score through the dense terms (never `compute_shaped_reward`'s terminal
 gate); scenarios feed FITNESS pressure, and the standing gates/referee never move. The
-campaign driver may mix scenario legs into a side's evolution; watchability quantities
-never appear in scenario fitness.
+campaign consumes scenarios ONLY through 18.21's additive scenario-provider seam — this
+task implements a provider conforming to that seam (no driver edit); watchability
+quantities never appear in scenario fitness.
 
 **Files in scope:**
 - orchestrator/game.py; (the additive `initial_state` seam)

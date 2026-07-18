@@ -24,8 +24,9 @@ kill-with-witness-nearby-then-survive-the-meeting, vent-unseen-under-patrol,
 force-parity-endgame, body-discovery-latency. Scenario episodes are truncated by
 construction and score through the dense terms (never `compute_shaped_reward`'s terminal
 gate); scenarios feed FITNESS pressure, and the standing gates/referee never move. The
-campaign driver may mix scenario legs into a side's evolution; watchability quantities
-never appear in scenario fitness.
+campaign consumes scenarios ONLY through 18.21's additive scenario-provider seam — this
+task implements a provider conforming to that seam (no driver edit); watchability
+quantities never appear in scenario fitness.
 
 **Files in scope:**
 - orchestrator/game.py; (the additive `initial_state` seam)

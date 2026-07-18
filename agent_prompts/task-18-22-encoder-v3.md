@@ -31,13 +31,14 @@ v3.
 - agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - orchestrator/game.py; (the meeting-concluded hook payload ONLY — `_notify_meeting_concluded`/`note_meeting_concluded` carry the public meeting outcome the memory channel folds; today the hook updates only the emergency tracker)
 - training/crew/scorer.py; (the `_CrewCandidateAgent.note_meeting_concluded` signature widening ONLY — the wrapper implements the exact current keyword-only signature and would TypeError on the widened payload)
+- training/env.py; (the same hook-signature widening ONLY — its wrapper at :454 also implements the exact current signature)
 - agents/tactical/learned/; (the learned wrappers' hook signature widening ONLY, if they override the hook)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
 - tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
 - tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
 
 **Files NOT in scope:**
-- agents/tactical/learned/; (the shipping champion is v1-featured; untouched)
+- agents/tactical/learned/forward.py + the committed champion weights (the shipping champion's forward pass and artifact are untouched — only wrapper hook SIGNATURES may move, per the in-scope entry)
 - training/bakeoff/utility_es.py (the menu family does not move)
 
 **Definition of done:**

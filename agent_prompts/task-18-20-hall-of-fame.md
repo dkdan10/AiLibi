@@ -34,7 +34,7 @@ everything reloadable bit-exactly.
 - training/bakeoff/map_elites.py (its cell artifacts are read via 18.6's public loader)
 
 **Definition of done:**
-- [ ] The store round-trips frozen genomes with sha verification (fail-loud on drift), the index carries full provenance, and MAP-Elites cells ingest as founders through 18.6's loader.
+- [ ] The store round-trips frozen genomes with sha verification (fail-loud on drift), the index carries full provenance, and MAP-Elites cells ingest as founders through 18.6's loader — with the founder's SUBSTRATE sha verified against the current campaign substrate at the ingest point: a mismatch refuses ingestion loudly pending the cheap deterministic re-run at the adopted substrate (the stale-seed fence moves here from 18.24, BEFORE the pool is built or sampled).
 - [ ] The sampler is deterministic under its seed, its hardness weighting is computed from supplied payoff entries (no hidden state), and the staleness cap raises loudly at exhaustion — all fixture-pinned.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
