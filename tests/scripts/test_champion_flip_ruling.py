@@ -219,9 +219,12 @@ def test_default_selector_surfaces_still_select_the_scripted_fsm(
 
     args = rt._parse_args(["--output-dir", str(tmp_path)])
     assert args.agent_factory == FSM_DEFAULT_POLICY_ID
+    # Task 18.7 appends the opt-in ``learned-crew`` arm to the vocabulary; the
+    # ruling's pin is that the DEFAULT stays the scripted FSM, which holds.
     assert rt._AGENT_FACTORY_CHOICES == (
         FSM_DEFAULT_POLICY_ID,
         rt.LEARNED_CHAMPION_FACTORY_ID,
+        rt.LEARNED_CREW_FACTORY_ID,
     )
     assert rt._resolve_agent_factory(FSM_DEFAULT_POLICY_ID) == (None, None)
 

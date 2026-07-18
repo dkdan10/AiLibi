@@ -56,7 +56,12 @@ reconstruction re-feeds the recorded actions and never re-invokes a policy
 replays byte-identical regardless of inference-float questions. Task 15.12
 corpus rows stamp the FSM default explicitly (:func:`fsm_default_tactical_policy_stamp`)
 and Wave 2 stamps a champion's weights hash; the loader honors the stamp via
-:class:`api.replay_loader.ReplayPolicyMismatchError`.
+:class:`api.replay_loader.ReplayPolicyMismatchError`. Task 18.7 adds the parallel
+CREW-side stamp (:attr:`GameEndReplayEntry.crew_tactical_policy`, a
+:class:`CrewTacticalPolicyStamp`) in its own DISTINCT record class so a learned-crew
+recording can never wear the impostor champion's stamp — ADDITIVE and OPTIONAL, an
+absent crew stamp meaning the scripted :class:`agents.tactical.crewmate_policy.CrewmatePolicy`
+default.
 """
 
 from __future__ import annotations
@@ -163,6 +168,40 @@ class MeetingReplayEntry(BaseModel):
 WinnerSide: TypeAlias = Literal["CREWMATES", "IMPOSTORS"]
 
 
+def _validated_stamp_field(value: str) -> str:
+    """Validate one provenance-stamp field, returning it unchanged or raising.
+
+    The shared mechanics behind both provenance-stamp classes' ``@field_validator``
+    (Task 15.9's :class:`TacticalPolicyStamp` and Task 18.7's
+    :class:`CrewTacticalPolicyStamp`, audits/audit-phase-18-planning.md §4 #7): a
+    stamp field is a single-line provenance token rendered into line-based
+    artifacts — the JSONL replay row and the Markdown MANIFEST ``policy`` cell
+    (``scripts/_manifest_writer.py``) — so a blank / whitespace-only value or one
+    carrying a ``"|"`` / newline / carriage-return fails loud at the stamp boundary
+    BEFORE any bad bytes are written (AGENTS.md "no silent fallbacks"). Extracting
+    the mechanics here lets the crew stamp share the EXACT same discipline as the
+    impostor stamp; see :meth:`TacticalPolicyStamp._reject_malformed_stamp_field`
+    for the full per-shape rationale.
+    """
+
+    if not value.strip():
+        raise ValueError(
+            "tactical-policy stamp fields must be non-empty tokens; a blank / "
+            f"whitespace-only value is forbidden (got {value!r})"
+        )
+    for forbidden, name in (
+        ("|", "pipe"),
+        ("\n", "newline"),
+        ("\r", "carriage return"),
+    ):
+        if forbidden in value:
+            raise ValueError(
+                "tactical-policy stamp fields must be single-line and "
+                f"MANIFEST-table-safe; a {name} is forbidden (got {value!r})"
+            )
+    return value
+
+
 class TacticalPolicyStamp(BaseModel):
     """Provenance stamp for the tactical policy that produced a game's actions.
 
@@ -233,25 +272,12 @@ class TacticalPolicyStamp(BaseModel):
 
         Every legitimate value — the ``fsm-default`` label, a champion id, a hex
         weights hash, a method / encoder / anchor label — is a single-line,
-        non-blank, pipe-free token, so nothing valid is rejected.
+        non-blank, pipe-free token, so nothing valid is rejected. The mechanics
+        live in the module-level :func:`_validated_stamp_field` so the Task-18.7
+        crew stamp shares them byte-for-byte.
         """
 
-        if not value.strip():
-            raise ValueError(
-                "tactical-policy stamp fields must be non-empty tokens; a blank / "
-                f"whitespace-only value is forbidden (got {value!r})"
-            )
-        for forbidden, name in (
-            ("|", "pipe"),
-            ("\n", "newline"),
-            ("\r", "carriage return"),
-        ):
-            if forbidden in value:
-                raise ValueError(
-                    "tactical-policy stamp fields must be single-line and "
-                    f"MANIFEST-table-safe; a {name} is forbidden (got {value!r})"
-                )
-        return value
+        return _validated_stamp_field(value)
 
 
 # The ``policy_id`` of the canonical scripted-FSM stamp (Task 15.9). It doubles
@@ -281,6 +307,54 @@ def fsm_default_tactical_policy_stamp() -> TacticalPolicyStamp:
         weights_sha256="none",
         anchor_policy=FSM_DEFAULT_POLICY_ID,
     )
+
+
+class CrewTacticalPolicyStamp(BaseModel):
+    """The CREW-side provenance stamp for a learned-crew recording (Task 18.7).
+
+    The crew twin of :class:`TacticalPolicyStamp` (audits/audit-phase-18-planning.md
+    §4 #7): a learned-crew recording names its crew policy in a DISTINCT record
+    class so a crew recording can NEVER wear the impostor champion's stamp — the
+    conflation guard (the CLI arm asserts distinct ``policy_id`` /
+    ``weights_sha256`` namespaces across the two stamps). It carries the SAME five
+    plain-string fields as the tactical stamp — ``policy_id`` / ``method`` /
+    ``encoder_version`` / ``weights_sha256`` / ``anchor_policy`` — set by the
+    RECORDER with no import of any training or agent code, so ``orchestrator/``
+    keeps the clean phase-15 import-linter dependency direction; the shared
+    :func:`_validated_stamp_field` helper enforces the single-line, non-blank,
+    MANIFEST-table-safe token discipline on each, byte-for-byte with the impostor
+    stamp.
+
+    ADDITIVE and OPTIONAL on the replay
+    (:attr:`GameEndReplayEntry.crew_tactical_policy` defaults to ``None``): an
+    ABSENT crew stamp means the scripted
+    :class:`agents.tactical.crewmate_policy.CrewmatePolicy` default (the untouched
+    anchor), so a game with no crew stamp records and reconstructs
+    byte-identically. Task 18.19 consumes this for dual-stamp recordings that
+    carry BOTH an impostor tactical stamp and a crew stamp.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    policy_id: str
+    method: str
+    encoder_version: str
+    weights_sha256: str
+    anchor_policy: str
+
+    @field_validator("*")
+    @classmethod
+    def _reject_malformed_stamp_field(cls, value: str) -> str:
+        """Fail loud on a blank or line/table-breaking crew-stamp field.
+
+        Delegates to the shared :func:`_validated_stamp_field` mechanics, so the
+        crew stamp enforces the SAME single-line, non-blank, MANIFEST-table-safe
+        token discipline as
+        :meth:`TacticalPolicyStamp._reject_malformed_stamp_field` — the crew and
+        impostor stamps render into the same line-based artifacts.
+        """
+
+        return _validated_stamp_field(value)
 
 
 class GameEndReplayEntry(BaseModel):
@@ -332,6 +406,20 @@ class GameEndReplayEntry(BaseModel):
     # full block. The loader honors it (``api.replay_loader``) by refusing to
     # serve a stamped replay under a CONFLICTING policy claim.
     tactical_policy: TacticalPolicyStamp | None = None
+    # The CREW-side tactical-policy provenance stamp (Task 18.7;
+    # audits/audit-phase-18-planning.md §4 #7). Mirrors ``tactical_policy`` but
+    # names the CREW policy in its own DISTINCT :class:`CrewTacticalPolicyStamp`
+    # record class, so a learned-crew recording can never wear the impostor
+    # champion's stamp (the conflation guard). ADDITIVE and OPTIONAL: ``None``
+    # means the scripted crew default
+    # (``agents.tactical.crewmate_policy.CrewmatePolicy``, the untouched anchor),
+    # so the reader tolerates its absence and those bytes reconstruct unchanged;
+    # the writer OMITS the key entirely when ``None``
+    # (``ReplayLog.record_game_end``) so an unstamped re-record stays
+    # byte-identical, and the committed sets — which predate the field — keep
+    # parsing. A learned-crew recording stamps the full block; Task 18.19
+    # consumes it for dual-stamp recordings.
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
 
 
 class FailedCallReplayEntry(BaseModel):
@@ -517,6 +605,7 @@ class ReplayLog:
         *,
         force: bool = False,
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
+        crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
     ) -> None:
         # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
         # (Task 15.9) written onto the ``game_over`` record by
@@ -526,6 +615,13 @@ class ReplayLog:
         # ``record_game_end`` callers (unit tests, eval/determinism_test.py) stay
         # untouched and record the FSM default.
         self._tactical_policy_stamp = tactical_policy_stamp
+        # ``crew_tactical_policy_stamp`` is the CREW-side twin (Task 18.7): the
+        # recorder-supplied crew provenance stamp written onto the same
+        # ``game_over`` record. Default ``None`` = absent = scripted crew default
+        # (``agents.tactical.crewmate_policy.CrewmatePolicy``), byte-identical to
+        # the pre-18.7 writer. Kept in its own DISTINCT field so a crew recording
+        # can never wear the impostor champion's stamp (the conflation guard).
+        self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
         self._handle: TextIO | None = None
@@ -634,6 +730,7 @@ class ReplayLog:
             reason=reason,
             substrate_flags=substrate_flag_snapshot(),
             tactical_policy=self._tactical_policy_stamp,
+            crew_tactical_policy=self._crew_tactical_policy_stamp,
         )
         payload = entry.model_dump(mode="json")
         # Byte-identity carve-out for the tactical-policy stamp (Task 15.9): an
@@ -646,6 +743,14 @@ class ReplayLog:
         # matters.
         if entry.tactical_policy is None:
             del payload["tactical_policy"]
+        # Mirrored byte-identity carve-out for the crew stamp (Task 18.7): an
+        # ABSENT crew stamp is the scripted crew default and MUST record
+        # byte-identically to the pre-18.7 game_over row, so the optional field is
+        # OMITTED when ``None`` rather than written as ``"crew_tactical_policy":
+        # null``. A present crew stamp is written as its own nested five-string
+        # block beside ``tactical_policy``.
+        if entry.crew_tactical_policy is None:
+            del payload["crew_tactical_policy"]
         self._append(payload)
 
     def record_failed_call(
@@ -871,6 +976,29 @@ def read_tactical_policy_stamp(path: Path) -> TacticalPolicyStamp | None:
     return stamp
 
 
+def read_crew_tactical_policy_stamp(path: Path) -> CrewTacticalPolicyStamp | None:
+    """Return the stamped CREW tactical policy of a replay (Task 18.7).
+
+    The crew twin of :func:`read_tactical_policy_stamp`: reads the
+    ``crew_tactical_policy`` block off the game's ``game_over`` record (the last
+    one wins, mirroring :func:`read_substrate_flags`). Returns ``None`` for a
+    replay that carries no crew stamp — a legacy / scripted-crew-default recording
+    (the committed canonical sets) — so callers treat an unstamped replay as the
+    scripted :class:`agents.tactical.crewmate_policy.CrewmatePolicy` default rather
+    than inventing an identity. A stamped replay returns its full five-field
+    :class:`CrewTacticalPolicyStamp`.
+    """
+
+    stamp: CrewTacticalPolicyStamp | None = None
+    for entry in read_all_entries(path):
+        if (
+            isinstance(entry, GameEndReplayEntry)
+            and entry.crew_tactical_policy is not None
+        ):
+            stamp = entry.crew_tactical_policy
+    return stamp
+
+
 def compute_cost_usd(path: Path) -> float:
     """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
 
@@ -1031,6 +1159,7 @@ __all__ = [
     "FSM_DEFAULT_POLICY_ID",
     "SUBSTRATE_FLAG_KEYS",
     "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
+    "CrewTacticalPolicyStamp",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",
     "LLMCallRecord",
@@ -1043,6 +1172,7 @@ __all__ = [
     "compute_cost_usd",
     "fsm_default_tactical_policy_stamp",
     "read_all_entries",
+    "read_crew_tactical_policy_stamp",
     "read_failed_call_entries",
     "read_game_outcome",
     "read_meeting_entries",
