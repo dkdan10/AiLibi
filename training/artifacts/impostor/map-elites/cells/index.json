@@ -1,0 +1,506 @@
+{
+  "baseline_id": "baseline-5",
+  "cells": [
+    {
+      "cell": [
+        0,
+        0,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 0.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": -1.0686875072563675,
+      "path": "cells/0-0-0",
+      "weights_sha256": "55d986c01976818d7566fbd9a627793fb33d1b5545920b50a78db07724eb3c96"
+    },
+    {
+      "cell": [
+        0,
+        0,
+        1
+      ],
+      "descriptors": {
+        "kill_count": 0.0,
+        "vent_usage": 0.5,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": -2.6140134823697894,
+      "path": "cells/0-0-1",
+      "weights_sha256": "8354585374e2ce82766d69a5c07d45571d90e2df9fba3bcab08f67e7d491ae3e"
+    },
+    {
+      "cell": [
+        0,
+        0,
+        2
+      ],
+      "descriptors": {
+        "kill_count": 0.0,
+        "vent_usage": 4.0,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": -2.103363874585571,
+      "path": "cells/0-0-2",
+      "weights_sha256": "727de6d4e6f3b7e6331d2c32991d339bf85e98d2877703503c185c81c23e7203"
+    },
+    {
+      "cell": [
+        0,
+        0,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 0.0,
+        "vent_usage": 17.5,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": -0.6271642981441892,
+      "path": "cells/0-0-3",
+      "weights_sha256": "e454385fcc664423928e18fe463a4e7c77d2e3dd9f1355def02fbc4e2585efed"
+    },
+    {
+      "cell": [
+        0,
+        2,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 0.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.25
+      },
+      "fitness": -2.26900946065697,
+      "path": "cells/0-2-0",
+      "weights_sha256": "d94d6cb9e57396dd32dbb6639c2cac55514dbffd785cff998e0ed3bdf1878676"
+    },
+    {
+      "cell": [
+        1,
+        0,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 0.75,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": -2.4842636393345376,
+      "path": "cells/1-0-0",
+      "weights_sha256": "e6285a503213a0cd40bba6ea19faf1c28b2a2c6fe9517e72b4a430da7c239eaf"
+    },
+    {
+      "cell": [
+        1,
+        2,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 1.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.25
+      },
+      "fitness": 2.0533254511661694,
+      "path": "cells/1-2-0",
+      "weights_sha256": "bb032e461d4c57f73d55fffc9ba5b2f8232fb64a7de38fee6c88c2ec58b22cd9"
+    },
+    {
+      "cell": [
+        1,
+        3,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 0.5,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.5
+      },
+      "fitness": -1.4553750027566992,
+      "path": "cells/1-3-0",
+      "weights_sha256": "9eac92e5961de9fa27574afd62392f1c891e5fdd54173131338ff783ca692649"
+    },
+    {
+      "cell": [
+        2,
+        1,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 2.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.125
+      },
+      "fitness": 3.2033608250287706,
+      "path": "cells/2-1-0",
+      "weights_sha256": "da97ca4c2e02b44d8ef3db17ecda100c82e209c8b98b34823b47093f9f8f06c3"
+    },
+    {
+      "cell": [
+        2,
+        1,
+        1
+      ],
+      "descriptors": {
+        "kill_count": 2.25,
+        "vent_usage": 2.0,
+        "witness_exposure_rate": 0.125
+      },
+      "fitness": 6.937764747403154,
+      "path": "cells/2-1-1",
+      "weights_sha256": "80ffbc2a0c4f1754f86e58e380c738ce0ef00344aecf1bf19daa3529a5307a55"
+    },
+    {
+      "cell": [
+        2,
+        2,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 2.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.375
+      },
+      "fitness": 5.13921524887988,
+      "path": "cells/2-2-0",
+      "weights_sha256": "e05a99363da1d881308b2d206d4d0bd75aa4078b1adf3f6377562048cead24ed"
+    },
+    {
+      "cell": [
+        2,
+        2,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 2.25,
+        "vent_usage": 54.5,
+        "witness_exposure_rate": 0.3
+      },
+      "fitness": 6.4325531358001955,
+      "path": "cells/2-2-3",
+      "weights_sha256": "e8f49993e79de0a896cacaad02f63c7bb561088503f6ec2b6033568b7ff789b1"
+    },
+    {
+      "cell": [
+        2,
+        3,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 2.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.5
+      },
+      "fitness": 3.7152356547444025,
+      "path": "cells/2-3-0",
+      "weights_sha256": "85b926a42aa3f39174c69ce152df1e207e1441a96595c59e485a3a9af42594bd"
+    },
+    {
+      "cell": [
+        3,
+        0,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 2.75,
+        "vent_usage": 57.75,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": 8.24890241890602,
+      "path": "cells/3-0-3",
+      "weights_sha256": "e956c9ec6ab6dd4307ffe36c80df01f23c46b1d44d1e4d6ba40046c4110b7b83"
+    },
+    {
+      "cell": [
+        3,
+        1,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 3.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.1125
+      },
+      "fitness": 10.784103461099996,
+      "path": "cells/3-1-0",
+      "weights_sha256": "f1dee083f5e19c1979c4e7abbede176ffa915ff53af41eaea8d5291b67eaeda7"
+    },
+    {
+      "cell": [
+        3,
+        1,
+        1
+      ],
+      "descriptors": {
+        "kill_count": 3.0,
+        "vent_usage": 2.0,
+        "witness_exposure_rate": 0.125
+      },
+      "fitness": 9.412031319113014,
+      "path": "cells/3-1-1",
+      "weights_sha256": "a25dc4cd7ee8ab588f9493aa4ed60916e440b0f2b4dd81135291b8c6acef6a26"
+    },
+    {
+      "cell": [
+        3,
+        1,
+        2
+      ],
+      "descriptors": {
+        "kill_count": 3.0,
+        "vent_usage": 2.5,
+        "witness_exposure_rate": 0.13333333333333333
+      },
+      "fitness": 10.192546601748457,
+      "path": "cells/3-1-2",
+      "weights_sha256": "b974f0ec8940907f149c57723c2d8bb8f7b55152714fe79ea97e7a59418cab06"
+    },
+    {
+      "cell": [
+        3,
+        1,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 3.25,
+        "vent_usage": 16.0,
+        "witness_exposure_rate": 0.1125
+      },
+      "fitness": 11.050848877465164,
+      "path": "cells/3-1-3",
+      "weights_sha256": "1f68554cf0fb7b55b171d38ef3be602be0ed700ecb680f7107e7fa80f2e1d8b8"
+    },
+    {
+      "cell": [
+        3,
+        2,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 3.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.4583333333333333
+      },
+      "fitness": 8.448684009867632,
+      "path": "cells/3-2-0",
+      "weights_sha256": "c20bb4c46e259fcc79b70ae6e30a98020b0a0a05de4ff9ec6b116aed952177bc"
+    },
+    {
+      "cell": [
+        3,
+        3,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 3.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.65
+      },
+      "fitness": 7.109097262004036,
+      "path": "cells/3-3-0",
+      "weights_sha256": "b23771eb90f54d66286b1897a686b73003862f05a289f17b5a462f98698df350"
+    },
+    {
+      "cell": [
+        4,
+        0,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 3.5,
+        "vent_usage": 41.5,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": 12.304830001247476,
+      "path": "cells/4-0-3",
+      "weights_sha256": "f0c14ec9e60cf19108f41829620d07746a81729b5ca1329863d033cf8a06ebff"
+    },
+    {
+      "cell": [
+        4,
+        1,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 3.5,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.2
+      },
+      "fitness": 10.854305054057624,
+      "path": "cells/4-1-0",
+      "weights_sha256": "4154ac84c116148fb1b4dad40ed9096f8c44000cc8ff0eaf159ef44da094abe9"
+    },
+    {
+      "cell": [
+        4,
+        1,
+        1
+      ],
+      "descriptors": {
+        "kill_count": 4.25,
+        "vent_usage": 1.0,
+        "witness_exposure_rate": 0.15000000000000002
+      },
+      "fitness": 13.504045169763907,
+      "path": "cells/4-1-1",
+      "weights_sha256": "026f222d15f4fe65566bad3d2b6fbe211f5deea537c280aa58ec890731e78a51"
+    },
+    {
+      "cell": [
+        4,
+        3,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 4.25,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.5416666666666666
+      },
+      "fitness": 13.243746091279323,
+      "path": "cells/4-3-0",
+      "weights_sha256": "63035d8bf6fae8df59a673d0309939fdd52d239a14d5966b36128c6356b4490c"
+    },
+    {
+      "cell": [
+        5,
+        0,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 5.0,
+        "vent_usage": 26.75,
+        "witness_exposure_rate": 0.0
+      },
+      "fitness": 18.864117589787234,
+      "path": "cells/5-0-3",
+      "weights_sha256": "b4469dec6f95def6ba53b9ca37b81b4285b02501374047f290c6a579de0f84bb"
+    },
+    {
+      "cell": [
+        5,
+        1,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 5.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.2
+      },
+      "fitness": 16.699956159310496,
+      "path": "cells/5-1-0",
+      "weights_sha256": "bb12b0e98e355f05c0e1d2f47ec2ca46299d5ed7146a507e3395bbfcd71b49b8"
+    },
+    {
+      "cell": [
+        5,
+        1,
+        3
+      ],
+      "descriptors": {
+        "kill_count": 5.0,
+        "vent_usage": 19.75,
+        "witness_exposure_rate": 0.05
+      },
+      "fitness": 18.419059627408803,
+      "path": "cells/5-1-3",
+      "weights_sha256": "58ded2b224f1490610e7d5a63fad4566152a20e03c105f5ac0ad7612206c99e4"
+    },
+    {
+      "cell": [
+        5,
+        2,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 4.75,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.475
+      },
+      "fitness": 15.30977698038786,
+      "path": "cells/5-2-0",
+      "weights_sha256": "f4ed45d3810e30aa8fad0e2ddbff35be9a17408fd2d2cefbc02309aaabb31f5b"
+    },
+    {
+      "cell": [
+        5,
+        2,
+        1
+      ],
+      "descriptors": {
+        "kill_count": 4.5,
+        "vent_usage": 2.0,
+        "witness_exposure_rate": 0.3666666666666667
+      },
+      "fitness": 15.242005731919658,
+      "path": "cells/5-2-1",
+      "weights_sha256": "afac2713dafd72f120b0b9d9a10c642b14075a456d46637f91a5e4a0927e7276"
+    },
+    {
+      "cell": [
+        5,
+        3,
+        0
+      ],
+      "descriptors": {
+        "kill_count": 5.0,
+        "vent_usage": 0.0,
+        "witness_exposure_rate": 0.7000000000000001
+      },
+      "fitness": 15.513688192077073,
+      "path": "cells/5-3-0",
+      "weights_sha256": "f597ba18d14b4c6a7aab793e8758e356368f1ce751a57d43c8d469531afa04ad"
+    }
+  ],
+  "config": {
+    "anchor_weight": 1.0,
+    "fitness_seeds": [
+      1000,
+      1001,
+      1002,
+      1005
+    ],
+    "hidden": 8,
+    "iterations": 120,
+    "num_impostors": 2,
+    "num_players": 9,
+    "random_inits": 5,
+    "seed": 0,
+    "sigma": 0.25,
+    "tasks_per_crewmate": 2
+  },
+  "descriptor_config": {
+    "axes": [
+      "kill_count",
+      "witness_exposure_rate",
+      "vent_usage"
+    ],
+    "edges": {
+      "kill_count": [
+        0.5,
+        1.5,
+        2.5,
+        3.5,
+        4.5
+      ],
+      "vent_usage": [
+        0.5,
+        2.5,
+        5.5
+      ],
+      "witness_exposure_rate": [
+        1e-09,
+        0.25,
+        0.5
+      ]
+    },
+    "name": "behavior-v1",
+    "total_cells": 96
+  },
+  "entrant": "map-elites",
+  "filled_cells": 30,
+  "substrate": {
+    "corpus_manifest": "replays/ml_corpus/9p2i/MANIFEST.md",
+    "substrate_sha256": "fbf23457b58205ed86e7d3983a9170c1765115ecfe97bb37fc67c5339de58348"
+  }
+}

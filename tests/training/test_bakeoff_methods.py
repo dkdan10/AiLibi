@@ -12,6 +12,9 @@ byte-determinism the 15.10 harness depends on.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -50,12 +53,22 @@ from observation.public_map import PublicMapView, RoomId
 from orchestrator.boundary import public_map_from_engine_map
 from training.bakeoff import es
 from training.bakeoff.bc import BcDaggerEntrant, bc_budget
-from training.bakeoff.harness import BakeoffPolicy, TrainedCandidate, rollout_candidate
+from training.bakeoff.harness import (
+    BakeoffPolicy,
+    TrainedCandidate,
+    load_candidate_weights,
+    rollout_candidate,
+)
 from training.bakeoff.map_elites import (
+    BEHAVIOR_DESCRIPTOR_CONFIGURATION,
+    REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
     TOTAL_CELLS,
     MapElitesEntrant,
+    bakeoff_substrate_sha,
     bin_descriptors,
+    load_archive_cell_genomes,
     map_elites_budget,
+    write_archive_cell_artifacts,
 )
 from training.bakeoff.policy_es import (
     KIND_SLOTS,
@@ -251,6 +264,21 @@ def bc_candidate() -> TrainedCandidate:
     """One CI-budget BC/DAgger champion, shared by the BC + warm-start tests."""
 
     return BcDaggerEntrant(config=bc_budget("ci")).train()
+
+
+@pytest.fixture(scope="module")
+def map_elites_run() -> tuple[MapElitesEntrant, TrainedCandidate]:
+    """One CI-budget MAP-Elites entrant TRAINED once (Task 18.6).
+
+    The trained entrant carries the frozen ``last_archive`` — the persisted
+    behaviorally-diverse pool the 18.6 persistence tests round-trip — and the
+    returned candidate carries the default-map config the byte-stability pin
+    reads. Shared module-scope so the ci train (≈ 2 s) runs once for the suite.
+    """
+
+    entrant = MapElitesEntrant(config=map_elites_budget("ci"))
+    candidate = entrant.train()
+    return entrant, candidate
 
 
 # --------------------------------------------------------------------------- #
@@ -758,6 +786,240 @@ def test_map_elites_tiny_budget() -> None:
         assert "kill_count" in row
         assert "witness_exposure_rate" in row
         assert "vent_usage" in row
+
+
+# --------------------------------------------------------------------------- #
+# 6b. MAP-Elites cell persistence + referee-tension descriptors (Task 18.6).    #
+# --------------------------------------------------------------------------- #
+
+
+def test_map_elites_persisted_cells_round_trip(
+    tmp_path: Path,
+    map_elites_run: tuple[MapElitesEntrant, TrainedCandidate],
+) -> None:
+    """The freeze-persisted cell pool reloads bit-exactly (Task 18.6).
+
+    The 18.6 freeze retains the whole illuminated archive (the pool the 18.20
+    hall-of-fame seeds from), and :func:`write_archive_cell_artifacts` /
+    :func:`load_archive_cell_genomes` round-trip it EXACTLY — bit-exact genomes
+    via float-hex, exact fitness/descriptors via JSON repr round-trip.
+    """
+
+    entrant, _candidate = map_elites_run
+    archive = entrant.last_archive
+    assert archive is not None
+    assert archive  # the freeze retained a non-empty behaviorally-diverse pool
+
+    cells_dir = write_archive_cell_artifacts(
+        archive, tmp_path, config=map_elites_budget("ci")
+    )
+    reloaded = load_archive_cell_genomes(tmp_path)
+    assert reloaded == dict(archive)
+
+    index = json.loads((cells_dir / "index.json").read_text())
+    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+
+    # Every sidecar is exactly ``<sha256(weights bytes)>  weights.json`` — the
+    # committed harness sidecar byte format.
+    for i, j, k in archive:
+        cell_dir = cells_dir / f"{i}-{j}-{k}"
+        weights_bytes = (cell_dir / "weights.json").read_bytes()
+        digest = hashlib.sha256(weights_bytes).hexdigest()
+        sidecar = (cell_dir / "weights.json.sha256").read_text()
+        assert sidecar == f"{digest}  weights.json\n"
+
+
+def test_map_elites_cell_artifacts_are_byte_deterministic(
+    tmp_path: Path,
+    map_elites_run: tuple[MapElitesEntrant, TrainedCandidate],
+) -> None:
+    """Two freezes of the same archive produce byte-identical trees (Task 18.6).
+
+    Sorted cell iteration + ``sort_keys`` JSON + float-hex weights make the
+    persisted tree a pure function of the archive: every relative path and every
+    file's bytes match across two independent writes.
+    """
+
+    entrant, _candidate = map_elites_run
+    archive = entrant.last_archive
+    assert archive is not None
+    config = map_elites_budget("ci")
+
+    first = write_archive_cell_artifacts(archive, tmp_path / "a", config=config)
+    second = write_archive_cell_artifacts(archive, tmp_path / "b", config=config)
+    first_files = sorted(p.relative_to(first) for p in first.rglob("*") if p.is_file())
+    second_files = sorted(
+        p.relative_to(second) for p in second.rglob("*") if p.is_file()
+    )
+    assert first_files == second_files
+    assert first_files  # the tree is non-empty
+    for rel in first_files:
+        assert (first / rel).read_bytes() == (second / rel).read_bytes()
+
+
+def test_map_elites_cell_loader_fails_loud(
+    tmp_path: Path,
+    map_elites_run: tuple[MapElitesEntrant, TrainedCandidate],
+) -> None:
+    """Every persisted-pool integrity violation fails loud (Task 18.6).
+
+    A wrong adopted substrate sha (the 18.24 stale-seed fence), a corrupted
+    cell's weights, and index/disk drift (a missing OR a stray cell dir) each
+    raise :class:`ValueError` — drift is never papered over.
+    """
+
+    entrant, _candidate = map_elites_run
+    archive = entrant.last_archive
+    assert archive is not None
+    victim = sorted(archive)[0]
+    victim_name = f"{victim[0]}-{victim[1]}-{victim[2]}"
+
+    # (a) A wrong expected substrate sha refuses the reload; the recorded one
+    # passes, proving the fence trips only on a genuine mismatch.
+    good_dir = tmp_path / "good"
+    write_archive_cell_artifacts(archive, good_dir, config=map_elites_budget("ci"))
+    load_archive_cell_genomes(good_dir, expected_substrate_sha=bakeoff_substrate_sha())
+    with pytest.raises(ValueError):
+        load_archive_cell_genomes(good_dir, expected_substrate_sha="deadbeef")
+
+    # (b) Corrupting one cell's weights.json trips the sha cross-check.
+    corrupt_dir = tmp_path / "corrupt"
+    cells = write_archive_cell_artifacts(
+        archive, corrupt_dir, config=map_elites_budget("ci")
+    )
+    (cells / victim_name / "weights.json").write_text("corrupted")
+    with pytest.raises(ValueError):
+        load_archive_cell_genomes(corrupt_dir)
+
+    # (c) Deleting a cell dir the index still references fails loud.
+    missing_dir = tmp_path / "missing"
+    cells = write_archive_cell_artifacts(
+        archive, missing_dir, config=map_elites_budget("ci")
+    )
+    shutil.rmtree(cells / victim_name)
+    with pytest.raises(ValueError):
+        load_archive_cell_genomes(missing_dir)
+
+    # (d) A stray cell dir the index does NOT list fails loud too.
+    stray_dir = tmp_path / "stray"
+    cells = write_archive_cell_artifacts(
+        archive, stray_dir, config=map_elites_budget("ci")
+    )
+    (cells / "9-9-9").mkdir()
+    with pytest.raises(ValueError):
+        load_archive_cell_genomes(stray_dir)
+
+
+def test_map_elites_referee_tension_configuration_is_additive() -> None:
+    """The referee-tension map is a selectable, deterministic alternative (18.6).
+
+    Selecting :data:`REFEREE_TENSION_DESCRIPTOR_CONFIGURATION` tessellates the
+    archive over the three watchability-tension axes (never as fitness), records
+    the config name + 64-cell shape, carries the tension descriptors in every
+    best-per-cell row with ``impostor_win`` in [0, 1], and reproduces the champion
+    + rows bit-for-bit on a second identical run.
+    """
+
+    entrant = MapElitesEntrant(
+        config=map_elites_budget("ci"),
+        descriptor_configuration=REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
+    )
+    candidate = entrant.train()
+
+    assert candidate.config["descriptor_config"] == "referee-tension-v1"
+    assert candidate.config["axes"] == [
+        "witness_exposure_rate",
+        "meeting_trigger_rate",
+        "impostor_win",
+    ]
+    assert candidate.config["total_cells"] == 64
+
+    best_per_cell = candidate.train_metadata["best_per_cell"]
+    assert isinstance(best_per_cell, list)
+    assert best_per_cell
+    for row in best_per_cell:
+        assert set(row) == {
+            "cell",
+            "fitness",
+            "witness_exposure_rate",
+            "meeting_trigger_rate",
+            "impostor_win",
+        }
+        assert 0.0 <= row["impostor_win"] <= 1.0
+
+    # A second identical run reproduces the champion genome + best_per_cell.
+    again = MapElitesEntrant(
+        config=map_elites_budget("ci"),
+        descriptor_configuration=REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
+    ).train()
+    assert again.weights == candidate.weights
+    assert again.train_metadata["best_per_cell"] == best_per_cell
+
+
+def test_map_elites_default_run_config_is_byte_stable(
+    map_elites_run: tuple[MapElitesEntrant, TrainedCandidate],
+) -> None:
+    """The additive configuration did not move the committed default (18.6).
+
+    The default ci candidate's config carries NO ``descriptor_config`` key and
+    the exact committed axes / edge lists / 96-cell literal, and
+    :meth:`DescriptorConfiguration.bin_values` under the behavior map agrees with
+    the untouched public :func:`bin_descriptors` on the pinned probe triples.
+    """
+
+    _entrant, candidate = map_elites_run
+    config = candidate.config
+    assert "descriptor_config" not in config
+    assert config["axes"] == ["kill_count", "witness_exposure_rate", "vent_usage"]
+    assert config["edges"] == {
+        "kill_count": [0.5, 1.5, 2.5, 3.5, 4.5],
+        "witness_exposure_rate": [1e-9, 0.25, 0.5],
+        "vent_usage": [0.5, 2.5, 5.5],
+    }
+    assert config["total_cells"] == TOTAL_CELLS == 96
+
+    for kill_count, witness_exposure_rate, vent_usage in (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.3, 3.0),
+        (7.0, 0.9, 10.0),
+    ):
+        values = {
+            "kill_count": kill_count,
+            "witness_exposure_rate": witness_exposure_rate,
+            "vent_usage": vent_usage,
+        }
+        assert BEHAVIOR_DESCRIPTOR_CONFIGURATION.bin_values(values) == bin_descriptors(
+            kill_count, witness_exposure_rate, vent_usage
+        )
+
+
+def test_committed_map_elites_cells_reload_bit_exact() -> None:
+    """The committed cell pool reloads bit-exact and agrees with the champion.
+
+    Pure file-read pin on the SHIPPED 18.6 tree: 30 cells reload with every sha
+    verified, ``filled_cells == 30``, and the index's substrate sha equals
+    :func:`bakeoff_substrate_sha`. That last pin TRIPS LOUDLY when a Wave-1
+    substrate adoption re-freezes the corpus MANIFEST — the designed
+    re-run-before-use fence. The max-fitness cell (the champion ``min`` over
+    ``(-fitness, genome)``) is cell (5, 0, 3) and its genome is bit-identical to
+    the committed champion artifact, so the persisted pool and the shipped
+    champion agree.
+    """
+
+    root = Path("training/artifacts/impostor/map-elites")
+    archive = load_archive_cell_genomes(root)
+    assert len(archive) == 30
+
+    index = json.loads((root / "cells" / "index.json").read_text())
+    assert index["filled_cells"] == 30
+    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+
+    champion_key, champion_cell = min(
+        archive.items(), key=lambda item: (-item[1].fitness, item[1].genome)
+    )
+    assert champion_key == (5, 0, 3)
+    assert round(champion_cell.fitness, 4) == 18.8641
+    assert champion_cell.genome == load_candidate_weights(root)
 
 
 # --------------------------------------------------------------------------- #
