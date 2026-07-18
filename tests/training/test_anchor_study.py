@@ -134,6 +134,26 @@ def test_walk_rejects_off_convention_filenames(tmp_path: Path) -> None:
         walk_corpus_game(stray)
 
 
+def test_walk_fails_loud_when_an_alive_impostor_action_is_missing(
+    tmp_path: Path,
+) -> None:
+    # Dropping an alive impostor's recorded action row must raise rather than
+    # silently thin the verified stream — a dropped ``wait`` may not even trip
+    # the state-hash check (Codex review on PR #292). Seed 1000's impostors
+    # are p-6/p-8 (the re-seeded roles).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    first = json.loads(lines[0])
+    impostor_actors = {"p-6", "p-8"}
+    kept = [raw for raw in first["actions"] if raw["actor"] not in impostor_actors]
+    assert len(kept) == len(first["actions"]) - 2
+    first["actions"] = kept
+    lines[0] = json.dumps(first)
+    drifted = tmp_path / "replay-seed-1000.jsonl"
+    drifted.write_text("\n".join(lines) + "\n")
+    with pytest.raises(CorpusWalkError, match="no recorded action"):
+        walk_corpus_game(drifted)
+
+
 # --------------------------------------------------------------------------- #
 # 3. The filtered-BC fit (the Fo6Logistic deterministic recipe).               #
 # --------------------------------------------------------------------------- #
@@ -259,8 +279,26 @@ def test_evaluate_anchor_offline_tallies_an_offmenu_fsm_choice() -> None:
     genome = tuple(0.0 for _ in range(utility_genome_length()))
     result = evaluate_anchor_offline(genome, (decision,), label="offmenu")
     assert result.fsm_offmenu_decisions == 1
+    # A structural off-menu decision necessarily clamps too.
+    assert result.ce_clamped_decisions == 1
     assert result.agreement == 0.0
     # The clamped log-loss, exactly the harness's ANCHOR_CE_EPSILON semantics.
+    assert result.mean_anchor_ce == pytest.approx(-math.log(1e-6))
+
+
+def test_evaluate_anchor_offline_separates_the_clamp_from_offmenu() -> None:
+    # An ON-menu FSM choice a sharp genome drives below the epsilon is
+    # CE-clamped but NOT off-menu (Codex review on PR #292): the walk's
+    # "0 off-menu" verification must stay true for any genome.
+    decision = _synthetic_decision(fsm_on_menu=True)
+    wait_index = OPTION_FEATURE_NAMES.index("kind_wait")
+    sharp = tuple(
+        20.0 if index == wait_index else 0.0 for index in range(utility_genome_length())
+    )
+    result = evaluate_anchor_offline(sharp, (decision,), label="sharp")
+    # softmax mass at the FSM's kill option is 1/(1+e^20) ~ 2e-9 < 1e-6.
+    assert result.fsm_offmenu_decisions == 0
+    assert result.ce_clamped_decisions == 1
     assert result.mean_anchor_ce == pytest.approx(-math.log(1e-6))
 
 
@@ -334,6 +372,15 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
         config = json.loads((entrant_dir / "config.json").read_text())
         assert config["substrate_sha"] == substrate_sha
         assert config["study"] == "anchor-study"
+        # Config-driven identity matches the directory name (Codex review on
+        # PR #292): a λ cell is addressable without its path.
+        assert config["entrant"] == entrant
+    assert (
+        json.loads((artifact_root / "lambda-1.0" / "config.json").read_text())[
+            "base_entrant"
+        ]
+        == "utility-es"
+    )
     index = json.loads((artifact_root / "study.json").read_text())
     round_trip = AnchorStudyReport.model_validate(index)
     assert round_trip == report
@@ -352,6 +399,35 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
     assert FILTERED_BC_ENTRANT in report.recommended_campaign_seeds
     for name in report.recommended_campaign_seeds:
         assert (artifact_root / name / "weights.json").exists()
+
+
+def test_substrate_sha_follows_the_protocol_baseline(tmp_path: Path) -> None:
+    # A re-pinned baseline must move the frozen provenance WITH the scoring
+    # protocol, never trail the module default (Codex review on PR #292).
+    # An EMPTY λ grid keeps this seconds-scale: no training, no
+    # evaluate_candidate call (whose referee would reject an unknown
+    # baseline), just the walk + fit + freeze.
+    report = run_anchor_study(
+        budget="ci",
+        lambda_grid=(),
+        corpus_seed_subset=(1000,),
+        artifact_root=tmp_path / "artifacts",
+        protocol=BakeoffProtocolConfig(
+            eval_seeds=(1004,),
+            baseline_id="baseline-x",
+            surrogate_artifact_dir=None,
+        ),
+    )
+    assert report.baseline_id == "baseline-x"
+    assert report.substrate_sha == compute_substrate_sha(baseline_id="baseline-x")
+    assert report.substrate_sha != compute_substrate_sha()
+    config = json.loads(
+        (tmp_path / "artifacts" / FILTERED_BC_ENTRANT / "config.json").read_text()
+    )
+    assert config["substrate_sha"] == report.substrate_sha
+    assert report.sweep_rows == ()
+    assert report.determinism_cross_check is None
+    assert report.recommended_campaign_seeds == (FILTERED_BC_ENTRANT,)
 
 
 def test_lambda_1_cross_check_raises_on_a_drifted_full_budget_champion() -> None:
@@ -420,6 +496,11 @@ def test_committed_study_artifacts_carry_the_substrate_sha() -> None:
         assert len(weights) == utility_genome_length()
         config = json.loads((entrant_dir / "config.json").read_text())
         assert config["substrate_sha"] == substrate_sha
+        # Config-driven identity: the entrant name lives in the bytes, and
+        # every λ cell names the training method it re-ran.
+        assert config["entrant"] == entrant
+        if entrant != FILTERED_BC_ENTRANT:
+            assert config["base_entrant"] == "utility-es"
     for name in report.recommended_campaign_seeds:
         assert (ANCHOR_STUDY_ARTIFACT_ROOT / name / "weights.json").exists()
 

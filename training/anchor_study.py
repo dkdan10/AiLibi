@@ -408,7 +408,18 @@ def walk_corpus_game(
             for pid in impostor_ids:
                 raw_action = recorded_by_actor.get(pid)
                 if raw_action is None:
-                    continue  # dead/ejected impostors submit nothing
+                    # Dead/ejected impostors submit nothing; an ALIVE impostor
+                    # with no recorded action row is a corrupted/partial replay
+                    # — and a dropped ``wait`` row may not trip the state-hash
+                    # check, so it must not silently thin the verified stream
+                    # (Codex review on PR #292).
+                    if state.players[pid].alive:
+                        raise CorpusWalkError(
+                            f"seed {seed}: tick {entry.tick} has no recorded "
+                            f"action for the alive impostor {pid!r} (partial "
+                            "or corrupted replay row)"
+                        )
+                    continue
                 packet = observation_service.build_packet(
                     world_state=state, agent_id=pid, engine_events=last_events
                 )
@@ -695,7 +706,14 @@ class OfflineAgreement(BaseModel):
     agreement_hits: int
     agreement: float
     mean_anchor_ce: float
+    # STRUCTURAL off-menu only: the FSM's choice realizes no menu option
+    # (zero grouped mass before any clamp). An on-menu key a sharp genome
+    # drives below the epsilon is NOT off-menu — it is tallied in
+    # ``ce_clamped_decisions`` (Codex review on PR #292), which counts every
+    # epsilon clamp the ``mean_anchor_ce`` column absorbed (structural
+    # off-menu decisions necessarily clamp, so it is a superset tally).
     fsm_offmenu_decisions: int
+    ce_clamped_decisions: int
     per_kind_agreement: Mapping[str, tuple[int, int]]
     divergence: tuple[DivergenceCell, ...]
 
@@ -732,6 +750,7 @@ def evaluate_anchor_offline(
 
     hits = 0
     offmenu = 0
+    clamped = 0
     ce_sum = 0.0
     per_kind: dict[str, list[int]] = {}
     divergence: dict[tuple[str, str], int] = {}
@@ -754,9 +773,11 @@ def evaluate_anchor_offline(
         for index, key in enumerate(decision.option_intent_keys):
             if key == decision.fsm_intent_key:
                 mass += float(probs[index])
+        if decision.fsm_option_index is None:
+            offmenu += 1
         if mass < ANCHOR_CE_EPSILON:
             mass = ANCHOR_CE_EPSILON
-            offmenu += 1
+            clamped += 1
         ce_sum += -math.log(mass)
 
         fsm_kind = _intent_kind(decision.fsm_intent_key)
@@ -782,6 +803,7 @@ def evaluate_anchor_offline(
         agreement=hits / len(decisions),
         mean_anchor_ce=ce_sum / len(decisions),
         fsm_offmenu_decisions=offmenu,
+        ce_clamped_decisions=clamped,
         per_kind_agreement={
             kind: (bucket[0], bucket[1]) for kind, bucket in sorted(per_kind.items())
         },
@@ -925,6 +947,13 @@ def run_lambda_sweep(
             entrant=_lambda_entrant_name(lambda_value),
             config={
                 **dict(candidate.config),
+                # The λ-specific identity must live in the CONFIG too, not
+                # only the directory name: 18.24's config-driven provenance
+                # would otherwise see every cell as "utility-es" (Codex
+                # review on PR #292). The training method the cell re-ran is
+                # preserved as ``base_entrant``.
+                "base_entrant": candidate.entrant,
+                "entrant": _lambda_entrant_name(lambda_value),
                 "study": "anchor-study",
                 "substrate_sha": substrate_sha,
                 "train_budget": budget,
@@ -1164,11 +1193,15 @@ def run_anchor_study(
     """
 
     started = time.perf_counter()
-    substrate_sha = compute_substrate_sha(corpus_dir)
-
     # ONE protocol instance for the whole run (the staleness-cap doctrine: one
-    # cumulative surrogate counter outlives every cell this run scores).
+    # cumulative surrogate counter outlives every cell this run scores), and
+    # the substrate sha is keyed to THAT protocol's baseline — a re-pinned
+    # baseline must move the frozen provenance with the scoring floors, never
+    # trail the module default (Codex review on PR #292).
     resolved_protocol = protocol if protocol is not None else default_protocol_config()
+    substrate_sha = compute_substrate_sha(
+        corpus_dir, baseline_id=resolved_protocol.baseline_id
+    )
     sweep_rows, cross_check, train_wall_clock = run_lambda_sweep(
         budget=budget,
         lambda_grid=lambda_grid,
@@ -1211,6 +1244,7 @@ def run_anchor_study(
             agreement=0.0,
             mean_anchor_ce=0.0,
             fsm_offmenu_decisions=0,
+            ce_clamped_decisions=0,
             per_kind_agreement={},
             divergence=(),
         )
@@ -1409,13 +1443,15 @@ def render_report(
             bc.committed_champion_overall,
         )
         lines = [
-            "| Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu |",
-            "|---|---:|---:|---:|---:|",
+            "| Stream | decisions | agreement | mean anchor-CE (nats) | "
+            "FSM off-menu | CE-clamped |",
+            "|---|---:|---:|---:|---:|---:|",
         ]
         for entry in evals:
             lines.append(
                 f"| {entry.label} | {entry.decisions} | {_fmt(entry.agreement)} | "
-                f"{_fmt(entry.mean_anchor_ce)} | {entry.fsm_offmenu_decisions} |"
+                f"{_fmt(entry.mean_anchor_ce)} | {entry.fsm_offmenu_decisions} | "
+                f"{entry.ce_clamped_decisions} |"
             )
         return "\n".join(lines)
 
