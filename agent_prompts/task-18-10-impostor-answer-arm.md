@@ -29,7 +29,8 @@ self-flag rate and win cost when impostors must account for themselves.
 **Files in scope:**
 - agents/strategic/prompts/qwen3_6_27b/ (the variant templates)
 - agents/strategic/prompts/loader.py (the flag-selected variant routing + resolver)
-- tests/agents/ (routing fixtures: default path renders byte-identically; variant path renders the self-placement contract; version stamps distinguish the variant)
+- orchestrator/game.py; (the `prompt_versions_for_set` registry entries for the variant ONLY — recorded `prompt_versions` come from this registry, not the loader, so without this the variant renders different bytes while recordings still stamp the old versions)
+- tests/agents/; (routing fixtures: default path renders byte-identically; variant path renders the self-placement contract; version stamps distinguish the variant in the registry AND the recorded bytes)
 
 **Files NOT in scope:**
 - meetings/ (18.8/18.9's regions)

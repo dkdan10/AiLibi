@@ -30,7 +30,7 @@ committed bytes; both pinned on corpus + samples.
 - tests/eval/test_kill_craft.py
 
 **Files NOT in scope:**
-- eval/watchability.py (its walk is consumed via import or a faithful local walk — the referee itself does not move)
+- eval/watchability.py; (its walk is consumed via import or a faithful local walk — the referee itself does not move)
 - engine/ (read-only reconstruction)
 
 **Definition of done:**

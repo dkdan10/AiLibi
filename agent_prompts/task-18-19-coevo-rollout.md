@@ -27,13 +27,13 @@ the single-side flags.
 
 **Files in scope:**
 - training/coevo/__init__.py + training/coevo/factory.py + training/coevo/rollout.py (new)
-- orchestrator/replay.py (the additive crew stamp record + reader)
-- scripts/run_tournament.py (the `--crew-artifact` arm + dual-stamp wiring)
+- orchestrator/replay.py; (the additive crew stamp record + reader)
+- scripts/run_tournament.py; (the `--crew-artifact` arm + dual-stamp wiring)
 - tests/training/test_coevo_rollout.py + tests/scripts/test_run_tournament_candidate_artifact.py (the dual-stamp guards)
 
 **Files NOT in scope:**
-- training/bakeoff/harness.py (its wrappers are imported/mirrored, never rewired — the single-side paths stay byte-identical)
-- agents/tactical/learned/ (18.7 shipped the surface; consumed here)
+- training/bakeoff/harness.py; (its wrappers are imported/mirrored, never rewired — the single-side paths stay byte-identical)
+- agents/tactical/learned/; (18.7 shipped the surface; consumed here)
 
 **Definition of done:**
 - [ ] A rollout with learned policies on BOTH sides runs deterministically on the fake path, yields both sides' fitness from one trace, and a recorded eval carries both stamps read back from bytes with distinct sha-verified identities; every single-side path (existing flags, no factory) is byte-identical to before (pinned).

@@ -35,7 +35,9 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 **Files in scope:**
 - audits/audit-phase-18-meeting-gate.md (new: the memo + the recorded ruling)
-- tasks/phase-18.md (the surgery + the banner note)
+- orchestrator/replay.py; (the substrate-flag snapshot registry ONLY: the four new lever flags — roll-call round, endpoint exemption, vent-flag variant, impostor-answer — wired in BEFORE any probe seed records, so probe/adoption recordings self-describe the arms under test; today the snapshot knows only `absence_prior`)
+- tests/orchestrator/ (the snapshot-registry fixtures)
+- tasks/phase-18.md; (the surgery + the banner note)
 - agent_prompts/ (regenerated)
 
 **Files NOT in scope:**
@@ -43,7 +45,8 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 - replays/samples/ + replays/ml_corpus/ (no committed record at the gate — probe sets are working artifacts)
 
 **Definition of done:**
-- [ ] Both probe sets recorded 25/25 on the real Featherless path ($0, stamp-proven substrate flags for the arms under test), validity-gated, with every bar cell quoted beside its pre-registered threshold and the ruling recorded verbatim (FULL / CREW-ONLY / NONE, plus the vent-widening and absence-graduation components).
+- [ ] The four new lever flags are registered in the replay substrate-flag snapshot BEFORE the first probe seed records (fixture-pinned; committed sets re-verify byte-identical — the registry addition must not move existing bytes).
+- [ ] Both probe sets recorded 25/25 on the real Featherless path ($0, the arms under test stamp-proven via the substrate-flag snapshot in the recorded bytes), validity-gated, with every bar cell quoted beside its pre-registered threshold and the ruling recorded verbatim (FULL / CREW-ONLY / NONE, plus the vent-widening and absence-graduation components).
 - [ ] The surgery is complete in the ruled direction (the Baseline-numbering block's enumeration): validator green, prompts regenerated, `scripts/compute_next_task.py --phase 18` consistent with the surviving DAG, no orphan references.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

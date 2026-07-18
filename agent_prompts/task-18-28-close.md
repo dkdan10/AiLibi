@@ -27,8 +27,12 @@ demonstrated complete, and the Q5 provenance arms stated honestly.
 
 **Files in scope:**
 - audits/audit-phase-18-close.md (new)
-- replays/samples/ + eval/watchability.py (FLIP path only: the mover record + its floor block)
-- tasks/phase-18.md (STATUS banner) + tasks/post-phase-14-plan.md (the spine annotation) + README.md (project status)
+- replays/samples/; (FLIP path only: the mover record)
+- eval/watchability.py; (FLIP path only: the mover baseline's floor block)
+- orchestrator/game.py; (FLIP path only: `build_default_agent_factory` selects the productized champion — the default-selector graduation this record adopts)
+- scripts/run_tournament.py; (FLIP path only: the default path follows the flipped factory)
+- tests/scripts/test_champion_flip_ruling.py; (FLIP: the default-provably-flipped re-pins; NO-FLIP: re-run green unchanged)
+- tasks/phase-18.md; (STATUS banner) + tasks/post-phase-14-plan.md (the spine annotation) + README.md (project status)
 - tests/ (byte-coupled re-pins on the FLIP path; ruling pins re-run either way)
 
 **Files NOT in scope:**
@@ -37,6 +41,7 @@ demonstrated complete, and the Q5 provenance arms stated honestly.
 
 **Definition of done:**
 - [ ] The ruled path is executed exactly (record + gates + canaries pre-registered in §0 before the first seed, or the NO-record battery at HEAD), all four committed sets re-verified (validity 10/10, bare byte-identity), and the close audit quotes every number from committed artifacts via the committed CLIs.
+- [ ] On the FLIP path the default-selector surfaces provably flip (every default-SELECTOR surface builds the productized champion; the absent-stamp fallback and opt-in surfaces stay coherent — the 17.16 pin suite inverted), and the record's bytes carry the champion stamp; on NO-FLIP the default provably does not move (pins re-run green).
 - [ ] The banner, README, and roadmap record the close; the phase computes complete with the merged-title index; every deferred item is a named routed contract, never a silent gap.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

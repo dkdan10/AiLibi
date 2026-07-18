@@ -31,14 +31,15 @@ sessions, checkpoint-push per generation.
 **Files in scope:**
 - training/reports/report-crew-campaign.md (new) + training/reports/results-crew-campaign.jsonl (new)
 - training/artifacts/coevo/ (crew-side frozen artifacts, via the driver; disjoint gen dirs from 18.24's — the store layout separates sides)
-- tests/training/test_coevo_driver.py (crew-campaign row pins ONLY — additive to 18.24's region)
+- tests/training/test_coevo_driver.py; (crew-campaign row pins ONLY — additive to 18.24's region)
 
 **Files NOT in scope:**
 - training/coevo/*.py + training/crew/*.py (runs, not redesigns)
-- agents/tactical/learned/ (adoption is 18.27's evidence question)
+- agents/tactical/learned/; (adoption is 18.27's evidence question)
 
 **Definition of done:**
 - [ ] The campaign report carries the full row/benchmark/meter discipline, the counter-adaptation reading (does trained crew close the frozen champion's win edge, and through which instrument channels), and the real-path re-rank tables with stamp proofs.
+- [ ] Every candidate emergence behavior this campaign surfaces carries its 18.4-named ablation run and provenance in the report (the 18.24 discipline, crew side).
 - [ ] The gate-validity discipline holds throughout (no starvation-family candidate survives selection; validity-gate columns quoted per entrant), and crew finalists (if any clear the bars) are named for 18.26.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

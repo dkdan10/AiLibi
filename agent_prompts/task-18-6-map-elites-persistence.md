@@ -32,11 +32,11 @@ configuration is additive and selected explicitly.
 - training/artifacts/impostor/map-elites/ (the persisted-cell layout, regenerated deterministically)
 
 **Files NOT in scope:**
-- training/bakeoff/harness.py (its artifact writer is imported, never edited)
-- eval/watchability.py (descriptors are computed from rollout facts, never from the referee)
+- training/bakeoff/harness.py; (its artifact writer is imported, never edited)
+- eval/watchability.py; (descriptors are computed from rollout facts, never from the referee)
 
 **Definition of done:**
-- [ ] A full-budget run persists every filled cell's genome with sha sidecars and reloads them bit-exactly; the default-configuration run's champion, jsonl row, and existing artifact tree are byte-identical to the committed state (pinned).
+- [ ] A full-budget run persists every filled cell's genome with sha sidecars and reloads them bit-exactly; the default-configuration run's champion, jsonl row, and existing artifact tree are byte-identical to the committed state (pinned); the persisted-cell index carries the substrate sha the cells were scored against (the 18.24 stale-seed refusal reads it — a Wave-1 substrate adoption makes these cells re-run-before-use, a cheap deterministic re-run).
 - [ ] The referee-tension descriptor configuration is additive, documented, and its axes are computed from `DecisionTrace`/rollout facts only — grep-provably no `eval.watchability` import in the entrant module (the standing AST firewall extends to it).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

@@ -12,7 +12,7 @@ Implement Task 18.12 — The adopting record: baseline 6 (operator ~6–7h, $0),
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-baseline-6-record`
-**Depends on:** 18.1, 18.2, 18.3, 18.11
+**Depends on:** 18.1, 18.2, 18.3, 18.4, 18.11
 **Section refs:** audits/audit-phase-16-close.md (the baseline-5 adopting-record runbook this reprises); eval/watchability.py:755-762 (the baseline-5 floor block the new block sits beside); audits/audit-phase-17-close.md §3 (the corpus canary anchors the pre-registration reads); the 18.11 ruling (which arms flip)
 **Complexity:** Integration
 
@@ -26,16 +26,17 @@ roll-call round adds ~36% meeting calls — plan ~6–7 h. Every byte-coupled co
 this record moves is re-pinned in the same PR.
 
 **Files in scope:**
-- meetings/manager.py (the ruled arms' graduation flips ONLY — mechanism bodies froze at Wave 1)
-- meetings/transcript.py (same)
-- agents/strategic/prompts/ (same)
+- meetings/manager.py; (the ruled arms' graduation flips ONLY — mechanism bodies froze at Wave 1)
+- meetings/transcript.py; (same)
+- agents/strategic/prompts/; (same)
+- orchestrator/game.py; (the `prompt_versions_for_set` registry graduation flip ONLY — if the impostor-answer arm ships, the variant versions become the default-served entries)
 - agents/memory/beliefs.py (the absence graduation component if ruled)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
-- eval/watchability.py (the baseline-6 floor block)
+- eval/watchability.py; (the baseline-6 floor block)
 - audits/audit-phase-18-baseline-6.md (new: the record audit)
-- tests/eval/ (the byte-coupled committed-bytes re-pins this record moves, incl. the 18.1/18.2/18.3 instrument pins)
-- tests/agents/ (the absence counterfactual + prompt-registry re-pins)
-- tests/meetings/ (the graduation-flip re-pins)
+- tests/eval/; (the byte-coupled committed-bytes re-pins this record moves, incl. the 18.1/18.2/18.3 instrument pins)
+- tests/agents/; (the absence counterfactual + prompt-registry re-pins)
+- tests/meetings/; (the graduation-flip re-pins)
 
 **Files NOT in scope:**
 - replays/ml_corpus/ (18.13's record)

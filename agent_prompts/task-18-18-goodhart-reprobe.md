@@ -27,7 +27,7 @@ protocol, never a silent caveat.
 **Files in scope:**
 - training/bakeoff/goodhart.py (the conviction-path probe arms)
 - training/reports/report-goodhart-probe.md (the re-probe reading)
-- tests/training/test_goodhart_probe.py (re-pins + the new arms' fixtures)
+- tests/training/test_goodhart_probe.py; (re-pins + the new arms' fixtures)
 
 **Files NOT in scope:**
 - training/conviction/ + training/bakeoff/harness.py (probed, never edited)

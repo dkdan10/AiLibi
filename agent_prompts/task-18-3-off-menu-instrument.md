@@ -31,7 +31,7 @@ the FSM menu" — a Tier-B pre-registration input.
 
 **Files NOT in scope:**
 - training/bakeoff/utility_es.py + agents/tactical/learned/forward.py (the oracle is imported, never forked)
-- training/bakeoff/harness.py (anchor-CE is a different quantity — rollout-time, distributional; do not conflate)
+- training/bakeoff/harness.py; (anchor-CE is a different quantity — rollout-time, distributional; do not conflate)
 
 **Definition of done:**
 - [ ] On committed FSM-generated corpus bytes the instrument reads all-on-menu (rate 0) with the reconstruction state-hash-verified; a synthetic recording carrying one off-menu intent reads exactly 1/N with the decision identified.

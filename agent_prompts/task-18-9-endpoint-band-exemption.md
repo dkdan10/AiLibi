@@ -33,11 +33,11 @@ placements would have minted physical flags, by subject role — the honest pric
 change in both directions.
 
 **Files in scope:**
-- meetings/transcript.py (both mechanisms + resolvers)
+- meetings/transcript.py; (both mechanisms + resolvers)
 - tests/meetings/test_contradictions.py (OFF-path byte-identity; ON-path STRONG-mint and vent-flag fixtures; the committed-bytes counterfactual pins by role)
 
 **Files NOT in scope:**
-- meetings/manager.py (18.8's region)
+- meetings/manager.py; (18.8's region)
 - eval/ (instruments read recorded flags; the counterfactuals live in the detector's own test pins)
 
 **Definition of done:**

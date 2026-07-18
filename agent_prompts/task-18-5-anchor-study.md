@@ -22,9 +22,16 @@ champion through the standing fake-path protocol, and report the fitness/anchor-
 descriptor-footprint Pareto — the training-time dial that piKL says controls legibility.
 (2) **Filtered-BC anchor refinement**: fit an alternative anchor policy over the FSM option
 features from the corpus's crew-winning/high-flag games (numpy weighted logistic — the
-corpus as a prior source, never a training environment), and run one ES leg anchored to it.
-Report-only: no champion ships from this task; the winners are candidate entrants for the
-18.24 campaign. Deterministic, $0, CPU.
+corpus as a prior source, never a training environment), and evaluate it OFFLINE
+(per-decision agreement with the FSM over the corpus decision stream; where it diverges and
+toward what). The ES-leg-under-the-refined-anchor is deliberately NOT run here: the
+harness's anchor-CE is computed against the FSM's own choice, and swapping the anchor needs
+the additive anchor-policy seam 18.16 adds — the refined-anchor ES leg is a named campaign
+entrant configuration at 18.24, which holds both the artifact (this task) and the seam
+(18.16). Report-only: no champion ships from this task. Deterministic, $0, CPU. Substrate
+provenance: every artifact this study freezes carries the corpus/floor substrate sha it was
+fitted/selected against — the 18.24 campaign refuses stale-substrate seeds without the
+cheap deterministic re-fit/re-run at the adopted substrate.
 
 **Files in scope:**
 - training/anchor_study.py (new: the sweep driver + the filtered-BC fit)
@@ -37,7 +44,7 @@ Report-only: no champion ships from this task; the winners are candidate entrant
 
 **Definition of done:**
 - [ ] The sweep reproduces the λ=1.0 committed champion byte-identically (the determinism cross-check), and every sweep row carries fitness, anchor-CE, win rate, take-rate, and descriptor footprint on the standing 30-seed protocol.
-- [ ] The filtered-BC anchor's fit is deterministic (documented platform caveat per the surrogate precedent), its game filter is stated (which games, why), and its ES leg reports the same row shape; the report names which candidates (if any) the 18.24 campaign should seed with.
+- [ ] The filtered-BC anchor's fit is deterministic (documented platform caveat per the surrogate precedent), its game filter is stated (which games, why), and its offline FSM-agreement/divergence evaluation is reported; the report names which candidates (if any) the 18.24 campaign should seed with, and every frozen artifact carries its substrate sha.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

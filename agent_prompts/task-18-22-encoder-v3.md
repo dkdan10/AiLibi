@@ -27,11 +27,14 @@ v3.
 
 **Files in scope:**
 - agents/tactical/features.py (the additive v3 encoder + golden layout)
+- agents/memory/store.py (the meeting-history memory channel the v3 encoder reads — populated at the existing deterministic meeting-conclusion fold; today `absorb_meeting_evidence` records no per-meeting outcome history the encoder can consume)
+- agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
-- tests/training/test_bakeoff_harness.py (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
+- tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
+- tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
 
 **Files NOT in scope:**
-- agents/tactical/learned/ (the shipping champion is v1-featured; untouched)
+- agents/tactical/learned/; (the shipping champion is v1-featured; untouched)
 - training/bakeoff/utility_es.py (the menu family does not move)
 
 **Definition of done:**

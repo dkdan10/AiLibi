@@ -37,7 +37,7 @@ baseline-5 corpus and the contract's numbers re-read there.
 
 **Files NOT in scope:**
 - training/surrogate/ (independent artifact, untouched — the designer ruling)
-- training/bakeoff/harness.py (18.16's integration)
+- training/bakeoff/harness.py; (18.16's integration)
 
 **Definition of done:**
 - [ ] The dataset walk re-validates against production folds before any fit (the 17.10 discipline: 0 raw mismatches, divergences measured and recorded); the fit is deterministic with the platform caveat documented; the artifact round-trips byte-stably.

@@ -33,7 +33,7 @@ committed-bytes value pinned (corpus + samples denominators).
 
 **Files NOT in scope:**
 - eval/funnel.py + eval/alibi_fabrication.py + eval/meeting_quality.py (consumed, never edited)
-- eval/watchability.py (no floor changes — these are diagnostics, not gates)
+- eval/watchability.py; (no floor changes — these are diagnostics, not gates)
 
 **Definition of done:**
 - [ ] On the committed corpus bytes the module reports the census cells (impostor→crew accusations, teammate accusations 0, false vouches, frame conversions) with numerators/denominators pinned; the grounded-vs-fabricated vouch split runs through the production grounding chokepoint, never a re-derivation.

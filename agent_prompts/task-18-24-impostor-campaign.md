@@ -23,7 +23,13 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Report: campaign rows, the cycling-detector
+selects on has been re-probed (18.18). Scenario legs (18.23) are deliberately NOT a
+prerequisite: the campaign starts without them, and if 18.23 merges mid-campaign a later
+swap MAY adopt scenario legs, recorded per-generation in the rows — the close (18.28)
+still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
+candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
+campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
+deterministic), never consumed stale. Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;
@@ -32,15 +38,16 @@ real-path legs total ~40–50 h spread across sessions — checkpoint-push per g
 **Files in scope:**
 - training/reports/report-impostor-campaign.md (new) + training/reports/results-impostor-campaign.jsonl (new)
 - training/artifacts/coevo/ (the campaign's frozen artifacts, via the driver)
-- tests/training/test_coevo_driver.py (campaign-row pins from the committed rows ONLY)
+- tests/training/test_coevo_driver.py; (campaign-row pins from the committed rows ONLY)
 
 **Files NOT in scope:**
 - training/coevo/*.py + training/bakeoff/ (the machinery froze at Wave 3 — a campaign is a run, not a redesign)
-- agents/tactical/learned/ (no champion swap here — 18.27's evidence decides)
+- agents/tactical/learned/; (no champion swap here — 18.27's evidence decides)
 
 **Definition of done:**
 - [ ] The campaign report carries every generation's row (fitness, anchor benchmarks both directions, opponent slates, exploiter outcomes, meter consumption), the cycling-detector verdict stated against the pre-registered signature, and the real-path re-rank tables with stamp proofs and floor sensitivity per the 17.14 discipline.
 - [ ] The emergence instruments are swept over the campaign's real-path recordings with deltas quoted against the 18.4 baseline cells (claims deferred to 18.27 — this task reports, never rules), and the finalists for 18.26 are named with their artifacts frozen.
+- [ ] For every candidate emergence behavior the report surfaces (a delta the 18.27 reading could rule on), the 18.4-named counterfactual ablation is RUN (disable the enabling lever/term/feature; fake-path re-runs suffice where the behavior is tactical) and its provenance recorded in the report — the 18.27 four-part discipline consumes ablation evidence from here, and an unablated candidate reads NOT-DEMONSTRATED by construction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

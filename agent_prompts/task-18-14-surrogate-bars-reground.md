@@ -28,16 +28,16 @@ reads.
 **Files in scope:**
 - training/artifacts/surrogate/ (weights + sidecar + max-uses, re-fit)
 - training/reports/report-ballot-surrogate.md (the baseline-6 reading)
-- training/bakeoff/harness.py (the two constant blocks ONLY)
+- training/bakeoff/harness.py; (the two constant blocks ONLY)
 - tests/training/test_surrogate_runner.py
 - tests/training/test_surrogate_fidelity.py
 - tests/training/test_surrogate_dataset.py
-- tests/training/test_bakeoff_harness.py (the two constant blocks' pins ONLY)
-- tests/training/test_goodhart_probe.py (the re-measured fake-path baseline pin ONLY)
+- tests/training/test_bakeoff_harness.py; (the two constant blocks' pins ONLY)
+- tests/training/test_goodhart_probe.py; (the re-measured fake-path baseline pin ONLY)
 
 **Files NOT in scope:**
 - training/surrogate/*.py (the machinery re-runs; it does not change)
-- eval/watchability.py (floors pinned at 18.12)
+- eval/watchability.py; (floors pinned at 18.12)
 
 **Definition of done:**
 - [ ] Walk re-validation (fold fidelity 0 mismatches; J1 divergence re-measured) recorded BEFORE the fit; the re-fit artifact + re-derived cap committed together with the re-stated verdict on the unchanged bar; coerced-SKIP census quoted.

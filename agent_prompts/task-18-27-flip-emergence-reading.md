@@ -18,10 +18,13 @@ The authoritative task contract is copied below from tasks/phase-18.md. Follow i
 
 The phase's owner reading, two axes in one memo. **Axis 1 — the flip:** the champion
 candidate read against the standing bar (referee PASS at the adopted baseline's floors AND
-win ≥ the same-seed FSM comparator); PASS ⇒ productize (the champion surfaces swap to the
-new artifact, default-selector flip, the 17.16 machinery in its PASS branch) and 18.28
-records the mover baseline; FAIL ⇒ the champion stays opt-in, the finding recorded, 18.28
-closes NO-FLIP. **Axis 2 — emergence:** every pre-registered instrument read against the
+win ≥ the same-seed FSM comparator); PASS ⇒ productize the ARTIFACT surface (the champion
+weights/stamp under `agents/tactical/learned/` swap to the ruled candidate) and pre-author
+the selector flip — the DEFAULT-SELECTOR surfaces (`orchestrator/game.py::
+build_default_agent_factory`, the `scripts/run_tournament.py` default path) flip at
+18.28's adopting record, not here (adoption-at-record: a default graduates at the baseline
+that adopts it); FAIL ⇒ the champion stays opt-in, the finding recorded, 18.28 closes
+NO-FLIP. **Axis 2 — emergence:** every pre-registered instrument read against the
 18.4 memo's four-part discipline (significance, split-reproducibility, ablation,
 selected-for), each claim ruled EMERGENT / NOT-DEMONSTRATED with the evidence quoted. A
 crew-adoption question, if the crew evidence supports one, is put to the owner here as its
@@ -29,8 +32,9 @@ own slot — never folded silently into either axis.
 
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
-- agents/tactical/learned/ (PASS branch only: the productization swap) + tests/scripts/test_champion_flip_ruling.py (the ruling pins, either branch)
-- tasks/phase-18.md (the ruling's banner note)
+- agents/tactical/learned/; (PASS branch only: the artifact-surface productization swap — the default-selector files flip at 18.28's record)
+- tests/scripts/test_champion_flip_ruling.py; (the ruling pins, either branch)
+- tasks/phase-18.md; (the ruling's banner note)
 
 **Files NOT in scope:**
 - eval/ + training/ (evidence is read, never regenerated here)

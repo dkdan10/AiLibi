@@ -16,24 +16,34 @@ The authoritative task contract is copied below from tasks/phase-18.md. Follow i
 **Section refs:** training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
 **Complexity:** Medium
 
-Wire the conviction model into the bake-off under the GO verdict: an additive
-`conviction_weight × predicted-supply` term in the inner fitness (side-specific: the
-impostor term prices surviving a convicting economy, the crew term prices supplying one),
-and a pre-screen hook the campaign driver calls before spending real-path evals. Under
-NO-GO the term is structurally absent (not zero-weighted) and the pre-screen is
-advisory-labeled. The gate/reward boundary comment extends to name the new term's
-provenance; use-counting flows through the model's own sha-keyed counter.
+Wire the conviction model into BOTH sides' fitness under the GO verdict: an additive
+`conviction_weight × predicted-supply` term in the impostor inner fitness
+(`training/bakeoff/harness.py::inner_episode_fitness`) AND in the crew fitness
+(`training/crew/scorer.py::crew_inner_episode_fitness` — a separate function that does NOT
+route through the harness; the crew campaign trains without the gradient unless this seam
+is wired here), plus a pre-screen hook the campaign driver calls before spending real-path
+evals. Under NO-GO the term is structurally absent from both sides (not zero-weighted) and
+the pre-screen is advisory-labeled. This task also adds the **additive anchor-policy seam**:
+`DecisionTrace`/`inner_episode_fitness` accept an optional anchor policy (default: the
+scripted FSM, byte-identical behavior when unset) so a campaign entrant can anchor to the
+18.5 filtered-BC artifact — the seam's second consumer is 18.24's refined-anchor entrant
+configuration. The gate/reward boundary comment extends to name the new term's provenance;
+use-counting flows through the model's own sha-keyed counter.
 
 **Files in scope:**
-- training/bakeoff/harness.py (the term + the pre-screen seam + the boundary comment)
-- tests/training/test_bakeoff_harness.py (term-provenance fixtures; NO-GO structural absence; counter threading; the AST firewall extended to training/conviction)
+- training/bakeoff/harness.py; (the impostor term + the pre-screen seam + the anchor-policy seam + the boundary comment)
+- training/crew/scorer.py (the crew-side conviction term — the fitness composition only)
+- tests/training/test_bakeoff_harness.py; (term-provenance fixtures; NO-GO structural absence; counter threading; anchor-policy default byte-identity; the AST firewall extended to training/conviction)
+- tests/training/test_crew_scorer.py (the crew-side term fixtures)
 
 **Files NOT in scope:**
 - training/conviction/ (consumed via its public seam)
-- training/rewards.py (the dense terms do not move — this is bake-off-level fitness composition)
+- training/rewards.py (the dense terms do not move — this is fitness composition on both sides)
+- training/crew/options.py (the menu does not move)
 
 **Definition of done:**
-- [ ] With a GO artifact the inner fitness carries the term for both sides with its weight named in the row metadata; with NO-GO the term is absent and rows say so; both fixture-pinned.
+- [ ] With a GO artifact both sides' fitness carries the term (impostor via the harness, crew via `crew_inner_episode_fitness`) with its weight named in the row metadata; with NO-GO the term is absent from both and rows say so; both fixture-pinned.
+- [ ] The anchor-policy seam defaults to the scripted FSM with provably byte-identical fitness when unset, and an alternative anchor policy threads through trace + fitness, fixture-pinned.
 - [ ] The pre-screen returns a machine-readable predicted-floors verdict consumed by tests, metered against the conviction counter, and documented as advisory-only under NO-GO.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

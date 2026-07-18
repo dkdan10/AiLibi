@@ -30,7 +30,7 @@ machine-readable campaign rows.
 
 **Files in scope:**
 - training/coevo/driver.py (new)
-- tests/training/test_coevo_driver.py (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)
+- tests/training/test_coevo_driver.py; (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)
 
 **Files NOT in scope:**
 - training/coevo/hall_of_fame.py + factory.py + rollout.py (consumed)

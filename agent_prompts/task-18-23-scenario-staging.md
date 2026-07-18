@@ -28,7 +28,7 @@ campaign driver may mix scenario legs into a side's evolution; watchability quan
 never appear in scenario fitness.
 
 **Files in scope:**
-- orchestrator/game.py (the additive `initial_state` seam)
+- orchestrator/game.py; (the additive `initial_state` seam)
 - training/env.py (the env-side plumbing + no-replay path integration)
 - training/scenarios.py (new: builders + per-scenario fitness)
 - tests/training/test_scenarios.py + tests/training/test_env.py (the seam's determinism + hash-coherence fixtures)

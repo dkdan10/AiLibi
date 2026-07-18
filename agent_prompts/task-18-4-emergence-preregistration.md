@@ -28,14 +28,19 @@ seed-splits; (c) a named counterfactual ablation (remove the enabling lever/feat
 the behavior recede; (d) the behavior is selected-for — present in the champion's
 recordings, not only the archive. Watchability improvement is never itself an emergence
 claim. The owner ratifies bars and instrument list by merge; amendments are recorded in the
-memo, and 18.27 reads against this memo verbatim.
+memo, and 18.27 reads against this memo verbatim. One standing rule the memo itself
+states: the DEFINITIONS, statistical rules, and bars are what the owner ratifies; the
+quoted baseline CELLS re-anchor mechanically at any adopting record (18.12/18.13 re-quote
+them on the new bytes with provenance) without re-ratification — pre-registration binds
+the rules before measurement, and the substrate the rules run on is whatever the phase
+adopts BEFORE the campaigns record.
 
 **Files in scope:**
 - audits/audit-phase-18-emergence-preregistration.md (new: the memo + the ratified bars)
 
 **Files NOT in scope:**
 - eval/ (no instrument changes at pre-registration; defects found here route back as contracts)
-- tasks/phase-18.md (no surgery at this gate)
+- tasks/phase-18.md; (no surgery at this gate)
 
 **Definition of done:**
 - [ ] Every pre-registered instrument's baseline cell is quoted from a committed test pin or committed report with its source named; no hand-computed figures.

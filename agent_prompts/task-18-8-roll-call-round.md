@@ -25,12 +25,12 @@ turns/meeting at today's economy (496 → 1057 turn calls over the samples denom
 ~+36% meeting LLM calls — the number the gate and the 18.13 duration plan both quote.
 
 **Files in scope:**
-- meetings/manager.py (the round + the resolver)
+- meetings/manager.py; (the round + the resolver)
 - tests/meetings/test_manager.py (OFF-path byte-identity; ON-path allocation fixtures: who is asked, order determinism, living-only, no double-turns)
 
 **Files NOT in scope:**
-- meetings/transcript.py (18.9's region)
-- agents/strategic/prompts/ (18.10's region — the round uses the existing role-blind whereabouts ask surface)
+- meetings/transcript.py; (18.9's region)
+- agents/strategic/prompts/; (18.10's region — the round uses the existing role-blind whereabouts ask surface)
 
 **Definition of done:**
 - [ ] With the flag OFF (default), committed-bytes reconstruction and all existing meeting fixtures are byte-identical (pinned); with it ON, every living non-speaker receives exactly one roll-call turn in deterministic order after the chain and before ballots, fixture-pinned.

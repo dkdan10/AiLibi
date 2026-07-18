@@ -93,7 +93,7 @@ Wave 0 (roots, layer-neutral, dispatch in parallel):
 Wave 1 (the meeting-layer package — before anything trains):
   18.8 (roll-call round)   18.9 (endpoint-band exemption)   18.10 (impostor-answer variant)
   (18.8, 18.9, 18.10) -> 18.11 THE MEETING-LAYER GATE [OPERATOR ~8-9h + OWNER]
-  (18.1, 18.2, 18.3, 18.11) -> 18.12 adopting record: baseline 6 [OPERATOR ~6-7h]
+  (18.1, 18.2, 18.3, 18.4, 18.11) -> 18.12 adopting record: baseline 6 [OPERATOR ~6-7h]
   18.12 -> 18.13 corpus re-record [OPERATOR ~18-20h]
   18.13 -> 18.14 surrogate re-ground + selection-bar re-pins
 
@@ -145,7 +145,9 @@ prompts/` 18.10 then 18.12 (same); `agents/memory/beliefs.py` 18.12 only;
 18.16 (term/pre-screen), serialized by the dep chain; `training/bakeoff/map_elites.py` 18.6;
 `agents/tactical/learned/` 18.7 then 18.27 (ordered via the dep chain);
 `scripts/run_tournament.py` 18.7 then 18.19 (dep edge); `orchestrator/replay.py` 18.19;
-`orchestrator/game.py` + `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
+`orchestrator/game.py` is 18.10 (prompt-version registry) then 18.12 (registry graduation)
+then 18.23 (the `initial_state` seam) then 18.28 (FLIP-path default selector), all
+dep-ordered; `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
 `training/coevo/` is 18.19/18.20/18.21 in dep order with per-task module files;
 `tasks/phase-18.md` is 18.11 (surgery) then 18.27 (ruling banner) then 18.28 (close banner),
 all dep-ordered; `agent_prompts/` surgery 18.11.
@@ -184,7 +186,7 @@ committed-bytes value pinned (corpus + samples denominators).
 
 **Files NOT in scope:**
 - eval/funnel.py + eval/alibi_fabrication.py + eval/meeting_quality.py (consumed, never edited)
-- eval/watchability.py (no floor changes — these are diagnostics, not gates)
+- eval/watchability.py; (no floor changes — these are diagnostics, not gates)
 
 **Definition of done:**
 - [ ] On the committed corpus bytes the module reports the census cells (impostor→crew accusations, teammate accusations 0, false vouches, frame conversions) with numerators/denominators pinned; the grounded-vs-fabricated vouch split runs through the production grounding chokepoint, never a re-derivation.
@@ -231,7 +233,7 @@ committed bytes; both pinned on corpus + samples.
 - tests/eval/test_kill_craft.py
 
 **Files NOT in scope:**
-- eval/watchability.py (its walk is consumed via import or a faithful local walk — the referee itself does not move)
+- eval/watchability.py; (its walk is consumed via import or a faithful local walk — the referee itself does not move)
 - engine/ (read-only reconstruction)
 
 **Definition of done:**
@@ -280,7 +282,7 @@ the FSM menu" — a Tier-B pre-registration input.
 
 **Files NOT in scope:**
 - training/bakeoff/utility_es.py + agents/tactical/learned/forward.py (the oracle is imported, never forked)
-- training/bakeoff/harness.py (anchor-CE is a different quantity — rollout-time, distributional; do not conflate)
+- training/bakeoff/harness.py; (anchor-CE is a different quantity — rollout-time, distributional; do not conflate)
 
 **Definition of done:**
 - [ ] On committed FSM-generated corpus bytes the instrument reads all-on-menu (rate 0) with the reconstruction state-hash-verified; a synthetic recording carrying one off-menu intent reads exactly 1/N with the decision identified.
@@ -325,14 +327,19 @@ seed-splits; (c) a named counterfactual ablation (remove the enabling lever/feat
 the behavior recede; (d) the behavior is selected-for — present in the champion's
 recordings, not only the archive. Watchability improvement is never itself an emergence
 claim. The owner ratifies bars and instrument list by merge; amendments are recorded in the
-memo, and 18.27 reads against this memo verbatim.
+memo, and 18.27 reads against this memo verbatim. One standing rule the memo itself
+states: the DEFINITIONS, statistical rules, and bars are what the owner ratifies; the
+quoted baseline CELLS re-anchor mechanically at any adopting record (18.12/18.13 re-quote
+them on the new bytes with provenance) without re-ratification — pre-registration binds
+the rules before measurement, and the substrate the rules run on is whatever the phase
+adopts BEFORE the campaigns record.
 
 **Files in scope:**
 - audits/audit-phase-18-emergence-preregistration.md (new: the memo + the ratified bars)
 
 **Files NOT in scope:**
 - eval/ (no instrument changes at pre-registration; defects found here route back as contracts)
-- tasks/phase-18.md (no surgery at this gate)
+- tasks/phase-18.md; (no surgery at this gate)
 
 **Definition of done:**
 - [ ] Every pre-registered instrument's baseline cell is quoted from a committed test pin or committed report with its source named; no hand-computed figures.
@@ -365,9 +372,16 @@ champion through the standing fake-path protocol, and report the fitness/anchor-
 descriptor-footprint Pareto — the training-time dial that piKL says controls legibility.
 (2) **Filtered-BC anchor refinement**: fit an alternative anchor policy over the FSM option
 features from the corpus's crew-winning/high-flag games (numpy weighted logistic — the
-corpus as a prior source, never a training environment), and run one ES leg anchored to it.
-Report-only: no champion ships from this task; the winners are candidate entrants for the
-18.24 campaign. Deterministic, $0, CPU.
+corpus as a prior source, never a training environment), and evaluate it OFFLINE
+(per-decision agreement with the FSM over the corpus decision stream; where it diverges and
+toward what). The ES-leg-under-the-refined-anchor is deliberately NOT run here: the
+harness's anchor-CE is computed against the FSM's own choice, and swapping the anchor needs
+the additive anchor-policy seam 18.16 adds — the refined-anchor ES leg is a named campaign
+entrant configuration at 18.24, which holds both the artifact (this task) and the seam
+(18.16). Report-only: no champion ships from this task. Deterministic, $0, CPU. Substrate
+provenance: every artifact this study freezes carries the corpus/floor substrate sha it was
+fitted/selected against — the 18.24 campaign refuses stale-substrate seeds without the
+cheap deterministic re-fit/re-run at the adopted substrate.
 
 **Files in scope:**
 - training/anchor_study.py (new: the sweep driver + the filtered-BC fit)
@@ -380,7 +394,7 @@ Report-only: no champion ships from this task; the winners are candidate entrant
 
 **Definition of done:**
 - [ ] The sweep reproduces the λ=1.0 committed champion byte-identically (the determinism cross-check), and every sweep row carries fitness, anchor-CE, win rate, take-rate, and descriptor footprint on the standing 30-seed protocol.
-- [ ] The filtered-BC anchor's fit is deterministic (documented platform caveat per the surrogate precedent), its game filter is stated (which games, why), and its ES leg reports the same row shape; the report names which candidates (if any) the 18.24 campaign should seed with.
+- [ ] The filtered-BC anchor's fit is deterministic (documented platform caveat per the surrogate precedent), its game filter is stated (which games, why), and its offline FSM-agreement/divergence evaluation is reported; the report names which candidates (if any) the 18.24 campaign should seed with, and every frozen artifact carries its substrate sha.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -423,11 +437,11 @@ configuration is additive and selected explicitly.
 - training/artifacts/impostor/map-elites/ (the persisted-cell layout, regenerated deterministically)
 
 **Files NOT in scope:**
-- training/bakeoff/harness.py (its artifact writer is imported, never edited)
-- eval/watchability.py (descriptors are computed from rollout facts, never from the referee)
+- training/bakeoff/harness.py; (its artifact writer is imported, never edited)
+- eval/watchability.py; (descriptors are computed from rollout facts, never from the referee)
 
 **Definition of done:**
-- [ ] A full-budget run persists every filled cell's genome with sha sidecars and reloads them bit-exactly; the default-configuration run's champion, jsonl row, and existing artifact tree are byte-identical to the committed state (pinned).
+- [ ] A full-budget run persists every filled cell's genome with sha sidecars and reloads them bit-exactly; the default-configuration run's champion, jsonl row, and existing artifact tree are byte-identical to the committed state (pinned); the persisted-cell index carries the substrate sha the cells were scored against (the 18.24 stale-seed refusal reads it — a Wave-1 substrate adoption makes these cells re-run-before-use, a cheap deterministic re-run).
 - [ ] The referee-tension descriptor configuration is additive, documented, and its axes are computed from `DecisionTrace`/rollout facts only — grep-provably no `eval.watchability` import in the entrant module (the standing AST firewall extends to it).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -466,9 +480,9 @@ emergency-uses bookkeeping via the meeting-concluded hook.
 
 **Files in scope:**
 - agents/tactical/learned/crew_forward.py (new) + agents/tactical/learned/factory.py (the crew factory + stamp) + the committed crew weights artifact under agents/tactical/learned/
-- scripts/run_tournament.py (the `learned-crew` factory arm + stamp wiring)
+- scripts/run_tournament.py; (the `learned-crew` factory arm + stamp wiring)
 - tests/training/test_learned_factory_acceptance.py (the crew twin: Q4 bit-exact gate vs `CrewOptionScorer`, determinism double-run, leak-mode scan)
-- tests/scripts/test_run_tournament_candidate_artifact.py (the crew factory arm's guards)
+- tests/scripts/test_run_tournament_candidate_artifact.py; (the crew factory arm's guards)
 
 **Files NOT in scope:**
 - training/crew/ (the training-side scorer is the reference implementation — mirrored, never moved)
@@ -526,12 +540,12 @@ turns/meeting at today's economy (496 → 1057 turn calls over the samples denom
 ~+36% meeting LLM calls — the number the gate and the 18.13 duration plan both quote.
 
 **Files in scope:**
-- meetings/manager.py (the round + the resolver)
+- meetings/manager.py; (the round + the resolver)
 - tests/meetings/test_manager.py (OFF-path byte-identity; ON-path allocation fixtures: who is asked, order determinism, living-only, no double-turns)
 
 **Files NOT in scope:**
-- meetings/transcript.py (18.9's region)
-- agents/strategic/prompts/ (18.10's region — the round uses the existing role-blind whereabouts ask surface)
+- meetings/transcript.py; (18.9's region)
+- agents/strategic/prompts/; (18.10's region — the round uses the existing role-blind whereabouts ask surface)
 
 **Definition of done:**
 - [ ] With the flag OFF (default), committed-bytes reconstruction and all existing meeting fixtures are byte-identical (pinned); with it ON, every living non-speaker receives exactly one roll-call turn in deterministic order after the chain and before ballots, fixture-pinned.
@@ -579,11 +593,11 @@ placements would have minted physical flags, by subject role — the honest pric
 change in both directions.
 
 **Files in scope:**
-- meetings/transcript.py (both mechanisms + resolvers)
+- meetings/transcript.py; (both mechanisms + resolvers)
 - tests/meetings/test_contradictions.py (OFF-path byte-identity; ON-path STRONG-mint and vent-flag fixtures; the committed-bytes counterfactual pins by role)
 
 **Files NOT in scope:**
-- meetings/manager.py (18.8's region)
+- meetings/manager.py; (18.8's region)
 - eval/ (instruments read recorded flags; the counterfactuals live in the detector's own test pins)
 
 **Definition of done:**
@@ -631,7 +645,8 @@ self-flag rate and win cost when impostors must account for themselves.
 **Files in scope:**
 - agents/strategic/prompts/qwen3_6_27b/ (the variant templates)
 - agents/strategic/prompts/loader.py (the flag-selected variant routing + resolver)
-- tests/agents/ (routing fixtures: default path renders byte-identically; variant path renders the self-placement contract; version stamps distinguish the variant)
+- orchestrator/game.py; (the `prompt_versions_for_set` registry entries for the variant ONLY — recorded `prompt_versions` come from this registry, not the loader, so without this the variant renders different bytes while recordings still stamp the old versions)
+- tests/agents/; (routing fixtures: default path renders byte-identically; variant path renders the self-placement contract; version stamps distinguish the variant in the registry AND the recorded bytes)
 
 **Files NOT in scope:**
 - meetings/ (18.8/18.9's regions)
@@ -684,7 +699,9 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 **Files in scope:**
 - audits/audit-phase-18-meeting-gate.md (new: the memo + the recorded ruling)
-- tasks/phase-18.md (the surgery + the banner note)
+- orchestrator/replay.py; (the substrate-flag snapshot registry ONLY: the four new lever flags — roll-call round, endpoint exemption, vent-flag variant, impostor-answer — wired in BEFORE any probe seed records, so probe/adoption recordings self-describe the arms under test; today the snapshot knows only `absence_prior`)
+- tests/orchestrator/ (the snapshot-registry fixtures)
+- tasks/phase-18.md; (the surgery + the banner note)
 - agent_prompts/ (regenerated)
 
 **Files NOT in scope:**
@@ -692,7 +709,8 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 - replays/samples/ + replays/ml_corpus/ (no committed record at the gate — probe sets are working artifacts)
 
 **Definition of done:**
-- [ ] Both probe sets recorded 25/25 on the real Featherless path ($0, stamp-proven substrate flags for the arms under test), validity-gated, with every bar cell quoted beside its pre-registered threshold and the ruling recorded verbatim (FULL / CREW-ONLY / NONE, plus the vent-widening and absence-graduation components).
+- [ ] The four new lever flags are registered in the replay substrate-flag snapshot BEFORE the first probe seed records (fixture-pinned; committed sets re-verify byte-identical — the registry addition must not move existing bytes).
+- [ ] Both probe sets recorded 25/25 on the real Featherless path ($0, the arms under test stamp-proven via the substrate-flag snapshot in the recorded bytes), validity-gated, with every bar cell quoted beside its pre-registered threshold and the ruling recorded verbatim (FULL / CREW-ONLY / NONE, plus the vent-widening and absence-graduation components).
 - [ ] The surgery is complete in the ruled direction (the Baseline-numbering block's enumeration): validator green, prompts regenerated, `scripts/compute_next_task.py --phase 18` consistent with the surviving DAG, no orphan references.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -721,7 +739,7 @@ pattern) — never merge a ruling that has not happened.
 
 ### Task 18.12 — The adopting record: baseline 6 (operator ~6–7h, $0)
 **Branch:** `phase-18-baseline-6-record`
-**Depends on:** 18.1, 18.2, 18.3, 18.11
+**Depends on:** 18.1, 18.2, 18.3, 18.4, 18.11
 **Section refs:** audits/audit-phase-16-close.md (the baseline-5 adopting-record runbook this reprises); eval/watchability.py:755-762 (the baseline-5 floor block the new block sits beside); audits/audit-phase-17-close.md §3 (the corpus canary anchors the pre-registration reads); the 18.11 ruling (which arms flip)
 **Complexity:** Integration
 
@@ -735,16 +753,17 @@ roll-call round adds ~36% meeting calls — plan ~6–7 h. Every byte-coupled co
 this record moves is re-pinned in the same PR.
 
 **Files in scope:**
-- meetings/manager.py (the ruled arms' graduation flips ONLY — mechanism bodies froze at Wave 1)
-- meetings/transcript.py (same)
-- agents/strategic/prompts/ (same)
+- meetings/manager.py; (the ruled arms' graduation flips ONLY — mechanism bodies froze at Wave 1)
+- meetings/transcript.py; (same)
+- agents/strategic/prompts/; (same)
+- orchestrator/game.py; (the `prompt_versions_for_set` registry graduation flip ONLY — if the impostor-answer arm ships, the variant versions become the default-served entries)
 - agents/memory/beliefs.py (the absence graduation component if ruled)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
-- eval/watchability.py (the baseline-6 floor block)
+- eval/watchability.py; (the baseline-6 floor block)
 - audits/audit-phase-18-baseline-6.md (new: the record audit)
-- tests/eval/ (the byte-coupled committed-bytes re-pins this record moves, incl. the 18.1/18.2/18.3 instrument pins)
-- tests/agents/ (the absence counterfactual + prompt-registry re-pins)
-- tests/meetings/ (the graduation-flip re-pins)
+- tests/eval/; (the byte-coupled committed-bytes re-pins this record moves, incl. the 18.1/18.2/18.3 instrument pins)
+- tests/agents/; (the absence counterfactual + prompt-registry re-pins)
+- tests/meetings/; (the graduation-flip re-pins)
 
 **Files NOT in scope:**
 - replays/ml_corpus/ (18.13's record)
@@ -797,10 +816,10 @@ the continuity anchor).
 - replays/ml_corpus/9p2i/ + replays/ml_corpus/4p1i/ (the re-recorded bytes + MANIFESTs + splits.json)
 - replays/ml_corpus/README.md (full substrate refresh)
 - scripts/record_ml_corpus.sh (the substrate pin flip + duration note)
-- tests/training/test_bakeoff_harness.py (corpus-derived re-pins ONLY — the constant flips are 18.14's)
-- tests/training/test_surrogate_runner.py (corpus-derived re-pins ONLY — the re-fit is 18.14's)
+- tests/training/test_bakeoff_harness.py; (corpus-derived re-pins ONLY — the constant flips are 18.14's)
+- tests/training/test_surrogate_runner.py; (corpus-derived re-pins ONLY — the re-fit is 18.14's)
 - tests/training/test_crew_options.py (corpus-derived re-pins ONLY)
-- tests/training/test_goodhart_probe.py (corpus-derived re-pins ONLY)
+- tests/training/test_goodhart_probe.py; (corpus-derived re-pins ONLY)
 - tests/scripts/test_record_ml_corpus.py
 
 **Files NOT in scope:**
@@ -850,16 +869,16 @@ reads.
 **Files in scope:**
 - training/artifacts/surrogate/ (weights + sidecar + max-uses, re-fit)
 - training/reports/report-ballot-surrogate.md (the baseline-6 reading)
-- training/bakeoff/harness.py (the two constant blocks ONLY)
+- training/bakeoff/harness.py; (the two constant blocks ONLY)
 - tests/training/test_surrogate_runner.py
 - tests/training/test_surrogate_fidelity.py
 - tests/training/test_surrogate_dataset.py
-- tests/training/test_bakeoff_harness.py (the two constant blocks' pins ONLY)
-- tests/training/test_goodhart_probe.py (the re-measured fake-path baseline pin ONLY)
+- tests/training/test_bakeoff_harness.py; (the two constant blocks' pins ONLY)
+- tests/training/test_goodhart_probe.py; (the re-measured fake-path baseline pin ONLY)
 
 **Files NOT in scope:**
 - training/surrogate/*.py (the machinery re-runs; it does not change)
-- eval/watchability.py (floors pinned at 18.12)
+- eval/watchability.py; (floors pinned at 18.12)
 
 **Definition of done:**
 - [ ] Walk re-validation (fold fidelity 0 mismatches; J1 divergence re-measured) recorded BEFORE the fit; the re-fit artifact + re-derived cap committed together with the re-stated verdict on the unchanged bar; coerced-SKIP census quoted.
@@ -912,7 +931,7 @@ baseline-5 corpus and the contract's numbers re-read there.
 
 **Files NOT in scope:**
 - training/surrogate/ (independent artifact, untouched — the designer ruling)
-- training/bakeoff/harness.py (18.16's integration)
+- training/bakeoff/harness.py; (18.16's integration)
 
 **Definition of done:**
 - [ ] The dataset walk re-validates against production folds before any fit (the 17.10 discipline: 0 raw mismatches, divergences measured and recorded); the fit is deterministic with the platform caveat documented; the artifact round-trips byte-stably.
@@ -953,24 +972,34 @@ Goodhart probe with the conviction term live before any campaign selection leans
 **Section refs:** training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
 **Complexity:** Medium
 
-Wire the conviction model into the bake-off under the GO verdict: an additive
-`conviction_weight × predicted-supply` term in the inner fitness (side-specific: the
-impostor term prices surviving a convicting economy, the crew term prices supplying one),
-and a pre-screen hook the campaign driver calls before spending real-path evals. Under
-NO-GO the term is structurally absent (not zero-weighted) and the pre-screen is
-advisory-labeled. The gate/reward boundary comment extends to name the new term's
-provenance; use-counting flows through the model's own sha-keyed counter.
+Wire the conviction model into BOTH sides' fitness under the GO verdict: an additive
+`conviction_weight × predicted-supply` term in the impostor inner fitness
+(`training/bakeoff/harness.py::inner_episode_fitness`) AND in the crew fitness
+(`training/crew/scorer.py::crew_inner_episode_fitness` — a separate function that does NOT
+route through the harness; the crew campaign trains without the gradient unless this seam
+is wired here), plus a pre-screen hook the campaign driver calls before spending real-path
+evals. Under NO-GO the term is structurally absent from both sides (not zero-weighted) and
+the pre-screen is advisory-labeled. This task also adds the **additive anchor-policy seam**:
+`DecisionTrace`/`inner_episode_fitness` accept an optional anchor policy (default: the
+scripted FSM, byte-identical behavior when unset) so a campaign entrant can anchor to the
+18.5 filtered-BC artifact — the seam's second consumer is 18.24's refined-anchor entrant
+configuration. The gate/reward boundary comment extends to name the new term's provenance;
+use-counting flows through the model's own sha-keyed counter.
 
 **Files in scope:**
-- training/bakeoff/harness.py (the term + the pre-screen seam + the boundary comment)
-- tests/training/test_bakeoff_harness.py (term-provenance fixtures; NO-GO structural absence; counter threading; the AST firewall extended to training/conviction)
+- training/bakeoff/harness.py; (the impostor term + the pre-screen seam + the anchor-policy seam + the boundary comment)
+- training/crew/scorer.py (the crew-side conviction term — the fitness composition only)
+- tests/training/test_bakeoff_harness.py; (term-provenance fixtures; NO-GO structural absence; counter threading; anchor-policy default byte-identity; the AST firewall extended to training/conviction)
+- tests/training/test_crew_scorer.py (the crew-side term fixtures)
 
 **Files NOT in scope:**
 - training/conviction/ (consumed via its public seam)
-- training/rewards.py (the dense terms do not move — this is bake-off-level fitness composition)
+- training/rewards.py (the dense terms do not move — this is fitness composition on both sides)
+- training/crew/options.py (the menu does not move)
 
 **Definition of done:**
-- [ ] With a GO artifact the inner fitness carries the term for both sides with its weight named in the row metadata; with NO-GO the term is absent and rows say so; both fixture-pinned.
+- [ ] With a GO artifact both sides' fitness carries the term (impostor via the harness, crew via `crew_inner_episode_fitness`) with its weight named in the row metadata; with NO-GO the term is absent from both and rows say so; both fixture-pinned.
+- [ ] The anchor-policy seam defaults to the scripted FSM with provably byte-identical fitness when unset, and an alternative anchor policy threads through trace + fitness, fixture-pinned.
 - [ ] The pre-screen returns a machine-readable predicted-floors verdict consumed by tests, metered against the conviction counter, and documented as advisory-only under NO-GO.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1012,7 +1041,7 @@ Recordings are working artifacts outside the tree; the committed truth is the ra
 - tests/training/test_realpath.py (fake-provider protocol tests: ranking rows, stamp read-back, timeout fail-loud, retry budget)
 
 **Files NOT in scope:**
-- scripts/run_tournament.py (the CLI recorder is 17.14's; this is the library loop — no CLI change)
+- scripts/run_tournament.py; (the CLI recorder is 17.14's; this is the library loop — no CLI change)
 - training/bakeoff/es.py + harness.py (consumed, never edited)
 
 **Definition of done:**
@@ -1057,7 +1086,7 @@ protocol, never a silent caveat.
 **Files in scope:**
 - training/bakeoff/goodhart.py (the conviction-path probe arms)
 - training/reports/report-goodhart-probe.md (the re-probe reading)
-- tests/training/test_goodhart_probe.py (re-pins + the new arms' fixtures)
+- tests/training/test_goodhart_probe.py; (re-pins + the new arms' fixtures)
 
 **Files NOT in scope:**
 - training/conviction/ + training/bakeoff/harness.py (probed, never edited)
@@ -1102,13 +1131,13 @@ the single-side flags.
 
 **Files in scope:**
 - training/coevo/__init__.py + training/coevo/factory.py + training/coevo/rollout.py (new)
-- orchestrator/replay.py (the additive crew stamp record + reader)
-- scripts/run_tournament.py (the `--crew-artifact` arm + dual-stamp wiring)
+- orchestrator/replay.py; (the additive crew stamp record + reader)
+- scripts/run_tournament.py; (the `--crew-artifact` arm + dual-stamp wiring)
 - tests/training/test_coevo_rollout.py + tests/scripts/test_run_tournament_candidate_artifact.py (the dual-stamp guards)
 
 **Files NOT in scope:**
-- training/bakeoff/harness.py (its wrappers are imported/mirrored, never rewired — the single-side paths stay byte-identical)
-- agents/tactical/learned/ (18.7 shipped the surface; consumed here)
+- training/bakeoff/harness.py; (its wrappers are imported/mirrored, never rewired — the single-side paths stay byte-identical)
+- agents/tactical/learned/; (18.7 shipped the surface; consumed here)
 
 **Definition of done:**
 - [ ] A rollout with learned policies on BOTH sides runs deterministically on the fake path, yields both sides' fitness from one trace, and a recorded eval carries both stamps read back from bytes with distinct sha-verified identities; every single-side path (existing flags, no factory) is byte-identical to before (pinned).
@@ -1209,7 +1238,7 @@ machine-readable campaign rows.
 
 **Files in scope:**
 - training/coevo/driver.py (new)
-- tests/training/test_coevo_driver.py (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)
+- tests/training/test_coevo_driver.py; (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)
 
 **Files NOT in scope:**
 - training/coevo/hall_of_fame.py + factory.py + rollout.py (consumed)
@@ -1263,11 +1292,14 @@ v3.
 
 **Files in scope:**
 - agents/tactical/features.py (the additive v3 encoder + golden layout)
+- agents/memory/store.py (the meeting-history memory channel the v3 encoder reads — populated at the existing deterministic meeting-conclusion fold; today `absorb_meeting_evidence` records no per-meeting outcome history the encoder can consume)
+- agents/memory/working.py (the channel's typed carrier, if the design places it there)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
-- tests/training/test_bakeoff_harness.py (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
+- tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
+- tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
 
 **Files NOT in scope:**
-- agents/tactical/learned/ (the shipping champion is v1-featured; untouched)
+- agents/tactical/learned/; (the shipping champion is v1-featured; untouched)
 - training/bakeoff/utility_es.py (the menu family does not move)
 
 **Definition of done:**
@@ -1311,7 +1343,7 @@ campaign driver may mix scenario legs into a side's evolution; watchability quan
 never appear in scenario fitness.
 
 **Files in scope:**
-- orchestrator/game.py (the additive `initial_state` seam)
+- orchestrator/game.py; (the additive `initial_state` seam)
 - training/env.py (the env-side plumbing + no-replay path integration)
 - training/scenarios.py (new: builders + per-scenario fitness)
 - tests/training/test_scenarios.py + tests/training/test_env.py (the seam's determinism + hash-coherence fixtures)
@@ -1366,7 +1398,13 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Report: campaign rows, the cycling-detector
+selects on has been re-probed (18.18). Scenario legs (18.23) are deliberately NOT a
+prerequisite: the campaign starts without them, and if 18.23 merges mid-campaign a later
+swap MAY adopt scenario legs, recorded per-generation in the rows — the close (18.28)
+still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
+candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
+campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
+deterministic), never consumed stale. Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;
@@ -1375,15 +1413,16 @@ real-path legs total ~40–50 h spread across sessions — checkpoint-push per g
 **Files in scope:**
 - training/reports/report-impostor-campaign.md (new) + training/reports/results-impostor-campaign.jsonl (new)
 - training/artifacts/coevo/ (the campaign's frozen artifacts, via the driver)
-- tests/training/test_coevo_driver.py (campaign-row pins from the committed rows ONLY)
+- tests/training/test_coevo_driver.py; (campaign-row pins from the committed rows ONLY)
 
 **Files NOT in scope:**
 - training/coevo/*.py + training/bakeoff/ (the machinery froze at Wave 3 — a campaign is a run, not a redesign)
-- agents/tactical/learned/ (no champion swap here — 18.27's evidence decides)
+- agents/tactical/learned/; (no champion swap here — 18.27's evidence decides)
 
 **Definition of done:**
 - [ ] The campaign report carries every generation's row (fitness, anchor benchmarks both directions, opponent slates, exploiter outcomes, meter consumption), the cycling-detector verdict stated against the pre-registered signature, and the real-path re-rank tables with stamp proofs and floor sensitivity per the 17.14 discipline.
 - [ ] The emergence instruments are swept over the campaign's real-path recordings with deltas quoted against the 18.4 baseline cells (claims deferred to 18.27 — this task reports, never rules), and the finalists for 18.26 are named with their artifacts frozen.
+- [ ] For every candidate emergence behavior the report surfaces (a delta the 18.27 reading could rule on), the 18.4-named counterfactual ablation is RUN (disable the enabling lever/term/feature; fake-path re-runs suffice where the behavior is tactical) and its provenance recorded in the report — the 18.27 four-part discipline consumes ablation evidence from here, and an unablated candidate reads NOT-DEMONSTRATED by construction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1429,14 +1468,15 @@ sessions, checkpoint-push per generation.
 **Files in scope:**
 - training/reports/report-crew-campaign.md (new) + training/reports/results-crew-campaign.jsonl (new)
 - training/artifacts/coevo/ (crew-side frozen artifacts, via the driver; disjoint gen dirs from 18.24's — the store layout separates sides)
-- tests/training/test_coevo_driver.py (crew-campaign row pins ONLY — additive to 18.24's region)
+- tests/training/test_coevo_driver.py; (crew-campaign row pins ONLY — additive to 18.24's region)
 
 **Files NOT in scope:**
 - training/coevo/*.py + training/crew/*.py (runs, not redesigns)
-- agents/tactical/learned/ (adoption is 18.27's evidence question)
+- agents/tactical/learned/; (adoption is 18.27's evidence question)
 
 **Definition of done:**
 - [ ] The campaign report carries the full row/benchmark/meter discipline, the counter-adaptation reading (does trained crew close the frozen champion's win edge, and through which instrument channels), and the real-path re-rank tables with stamp proofs.
+- [ ] Every candidate emergence behavior this campaign surfaces carries its 18.4-named ablation run and provenance in the report (the 18.24 discipline, crew side).
 - [ ] The gate-validity discipline holds throughout (no starvation-family candidate survives selection; validity-gate columns quoted per entrant), and crew finalists (if any clear the bars) are named for 18.26.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1519,10 +1559,13 @@ re-recorded here, never quoted from the old report. The contract makes that a Do
 
 The phase's owner reading, two axes in one memo. **Axis 1 — the flip:** the champion
 candidate read against the standing bar (referee PASS at the adopted baseline's floors AND
-win ≥ the same-seed FSM comparator); PASS ⇒ productize (the champion surfaces swap to the
-new artifact, default-selector flip, the 17.16 machinery in its PASS branch) and 18.28
-records the mover baseline; FAIL ⇒ the champion stays opt-in, the finding recorded, 18.28
-closes NO-FLIP. **Axis 2 — emergence:** every pre-registered instrument read against the
+win ≥ the same-seed FSM comparator); PASS ⇒ productize the ARTIFACT surface (the champion
+weights/stamp under `agents/tactical/learned/` swap to the ruled candidate) and pre-author
+the selector flip — the DEFAULT-SELECTOR surfaces (`orchestrator/game.py::
+build_default_agent_factory`, the `scripts/run_tournament.py` default path) flip at
+18.28's adopting record, not here (adoption-at-record: a default graduates at the baseline
+that adopts it); FAIL ⇒ the champion stays opt-in, the finding recorded, 18.28 closes
+NO-FLIP. **Axis 2 — emergence:** every pre-registered instrument read against the
 18.4 memo's four-part discipline (significance, split-reproducibility, ablation,
 selected-for), each claim ruled EMERGENT / NOT-DEMONSTRATED with the evidence quoted. A
 crew-adoption question, if the crew evidence supports one, is put to the owner here as its
@@ -1530,8 +1573,9 @@ own slot — never folded silently into either axis.
 
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
-- agents/tactical/learned/ (PASS branch only: the productization swap) + tests/scripts/test_champion_flip_ruling.py (the ruling pins, either branch)
-- tasks/phase-18.md (the ruling's banner note)
+- agents/tactical/learned/; (PASS branch only: the artifact-surface productization swap — the default-selector files flip at 18.28's record)
+- tests/scripts/test_champion_flip_ruling.py; (the ruling pins, either branch)
+- tasks/phase-18.md; (the ruling's banner note)
 
 **Files NOT in scope:**
 - eval/ + training/ (evidence is read, never regenerated here)
@@ -1580,8 +1624,12 @@ demonstrated complete, and the Q5 provenance arms stated honestly.
 
 **Files in scope:**
 - audits/audit-phase-18-close.md (new)
-- replays/samples/ + eval/watchability.py (FLIP path only: the mover record + its floor block)
-- tasks/phase-18.md (STATUS banner) + tasks/post-phase-14-plan.md (the spine annotation) + README.md (project status)
+- replays/samples/; (FLIP path only: the mover record)
+- eval/watchability.py; (FLIP path only: the mover baseline's floor block)
+- orchestrator/game.py; (FLIP path only: `build_default_agent_factory` selects the productized champion — the default-selector graduation this record adopts)
+- scripts/run_tournament.py; (FLIP path only: the default path follows the flipped factory)
+- tests/scripts/test_champion_flip_ruling.py; (FLIP: the default-provably-flipped re-pins; NO-FLIP: re-run green unchanged)
+- tasks/phase-18.md; (STATUS banner) + tasks/post-phase-14-plan.md (the spine annotation) + README.md (project status)
 - tests/ (byte-coupled re-pins on the FLIP path; ruling pins re-run either way)
 
 **Files NOT in scope:**
@@ -1590,6 +1638,7 @@ demonstrated complete, and the Q5 provenance arms stated honestly.
 
 **Definition of done:**
 - [ ] The ruled path is executed exactly (record + gates + canaries pre-registered in §0 before the first seed, or the NO-record battery at HEAD), all four committed sets re-verified (validity 10/10, bare byte-identity), and the close audit quotes every number from committed artifacts via the committed CLIs.
+- [ ] On the FLIP path the default-selector surfaces provably flip (every default-SELECTOR surface builds the productized champion; the absent-stamp fallback and opt-in surfaces stay coherent — the 17.16 pin suite inverted), and the record's bytes carry the champion stamp; on NO-FLIP the default provably does not move (pins re-run green).
 - [ ] The banner, README, and roadmap record the close; the phase computes complete with the merged-title index; every deferred item is a named routed contract, never a silent gap.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

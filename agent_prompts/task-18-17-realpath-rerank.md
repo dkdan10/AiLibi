@@ -31,7 +31,7 @@ Recordings are working artifacts outside the tree; the committed truth is the ra
 - tests/training/test_realpath.py (fake-provider protocol tests: ranking rows, stamp read-back, timeout fail-loud, retry budget)
 
 **Files NOT in scope:**
-- scripts/run_tournament.py (the CLI recorder is 17.14's; this is the library loop — no CLI change)
+- scripts/run_tournament.py; (the CLI recorder is 17.14's; this is the library loop — no CLI change)
 - training/bakeoff/es.py + harness.py (consumed, never edited)
 
 **Definition of done:**
