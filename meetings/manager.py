@@ -44,6 +44,23 @@ A meeting is one ordered ``transcript.turns`` list followed by a vote:
    decay) stays the orchestrator-owned post-meeting absorb, exactly as
    the 9.8 design wired it.
 
+Roll-call round (Task 18.8, default-OFF)
+========================================
+
+Task 18.8 adds a DEFAULT-OFF roll-call round between the opt-in phase
+(PHASE 3) and voting, behind :func:`roll_call_round_enabled` (the 16.8
+``absence_prior_enabled`` lever pattern -- env-gated, not retired). ON,
+every living player who has not yet spoken takes one terminal
+``opt_in``-surface turn in ascending player-id order, executing the
+turn-taking routing of ``audits/audit-phase-17-absence-gate.md``
+Ruling 3(a). The measured cost is honest and large
+(``audits/audit-phase-18-planning.md`` §3.4): +3.13 turn calls/meeting
+at today's economy (496 -> 1057 turn calls over the 179-meeting
+canonical samples denominator, 2.13x), ~+36% meeting LLM calls -- the
+number the 18.11 gate and the 18.13 duration plan both quote. OFF (the
+default) the round is skipped entirely and the allocation stays
+byte-identical to the committed substrate.
+
 Single per-turn chokepoint
 ===========================
 
@@ -78,6 +95,7 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -778,6 +796,60 @@ class DefaultedCall:
     rendered_vote_max: float | None = None
 
 
+# Task 18.8 roll-call-round lever — DEFAULT-OFF (the 16.8 ``absence_prior_enabled``
+# pattern: env-gated, NOT retired). Deliberately NOT registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` yet — Task 18.11 wires the
+# substrate stamp (with the other three Phase-18 lever flags) before any probe
+# seed records; Task 18.12 is the graduation flip if the gate rules SHIP.
+ENV_ROLL_CALL_ROUND: Final[str] = "AILIBI_ROLL_CALL_ROUND"
+_ROLL_CALL_ROUND_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 18.8 roll-call-round lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_ROLL_CALL_ROUND` from ``env`` (defaulting to the real
+    process environment), mirroring the 16.8
+    :func:`agents.memory.beliefs.absence_prior_enabled` resolver it clones
+    (itself the 16.4 ``hard_evidence_gate`` live-toggle pattern). Default OFF:
+    an unset / empty / unrecognised value is ``False`` so
+    :meth:`MeetingManager.run` keeps the exact three-phase turn allocation of
+    the committed baseline-5 substrate -- the round is path-gated at its single
+    call site in ``run``, so a lever-OFF meeting takes the identical code path
+    (and bytes) as before the lever existed (``scripts/verify_samples.sh`` and
+    the 179-meeting committed-bytes reconstruction stay clean). Accepts
+    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests toggle
+    the lever deterministically without mutating ``os.environ``.
+
+    ON inserts the roll-call round after the opt-in phase and before ballots:
+    every living player who has not yet spoken takes exactly one terminal
+    ``opt_in``-surface turn (the existing role-blind info-share whereabouts
+    ask; what impostor templates DO with it is Task 18.10's separate arm) in
+    ascending player-id order. This is the turn-allocation surface
+    ``audits/audit-phase-17-absence-gate.md`` Ruling 3(a) routes to Phase 18,
+    and the only surface that can reach the ratified >= 0.60 crew roll-call
+    coverage clause (template asks cap coverage at 496/1057 = 0.469).
+
+    THE MEASURED COST (``audits/audit-phase-18-planning.md`` §3.4, the
+    turn-taking decomposition): on the canonical samples (179 meetings; living
+    player-meetings 1057, took >= 1 turn 496), 561/1057 = 53% of living
+    player-meetings never speak, so the round adds +3.13 turn calls/meeting
+    (496 -> 1057 turn calls over the samples denominator, 2.13x), ~+36% meeting
+    LLM calls -- the number the 18.11 gate memo and the 18.13 duration plan
+    both quote. The live measurement against the ratified bar is Task 18.11
+    (the meeting-layer gate); the graduation flip, if ruled, is Task 18.12 (the
+    baseline-6 adopting record).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_ROLL_CALL_ROUND, "").strip().lower()
+        in _ROLL_CALL_ROUND_FLAG_TRUE
+    )
+
+
 class MeetingManager:
     """State machine that runs one meeting end-to-end (DESIGN.md §5.1, §5.2).
 
@@ -1049,6 +1121,46 @@ class MeetingManager:
             )
             turns.append(opt_in_turn)
             spoken.add(opt_in_id)
+
+        # Roll-call round (Task 18.8, DEFAULT-OFF behind
+        # :func:`roll_call_round_enabled`). ON, every living player who has
+        # not yet spoken -- the Phase-3 co-presence gate leaves 53% of living
+        # player-meetings silent (audits/audit-phase-18-planning.md §3.4) --
+        # takes one terminal ``opt_in``-surface turn in ascending player-id
+        # order, the turn-allocation routing
+        # audits/audit-phase-17-absence-gate.md Ruling 3(a) sends to Phase 18.
+        # The ENTIRE round is path-gated on the bare resolver call: an OFF
+        # meeting never enters this block and takes the byte-identical code
+        # path (and allocation) of the committed substrate. Each turn reuses
+        # the existing opt-in surface through the single per-turn chokepoint,
+        # so it inherits the same guards and the same deadline/default
+        # fail-soft (no ``retries`` -- a defaulted roll-call turn is recorded
+        # exactly like a defaulted opt-in). NOT co-presence-gated: every living
+        # non-speaker is asked, so ``_opt_in_eligible_ids`` is deliberately not
+        # reused here.
+        if roll_call_round_enabled():
+            for roll_call_id in sorted(roster - spoken):
+                transcript_so_far = MeetingTranscript(turns=tuple(turns))
+                contradictions_so_far = detect_contradictions(
+                    transcript_so_far,
+                    roster=roster,
+                    vent_witness_records=vent_witness_records,
+                )
+                roll_call_turn = await self._collect_turn(
+                    meeting_id=meeting_id,
+                    trigger=trigger,
+                    participant=by_id[roll_call_id],
+                    living_ids=roster,
+                    dead_ids=dead_ids,
+                    turn_index=len(turns),
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    prior_turn=None,
+                    transcript_so_far=transcript_so_far,
+                    contradictions=contradictions_so_far,
+                )
+                turns.append(roll_call_turn)
+                spoken.add(roll_call_id)
 
         transcript = MeetingTranscript(turns=tuple(turns))
 
@@ -3603,6 +3715,7 @@ __all__ = [
     "EMERGENCY_BODY_STRIP_MARKER",
     "EMERGENCY_NO_BODY_RETRY_FEEDBACK",
     "EMERGENCY_TRIGGER_PHRASE",
+    "ENV_ROLL_CALL_ROUND",
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
@@ -3644,4 +3757,5 @@ __all__ = [
     "extract_belief_evidence",
     "guard_ballot_citation",
     "guard_ballot_target_graph",
+    "roll_call_round_enabled",
 ]
