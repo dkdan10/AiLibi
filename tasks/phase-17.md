@@ -138,7 +138,13 @@ six independent roots; nothing outside the gate chain waits on the owner.
 the gate RULED STAY-OFF (owner, 2026-07-14, `audits/audit-phase-17-absence-gate.md` §7),
 so this numbering is final: the mover record at 17.17 is **baseline 6**, its BEFORE
 column is `baseline5-final-measure.json`, and the corpus (17.9) records at the
-baseline-5 meeting layer. The GO-only surgery this block formerly enumerated (an
+baseline-5 meeting layer. CLOSE OUTCOME (2026-07-18): that numbering named what a
+FLIP-path record WOULD have been — 17.16 ruled locked decision 2's FAIL branch, so 17.17
+executed its NO-FLIP path: **no baseline-6 record exists**, `baseline5-final-measure.json`
+was never created (the BEFORE column exists only to attribute a record), and the ladder
+tip stands at baseline 5 (the banner above; `audits/audit-phase-17-close.md` §1, §8). A
+mover baseline re-enters only via a future adopting record that passes the referee +
+win-edge bar, and it takes the NEXT number at that record. The GO-only surgery this block formerly enumerated (an
 adopting-record task kept between the gate and the corpus, its edge inserted into 17.9's
 `Depends on:` line, a 6 → 7 mover renumber across 17.11/17.12/17.17, and a
 BEFORE-column rename) was NOT performed — the rejected path's rationale is §6–§7 of the
