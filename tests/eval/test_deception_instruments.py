@@ -587,8 +587,8 @@ def test_grounded_split_grounded_when_impostor_holds_matching_record() -> None:
             _turn(
                 "p-1",
                 0,
-                observations=(_saw("p-2", tick=10, room=_ROOM_A)),
-            )
+                observations=(_saw("p-2", tick=10, room=_ROOM_A),),
+            ),
         ),
         sighting_records={
             "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
@@ -604,8 +604,8 @@ def test_grounded_split_fabricated_without_matching_record() -> None:
             _turn(
                 "p-1",
                 0,
-                observations=(_saw("p-2", tick=10, room=_ROOM_A)),
-            )
+                observations=(_saw("p-2", tick=10, room=_ROOM_A),),
+            ),
         ),
         sighting_records={
             # wrong room: the vouch cannot ground.
@@ -625,12 +625,12 @@ def test_grounded_split_restriction_ignores_crew_speaker_records() -> None:
             _turn(
                 "p-1",
                 0,
-                observations=(_saw("p-2", tick=10, room=_ROOM_A)),
+                observations=(_saw("p-2", tick=10, room=_ROOM_A),),
             ),
             _turn(
                 "p-3",
                 1,
-                observations=(_saw("p-2", tick=10, room=_ROOM_A)),
+                observations=(_saw("p-2", tick=10, room=_ROOM_A),),
             ),
         ),
         sighting_records={
