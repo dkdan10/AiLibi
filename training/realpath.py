@@ -24,6 +24,13 @@ and the core ``scripts/measure_baseline.py`` fold), and one machine-readable
 ranking row per candidate is emitted to ``ranking_path`` as JSONL — the committed
 truth. The recordings under ``work_dir`` are throwaway working artifacts.
 
+Two recording outcomes are terminal, never retried: a ``TICK_BUDGET_REACHED``
+game is an accepted non-decisive outcome (the engine writes no ``game_over``
+row for it, so that seed contributes no stamp bytes — provenance is proven over
+the decisive seeds, and a candidate with NO decisive seed fails loud), and a
+:class:`~llm.budget.BudgetExceededError` is a metering stop that propagates
+unretried (re-recording would re-spend the per-game cap on a paid provider).
+
 Honesty note (provider nondeterminism). Real-path ranks are a SELECTION signal,
 NOT a fitness. Two runs of the same genome on the real provider may score
 differently, which selection tolerates but the ES fitness-purity contract
@@ -61,7 +68,17 @@ from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
 from eval.balance_eval import _resolve_game_budget, run_tournament_eval
 from eval.validity import ValidityGateReport, run_validity_gate
-from eval.watchability import WatchabilityReport, compute_watchability
+
+# _BASELINE_SUPPLY_FLOORS is a deliberate private import (same posture as
+# _resolve_game_budget above): the floor-block preflight must fail BEFORE any
+# real-provider seed is recorded, and compute_watchability can only raise its
+# KeyError after a directory of recordings exists.
+from eval.watchability import (
+    _BASELINE_SUPPLY_FLOORS,
+    WatchabilityReport,
+    compute_watchability,
+)
+from llm.budget import BudgetExceededError
 from meetings.manager import MeetingTrigger
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
@@ -114,6 +131,22 @@ DEFAULT_TASKS_PER_CREWMATE: Final[int] = 2
 
 MODE_TOP_K: Final[str] = "top-k"
 MODE_CHAMPION_TRACE: Final[str] = "champion-trace"
+
+# The masked-MLP family's encoder identity (MaskedMlpPolicy builds the v2
+# encoder; the committed policy-es stamp pins "v2"). A new family (e.g. the
+# 18.22 encoder v3) is supported by extending the dispatch in
+# _build_agent_factory and this whitelist — never by silently building the
+# wrong encoder for an unknown version.
+_MASKED_MLP_ENCODER_VERSION: Final[str] = "v2"
+_SUPPORTED_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
+    _UTILITY_ENCODER_VERSION,
+    _MASKED_MLP_ENCODER_VERSION,
+)
+
+# The non-decisive outcome run_tournament_eval folds with
+# ``fallback_reason=result.outcome`` (eval/balance_eval.py): such a game is
+# complete but capped, writes NO game_over row, and must not be retried.
+_TICK_BUDGET_REASON: Final[str] = "TICK_BUDGET_REACHED"
 
 # The selection composition mirrors training/bakeoff/goodhart.py:257/269/272-290:
 # a validity-failing set scores below any real geomean, and a referee pass
@@ -241,6 +274,14 @@ class RealPathCandidate(BaseModel):
     def _validate(self) -> RealPathCandidate:
         if not self.genome:
             raise ValueError(f"candidate {self.label!r}: genome must be non-empty")
+        if self.encoder_version not in _SUPPORTED_ENCODER_VERSIONS:
+            raise ValueError(
+                f"candidate {self.label!r}: unsupported encoder_version "
+                f"{self.encoder_version!r}; supported families: "
+                f"{_SUPPORTED_ENCODER_VERSIONS!r}. A new family (e.g. the 18.22 "
+                "encoder v3) extends _build_agent_factory's dispatch and this "
+                "whitelist — never a silent fallback to the wrong builder"
+            )
         if self.encoder_version == _UTILITY_ENCODER_VERSION:
             if self.hidden is not None:
                 raise ValueError(
@@ -321,8 +362,11 @@ class RealPathSeedTelemetry(BaseModel):
     ``error_types`` is the failed-attempt exception class names in order, so
     ``len(error_types) == attempts - 1``. ``degraded_recordings`` counts normal
     returns whose replay carried NO ``game_over`` stamp (the real-provider
-    parse-fold abort case). ``wall_seconds`` is cumulative monotonic time across
-    all attempts, rounded to 3 places.
+    parse-fold abort case). ``tick_budget_reached`` marks the accepted
+    non-decisive outcome: the game hit the scheduler cap, so its replay has no
+    ``game_over`` row (and no stamp bytes) BY DESIGN — never retried, and
+    excluded from stamp verification. ``wall_seconds`` is cumulative monotonic
+    time across all attempts, rounded to 3 places.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -331,6 +375,7 @@ class RealPathSeedTelemetry(BaseModel):
     attempts: int
     timed_out_attempts: int
     degraded_recordings: int
+    tick_budget_reached: bool
     error_types: tuple[str, ...]
     wall_seconds: float
 
@@ -356,9 +401,12 @@ class RealPathRerankRow(BaseModel):
     """One candidate's committed ranking row (frozen, extra='forbid').
 
     ``stamp`` is the READ-BACK stamp (recovered from the recorded bytes), never
-    the in-memory launch stamp. Core metrics are flattened scalars (no ``scripts/``
-    type in the row schema); a ``float | None`` core field stays ``None`` when its
-    denominator is empty and is never coerced to ``0.0``.
+    the in-memory launch stamp; ``stamp_verified_games`` counts the DECISIVE
+    games whose bytes proved it (a tick-budget game has no ``game_over`` row and
+    is excluded — see ``seed_telemetry``'s ``tick_budget_reached``). Core
+    metrics are flattened scalars (no ``scripts/`` type in the row schema); a
+    ``float | None`` core field stays ``None`` when its denominator is empty and
+    is never coerced to ``0.0``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -563,7 +611,12 @@ def _record_seed(
     retryable outcome; any other ``Exception`` (provider / transport / engine
     crash) is presumed transient on the real path and retried; a normal return
     whose replay carries NO ``game_over`` stamp (the parse-fold abort) is a
-    degraded recording and retried. ``KeyboardInterrupt`` / ``SystemExit`` are not
+    degraded recording and retried. Two outcomes are terminal, never retried: a
+    ``TICK_BUDGET_REACHED`` game (deterministic non-decisive outcome — the
+    replay has no ``game_over`` row by design; accepted with
+    ``tick_budget_reached=True``) and :class:`~llm.budget.BudgetExceededError`
+    (a metering stop — re-recording would re-spend the per-game cap; it
+    propagates unretried). ``KeyboardInterrupt`` / ``SystemExit`` are not
     ``Exception`` and propagate.
     """
 
@@ -580,7 +633,7 @@ def _record_seed(
             num_players=config.num_players,
         )
         try:
-            run_tournament_eval(
+            report = run_tournament_eval(
                 seeds=[seed],
                 output_dir=candidate_dir,
                 game_map=game_map,
@@ -598,11 +651,17 @@ def _record_seed(
             error_types.append(type(exc).__name__)
             last_exc = exc
             continue
+        except BudgetExceededError:
+            # A metering stop, not a transient crash: a fresh GameBudget is
+            # built per attempt, so retrying would re-spend the per-game cap
+            # up to max_attempts times on a paid provider. Propagate unretried.
+            raise
         except Exception as exc:  # noqa: BLE001 - retried; exhaustion is fail-loud
             error_types.append(type(exc).__name__)
             last_exc = exc
             continue
-        if read_tactical_policy_stamp(replay_path) is None:
+        tick_budget = report.games[0].reason == _TICK_BUDGET_REASON
+        if not tick_budget and read_tactical_policy_stamp(replay_path) is None:
             degraded += 1
             error_types.append("DegradedRecording")
             last_exc = RealPathRerankError(
@@ -615,6 +674,7 @@ def _record_seed(
             attempts=attempt,
             timed_out_attempts=timed_out,
             degraded_recordings=degraded,
+            tick_budget_reached=tick_budget,
             error_types=tuple(error_types),
             wall_seconds=round(time.monotonic() - start, 3),
         )
@@ -632,14 +692,23 @@ def _verify_stamps(
     expected_digest: str,
     label: str,
 ) -> tuple[TacticalPolicyStamp, int]:
-    """Read every seed's stamp back from bytes and enforce the 17.14 invariants.
+    """Read every decisive seed's stamp back from bytes (the 17.14 invariants).
 
-    Fails loud (RealPathStampError) on a missing stamp, a read-back
-    ``weights_sha256`` that disagrees with the computed genome digest, or a
-    non-uniform stamp across seeds. Returns the uniform stamp and the verified
-    game count.
+    ``seeds`` are the DECISIVE seeds only — a tick-budget game writes no
+    ``game_over`` row, so it carries no stamp bytes by design and is excluded by
+    the caller. Fails loud (RealPathStampError) when no decisive seed exists
+    (nothing on disk can prove which policy produced the bytes), on a missing
+    stamp, on a read-back ``weights_sha256`` that disagrees with the computed
+    genome digest, or on a non-uniform stamp across seeds. Returns the uniform
+    stamp and the verified game count.
     """
 
+    if not seeds:
+        raise RealPathStampError(
+            f"candidate {label!r}: every seed hit the tick budget, so no "
+            "game_over bytes exist to prove provenance (stamp read-back "
+            "requires at least one decisive game)"
+        )
     stamps: list[TacticalPolicyStamp] = []
     for seed in seeds:
         replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
@@ -834,6 +903,26 @@ def run_realpath_rerank(
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
 
+    # Preflight the watchability floor block BEFORE any recording: an unknown
+    # baseline_id / roster would otherwise only surface at scoring time, after
+    # every real-provider seed for the candidate has already been recorded.
+    # Mirrors compute_watchability's own lookup (baseline id, then the
+    # "{num_players}p{num_impostors}i" roster key).
+    roster_key = f"{resolved_config.num_players}p{resolved_config.num_impostors}i"
+    baseline_floors = _BASELINE_SUPPLY_FLOORS.get(resolved_config.baseline_id)
+    if baseline_floors is None:
+        raise ValueError(
+            "no supply-floor block pinned for baseline_id "
+            f"{resolved_config.baseline_id!r} "
+            f"(known: {sorted(_BASELINE_SUPPLY_FLOORS)}); refusing to record"
+        )
+    if roster_key not in baseline_floors:
+        raise ValueError(
+            f"baseline {resolved_config.baseline_id!r} has no supply-floor "
+            f"block for roster {roster_key!r} (known: {sorted(baseline_floors)}); "
+            "refusing to record"
+        )
+
     payloads: list[_CandidatePayload] = []
     for index, candidate in enumerate(candidates):
         stamp = _candidate_stamp(candidate)
@@ -856,9 +945,12 @@ def run_realpath_rerank(
         )
         _drop_audit_sidecars(candidate_dir)
         _write_roster_json(candidate_dir, resolved_config)
+        decisive_seeds = tuple(
+            entry.seed for entry in telemetry if not entry.tick_budget_reached
+        )
         read_stamp, verified = _verify_stamps(
             candidate_dir,
-            seeds=seeds_tuple,
+            seeds=decisive_seeds,
             expected_digest=digest,
             label=candidate.label,
         )

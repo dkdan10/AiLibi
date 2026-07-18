@@ -28,6 +28,7 @@ from agents.base import AgentInterface
 from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
 from eval.balance_eval import _resolve_game_budget
+from llm.budget import BudgetExceededError
 from meetings.manager import MeetingTrigger
 from orchestrator.game import (
     MeetingArtifacts,
@@ -47,6 +48,7 @@ from training.realpath import (
     RealPathRerankResult,
     RealPathRerankRow,
     RealPathSeedExhaustedError,
+    RealPathStampError,
     _TimeoutMeetingRunner,
     candidates_from_champion_trace,
     run_realpath_rerank,
@@ -120,6 +122,23 @@ class _HangRunner:
     ) -> MeetingArtifacts:
         await asyncio.Event().wait()
         raise AssertionError("hang runner must never return")  # unreachable
+
+
+@dataclass
+class _BudgetStopRunner:
+    """A :class:`MeetingRunner` whose meeting exhausts the per-game budget."""
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[PlayerId, AgentInterface],
+    ) -> MeetingArtifacts:
+        raise BudgetExceededError(
+            dimension="cost_usd", current=0.29, delta=0.02, cap=0.30
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -491,3 +510,117 @@ def test_tie_break_is_candidate_input_order(tmp_path: Path) -> None:
     assert result.rows[0].rank == 1
     assert result.rows[1].label == "b"
     assert result.rows[1].rank == 2
+
+
+# --------------------------------------------------------------------------- #
+# 11. A tick-budget game is an accepted outcome, never retried.               #
+# --------------------------------------------------------------------------- #
+
+
+def test_tick_budget_seed_is_accepted_not_retried(tmp_path: Path) -> None:
+    # On 4p1i with the utility-es candidate, seed 2 ends decisively at ~tick 11
+    # and seed 1 at ~tick 22 (verified empirically), so max_ticks=15 caps seed 1
+    # while seed 2 still lands a stamped game_over.
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=tmp_path / "work",
+        ranking_path=tmp_path / "ranking.jsonl",
+        config=_config(max_ticks=15, max_attempts=3),
+    )
+
+    (row,) = result.rows
+    capped, decisive = row.seed_telemetry
+    assert capped.seed == 1
+    assert capped.tick_budget_reached is True
+    assert capped.attempts == 1  # the deterministic cap is never retried
+    assert capped.degraded_recordings == 0
+    assert decisive.seed == 2
+    assert decisive.tick_budget_reached is False
+    # Provenance is proven over the decisive seed only.
+    assert row.stamp_verified_games == 1
+    assert row.stamp.weights_sha256 == _UTIL_DIGEST
+
+
+def test_all_tick_budget_seeds_fail_loud_without_retry(tmp_path: Path) -> None:
+    # max_ticks=5 caps every seed before any decisive game_over exists, so no
+    # bytes can prove provenance: RealPathStampError (NOT SeedExhausted — the
+    # cap is an accepted outcome, not a retried degraded recording).
+    with pytest.raises(RealPathStampError) as excinfo:
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=tmp_path / "work",
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(max_ticks=5, max_attempts=3),
+        )
+    assert "every seed hit the tick budget" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# 12. Budget exhaustion is a metering stop, never retried.                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_budget_exceeded_is_never_retried(tmp_path: Path) -> None:
+    calls = {"n": 0}
+
+    def budget_stop_factory() -> MeetingRunner:
+        calls["n"] += 1
+        return _BudgetStopRunner()
+
+    with pytest.raises(BudgetExceededError):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=tmp_path / "work",
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(max_attempts=3),
+            meeting_runner_factory=budget_stop_factory,
+        )
+    # One attempt only: a metering stop propagates instead of re-spending.
+    assert calls["n"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# 13. Unknown floor blocks fail BEFORE any recording is made.                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_baseline_or_roster_fails_before_recording(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    with pytest.raises(ValueError, match="no supply-floor block pinned"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(baseline_id="baseline-999"),
+        )
+    with pytest.raises(ValueError, match="no supply-floor .*block for roster"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(num_players=7, num_impostors=1),
+        )
+    # The preflight fired before any candidate dir or recording existed.
+    assert not work_dir.exists()
+
+
+# --------------------------------------------------------------------------- #
+# 14. Unsupported encoder families fail loud at candidate construction.       #
+# --------------------------------------------------------------------------- #
+
+
+def test_unsupported_encoder_version_fails_loud() -> None:
+    with pytest.raises(ValidationError, match="unsupported encoder_version"):
+        RealPathCandidate(
+            label="future",
+            genome=_util_weights(),
+            encoder_version="v3",
+            hidden=8,
+            policy_id="p",
+            method="m",
+        )
