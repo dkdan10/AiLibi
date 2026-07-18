@@ -35,6 +35,16 @@ set is a **subset of co-present ∪ one-hop** by construction, and the census is
 verified to agree: a crew witness that lands in neither bucket would mean the
 pre-advance census disagrees with the engine walk, which fails loud (below).
 
+The census is deliberately **not** read at kill resolution: the mid-tick
+predicate would reproduce ``KilledEvent.witnesses`` identically for crew (alive,
+non-vented, same-room, excluding killer and victim — and crew never vent), so
+``co_present_crew`` would collapse into the witnessed bit itself and the
+"correlated with the witnessed bit" cell would degenerate into a variable
+correlated with its own indicator. The pre-advance decision frame is what makes
+*kill into witnesses vs wait them out* measurable: a crew member who walks into
+the kill room mid-tick reads as one-hop density at decision time — realized as a
+witness.
+
 Fold-1 census predicate (per :class:`~engine.events.KilledEvent`)
 -----------------------------------------------------------------
 ``co_present_crew`` counts players ``p`` where ``p`` is a CREWMATE, alive and not
@@ -111,7 +121,12 @@ floor-the-set referee semantics): :class:`KillCraftReconstructionError` is raise
 — naming the game/tick and what disagreed — on a per-tick ``state_hash`` mismatch,
 a MEETING tick with no meeting row, a meeting ``state_hash_before`` /
 ``state_hash_after`` mismatch, a recorded action whose actor is missing or not
-alive in the pre-advance state, and the census-agreement breach above. An
+alive in the pre-advance state, the census-agreement breach above, a replay whose
+bytes end before the game reaches GAME_OVER (an EOF-truncated recording would
+silently under-count kills and actions; mirrors the missing-terminal-outcome
+check in ``eval.watchability``), and a ``sample_dir`` containing no
+``replay-seed-*.jsonl`` files at all (a path typo must not pin a zero-game
+"measurement"). An
 instrument must never silently under-measure (AGENTS.md "no silent fallbacks"), so
 malformed bytes (a corrupt action row, a truncated file) are allowed to raise
 naturally (pydantic / OS errors propagate) rather than being papered over.
@@ -208,8 +223,10 @@ class KillCraftReconstructionError(RuntimeError):
     precedent, NOT watchability's floor-the-set referee semantics). Fired on: a
     per-tick ``state_hash`` mismatch; a MEETING tick with no meeting row; a
     meeting ``state_hash_before`` / ``state_hash_after`` mismatch; a recorded
-    action whose actor is missing or not alive in the pre-advance state; and a
-    crew witness that lands in neither the co-present nor the one-hop census.
+    action whose actor is missing or not alive in the pre-advance state; a crew
+    witness that lands in neither the co-present nor the one-hop census; a
+    replay whose bytes end before the game reaches GAME_OVER (EOF truncation);
+    and a replay-set directory with no ``replay-seed-*.jsonl`` files at all.
     """
 
 
@@ -316,6 +333,11 @@ def compute_kill_craft_report(sample_dir: Path) -> KillCraftReport:
         game_map=game_map,
     )
     seeds = seeds_on_disk(sample_dir)
+    if not seeds:
+        raise KillCraftReconstructionError(
+            f"{sample_dir}: no replay-seed-*.jsonl files found — not a replay set "
+            "(wrong path?); refusing to report a zero-game measurement"
+        )
 
     per_kill: list[KillWitnessDensityRow] = []
     # Keyed (seed, player) so the same "p-1" in different games stays distinct.
@@ -427,7 +449,7 @@ def _walk_game(
                 walk.kills.append(_kill_row(seed, event, pre_players, roles, game_map))
 
         if state.phase == "GAME_OVER":
-            break
+            return walk
         if state.phase != "MEETING":
             continue
 
@@ -468,9 +490,16 @@ def _walk_game(
                 f"recorded {meeting_entry.state_hash_after!r}"
             )
         if state.phase == "GAME_OVER":
-            break
+            return walk
 
-    return walk
+    # Every committed game terminates: falling out of the entry loop means the
+    # bytes ended while the game was still in play — an EOF-truncated recording
+    # whose kills / actions would otherwise be silently under-counted.
+    raise KillCraftReconstructionError(
+        f"{game_id}: replay bytes end with phase {state.phase!r} at tick "
+        f"{state.tick} — the game never reached GAME_OVER (truncated / partial "
+        "recording); refusing to silently under-measure"
+    )
 
 
 def _fold_entropy(

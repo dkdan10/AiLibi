@@ -295,3 +295,33 @@ def test_fail_loud_on_corrupted_state_hash(tmp_path: Path) -> None:
 
     with pytest.raises(KillCraftReconstructionError, match="tick 0 reconstructed"):
         compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_truncated_replay(tmp_path: Path) -> None:
+    # A replay whose bytes end while the game is still in play (no GAME_OVER
+    # reached) is an EOF-truncated recording: it must raise, never return a
+    # partial (silently under-counted) report.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    first = json.loads(source_lines[0])
+    assert first["kind"] == "tick"  # a game cannot be over at tick 0
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        source_lines[0] + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(KillCraftReconstructionError, match="never reached GAME_OVER"):
+        compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_empty_replay_set(tmp_path: Path) -> None:
+    # A directory with no replay-seed-*.jsonl files (a path typo, or the parent
+    # corpus dir) must raise, never pin a zero-game "measurement".
+    with pytest.raises(KillCraftReconstructionError, match="no replay-seed"):
+        compute_kill_craft_report(tmp_path)
