@@ -12,7 +12,7 @@ Implement Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session), anchor
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-impostor-campaign`
-**Depends on:** 18.4, 18.17, 18.18, 18.21, 18.22
+**Depends on:** 18.4, 18.5, 18.17, 18.18, 18.21, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
 **Complexity:** Integration
 
@@ -86,6 +86,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
+- `uv run python -c "import training.anchor_study"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

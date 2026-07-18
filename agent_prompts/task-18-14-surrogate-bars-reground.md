@@ -29,7 +29,11 @@ reads.
 - training/artifacts/surrogate/ (weights + sidecar + max-uses, re-fit)
 - training/reports/report-ballot-surrogate.md (the baseline-6 reading)
 - training/bakeoff/harness.py (the two constant blocks ONLY)
-- tests/training/ (surrogate + bar re-pins)
+- tests/training/test_surrogate_runner.py
+- tests/training/test_surrogate_fidelity.py
+- tests/training/test_surrogate_dataset.py
+- tests/training/test_bakeoff_harness.py (the two constant blocks' pins ONLY)
+- tests/training/test_goodhart_probe.py (the re-measured fake-path baseline pin ONLY)
 
 **Files NOT in scope:**
 - training/surrogate/*.py (the machinery re-runs; it does not change)

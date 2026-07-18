@@ -108,13 +108,14 @@ Wave 3 (co-evolution):
   18.20 -> 18.21 alternating-freeze driver + stabilizers
   18.19 -> 18.22 encoder v3 + within-kind target resolution
   18.16 -> 18.23 scenario staging (state injection + skill scenarios)
-  (18.4, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
+  (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
   18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
   (18.4, 18.18, 18.26) -> 18.27 THE FLIP + EMERGENCE READING [OWNER]
-  (18.5, 18.23, 18.27) -> 18.28 mover record + phase close [OPERATOR + OWNER]
+  (18.23, 18.27) -> 18.28 mover record + phase close [OPERATOR + OWNER]
+  (18.5 reaches the close transitively through 18.24's entrant seeding)
 ```
 
 Critical path: 18.8/18.9/18.10 → 18.11 → 18.12 → 18.13 → 18.15 → 18.16 → 18.19 → 18.20 →
@@ -796,7 +797,11 @@ the continuity anchor).
 - replays/ml_corpus/9p2i/ + replays/ml_corpus/4p1i/ (the re-recorded bytes + MANIFESTs + splits.json)
 - replays/ml_corpus/README.md (full substrate refresh)
 - scripts/record_ml_corpus.sh (the substrate pin flip + duration note)
-- tests/training/ + tests/scripts/ (corpus-derived re-pins ONLY — the surrogate/bar re-derivations are 18.14's)
+- tests/training/test_bakeoff_harness.py (corpus-derived re-pins ONLY — the constant flips are 18.14's)
+- tests/training/test_surrogate_runner.py (corpus-derived re-pins ONLY — the re-fit is 18.14's)
+- tests/training/test_crew_options.py (corpus-derived re-pins ONLY)
+- tests/training/test_goodhart_probe.py (corpus-derived re-pins ONLY)
+- tests/scripts/test_record_ml_corpus.py
 
 **Files NOT in scope:**
 - replays/samples/ (18.12's record — pinned)
@@ -846,7 +851,11 @@ reads.
 - training/artifacts/surrogate/ (weights + sidecar + max-uses, re-fit)
 - training/reports/report-ballot-surrogate.md (the baseline-6 reading)
 - training/bakeoff/harness.py (the two constant blocks ONLY)
-- tests/training/ (surrogate + bar re-pins)
+- tests/training/test_surrogate_runner.py
+- tests/training/test_surrogate_fidelity.py
+- tests/training/test_surrogate_dataset.py
+- tests/training/test_bakeoff_harness.py (the two constant blocks' pins ONLY)
+- tests/training/test_goodhart_probe.py (the re-measured fake-path baseline pin ONLY)
 
 **Files NOT in scope:**
 - training/surrogate/*.py (the machinery re-runs; it does not change)
@@ -1346,7 +1355,7 @@ meeting suppression — the FO-2 lesson).
 
 ### Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session)
 **Branch:** `phase-18-impostor-campaign`
-**Depends on:** 18.4, 18.17, 18.18, 18.21, 18.22
+**Depends on:** 18.4, 18.5, 18.17, 18.18, 18.21, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
 **Complexity:** Integration
 
@@ -1556,7 +1565,7 @@ open on the held axis, the 17.14 PENDING pattern).
 
 ### Task 18.28 — The mover record + the phase close (operator + owner, $0)
 **Branch:** `phase-18-close`
-**Depends on:** 18.5, 18.23, 18.27
+**Depends on:** 18.23, 18.27
 **Section refs:** tasks/phase-17.md 17.17 + audits/audit-phase-17-close.md (the close shape, both paths); the 18.12 record audit (the canary pre-registration source); tasks/post-phase-14-plan.md (the roadmap spine this close annotates)
 **Complexity:** Integration
 

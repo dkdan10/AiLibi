@@ -12,7 +12,7 @@ Implement Task 18.28 — The mover record + the phase close (operator + owner, $
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-close`
-**Depends on:** 18.5, 18.23, 18.27
+**Depends on:** 18.23, 18.27
 **Section refs:** tasks/phase-17.md 17.17 + audits/audit-phase-17-close.md (the close shape, both paths); the 18.12 record audit (the canary pre-registration source); tasks/post-phase-14-plan.md (the roadmap spine this close annotates)
 **Complexity:** Integration
 
@@ -82,8 +82,8 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
-- `uv run python -c "import training.scenarios"`
 - `uv run python -c "import training.anchor_study"`
+- `uv run python -c "import training.scenarios"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

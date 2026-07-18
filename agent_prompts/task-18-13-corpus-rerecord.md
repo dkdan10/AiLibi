@@ -28,7 +28,11 @@ the continuity anchor).
 - replays/ml_corpus/9p2i/ + replays/ml_corpus/4p1i/ (the re-recorded bytes + MANIFESTs + splits.json)
 - replays/ml_corpus/README.md (full substrate refresh)
 - scripts/record_ml_corpus.sh (the substrate pin flip + duration note)
-- tests/training/ + tests/scripts/ (corpus-derived re-pins ONLY — the surrogate/bar re-derivations are 18.14's)
+- tests/training/test_bakeoff_harness.py (corpus-derived re-pins ONLY — the constant flips are 18.14's)
+- tests/training/test_surrogate_runner.py (corpus-derived re-pins ONLY — the re-fit is 18.14's)
+- tests/training/test_crew_options.py (corpus-derived re-pins ONLY)
+- tests/training/test_goodhart_probe.py (corpus-derived re-pins ONLY)
+- tests/scripts/test_record_ml_corpus.py
 
 **Files NOT in scope:**
 - replays/samples/ (18.12's record — pinned)

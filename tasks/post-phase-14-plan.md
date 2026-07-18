@@ -172,16 +172,22 @@ baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 g
 6. **Findings, not failures.** A measured flat/negative result closes as a finding (the Phase-14
    doctrine); the pause exists so a small bake-off result redirects effort instead of sinking it.
 
-## 5. Known deferred items (tracked, not dropped)
+## 5. Known deferred items (tracked, not dropped — dispositions refreshed at the Phase-18 open, 2026-07-18)
 
-- Ballot-whereabouts / in-meeting roll-call elicitation → Phase 16 (pooling belongs with Judgment).
+- Ballot-whereabouts / in-meeting roll-call elicitation → LANDED at Phase 16 (the 16.15
+  elicitation); the residual uptake/turn-taking gap (53% of living player-meetings never take a
+  turn) is now Phase 18's Wave-1 meeting-layer package (`tasks/phase-18.md` 18.8–18.12).
 - New physical information channels (cameras/door logs, task-visual confirmation as soft alibis,
-  sabotage retune so meetings happen under pressure) → after Phase 16 proves the funnel keeps what it is
-  given; re-evaluate at the Phase-16 close.
-- Crew owned-task-set observation surface (task-ordering learnability) → owner-gated at the Phase-15
-  pause.
-- Co-evolution (Hall-of-Fame/PFSP stack) → Phase-15 pause decision; never the naive two-population form.
-- `api/replay_loader.py` decomposition; a second map as a held-out generalization set (becomes pressing
-  the moment a learned policy ships as default) → standalone hygiene work, schedule opportunistically.
-- DESIGN.md prose refresh (stale sabotage/provider text) → owner-side edit; dispatched agents are barred
-  from DESIGN.md by the prompt generator.
+  sabotage retune so meetings happen under pressure) → still deferred; re-evaluate at the
+  Phase-18 close against the evidence economy that phase leaves behind.
+- Crew owned-task-set observation surface (task-ordering learnability) → LANDED at 15.22 (pause
+  decision 5); the crew DEPLOYMENT surface (production opt-in) is Phase 18's 18.7, adoption
+  gated.
+- Co-evolution (Hall-of-Fame/PFSP stack) → now OWNED by Phase 18 Wave 3 (alternating-freeze +
+  the stabilizer stack, 18.19–18.21); the naive simultaneous two-population form stays barred
+  (pause decision 4, unchanged).
+- `api/replay_loader.py` decomposition → a Phase-19 review input. A second map as a held-out
+  generalization set becomes pressing the moment a learned policy ships as default — i.e. on a
+  Phase-18 18.27 PASS branch; the close routes it explicitly in that case.
+- DESIGN.md prose refresh (stale sabotage/provider text) → owner-side edit; dispatched agents are
+  barred from DESIGN.md by the prompt generator. A Phase-19 review input.
