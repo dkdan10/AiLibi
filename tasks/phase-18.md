@@ -92,7 +92,9 @@ Wave 0 (roots, layer-neutral, dispatch in parallel):
 
 Wave 1 (the meeting-layer package — before anything trains):
   18.8 (roll-call round)   18.9 (endpoint-band exemption)   18.10 (impostor-answer variant)
-  (18.8, 18.9, 18.10) -> 18.11 THE MEETING-LAYER GATE [OPERATOR ~8-9h + OWNER]
+  (18.7, 18.8, 18.9, 18.10) -> 18.11 THE MEETING-LAYER GATE [OPERATOR ~8-9h + OWNER]
+  (the 18.7 edge is orchestrator/replay.py serialization: crew-stamp schema before the
+   substrate-flag snapshot registry — a collision edge, not a semantic prerequisite)
   (18.1, 18.2, 18.3, 18.4, 18.11) -> 18.12 adopting record: baseline 6 [OPERATOR ~6-7h]
   18.12 -> 18.13 corpus re-record [OPERATOR ~18-20h]
   18.13 -> 18.14 surrogate re-ground + selection-bar re-pins
@@ -107,7 +109,7 @@ Wave 3 (co-evolution):
   (18.6, 18.19) -> 18.20 hall-of-fame + PFSP-lite sampler
   18.20 -> 18.21 alternating-freeze driver + stabilizers
   18.19 -> 18.22 encoder v3 + within-kind target resolution
-  18.16 -> 18.23 scenario staging (state injection + skill scenarios)
+  (18.16, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
   18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
@@ -144,7 +146,9 @@ prompts/` 18.10 then 18.12 (same); `agents/memory/beliefs.py` 18.12 only;
 `scripts/record_ml_corpus.sh` 18.13; `training/bakeoff/harness.py` 18.14 (constants) then
 18.16 (term/pre-screen), serialized by the dep chain; `training/bakeoff/map_elites.py` 18.6;
 `agents/tactical/learned/` 18.7 then 18.27 (ordered via the dep chain);
-`scripts/run_tournament.py` 18.7 then 18.19 (dep edge); `orchestrator/replay.py` 18.19;
+`scripts/run_tournament.py` 18.7 then 18.19 (dep edge); `orchestrator/replay.py` is 18.7
+(crew-stamp schema) then 18.11 (substrate-flag snapshot registry) then 18.19 (dual-stamp
+coherence), all dep-ordered;
 `orchestrator/game.py` is 18.10 (prompt-version registry) then 18.12 (registry graduation)
 then 18.23 (the `initial_state` seam) then 18.28 (FLIP-path default selector), all
 dep-ordered; `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
@@ -385,6 +389,7 @@ cheap deterministic re-fit/re-run at the adopted substrate.
 
 **Files in scope:**
 - training/anchor_study.py (new: the sweep driver + the filtered-BC fit)
+- training/artifacts/anchor_study/ (new: the frozen candidate genomes/anchors — float-hex weights + sha sidecars + a config carrying the substrate sha, the byte-addressable seeds 18.24 reloads)
 - training/reports/report-anchor-study.md (new)
 - tests/training/test_anchor_study.py
 
@@ -480,6 +485,7 @@ emergency-uses bookkeeping via the meeting-concluded hook.
 
 **Files in scope:**
 - agents/tactical/learned/crew_forward.py (new) + agents/tactical/learned/factory.py (the crew factory + stamp) + the committed crew weights artifact under agents/tactical/learned/
+- orchestrator/replay.py; (the ADDITIVE crew-stamp record + reader — `CrewTacticalPolicyStamp` lands HERE so a learned-crew recording has a schema slot from day one; a game with no crew stamp parses byte-identically, committed-set round-trip pinned; 18.19 consumes this for dual-stamp recordings)
 - scripts/run_tournament.py; (the `learned-crew` factory arm + stamp wiring)
 - tests/training/test_learned_factory_acceptance.py (the crew twin: Q4 bit-exact gate vs `CrewOptionScorer`, determinism double-run, leak-mode scan)
 - tests/scripts/test_run_tournament_candidate_artifact.py; (the crew factory arm's guards)
@@ -518,6 +524,7 @@ champion's stamp — assert distinct `policy_id`/`weights_sha256` namespaces in 
 - `agents.tactical.learned.crew_forward.LearnedCrewScorer`
 - `agents.tactical.learned.factory.build_learned_crew_factory`
 - `agents.tactical.learned.factory.LearnedCrewPolicyStamp`
+- `orchestrator.replay.CrewTacticalPolicyStamp`
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-7-crew-surface.md`
 
@@ -676,7 +683,7 @@ conventions so validity-gate provenance can tell variant bytes from default byte
 
 ### Task 18.11 — THE MEETING-LAYER GATE: probe + ruling (operator ~8–9h + owner) + phase-doc surgery
 **Branch:** `phase-18-meeting-layer-gate`
-**Depends on:** 18.8, 18.9, 18.10
+**Depends on:** 18.7, 18.8, 18.9, 18.10
 **Section refs:** audits/audit-phase-18-planning.md §3.4 + §7 (the package and its arms); audits/audit-phase-17-absence-gate.md (the ratified 0.20/0.60 bar + Ruling 3; the gate-with-surgery precedent); tasks/phase-17.md 17.7 (the memo-then-ruling shape); the 18.8/18.9/18.10 counterfactual pins (the offline evidence)
 **Complexity:** Integration
 
@@ -757,6 +764,9 @@ this record moves is re-pinned in the same PR.
 - meetings/transcript.py; (same)
 - agents/strategic/prompts/; (same)
 - orchestrator/game.py; (the `prompt_versions_for_set` registry graduation flip ONLY — if the impostor-answer arm ships, the variant versions become the default-served entries)
+- scripts/record_ml_corpus.sh; (the `REQUIRED_PROMPT_VERSIONS` re-lock ONLY — the recorder's version pin must move WITH the registry or check.sh fails at this PR; the duration/guard edits stay 18.13's)
+- tests/scripts/test_record_ml_corpus.py; (the registry-equality pin re-lock ONLY)
+- tests/scripts/test_manifest_writer.py (the MANIFEST substrate-flags string pins — the new true flags in recorded bytes)
 - agents/memory/beliefs.py (the absence graduation component if ruled)
 - replays/samples/9p2i/ + replays/samples/4p1i/ (the baseline-6 record)
 - eval/watchability.py; (the baseline-6 floor block)
@@ -1131,7 +1141,7 @@ the single-side flags.
 
 **Files in scope:**
 - training/coevo/__init__.py + training/coevo/factory.py + training/coevo/rollout.py (new)
-- orchestrator/replay.py; (the additive crew stamp record + reader)
+- orchestrator/replay.py; (the dual-stamp read-back coherence over 18.7's `CrewTacticalPolicyStamp` — games with zero, one, or two stamps round-trip; the schema field itself landed at 18.7)
 - scripts/run_tournament.py; (the `--crew-artifact` arm + dual-stamp wiring)
 - tests/training/test_coevo_rollout.py + tests/scripts/test_run_tournament_candidate_artifact.py (the dual-stamp guards)
 
@@ -1167,7 +1177,6 @@ forking a second guard suite.
 **Public types introduced:**
 - `training.coevo.factory.build_coevo_factory`
 - `training.coevo.rollout.rollout_coevo`
-- `orchestrator.replay.CrewTacticalPolicyStamp`
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-19-coevo-rollout.md`
 
@@ -1294,6 +1303,7 @@ v3.
 - agents/tactical/features.py (the additive v3 encoder + golden layout)
 - agents/memory/store.py (the meeting-history memory channel the v3 encoder reads — populated at the existing deterministic meeting-conclusion fold; today `absorb_meeting_evidence` records no per-meeting outcome history the encoder can consume)
 - agents/memory/working.py (the channel's typed carrier, if the design places it there)
+- orchestrator/game.py; (the meeting-concluded hook payload ONLY — `_notify_meeting_concluded`/`note_meeting_concluded` carry the public meeting outcome the memory channel folds; today the hook updates only the emergency tracker)
 - training/bakeoff/policy_es.py (the per-target head + v3 selection)
 - tests/agents/test_memory_meeting_history.py (new — the channel's fold fixtures, firewall-legality)
 - tests/training/test_bakeoff_harness.py; (encoder/head fixtures ONLY — the v3 golden pins, mask/tie fixtures)
@@ -1327,7 +1337,7 @@ by construction) and quantize everything through the established integer-grid he
 
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
-**Depends on:** 18.16
+**Depends on:** 18.16, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1495-1501, 1556; `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
@@ -1520,7 +1530,7 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
-- tests/training/ (jsonl-row pins ONLY)
+- tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
 
 **Files NOT in scope:**
 - scripts/run_tournament.py + training/ machinery (recorders froze earlier)
@@ -1582,7 +1592,7 @@ own slot — never folded silently into either axis.
 - replays/ (no record at the reading — 18.28 records)
 
 **Definition of done:**
-- [ ] The memo reads axis 1 against the bar with every floor cell + win edge quoted from the 18.26 committed rows, the ruling recorded verbatim, and the ruled branch implemented + pinned (default provably flipped, or provably unmoved).
+- [ ] The memo reads axis 1 against the bar with every floor cell + win edge quoted from the 18.26 committed rows, the ruling recorded verbatim, and the ruled branch implemented + pinned (PASS: the artifact surface swapped and the 18.28 selector flip pre-authored, with the default provably NOT yet moved — adoption-at-record; FAIL: the default provably unmoved).
 - [ ] Axis 2 rules every pre-registered claim with its four-part evidence quoted (including the ablation runs' provenance), and any crew-adoption slot is put and recorded explicitly.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

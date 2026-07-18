@@ -27,6 +27,7 @@ emergency-uses bookkeeping via the meeting-concluded hook.
 
 **Files in scope:**
 - agents/tactical/learned/crew_forward.py (new) + agents/tactical/learned/factory.py (the crew factory + stamp) + the committed crew weights artifact under agents/tactical/learned/
+- orchestrator/replay.py; (the ADDITIVE crew-stamp record + reader — `CrewTacticalPolicyStamp` lands HERE so a learned-crew recording has a schema slot from day one; a game with no crew stamp parses byte-identically, committed-set round-trip pinned; 18.19 consumes this for dual-stamp recordings)
 - scripts/run_tournament.py; (the `learned-crew` factory arm + stamp wiring)
 - tests/training/test_learned_factory_acceptance.py (the crew twin: Q4 bit-exact gate vs `CrewOptionScorer`, determinism double-run, leak-mode scan)
 - tests/scripts/test_run_tournament_candidate_artifact.py; (the crew factory arm's guards)
@@ -58,6 +59,7 @@ arithmetic). The crew menu module already imports only firewall-legal packages.
 - `agents.tactical.learned.crew_forward.LearnedCrewScorer`
 - `agents.tactical.learned.factory.build_learned_crew_factory`
 - `agents.tactical.learned.factory.LearnedCrewPolicyStamp`
+- `orchestrator.replay.CrewTacticalPolicyStamp`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 

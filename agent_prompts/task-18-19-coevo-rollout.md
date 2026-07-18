@@ -27,7 +27,7 @@ the single-side flags.
 
 **Files in scope:**
 - training/coevo/__init__.py + training/coevo/factory.py + training/coevo/rollout.py (new)
-- orchestrator/replay.py; (the additive crew stamp record + reader)
+- orchestrator/replay.py; (the dual-stamp read-back coherence over 18.7's `CrewTacticalPolicyStamp` — games with zero, one, or two stamps round-trip; the schema field itself landed at 18.7)
 - scripts/run_tournament.py; (the `--crew-artifact` arm + dual-stamp wiring)
 - tests/training/test_coevo_rollout.py + tests/scripts/test_run_tournament_candidate_artifact.py (the dual-stamp guards)
 
@@ -56,7 +56,6 @@ stamp parses exactly as before — the 15.9 compatibility discipline).
 ## Public types this task introduces
 - `training.coevo.factory.build_coevo_factory`
 - `training.coevo.rollout.rollout_coevo`
-- `orchestrator.replay.CrewTacticalPolicyStamp`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
@@ -77,11 +76,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import meetings.transcript"`
 - `uv run python -c "import meetings.manager"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
-- `uv run python -c "import agents.tactical.learned.crew_forward"`
-- `uv run python -c "import agents.tactical.learned.factory"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

@@ -26,7 +26,7 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
-- tests/training/ (jsonl-row pins ONLY)
+- tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
 
 **Files NOT in scope:**
 - scripts/run_tournament.py + training/ machinery (recorders froze earlier)
@@ -61,7 +61,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.tactical.features"`
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
-- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
 - `uv run python -c "import training.conviction.dataset"`
@@ -69,11 +68,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import meetings.transcript"`
 - `uv run python -c "import meetings.manager"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
-- `uv run python -c "import agents.tactical.learned.crew_forward"`
-- `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import training.coevo.driver"`
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`

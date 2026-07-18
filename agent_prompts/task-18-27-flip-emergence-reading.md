@@ -41,7 +41,7 @@ own slot — never folded silently into either axis.
 - replays/ (no record at the reading — 18.28 records)
 
 **Definition of done:**
-- [ ] The memo reads axis 1 against the bar with every floor cell + win edge quoted from the 18.26 committed rows, the ruling recorded verbatim, and the ruled branch implemented + pinned (default provably flipped, or provably unmoved).
+- [ ] The memo reads axis 1 against the bar with every floor cell + win edge quoted from the 18.26 committed rows, the ruling recorded verbatim, and the ruled branch implemented + pinned (PASS: the artifact surface swapped and the 18.28 selector flip pre-authored, with the default provably NOT yet moved — adoption-at-record; FAIL: the default provably unmoved).
 - [ ] Axis 2 rules every pre-registered claim with its four-part evidence quoted (including the ablation runs' provenance), and any crew-adoption slot is put and recorded explicitly.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -70,7 +70,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.tactical.features"`
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
-- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
 - `uv run python -c "import training.conviction.dataset"`
@@ -78,11 +77,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import meetings.transcript"`
 - `uv run python -c "import meetings.manager"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
-- `uv run python -c "import agents.tactical.learned.crew_forward"`
-- `uv run python -c "import agents.tactical.learned.factory"`
 - `uv run python -c "import training.coevo.driver"`
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`

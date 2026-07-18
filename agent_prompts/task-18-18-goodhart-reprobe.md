@@ -59,6 +59,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import meetings.transcript"`
 - `uv run python -c "import meetings.manager"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`

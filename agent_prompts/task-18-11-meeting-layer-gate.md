@@ -12,7 +12,7 @@ Implement Task 18.11 — THE MEETING-LAYER GATE: probe + ruling (operator ~8–9
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-meeting-layer-gate`
-**Depends on:** 18.8, 18.9, 18.10
+**Depends on:** 18.7, 18.8, 18.9, 18.10
 **Section refs:** audits/audit-phase-18-planning.md §3.4 + §7 (the package and its arms); audits/audit-phase-17-absence-gate.md (the ratified 0.20/0.60 bar + Ruling 3; the gate-with-surgery precedent); tasks/phase-17.md 17.7 (the memo-then-ruling shape); the 18.8/18.9/18.10 counterfactual pins (the offline evidence)
 **Complexity:** Integration
 
@@ -77,6 +77,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import meetings.transcript"`
 - `uv run python -c "import meetings.manager"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

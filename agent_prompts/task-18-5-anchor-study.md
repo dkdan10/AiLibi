@@ -35,6 +35,7 @@ cheap deterministic re-fit/re-run at the adopted substrate.
 
 **Files in scope:**
 - training/anchor_study.py (new: the sweep driver + the filtered-BC fit)
+- training/artifacts/anchor_study/ (new: the frozen candidate genomes/anchors — float-hex weights + sha sidecars + a config carrying the substrate sha, the byte-addressable seeds 18.24 reloads)
 - training/reports/report-anchor-study.md (new)
 - tests/training/test_anchor_study.py
 
