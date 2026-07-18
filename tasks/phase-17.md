@@ -1,20 +1,30 @@
 # Phase 17 — Co-adaptation: re-ground, re-run, re-select on baseline 5
 
-STATUS: OPEN (authored 2026-07-14) — ABSENCE GATE: STAY-OFF (owner, 2026-07-14,
-`audits/audit-phase-17-absence-gate.md` §7; sign-off rides the 17.7 PR merge — the 15.18
-convention). The 17.7 gate is decided: `absence_prior` STAYS OFF (the ratified bar —
-new-over-gate ≤ 0.20 at crew roll-call coverage ≥ 0.60 — fails both clauses at 53/179 = 0.296
-and 0.4624), the PR #264 vent widening HOLDS (the flag stays inert; both travel to Phase 18 as
-one package under the ratified routing note), and the corpus re-record (17.9) is unblocked at
-the baseline-5 meeting layer. The GO-only adopting-record task was REMOVED by the gate's
-surgery (the 16.2 discipline); its drop record sits in Wave 1. Baseline 5 is canonical
-(`Qwen/Qwen3.6-27B`, `qwen3_6_27b` v3, nine always-on levers, `absence_prior` the sole
-live toggle — `audits/audit-phase-16-close.md`). Phase 17 is the roadmap's co-adaptation phase
-(`tasks/post-phase-14-plan.md` owner goal 3): everything trained or selected before the
-Phase-16 close is PRIOR-SUBSTRATE-ANCHORED (the close §8 staleness rule), so this phase
-re-grounds the calibration corpus and the ballot surrogate on baseline-5 meetings, re-runs
-the Phase-15 training recipe (full entrant slate), and re-selects champions through the
-same gates with the 16.11 population-relative referee as the selection bar.
+STATUS: CLOSED 2026-07-18 with NO mover record (Task 17.17) — the ladder tip STANDS at
+baseline 5. The evidence-gated flip criterion (locked decision 2) failed BOTH finalists at
+the 17.14 real-LLM eval, read and implemented at 17.16 (the FAIL branch, PR #285):
+`utility-es` retains a real win edge (0.52 vs the same-seed FSM 0.36, Δ +0.16) but FAILS the
+baseline-5 referee on the conversion economy (flags/meeting 0.4255 < 0.50279;
+testimony-backed conversion 0.3585 < its population-relative derived floor 0.5601);
+`policy-es` clears the referee (48.20) but is competitively annihilated (win 0.02, Δ −0.34 —
+the vent tell, again). The scripted FSM therefore STAYS the default mover, the champion stays
+OPT-IN (the 15.20/15.21 posture; byte-identical to the re-selected finalist, sha `6d327dcb…`),
+baseline 6 is NOT recorded, and `replays/samples/` + the `eval/watchability.py` floors are
+byte-untouched (re-verified at the close: gates 10/10 PASS, bare byte-identity, referee at
+exact floor equality). The phase's re-grounding STANDS: the corpus re-recorded at baseline 5
+(17.9 — the Q3 canary-denominator restoration, operative), the surrogate re-fit with its
+first GO at training-time-runner tier (17.10, cap 62,491), the full-slate bake-off re-run
+with the ordinal ranking unchanged (17.12), crew measurement-only (17.13), the Goodhart
+no-exploitable-seam conclusion re-earned and narrowed (17.15), and every Wave-0 instrument
+repair live in the close's own reads (provenance breaches 5 → 0; the coerced-SKIP bucket, 2,
+inversions 98; the genuine-class successor 63/70 on the samples and 211/241 on the corpus
+denominator — canary-eligible for the first time). ABSENCE GATE: STAY-OFF (owner, 2026-07-14,
+`audits/audit-phase-17-absence-gate.md` §7) — graduation + the PR #264 vent widening travel
+to Phase 18 as one package under the ratified bar (new-over-gate ≤ 0.20 at crew roll-call
+coverage ≥ 0.60), with the pooling-prompt uptake work, the crew deployment surface, and the
+detector-band relaxation (the routed contracts). Full close:
+`audits/audit-phase-17-close.md` (the finding §1, the HEAD reads §2, the corpus canary
+anchors §3, the Phase-18 staleness rule §5, the routed contracts §6, Q5 §7).
 
 ## Locked decisions (owner-ratified 2026-07-14)
 
