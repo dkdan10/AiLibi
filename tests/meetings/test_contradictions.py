@@ -19,6 +19,12 @@ observation appears on a :class:`MeetingTurn`, regardless of turn-kind):
 
 from __future__ import annotations
 
+import functools
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -31,17 +37,28 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     SawPlayerObservation,
+    SawVentObservation,
+    VentWitnessRecord,
+    WhereaboutsClaim,
 )
 from meetings.transcript import (
+    ENV_VENT_PLACEMENT_CONTRADICTIONS,
+    ENV_WHEREABOUTS_INTERIOR_FLAGS,
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_ADVERSARIAL,
     WEAK_REASON_BOUNDARY_OVERLAP,
+    WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_KILL_SCENE,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_PAIR,
+    _turn_observation_id,
+    _turn_whereabouts_id,
     detect_contradictions,
     is_weak_contradiction,
+    vent_placement_contradictions_enabled,
+    whereabouts_interior_flags_enabled,
 )
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 # --- Builders --------------------------------------------------------------
 
@@ -86,6 +103,21 @@ def _turn(
         claims=claims,
         free_text=f"turn {turn_index} from {speaker}",
     )
+
+
+def _whereabouts(*, tick: int, room: str) -> WhereaboutsClaim:
+    # A roll-call self-placement ("I was in ``room`` at ``tick``"). Indexed by
+    # :func:`_iter_alibis` as a DEGENERATE SINGLE-TICK SELF-ALIBI (subject is the
+    # speaker, ``from_tick == to_tick == tick``) -- the Task 18.9 lever-1 class.
+    return WhereaboutsClaim(type="whereabouts", tick=tick, room=room)
+
+
+def _saw_vent(*, tick: int, subject: str, room: str) -> SawVentObservation:
+    return SawVentObservation(type="saw_vent", tick=tick, subject=subject, room=room)
+
+
+def _vent_record(*, tick: int, subject: str, room: str) -> VentWitnessRecord:
+    return VentWitnessRecord(subject=subject, room=room, tick=tick)
 
 
 # --- Empty / non-contradictory transcripts ---------------------------------
@@ -1491,3 +1523,1208 @@ class TestCrossSpeakerConflictStrength:
         assert flags[0].kind == "alibi_conflict"
         assert is_weak_contradiction(flags[0]) is True
         assert WEAK_REASON_BOUNDARY_OVERLAP in flags[0].description
+
+
+# --- Task 18.9 lever resolvers (default-OFF, the 16.8 absence-prior shape) ---
+
+
+class TestWhereaboutsInteriorFlagsResolver:
+    """The Task 18.9 lever-1 resolver -- DEFAULT-OFF, the 16.8 clone.
+
+    Mirrors :class:`tests.agents.test_absence_prior.TestAbsencePriorResolver`:
+    an unset / empty / unrecognised value reads ``False`` so
+    :func:`detect_contradictions` re-derives the committed substrate
+    byte-identically; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed)
+    reads ``True``. ``env=None`` falls back to the live process environment.
+    """
+
+    def test_default_off_on_an_empty_mapping(self) -> None:
+        assert whereabouts_interior_flags_enabled(env={}) is False
+
+    def test_default_off_when_the_key_is_absent(self) -> None:
+        assert (
+            whereabouts_interior_flags_enabled(env={"AILIBI_SOMETHING_ELSE": "1"})
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
+    )
+    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
+        self, value: str
+    ) -> None:
+        assert (
+            whereabouts_interior_flags_enabled(
+                env={ENV_WHEREABOUTS_INTERIOR_FLAGS: value}
+            )
+            is True
+        )
+
+    @pytest.mark.parametrize(
+        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
+    )
+    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
+        # An allow-list membership test, not a truthiness cast.
+        assert (
+            whereabouts_interior_flags_enabled(
+                env={ENV_WHEREABOUTS_INTERIOR_FLAGS: value}
+            )
+            is False
+        )
+
+    def test_env_none_reads_the_live_process_environment_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, "1")
+        assert whereabouts_interior_flags_enabled() is True
+        assert whereabouts_interior_flags_enabled(env=None) is True
+
+    def test_env_none_reads_the_live_process_environment_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, raising=False)
+        assert whereabouts_interior_flags_enabled() is False
+        assert whereabouts_interior_flags_enabled(env=None) is False
+
+    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
+        env = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "on", "AILIBI_OTHER": "x"}
+        before = dict(env)
+        assert whereabouts_interior_flags_enabled(env=env) is True
+        assert whereabouts_interior_flags_enabled(env=env) is True
+        assert env == before
+
+
+class TestVentPlacementContradictionsResolver:
+    """The Task 18.9 lever-2 resolver -- DEFAULT-OFF, the same 16.8 clone."""
+
+    def test_default_off_on_an_empty_mapping(self) -> None:
+        assert vent_placement_contradictions_enabled(env={}) is False
+
+    def test_default_off_when_the_key_is_absent(self) -> None:
+        assert (
+            vent_placement_contradictions_enabled(env={"AILIBI_SOMETHING_ELSE": "1"})
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
+    )
+    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
+        self, value: str
+    ) -> None:
+        assert (
+            vent_placement_contradictions_enabled(
+                env={ENV_VENT_PLACEMENT_CONTRADICTIONS: value}
+            )
+            is True
+        )
+
+    @pytest.mark.parametrize(
+        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
+    )
+    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
+        assert (
+            vent_placement_contradictions_enabled(
+                env={ENV_VENT_PLACEMENT_CONTRADICTIONS: value}
+            )
+            is False
+        )
+
+    def test_env_none_reads_the_live_process_environment_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, "1")
+        assert vent_placement_contradictions_enabled() is True
+        assert vent_placement_contradictions_enabled(env=None) is True
+
+    def test_env_none_reads_the_live_process_environment_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
+        assert vent_placement_contradictions_enabled() is False
+        assert vent_placement_contradictions_enabled(env=None) is False
+
+    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
+        env = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "on", "AILIBI_OTHER": "x"}
+        before = dict(env)
+        assert vent_placement_contradictions_enabled(env=env) is True
+        assert vent_placement_contradictions_enabled(env=env) is True
+        assert env == before
+
+    def test_the_two_levers_are_independent_keys(self) -> None:
+        # Each lever reads its OWN key; setting one never flips the other.
+        env_w = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "1"}
+        env_v = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "1"}
+        assert whereabouts_interior_flags_enabled(env=env_w) is True
+        assert vent_placement_contradictions_enabled(env=env_w) is False
+        assert vent_placement_contradictions_enabled(env=env_v) is True
+        assert whereabouts_interior_flags_enabled(env=env_v) is False
+
+
+# --- Task 18.9 lever 1: the endpoint-band whereabouts exemption -------------
+
+_L1_ON = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "1"}
+
+
+class TestEndpointBandExemption:
+    """Lever 1 ON: a degenerate single-tick self-alibi becomes interior-class.
+
+    Audit-phase-18-planning.md §3.3: a roll-call whereabouts answer indexes as
+    ``from_tick == to_tick`` with the speaker its own subject, so a contradicting
+    first-hand sighting sits on an endpoint tick and is banded WEAK. ON, the
+    single tick is adjudicated as the claim's INTERIOR and the contradicting
+    sighting mints a STRONG ``alibi_vs_sighting`` flag. Everything else is
+    byte-identical: multi-tick alibis keep the endpoint band, a proxy alibi is
+    untouched.
+    """
+
+    def _whereabouts_lie(self) -> MeetingTranscript:
+        # p-3 answers roll-call "STORAGE at 150"; p-5 first-hand saw p-3 in
+        # CAFETERIA at exactly tick 150 -- the degenerate single-tick self-alibi
+        # contradicted on its (only) tick.
+        return MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    observations=(_whereabouts(tick=150, room="STORAGE"),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=150, subject="p-3", room="CAFETERIA"),),
+                ),
+            )
+        )
+
+    def test_off_path_is_weak_with_endpoint_and_narrow_markers(self) -> None:
+        # The DEFAULT: the single-tick self-alibi is narrow AND endpoint-banded.
+        flags = detect_contradictions(self._whereabouts_lie())
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_vs_sighting"
+        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_NARROW_WINDOW in flags[0].description
+        assert WEAK_REASON_ENDPOINT_TICK in flags[0].description
+
+    def test_lever_on_mints_a_strong_alibi_vs_sighting(self) -> None:
+        tx = self._whereabouts_lie()
+        off = detect_contradictions(tx)
+        on = detect_contradictions(tx, env=_L1_ON)
+        assert len(on) == 1
+        flag = on[0]
+        assert flag.kind == "alibi_vs_sighting"
+        assert flag.subjects == ("p-3",)
+        # STRONG: no weak predicate, no weak marker at all in the free text.
+        assert is_weak_contradiction(flag) is False
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert WEAK_REASON_NARROW_WINDOW not in flag.description
+        assert WEAK_REASON_ENDPOINT_TICK not in flag.description
+        # Only the BAND (the description) changed -- the flag identity is stable.
+        assert flag.contradiction_id == off[0].contradiction_id
+        assert (flag.event_a_id, flag.event_b_id) == (
+            off[0].event_a_id,
+            off[0].event_b_id,
+        )
+
+    def test_genuine_single_tick_self_stated_alibi_is_exempted_too(self) -> None:
+        # A single-tick self-stated ``AlibiClaim`` is the SAME class by
+        # construction (speaker == subject, from == to) -- indistinguishable from
+        # a whereabouts answer -- so the exemption covers it identically.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=150, to_tick=150, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=150, subject="p-3", room="CAFETERIA"),),
+                ),
+            )
+        )
+        off = detect_contradictions(tx)
+        on = detect_contradictions(tx, env=_L1_ON)
+        assert is_weak_contradiction(off[0]) is True
+        assert len(on) == 1
+        assert on[0].kind == "alibi_vs_sighting"
+        assert is_weak_contradiction(on[0]) is False
+
+    def test_multi_tick_alibi_endpoint_sighting_stays_weak_under_lever_on(
+        self,
+    ) -> None:
+        # The scope guard: a genuine MULTI-tick alibi (from != to) is NOT the
+        # degenerate class, so an endpoint-tick sighting keeps the endpoint band
+        # even with the lever ON -- multi-tick endpoint semantics are untouched.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=200, subject="p-3", room="CAFETERIA"),),
+                ),
+            )
+        )
+        on = detect_contradictions(tx, env=_L1_ON)
+        assert on == detect_contradictions(tx)  # byte-identical to OFF
+        assert len(on) == 1
+        assert is_weak_contradiction(on[0]) is True
+        assert WEAK_REASON_ENDPOINT_TICK in on[0].description
+
+    def test_multi_tick_narrow_alibi_keeps_narrow_window_under_lever_on(self) -> None:
+        # A MULTI-tick but narrow alibi (to - from == 1 < 2) is still outside the
+        # exemption (from != to), so the narrow-window band survives ON.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=101, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=100, subject="p-3", room="CAFETERIA"),),
+                ),
+            )
+        )
+        on = detect_contradictions(tx, env=_L1_ON)
+        assert on == detect_contradictions(tx)
+        assert len(on) == 1
+        assert is_weak_contradiction(on[0]) is True
+        assert WEAK_REASON_NARROW_WINDOW in on[0].description
+
+    def test_proxy_single_tick_alibi_is_untouched_under_lever_on(self) -> None:
+        # A PROXY alibi (speaker != subject) can never be the self-alibi class,
+        # so the lever leaves it byte-identical -- and still weak.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-4",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=150, to_tick=150, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=150, subject="p-3", room="CAFETERIA"),),
+                ),
+            )
+        )
+        off = detect_contradictions(tx)
+        on = detect_contradictions(tx, env=_L1_ON)
+        assert on == off
+        assert len(on) == 1
+        assert is_weak_contradiction(on[0]) is True
+
+
+# --- Task 18.9 lever 2: the grounded vent-placement flag variant ------------
+
+_L2_ON = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "1"}
+_VENT_ROSTER = frozenset({"p-3", "p-5"})
+
+
+class TestVentPlacementVariant:
+    """Lever 2 ON: a grounded vent placement contradicting a self-alibi is STRONG.
+
+    The 17.5 scope firewall's flag-minting arm, reusing the 15.4 grounding
+    chokepoint VERBATIM. A spoken :class:`SawVentObservation` grounded against
+    the speaker's own :class:`VentWitnessRecord`, whose RECORD places the subject
+    in a room disjoint from the subject's OWN stated alibi over an inclusive
+    window, mints a STRONG ``alibi_vs_physical`` flag BESIDE the ``vent_sighting``
+    flag. Grounded-only is the firewall: an ungrounded spoken vent claim mints
+    nothing.
+    """
+
+    def _self_alibi_turn(
+        self, *, room: str, from_tick: int, to_tick: int
+    ) -> MeetingTurn:
+        return _turn(
+            turn_index=0,
+            speaker="p-3",
+            claims=(
+                _alibi(subject="p-3", from_tick=from_tick, to_tick=to_tick, room=room),
+            ),
+        )
+
+    def _vent_turn(self, *, tick: int, room: str = "MEDBAY") -> MeetingTurn:
+        return _turn(
+            turn_index=1,
+            speaker="p-5",
+            observations=(_saw_vent(tick=tick, subject="p-3", room=room),),
+        )
+
+    def test_grounded_disjoint_placement_mints_strong_physical_beside_vent(
+        self,
+    ) -> None:
+        # The record (MEDBAY @ 14) is quoted; the spoken tick (15) differs within
+        # tolerance, so the description must show the RECORD's tick, never the
+        # spoken one -- the grounded fact, not the testimony.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=15),
+            )
+        )
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        flags = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        assert sorted(f.kind for f in flags) == ["alibi_vs_physical", "vent_sighting"]
+        physical = next(f for f in flags if f.kind == "alibi_vs_physical")
+        assert physical.subjects == ("p-3",)
+        assert is_weak_contradiction(physical) is False
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in physical.description
+        # Description quotes the RECORD (room MEDBAY, tick 14) + the stated alibi.
+        assert "MEDBAY" in physical.description
+        assert "at tick 14" in physical.description
+        assert "tick 15" not in physical.description
+        assert "STORAGE" in physical.description
+        # event_a_id is the self-alibi claim; event_b_id the spoken vent obs.
+        obs_id = _turn_observation_id(turn=tx.turns[1], index=0)
+        assert obs_id in (physical.event_a_id, physical.event_b_id)
+
+    def test_lever_off_with_records_is_byte_identical(self) -> None:
+        # OFF (default) with records supplied: only the 15.4 ``vent_sighting``
+        # mints; the variant block is never entered, and env absent == env={}.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14),
+            )
+        )
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        off_no_env = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records
+        )
+        off_empty = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env={}
+        )
+        assert off_no_env == off_empty
+        assert [f.kind for f in off_no_env] == ["vent_sighting"]
+
+    def test_inclusive_window_endpoint_record_tick_mints(self) -> None:
+        # The recorded-judgment inclusive-window decision: a record tick sitting
+        # ON either window endpoint DOES contradict (engine truth, not testimony
+        # fuzz). Both endpoints are pinned.
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=20),)}
+        tx_to = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=20),
+            )
+        )
+        flags_to = detect_contradictions(
+            tx_to, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        assert any(f.kind == "alibi_vs_physical" for f in flags_to)
+
+        records_from = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=10),)}
+        tx_from = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=10),
+            )
+        )
+        flags_from = detect_contradictions(
+            tx_from, roster=_VENT_ROSTER, vent_witness_records=records_from, env=_L2_ON
+        )
+        assert any(f.kind == "alibi_vs_physical" for f in flags_from)
+
+    def test_a_consistent_grounded_vent_mints_no_physical(self) -> None:
+        # The record room is INSIDE the alibi rooms -- the vent grounds (venting
+        # is still role-proving, so ``vent_sighting`` fires) but it does NOT
+        # contradict the stated path, so no ``alibi_vs_physical``.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="MEDBAY", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14),
+            )
+        )
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        flags = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        assert [f.kind for f in flags] == ["vent_sighting"]
+
+    def test_a_consistent_record_never_masks_a_contradicting_one(self) -> None:
+        # The 16.7 lesson: match-AND-contradict is tested PER record, so a
+        # matching-but-consistent record (STORAGE, inside the alibi) appearing
+        # BEFORE a matching-and-contradicting one (MEDBAY, disjoint) never
+        # short-circuits the flag. The spoken compound room grounds both records.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14, room="STORAGE/MEDBAY"),
+            )
+        )
+        records = {
+            "p-5": (
+                _vent_record(subject="p-3", room="STORAGE", tick=14),  # consistent
+                _vent_record(subject="p-3", room="MEDBAY", tick=14),  # contradicts
+            )
+        }
+        flags = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        physical = next(f for f in flags if f.kind == "alibi_vs_physical")
+        # The flag quotes the CONTRADICTING record (MEDBAY), not the consistent one.
+        assert "MEDBAY" in physical.description
+
+    @pytest.mark.parametrize(
+        "record",
+        [
+            _vent_record(subject="p-9", room="MEDBAY", tick=14),  # wrong subject
+            _vent_record(subject="p-3", room="ADMIN", tick=14),  # wrong room
+            _vent_record(subject="p-3", room="MEDBAY", tick=40),  # tick beyond tol
+        ],
+        ids=["mismatched_subject", "mismatched_room", "tick_beyond_tolerance"],
+    )
+    def test_an_ungrounded_vent_claim_can_never_mint_a_physical(
+        self, record: VentWitnessRecord
+    ) -> None:
+        # The fabrication firewall: without a record that GROUNDS the spoken
+        # observation (15.4 chokepoint), the variant mints nothing -- an
+        # ungrounded spoken vent claim is testimony, not evidence.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14),
+            )
+        )
+        flags = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records={"p-5": (record,)}, env=_L2_ON
+        )
+        assert all(f.kind != "alibi_vs_physical" for f in flags)
+
+    def test_no_self_alibi_mints_no_physical(self) -> None:
+        # A grounded vent with no self-alibi to contradict: ``vent_sighting``
+        # fires, but there is no stated path to contradict.
+        tx = MeetingTranscript(turns=(self._vent_turn(tick=14),))
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        flags = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        assert [f.kind for f in flags] == ["vent_sighting"]
+
+    def test_non_roster_subject_mints_nothing(self) -> None:
+        # The vent subject p-3 is off the roster -- the whole chain is filtered,
+        # exactly like the 15.4 flag detector.
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14),
+            )
+        )
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        flags = detect_contradictions(
+            tx, roster=frozenset({"p-5"}), vent_witness_records=records, env=_L2_ON
+        )
+        assert all(f.kind != "alibi_vs_physical" for f in flags)
+
+    def test_variant_detection_is_deterministic(self) -> None:
+        tx = MeetingTranscript(
+            turns=(
+                self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
+                self._vent_turn(tick=14),
+            )
+        )
+        records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        first = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        second = detect_contradictions(
+            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+        )
+        assert first == second
+
+
+class TestBothLeversCompose:
+    def test_a_whereabouts_lie_contradicted_by_sighting_and_vent_mints_both(
+        self,
+    ) -> None:
+        # A single-tick whereabouts lie contradicted by BOTH a first-hand
+        # sighting (lever 1 -> STRONG alibi_vs_sighting) AND a grounded vent
+        # record (lever 2 -> STRONG alibi_vs_physical, beside vent_sighting).
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    observations=(_whereabouts(tick=14, room="STORAGE"),),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=14, subject="p-3", room="CAFETERIA"),),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(_saw_vent(tick=14, subject="p-3", room="MEDBAY"),),
+                ),
+            )
+        )
+        records = {"p-7": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
+        env = {
+            ENV_WHEREABOUTS_INTERIOR_FLAGS: "1",
+            ENV_VENT_PLACEMENT_CONTRADICTIONS: "1",
+        }
+        flags = detect_contradictions(
+            tx,
+            roster=frozenset({"p-3", "p-5", "p-7"}),
+            vent_witness_records=records,
+            env=env,
+        )
+        by_kind = {f.kind: f for f in flags}
+        assert set(by_kind) == {
+            "alibi_vs_sighting",
+            "alibi_vs_physical",
+            "vent_sighting",
+        }
+        # Both lever-minted flags are STRONG.
+        assert is_weak_contradiction(by_kind["alibi_vs_sighting"]) is False
+        assert is_weak_contradiction(by_kind["alibi_vs_physical"]) is False
+
+
+# --- Task 18.9: OFF-path committed-bytes byte-identity pin ------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_COMMITTED_SETS = (
+    _REPO_ROOT / "replays" / "samples" / "9p2i",
+    _REPO_ROOT / "replays" / "samples" / "4p1i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
+)
+
+
+@functools.cache
+def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], ...]:
+    """Every committed meeting entry across all four sets (set, seed, entry).
+
+    Cached so the OFF-path byte-identity pin AND the Task 18.9 lever censuses
+    below read the 799-meeting corpus off ONE walk (the "do not walk twice"
+    rule): the file read happens once per session, and each consumer runs its
+    own detector re-derivations over the shared, already-parsed entries.
+    """
+
+    collected: list[tuple[str, int, MeetingReplayEntry]] = []
+    for set_dir in _COMMITTED_SETS:
+        set_name = f"{set_dir.parent.name}/{set_dir.name}"
+        for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+            seed = int(path.stem.rsplit("-", 1)[1])
+            for entry in read_all_entries(path):
+                if isinstance(entry, MeetingReplayEntry):
+                    collected.append((set_name, seed, entry))
+    return tuple(collected)
+
+
+def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
+    # Every recorded ballot was cast by a living participant, so the ballot
+    # voters ARE the roster the recording-time detector received.
+    return frozenset(ballot.voter for ballot in entry.ballots)
+
+
+def _vent_records_from_recorded_flags(
+    entry: MeetingReplayEntry,
+) -> dict[str, tuple[VentWitnessRecord, ...]]:
+    """Rebuild each speaker's groundable vent channel from the RECORDED flags.
+
+    The replay persists no private :class:`VentWitnessRecord`s, but a recorded
+    ``vent_sighting`` flag IS the record-time grounding verdict: its
+    ``event_a_id`` names the spoken :class:`SawVentObservation` that matched the
+    speaker's own channel. Minting a record from that observation's TYPED fields
+    (grounding at record time guarantees the label is spatial and the tick
+    in-window, so the rebuilt record re-grounds the same observation by
+    construction) lets the OFF-path pin re-derive the vent flags too -- ids and
+    typed fields only, never a text parse (clone of
+    :meth:`tests.agents.test_absence_prior` `_vent_records_from_recorded_flags`).
+    """
+
+    flagged = {
+        flag.event_a_id for flag in entry.contradictions if flag.kind == "vent_sighting"
+    }
+    records: dict[str, list[VentWitnessRecord]] = {}
+    for turn in entry.transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if _turn_observation_id(turn=turn, index=index) not in flagged:
+                continue
+            records.setdefault(turn.speaker, []).append(
+                VentWitnessRecord(
+                    subject=observation.subject,
+                    room=observation.room,
+                    tick=observation.tick,
+                )
+            )
+    return {speaker: tuple(rows) for speaker, rows in records.items()}
+
+
+# The vent-record TICK is provably unrecoverable from replay bytes: the flag
+# description embeds ``VentWitnessRecord.tick`` (the real observed vent tick),
+# which the replay does not persist, while the rebuild above uses the SPOKEN
+# observation's tick. Grounding still fires (they agree within
+# VENT_GROUNDING_TICK_TOLERANCE), so every STRUCTURAL field re-derives
+# byte-identically; only that one description tick can differ (1 meeting across
+# the whole corpus -- ml_corpus/9p2i seed 1075). The comparison therefore pins
+# full equality for every non-vent kind and structural equality (all fields but
+# ``description``) for ``vent_sighting``.
+_VENT_STRUCT = ("contradiction_id", "kind", "event_a_id", "event_b_id", "subjects")
+
+
+def _flags_match(
+    rederived: tuple[ContradictionRef, ...],
+    recorded: tuple[ContradictionRef, ...],
+) -> bool:
+    if len(rederived) != len(recorded):
+        return False
+    for got, exp in zip(rederived, recorded, strict=True):
+        if exp.kind == "vent_sighting":
+            if any(getattr(got, name) != getattr(exp, name) for name in _VENT_STRUCT):
+                return False
+        elif got != exp:
+            return False
+    return True
+
+
+class TestOffPathCommittedBytesByteIdentity:
+    """DoD(a): both levers OFF, ``detect_contradictions`` re-derives the recorded
+    flags byte-identically over every committed meeting (all four sets).
+
+    New coverage beyond the ``test_transcript.py`` re-derivation pin: this walk
+    includes ``vent_sighting`` (via records rebuilt from the recorded verdicts)
+    and spans samples + ml_corpus, both exhaustively (799 meetings, ~1.5 s). The
+    detector has no env dependency when both levers are OFF, so env absent and
+    env={} must agree and both must reproduce the recorded census.
+    """
+
+    def test_re_derivation_equals_recorded_on_every_committed_meeting(self) -> None:
+        entries = _committed_meeting_entries()
+        assert len(entries) > 700  # guard: the walk actually loaded the corpus
+        mismatches: list[str] = []
+        for set_name, seed, entry in entries:
+            roster = _living_roster(entry)
+            records = _vent_records_from_recorded_flags(entry)
+            # Both OFF signals: env absent (default) AND an explicit empty mapping.
+            rederived = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=records
+            )
+            rederived_empty_env = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=records,
+                env={},
+            )
+            # Levers OFF => env absent and env={} are byte-identical.
+            if rederived != rederived_empty_env:
+                mismatches.append(
+                    f"{set_name} seed {seed} {entry.meeting_id}: env drift"
+                )
+            # Determinism: a second call reproduces the first exactly.
+            if rederived != detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=records
+            ):
+                mismatches.append(f"{set_name} seed {seed} {entry.meeting_id}: nondet")
+            if not _flags_match(rederived, entry.contradictions):
+                mismatches.append(
+                    f"{set_name} seed {seed} {entry.meeting_id}: "
+                    f"{len(rederived)} re-derived vs {len(entry.contradictions)} recorded"
+                )
+        assert mismatches == []
+
+
+# --- Task 18.9: the committed-bytes lever censuses (the 18.11 gate reads) ----
+#
+# The counterfactuals the graduation decision (Task 18.11) reads: re-run the
+# CURRENT detector over every committed meeting with each lever forced ON and
+# pin every resulting cell EXACTLY, so a later detector edit cannot silently
+# move the substrate the graduation reads. The 17.5 pin pattern
+# (:class:`tests.agents.test_absence_prior`): reconstruct the roster + rebuilt
+# vent records, toggle the lever through ``env``, and count.
+#
+# ``trigger_kind`` is threaded as ``None`` (the OFF-path pin's choice, RECON R1:
+# not load-bearing on committed bytes -- forcing ``None`` reproduces the recorded
+# census; and the two lever paths never read it -- lever 1 is inside
+# :func:`_detect_alibi_vs_sightings`, lever 2 inside
+# :func:`_detect_vent_placement_contradictions`, neither of which calls
+# ``reconstruct_stated_paths``), so a lever OFF vs ON diff isolates the lever.
+
+_L1_ENV = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "1"}
+_L2_ENV = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "1"}
+
+
+@functools.cache
+def _roles_by_seed(set_name: str) -> dict[int, dict[str, str]]:
+    """``seed -> {player_id: role}`` from a set's tournament-eval-report.json.
+
+    ``role`` is ``"CREWMATE"`` / ``"IMPOSTOR"``; a degenerate self-alibi's LIAR
+    role and a vent placement's SUBJECT role are both read here, keyed by the
+    game seed (mirrors :meth:`tests.agents.test_absence_prior` `roles_by_seed`).
+    """
+
+    import json
+
+    report = json.loads(
+        (_REPO_ROOT / "replays" / set_name / "tournament-eval-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return {game["seed"]: game["roles"] for game in report["report"]["games"]}
+
+
+def _degenerate_self_alibi_ids(
+    entry: MeetingReplayEntry, roster: frozenset[str]
+) -> dict[str, tuple[str, str]]:
+    """``event_id -> (subject, class)`` for degenerate single-tick self-alibis.
+
+    The Task 18.9 lever-1 class: ``from_tick == to_tick`` AND the speaker is its
+    own subject, exactly how :func:`_iter_alibis` indexes a
+    :class:`~meetings.schemas.WhereaboutsClaim` (``class == "whereabouts"``, event
+    id :func:`_turn_whereabouts_id`) and how a genuine single-tick self-stated
+    :class:`~meetings.schemas.AlibiClaim` reads (``class == "alibi"``, event id
+    ``turn:{turn_id}:claim:{index}``). Roster-filtered on the subject, matching
+    :func:`detect_contradictions`' own alibi filter.
+    """
+
+    out: dict[str, tuple[str, str]] = {}
+    for turn in entry.transcript.turns:
+        for index, claim in enumerate(turn.claims):
+            if (
+                isinstance(claim, AlibiClaim)
+                and claim.from_tick == claim.to_tick
+                and claim.subject == turn.speaker
+                and claim.subject in roster
+            ):
+                out[f"turn:{turn.turn_id}:claim:{index}"] = (claim.subject, "alibi")
+        for index, obs in enumerate(turn.observations):
+            if isinstance(obs, WhereaboutsClaim) and turn.speaker in roster:
+                out[_turn_whereabouts_id(turn=turn, index=index)] = (
+                    turn.speaker,
+                    "whereabouts",
+                )
+    return out
+
+
+def _funnel_whereabouts_ids(
+    entry: MeetingReplayEntry, roster: frozenset[str]
+) -> dict[str, str]:
+    """``event_id -> speaker`` for living speakers' whereabouts claims.
+
+    The funnel's ``_whereabouts_claim_event_ids`` construction verbatim
+    (``eval/funnel.py:1384`): the population the audit's "25 lies" cell counts
+    over (subset by any RECORDED flag naming the id).
+    """
+
+    out: dict[str, str] = {}
+    for turn in entry.transcript.turns:
+        if turn.speaker not in roster:
+            continue
+        for index, obs in enumerate(turn.observations):
+            if isinstance(obs, WhereaboutsClaim):
+                out[_turn_whereabouts_id(turn=turn, index=index)] = turn.speaker
+    return out
+
+
+@dataclass(frozen=True)
+class _SetCensus:
+    meetings: int
+    # --- Lever 1 exemption census -------------------------------------------
+    # (a) DISTINCT degenerate self-alibi claims carrying >=1 alibi_vs_sighting
+    #     flag OFF, split by the liar (subject) role and by class; all weak.
+    exempt_off_distinct_by_role: dict[str, int]
+    exempt_off_distinct_by_class: dict[str, int]
+    exempt_off_flag_count: int
+    exempt_all_off_weak: bool
+    # (b) how many of those DISTINCT claims mint >=1 STRONG alibi_vs_sighting ON.
+    exempt_on_strong_distinct_by_role: dict[str, int]
+    exempt_on_strong_flag_count: int
+    # invariant: the OFF-carrying set and the ON-strong set are the SAME ids
+    # (the lever only re-BANDS, never adds/drops a flag).
+    exempt_off_equals_on_strong_ids: bool
+    l1_leaves_flag_id_set_unchanged: bool
+    # --- funnel reconciliation (RECORDED flags, any kind, whereabouts only) --
+    funnel_by_role: dict[str, int]
+    funnel_combo_counts: dict[str, int]
+    funnel_combo_by_role: dict[str, dict[str, int]]
+    # --- Lever 2 vent-placement census --------------------------------------
+    # would-be alibi_vs_physical flags (absent OFF, present ON) + distinct
+    # subjects, by SUBJECT role.
+    vent_flag_count: int
+    vent_subjects_by_role: dict[str, int]
+    vent_new_ids_all_physical: bool
+    # --- DoD point 3: OFF == recorded on the ON legs' own walk --------------
+    off_matches_recorded: bool
+
+
+@functools.cache
+def _committed_lever_census() -> dict[str, _SetCensus]:
+    """One shared re-derivation walk of the corpus computing all 18.9 cells.
+
+    For every committed meeting: reconstruct the roster (ballot voters) and the
+    rebuilt vent channel, then re-derive :func:`detect_contradictions` THREE ways
+    -- OFF (env absent), lever 1 ON, lever 2 ON -- and fold the exemption census,
+    the funnel reconciliation, and the vent census. Cached, so the whole census
+    is one pass over the (already cached) entries.
+    """
+
+    from collections import Counter
+
+    per_set: dict[str, _SetCensus] = {}
+    for set_dir in _COMMITTED_SETS:
+        set_name = f"{set_dir.parent.name}/{set_dir.name}"
+        roles = _roles_by_seed(set_name)
+
+        exempt_off_role: Counter[str] = Counter()
+        exempt_off_class: Counter[str] = Counter()
+        exempt_on_role: Counter[str] = Counter()
+        exempt_off_flags = 0
+        exempt_on_flags = 0
+        all_off_weak = True
+        off_equals_on_ids = True
+        l1_id_set_unchanged = True
+        funnel_role: Counter[str] = Counter()
+        funnel_combo: Counter[str] = Counter()
+        funnel_combo_role: dict[str, Counter[str]] = {}
+        vent_flags = 0
+        vent_subjects: dict[str, set[tuple[int, str]]] = {}
+        vent_new_all_physical = True
+        off_matches = True
+        meetings = 0
+
+        for entry_set, seed, entry in _committed_meeting_entries():
+            if entry_set != set_name:
+                continue
+            meetings += 1
+            role_map = roles[seed]
+            roster = _living_roster(entry)
+            records = _vent_records_from_recorded_flags(entry)
+            degenerate = _degenerate_self_alibi_ids(entry, roster)
+
+            off = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=records
+            )
+            on1 = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=records,
+                env=_L1_ENV,
+            )
+            on2 = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=records,
+                env=_L2_ENV,
+            )
+
+            if not _flags_match(off, entry.contradictions):
+                off_matches = False
+
+            # (a) OFF: distinct degenerate ids carrying an alibi_vs_sighting flag.
+            off_carrying: set[str] = set()
+            for flag in off:
+                if flag.kind != "alibi_vs_sighting":
+                    continue
+                for eid in (flag.event_a_id, flag.event_b_id):
+                    if eid in degenerate:
+                        off_carrying.add(eid)
+                        exempt_off_flags += 1
+                        if not is_weak_contradiction(flag):
+                            all_off_weak = False
+            for eid in off_carrying:
+                subject, cls = degenerate[eid]
+                exempt_off_role[role_map[subject]] += 1
+                exempt_off_class[cls] += 1
+
+            # (b) ON: distinct degenerate ids carrying a STRONG alibi_vs_sighting.
+            on_strong: set[str] = set()
+            for flag in on1:
+                if flag.kind != "alibi_vs_sighting" or is_weak_contradiction(flag):
+                    continue
+                for eid in (flag.event_a_id, flag.event_b_id):
+                    if eid in degenerate:
+                        on_strong.add(eid)
+                        exempt_on_flags += 1
+            for eid in on_strong:
+                subject, _cls = degenerate[eid]
+                exempt_on_role[role_map[subject]] += 1
+            if off_carrying != on_strong:
+                off_equals_on_ids = False
+            # Lever 1 only re-bands: it adds/drops NO flag, so the id set is stable.
+            if {f.contradiction_id for f in off} != {f.contradiction_id for f in on1}:
+                l1_id_set_unchanged = False
+
+            # funnel reconciliation: whereabouts ids named by ANY recorded flag.
+            recorded_named: dict[str, set[str]] = {}
+            for flag in entry.contradictions:
+                recorded_named.setdefault(flag.event_a_id, set()).add(flag.kind)
+                recorded_named.setdefault(flag.event_b_id, set()).add(flag.kind)
+            for eid, speaker in _funnel_whereabouts_ids(entry, roster).items():
+                if eid not in recorded_named:
+                    continue
+                role = role_map[speaker]
+                funnel_role[role] += 1
+                combo = "+".join(sorted(recorded_named[eid]))
+                funnel_combo[combo] += 1
+                funnel_combo_role.setdefault(role, Counter())[combo] += 1
+
+            # Lever 2 vent census: flags present ON but absent OFF.
+            off_ids = {f.contradiction_id for f in off}
+            for flag in on2:
+                if flag.contradiction_id in off_ids:
+                    continue
+                if flag.kind != "alibi_vs_physical":
+                    vent_new_all_physical = False
+                    continue
+                vent_flags += 1
+                for subject in flag.subjects:
+                    vent_subjects.setdefault(role_map.get(subject, "?"), set()).add(
+                        (seed, subject)
+                    )
+
+        per_set[set_name] = _SetCensus(
+            meetings=meetings,
+            exempt_off_distinct_by_role=dict(exempt_off_role),
+            exempt_off_distinct_by_class=dict(exempt_off_class),
+            exempt_off_flag_count=exempt_off_flags,
+            exempt_all_off_weak=all_off_weak,
+            exempt_on_strong_distinct_by_role=dict(exempt_on_role),
+            exempt_on_strong_flag_count=exempt_on_flags,
+            exempt_off_equals_on_strong_ids=off_equals_on_ids,
+            l1_leaves_flag_id_set_unchanged=l1_id_set_unchanged,
+            funnel_by_role=dict(funnel_role),
+            funnel_combo_counts=dict(funnel_combo),
+            funnel_combo_by_role={r: dict(c) for r, c in funnel_combo_role.items()},
+            vent_flag_count=vent_flags,
+            vent_subjects_by_role={r: len(s) for r, s in vent_subjects.items()},
+            vent_new_ids_all_physical=vent_new_all_physical,
+            off_matches_recorded=off_matches,
+        )
+    return per_set
+
+
+class TestExemptionCensus:
+    """Lever 1 (endpoint-band whereabouts exemption) -- the committed-bytes
+    would-be-STRONG census the 18.11 gate reads.
+
+    Per set: the DISTINCT degenerate single-tick self-alibi claims that carry an
+    ``alibi_vs_sighting`` flag OFF (today's recorded roll-call-lie flags, all
+    weak) and how many mint a STRONG flag ON. The lever only RE-BANDS this class:
+    the OFF-carrying and ON-strong id sets are identical, and the whole flag id
+    set is unchanged -- so every one of today's endpoint-banded roll-call lies
+    becomes conviction-grade, none are gained or lost.
+    """
+
+    @pytest.fixture(scope="class")
+    def census(self) -> dict[str, _SetCensus]:
+        return _committed_lever_census()
+
+    def test_all_off_carrying_flags_are_weak_every_set(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        # DoD(a): today's roll-call-lie flags are ALL weak-tier (the audit §3.3
+        # invariant the lever exists to reverse).
+        for cell in census.values():
+            assert cell.exempt_all_off_weak is True
+
+    def test_lever_only_rebands_the_class_every_set(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        # The exemption adds/drops NO flag: (a) the OFF-carrying id set equals the
+        # ON-strong id set, and (b) the full flag id set is byte-stable ON -- only
+        # the weak/strong BAND (description) of the exempt class moves.
+        for cell in census.values():
+            assert cell.exempt_off_equals_on_strong_ids is True
+            assert cell.l1_leaves_flag_id_set_unchanged is True
+            assert cell.exempt_off_flag_count == cell.exempt_on_strong_flag_count
+            assert (
+                cell.exempt_off_distinct_by_role
+                == cell.exempt_on_strong_distinct_by_role
+            )
+
+    def test_samples_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["samples/9p2i"]
+        assert cell.meetings == 179
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 4}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 4}
+        assert cell.exempt_off_flag_count == 4
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 4}
+        assert cell.exempt_on_strong_flag_count == 4
+
+    def test_samples_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["samples/4p1i"]
+        assert cell.meetings == 39
+        assert cell.exempt_off_distinct_by_role == {}
+        assert cell.exempt_off_distinct_by_class == {}
+        assert cell.exempt_off_flag_count == 0
+        assert cell.exempt_on_strong_distinct_by_role == {}
+        assert cell.exempt_on_strong_flag_count == 0
+
+    def test_ml_corpus_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["ml_corpus/9p2i"]
+        assert cell.meetings == 541
+        # 16 distinct exempt claims (13 crew / 3 impostor) = 14 whereabouts + 2
+        # genuine single-tick self-stated AlibiClaims (the +2 are both crew).
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 13, "IMPOSTOR": 3}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 14, "alibi": 2}
+        assert cell.exempt_off_flag_count == 16
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 13, "IMPOSTOR": 3}
+        assert cell.exempt_on_strong_flag_count == 16
+
+    def test_ml_corpus_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["ml_corpus/4p1i"]
+        assert cell.meetings == 40
+        assert cell.exempt_off_distinct_by_role == {}
+        assert cell.exempt_off_distinct_by_class == {}
+        assert cell.exempt_off_flag_count == 0
+        assert cell.exempt_on_strong_distinct_by_role == {}
+        assert cell.exempt_on_strong_flag_count == 0
+
+    def test_off_re_derivation_equals_recorded_on_the_census_walk(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        # DoD point 3: pin OFF == recorded on the ON legs' own walk (not only the
+        # dedicated byte-identity class), so the census baseline IS the substrate.
+        for cell in census.values():
+            assert cell.off_matches_recorded is True
+
+
+class TestExemptionCensusFunnelReconciliation:
+    """Reconcile the ml_corpus/9p2i OFF cell with the audit's "25 lies, 20/5".
+
+    The audit (``audit-phase-18-planning.md`` §3.3, derived via
+    ``eval/funnel.py:1469`` ``_whereabouts_lies_detected``) counts DISTINCT
+    living-speaker WHEREABOUTS claims named by ANY recorded flag kind: 25, split
+    20 crew / 5 impostor. That reproduces here EXACTLY. It does NOT equal the
+    lever-1 would-be-STRONG census (16) because the two measure different
+    populations, decomposed below -- reported, not forced.
+    """
+
+    @pytest.fixture(scope="class")
+    def census(self) -> dict[str, _SetCensus]:
+        return _committed_lever_census()
+
+    def test_funnel_cell_reproduces_the_audit_25_20_5(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        cell = census["ml_corpus/9p2i"]
+        assert cell.funnel_by_role == {"CREWMATE": 20, "IMPOSTOR": 5}
+        assert sum(cell.funnel_by_role.values()) == 25
+
+    def test_funnel_25_decomposes_by_recorded_flag_kind(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        # The 25 whereabouts lies split cleanly by the flag kind that names them:
+        #   * 14 named by ``alibi_vs_sighting`` -- EXACTLY the whereabouts subset
+        #     lever 1 promotes to STRONG (the 14 of the 16-claim exemption census
+        #     whose class is "whereabouts"; the other 2 exempt claims are genuine
+        #     single-tick AlibiClaims, NOT whereabouts, so outside this funnel);
+        #   * 11 named by ``alibi_conflict`` ONLY -- self-placement CONFLICTS,
+        #     which lever 1 does NOT touch (the exemption lives only in
+        #     ``_detect_alibi_vs_sightings``; the alibi_conflict weak guards --
+        #     self-pair / narrow / boundary / adversarial -- are untouched).
+        # No whereabouts lie is named by both, by alibi_vs_physical, or by
+        # vent_sighting -- so the 25 = 14 + 11 partition is exhaustive.
+        cell = census["ml_corpus/9p2i"]
+        assert cell.funnel_combo_counts == {
+            "alibi_conflict": 11,
+            "alibi_vs_sighting": 14,
+        }
+        assert cell.funnel_combo_by_role == {
+            "CREWMATE": {"alibi_conflict": 9, "alibi_vs_sighting": 11},
+            "IMPOSTOR": {"alibi_conflict": 2, "alibi_vs_sighting": 3},
+        }
+
+    def test_lever_promotes_the_alibi_vs_sighting_subset_only(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        # The reconciliation identity: the 14 alibi_vs_sighting-carrying
+        # whereabouts claims in the funnel ARE the "whereabouts"-class rows of the
+        # exemption census; lever 1's would-be-STRONG count is those 14 plus the 2
+        # non-whereabouts genuine single-tick self-alibis = 16.
+        cell = census["ml_corpus/9p2i"]
+        funnel_avs = sum(
+            counts.get("alibi_vs_sighting", 0)
+            for counts in cell.funnel_combo_by_role.values()
+        )
+        assert funnel_avs == cell.exempt_off_distinct_by_class["whereabouts"] == 14
+        assert (
+            cell.exempt_off_distinct_by_class["whereabouts"]
+            + cell.exempt_off_distinct_by_class["alibi"]
+            == cell.exempt_off_flag_count
+            == 16
+        )
+
+
+class TestVentPlacementCensus:
+    """Lever 2 (grounded vent-placement variant) -- the committed-bytes census.
+
+    Per set: the would-be ``alibi_vs_physical`` flags absent OFF and present ON
+    (with the vent channel rebuilt from the recorded ``vent_sighting`` verdicts --
+    the best faithful reconstruction the replay boundary allows: the rebuilt
+    records carry the SPOKEN tick/room, since the private
+    :class:`~meetings.schemas.VentWitnessRecord` is not persisted). Vents are
+    impostor-only, so every flagged subject is measured to be an IMPOSTOR.
+    """
+
+    @pytest.fixture(scope="class")
+    def census(self) -> dict[str, _SetCensus]:
+        return _committed_lever_census()
+
+    def test_all_new_flags_are_alibi_vs_physical_and_impostor_every_set(
+        self, census: dict[str, _SetCensus]
+    ) -> None:
+        for cell in census.values():
+            assert cell.vent_new_ids_all_physical is True
+            # Every vent-placement subject is an IMPOSTOR (vents are impostor-only)
+            # -- the assertion is over what is MEASURED, so an empty set passes.
+            assert set(cell.vent_subjects_by_role) <= {"IMPOSTOR"}
+
+    def test_samples_9p2i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["samples/9p2i"]
+        # One impostor subject (seed 43 p-9), flagged twice: two of the subject's
+        # own self-alibis (an 8-10 window and a 10-10 single tick) each contradict
+        # the same grounded MEDBAY vent placement -- one flag per (obs, alibi).
+        assert cell.vent_flag_count == 2
+        assert cell.vent_subjects_by_role == {"IMPOSTOR": 1}
+
+    def test_samples_4p1i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["samples/4p1i"]
+        assert cell.vent_flag_count == 0
+        assert cell.vent_subjects_by_role == {}
+
+    def test_ml_corpus_9p2i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["ml_corpus/9p2i"]
+        # Five grounded vent placements, five DISTINCT impostor subjects (seeds
+        # 1031/p-5, 1053/p-1, 1071/p-9, 1081/p-6, 1119/p-6), one flag each.
+        assert cell.vent_flag_count == 5
+        assert cell.vent_subjects_by_role == {"IMPOSTOR": 5}
+
+    def test_ml_corpus_4p1i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
+        cell = census["ml_corpus/4p1i"]
+        assert cell.vent_flag_count == 0
+        assert cell.vent_subjects_by_role == {}
