@@ -76,11 +76,27 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
  stands as the ladder tip —        exists; a mover baseline re-enters only via a future
  audits/audit-phase-17-close.md)   adopting record that passes the referee + win-edge bar
         │
-        │   Phase 18 — presentation: mixed-model lobbies + deduction/deception leaderboard,
-        │   auto-highlight reels from the referee, a turn-paced human seat, the public
-        │   deception-dataset packaging, and the workflow retrospective write-up
+        │   Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18,
+        │   audits/audit-phase-18-planning.md; tasks/phase-18.md): emergent
+        │   deception/deduction under environmental pressure — the meeting-layer
+        │   package behind an evidence gate (its adopting record, if any arm ships,
+        │   is baseline 6), the conviction-economy training signal, alternating-
+        │   freeze co-evolution impostor-first, pre-registered emergence
+        │   instruments; an evidence-gated mover flip at the close records the
+        │   next baseline number after whatever the phase adopted
         ▼
-      (ship)
+baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 gate's
+        │                       ruling; mover record only on a §1.3-bar PASS at 18.27
+        │
+        │   Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18): a deep
+        │   review of the existing code (dead spots, dead code, refactor
+        │   opportunities) + an updated presentation of the frontend and the data
+        │   displays. NOT a feature phase. Heterogeneous-model lobbies are NOT in
+        │   Phase 19 — a model-vs-model comparison feature comes only AFTER the
+        │   review/refresh work, as its own later decision. The human seat is OUT
+        │   (not deferred-to-19; out).
+        ▼
+      (presentation, re-scoped as a later decision)
 ```
 
 ## 3. Phase-by-phase summary
@@ -121,11 +137,24 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
   ranking unchanged); the absence-prior graduation + vent widening, the pooling-prompt uptake
   work, the crew deployment surface, and the detector-band relaxation route to Phase 18 as
   recorded contracts (the close audit §6).
-- **Phase 18 — presentation (owner goal 4).** Heterogeneous-model lobbies (per-agent model routing +
-  per-player provenance — plumbing already sized in the V&J planning doc) and a which-model-deceives/
-  deduces-best leaderboard; referee-driven auto-highlight reels in the spectator UI; a turn-paced
-  human seat; packaging the recorded corpora as a labeled deception benchmark; the agentic-workflow
-  retrospective write-up. Ordering inside the phase is flexible; nothing here changes game substance.
+- **Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18; `tasks/phase-18.md`, opened
+  2026-07-18).** The owner ruled presentation DEFERRED and re-chartered Phase 18 as the ML phase:
+  advance the learned agents until deception and deduction arise from environmental pressure rather
+  than scripting. Five owner-ratified locked decisions (`audits/audit-phase-18-planning.md` §8):
+  layered training signal (a conviction-economy proxy model in the loop + per-generation real-path
+  re-ranks), the meeting-layer absence/uptake package in-phase and FIRST behind an evidence gate
+  (roll-call round + endpoint-band relaxation + impostor-answer arm + vent widening + absence
+  graduation, with pre-registered bars and a crew-only fallback), alternating-freeze co-evolution
+  with the stabilizer stack impostor-first, the §1.3 flip bar as target with pre-registered
+  emergence instruments co-equal, and encoder work riding the co-evolution wave (first-principles
+  primitives rejected on code evidence).
+- **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18).** Not a feature phase: (a) a
+  deep review of the code that already exists — dead spots, dead code, refactor opportunities; (b)
+  an updated presentation of the frontend and the data displays. The human seat is OUT (not
+  deferred-to-19; out). Heterogeneous-model lobbies are NOT in Phase 19 either — a feature comparing
+  how models perform relative to one another comes only AFTER the review/refresh work, as its own
+  later decision. The former presentation scope (leaderboards, highlight reels, dataset packaging,
+  the retrospective) re-enters only through that later decision.
 
 ## 4. Standing rules (carried from the Phase-15 preamble and the planning audits)
 
@@ -143,16 +172,22 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
 6. **Findings, not failures.** A measured flat/negative result closes as a finding (the Phase-14
    doctrine); the pause exists so a small bake-off result redirects effort instead of sinking it.
 
-## 5. Known deferred items (tracked, not dropped)
+## 5. Known deferred items (tracked, not dropped — dispositions refreshed at the Phase-18 open, 2026-07-18)
 
-- Ballot-whereabouts / in-meeting roll-call elicitation → Phase 16 (pooling belongs with Judgment).
+- Ballot-whereabouts / in-meeting roll-call elicitation → LANDED at Phase 16 (the 16.15
+  elicitation); the residual uptake/turn-taking gap (53% of living player-meetings never take a
+  turn) is now Phase 18's Wave-1 meeting-layer package (`tasks/phase-18.md` 18.8–18.12).
 - New physical information channels (cameras/door logs, task-visual confirmation as soft alibis,
-  sabotage retune so meetings happen under pressure) → after Phase 16 proves the funnel keeps what it is
-  given; re-evaluate at the Phase-16 close.
-- Crew owned-task-set observation surface (task-ordering learnability) → owner-gated at the Phase-15
-  pause.
-- Co-evolution (Hall-of-Fame/PFSP stack) → Phase-15 pause decision; never the naive two-population form.
-- `api/replay_loader.py` decomposition; a second map as a held-out generalization set (becomes pressing
-  the moment a learned policy ships as default) → standalone hygiene work, schedule opportunistically.
-- DESIGN.md prose refresh (stale sabotage/provider text) → owner-side edit; dispatched agents are barred
-  from DESIGN.md by the prompt generator.
+  sabotage retune so meetings happen under pressure) → still deferred; re-evaluate at the
+  Phase-18 close against the evidence economy that phase leaves behind.
+- Crew owned-task-set observation surface (task-ordering learnability) → LANDED at 15.22 (pause
+  decision 5); the crew DEPLOYMENT surface (production opt-in) is Phase 18's 18.7, adoption
+  gated.
+- Co-evolution (Hall-of-Fame/PFSP stack) → now OWNED by Phase 18 Wave 3 (alternating-freeze +
+  the stabilizer stack, 18.19–18.21); the naive simultaneous two-population form stays barred
+  (pause decision 4, unchanged).
+- `api/replay_loader.py` decomposition → a Phase-19 review input. A second map as a held-out
+  generalization set becomes pressing the moment a learned policy ships as default — i.e. on a
+  Phase-18 18.27 PASS branch; the close routes it explicitly in that case.
+- DESIGN.md prose refresh (stale sabotage/provider text) → owner-side edit; dispatched agents are
+  barred from DESIGN.md by the prompt generator. A Phase-19 review input.

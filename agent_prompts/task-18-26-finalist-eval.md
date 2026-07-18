@@ -1,0 +1,105 @@
+# Agent Prompt — 18.26 The real-LLM finalist eval (operator, ~5h/finalist, $0)
+
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task 18.26 — The real-LLM finalist eval (operator, ~5h/finalist, $0), anchored to training/reports/report-finalist-eval.md (the 17.14 recorder + protocol this re-runs); scripts/run_tournament.py --candidate-artifact + the 18.19 --crew-artifact arm; the campaign reports' named finalists; the standing floors (whichever baseline the phase adopted). Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+**Branch:** `phase-18-finalist-eval`
+**Depends on:** 18.24, 18.25
+**Section refs:** training/reports/report-finalist-eval.md (the 17.14 recorder + protocol this re-runs); scripts/run_tournament.py --candidate-artifact + the 18.19 --crew-artifact arm; the campaign reports' named finalists; the standing floors (whichever baseline the phase adopted)
+**Complexity:** Integration
+
+The selection evidence: 50-seed real-path evals of the named finalists on the canonical
+seed set at the standing substrate — impostor finalists against the scripted-FSM crew (the
+§1.3 comparator discipline: the same-seed FSM row re-recorded if the substrate moved), and
+(if crew finalists exist) crew finalists against both the scripted impostor and the frozen
+impostor champion, dual-stamped. Full 17.14 discipline: stamp proofs, validity gates, floor
+sensitivity with rare-event z beside every verdict, the committed jsonl + report tables
+18.27 reads.
+
+**Files in scope:**
+- training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
+- tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
+
+**Files NOT in scope:**
+- scripts/run_tournament.py + training/ machinery (recorders froze earlier)
+- replays/samples/ + replays/ml_corpus/ (working recordings stay out of the tree)
+
+**Definition of done:**
+- [ ] Every finalist recorded 50/50 on the real path, stamp-proven (uniform, sha==sidecar), validity PASS, $0, with the same-substrate FSM comparator row recorded on the same seeds; the evidence table carries win edge, referee verdict, and per-gauge floor sensitivity with the statistical reads.
+- [ ] The emergence instruments are computed over every finalist's recordings and quoted beside the selection cells (18.27's second axis reads from here).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+## Implementation hint
+
+The 17.14 §6 recipe generalizes; the new leg is the dual-stamped crew-vs-champion cell —
+plan its seeds so the crew finalist's two opponents are same-seed comparable. Wall-clock
+scales with finalist count: cap the slate at what the campaign reports justify (~3–4).
+
+## Integration risk
+
+The comparator discipline is where selection evidence goes quietly wrong: if the substrate
+moved at 18.12, every Phase-17 comparator number is stale and the same-seed FSM row MUST be
+re-recorded here, never quoted from the old report. The contract makes that a DoD cell.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import agents.tactical.features"`
+- `uv run python -c "import training.coevo.factory"`
+- `uv run python -c "import training.coevo.rollout"`
+- `uv run python -c "import training.bakeoff.harness"`
+- `uv run python -c "import training.conviction.model"`
+- `uv run python -c "import training.conviction.dataset"`
+- `uv run python -c "import training.conviction.fidelity"`
+- `uv run python -c "import agents.strategic.prompts.loader"`
+- `uv run python -c "import agents.tactical.learned.crew_forward"`
+- `uv run python -c "import agents.tactical.learned.factory"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
+- `uv run python -c "import eval.off_menu"`
+- `uv run python -c "import eval.kill_craft"`
+- `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import training.coevo.driver"`
+- `uv run python -c "import training.coevo.hall_of_fame"`
+- `uv run python -c "import training.bakeoff.map_elites"`
+- `uv run python -c "import training.realpath"`
+- `uv run python -c "import training.anchor_study"`
+
+## Pre-flight checklist
+- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+
+## Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify AGENT_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
+Do not implement work outside this task.
+
+## Verification checklist
+- Run every command listed in the Definition of done.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `phase-18-finalist-eval` with a title like `task 18.26: the real-llm finalist eval (operator, ~5h/finalist, $0)`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing training/reports/report-finalist-eval.md (the 17.14 recorder + protocol this re-runs); scripts/run_tournament.py --candidate-artifact + the 18.19 --crew-artifact arm; the campaign reports' named finalists; the standing floors (whichever baseline the phase adopted)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
