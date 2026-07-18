@@ -109,7 +109,7 @@ Wave 3 (co-evolution):
   (18.6, 18.19) -> 18.20 hall-of-fame + PFSP-lite sampler
   (18.17, 18.20) -> 18.21 alternating-freeze driver + stabilizers
   18.19 -> 18.22 encoder v3 + within-kind target resolution
-  (18.16, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
+  (18.16, 18.21, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
   18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
@@ -1355,7 +1355,7 @@ by construction) and quantize everything through the established integer-grid he
 
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
-**Depends on:** 18.16, 18.22
+**Depends on:** 18.16, 18.21, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1495-1501, 1556; `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
