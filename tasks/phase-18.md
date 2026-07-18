@@ -120,8 +120,11 @@ Wave 4 (selection + close):
   (18.5 reaches the close transitively through 18.24's entrant seeding)
 ```
 
-Critical path: 18.8/18.9/18.10 → 18.11 → 18.12 → 18.13 → 18.15 → 18.16 → 18.19 → 18.20 →
-18.21 → 18.24 → 18.26 → 18.27 → 18.28. Wave 0 is seven independent roots; nothing outside
+Critical path: 18.7 → 18.10 → 18.11 → 18.12 → 18.13 → 18.15 → 18.16 → 18.19 → 18.20 →
+18.21 → 18.24 → 18.26 → 18.27 → 18.28 (18.7 and 18.10 entered the head via the
+`orchestrator/game.py`/`orchestrator/replay.py` serialization edges — dispatch 18.7 first).
+The day-one frontier is nine roots (18.1–18.3, 18.5, 18.6, 18.7, 18.8, 18.9, 18.17);
+nothing outside
 the gate chain waits on the owner.
 
 **Baseline numbering.** The ladder tip stands at baseline 5 (`audits/
