@@ -98,6 +98,7 @@ from orchestrator.boundary import (
 )
 from orchestrator.personas import assign_personas
 from orchestrator.replay import (
+    CrewTacticalPolicyStamp,
     LLMCallRecord,
     ReplayLog,
     TacticalPolicyStamp,
@@ -1364,6 +1365,7 @@ class HeadlessGame:
         meeting_runner: MeetingRunner | None = None,
         force: bool = False,
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
+        crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
         rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     ) -> None:
         # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
@@ -1395,6 +1397,12 @@ class HeadlessGame:
                 "record, so a tactical_policy_stamp has nothing to attribute; drop "
                 "the stamp, or pass a replay_path to record and stamp the game."
             )
+        if not records_replay and crew_tactical_policy_stamp is not None:
+            raise ValueError(
+                "a no-replay HeadlessGame (replay_path=None) writes no game_over "
+                "record, so a crew_tactical_policy_stamp has nothing to attribute; "
+                "drop the stamp, or pass a replay_path to record and stamp the game."
+            )
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
@@ -1413,6 +1421,11 @@ class HeadlessGame:
         # default, byte-identical to today's path; the stamp is threaded straight
         # into the per-game ``ReplayLog`` (the writer) in :meth:`run`.
         self._tactical_policy_stamp = tactical_policy_stamp
+        # The CREW-side provenance stamp (Task 18.7): the mirror of the tactical
+        # stamp above, threaded straight into the per-game ``ReplayLog`` in
+        # :meth:`run`. Default ``None`` = absent = scripted crew default,
+        # byte-identical to today's path.
+        self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
         # Passed through to ReplayLog: force=True truncates a pre-existing
         # replay file at construction (just before this game writes it),
         # force=False (default) makes a re-run against an existing path fail
@@ -1508,6 +1521,7 @@ class HeadlessGame:
             game_id=self._game_id(),
             force=self._force,
             tactical_policy_stamp=self._tactical_policy_stamp,
+            crew_tactical_policy_stamp=self._crew_tactical_policy_stamp,
         )
         agents = self._build_agents(state.players)
 

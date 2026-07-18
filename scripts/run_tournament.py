@@ -55,6 +55,23 @@ committed scoring CLIs (``scripts/validity_gate.py``, ``scripts/measure_baseline
 and the stamp read back from every recording via
 ``orchestrator.replay.read_tactical_policy_stamp`` (see
 ``training/reports/report-finalist-eval.md``).
+
+The opt-in learned CREW surface is a THIRD ``--agent-factory`` arm beside the
+scripted default (Task 18.7; audits/audit-phase-18-planning.md §4 #7) — the
+missing half of co-evolution, the 15.20/15.21 pattern on the crew side.
+``--agent-factory learned-crew`` wraps every crewmate with the committed
+``crew-owned-tasks-es`` scorer (``agents.tactical.learned`` again) while
+impostors stay the scripted FSM, and AUTO-STAMPS each recording with the crew
+:class:`~orchestrator.replay.CrewTacticalPolicyStamp` beside an ABSENT impostor
+tactical stamp — so a crew recording carries its own provenance in a DISTINCT
+schema slot and can never be re-read as an impostor-champion game. Adoption
+stays GATED exactly as the impostor champion's: this ships a SURFACE, not a
+champion, and the scripted crew default (``agents.tactical.crewmate_policy``) is
+untouched — an unflagged run threads neither factory nor crew stamp,
+byte-identical to before Task 18.7. The 18.7 conflation guard is enforced in the
+arm itself: the crew stamp's ``policy_id`` / ``weights_sha256`` are asserted
+disjoint from the impostor champion's, so the two learned surfaces can never
+share one recording's label.
 """
 
 from __future__ import annotations
@@ -74,7 +91,9 @@ from agents.tactical.crewmate_policy import CrewmatePolicy  # noqa: E402
 from agents.tactical.impostor_policy import ImpostorPolicy  # noqa: E402
 from agents.tactical.learned.factory import (  # noqa: E402
     LearnedAgentFactory,
+    LearnedCrewAgentFactory,
     build_learned_agent_factory,
+    build_learned_crew_factory,
 )
 from eval.balance_eval import run_tournament_eval  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
@@ -93,6 +112,7 @@ from orchestrator.game import (  # noqa: E402
 )
 from orchestrator.replay import (  # noqa: E402
     FSM_DEFAULT_POLICY_ID,
+    CrewTacticalPolicyStamp,
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
 )
@@ -104,9 +124,14 @@ _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
 # champion is opt-in. Reusing ``FSM_DEFAULT_POLICY_ID`` as the default value
 # keeps an unflagged run byte-identical to the pre-15.21 CLI.
 LEARNED_CHAMPION_FACTORY_ID: Final[str] = "learned-champion"
+# The opt-in crew surface arm (Task 18.7; audits/audit-phase-18-planning.md §4
+# #7): a third choice beside the untouched scripted default and the impostor
+# champion. Adoption stays gated — this selects a SURFACE, not a champion.
+LEARNED_CREW_FACTORY_ID: Final[str] = "learned-crew"
 _AGENT_FACTORY_CHOICES: Final[tuple[str, ...]] = (
     FSM_DEFAULT_POLICY_ID,
     LEARNED_CHAMPION_FACTORY_ID,
+    LEARNED_CREW_FACTORY_ID,
 )
 
 
@@ -222,7 +247,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "impostor with the committed utility-es champion scorer "
             "(agents.tactical.learned) and auto-stamps each recording with the "
             "champion's TacticalPolicyStamp — combining it with a contradicting "
-            "--tactical-policy-stamp is rejected loudly."
+            "--tactical-policy-stamp is rejected loudly. 'learned-crew' (opt-in, "
+            "Task 18.7) wraps every crewmate with the committed crew-owned-tasks-es "
+            "scorer while impostors stay the scripted FSM, and auto-stamps each "
+            "recording with the crew stamp (CrewTacticalPolicyStamp) beside an "
+            "absent impostor stamp."
         ),
     )
     parser.add_argument(
@@ -305,6 +334,96 @@ def _build_learned_champion_factory() -> LearnedAgentFactory:
         return TacticalAgent(agent_id=agent_id, policy=policy, role=role)
 
     return build_learned_agent_factory(inner)
+
+
+def _build_learned_crew_factory() -> LearnedCrewAgentFactory:
+    """Build the Task-18.7 crew factory around the production inner agent.
+
+    The injected inner constructor is exactly the per-player construction
+    :func:`orchestrator.game.build_default_agent_factory` performs — the
+    orchestrator-owned :class:`~orchestrator.game.TacticalAgent` wrapping the
+    role-appropriate scripted FSM policy — the same one-liner
+    :func:`_build_learned_champion_factory` injects. It is injected rather than
+    imported by ``agents/tactical/learned/`` because that package may not import
+    the orchestrator (``agents → orchestrator → engine`` breaches the observation
+    firewall) while this CLI may.
+
+    The crew factory additionally needs two SCALARS off the engine map that the
+    submission-mask re-validation and emergency bookkeeping read but the
+    observation surface does not expose — the sabotage kinds and the per-player
+    emergency-use budget. ``engine.world.load_canonical_map`` is imported INSIDE
+    this function (the :func:`_resolve_candidate_artifact` lazy-import idiom) so
+    the default ``fsm-default`` path's module graph stays byte-identical, and the
+    two scalars are read off the real map (``game_map.sabotages`` /
+    ``game_map.emergency.uses_per_player``) and INJECTED — closing the seam
+    Task 18.7 deliberately leaves injected because ``agents/`` may not read the
+    engine map.
+    """
+
+    def inner(agent_id: PlayerId, role: Role) -> TacticalAgent:
+        policy: CrewmatePolicy | ImpostorPolicy
+        if role == "IMPOSTOR":
+            policy = ImpostorPolicy(agent_id=agent_id)
+        else:
+            policy = CrewmatePolicy(agent_id=agent_id)
+        return TacticalAgent(agent_id=agent_id, policy=policy, role=role)
+
+    from engine.world import load_canonical_map
+
+    game_map = load_canonical_map()
+    return build_learned_crew_factory(
+        inner,
+        sabotage_kinds=tuple(sorted(game_map.sabotages)),
+        emergency_uses_per_player=game_map.emergency.uses_per_player,
+    )
+
+
+def _resolve_learned_crew_factory() -> tuple[AgentFactory, CrewTacticalPolicyStamp]:
+    """Resolve ``--agent-factory learned-crew`` into a factory + crew auto-stamp (18.7).
+
+    Builds the opt-in Task-18.7 crew factory (its committed
+    ``crew-owned-tasks-es`` weights sha-verified on load, fail loud) and
+    constructs the real :class:`~orchestrator.replay.CrewTacticalPolicyStamp` here
+    in ``scripts/`` from the factory's five plain-string stamp fields — the
+    factory itself stays engine-free per Task 18.7 — so the crew auto-stamp always
+    carries the digest of the crew artifact actually loaded, never a hard-coded
+    sha.
+
+    Then enforces the 18.7 CONFLATION GUARD (the task's integration-risk clause):
+    a crew recording must NEVER wear the impostor champion's stamp, so the crew
+    stamp's ``policy_id`` / ``weights_sha256`` are asserted DISJOINT from the
+    committed impostor champion's namespaces (``CHAMPION_POLICY_ID`` /
+    :func:`agents.tactical.learned.weights.committed_weights_sha256`). A collision
+    on either — which would let the two learned surfaces share one recording's
+    label — is fail-loud (``SystemExit``), never a silent record.
+    """
+
+    factory = _build_learned_crew_factory()
+    fields = factory.stamp
+    stamp = CrewTacticalPolicyStamp(
+        policy_id=fields.policy_id,
+        method=fields.method,
+        encoder_version=fields.encoder_version,
+        weights_sha256=fields.weights_sha256,
+        anchor_policy=fields.anchor_policy,
+    )
+
+    from agents.tactical.learned.factory import CHAMPION_POLICY_ID
+    from agents.tactical.learned.weights import committed_weights_sha256
+
+    if (
+        stamp.policy_id == CHAMPION_POLICY_ID
+        or stamp.weights_sha256 == committed_weights_sha256()
+    ):
+        raise SystemExit(
+            "the learned-crew recorder produced a crew stamp that collides with "
+            f"the impostor champion's (policy_id={stamp.policy_id!r}, "
+            f"weights_sha256={stamp.weights_sha256!r}); a crew recording must "
+            "never wear the impostor champion's stamp — the 18.7 conflation guard "
+            "requires distinct policy_id/weights_sha256 namespaces across the crew "
+            "and impostor stamps."
+        )
+    return factory, stamp
 
 
 _CANDIDATE_STAMP_FILENAME: Final[str] = "stamp.json"
@@ -688,9 +807,38 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
-    agent_factory, auto_stamp = _resolve_agent_factory(
-        args.agent_factory, candidate_artifact=args.candidate_artifact
-    )
+    # The learned-crew arm (Task 18.7) resolves its own factory + CREW auto-stamp
+    # and leaves the impostor tactical auto_stamp ABSENT (impostors stay the
+    # scripted FSM); every other arm keeps crew_auto_stamp None. --candidate-artifact
+    # records an impostor policy, so combining it with the crew arm conflates two
+    # movers in one recording — reject it loudly, mirroring the existing
+    # champion-vs-artifact mutual-exclusion. The three resolution outputs are
+    # declared up front so the crew branch (which alone yields a non-None factory
+    # here) does not narrow ``agent_factory`` below the ``| None`` the
+    # ``fsm-default`` path needs.
+    agent_factory: AgentFactory | None
+    auto_stamp: TacticalPolicyStamp | None
+    crew_auto_stamp: CrewTacticalPolicyStamp | None
+    if args.agent_factory == LEARNED_CREW_FACTORY_ID:
+        if args.candidate_artifact is not None:
+            raise SystemExit(
+                f"--candidate-artifact is mutually exclusive with --agent-factory "
+                f"{LEARNED_CREW_FACTORY_ID!r}: the crew arm wraps every crewmate "
+                "with the committed crew scorer and auto-stamps the crew stamp, "
+                "while the artifact records an impostor policy. Drop --agent-factory "
+                f"(it defaults to {FSM_DEFAULT_POLICY_ID!r})."
+            )
+        agent_factory, crew_auto_stamp = _resolve_learned_crew_factory()
+        auto_stamp = None
+    else:
+        agent_factory, auto_stamp = _resolve_agent_factory(
+            args.agent_factory, candidate_artifact=args.candidate_artifact
+        )
+        crew_auto_stamp = None
+    # The IMPOSTOR-side stamp reconciliation is unchanged (Task 15.21): on the
+    # crew arm auto_stamp is None, so the reference is the FSM default and an
+    # explicit champion --tactical-policy-stamp already contradicts it and exits
+    # here — the crew arm records the impostor side as the scripted FSM.
     tactical_policy_stamp = _resolve_recorded_stamp(
         auto_stamp=auto_stamp,
         explicit_stamp=explicit_stamp,
@@ -703,12 +851,29 @@ def main(argv: list[str] | None = None) -> int:
     # without --force, the first existing file raises and exits non-zero
     # (DESIGN.md §11.4; Task 4.16).
     #
-    # Two-branch call (Task 15.21): the fsm-default path passes NO agent_factory
-    # kwarg, so the harness call — and any 15.9-era caller/spy of this module's
-    # seam — stays byte-identical to the pre-15.21 CLI (run_tournament_eval's
-    # omitted-kwarg default already is build_default_agent_factory()); the
-    # learned path threads the opt-in factory.
-    if agent_factory is None:
+    # Three-branch call (Task 18.7, extending the Task-15.21 two-branch seam):
+    # the two pre-18.7 call sites stay BYTE-IDENTICAL for their spies — the
+    # fsm-default path passes NO agent_factory kwarg (run_tournament_eval's
+    # omitted-kwarg default already is build_default_agent_factory(), so any
+    # 15.9/15.21/17.14-era caller/spy of this seam keeps pinning it) and the
+    # learned-champion / candidate path threads the opt-in factory unchanged.
+    # Only the crew arm threads the additive crew_policy_stamp beside the
+    # (absent) impostor tactical stamp; crew_auto_stamp is None on every other
+    # path, so they fall through to the unchanged branches.
+    if crew_auto_stamp is not None:
+        report = run_tournament_eval(
+            seeds=seeds,
+            output_dir=args.output_dir,
+            agent_factory=agent_factory,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            max_ticks=args.max_ticks,
+            force=args.force,
+            tactical_policy_stamp=tactical_policy_stamp,
+            crew_policy_stamp=crew_auto_stamp,
+        )
+    elif agent_factory is None:
         report = run_tournament_eval(
             seeds=seeds,
             output_dir=args.output_dir,

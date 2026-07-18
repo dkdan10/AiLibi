@@ -18,6 +18,21 @@ learned-champion``; an explicit ``--tactical-policy-stamp`` must match the
 artifact stamp field-for-field); (4) the default (no ``--candidate-artifact``)
 path stays byte-identical to the pre-17.14 CLI. The fake LLM provider comes from
 the root ``tests/conftest.py`` autouse fixture — no network.
+
+The opt-in learned CREW arm (Task 18.7; audits/audit-phase-18-planning.md §4 #7)
+adds its own guard section below: ``--agent-factory learned-crew`` resolves to a
+:class:`~agents.tactical.learned.factory.LearnedCrewAgentFactory` plus a crew
+:class:`~orchestrator.replay.CrewTacticalPolicyStamp` whose ``weights_sha256`` is
+the committed crew sidecar digest (read back from the recorded bytes, never
+echoed), its ``policy_id`` / ``weights_sha256`` asserted DISJOINT from the
+impostor champion's — the 18.7 conflation guard, positively AND (via a
+monkeypatched collision on the guard's ``CHAMPION_POLICY_ID`` import site)
+mechanically. ``main`` threads that factory beside the crew stamp and an ABSENT
+impostor tactical stamp, so a crew recording carries its own provenance in a
+distinct schema slot; the fsm-default path threads NEITHER (the byte-identity
+pin, on-disk edition: no ``crew_tactical_policy`` key), and the crew arm rejects a
+combined ``--candidate-artifact`` (an impostor mover) or a contradicting explicit
+champion ``--tactical-policy-stamp`` loudly.
 """
 
 from __future__ import annotations
@@ -30,12 +45,17 @@ from pathlib import Path
 import pytest
 
 import run_tournament as rt
-from agents.tactical.learned.factory import LearnedAgentFactory
+from agents.tactical.learned.factory import (
+    LearnedAgentFactory,
+    LearnedCrewAgentFactory,
+)
 from eval.balance_eval import run_tournament_eval as _real_run_tournament_eval
 from eval.report_schema import TournamentReport
 from orchestrator.game import AgentFactory
 from orchestrator.replay import (
+    CrewTacticalPolicyStamp,
     TacticalPolicyStamp,
+    read_crew_tactical_policy_stamp,
     read_tactical_policy_stamp,
 )
 
@@ -43,6 +63,25 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ARTIFACTS = _REPO_ROOT / "training" / "artifacts" / "impostor"
 _UTILITY_ES = _ARTIFACTS / "utility-es"
 _POLICY_ES = _ARTIFACTS / "policy-es"
+
+# The committed CREW artifact (Task 18.7): the agents-side copy of the frozen
+# training-side ``crew-owned-tasks-es`` genome. Both sidecars record the SAME
+# digest — the never-echoed provenance the crew stamp names and the on-disk
+# read-back verifies against.
+_CREW_WEIGHTS_DIGEST = (
+    "bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c"
+)
+_AGENTS_CREW_SIDECAR = (
+    _REPO_ROOT / "agents" / "tactical" / "learned" / "crew_weights.json.sha256"
+)
+_TRAINING_CREW_SIDECAR = (
+    _REPO_ROOT
+    / "training"
+    / "artifacts"
+    / "crew"
+    / "crew-owned-tasks-es"
+    / "weights.json.sha256"
+)
 
 
 def _artifact_stamp(entrant_dir: Path) -> TacticalPolicyStamp:
@@ -131,6 +170,50 @@ def _install_default_path_spy(
         return _real_run_tournament_eval(
             seeds=seeds,
             output_dir=output_dir,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            max_ticks=max_ticks,
+            force=force,
+            tactical_policy_stamp=tactical_policy_stamp,
+        )
+
+    monkeypatch.setattr(rt, "run_tournament_eval", spy)
+
+
+def _install_crew_factory_capturing_spy(
+    monkeypatch: pytest.MonkeyPatch, captured: dict[str, object]
+) -> None:
+    """Patch ``run_tournament.run_tournament_eval`` to capture the CREW seam (18.7).
+
+    The crew twin of :func:`_install_factory_capturing_spy`: keyword-only
+    ``agent_factory`` AND ``crew_policy_stamp``, BOTH with no default, so ``main``
+    failing to thread EITHER the crew factory or the crew stamp also fails loud
+    (TypeError). Records the factory + both stamps ``main`` threads, then delegates
+    to the real harness so ``main`` still produces a valid report end-to-end.
+    """
+
+    def spy(
+        *,
+        seeds: Sequence[int],
+        output_dir: Path,
+        agent_factory: AgentFactory,
+        crew_policy_stamp: CrewTacticalPolicyStamp,
+        num_players: int,
+        num_impostors: int,
+        tasks_per_crewmate: int,
+        max_ticks: int,
+        force: bool,
+        tactical_policy_stamp: TacticalPolicyStamp | None = None,
+    ) -> TournamentReport:
+        captured["agent_factory"] = agent_factory
+        captured["crew_policy_stamp"] = crew_policy_stamp
+        captured["tactical_policy_stamp"] = tactical_policy_stamp
+        return _real_run_tournament_eval(
+            seeds=seeds,
+            output_dir=output_dir,
+            agent_factory=agent_factory,
+            crew_policy_stamp=crew_policy_stamp,
             num_players=num_players,
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
@@ -467,3 +550,273 @@ def test_main_candidate_sha_mismatch_fails_before_recording(tmp_path: Path) -> N
     # Fail loud BEFORE any spend: no replay bytes were written.
     if out_dir.exists():
         assert not list(out_dir.glob("replay-seed-*.jsonl"))
+
+
+# -- the opt-in learned CREW arm (Task 18.7) ----------------------------------
+
+
+def _read_game_over_line(replay_path: Path) -> dict[str, object]:
+    """The raw ``game_over`` JSON object from a replay (the on-disk byte inspector).
+
+    Reads the recorded bytes directly — not through the typed reader — so a test
+    can assert the ABSENCE of a key (``crew_tactical_policy``) that the writer
+    OMITS when the stamp is ``None`` (the byte-identity discipline in
+    :meth:`orchestrator.replay.ReplayLog.record_game_end`), which a typed reader
+    would silently normalize away.
+    """
+
+    for line in replay_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if isinstance(record, dict) and record.get("kind") == "game_over":
+            return record
+    raise AssertionError(f"no game_over record in {replay_path}")
+
+
+def test_resolve_learned_crew_factory_builds_factory_and_exact_stamp() -> None:
+    """``learned-crew`` resolves to the crew factory + its EXACT five-field stamp.
+
+    The crew twin of :func:`test_resolve_candidate_builds_factory_and_exact_stamp`:
+    the factory is the committed :class:`LearnedCrewAgentFactory`, and the crew
+    stamp's ``weights_sha256`` equals BOTH the agents-side crew sidecar digest and
+    the frozen training-side ``crew-owned-tasks-es`` sidecar — the sha-verified
+    provenance a learned-crew recording reads back from bytes.
+    """
+
+    factory, stamp = rt._resolve_learned_crew_factory()
+    assert isinstance(factory, LearnedCrewAgentFactory)
+    assert (
+        stamp.policy_id,
+        stamp.method,
+        stamp.encoder_version,
+        stamp.weights_sha256,
+        stamp.anchor_policy,
+    ) == (
+        "crew-owned-tasks-es",
+        "crew-utility-scorer-es",
+        "crew-option-features-v2",
+        _CREW_WEIGHTS_DIGEST,
+        "fsm-default",
+    )
+    assert (
+        stamp.weights_sha256
+        == _AGENTS_CREW_SIDECAR.read_text(encoding="utf-8").split()[0]
+    )
+    assert (
+        stamp.weights_sha256
+        == _TRAINING_CREW_SIDECAR.read_text(encoding="utf-8").split()[0]
+    )
+
+
+def test_learned_crew_stamp_namespaces_are_disjoint_from_the_impostor_champion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The crew and impostor-champion stamps never share a namespace (18.7 guard).
+
+    Positively: the crew stamp's ``policy_id`` / ``weights_sha256`` differ from the
+    ``learned-champion`` auto-stamp's — the conflation guard's factual basis (a
+    crew recording can never be re-read as an impostor-champion game). Mechanically:
+    monkeypatching the guard's ``CHAMPION_POLICY_ID`` import site into a collision
+    with the crew ``policy_id`` makes the arm fail loud, so the guard is a LIVE
+    check, not a comment.
+    """
+
+    _, crew_stamp = rt._resolve_learned_crew_factory()
+    _, champion_stamp = rt._resolve_agent_factory("learned-champion")
+    assert champion_stamp is not None
+    assert crew_stamp.policy_id != champion_stamp.policy_id
+    assert crew_stamp.weights_sha256 != champion_stamp.weights_sha256
+
+    # Force a collision on the impostor champion's policy_id namespace: the guard
+    # reads ``CHAMPION_POLICY_ID`` from agents.tactical.learned.factory at call
+    # time (a function-local import), so patching that import site trips it.
+    monkeypatch.setattr(
+        "agents.tactical.learned.factory.CHAMPION_POLICY_ID", "crew-owned-tasks-es"
+    )
+    with pytest.raises(SystemExit, match="conflation guard"):
+        rt._resolve_learned_crew_factory()
+
+
+def test_main_learned_crew_threads_factory_and_crew_stamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--agent-factory learned-crew`` threads the crew factory + the crew stamp.
+
+    The crew twin of :func:`test_main_candidate_threads_factory_and_auto_stamp`:
+    the spy's keyword-only ``crew_policy_stamp`` (no default) makes a missing crew
+    stamp fail loud, and the impostor-side ``tactical_policy_stamp`` stays ``None``
+    (impostors remain the scripted FSM).
+    """
+
+    captured: dict[str, object] = {}
+    _install_crew_factory_capturing_spy(monkeypatch, captured)
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--start-seed",
+            "1004",
+            "--max-ticks",
+            "30",
+            "--output-dir",
+            str(tmp_path),
+            "--agent-factory",
+            "learned-crew",
+            "--force",
+        ]
+    )
+
+    assert rc == 0
+    assert isinstance(captured["agent_factory"], LearnedCrewAgentFactory)
+    crew_stamp = captured["crew_policy_stamp"]
+    assert isinstance(crew_stamp, CrewTacticalPolicyStamp)
+    assert crew_stamp.weights_sha256 == _CREW_WEIGHTS_DIGEST
+    assert captured["tactical_policy_stamp"] is None
+
+
+def test_main_learned_crew_stamps_replay_on_disk_read_back_never_echoed(
+    tmp_path: Path,
+) -> None:
+    """The DoD e2e: a real crew run stamps the crew provenance on disk (exact).
+
+    No spy — the production seam runs end-to-end and lands a ``game_over`` record.
+    The crew stamp is asserted from the RECORDED BYTES via
+    :func:`read_crew_tactical_policy_stamp`, its ``weights_sha256`` equal to the
+    committed crew sidecar digest READ FROM THE SIDECAR FILE (the never-echoed
+    discipline), while the impostor side records the absent = FSM default
+    (:func:`read_tactical_policy_stamp` is ``None``).
+    """
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--start-seed",
+            "1004",
+            "--output-dir",
+            str(tmp_path),
+            "--max-ticks",
+            "200",
+            "--agent-factory",
+            "learned-crew",
+        ]
+    )
+
+    assert rc == 0
+    replay = tmp_path / "replay-seed-1004.jsonl"
+    crew_stamp = read_crew_tactical_policy_stamp(replay)
+    assert crew_stamp is not None
+    assert (
+        crew_stamp.weights_sha256
+        == _AGENTS_CREW_SIDECAR.read_text(encoding="utf-8").split()[0]
+    )
+    assert (
+        crew_stamp.policy_id,
+        crew_stamp.method,
+        crew_stamp.encoder_version,
+        crew_stamp.anchor_policy,
+    ) == (
+        "crew-owned-tasks-es",
+        "crew-utility-scorer-es",
+        "crew-option-features-v2",
+        "fsm-default",
+    )
+    # The impostor side is the scripted FSM (an absent tactical stamp).
+    assert read_tactical_policy_stamp(replay) is None
+
+
+def test_main_default_path_threads_no_crew_stamp_and_writes_no_crew_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default path threads NO crew stamp and writes NO crew key (byte-identity).
+
+    The crew edition of :func:`test_main_candidate_omitted_is_default_path`: the
+    default-path spy has no ``crew_policy_stamp`` parameter, so ``main`` threading
+    one would raise TypeError. Reaching rc == 0 pins that the fsm-default arm never
+    threads it; then the on-disk ``game_over`` line carries no
+    ``crew_tactical_policy`` key (the writer omits it when the stamp is ``None``)
+    and :func:`read_crew_tactical_policy_stamp` returns ``None``.
+    """
+
+    captured: dict[str, object] = {}
+    _install_default_path_spy(monkeypatch, captured)
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--start-seed",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--max-ticks",
+            "200",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["tactical_policy_stamp"] is None
+    replay = tmp_path / "replay-seed-0.jsonl"
+    assert "crew_tactical_policy" not in _read_game_over_line(replay)
+    assert read_crew_tactical_policy_stamp(replay) is None
+
+
+def test_main_learned_crew_rejects_candidate_artifact(tmp_path: Path) -> None:
+    """``learned-crew`` + ``--candidate-artifact`` is rejected loudly (mutual excl.).
+
+    The artifact records an IMPOSTOR policy while the crew arm scores crewmates —
+    combining them would conflate two movers in one recording, so the crew arm
+    rejects the pairing before any game runs (mirroring the champion-vs-artifact
+    mutual exclusion).
+    """
+
+    with pytest.raises(SystemExit, match="mutually exclusive"):
+        rt.main(
+            [
+                "--num-games",
+                "1",
+                "--output-dir",
+                str(tmp_path),
+                "--max-ticks",
+                "2",
+                "--agent-factory",
+                "learned-crew",
+                "--candidate-artifact",
+                str(_UTILITY_ES),
+            ]
+        )
+
+
+def test_main_learned_crew_rejects_contradicting_explicit_stamp(
+    tmp_path: Path,
+) -> None:
+    """An explicit impostor-champion stamp contradicts the crew arm's FSM impostor.
+
+    The crew arm records the impostor side as the scripted FSM default (its
+    ``auto_stamp`` is ``None``), so an explicit ``--tactical-policy-stamp`` carrying
+    the utility-es champion fields contradicts that reference (first differing on
+    ``policy_id``) and fails loud before any game runs.
+    """
+
+    stamp_path = tmp_path / "champion.json"
+    stamp_path.write_text(
+        _artifact_stamp(_UTILITY_ES).model_dump_json(), encoding="utf-8"
+    )
+
+    with pytest.raises(SystemExit, match="policy_id"):
+        rt.main(
+            [
+                "--num-games",
+                "1",
+                "--output-dir",
+                str(tmp_path),
+                "--max-ticks",
+                "2",
+                "--agent-factory",
+                "learned-crew",
+                "--tactical-policy-stamp",
+                str(stamp_path),
+            ]
+        )

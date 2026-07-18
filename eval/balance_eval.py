@@ -89,6 +89,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import (
+    CrewTacticalPolicyStamp,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     MeetingReplayEntry,
@@ -238,6 +239,7 @@ def run_tournament_eval(
     max_ticks: int = DEFAULT_MAX_TICKS,
     force: bool = False,
     tactical_policy_stamp: TacticalPolicyStamp | None = None,
+    crew_policy_stamp: CrewTacticalPolicyStamp | None = None,
     meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
 ) -> TournamentReport:
     """Run one :class:`HeadlessGame` per seed and assemble a typed report.
@@ -304,6 +306,15 @@ def run_tournament_eval(
     ``--tactical-policy-stamp`` CLI flag (the seam the Task-15.12 corpus wrapper
     drives).
 
+    ``crew_policy_stamp`` is the additive crew-side provenance pass-through (Task
+    18.7): the crew twin of ``tactical_policy_stamp``, forwarded verbatim to each
+    per-seed :class:`HeadlessGame` as ``crew_tactical_policy_stamp`` so a
+    learned-crew recording stamps every game's ``game_over`` record in its own
+    DISTINCT :class:`~orchestrator.replay.CrewTacticalPolicyStamp` slot (never
+    conflated with the impostor stamp). The default (``None``) records the absent =
+    scripted-crew-default stamp, byte-identical to the pre-18.7 path.
+    ``scripts/run_tournament.py``'s learned-crew arm drives it.
+
     ``meeting_runner_factory`` (Task 15.13) is the additive-optional per-game
     meeting-runner factory, mirroring the default path's fresh-runner-per-game
     construction: when supplied it is invoked once per seed and the produced
@@ -356,6 +367,7 @@ def run_tournament_eval(
             ),
             force=force,
             tactical_policy_stamp=tactical_policy_stamp,
+            crew_tactical_policy_stamp=crew_policy_stamp,
         )
         try:
             result = game.run()
