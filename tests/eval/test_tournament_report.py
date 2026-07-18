@@ -427,6 +427,10 @@ class _AbortingHeadlessGame:
         meeting_runner: object,
         force: bool,
         tactical_policy_stamp: object = None,
+        # The Task-18.7 additive crew-stamp kwarg the harness threads (default
+        # None, mirroring HeadlessGame): the stub accepts it so the seam stays
+        # signature-faithful; the abort path never records a game_over to stamp.
+        crew_tactical_policy_stamp: object = None,
     ) -> None:
         self._seed = seed
         self._replay_path = replay_path
