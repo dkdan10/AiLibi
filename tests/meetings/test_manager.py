@@ -12,6 +12,11 @@ The contract exercised here is the reactive accusation chain (DESIGN.md
 * Opt-in is limited to living non-speakers with a relevant observation
   (a co-presence gate with the body / accused), one terminal turn each,
   and never extends the chain.
+* The Task 18.8 roll-call round (DEFAULT-OFF, behind
+  :func:`~meetings.manager.roll_call_round_enabled`) asks EVERY remaining
+  living non-speaker one terminal ``opt_in`` turn after the opt-in phase;
+  OFF (the default) it is skipped and the allocation is byte-identical to
+  the committed substrate.
 * Every turn-kind flows through one chokepoint, so the 7.12 teammate
   firewall, self-alibi normalization, and the 7.10 fail-soft wrap every
   turn; the vote inherits the teammate-ballot guard.
@@ -53,6 +58,7 @@ from meetings.manager import (
     DEFAULT_VOTE_RATIONALE,
     EMERGENCY_BODY_STRIP_MARKER,
     EMERGENCY_NO_BODY_RETRY_FEEDBACK,
+    ENV_ROLL_CALL_ROUND,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
@@ -86,6 +92,7 @@ from meetings.manager import (
     exclude_teammate_accusation_claims,
     extract_belief_evidence,
     guard_ballot_target_graph,
+    roll_call_round_enabled,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -811,6 +818,368 @@ class TestOptIn:
         result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
 
         assert all(t.turn_kind != "opt_in" for t in result.transcript.turns)
+
+
+# --- Roll-call round (Task 18.8, DEFAULT-OFF) ------------------------------
+
+
+class TestRollCallResolver:
+    """The Task-18.8 roll-call-round lever resolver -- DEFAULT-OFF, the 16.8
+    ``absence_prior_enabled`` live-toggle pattern (itself the 16.4
+    hard-evidence-gate pattern): an unset / empty / unrecognised value reads
+    ``False`` so :meth:`MeetingManager.run` keeps the committed three-phase
+    allocation; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed) reads
+    ``True``. ``env=None`` falls back to the live process environment. The
+    resolver is NOT registered in the replay lever registry yet (Task 18.11),
+    so -- unlike the 16.8 suite -- there is no registry-identity pin here.
+    """
+
+    def test_default_off_on_an_empty_mapping(self) -> None:
+        # The DEFAULT: a bare env cell resolves OFF, so the round is skipped.
+        assert roll_call_round_enabled(env={}) is False
+
+    def test_default_off_when_an_unrelated_ailibi_key_is_set(self) -> None:
+        # An unrelated export leaves the lever OFF -- only its own key counts.
+        assert roll_call_round_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is False
+
+    @pytest.mark.parametrize(
+        "value",
+        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
+    )
+    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
+        self, value: str
+    ) -> None:
+        # Every documented truthy token, plus case + surrounding-whitespace
+        # variants (the resolver strips then lowercases before the set test).
+        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is True
+
+    @pytest.mark.parametrize(
+        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
+    )
+    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
+        # Explicit falsy tokens, the empty string, and junk all read OFF: the
+        # resolver is an allow-list membership test, not a truthiness cast.
+        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is False
+
+    def test_env_none_reads_the_live_process_environment_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ``env=None`` (and the bare call the manager makes) reads ``os.environ``.
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        assert roll_call_round_enabled() is True
+        assert roll_call_round_enabled(env=None) is True
+
+    def test_env_none_reads_the_live_process_environment_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With the export deleted the live read is OFF -- the default.
+        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
+        assert roll_call_round_enabled() is False
+        assert roll_call_round_enabled(env=None) is False
+
+    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
+        # The resolver never writes its env argument (pure read), so two calls on
+        # the same mapping agree and the mapping is unchanged.
+        env = {ENV_ROLL_CALL_ROUND: "on", "AILIBI_OTHER": "x"}
+        before = dict(env)
+        assert roll_call_round_enabled(env=env) is True
+        assert roll_call_round_enabled(env=env) is True
+        assert env == before
+
+
+@dataclass
+class _RollCallValidationClient:
+    """Valid opening / reply / votes, but invalid turn JSON for the roll-call
+    (``opt_in``) turn of exactly ``invalid_speaker`` -- exercises the roll-call
+    fail-soft. Like :class:`_ReplyValidationClient` it does NOT self-validate,
+    so the manager's own ``MeetingTurn.model_validate_json`` raises the
+    ``ValidationError`` -> default. Only the opening ever retries, so the
+    roll-call turn defaults after a SINGLE attempt (``invalid_calls`` pins it).
+    """
+
+    invalid_speaker: str
+    accusations: dict[str, str | None] = field(default_factory=dict)
+    invalid_calls: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=VOTE" in prompt:
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        else:
+            speaker = _extract_marker(prompt, "agent_id=")
+            if "turn_kind=opt_in" in prompt and speaker == self.invalid_speaker:
+                self.invalid_calls += 1
+                text = "{}"  # invalid -> the roll-call turn defaults (not retried)
+            else:
+                text = _turn_json(
+                    speaker=speaker, accuses=self.accusations.get(speaker)
+                )
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "roll-call-validation",
+        )
+
+
+class TestRollCallRound:
+    """The Task-18.8 roll-call round ON: every living non-speaker takes one
+    terminal ``opt_in`` turn after the opt-in phase, in ascending player-id
+    order. Every test sets the lever ONLY through function-scoped
+    ``monkeypatch.setenv`` so it can never leak into the class-scoped
+    committed-bytes reconstructions elsewhere in the suite.
+    """
+
+    def test_every_living_non_speaker_takes_one_roll_call_turn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        # Chain: p-1 opens accusing p-3, p-3 replies without accusing (the chain
+        # dies). No observations -> no genuine opt-in. Roll-call then asks the
+        # two living non-speakers p-2, p-4 in ascending id order.
+        result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
+
+        kinds = [t.turn_kind for t in result.transcript.turns]
+        assert kinds == ["opening", "reply", "opt_in", "opt_in"]
+        tail = [t.speaker for t in result.transcript.turns if t.turn_kind == "opt_in"]
+        assert tail == ["p-2", "p-4"]
+        # ALL four living speak exactly once -- no double turns.
+        assert sorted({t.speaker for t in result.transcript.turns}) == [
+            "p-1",
+            "p-2",
+            "p-3",
+            "p-4",
+        ]
+        assert len(result.transcript.turns) == 4
+        # Ballots still collected for every living player after the round.
+        assert len(result.ballots) == 4
+
+    def test_non_eligible_non_speaker_is_asked_after_genuine_opt_ins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        # The opening places p-4 in the body room (p-4 becomes opt-in eligible)
+        # while p-2 holds NO relevant observation. The eligible player
+        # deliberately carries the HIGHER id: the opt-in phase runs FIRST
+        # (eligible p-4), roll-call THEN asks the non-eligible p-2, so the
+        # terminal tail is ["p-4", "p-2"] -- a round that ran before the
+        # opt-in phase would emit the plain sorted ["p-2", "p-4"] instead,
+        # which is exactly what this pin discriminates.
+        obs: tuple[ObservationClaim, ...] = (
+            FoundBodyObservation(
+                type="found_body", tick=410, body_of="p-9", room="MEDBAY"
+            ),
+            SawPlayerObservation(
+                type="saw_player", tick=400, subject="p-4", room="MEDBAY"
+            ),
+        )
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": "p-3"},
+                observations={"p-1": obs},
+            )
+        )
+
+        kinds = [t.turn_kind for t in result.transcript.turns]
+        assert kinds == ["opening", "reply", "opt_in", "opt_in"]
+        # p-4 (the genuine opt-in) precedes p-2 (the roll-call add).
+        tail = [t.speaker for t in result.transcript.turns if t.turn_kind == "opt_in"]
+        assert tail == ["p-4", "p-2"]
+        # The non-vacuous differentiator from opt-in: p-2 (never observed, not
+        # opt-in eligible, so silent under the committed allocation) still
+        # speaks here.
+        assert "p-2" in {t.speaker for t in result.transcript.turns}
+
+    def test_meeting_where_everyone_spoke_adds_no_roll_call_turn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        # Two participants: p-1 accuses p-2 -> both speak, so ``roster - spoken``
+        # is empty and the round appends nothing.
+        result, _ = _run_meeting(
+            _make_responder(accusations={"p-1": "p-2"}),
+            participants=(_participant("p-1"), _participant("p-2")),
+        )
+
+        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
+
+    def test_roll_call_asks_living_participants_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        # ``dead_ids`` is render-only context: the round derives from the
+        # living participant roster, so a dead player is never asked.
+        result, _ = _run_meeting(
+            _make_responder(accusations={"p-1": "p-3"}), dead_ids=("p-5",)
+        )
+
+        tail = [t.speaker for t in result.transcript.turns if t.turn_kind == "opt_in"]
+        assert tail == ["p-2", "p-4"]
+        assert "p-5" not in {t.speaker for t in result.transcript.turns}
+
+    def test_roll_call_turn_ids_stay_sequential_and_contiguous(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        result, _ = _run_meeting(
+            _make_responder(accusations={"p-1": "p-3"}), meeting_id="m-xyz"
+        )
+
+        turns = result.transcript.turns
+        # The round appended two roll-call turns onto the two-turn chain.
+        assert len(turns) == 4
+        assert [t.turn_id for t in turns] == [
+            f"m-xyz:turn-{i}" for i in range(len(turns))
+        ]
+        assert len({t.turn_id for t in turns}) == len(turns)
+        assert [t.turn_index for t in turns] == list(range(len(turns)))
+
+    def test_roll_call_transcript_replays_under_walk_chain(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
+
+        living = frozenset({"p-1", "p-2", "p-3", "p-4"})
+        walk = walk_chain(result.transcript, living_ids=living)  # must not raise
+        assert walk.chain_speakers == ("p-1", "p-3")
+        # The roll-call speakers land in the terminal opt-in tail.
+        assert set(walk.opt_in_speakers) >= {"p-2", "p-4"}
+
+    def test_roll_call_invalid_json_defaults_after_single_attempt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+        # p-2's roll-call turn returns schema-invalid JSON; the meeting must
+        # still complete and p-2's turn is the placeholder default.
+        client = _RollCallValidationClient(
+            invalid_speaker="p-2", accusations={"p-1": "p-3"}
+        )
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        kinds = [t.turn_kind for t in result.transcript.turns]
+        assert kinds == ["opening", "reply", "opt_in", "opt_in"]
+        p2_turn = next(t for t in result.transcript.turns if t.speaker == "p-2")
+        assert p2_turn.turn_kind == "opt_in"
+        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT
+        # Attempted exactly once -- roll-call inherits the opt-in single-attempt
+        # (no-retry) fail-soft, not the opening's retry.
+        assert client.invalid_calls == 1
+        # Surfaced for the orchestrator as an ``opt_in``-phase default.
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opt_in"
+        assert default.agent_id == "p-2"
+        assert default.trigger == "validation"
+        assert default.turn_index == 2
+
+    def test_roll_call_missed_deadline_records_default_turn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+
+        # p-2's roll-call turn sleeps past the turn deadline; every other call
+        # answers instantly (the ``_SleepOnOpening`` pattern). The turn defaults
+        # through the same fail-soft an opt-in deadline miss takes.
+        @dataclass
+        class _SleepOnRollCall:
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+                agent_id: str | None = None,
+            ) -> LLMResponse:
+                if "turn_kind=opt_in" in prompt and "agent_id=p-2" in prompt:
+                    await asyncio.sleep(1.0)
+                text = _make_responder(accusations={"p-1": "p-3"})(prompt, schema)
+                if schema is not None:
+                    schema.model_validate_json(text)
+                return LLMResponse(
+                    text=text,
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    cost_usd=0.0,
+                    model="sleep",
+                )
+
+        manager = _make_manager(
+            llm_client=_SleepOnRollCall(),
+            deadlines=MeetingDeadlines(turn_seconds=0.01, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        p2_turn = next(t for t in result.transcript.turns if t.speaker == "p-2")
+        assert p2_turn.turn_kind == "opt_in"
+        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opt_in"
+        assert default.agent_id == "p-2"
+        assert default.trigger == "deadline"
+
+
+class TestRollCallOffPath:
+    """OFF path (the default): the round is skipped and the allocation is
+    byte-identical to the committed substrate. The committed-bytes OFF-path pin
+    is the existing 179-meeting reconstruction
+    (``tests/meetings/test_prompt_byte_golden.py`` +
+    ``tests/agents/test_absence_prior.py::TestAbsencePriorOnCommittedBytes``),
+    which re-runs the REAL ``MeetingManager.run`` keyed by recorded prompt bytes
+    and stays green precisely because the lever defaults OFF.
+    """
+
+    def test_default_env_skips_the_round_and_issues_no_extra_calls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
+        # Same fixture as the ON test: p-1 -> p-3 chain, p-2/p-4 never speak.
+        result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
+
+        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
+        assert {t.speaker for t in result.transcript.turns} == {"p-1", "p-3"}
+        # 2 turn calls (opening + reply) + 4 vote calls, and provably zero
+        # roll-call calls -- the OFF path issues no extra LLM work.
+        assert len(client.calls) == 6
+
+    @pytest.mark.parametrize("value", ["0", "false", "off"])
+    def test_explicit_falsy_env_is_the_identical_off_path(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, value)
+        result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
+
+        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
+        assert {t.speaker for t in result.transcript.turns} == {"p-1", "p-3"}
+        assert len(client.calls) == 6
 
 
 # --- Turn ids --------------------------------------------------------------
