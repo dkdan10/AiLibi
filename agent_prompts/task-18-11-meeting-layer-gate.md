@@ -26,9 +26,11 @@ roll-call coverage on the probe ≥ **0.60** (the ratified crew clause, measured
 the absence counterfactual re-run on probe bytes reads new-over-gate ≤ **0.20** (the
 ratified ceiling); (c) the impostor-answer arm ships only if probe impostor win ≥ **0.20**
 (not annihilated; FSM comparator 0.36) AND the STRONG self-flag rate ≤ **0.25** of answered
-impostor roll-calls; (d) the vent widening re-ruled with the package (the 17.7 Ruling 2
-HOLD travels here). The owner rules **FULL / CREW-ONLY / NONE**; absence-prior graduation
-rides the ruling per the ratified bar. Then the surgery in the ruled direction, exactly as
+impostor roll-calls; (d) the vent widening AND its flag-minting variant (18.9's second
+arm) re-ruled with the package (the 17.7 Ruling 2 HOLD travels here; the FULL probe runs
+with the variant ON so its live flag yield is measured, not extrapolated). The owner rules
+**FULL / CREW-ONLY / NONE**; absence-prior graduation rides the ruling per the ratified
+bar. Then the surgery in the ruled direction, exactly as
 the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 **Files in scope:**

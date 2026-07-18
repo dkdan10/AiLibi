@@ -93,7 +93,7 @@ Wave 0 (roots, layer-neutral, dispatch in parallel):
 Wave 1 (the meeting-layer package — before anything trains):
   18.8 (roll-call round)   18.9 (endpoint-band exemption)   18.10 (impostor-answer variant)
   (18.8, 18.9, 18.10) -> 18.11 THE MEETING-LAYER GATE [OPERATOR ~8-9h + OWNER]
-  18.11 -> 18.12 adopting record: baseline 6 [OPERATOR ~6-7h]
+  (18.1, 18.2, 18.3, 18.11) -> 18.12 adopting record: baseline 6 [OPERATOR ~6-7h]
   18.12 -> 18.13 corpus re-record [OPERATOR ~18-20h]
   18.13 -> 18.14 surrogate re-ground + selection-bar re-pins
 
@@ -108,8 +108,8 @@ Wave 3 (co-evolution):
   18.20 -> 18.21 alternating-freeze driver + stabilizers
   18.19 -> 18.22 encoder v3 + within-kind target resolution
   18.16 -> 18.23 scenario staging (state injection + skill scenarios)
-  (18.17, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
-  18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR]
+  (18.4, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
+  18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
@@ -128,25 +128,31 @@ mover flip at 18.28 records **baseline 7**. Gate-conditional surgery, pre-enumer
 state): a FULL or CREW-ONLY ruling at 18.11 changes no structure (the arms that ship are the
 ruling's business; 18.12–18.14 proceed either way). A **NONE** ruling removes 18.12, 18.13,
 and 18.14 (contracts + prompts, with a drop record naming the gate audit), rewires 18.15's
-`Depends on:` to `18.11`, binds 18.15 to the standing baseline-5 corpus (its contract names
+`Depends on:` to `18.11`, rewires 18.16's `Depends on:` to `18.15` alone (the removed
+18.14's constant-flip is moot under NONE — the bar stays baseline-5; the Wave-2 DAG edge
+becomes `18.15 -> 18.16`), binds 18.15 to the standing baseline-5 corpus (its contract names
 this fallback), leaves `BAKEOFF_BASELINE_ID = "baseline-5"` untouched, and renumbers the
 18.28 mover record baseline 7 → 6. Under NONE the absence prior stays OFF with the ratified
 bar unmet, restated in the gate audit.
 
-**Collision discipline.** `meetings/manager.py` single-toucher 18.8; `meetings/
-transcript.py` 18.9; `agents/strategic/prompts/` 18.10; `eval/watchability.py` floor blocks
-18.12 only; `replays/samples/` 18.12; `replays/ml_corpus/` + `scripts/record_ml_corpus.sh`
-18.13; `training/bakeoff/harness.py` 18.14 (constants) then 18.16 (term/pre-screen),
-serialized by the dep chain; `training/bakeoff/map_elites.py` 18.6; `agents/tactical/
-learned/` 18.7 then 18.27 (ordered via the dep chain); `scripts/run_tournament.py` 18.7 then
-18.19 (dep edge); `orchestrator/replay.py` 18.19; `orchestrator/game.py` + `training/env.py`
-18.23; `agents/tactical/features.py` 18.22; `training/coevo/` is 18.19/18.20/18.21 in
-dep order with per-task module files; `tasks/phase-18.md` + `agent_prompts/` surgery 18.11
-(and the close banner at 18.28, ordered).
+**Collision discipline.** `meetings/manager.py` 18.8 then 18.12 (the graduation flip,
+ordered via 18.11); `meetings/transcript.py` 18.9 then 18.12 (same); `agents/strategic/
+prompts/` 18.10 then 18.12 (same); `agents/memory/beliefs.py` 18.12 only;
+`eval/watchability.py` floor blocks 18.12 then 18.28 (FLIP path, ordered);
+`replays/samples/` 18.12 then 18.28 (same); `replays/ml_corpus/` +
+`scripts/record_ml_corpus.sh` 18.13; `training/bakeoff/harness.py` 18.14 (constants) then
+18.16 (term/pre-screen), serialized by the dep chain; `training/bakeoff/map_elites.py` 18.6;
+`agents/tactical/learned/` 18.7 then 18.27 (ordered via the dep chain);
+`scripts/run_tournament.py` 18.7 then 18.19 (dep edge); `orchestrator/replay.py` 18.19;
+`orchestrator/game.py` + `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
+`training/coevo/` is 18.19/18.20/18.21 in dep order with per-task module files;
+`tasks/phase-18.md` is 18.11 (surgery) then 18.27 (ruling banner) then 18.28 (close banner),
+all dep-ordered; `agent_prompts/` surgery 18.11.
 
 **Operator/owner gates.** Operator sessions: 18.11 (probe recordings ~8–9 h), 18.12 (~6–7 h),
 18.13 (~18–20 h — the long pole; checkpoint-push), 18.24 (multi-session; ~40–50 h of
-unattended real-path re-rank legs spread across the campaign), 18.25, 18.26 (~5 h/finalist),
+unattended real-path re-rank legs spread across the campaign), 18.25 (multi-session;
+~30–40 h real-path legs — the crew slate is smaller), 18.26 (~5 h/finalist),
 18.28 (~6 h on the flip path). Owner gates: **18.4** (emergence pre-registration), **18.11**
 (the meeting-layer ruling), **18.27** (the flip + emergence reading), **18.28** (the close).
 
@@ -549,32 +555,39 @@ mirrors opt-in turns.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-8-roll-call-round.md`
 
-### Task 18.9 — The endpoint-band whereabouts exemption (default-OFF) + counterfactual
+### Task 18.9 — The endpoint-band whereabouts exemption + the vent-placement flag variant (default-OFF) + counterfactuals
 **Branch:** `phase-18-endpoint-band-exemption`
 **Depends on:** none (root)
-**Section refs:** audits/audit-phase-18-planning.md §3.3 (why roll-call lies can never mint STRONG flags); meetings/transcript.py:529 (`WEAK_REASON_ENDPOINT_TICK`), :2262-2270 (the band application), :1927-1945 (the single-tick self-alibi indexing); audits/audit-phase-17-close.md §6 (the routed detector-band relaxation this executes)
+**Section refs:** audits/audit-phase-18-planning.md §3.3 (why roll-call lies can never mint STRONG flags); meetings/transcript.py:529 (`WEAK_REASON_ENDPOINT_TICK`), :2262-2270 (the band application), :1927-1945 (the single-tick self-alibi indexing); audits/audit-phase-17-close.md §6 item 4 (BOTH halves of the routed detector package: the endpoint relaxation AND the grounded-vent flag-minting variant); tasks/phase-17.md §Designer rulings (the 17.5 grounding chokepoint the variant reuses)
 **Complexity:** Medium
 
-The lever that converts roll-call answers into conviction-economy currency: a flag-gated
-exemption under which a single-tick whereabouts self-alibi contradicted by a first-hand
-sighting mints a STRONG (interior-class) flag instead of being endpoint-banded to weak.
-Default-OFF; OFF-path bytes identical. With the mechanism, the committed-bytes
-counterfactual the gate reads: over the corpus and samples, how many recorded whereabouts
+The detector half of the routed Phase-18 package — both flag-minting levers, each
+independently flag-gated and default-OFF. **(1) The endpoint-band exemption**, the lever
+that converts roll-call answers into conviction-economy currency: a single-tick whereabouts
+self-alibi contradicted by a first-hand sighting mints a STRONG (interior-class) flag
+instead of being endpoint-banded to weak. **(2) The vent-placement flag variant** (the 17.5
+scope firewall's flag-minting variant, routed by the close): a GROUNDED spoken vent
+sighting — matched against the speaker's own `VentWitnessRecord`, the 15.4 chokepoint —
+placing subject X in contradiction with X's own stated path mints a physical-contradiction
+flag (today the widening feeds only the absent-set derivation; this arm feeds the
+detector). OFF-path bytes identical for both. With the mechanisms, the committed-bytes
+counterfactuals the gate reads: over the corpus and samples, how many recorded whereabouts
 lies would have minted STRONG flags under the exemption, by liar role (today: 25 corpus
-lies, 20 crew-authored / 5 impostor-authored, all weak) — the honest price of the change in
-both directions (crew misremembering becomes ejectable evidence too).
+lies, 20 crew-authored / 5 impostor-authored, all weak), and how many grounded vent
+placements would have minted physical flags, by subject role — the honest price of each
+change in both directions.
 
 **Files in scope:**
-- meetings/transcript.py (the exemption + resolver)
-- tests/meetings/test_contradictions.py (OFF-path byte-identity; ON-path STRONG-mint fixtures; the committed-bytes counterfactual pins by liar role)
+- meetings/transcript.py (both mechanisms + resolvers)
+- tests/meetings/test_contradictions.py (OFF-path byte-identity; ON-path STRONG-mint and vent-flag fixtures; the committed-bytes counterfactual pins by role)
 
 **Files NOT in scope:**
 - meetings/manager.py (18.8's region)
-- eval/ (instruments read recorded flags; the counterfactual lives in the detector's own test pins)
+- eval/ (instruments read recorded flags; the counterfactuals live in the detector's own test pins)
 
 **Definition of done:**
-- [ ] With the flag OFF, `detect_contradictions` output over committed bytes is byte-identical (pinned); ON, a contradicted single-tick whereabouts claim mints a STRONG `alibi_vs_sighting` flag, fixture-pinned, while multi-tick alibi endpoint semantics are untouched.
-- [ ] The committed-bytes counterfactual is pinned: the would-be STRONG-mint census over corpus + samples, split by liar role, quoted in the PR for the 18.11 gate memo.
+- [ ] With both flags OFF, `detect_contradictions` output over committed bytes is byte-identical (pinned); exemption ON, a contradicted single-tick whereabouts claim mints a STRONG `alibi_vs_sighting` flag while multi-tick alibi endpoint semantics are untouched; variant ON, a grounded vent placement contradicting the subject's stated path mints a physical-contradiction flag and an UNGROUNDED vent claim can never mint one — all fixture-pinned.
+- [ ] Both committed-bytes counterfactuals are pinned: the would-be STRONG-mint census (by liar role) and the would-be vent-flag census (by subject role) over corpus + samples, quoted in the PR for the 18.11 gate memo.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -587,11 +600,14 @@ both directions (crew misremembering becomes ejectable evidence too).
 
 Scope the exemption to the degenerate `from_tick == to_tick` self-alibi class only — the
 narrow-window weak reason and the two-source discipline for genuine multi-tick alibis do
-not move. The counterfactual is a re-run of the current detector with the flag ON over
-reconstructed transcripts, the 17.5 pin pattern.
+not move. The vent variant reuses the 17.5 grounding chokepoint verbatim (grounded-only is
+the firewall — an ungrounded vent claim minting a flag would be a fabrication channel). The
+counterfactuals are re-runs of the current detector with each flag ON over reconstructed
+transcripts, the 17.5 pin pattern.
 
 **Public types introduced:**
 - `meetings.transcript.whereabouts_interior_flags_enabled`
+- `meetings.transcript.vent_placement_contradictions_enabled`
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-9-endpoint-band-exemption.md`
 
@@ -658,9 +674,11 @@ roll-call coverage on the probe ≥ **0.60** (the ratified crew clause, measured
 the absence counterfactual re-run on probe bytes reads new-over-gate ≤ **0.20** (the
 ratified ceiling); (c) the impostor-answer arm ships only if probe impostor win ≥ **0.20**
 (not annihilated; FSM comparator 0.36) AND the STRONG self-flag rate ≤ **0.25** of answered
-impostor roll-calls; (d) the vent widening re-ruled with the package (the 17.7 Ruling 2
-HOLD travels here). The owner rules **FULL / CREW-ONLY / NONE**; absence-prior graduation
-rides the ruling per the ratified bar. Then the surgery in the ruled direction, exactly as
+impostor roll-calls; (d) the vent widening AND its flag-minting variant (18.9's second
+arm) re-ruled with the package (the 17.7 Ruling 2 HOLD travels here; the FULL probe runs
+with the variant ON so its live flag yield is measured, not extrapolated). The owner rules
+**FULL / CREW-ONLY / NONE**; absence-prior graduation rides the ruling per the ratified
+bar. Then the surgery in the ruled direction, exactly as
 the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 **Files in scope:**
@@ -1328,7 +1346,7 @@ meeting suppression — the FO-2 lesson).
 
 ### Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session)
 **Branch:** `phase-18-impostor-campaign`
-**Depends on:** 18.17, 18.21, 18.22
+**Depends on:** 18.4, 18.17, 18.18, 18.21, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
 **Complexity:** Integration
 
@@ -1337,7 +1355,9 @@ plus hall-of-fame opponents (as the crew side gains members, later swaps use the
 entrants seeded from the committed champion, the 18.5 anchor-study candidates, and (for the
 free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate path with the
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
-before every real spend, all meters quoted. Report: campaign rows, the cycling-detector
+before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
+records before the emergence bars are ratified (18.4) or before the conviction signal it
+selects on has been re-probed (18.18). Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;
@@ -1379,7 +1399,7 @@ machinery silently (merge-equals-done applies to the tools it runs on).
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-24-impostor-campaign.md`
 
-### Task 18.25 — THE CREW CAMPAIGN (operator)
+### Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h real-path legs)
 **Branch:** `phase-18-crew-campaign`
 **Depends on:** 18.24
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
@@ -1393,6 +1413,9 @@ real-path re-ranks per generation. Report mirrors 18.24 (rows, cycling detector,
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.
+Duration honesty: the crew slate is smaller than 18.24's but the per-generation real-path
+re-rank arithmetic is the same — plan **~30–40 h** of unattended real-path legs across
+sessions, checkpoint-push per generation.
 
 **Files in scope:**
 - training/reports/report-crew-campaign.md (new) + training/reports/results-crew-campaign.jsonl (new)

@@ -12,7 +12,7 @@ Implement Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session), anchor
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-impostor-campaign`
-**Depends on:** 18.17, 18.21, 18.22
+**Depends on:** 18.4, 18.17, 18.18, 18.21, 18.22
 **Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
 **Complexity:** Integration
 
@@ -21,7 +21,9 @@ plus hall-of-fame opponents (as the crew side gains members, later swaps use the
 entrants seeded from the committed champion, the 18.5 anchor-study candidates, and (for the
 free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate path with the
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
-before every real spend, all meters quoted. Report: campaign rows, the cycling-detector
+before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
+records before the emergence bars are ratified (18.4) or before the conviction signal it
+selects on has been re-probed (18.18). Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;

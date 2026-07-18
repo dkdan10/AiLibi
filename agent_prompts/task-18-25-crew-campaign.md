@@ -1,4 +1,4 @@
-# Agent Prompt — 18.25 THE CREW CAMPAIGN (operator)
+# Agent Prompt — 18.25 THE CREW CAMPAIGN (operator, multi-session, ~30–40h real-path legs)
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 18.25 — THE CREW CAMPAIGN (operator), anchored to the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight). Do not implement work outside these references.
+Implement Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h real-path legs), anchored to the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -24,6 +24,9 @@ real-path re-ranks per generation. Report mirrors 18.24 (rows, cycling detector,
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.
+Duration honesty: the crew slate is smaller than 18.24's but the per-generation real-path
+re-rank arithmetic is the same — plan **~30–40 h** of unattended real-path legs across
+sessions, checkpoint-push per generation.
 
 **Files in scope:**
 - training/reports/report-crew-campaign.md (new) + training/reports/results-crew-campaign.jsonl (new)
@@ -102,5 +105,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-18-crew-campaign` with a title like `task 18.25: the crew campaign (operator)`.
+Open a PR from branch `phase-18-crew-campaign` with a title like `task 18.25: the crew campaign (operator, multi-session, ~30–40h real-path legs)`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
