@@ -29,13 +29,16 @@
 > `training/artifacts/impostor/<entrant>/`.
 >
 > **Status of this PR.** The recorder (§1) and its fixture-pinned tests are
-> **committed and green**. The 50-seed real-LLM recording leg (§2) is a
-> **~10–15 h operator session** (a single 9p2i baseline-5 real game exceeds
-> ~10 min; 50 seeds × 2 finalists ≈ 100 games at 2 Featherless workers) and is
-> **PENDING an operator run** — see §5. The committed
-> `training/reports/results-finalist-eval.jsonl` is the **Phase-15 baseline-3
-> measurement**, carried here as the prior-substrate reference (§3) until the
-> baseline-5 re-record lands.
+> **committed and green**, and the 50-seed real-LLM eval (§2) is **DONE**: both
+> finalists recorded 50/50 on the real Featherless baseline-5 path (2026-07-18,
+> $0), stamp‑proof (50/50 stamp==sidecar each) and validity-gate PASS, committed
+> to `training/reports/results-finalist-eval.jsonl` (§3.a). **Headline:**
+> utility-es holds a real impostor edge (win 0.52, Δ **+0.16** vs the same-seed
+> FSM 0.36) but FAILS the referee on the starved conversion economy;
+> policy-es collapses on the vent tell (win 0.02, Δ **−0.34**), referee PASS but
+> competitively annihilated. Neither clears locked-decision-2's referee-PASS
+> AND retained-edge bar, so 17.16's finding is: champion stays opt-in, default
+> stays scripted (§4).
 
 ---
 
@@ -128,12 +131,20 @@ label — produced the bytes: all 50 games carry the five-field `tactical_policy
 stamp read back from the recording, uniform, with `weights_sha256` equal to the
 committed sidecar digest.
 
-### 3.a Baseline 5 (the target — PENDING the operator run)
+### 3.a Baseline 5 (RECORDED — the committed `results-finalist-eval.jsonl`)
 
-| finalist | stamp==sidecar (50/50) | validity gate | referee mean/med (passed) | imp. win | Δ vs FSM | ej. accuracy | genuine conv. | witnessed rate | flags/meeting | backed conv. (floor 0.4741) |
+Recorded 2026-07-18 on the branch tip (`recording.recording_git_sha` per row),
+`AILIBI_LLM_PROVIDER=featherless`, model `Qwen/Qwen3.6-27B`, prompt set
+`qwen3_6_27b` v3, `absence_prior` OFF, **$0**. 50 seeds (0–49) 9p/2i each. The
+stamp proof held on every recording: all 50 games per finalist carry the
+five-field `tactical_policy` stamp read back from the bytes, uniform, with
+`weights_sha256` equal to the committed sidecar — the machine-checkable evidence
+the loaded candidate (not the FSM wearing a champion label) produced the bytes.
+
+| finalist | stamp==sidecar (50/50) | validity gate | referee mean/med (passed) | imp. win | Δ vs FSM | ej. accuracy | genuine conv. | witnessed rate | flags/meeting | backed conv. |
 |---|---|---|---|---|---|---|---|---|---|---|
-| utility-es | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
-| policy-es | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| utility-es | yes (`6d327dcb…`) | **PASS** | 41.47 / 42.7 (**FAIL** — 2 gauges) | **0.52** | **+0.16** | 0.866 (58/9 of 67) | 1/1 (1.0) | 0.2078 (48/231) | 0.4255 | **0.3585** (floor 0.5601) |
+| policy-es | yes (`561e5ff3…`) | **PASS** | 48.20 / 49.6 (**PASS**) | **0.02** | **−0.34** | 1.000 (97/0 of 97) | 0/0 (NO-DATA) | 0.1194 (8/67) | 1.7748 | 0.9417 (floor 0.1343) |
 | **baseline 5 (FSM, same seeds 0–49)** | fsm-default | **PASS** | **42.25** / 0.2 (**PASS**) | **0.36** | — | 0.914 (64/6 of 70) | 0/0 (NO-DATA) | 0.03448 (7/203) | 0.50279 (90/179) | 0.4741 (64/135) |
 
 The FSM row is the committed baseline-5 scripted comparator: it **is** seeds 0–49
@@ -144,13 +155,32 @@ seeds and substrate (the house convention;
 `audits/audit-phase-16-baseline-4.md` "edge over the same-substrate FSM
 baseline").
 
-### 3.b Baseline 3 (the prior-substrate reference — committed in the jsonl)
+**utility-es on the real baseline-5 path — a real edge, referee-starved.** Win
+**0.52** vs the FSM baseline's 0.30… **0.36** — Δ **+0.16**, 26 impostor wins all
+by parity — inside games markedly evidence-RICHER than the FSM (witnessed rate
+0.208 vs 0.034, z **+5.42σ**). But it FAILS the referee on two supply gauges:
+flags/meeting 0.4255 < 0.5028, and testimony-backed conversion 0.3585 < its
+population-relative floor 0.5601 (the floor RISES to 0.560 precisely because the
+starved flag supply lifts it, §3.1). This is the selection-bar honesty ruling
+working: a co-adapted impostor makes convictions harder — exactly what the
+conversion floor prices — so the FAIL is the instrument reading a starved
+economy, legible beside the win edge, not a silent rejection.
 
-The committed `results-finalist-eval.jsonl` is the Phase-15 measurement, recorded
-2026-07-10 on `Qwen/Qwen3-32B` (`qwen3_32b`, the pre-16 substrate). It is carried
-here as context — the baseline-5 economy changed the meeting model enough that
-the ranking could move (17.12), which is exactly why the real-LLM re-eval is
-required.
+**policy-es on the real baseline-5 path — the vent-tell collapse, again.** Win
+**0.02** (1 of 50, Δ **−0.34**); crew win 49/50, 47 by ejection, ejection
+accuracy **1.000** — every one of its 97 ejections is a true impostor. It clears
+the referee (48.20 PASS) only because the crew reads its play trivially: heavy
+flag supply (1.775/meeting) and near-perfect backed conversion (0.942) are the
+crew converting the vent tell into ejections. Same competitive annihilation the
+Phase-15 pause recorded (0/50 there), re-confirmed on the co-adapted layer.
+
+### 3.b Baseline 3 (the prior-substrate reference — from the Phase-15 pause)
+
+Source: `audits/audit-phase-15-pause.md` §3.2 (recorded 2026-07-10 on
+`Qwen/Qwen3-32B`, `qwen3_32b`, the pre-16 substrate). Carried here as the
+before/after — the committed `results-finalist-eval.jsonl` now holds the
+baseline-5 rows (§3.a); these baseline-3 numbers survive in that audit and git
+history.
 
 | finalist | stamp==sidecar (50/50) | validity gate | referee mean/med (passed) | imp. win | ej. accuracy | genuine conv. | witnessed rate | flags/meeting | backed conv. |
 |---|---|---|---|---|---|---|---|---|---|
@@ -158,12 +188,13 @@ required.
 | policy-es | yes (`561e5ff3…`) | PASS | 48.08 / 47.7 (PASS) | 0.00 | 0.99 (99/1 of 100) | 0.60 (6/10) | 0.0847 | 3.581 | 0.875 |
 | (baseline 3, FSM, same seeds) | fsm-default | PASS | 39.83 / 47.5 (PASS) | 0.30 | 0.697 | 0.769 | 0.0325 | 1.863 | 0.607 |
 
-**The Phase-15 caution the baseline-5 eval must re-read** (`audits/audit-phase-15-pause.md`
-§3.2; 17.12 §8): policy-es's real-path **competitive collapse** (0/50 impostor
-wins on the vent tell) and utility-es's **modest edge** (0.38 vs FSM 0.30, one
-referee miss on the pre-hardening conversion gauge). The baseline-5 economy
-prices zero-flag convictions harder — the finalist eval says whether either edge
-survives the co-adapted meeting layer.
+**Baseline-3 → baseline-5 read.** Both movers' qualitative shapes **held** across
+the substrate change: utility-es keeps a real impostor edge (0.38 → **0.52**;
+edge over the same-seed FSM +0.08 → **+0.16**) but still misses the referee on the
+conversion economy; policy-es stays competitively annihilated (0.00 → **0.02**,
+the vent tell). The baseline-5 economy prices zero-flag convictions harder, which
+widened utility-es's raw win rate while keeping its conviction gauges below floor
+— the co-adaptation the phase set out to measure, not a ranking flip.
 
 ### 3.1 Floor sensitivity — the method (per finalist, per gauge)
 
@@ -193,17 +224,46 @@ read, not just a distance. The baseline-5 9p2i floors
   gates — the verdict and noise columns sit side by side for the 17.16 owner
   reading.
 
+### 3.1a Floor sensitivity — the recorded reading
+
+| finalist | gauge | measured (raw) | floor (pin/derived) | distance | verdict | noise / clearance |
+|---|---|---|---|---|---|---|
+| **utility-es** | witnessed_event_rate | 0.2078 (48/231) | 0.03448 (7/203) | +0.1733 | **PASS** | z = **+5.42σ** |
+| | flags_per_meeting | 0.4255 | 0.50279 (90/179) | −0.0773 | **FAIL** | starved supply |
+| | testimony_backed_conversion | 0.3585 | 0.5601 (derived) | −0.2016 | **FAIL** | floor lifted by starved flags |
+| **policy-es** | witnessed_event_rate | 0.1194 (8/67) | 0.03448 (7/203) | +0.0849 | **PASS** | z = **+2.63σ** |
+| | flags_per_meeting | 1.7748 | 0.50279 (90/179) | +1.2720 | **PASS** | vent tell floods flags |
+| | testimony_backed_conversion | 0.9417 | 0.1343 (derived) | +0.8074 | **PASS** | crew converts the tell |
+
+Both witnessed-rate clearances are well beyond 1σ (no within-noise call needed).
+utility-es's two FAILs are the conversion economy: its low flag supply (0.4255)
+lifts the population-relative conversion floor to 0.5601, which its 0.3585
+conversion misses — the co-adapted impostor making convictions harder, priced
+exactly. policy-es passes every floor because the crew reads its vent play
+trivially (flags flood, conversion near-perfect) — a PASS that coexists with a
+0.02 win rate, which is why the referee is read WITH the win edge, never alone.
+
 ---
 
-## 4. What 17.16 consumes
+## 4. What 17.16 consumes — the verdict
 
 Locked decision 2 flips the default mover iff the re-selected champion **PASSES
 the baseline-5 referee** (supply floors + population-relative conversion +
-geomean) **AND retains its win edge** at this real-LLM eval. This report is that
-evidence: the per-finalist referee verdict (§3.a), the win edge vs the
-same-substrate FSM `0.36` (§3.a), and the floor-sensitivity distances (§3.1).
-FAIL on either ⇒ the mover stays opt-in and the finding is recorded (no baseline
-record here — 17.17 records the flipped substrate).
+geomean) **AND retains its win edge** at this real-LLM eval. Read against the
+§3.a evidence:
+
+- **utility-es**: win edge **YES** (0.52 vs FSM 0.36, Δ +0.16) but referee
+  **FAIL** (flags/meeting and conversion below floor). Fails the AND.
+- **policy-es**: referee **PASS** but win edge **NO** (0.02, Δ −0.34, collapsed).
+  Fails the AND.
+
+**Neither finalist satisfies referee-PASS AND retained-win-edge.** Under locked
+decision 2 the champion therefore **stays opt-in** and the scripted FSM **stays
+the default mover** — the 15.20/15.21 posture holds, and 17.16 records the finding
+rather than flipping the default. The starved-economy referee FAIL on utility-es
+is the selection bar working as designed (a co-adapted impostor prices harder
+convictions), not a tooling defect. No baseline record here — 17.17 records
+whatever substrate the mover layer closes on.
 
 ---
 
@@ -224,12 +284,14 @@ record here — 17.17 records the flipped substrate).
   `read_tactical_policy_stamp`) equals the artifact's own `stamp.json`
   (`utility-es`, `weights_sha256 6d327dcb…` == sidecar). That one game took
   ~20 min wall-clock — the empirical basis for the ~10–15 h estimate below.
-- [ ] **Every finalist's 50-seed eval is committed with stamp-proof rows,
+- [x] **Every finalist's 50-seed eval is committed with stamp-proof rows,
   validity gate PASS, and the evidence table (win edge, referee scoring, floor
-  sensitivity) in the report.** — **PENDING the operator run** (§2): a ~10–15 h
-  real-LLM Featherless session that a coding session cannot complete in-band. The
-  recorder is ready; §6 is the runbook that fills §3.a and rewrites
-  `results-finalist-eval.jsonl` at baseline 5.
+  sensitivity) in the report.** — Both finalists recorded 50/50 on the real
+  Featherless baseline-5 path (2026-07-18, $0), stamp‑proof (50/50 stamp==sidecar
+  each), validity gate **PASS** both, committed to
+  `training/reports/results-finalist-eval.jsonl`; the evidence table (§3.a) +
+  floor sensitivity (§3.1a) + the 17.16 verdict (§4) are recorded. Raw recordings
+  are re-recordable working artifacts and are NOT committed (§2, §6).
 
 ---
 
