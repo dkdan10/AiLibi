@@ -61,8 +61,10 @@ from training.bakeoff.harness import (
 )
 from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
+    DESCRIPTOR_AXES,
     REFEREE_TENSION_DESCRIPTOR_CONFIGURATION,
     TOTAL_CELLS,
+    ArchiveCell,
     DescriptorConfiguration,
     MapElitesEntrant,
     bakeoff_substrate_sha,
@@ -934,6 +936,65 @@ def test_map_elites_cell_loader_fails_loud(
     (cells / "9-9-9").mkdir()
     with pytest.raises(ValueError, match="do not match the index"):
         load_archive_cell_genomes(stray_dir)
+
+
+def test_map_elites_edge_relabel_is_rejected(tmp_path: Path) -> None:
+    """A same-axes-DIFFERENT-edges relabel is rejected on write AND load (18.6).
+
+    The subtle mislabel Codex flagged: a configuration whose axes match but whose
+    EDGES differ re-bins some cells to a DIFFERENT coordinate, yet the axis-key and
+    per-component-range checks pass. The writer now re-bins every cell under the
+    recorded edges and refuses when a coordinate does not reproduce; the loader
+    rebuilds the recorded configuration and self-validates each index entry the
+    same way, so a tampered edge block is caught on reload too. Uses a synthetic
+    cell whose ``kill_count`` (0.55) provably straddles the behavior edge 0.5 and
+    the shifted edge 0.6 — the all-zeros ci archive cannot re-bin under a
+    positive-edge shift, so it cannot exercise this guard.
+    """
+
+    descriptors = {"kill_count": 0.55, "witness_exposure_rate": 0.0, "vent_usage": 0.0}
+    cell_key = BEHAVIOR_DESCRIPTOR_CONFIGURATION.bin_values(descriptors)
+    assert cell_key == (1, 0, 0)  # binned under the behavior edges
+    archive = {
+        cell_key: ArchiveCell(genome=(0.25, -0.5), fitness=1.0, descriptors=descriptors)
+    }
+    shifted = DescriptorConfiguration(
+        name="behavior-shifted",
+        axes=DESCRIPTOR_AXES,
+        edges={
+            "kill_count": (0.6, 1.6, 2.6, 3.6, 4.6),
+            "witness_exposure_rate": (0.1, 0.3, 0.6),
+            "vent_usage": (0.7, 2.7, 5.7),
+        },
+    )
+    # Under the shifted edges kill_count 0.55 falls in bin 0, not 1.
+    assert shifted.bin_values(descriptors) == (0, 0, 0)
+
+    # (a) The writer refuses the shifted config (re-bin mismatch), before any I/O.
+    with pytest.raises(ValueError, match="re-bins cell"):
+        write_archive_cell_artifacts(
+            archive,
+            tmp_path / "shifted",
+            config=map_elites_budget("ci"),
+            descriptor_configuration=shifted,
+        )
+
+    # (b) An honestly-written tree, then a tampered index edge block, is caught on
+    # reload: the recorded (1, 0, 0) entry re-bins to (0, 0, 0) under the shifted
+    # kill_count edges.
+    cells_dir = write_archive_cell_artifacts(
+        archive,
+        tmp_path / "tamper",
+        config=map_elites_budget("ci"),
+        descriptor_configuration=BEHAVIOR_DESCRIPTOR_CONFIGURATION,
+    )
+    index = json.loads((cells_dir / "index.json").read_text())
+    index["descriptor_config"]["edges"]["kill_count"] = [0.6, 1.6, 2.6, 3.6, 4.6]
+    (cells_dir / "index.json").write_text(
+        json.dumps(index, indent=2, sort_keys=True) + "\n"
+    )
+    with pytest.raises(ValueError, match="re-bins to"):
+        load_archive_cell_genomes(tmp_path / "tamper")
 
 
 def test_map_elites_referee_tension_configuration_is_additive(tmp_path: Path) -> None:

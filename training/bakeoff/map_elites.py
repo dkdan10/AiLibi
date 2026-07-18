@@ -758,10 +758,12 @@ def write_archive_cell_artifacts(
 
     ``descriptor_configuration`` MUST be the configuration the archive was binned
     on — the writer verifies this BEFORE any file I/O: each cell's descriptor key
-    set must equal the configuration's axes, and each cell-key component must fall
-    within that axis' bin range. A mismatch (e.g. persisting a referee-tension
-    archive while recording the behavior-v1 index block) fails loud rather than
-    writing an internally-inconsistent tree the loader cannot later detect.
+    set must equal the configuration's axes, AND re-binning the cell's descriptors
+    under the configuration's edges must reproduce the cell's own coordinate. A
+    mismatch — a different axis set (e.g. persisting a referee-tension archive
+    while recording the behavior-v1 block) OR the same axes with shifted edges
+    that re-bin a cell elsewhere — fails loud rather than writing an
+    internally-inconsistent tree the loader cannot later detect.
 
     Operator regeneration recipe (reproduces the committed tree byte-for-byte)::
 
@@ -793,14 +795,13 @@ def write_archive_cell_artifacts(
 
     # Fail loud BEFORE any file I/O if the configuration being recorded is not the
     # one the archive was binned on: every cell's descriptor keys must equal the
-    # configuration's axes, and every cell-key component must fall in that axis'
-    # bin range. Otherwise the index block (axes / total_cells) would misdescribe
-    # the persisted cells — an inconsistency the loader cannot detect (the tension
-    # cell keys fit inside the behavior bin ranges).
+    # configuration's axes, and re-binning the cell's descriptors under the
+    # configuration's edges must reproduce the cell's own coordinate. Otherwise
+    # the index block (axes / edges / total_cells) would misdescribe the persisted
+    # cells — an inconsistency the loader cannot detect (a same-axes-different-
+    # edges config re-bins some cells to a DIFFERENT coordinate yet passes any
+    # per-component range check, since bin_values output is always in range).
     axis_set = set(configuration.axes)
-    axis_bin_counts = [
-        len(configuration.edges[axis]) + 1 for axis in configuration.axes
-    ]
     for cell_key in sorted(archive):
         cell = archive[cell_key]
         if set(cell.descriptors) != axis_set:
@@ -810,13 +811,14 @@ def write_archive_cell_artifacts(
                 f"{configuration.name!r} over {sorted(axis_set)}; the writer's "
                 "descriptor_configuration must be the one the archive was binned on"
             )
-        for axis_index, component in enumerate(cell_key):
-            if not 0 <= component < axis_bin_counts[axis_index]:
-                raise ValueError(
-                    f"cell key {cell_key} component {component} is out of range "
-                    f"[0, {axis_bin_counts[axis_index]}) for axis "
-                    f"{configuration.axes[axis_index]!r}"
-                )
+        if configuration.bin_values(cell.descriptors) != cell_key:
+            raise ValueError(
+                f"configuration {configuration.name!r} re-bins cell "
+                f"{cell_key} to {configuration.bin_values(cell.descriptors)} under "
+                "its recorded edges; the edges do not reproduce the archive's cell "
+                "coordinates — the descriptor_configuration must be the one the "
+                "archive was binned on"
+            )
 
     cells_dir = artifact_dir / _CELLS_DIRNAME
     if cells_dir.exists():
@@ -901,9 +903,14 @@ def load_archive_cell_genomes(
 
     If ``expected_substrate_sha`` is given and differs from the index's recorded
     ``substrate.substrate_sha256`` the reload REFUSES — the 18.24/18.20 fence:
-    stale-substrate cells must be re-run at the adopted substrate before use. Per
-    cell the loader re-hashes ``weights.json`` and cross-checks the digest against
-    BOTH the sidecar's first token and the index entry (the
+    stale-substrate cells must be re-run at the adopted substrate before use. The
+    recorded descriptor configuration is rebuilt as a real
+    :class:`DescriptorConfiguration` (so the index block gets the same fail-loud
+    validation) and each entry SELF-validates: its descriptors must key on the
+    recorded axes and re-bin to its own cell key under the recorded edges (a
+    mislabeled or tampered index otherwise). Per cell the loader re-hashes
+    ``weights.json`` and cross-checks the digest against BOTH the sidecar's first
+    token and the index entry (the
     :func:`~training.bakeoff.harness.load_candidate_weights` drift posture), and
     the on-disk ``cells/`` subdirectory set must equal the index's path set — a
     stray or missing cell dir is drift, never papered over.
@@ -925,15 +932,26 @@ def load_archive_cell_genomes(
             "the adopted substrate before use"
         )
 
+    # Rebuild the recorded configuration as a real DescriptorConfiguration:
+    # constructing it runs __post_init__'s fail-loud validation on the index block
+    # (3 distinct axes, edge keys == axes, strictly-increasing edges) for free.
     descriptor_config = index["descriptor_config"]
-    axes = descriptor_config["axes"]
-    edges = descriptor_config["edges"]
-    bin_counts = [len(edges[axis]) + 1 for axis in axes]
+    configuration = DescriptorConfiguration(
+        name=descriptor_config["name"],
+        axes=tuple(descriptor_config["axes"]),
+        edges={
+            axis: tuple(edge_list)
+            for axis, edge_list in descriptor_config["edges"].items()
+        },
+    )
+    axis_set = set(configuration.axes)
 
-    # First pass: validate every cell key (shape, bin range, no duplicates) and
-    # collect the index's declared path set. This runs BEFORE any weights read so
-    # a missing cell dir is caught by the drift cross-check below as a loud
-    # ValueError, not a bare FileNotFoundError from the read loop.
+    # First pass: validate every cell key (shape, no duplicates), self-validate the
+    # index (each entry's descriptors must key on the recorded axes and RE-BIN to
+    # the entry's own cell key under the recorded edges — a mislabeled/tampered
+    # index otherwise), and collect the index's declared path set. This runs BEFORE
+    # any weights read so a missing cell dir is caught by the drift cross-check
+    # below as a loud ValueError, not a bare FileNotFoundError from the read loop.
     validated: list[tuple[tuple[int, int, int], Any]] = []
     index_paths: set[str] = set()
     seen_keys: set[tuple[int, int, int]] = set()
@@ -948,18 +966,25 @@ def load_archive_cell_genomes(
                 f"cell index at {index_path} has a malformed cell key "
                 f"{raw_key!r} (expected a 3-list of ints)"
             )
-        for axis_index, component in enumerate(raw_key):
-            if not 0 <= component < bin_counts[axis_index]:
-                raise ValueError(
-                    f"cell key {raw_key!r} component {component} is out of range "
-                    f"[0, {bin_counts[axis_index]}) for axis {axes[axis_index]!r}"
-                )
         cell_key = (int(raw_key[0]), int(raw_key[1]), int(raw_key[2]))
         if cell_key in seen_keys:
             raise ValueError(
                 f"cell index at {index_path} has a duplicate cell key {cell_key}"
             )
         seen_keys.add(cell_key)
+        descriptors = entry["descriptors"]
+        if set(descriptors) != axis_set:
+            raise ValueError(
+                f"index entry for cell {cell_key} carries descriptors "
+                f"{sorted(descriptors)} but the recorded configuration "
+                f"{configuration.name!r} is over {sorted(axis_set)}"
+            )
+        if configuration.bin_values(descriptors) != cell_key:
+            raise ValueError(
+                f"index entry for cell {cell_key} re-bins to "
+                f"{configuration.bin_values(descriptors)} under the recorded "
+                f"{configuration.name!r} edges — a mislabeled or tampered index"
+            )
         validated.append((cell_key, entry))
         index_paths.add(entry["path"])
 
