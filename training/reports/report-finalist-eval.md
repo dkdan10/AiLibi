@@ -133,9 +133,22 @@ committed sidecar digest.
 
 ### 3.a Baseline 5 (RECORDED — the committed `results-finalist-eval.jsonl`)
 
-Recorded 2026-07-18 on the branch tip (`recording.recording_git_sha` per row),
-`AILIBI_LLM_PROVIDER=featherless`, model `Qwen/Qwen3.6-27B`, prompt set
-`qwen3_6_27b` v3, `absence_prior` OFF, **$0**. 50 seeds (0–49) 9p/2i each. The
+Recorded 2026-07-18, `AILIBI_LLM_PROVIDER=featherless`, model `Qwen/Qwen3.6-27B`,
+prompt set `qwen3_6_27b` v3, `absence_prior` OFF, **$0**. 50 seeds (0–49) 9p/2i
+each.
+
+**Provenance durability (Q5 convention).** Each row's `recording.recording_git_sha`
+names the **recorder-code commit** `2a9b369` — the commit that introduced the
+`scripts/run_tournament.py --candidate-artifact` recorder that produced these
+bytes (unchanged for the rest of the branch). That recorder is a **committed,
+in-scope file** in this PR, so it lands on `main` via the merge and the exact
+recorder is retrievable from `main`'s history regardless of the branch's
+`wip: promote` commits squashing away. Per the Q5/16.14 durability convention the
+SHA is **back-filled to the squash-merge landing SHA on merge** (the annotated-tag
+arm is unavailable — this remote rejects tag pushes). The recordings are
+re-recordable from that recorder + §6.
+
+The
 stamp proof held on every recording: all 50 games per finalist carry the
 five-field `tactical_policy` stamp read back from the bytes, uniform, with
 `weights_sha256` equal to the committed sidecar — the machine-checkable evidence
@@ -373,6 +386,9 @@ uv run pytest tests/scripts/test_run_tournament_candidate_artifact.py -q
 - **The conflation guard checks `stamp.weights_sha256 == sidecar digest`** on top
   of the genome sha verification, so a `stamp.json` copied from another artifact
   can never mislabel a recording.
-- **`results-finalist-eval.jsonl` is left at its Phase-15 baseline-3 measurement**
-  in this PR — fabricating baseline-5 rows without the real recording would be
-  dishonest. The baseline-5 rows land with the operator run (§6).
+- **`results-finalist-eval.jsonl` carries the baseline-5 measurement** — the
+  operator run (§6) recorded both finalists 50/50 on the real Featherless
+  baseline-5 path and this patch replaced the prior Phase-15 baseline-3 rows with
+  the recorded baseline-5 rows (§3.a). The baseline-3 numbers survive as the
+  before/after reference in `audits/audit-phase-15-pause.md` §3.2 and git history
+  (§3.b), never fabricated.
