@@ -40,12 +40,12 @@
 - **Filtered-BC filter (stated):** a corpus game qualifies iff its recorded
   winner is CREWMATES (crew-winning: the games where the evidence economy
   actually convicted) OR its persisted contradiction rows per meeting reach
-  the baseline-5 `flags_per_meeting` supply floor 0.502793
+  the `flags_per_meeting` supply floor 0.502793
   (high-flag: the supply gauge the champion failed, read off the committed
   meeting rows — conservative vs the referee's set-level gauge, which
   additionally re-derives transcript flags). Games satisfying BOTH weigh
-  2× in the fit (the purest "watchable winning play"
-  exemplars).
+  2× in the fit (the purest "watchable winning
+  play" exemplars).
 - **Fit recipe:** numpy weighted conditional logit over the FSM option menu
   (grouped by canonical intent key, the anchor-CE semantics), standardized
   features, zeros init, 300 full-batch epochs at lr

@@ -72,8 +72,12 @@ def test_substrate_sha_moves_with_the_replay_bytes_alone(tmp_path: Path) -> None
     # filtered-BC anchor is fitted from the replay bytes (Codex review on
     # PR #292).
     def build(replay_suffix: str) -> Path:
-        corpus = tmp_path / f"corpus{len(replay_suffix)}"
-        corpus.mkdir()
+        # The SAME leaf directory name under different parents: corpus_set
+        # (the dir name) is part of the sha payload, so a differing leaf name
+        # would make this test pass even if the replay-byte digest regressed
+        # (Codex review on PR #292) — only the replay bytes may differ.
+        corpus = tmp_path / f"variant{len(replay_suffix)}" / "9p2i"
+        corpus.mkdir(parents=True)
         shutil.copy(CORPUS_DIR / "MANIFEST.md", corpus / "MANIFEST.md")
         shutil.copy(CORPUS_DIR / "splits.json", corpus / "splits.json")
         replay = _SEED_1000_REPLAY.read_text() + replay_suffix
