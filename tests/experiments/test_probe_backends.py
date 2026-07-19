@@ -73,8 +73,11 @@ _FLAGS_OFF = {
 # Task-16.17 baseline-5 record (16.4's hard_evidence_gate, 16.5's
 # observation_id_rendering, 16.6's citation_gate) -- each env gate retired once the
 # baseline adopted it, so the snapshot no longer reads an AILIBI_* var for any of
-# them -- plus the ONE remaining LIVE default-OFF toggle, Task 16.8's
-# absence_prior, stamped False under the bare env.
+# them -- plus the FIVE remaining LIVE default-OFF toggles, all stamped False under
+# the bare env: Task 16.8's absence_prior and the four Phase-18 meeting-layer lever
+# flags registered at Task 18.11 (18.8's roll_call_round, 18.9's
+# whereabouts_interior_flags + vent_placement_contradictions, 18.10's
+# impostor_roll_call).
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
@@ -85,9 +88,15 @@ _FLAGS_ON = {
     "hard_evidence_gate": True,
     "observation_id_rendering": True,
     "citation_gate": True,
-    # The one remaining live toggle: DEFAULT-OFF, so the bare/default snapshot
-    # stamps it False alongside the nine unconditional levers.
+    # The five remaining live toggles: all DEFAULT-OFF, so the bare/default
+    # snapshot stamps them False alongside the nine unconditional levers. The
+    # four Phase-18 flags were registered at Task 18.11 (the meeting-layer gate)
+    # before any probe seed records, so a probe recording self-describes its arms.
     "absence_prior": False,
+    "roll_call_round": False,
+    "whereabouts_interior_flags": False,
+    "vent_placement_contradictions": False,
+    "impostor_roll_call": False,
 }
 
 

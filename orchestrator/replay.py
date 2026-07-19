@@ -70,6 +70,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
@@ -78,6 +79,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agents.memory.beliefs import absence_prior_enabled
 from engine.actions import Action
 from engine.world import WorldState
+from meetings.manager import roll_call_round_enabled
 from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
@@ -86,6 +88,36 @@ from meetings.schemas import (
     PlayerId,
     VoteBallot,
 )
+from meetings.transcript import (
+    vent_placement_contradictions_enabled,
+    whereabouts_interior_flags_enabled,
+)
+
+# The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
+# ``agents.strategic.prompts.loader.impostor_roll_call_enabled``: the loader
+# builds its Jinja environment at IMPORT time from ``AILIBI_PROMPT_SET`` and
+# raises on an unknown set, so importing it here would make every replay-only
+# consumer (sample byte-verification, MANIFEST reads, the API replay loader)
+# fail on a stray prompt-set export before reading a single JSONL row. The env
+# name and truthy-token set mirror the loader's
+# ``ENV_IMPOSTOR_ROLL_CALL`` / ``_IMPOSTOR_ROLL_CALL_FLAG_TRUE`` byte-for-byte,
+# and ``tests/orchestrator/test_replay.py`` pins the two resolvers EQUIVALENT
+# over the env grid (the CI substitute for the identity binding the other three
+# levers keep — read-site and stamp cannot drift without that pin failing).
+ENV_IMPOSTOR_ROLL_CALL: Final[str] = "AILIBI_IMPOSTOR_ROLL_CALL"
+_IMPOSTOR_ROLL_CALL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def _impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """The 18.10 lever's stamp-side resolver (mirrors the loader's, see above)."""
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_IMPOSTOR_ROLL_CALL, "").strip().lower()
+        in _IMPOSTOR_ROLL_CALL_FLAG_TRUE
+    )
 
 
 class LLMCallRecord(BaseModel):
@@ -483,10 +515,22 @@ ReplayLogEntry: TypeAlias = Annotated[
 # ``observation_id_rendering``, 16.6's ``citation_gate`` — the slate rulings are
 # audits/audit-phase-16-close.md §0.1) are ALL RETIRED as toggles —
 # unconditionally ON, env gates deleted — but stay in the snapshot as
-# provenance. Task 16.8's ``absence_prior`` is the ONE live toggle left in
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` below — the slate's recorded STAY-OFF (the
-# set-size evidence was pre-roll-call; Phase 17 re-measures on the baseline-5
-# bytes and graduates at its own adopting record if warranted).
+# provenance. Task 16.8's ``absence_prior`` (the Phase-16 slate's recorded
+# STAY-OFF, re-routed to Phase 18 by audits/audit-phase-17-absence-gate.md
+# Ruling 3) and the FOUR Phase-18 meeting-layer lever flags registered at
+# Task 18.11 (the meeting-layer gate — 18.8's ``roll_call_round``, 18.9's
+# ``whereabouts_interior_flags`` and ``vent_placement_contradictions``, 18.10's
+# ``impostor_roll_call``) are the LIVE toggles left in
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` below. The four were built default-OFF and
+# inert at Wave 1 (18.8/18.9/18.10) but DELIBERATELY not registered there: the
+# gate wires them into the substrate stamp HERE, before any probe seed records,
+# so a probe/adoption recording self-describes which arms it ran under. Each
+# stays DEFAULT-OFF, so a bare-environment recording stamps all five toggles
+# ``False`` — byte-identical (via the missing-key-reads-False rule) to the
+# committed baseline-5 sets, which predate every one of these keys. Task 18.12
+# is the graduation flip: whichever arms the gate rules SHIP move from this
+# table into ``_RETIRED_ALWAYS_ON_LEVERS``, exactly as the three Phase-16 levers
+# graduated at 16.17.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -504,20 +548,41 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). ONE live toggle now, DEFAULT-OFF: Task 16.8's
-# ``absence_prior`` (the transient pre-vote delta on the publicly-unplaced) —
-# the Task-16.17 graduation slate's recorded stay-OFF. A bare-environment
-# snapshot stamps it ``False``, matching the committed baseline-5 recording
-# (made bare), so the committed replays reconstruct byte-identically --
+# ``*_enabled()`` signature). FIVE live toggles now, ALL DEFAULT-OFF:
+#
+# * Task 16.8's ``absence_prior`` (the transient pre-vote delta on the
+#   publicly-unplaced) — the Task-16.17 graduation slate's recorded stay-OFF,
+#   re-routed to Phase 18 by audits/audit-phase-17-absence-gate.md Ruling 3.
+# * The FOUR Phase-18 meeting-layer lever flags, registered at Task 18.11 (the
+#   meeting-layer gate) BEFORE any probe seed records so a recording
+#   self-describes the arms under test: 18.8's ``roll_call_round`` (the
+#   turn-allocation surface), 18.9's ``whereabouts_interior_flags`` (the
+#   endpoint-band exemption) and ``vent_placement_contradictions`` (the
+#   grounded-vent flag variant), and 18.10's ``impostor_roll_call`` (the
+#   impostor-answer template arm). The manager/transcript resolvers are bound
+#   here BY IDENTITY so the replay stamp and each lever's read-site share one
+#   source of truth; the impostor-answer lever binds the LOCAL
+#   :func:`_impostor_roll_call_enabled` mirror instead (the loader's
+#   import-time Jinja build is prompt-set-sensitive — see the mirror's comment
+#   block), with a CI equivalence pin standing in for identity.
+#
+# A bare-environment snapshot stamps all five ``False``, matching the committed
+# baseline-5 recordings (made bare, and predating every one of these keys), so
+# the committed replays reconstruct byte-identically --
 # ``_assert_substrate_matches`` reads a missing key as ``False`` on both sides.
-# The other three Phase-16 levers (16.4's ``hard_evidence_gate``, 16.5's
-# ``observation_id_rendering``, 16.6's ``citation_gate``) graduated to
-# ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-16.17 baseline-5 record
-# (``reporter_exculpation`` graduated the same way at 15.7, and
-# ``evidence_quality_lift`` at the 14.12 close).
+# Task 18.12 graduates whichever Phase-18 arms the gate rules SHIP into
+# ``_RETIRED_ALWAYS_ON_LEVERS`` (the way 16.4/16.5/16.6 graduated at 16.17,
+# ``reporter_exculpation`` at 15.7, and ``evidence_quality_lift`` at the 14.12
+# close).
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("absence_prior", absence_prior_enabled),)
+] = (
+    ("absence_prior", absence_prior_enabled),
+    ("roll_call_round", roll_call_round_enabled),
+    ("whereabouts_interior_flags", whereabouts_interior_flags_enabled),
+    ("vent_placement_contradictions", vent_placement_contradictions_enabled),
+    ("impostor_roll_call", _impostor_roll_call_enabled),
+)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -553,13 +618,17 @@ def substrate_flag_snapshot(
     replay stamp keep self-describing recordings (and so the loader's
     substrate-mismatch guard can still validate legacy stamped replays — a
     baseline-4 stamp recording ``citation_gate`` OFF now fails loud, no
-    cross-substrate replay). Task 16.8's ``absence_prior`` is the ONE LIVE
-    env-gated toggle (the slate's recorded stay-OFF): its resolver is read from
-    the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded
-    through (defaulting to the live process environment), so a bare environment
-    stamps it ``False`` (DEFAULT-OFF, byte-identical to the committed baseline-5
-    recording) while an ``AILIBI_ABSENCE_PRIOR`` export stamps it ``True`` --
-    preserving the deterministic-snapshot seam tests and sweep configs rely on.
+    cross-substrate replay). The FIVE LIVE env-gated toggles are Task 16.8's
+    ``absence_prior`` and the four Phase-18 meeting-layer lever flags registered
+    at Task 18.11 (``roll_call_round``, ``whereabouts_interior_flags``,
+    ``vent_placement_contradictions``, ``impostor_roll_call``): each resolver is
+    read from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env``
+    threaded through (defaulting to the live process environment), so a bare
+    environment stamps all five ``False`` (DEFAULT-OFF, byte-identical to the
+    committed baseline-5 recordings, which predate every Phase-18 key) while an
+    ``AILIBI_*`` export for any one stamps it ``True`` -- preserving the
+    deterministic-snapshot seam the probe recorder, tests, and sweep configs
+    rely on to prove which arms a recording ran under.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)

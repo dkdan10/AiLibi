@@ -119,19 +119,27 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     SawPlayerObservation,
+    SawVentObservation,
     TurnKind,
+    VentWitnessRecord,
 )
 from meetings.transcript import (
+    ENV_VENT_PLACEMENT_CONTRADICTIONS,
+    ENV_WHEREABOUTS_INTERIOR_FLAGS,
+    MeetingTriggerKind,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
+    _turn_observation_id,
     detect_contradictions,
     independent_voices,
     is_canonically_ordered,
     is_weak_contradiction,
     next_chain_step,
+    vent_placement_contradictions_enabled,
+    whereabouts_interior_flags_enabled,
 )
 from agents.memory.beliefs import (
     CONTRADICTION_SUSPICION_DELTA,
@@ -348,7 +356,12 @@ def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
     return None, has_observation
 
 
-def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]:
+def _genuine_subjects(
+    transcript: Any,
+    roster: frozenset[str],
+    *,
+    detector_env: Mapping[str, str],
+) -> frozenset[str]:
     """Re-derive the genuine CANON-interior subjects (one-home, Task 10.4).
 
     Re-runs the imported repaired detector
@@ -360,10 +373,16 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
     diagnostic class). Imported, never re-implemented: on post-repair
     recordings the re-run equals the recorded flags byte-for-byte (verified by
     the genuine-class cross-check invariant).
+
+    ``detector_env`` (Task 18.11) is the recording's OWN lever mapping
+    (:func:`_detector_env_from_stamp`), threaded here exactly as into
+    :func:`_rederive_meeting_contradictions`: the exemption lever changes which
+    ``alibi_vs_sighting`` flags are interior-class, so an ambient shell must
+    never decide this classification.
     """
 
     genuine: set[str] = set()
-    for flag in detect_contradictions(transcript, roster=roster):
+    for flag in detect_contradictions(transcript, roster=roster, env=detector_env):
         if flag.kind != "alibi_vs_sighting":
             continue
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
@@ -391,8 +410,151 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
     return frozenset(genuine)
 
 
+# The vent_sighting flag's minted description (meetings/transcript.py, the
+# quote-the-record ``_describe_*`` contract): "{speaker} witnessed {subject}
+# vent in {room} at tick {tick}; venting is impostor-only, and the spoken
+# observation matches the witness's own record." Player/room ids are
+# whitespace-free tokens, so \S+ captures are exact; the full-sentence anchor
+# means any detector format drift fails the parse LOUD instead of silently
+# rebuilding a wrong record.
+_VENT_RECORD_QUOTE_RE = re.compile(
+    r"^\S+ witnessed (?P<subject>\S+) vent in (?P<room>\S+) at tick "
+    r"(?P<tick>\d+); venting is impostor-only, and the spoken observation "
+    r"matches the witness's own record\.$"
+)
+
+# The vent-PLACEMENT variant's minted description (the 18.9 lever-2
+# ``_describe_vent_placement`` format) quotes ITS grounding record the same way
+# before the ", but ..." alibi clause. Parsed alongside the sighting format
+# because the two flags may quote DIFFERENT records: the sighting mint quotes
+# the FIRST role-proof match in channel order, while the placement scan tests
+# every matching record and can mint from a LATER one whose tick overlaps the
+# stated account — rebuilding from sighting quotes alone would drop exactly
+# those records and lose placement flags on re-extraction.
+_VENT_PLACEMENT_QUOTE_RE = re.compile(
+    r"^\S+ witnessed (?P<subject>\S+) vent in (?P<room>\S+) at tick "
+    r"(?P<tick>\d+), but \S+'s own account places them in \S+ "
+    r"\(ticks \d+-\d+\) -- venting is impostor-only, physically incompatible "
+    r"with the stated account\.$"
+)
+
+
+def _vent_records_from_recorded_flags(
+    entry: MeetingReplayEntry,
+) -> dict[str, tuple[VentWitnessRecord, ...]]:
+    """Each speaker's groundable vent channel, rebuilt from the RECORDED verdicts.
+
+    Mirrors ``tests/agents/test_absence_prior.py::TestAbsencePriorOnCommittedBytes
+    ._vent_records_from_recorded_flags`` (the 17.5 sweep's committed pattern —
+    not importable here, so mirrored with this note naming the source). The
+    replay persists no private :class:`VentWitnessRecord`s (the 15.4 replay
+    boundary), but a recorded ``vent_sighting`` flag IS the record-time
+    grounding verdict: its ``event_a_id`` names the spoken
+    :class:`SawVentObservation` that matched the speaker's own channel, and its
+    DESCRIPTION quotes the RECORD's typed fields verbatim (the detector's
+    quote-the-record contract: "Quote the RECORD ... never the spoken
+    observation's values"). The record fields are recovered from that minted
+    description rather than the spoken observation, because grounding permits
+    tick fuzz: a spoken tick may sit a window away from the record tick, and
+    the vent-PLACEMENT variant decides ``alibi_vs_physical`` overlap against
+    the RECORD tick — a rebuilt record carrying the spoken tick would drop
+    exactly the placement flags a vent-ON recording minted. Parsing our own
+    detector's deterministic minted format is this tool's established idiom
+    (the defaulted-turn / invalid-target marker regexes above); an unparseable
+    description fails LOUD (a detector format drift, never a silent skew).
+    Verified: committed 9p2i re-derives 179/179 meetings byte-exact and both
+    18.11 probe arms 66/66 + 75/75 (the earlier spoken-tick rebuild left one
+    description-drift meeting per arm; the record-tick recovery closes it).
+    """
+
+    # Every SawVentObservation's event id -> its speaker, so a flag whose
+    # ``event_a_id`` lands in this map is vent-grounded by construction (both
+    # the sighting mint and the placement mint reference the spoken
+    # observation on event_a; the weak single-voice / kill-scene
+    # ``alibi_vs_physical`` classes reference other event shapes and fall out
+    # of the map naturally).
+    vent_obs_speaker: dict[str, str] = {}
+    for turn in entry.transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if isinstance(observation, SawVentObservation):
+                vent_obs_speaker[_turn_observation_id(turn=turn, index=index)] = (
+                    turn.speaker
+                )
+    seen: dict[str, set[tuple[str, str, int]]] = {}
+    records: dict[str, list[VentWitnessRecord]] = {}
+    for flag in entry.contradictions:
+        if flag.kind not in ("vent_sighting", "alibi_vs_physical"):
+            continue
+        # The vent observation may sit on EITHER event id: _build_contradiction
+        # canonicalises the pair lexicographically, so a placement flag pairing
+        # an AlibiClaim (":claim:") against a SawVentObservation (":obs:") can
+        # land the observation on event_b (4 of the FULL probe's 28 placement
+        # flags do). An event_a-only lookup would skip exactly the
+        # later-record placement quotes this parser exists to preserve.
+        speaker = vent_obs_speaker.get(flag.event_a_id or "") or vent_obs_speaker.get(
+            flag.event_b_id or ""
+        )
+        if speaker is None:
+            continue
+        pattern = (
+            _VENT_RECORD_QUOTE_RE
+            if flag.kind == "vent_sighting"
+            else _VENT_PLACEMENT_QUOTE_RE
+        )
+        match = pattern.match(flag.description)
+        if match is None:
+            raise SystemExit(
+                f"unparseable {flag.kind} description for {flag.event_a_id} "
+                f"({flag.description!r}) — the detector's minted format "
+                "changed; update the vent-record quote regexes to keep the "
+                "record rebuild faithful."
+            )
+        row = (match.group("subject"), match.group("room"), int(match.group("tick")))
+        if row in seen.setdefault(speaker, set()):
+            continue
+        seen[speaker].add(row)
+        records.setdefault(speaker, []).append(
+            VentWitnessRecord(subject=row[0], room=row[1], tick=row[2])
+        )
+    # Channel order approximates the live accessor's append/tick order: sort
+    # deterministically by (tick, subject, room) so the sighting mint's
+    # "first matching record" read is reproducible.
+    return {
+        speaker: tuple(sorted(rows, key=lambda r: (r.tick, r.subject, r.room)))
+        for speaker, rows in records.items()
+    }
+
+
+def _detector_env_from_stamp(
+    substrate_flags: Mapping[str, bool] | None,
+) -> dict[str, str]:
+    """The detector-lever env a recording's OWN substrate stamp names (Task 18.11).
+
+    The two Task-18.9 detector levers are read from the RECORDED
+    ``game_over`` stamp, never the operator's shell: an ON-path probe/adoption
+    recording re-derives with the exemption/vent levers it actually ran, and an
+    OFF-path recording (the committed baseline-5 sets, which stamp the levers
+    absent = OFF) re-derives with an explicit all-OFF mapping — so a polluted
+    ambient ``AILIBI_*`` export can never skew contradiction-derived facts in
+    either direction. Returning an explicit dict (possibly empty) is the
+    load-bearing part: ``detect_contradictions(env=...)`` then never consults
+    ``os.environ``.
+    """
+
+    flags = substrate_flags or {}
+    env: dict[str, str] = {}
+    if flags.get("whereabouts_interior_flags"):
+        env[ENV_WHEREABOUTS_INTERIOR_FLAGS] = "1"
+    if flags.get("vent_placement_contradictions"):
+        env[ENV_VENT_PLACEMENT_CONTRADICTIONS] = "1"
+    return env
+
+
 def _rederive_meeting_contradictions(
     entry: MeetingReplayEntry,
+    *,
+    detector_env: Mapping[str, str],
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> MeetingReplayEntry:
     """Re-run the CURRENT detector over the recorded transcript (Task 13.3).
 
@@ -410,6 +572,14 @@ def _rederive_meeting_contradictions(
     roster, verified across the committed 9p2i set); it diverges ONLY when the
     detector itself changes, which is exactly the signal re-extraction surfaces.
 
+    ``detector_env`` (Task 18.11) is the recording's OWN lever mapping
+    (:func:`_detector_env_from_stamp`), so the re-run applies the exemption /
+    vent-variant levers the bytes were recorded under rather than the ambient
+    shell; the vent channel is rebuilt from the recorded grounding verdicts
+    (:func:`_vent_records_from_recorded_flags`) so a vent-ON recording's
+    ``alibi_vs_physical`` mints reproduce — the replay persists no private
+    records (the 15.4 boundary).
+
     The roster mirrors :func:`_genuine_subjects`: the recorded ballot voters are
     the living participants the meeting ran with, so the re-run applies the same
     subject filter the recording used.
@@ -418,7 +588,13 @@ def _rederive_meeting_contradictions(
     roster = frozenset(b.voter for b in entry.ballots)
     return entry.model_copy(
         update={
-            "contradictions": detect_contradictions(entry.transcript, roster=roster)
+            "contradictions": detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                trigger_kind=trigger_kind,
+                vent_witness_records=_vent_records_from_recorded_flags(entry),
+                env=detector_env,
+            )
         }
     )
 
@@ -685,6 +861,8 @@ def _analyze_meeting(
     findings: list[dict[str, Any]],
     invariant_failures: list[str],
     defaulted_vote_rendered_max: Mapping[str, float],
+    roll_call_round_recorded: bool = False,
+    detector_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Per-meeting chain facts + chain-protocol mechanical checks (v2).
 
@@ -696,6 +874,19 @@ def _analyze_meeting(
     reconstructed state at the meeting tick (== the participant roster the
     manager ran with: ``orchestrator.game._build_participants`` builds one
     participant per living player).
+
+    ``roll_call_round_recorded`` (Task 18.11) relaxes the PHASE-3 eligibility
+    re-derivation for a recording whose ``game_over`` stamp carries the Task-18.8
+    ``roll_call_round`` lever ON (read from the recorded substrate flags, so the
+    tool self-describes the arm it is auditing rather than reading ambient env).
+    With the round ON, the manager appends one terminal ``opt_in``-surface turn
+    for EVERY living non-speaker after the co-presence opt-in phase (``sorted(
+    roster - spoken)``, ascending id) — NOT co-presence-gated — so the recorded
+    opt-in speakers legitimately exceed ``_opt_in_eligible_ids``. Default False
+    keeps the strict gate for every OFF-path recording (the committed
+    baseline-5 sets, which predate the lever and stamp it absent = OFF); the
+    DESIGN.md §5.2 companion note recording this Phase-18 turn-allocation surface
+    is owner-side (Task 18.12's adopting record), not edited by this tool.
     """
 
     mid = meeting_entry.meeting_id
@@ -1000,15 +1191,29 @@ def _analyze_meeting(
         (i for i, t in enumerate(turns) if t.turn_kind == "opt_in"), len(turns)
     )
     post_chain = MeetingTranscript(turns=tuple(turns[:structural_chain_end]))
+    chain_speakers = frozenset(t.speaker for t in turns[:structural_chain_end])
     derived_eligible = _opt_in_eligible_ids(
         transcript=post_chain,
-        spoken=frozenset(t.speaker for t in turns[:structural_chain_end]),
+        spoken=chain_speakers,
         living_ids=living_ids,
     )
+    # Task 18.11: with the 18.8 roll-call round ON (read from THIS recording's
+    # substrate stamp), the manager appends a terminal opt_in-surface turn for
+    # every remaining living non-speaker after the co-presence opt-in phase, in
+    # ascending id order (meetings/manager.py ``for roll_call_id in sorted(roster
+    # - spoken)``). The faithful expected sequence is therefore the co-presence
+    # eligible ids (the manager's opt-in order) FOLLOWED BY the sorted remainder;
+    # OFF-path recordings keep the exact ``_opt_in_eligible_ids`` sequence.
+    if roll_call_round_recorded:
+        after_opt_in = chain_speakers | set(derived_eligible)
+        roll_call_ids = tuple(sorted(living_ids - after_opt_in))
+        expected_opt_in_speakers = tuple(derived_eligible) + roll_call_ids
+    else:
+        expected_opt_in_speakers = tuple(derived_eligible)
     recorded_opt_in_speakers = tuple(
         t.speaker for t in turns[structural_chain_end:] if t.turn_kind == "opt_in"
     )
-    if recorded_opt_in_speakers != derived_eligible:
+    if recorded_opt_in_speakers != expected_opt_in_speakers:
         findings.append(
             {
                 "id": f"OPTIN-{seed}-{meeting_index}-eligibility",
@@ -1020,18 +1225,26 @@ def _analyze_meeting(
                 "claim": (
                     "PHASE-3 eligibility is a pure function of the post-chain "
                     "transcript (co-presence with body room / accused), and "
-                    "every eligible player takes exactly one terminal turn; "
-                    "the recorded opt_in speakers do not match."
+                    "every eligible player takes exactly one terminal turn"
+                    + (
+                        " — plus, under the 18.8 roll-call round stamped ON, the "
+                        "sorted remaining living non-speakers"
+                        if roll_call_round_recorded
+                        else ""
+                    )
+                    + "; the recorded opt_in speakers do not match."
                 ),
                 "evidence": (
                     f"{where}: recorded opt_in speakers "
-                    f"{list(recorded_opt_in_speakers)} vs derived eligible "
-                    f"{list(derived_eligible)}"
+                    f"{list(recorded_opt_in_speakers)} vs expected "
+                    f"{list(expected_opt_in_speakers)}"
+                    + (" (roll-call round ON)" if roll_call_round_recorded else "")
                 ),
                 "repair_hint": (
                     "Re-run meetings/manager.py::_opt_in_eligible_ids on the "
-                    "post-chain transcript; divergence means the recorded "
-                    "transcript was not produced by the committed gate."
+                    "post-chain transcript (plus the roll-call round when the "
+                    "recording stamps roll_call_round ON); divergence means the "
+                    "recorded transcript was not produced by the committed gate."
                 ),
             }
         )
@@ -1464,7 +1677,11 @@ def _analyze_meeting(
     # the per-meeting set so the genuine-class records can be assembled with
     # cross-meeting context in the per-game loop.
     ballot_voter_roster = frozenset(b.voter for b in meeting_entry.ballots)
-    genuine_subjects = _genuine_subjects(meeting_entry.transcript, ballot_voter_roster)
+    genuine_subjects = _genuine_subjects(
+        meeting_entry.transcript,
+        ballot_voter_roster,
+        detector_env=detector_env if detector_env is not None else {},
+    )
 
     # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
     # who followed through on their own target.
@@ -1967,13 +2184,74 @@ def main() -> int:
             e for e in entries if isinstance(e, FailedCallReplayEntry)
         ]
         game_end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
+        # Task 18.11: read the 18.8 roll-call-round lever off THIS recording's
+        # substrate stamp so the PHASE-3 eligibility re-derivation self-describes
+        # the arm it audits — an ON-path recording (a probe seed, or a future
+        # baseline-6 record if the round graduates) legitimately carries a
+        # terminal opt_in turn for every living non-speaker, so the strict gate
+        # relaxes; an OFF-path recording (the committed baseline-5 sets, which
+        # stamp the lever absent = OFF) keeps the exact eligibility check.
+        roll_call_round_recorded = bool(
+            (game_end.substrate_flags or {}).get("roll_call_round")
+            if game_end is not None
+            else False
+        )
         # Task 13.3: re-derive each meeting's contradictions from the recorded
         # transcript with the CURRENT detector (the $0 re-extraction spine), so
         # a detector change is reflected without a re-record. A byte-for-byte
-        # no-op for an unchanged detector (recorded == re-derived).
-        meeting_by_tick = {
-            e.tick: _rederive_meeting_contradictions(e) for e in meeting_entries
-        }
+        # no-op for an unchanged detector (recorded == re-derived). Task 18.11:
+        # the detector LEVERS come from THIS recording's substrate stamp, never
+        # the ambient shell — an explicit (possibly empty) env mapping, so an
+        # ON-path recording re-derives under the exemption/vent levers it
+        # actually ran and a polluted operator shell cannot skew the
+        # contradiction-derived facts of an OFF-path one.
+        detector_env = _detector_env_from_stamp(
+            game_end.substrate_flags if game_end is not None else None
+        )
+        # The tool's OWN detector re-runs are stamp-true regardless of the shell
+        # (detector_env above). The SHIPPED eval folds this audit cross-checks
+        # against (eval.vote_correctness / meeting_quality, out of 18.11 scope)
+        # still read the ambient env — so an ambient detector-lever state that
+        # DISAGREES with a stamped recording is refused up front rather than
+        # letting the two halves of the report silently diverge (the same
+        # match-the-env-to-the-stamp requirement the validity gate and the
+        # replay loader already enforce). Unstamped legacy recordings skip the
+        # check, mirroring the loader.
+        if game_end is not None and game_end.substrate_flags is not None:
+            stamped = game_end.substrate_flags
+            ambient_mismatches = [
+                f"{env_var}: recording stamps {bool(stamped.get(key))}, "
+                f"ambient resolves {resolver(None)}"
+                for env_var, key, resolver in (
+                    (
+                        ENV_WHEREABOUTS_INTERIOR_FLAGS,
+                        "whereabouts_interior_flags",
+                        whereabouts_interior_flags_enabled,
+                    ),
+                    (
+                        ENV_VENT_PLACEMENT_CONTRADICTIONS,
+                        "vent_placement_contradictions",
+                        vent_placement_contradictions_enabled,
+                    ),
+                )
+                if resolver(None) != bool(stamped.get(key))
+            ]
+            if ambient_mismatches:
+                raise SystemExit(
+                    f"seed {seed}: ambient detector-lever env disagrees with the "
+                    f"recording's substrate stamp ({'; '.join(ambient_mismatches)}). "
+                    "Export/unset the AILIBI_* vars to match the stamp before "
+                    "extracting — the shipped eval cross-checks read the ambient "
+                    "env and would silently diverge from this tool's stamp-true "
+                    "re-derivations."
+                )
+        # RAW entries here; the re-derivation happens per meeting inside the
+        # walk, where the reconstructed trigger kind is known — the live
+        # manager's final detection runs with ``trigger_kind`` (an emergency
+        # meeting's ``triggering_body_rooms`` ignores a fabricated opening
+        # body), so re-deriving without it would diverge on exactly those
+        # meetings.
+        meeting_by_tick = {e.tick: e for e in meeting_entries}
         total_meeting_records += len(meeting_entries)
 
         # Meetings whose OPENING defaulted (exhausted its single retry): the
@@ -2182,8 +2460,8 @@ def main() -> int:
                 continue
 
             # Meeting resolved this tick.
-            meeting_entry = meeting_by_tick.get(entry.tick)
-            if meeting_entry is None:
+            raw_meeting_entry = meeting_by_tick.get(entry.tick)
+            if raw_meeting_entry is None:
                 # Partial replay (meeting opened, never resolved). Stop the walk.
                 break
 
@@ -2194,6 +2472,22 @@ def main() -> int:
                 if isinstance(ev, MeetingTriggeredEvent):
                     body_id = ev.body_id
                     trigger_kind = ev.trigger
+
+            # Task 13.3/18.11: the $0 re-extraction spine, run HERE where the
+            # reconstructed trigger kind is known so the re-derivation mirrors
+            # the manager's final detection exactly (``"emergency" if
+            # _trigger_is_emergency(trigger) else "report"``; the engine event's
+            # trigger literal is already that pair).
+            meeting_trigger_kind: MeetingTriggerKind | None = (
+                "emergency"
+                if trigger_kind == "emergency"
+                else ("report" if trigger_kind == "report" else None)
+            )
+            meeting_entry = _rederive_meeting_contradictions(
+                raw_meeting_entry,
+                detector_env=detector_env,
+                trigger_kind=meeting_trigger_kind,
+            )
 
             # Schema-verified against meetings/schemas.py::MeetingResult
             # (Task 8.7 shape): meeting_id, triggered_by,
@@ -2237,6 +2531,8 @@ def main() -> int:
                 defaulted_vote_rendered_max=defaulted_vote_rendered_max_by_meeting.get(
                     meeting_entry.meeting_id, {}
                 ),
+                roll_call_round_recorded=roll_call_round_recorded,
+                detector_env=detector_env,
             )
             meetings_out.append(m_facts)
             total_meetings += 1

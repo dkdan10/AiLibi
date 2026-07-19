@@ -33,15 +33,26 @@ from orchestrator.game import (
 )
 from orchestrator.replay import (
     FSM_DEFAULT_POLICY_ID,
+    CrewTacticalPolicyStamp,
     GameEndReplayEntry,
     ReplayLog,
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
     read_all_entries,
+    read_crew_tactical_policy_stamp,
     read_substrate_flags,
     read_tactical_policy_stamp,
 )
 from orchestrator.scheduler import TickScheduler
+
+# The committed canonical sets, read-only here — they predate BOTH policy stamps
+# (15.9 impostor + 18.7 crew), so both read back absent = scripted default.
+_COMMITTED_9P2I_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+_COMMITTED_4P1I_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "4p1i"
+)
 
 # A distinct learned-policy stamp (all five fields non-default) used to prove
 # every field round-trips and that the stamp is disjoint from the FSM default.
@@ -302,3 +313,76 @@ class TestProductionSeam:
         )
         assert "tactical_policy" not in row
         assert read_substrate_flags(path) is not None
+
+
+class TestCrewStampCommittedSetRoundTrip:
+    """The 18.7 crew stamp reads back absent on every committed replay (Task 18.11).
+
+    The 18.7 verifier pinned the crew-stamp writer round-trip and the absent-stamp
+    byte-identity carve-out against a FRESH ``ReplayLog``, but left one soft spot:
+    a dedicated round-trip pin over the COMMITTED canonical sets — the exact bytes
+    the meeting-gate probe and every downstream record are byte-compared against.
+    18.11 closes it while in ``orchestrator/replay.py`` for the substrate-flag
+    registry. The committed 9p2i + 4p1i sets predate BOTH policy stamps, so every
+    ``game_over`` row must (a) carry NO ``crew_tactical_policy`` key on disk and
+    (b) read back ``None`` = the scripted ``CrewmatePolicy`` default through
+    :func:`read_crew_tactical_policy_stamp`. A regression that made the crew reader
+    invent an identity, or the schema reject the unstamped committed shape, would
+    surface here rather than silently mis-attributing a canonical recording.
+    """
+
+    def _committed_replays(self, directory: Path) -> list[Path]:
+        paths = sorted(directory.glob("replay-seed-*.jsonl"))
+        assert paths, f"no committed replays under {directory}"
+        return paths
+
+    @pytest.mark.parametrize("set_name", ["9p2i", "4p1i"])
+    def test_committed_game_over_carries_no_crew_stamp_key(self, set_name: str) -> None:
+        directory = _COMMITTED_9P2I_DIR if set_name == "9p2i" else _COMMITTED_4P1I_DIR
+        for path in self._committed_replays(directory):
+            game_over_rows = [
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line and json.loads(line).get("kind") == "game_over"
+            ]
+            assert len(game_over_rows) == 1, path
+            row = game_over_rows[0]
+            # The absent-stamp byte-identity carve-out: the optional crew key is
+            # OMITTED from the JSON entirely, never written as null, so the
+            # committed bytes are byte-identical to the pre-18.7 game_over row.
+            assert "crew_tactical_policy" not in row, path
+            # And the impostor stamp is likewise absent (FSM-default recordings).
+            assert "tactical_policy" not in row, path
+
+    @pytest.mark.parametrize("set_name", ["9p2i", "4p1i"])
+    def test_committed_crew_stamp_reads_back_absent(self, set_name: str) -> None:
+        directory = _COMMITTED_9P2I_DIR if set_name == "9p2i" else _COMMITTED_4P1I_DIR
+        for path in self._committed_replays(directory):
+            # read_crew_tactical_policy_stamp returns None = scripted crew default,
+            # and the entry parses (the schema tolerates the unstamped shape).
+            assert read_crew_tactical_policy_stamp(path) is None, path
+            (entry,) = [
+                e for e in read_all_entries(path) if isinstance(e, GameEndReplayEntry)
+            ]
+            assert entry.crew_tactical_policy is None, path
+
+    def test_committed_crew_stamp_survives_a_crew_stamp_round_trip(
+        self, tmp_path: Path
+    ) -> None:
+        # A learned-crew recording DOES stamp the crew block, and the reader
+        # round-trips all five fields — proving the committed-set None read is a
+        # genuine absence, not a reader that always returns None.
+        crew = CrewTacticalPolicyStamp(
+            policy_id="crew-owned-tasks-es-1",
+            method="neuroevolution",
+            encoder_version="crew.encoder.v1",
+            weights_sha256="b" * 64,
+            anchor_policy="crewmate-policy",
+        )
+        path = tmp_path / "crew-stamped.jsonl"
+        ReplayLog(
+            path, game_id="crew-1", crew_tactical_policy_stamp=crew
+        ).record_game_end(winner="CREWMATES", reason="CREWMATE_TASKS", tick=9)
+        assert read_crew_tactical_policy_stamp(path) == crew
+        # The impostor stamp stays absent beside a present crew stamp.
+        assert read_tactical_policy_stamp(path) is None
