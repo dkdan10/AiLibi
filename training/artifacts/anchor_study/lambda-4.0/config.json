@@ -1,7 +1,8 @@
 {
   "anchor_weight": 4.0,
+  "base_entrant": "utility-es",
   "encoder_version": "impostor-option-features-v1",
-  "entrant": "utility-es",
+  "entrant": "lambda-4.0",
   "es": {
     "fitness_seeds": [
       1000,

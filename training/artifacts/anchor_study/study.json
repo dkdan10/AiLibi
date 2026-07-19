@@ -44,6 +44,7 @@
     "committed_champion_overall": {
       "agreement": 0.41310282074613286,
       "agreement_hits": 3178,
+      "ce_clamped_decisions": 0,
       "decisions": 7693,
       "divergence": [
         {
@@ -284,6 +285,7 @@
     "in_filter": {
       "agreement": 0.7936479454512829,
       "agreement_hits": 4423,
+      "ce_clamped_decisions": 0,
       "decisions": 5573,
       "divergence": [
         {
@@ -376,6 +378,7 @@
     "out_of_filter": {
       "agreement": 0.8056603773584906,
       "agreement_hits": 1708,
+      "ce_clamped_decisions": 0,
       "decisions": 2120,
       "divergence": [
         {
@@ -457,6 +460,7 @@
     "overall": {
       "agreement": 0.796958273755362,
       "agreement_hits": 6131,
+      "ce_clamped_decisions": 0,
       "decisions": 7693,
       "divergence": [
         {

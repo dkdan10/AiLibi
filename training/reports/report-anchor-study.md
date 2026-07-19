@@ -14,8 +14,8 @@
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
 > **Command:** `uv run python -m training.anchor_study run --budget full`
-> (exit 0, 1544 s training + 94 s
-> scoring/walk = 1638 s wall-clock, CPU-only, $0).
+> (exit 0, 1212 s training + 77 s
+> scoring/walk = 1289 s wall-clock, CPU-only, $0).
 > **Report-only:** no champion ships from this study; the ES leg under the
 > refined anchor is deliberately NOT run here (the harness's anchor-CE is
 > computed against the FSM's own choice; the anchor-policy seam lands at
@@ -119,12 +119,12 @@ decisions (weight total 8439) of
 
 ### 3.1 Offline FSM agreement (per-decision, top-1 by the frozen arbitration)
 
-| Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu |
-|---|---:|---:|---:|---:|
-| all corpus games | 7693 | 0.7970 | 0.4589 | 0 |
-| in-filter games | 5573 | 0.7936 | 0.4685 | 0 |
-| out-of-filter games | 2120 | 0.8057 | 0.4337 | 0 |
-| committed utility-es champion | 7693 | 0.4131 | 1.0800 | 0 |
+| Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu | CE-clamped |
+|---|---:|---:|---:|---:|---:|
+| all corpus games | 7693 | 0.7970 | 0.4589 | 0 | 0 |
+| in-filter games | 5573 | 0.7936 | 0.4685 | 0 | 0 |
+| out-of-filter games | 2120 | 0.8057 | 0.4337 | 0 | 0 |
+| committed utility-es champion | 7693 | 0.4131 | 1.0800 | 0 | 0 |
 
 ### 3.2 Where the anchor agrees, by FSM intent kind (all corpus games)
 
