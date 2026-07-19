@@ -10,6 +10,17 @@ below were ratified by the owner on 2026-07-18 at the planning session's decisio
 (`audits/audit-phase-18-planning.md` §8), sign-off additionally riding the merge of this
 phase doc (the 15.18 convention).
 
+**18.11 meeting-layer gate — PENDING (2026-07-19).** The gate memo
+`audits/audit-phase-18-meeting-gate.md` is assembled with the offline evidence (the 18.9
+exemption + vent censuses, the baseline-5 absence + crew-coverage pins) quoted against the
+pre-registered bars, and the substrate-flag snapshot registry + `extract_gameplay_facts`
+relaxation land in the 18.11 PR. The LIVE probe (operator, two 25-seed real-path sets, ~8–9 h)
+and the owner ruling (FULL / CREW-ONLY / NONE, with the absence-prior graduation and the vent
+re-rule riding it) are **not yet executed**, so no meeting-layer surgery has been performed and
+the DAG below is UNCHANGED — the 17.14 PENDING pattern (the PR stays open with the memo complete
+and the DoD honest; never a ruling that has not happened). The ruling directions and their
+surgery are pre-authored in the gate memo §9–§10 and in the Baseline-numbering block below.
+
 ## Locked decisions (owner-ratified 2026-07-18)
 
 1. **Training signal: layered — conviction-economy proxy + real-path selection.** A

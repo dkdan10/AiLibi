@@ -685,6 +685,7 @@ def _analyze_meeting(
     findings: list[dict[str, Any]],
     invariant_failures: list[str],
     defaulted_vote_rendered_max: Mapping[str, float],
+    roll_call_round_recorded: bool = False,
 ) -> dict[str, Any]:
     """Per-meeting chain facts + chain-protocol mechanical checks (v2).
 
@@ -696,6 +697,19 @@ def _analyze_meeting(
     reconstructed state at the meeting tick (== the participant roster the
     manager ran with: ``orchestrator.game._build_participants`` builds one
     participant per living player).
+
+    ``roll_call_round_recorded`` (Task 18.11) relaxes the PHASE-3 eligibility
+    re-derivation for a recording whose ``game_over`` stamp carries the Task-18.8
+    ``roll_call_round`` lever ON (read from the recorded substrate flags, so the
+    tool self-describes the arm it is auditing rather than reading ambient env).
+    With the round ON, the manager appends one terminal ``opt_in``-surface turn
+    for EVERY living non-speaker after the co-presence opt-in phase (``sorted(
+    roster - spoken)``, ascending id) — NOT co-presence-gated — so the recorded
+    opt-in speakers legitimately exceed ``_opt_in_eligible_ids``. Default False
+    keeps the strict gate for every OFF-path recording (the committed
+    baseline-5 sets, which predate the lever and stamp it absent = OFF); the
+    DESIGN.md §5.2 companion note recording this Phase-18 turn-allocation surface
+    is owner-side (Task 18.12's adopting record), not edited by this tool.
     """
 
     mid = meeting_entry.meeting_id
@@ -1000,15 +1014,29 @@ def _analyze_meeting(
         (i for i, t in enumerate(turns) if t.turn_kind == "opt_in"), len(turns)
     )
     post_chain = MeetingTranscript(turns=tuple(turns[:structural_chain_end]))
+    chain_speakers = frozenset(t.speaker for t in turns[:structural_chain_end])
     derived_eligible = _opt_in_eligible_ids(
         transcript=post_chain,
-        spoken=frozenset(t.speaker for t in turns[:structural_chain_end]),
+        spoken=chain_speakers,
         living_ids=living_ids,
     )
+    # Task 18.11: with the 18.8 roll-call round ON (read from THIS recording's
+    # substrate stamp), the manager appends a terminal opt_in-surface turn for
+    # every remaining living non-speaker after the co-presence opt-in phase, in
+    # ascending id order (meetings/manager.py ``for roll_call_id in sorted(roster
+    # - spoken)``). The faithful expected sequence is therefore the co-presence
+    # eligible ids (the manager's opt-in order) FOLLOWED BY the sorted remainder;
+    # OFF-path recordings keep the exact ``_opt_in_eligible_ids`` sequence.
+    if roll_call_round_recorded:
+        after_opt_in = chain_speakers | set(derived_eligible)
+        roll_call_ids = tuple(sorted(living_ids - after_opt_in))
+        expected_opt_in_speakers = tuple(derived_eligible) + roll_call_ids
+    else:
+        expected_opt_in_speakers = tuple(derived_eligible)
     recorded_opt_in_speakers = tuple(
         t.speaker for t in turns[structural_chain_end:] if t.turn_kind == "opt_in"
     )
-    if recorded_opt_in_speakers != derived_eligible:
+    if recorded_opt_in_speakers != expected_opt_in_speakers:
         findings.append(
             {
                 "id": f"OPTIN-{seed}-{meeting_index}-eligibility",
@@ -1020,18 +1048,26 @@ def _analyze_meeting(
                 "claim": (
                     "PHASE-3 eligibility is a pure function of the post-chain "
                     "transcript (co-presence with body room / accused), and "
-                    "every eligible player takes exactly one terminal turn; "
-                    "the recorded opt_in speakers do not match."
+                    "every eligible player takes exactly one terminal turn"
+                    + (
+                        " — plus, under the 18.8 roll-call round stamped ON, the "
+                        "sorted remaining living non-speakers"
+                        if roll_call_round_recorded
+                        else ""
+                    )
+                    + "; the recorded opt_in speakers do not match."
                 ),
                 "evidence": (
                     f"{where}: recorded opt_in speakers "
-                    f"{list(recorded_opt_in_speakers)} vs derived eligible "
-                    f"{list(derived_eligible)}"
+                    f"{list(recorded_opt_in_speakers)} vs expected "
+                    f"{list(expected_opt_in_speakers)}"
+                    + (" (roll-call round ON)" if roll_call_round_recorded else "")
                 ),
                 "repair_hint": (
                     "Re-run meetings/manager.py::_opt_in_eligible_ids on the "
-                    "post-chain transcript; divergence means the recorded "
-                    "transcript was not produced by the committed gate."
+                    "post-chain transcript (plus the roll-call round when the "
+                    "recording stamps roll_call_round ON); divergence means the "
+                    "recorded transcript was not produced by the committed gate."
                 ),
             }
         )
@@ -1967,6 +2003,18 @@ def main() -> int:
             e for e in entries if isinstance(e, FailedCallReplayEntry)
         ]
         game_end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
+        # Task 18.11: read the 18.8 roll-call-round lever off THIS recording's
+        # substrate stamp so the PHASE-3 eligibility re-derivation self-describes
+        # the arm it audits — an ON-path recording (a probe seed, or a future
+        # baseline-6 record if the round graduates) legitimately carries a
+        # terminal opt_in turn for every living non-speaker, so the strict gate
+        # relaxes; an OFF-path recording (the committed baseline-5 sets, which
+        # stamp the lever absent = OFF) keeps the exact eligibility check.
+        roll_call_round_recorded = bool(
+            (game_end.substrate_flags or {}).get("roll_call_round")
+            if game_end is not None
+            else False
+        )
         # Task 13.3: re-derive each meeting's contradictions from the recorded
         # transcript with the CURRENT detector (the $0 re-extraction spine), so
         # a detector change is reflected without a re-record. A byte-for-byte
@@ -2237,6 +2285,7 @@ def main() -> int:
                 defaulted_vote_rendered_max=defaulted_vote_rendered_max_by_meeting.get(
                     meeting_entry.meeting_id, {}
                 ),
+                roll_call_round_recorded=roll_call_round_recorded,
             )
             meetings_out.append(m_facts)
             total_meetings += 1
