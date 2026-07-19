@@ -95,6 +95,23 @@ _ALL_LEVER_VARS: tuple[str, ...] = (
 
 _ARM_DIR: dict[str, str] = {"full": "full", "crew-only": "crew-only"}
 
+# env var -> the substrate-flag snapshot key it toggles (orchestrator.replay's
+# Task-18.11 registry). Used by the resume path to verify an existing
+# recording's stamp actually matches its arm directory before skipping it.
+_LEVER_STAMP_KEYS: dict[str, str] = {
+    "AILIBI_ROLL_CALL_ROUND": "roll_call_round",
+    "AILIBI_WHEREABOUTS_INTERIOR_FLAGS": "whereabouts_interior_flags",
+    "AILIBI_VENT_PLACEMENT_CONTRADICTIONS": "vent_placement_contradictions",
+    "AILIBI_IMPOSTOR_ROLL_CALL": "impostor_roll_call",
+    "AILIBI_ABSENCE_PRIOR": "absence_prior",
+}
+
+# The locked eval model (llm.featherless_client.DEFAULT_FEATHERLESS_MODEL, the
+# Task-16.2 lock) — duplicated here as a literal so this operator script stays
+# stdlib-only (it is invoked from arbitrary CWDs where the repo packages may
+# not be importable); the validity gate re-pins the same id from the bytes.
+_LOCKED_MODEL: str = "Qwen/Qwen3.6-27B"
+
 # Cooperative-stop signal, shared across the worker threads; the SIGINT handler
 # sets it and terminates in-flight children so ^C is responsive.
 _STOP = threading.Event()
@@ -141,6 +158,38 @@ def _has_game_over(path: Path) -> bool:
                 return True
     except (OSError, json.JSONDecodeError):
         return False
+    return False
+
+
+def _recorded_stamp_matches_arm(path: Path, arm: str) -> bool:
+    """Whether an existing recording's substrate stamp matches ``arm`` exactly.
+
+    The resume guard: a per-seed file left by an OLDER, interrupted, or
+    polluted run (a full/ seed stamped crew-only, an absence-prior-ON stamp, a
+    file copied between arm dirs) must NOT be skipped as "already recorded" —
+    it would contaminate the arm's measurements while the completeness pass
+    reads green. Reads the ``game_over`` row's ``substrate_flags`` and requires
+    every lever in :data:`_LEVER_STAMP_KEYS` to equal the arm's intent: True
+    iff the lever is in ``_ARMS[arm]`` (``absence_prior`` is in no arm, so it
+    must stamp False/absent). A missing stamp fails the match (fail-safe:
+    re-record). Callers only invoke this on files :func:`_has_game_over`
+    accepted, so the parse cannot raise here.
+    """
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        if not isinstance(row, dict) or row.get("kind") != "game_over":
+            continue
+        flags = row.get("substrate_flags")
+        if not isinstance(flags, dict):
+            return False
+        return all(
+            bool(flags.get(stamp_key)) == (env_var in _ARMS[arm])
+            for env_var, stamp_key in _LEVER_STAMP_KEYS.items()
+        )
     return False
 
 
@@ -354,7 +403,14 @@ def _worker(
 def _build_board(
     *, start_seed: int, num_seeds: int, probe_root: Path
 ) -> tuple[_Board, int]:
-    """Build the work board, skipping seeds already recorded (resume)."""
+    """Build the work board, skipping seeds already recorded (resume).
+
+    "Already recorded" requires BOTH a ``game_over`` row AND a substrate stamp
+    that matches the arm directory (:func:`_recorded_stamp_matches_arm`): a
+    complete-looking file whose stamp names a different arm (or a stray
+    ``absence_prior`` ON) is queued for re-record with a loud notice, never
+    silently counted complete.
+    """
 
     seeds = list(range(start_seed, start_seed + num_seeds))
     remaining: dict[str, list[int]] = {}
@@ -364,10 +420,16 @@ def _build_board(
         arm_dir.mkdir(parents=True, exist_ok=True)
         pending: list[int] = []
         for seed in seeds:
-            if _has_game_over(arm_dir / f"replay-seed-{seed}.jsonl"):
-                already += 1
-            else:
-                pending.append(seed)
+            replay_path = arm_dir / f"replay-seed-{seed}.jsonl"
+            if _has_game_over(replay_path):
+                if _recorded_stamp_matches_arm(replay_path, arm):
+                    already += 1
+                    continue
+                _log(
+                    f"[{arm}] seed {seed}: existing recording's substrate stamp "
+                    f"does NOT match the {arm} arm — re-recording it"
+                )
+            pending.append(seed)
         remaining[arm] = pending
     total = num_seeds * len(_ARMS)
     board = _Board(remaining=remaining, total_units=total, done=already)
@@ -389,6 +451,20 @@ def _preflight(*, dry_run: bool) -> None:
         )
     if not os.environ.get("FEATHERLESS_API_KEY"):
         problems.append("FEATHERLESS_API_KEY must be set for the real-path probe")
+    for model_var in ("AILIBI_LLM_MEETING_MODEL", "AILIBI_LLM_TRIGGER_MODEL"):
+        # The record_ml_corpus.sh model-override guard, mirrored: an exported
+        # override routes llm.provider.build_default_client to a NON-LOCKED
+        # model while this preflight's provider/prompt-set checks still pass —
+        # the multi-hour probe would then record off-model, caught only later
+        # by the validity gate's model census. Unset, or exactly the locked
+        # model, are the only acceptable states.
+        override = os.environ.get(model_var, "").strip()
+        if override and override != _LOCKED_MODEL:
+            problems.append(
+                f"{model_var}={override!r} would record the probe on a "
+                f"non-locked model (the Task-16.2 lock is {_LOCKED_MODEL!r}); "
+                "unset it or set it to the locked model"
+            )
     if os.environ.get("AILIBI_ABSENCE_PRIOR", "").strip():
         # The record_ml_corpus.sh absence-prior guard, mirrored: the lever is a
         # live stamped toggle that is part of NO probe arm (its graduation rides
