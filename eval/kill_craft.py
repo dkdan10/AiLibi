@@ -125,7 +125,10 @@ the collapsed duplicate's hashes would never be validated), a tick row whose
 recorded action actors do not exactly match the living players of the pre-advance
 state (a doubled, dropped, or injected action can pass the hash chain — a
 repeated ``wait`` is a state no-op — while mis-counting the entropy decisions;
-the recorder emits exactly one action per living player), the census-agreement
+the recorder emits exactly one action per living player), a tick row whose
+actions are not in the recorder's canonical actor-ascending order (a permuted
+row changes intra-tick resolution — it can flip ``KilledEvent.witnesses`` —
+while the post-advance hash still verifies), the census-agreement
 breach above, a replay whose bytes end before the game reaches GAME_OVER (an
 EOF-truncated recording would silently under-count kills and actions), a replay
 carrying tick / meeting rows AFTER the terminal GAME_OVER tick (trailing rows
@@ -234,7 +237,9 @@ class KillCraftReconstructionError(RuntimeError):
     meeting ``state_hash_before`` / ``state_hash_after`` mismatch; a duplicate
     meeting row (same tick or meeting id); a tick row whose recorded action
     actors do not match the living players of the pre-advance state (a doubled,
-    dropped, or injected action); a crew witness that lands in neither the
+    dropped, or injected action); a tick row whose actions are not in canonical
+    actor-ascending order (a permuted row can flip the witnessed bit while the
+    hash chain verifies); a crew witness that lands in neither the
     co-present nor the one-hop census; a replay whose bytes end before the game
     reaches GAME_OVER (EOF truncation); a replay carrying tick / meeting rows
     after the terminal GAME_OVER tick (trailing bytes the walk never validated
@@ -570,14 +575,25 @@ def _fold_entropy(
 
     Reads the raw ``actor`` / ``type`` off the recorded action dict (before
     deserialization) and buckets by the actor's pre-advance coarse state. The
-    recorder emits EXACTLY one action per living player per tick
-    (``orchestrator.action_ordering`` rejects duplicates at record time), and a
-    violation can pass the state-hash chain while mis-counting the entropy
-    decisions (a doubled or dropped ``wait`` is a state no-op), so the walk
-    enforces the invariant before folding.
+    recorder emits EXACTLY one action per living player per tick, in canonical
+    actor-ascending order (``orchestrator.action_ordering``), and a violation
+    can pass the state-hash chain while corrupting the folds — a doubled or
+    dropped ``wait`` is a state no-op that mis-counts the entropy decisions, and
+    ``advance_tick`` applies actions in list order WITHOUT re-sorting, so a
+    permuted row changes intra-tick resolution (it can flip
+    ``KilledEvent.witnesses``) while the post-advance hash still verifies. Both
+    invariants are enforced before folding.
     """
 
-    actors = sorted(raw["actor"] for raw in entry.actions)
+    recorded_actors: list[PlayerId] = [raw["actor"] for raw in entry.actions]
+    if recorded_actors != sorted(recorded_actors):
+        raise KillCraftReconstructionError(
+            f"{game_id}: tick {entry.tick} actions are not in the recorder's "
+            "canonical actor-ascending order — a permuted row changes intra-tick "
+            "resolution (and can flip the witnessed bit) while the state hash "
+            "still verifies; refusing to fold non-canonical bytes"
+        )
+    actors = sorted(recorded_actors)
     living = sorted(pid for pid, player in pre_players.items() if player.alive)
     if actors != living:
         raise KillCraftReconstructionError(

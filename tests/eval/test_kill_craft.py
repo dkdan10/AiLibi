@@ -420,7 +420,14 @@ def test_fail_loud_on_doubled_actor_action(tmp_path: Path) -> None:
     )
     first = json.loads(source_lines[0])
     assert first["kind"] == "tick"
-    first["actions"] = [*first["actions"], dict(first["actions"][0])]
+    # Insert the duplicate ADJACENT to the original so the row stays in
+    # canonical actor-ascending order and the duplicate check (not the order
+    # check) is what fires.
+    first["actions"] = [
+        first["actions"][0],
+        dict(first["actions"][0]),
+        *first["actions"][1:],
+    ]
     source_lines[0] = json.dumps(first)
     (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
         "\n".join(source_lines) + "\n", encoding="utf-8"
@@ -428,6 +435,37 @@ def test_fail_loud_on_doubled_actor_action(tmp_path: Path) -> None:
 
     with pytest.raises(
         KillCraftReconstructionError, match="one action per living player"
+    ):
+        compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_permuted_action_order(tmp_path: Path) -> None:
+    # advance_tick applies actions in list order without re-sorting, so a
+    # permuted row changes intra-tick resolution (it can flip the witnessed
+    # bit) while the post-advance hash can still verify: the recorder's
+    # canonical actor-ascending order is enforced.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    first = json.loads(source_lines[0])
+    assert first["kind"] == "tick"
+    assert len(first["actions"]) >= 2
+    actions = list(first["actions"])
+    actions[0], actions[1] = actions[1], actions[0]
+    first["actions"] = actions
+    source_lines[0] = json.dumps(first)
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(source_lines) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(
+        KillCraftReconstructionError, match="canonical actor-ascending order"
     ):
         compute_kill_craft_report(tmp_path)
 
