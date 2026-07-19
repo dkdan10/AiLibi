@@ -59,6 +59,17 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 ## Implementation hint
 
+The probe arm environments, from the merged mechanisms (verified): FULL =
+`AILIBI_ROLL_CALL_ROUND=1 AILIBI_WHEREABOUTS_INTERIOR_FLAGS=1
+AILIBI_VENT_PLACEMENT_CONTRADICTIONS=1 AILIBI_IMPOSTOR_ROLL_CALL=1`; CREW-ONLY = the
+first two only. The impostor-answer variant exists ONLY for `qwen3_6_27b` (any other
+prompt set fails loud), and every lever read happens at runner CONSTRUCTION — export the
+full arm environment before any worker process starts, never mid-run. The variant's
+recorded version strings are `impostor_report_roll_call.qwen3_6_27b.v1` /
+`accusation_round_roll_call.qwen3_6_27b.v1`; 18.12's graduation flip folds
+`IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` into `PROMPT_VERSION_SETS` (the registry
+docstring says so).
+
 Two pre-probe obligations the Wave-1 merges routed here, both load-bearing BEFORE any
 ON-path seed records: (a) the four lever flags are deliberately NOT in
 `orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` (18.8/18.9 deferred registration to

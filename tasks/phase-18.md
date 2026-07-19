@@ -749,6 +749,17 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 **Implementation hint:**
 
+The probe arm environments, from the merged mechanisms (verified): FULL =
+`AILIBI_ROLL_CALL_ROUND=1 AILIBI_WHEREABOUTS_INTERIOR_FLAGS=1
+AILIBI_VENT_PLACEMENT_CONTRADICTIONS=1 AILIBI_IMPOSTOR_ROLL_CALL=1`; CREW-ONLY = the
+first two only. The impostor-answer variant exists ONLY for `qwen3_6_27b` (any other
+prompt set fails loud), and every lever read happens at runner CONSTRUCTION — export the
+full arm environment before any worker process starts, never mid-run. The variant's
+recorded version strings are `impostor_report_roll_call.qwen3_6_27b.v1` /
+`accusation_round_roll_call.qwen3_6_27b.v1`; 18.12's graduation flip folds
+`IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` into `PROMPT_VERSION_SETS` (the registry
+docstring says so).
+
 Two pre-probe obligations the Wave-1 merges routed here, both load-bearing BEFORE any
 ON-path seed records: (a) the four lever flags are deliberately NOT in
 `orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` (18.8/18.9 deferred registration to
@@ -1384,7 +1395,7 @@ by construction) and quantize everything through the established integer-grid he
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
 **Depends on:** 18.16, 18.21, 18.22
-**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1508-1514, 1570 (post-18.7 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
+**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1558-1564, 1620 (post-18.10 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
 The training-grounds instrument: an `initial_state` injection seam on the headless game
