@@ -154,6 +154,10 @@ def test_corpus_nine_is_the_audit_census(
             "false_vouch_grounded": 21,
             "false_vouch_fabricated": 7,
             "false_vouch_grounded_share": 21 / 28,
+            # observation-level companion join: partitions the 34 observations
+            # by their subject's chokepoint verdict (26 + 8 == 34).
+            "false_vouch_grounded_subject_observations": 26,
+            "false_vouch_fabricated_subject_observations": 8,
         },
     )
     # teammate-non-accusation index: 0 of 455, advisory, Wilson pinned.
@@ -224,6 +228,9 @@ def test_sample_nine_full_pins(sample_nine: DeceptionInstrumentsReport) -> None:
             "false_vouch_grounded": 4,
             "false_vouch_fabricated": 7,
             "false_vouch_grounded_share": 4 / 11,
+            # companion join partitions the 13 observations (5 + 8 == 13).
+            "false_vouch_grounded_subject_observations": 5,
+            "false_vouch_fabricated_subject_observations": 8,
         },
     )
     _check_cell(
@@ -292,6 +299,8 @@ def test_sample_four_full_pins(sample_four: DeceptionInstrumentsReport) -> None:
             "false_vouch_grounded": 0,
             "false_vouch_fabricated": 0,
             "false_vouch_grounded_share": None,
+            "false_vouch_grounded_subject_observations": 0,
+            "false_vouch_fabricated_subject_observations": 0,
         },
     )
     _check_cell(
@@ -359,6 +368,8 @@ def test_corpus_four_full_pins(corpus_four: DeceptionInstrumentsReport) -> None:
             "false_vouch_grounded": 0,
             "false_vouch_fabricated": 0,
             "false_vouch_grounded_share": None,
+            "false_vouch_grounded_subject_observations": 0,
+            "false_vouch_fabricated_subject_observations": 0,
         },
     )
     _check_cell(
@@ -594,8 +605,7 @@ def test_grounded_split_grounded_when_impostor_holds_matching_record() -> None:
             "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
         },
     )
-    events, grounded, fabricated = _grounded_split(meeting, _ROLES)
-    assert (events, grounded, fabricated) == (1, 1, 0)
+    assert _grounded_split(meeting, _ROLES) == (1, 1, 0, 1, 0)
 
 
 def test_grounded_split_fabricated_without_matching_record() -> None:
@@ -612,8 +622,7 @@ def test_grounded_split_fabricated_without_matching_record() -> None:
             "p-1": (SightingRecord(subject="p-2", room=_ROOM_B, tick=10),)
         },
     )
-    events, grounded, fabricated = _grounded_split(meeting, _ROLES)
-    assert (events, grounded, fabricated) == (1, 0, 1)
+    assert _grounded_split(meeting, _ROLES) == (1, 0, 1, 0, 1)
 
 
 def test_grounded_split_restriction_ignores_crew_speaker_records() -> None:
@@ -637,13 +646,58 @@ def test_grounded_split_restriction_ignores_crew_speaker_records() -> None:
             "p-3": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
         },
     )
-    events, grounded, fabricated = _grounded_split(meeting, _ROLES)
-    assert (events, grounded, fabricated) == (1, 0, 1)
+    assert _grounded_split(meeting, _ROLES) == (1, 0, 1, 0, 1)
 
 
 def test_grounded_split_empty_without_false_vouch() -> None:
     meeting = _meeting(turns=(_turn("p-1", 0, observations=(_saw("p-3"),)),))
-    assert _grounded_split(meeting, _ROLES) == (0, 0, 0)
+    assert _grounded_split(meeting, _ROLES) == (0, 0, 0, 0, 0)
+
+
+def test_grounded_split_duplicate_vouches_collapse_to_one_subject_event() -> None:
+    # Two placements of the same co-impostor in one meeting: ONE subject event
+    # (the chokepoint's granularity), TWO observations in the companion join,
+    # both inheriting the subject's verdict.
+    meeting = _meeting(
+        turns=(
+            _turn(
+                "p-1",
+                0,
+                observations=(
+                    _saw("p-2", tick=10, room=_ROOM_A),
+                    _saw("p-2", tick=12, room=_ROOM_A),
+                ),
+            ),
+        ),
+        sighting_records={
+            "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
+        },
+    )
+    assert _grounded_split(meeting, _ROLES) == (1, 1, 0, 2, 0)
+
+
+def test_grounded_split_mixed_subjects_partition_observations() -> None:
+    # p-1's duplicate vouch of p-2 grounds (2 observations); p-2's single vouch
+    # of p-1 has no matching record: 2 subject events split 1/1, and the
+    # 3 observations split 2/1 -- the companion join partitions the
+    # observation numerator exactly.
+    meeting = _meeting(
+        turns=(
+            _turn(
+                "p-1",
+                0,
+                observations=(
+                    _saw("p-2", tick=10, room=_ROOM_A),
+                    _saw("p-2", tick=12, room=_ROOM_A),
+                ),
+            ),
+            _turn("p-2", 1, observations=(_saw("p-1", tick=10, room=_ROOM_A),)),
+        ),
+        sighting_records={
+            "p-1": (SightingRecord(subject="p-2", room=_ROOM_A, tick=10),)
+        },
+    )
+    assert _grounded_split(meeting, _ROLES) == (2, 1, 1, 2, 1)
 
 
 # -- Wilson helper ----------------------------------------------------------- #
@@ -699,15 +753,39 @@ def test_rare_event_cell_rejects_numerator_over_denominator() -> None:
 
 
 def test_rare_event_cell_rejects_wrong_advisory_flag() -> None:
+    # Correct Wilson values, ONLY the advisory flag flipped -- isolates the
+    # advisory check from the value check.
+    rate, low, high = _wilson_interval(3, 10)
     with pytest.raises(ValidationError):
         RareEventCell(
             numerator=3,
             denominator=10,
-            rate=0.3,
-            wilson_low=0.1,
-            wilson_high=0.6,
+            rate=rate,
+            wilson_low=low,
+            wilson_high=high,
             advisory=False,
         )
+
+
+def test_rare_event_cell_rejects_rate_contradicting_counts() -> None:
+    base = _rare_event_cell(5, 415).model_dump()
+    base["rate"] = 0.5
+    with pytest.raises(ValidationError):
+        RareEventCell.model_validate(base)
+
+
+def test_rare_event_cell_rejects_wilson_bounds_contradicting_counts() -> None:
+    base = _rare_event_cell(5, 415).model_dump()
+    base["wilson_low"] = base["wilson_low"] + 1e-6
+    with pytest.raises(ValidationError):
+        RareEventCell.model_validate(base)
+
+
+def test_rare_event_cell_round_trips_through_json_exactly() -> None:
+    # The value check is exact equality; JSON round-trip must preserve the
+    # identical doubles or this raises.
+    cell = _rare_event_cell(5, 415)
+    assert RareEventCell.model_validate_json(cell.model_dump_json()) == cell
 
 
 def test_rare_event_cell_rejects_none_rate_with_positive_denominator() -> None:
@@ -739,5 +817,16 @@ def test_report_rejects_broken_accusation_partition(
 ) -> None:
     base = sample_four.model_dump()
     base["frame_attempts"] = base["frame_attempts"] + 1
+    with pytest.raises(ValidationError):
+        DeceptionInstrumentsReport.model_validate(base)
+
+
+def test_report_rejects_broken_observation_companion_join(
+    sample_nine: DeceptionInstrumentsReport,
+) -> None:
+    base = sample_nine.model_dump()
+    base["false_vouch_grounded_subject_observations"] = (
+        base["false_vouch_grounded_subject_observations"] + 1
+    )
     with pytest.raises(ValidationError):
         DeceptionInstrumentsReport.model_validate(base)

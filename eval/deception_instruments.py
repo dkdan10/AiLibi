@@ -102,11 +102,30 @@ Predicate definitions (each landed on the corpus bytes):
    within one meeting collapse). This granularity is the production function's
    own -- it dedups subjects internally (``meetings/transcript.py``,
    "``if observation.subject in grounded``") and returns a per-meeting subject
-   set, so no per-observation verdict exists to adopt. Labeling each duplicate
-   observation with its subject's verdict would misclassify a non-matching
-   duplicate vouch as grounded, and re-matching records per observation would
-   be the re-derivation the 18.1 DoD forbids; the observation-level numerator
-   is reported beside the split with its own denominator instead.
+   set, so no per-observation verdict exists to adopt, and re-matching records
+   per observation would be the re-derivation the 18.1 DoD forbids.
+
+   For downstream reconciliation the report ALSO carries the observation-level
+   companion join: ``false_vouch_grounded_subject_observations`` +
+   ``false_vouch_fabricated_subject_observations`` partition
+   ``false_vouch_saw_player_observations`` exactly, bucketing every false-vouch
+   observation by its SUBJECT's chokepoint verdict. These are an explicit join
+   (a duplicate placement inherits its subject's classification), NOT
+   per-observation grounding verdicts -- the docstring on
+   :func:`_grounded_split` states the distinction.
+
+   "Fabricated" here means UNGROUNDED BY THE CHOKEPOINT: the impostor holds no
+   record that both matches the spoken sighting AND passes the §6.3 Rule-3
+   relevance gate. The cell is therefore a corroboration-grade-backing verdict,
+   not a literal no-record-exists claim: a placement backed only by a
+   Rule-3-excluded record (a spawn-window or kill-scene sighting --
+   evidentially-empty cover by the production bar) counts as fabricated,
+   deliberately, and the two ungrounded shapes are not separable through the
+   chokepoint's public inputs (separating them would re-derive the record
+   match the DoD forbids). Empirically, on the committed corpus bytes ALL 7
+   fabricated subject events are of the record-matched-but-Rule-3-excluded
+   shape (spawn-window/kill-scene co-presence weaponized as cover); none is a
+   whole-cloth invention with no matching record at all.
 9. Adoption wrappers (pure assembly, no metric math re-implemented -- the
    ``build_tournament_eval_report`` doctrine, ``eval/meeting_quality.py:2649``):
    :func:`eval.validity.assemble_tournament_report` feeds
@@ -234,6 +253,25 @@ class RareEventCell(_FrozenModel):
                     "RareEventCell with a positive denominator must have a "
                     "defined rate and interval"
                 )
+            # Fail-loud value check (AGENTS.md "no silent fallbacks"): a cell
+            # loaded from stale or hand-built JSON must not carry a rate or
+            # interval that contradicts its own counts. Exact equality is
+            # correct here -- construction and JSON round-trip both preserve
+            # the identical doubles.
+            expected_rate, expected_low, expected_high = _wilson_interval(
+                self.numerator, self.denominator
+            )
+            if (
+                self.rate != expected_rate
+                or self.wilson_low != expected_low
+                or self.wilson_high != expected_high
+            ):
+                raise ValueError(
+                    "RareEventCell rate/interval must equal the Wilson values "
+                    f"recomputed from {self.numerator}/{self.denominator}: got "
+                    f"({self.rate}, {self.wilson_low}, {self.wilson_high}), "
+                    f"expected ({expected_rate}, {expected_low}, {expected_high})"
+                )
         expected_advisory = self.numerator <= _RARE_EVENT_ADVISORY_MAX_NUMERATOR
         if self.advisory != expected_advisory:
             raise ValueError(
@@ -301,6 +339,9 @@ class DeceptionInstrumentsReport(_FrozenModel):
     false_vouch_grounded: int
     false_vouch_fabricated: int
     false_vouch_grounded_share: float | None
+    # observation-level companion join (partitions the observation numerator)
+    false_vouch_grounded_subject_observations: int
+    false_vouch_fabricated_subject_observations: int
     # adopted analyzers (pure assembly)
     alibi_fabrication: AlibiFabricationReport
     effective_deflection: EffectiveDeflectionReport
@@ -329,6 +370,8 @@ class DeceptionInstrumentsReport(_FrozenModel):
             self.false_vouch_subject_events,
             self.false_vouch_grounded,
             self.false_vouch_fabricated,
+            self.false_vouch_grounded_subject_observations,
+            self.false_vouch_fabricated_subject_observations,
         )
         if any(count < 0 for count in counts):
             raise ValueError("deception-instrument counts must be non-negative")
@@ -382,6 +425,33 @@ class DeceptionInstrumentsReport(_FrozenModel):
                 "grounded + fabricated must equal false_vouch_subject_events: "
                 f"{self.false_vouch_grounded} + {self.false_vouch_fabricated} != "
                 f"{self.false_vouch_subject_events}"
+            )
+        if (
+            self.false_vouch_grounded_subject_observations
+            + self.false_vouch_fabricated_subject_observations
+            != self.false_vouch_saw_player_observations
+        ):
+            raise ValueError(
+                "the observation-level companion join must partition "
+                "false_vouch_saw_player_observations: "
+                f"{self.false_vouch_grounded_subject_observations} + "
+                f"{self.false_vouch_fabricated_subject_observations} != "
+                f"{self.false_vouch_saw_player_observations}"
+            )
+        if self.false_vouch_grounded_subject_observations < self.false_vouch_grounded:
+            raise ValueError(
+                "every grounded subject event carries >=1 observation: "
+                f"{self.false_vouch_grounded_subject_observations} < "
+                f"{self.false_vouch_grounded}"
+            )
+        if (
+            self.false_vouch_fabricated_subject_observations
+            < self.false_vouch_fabricated
+        ):
+            raise ValueError(
+                "every fabricated subject event carries >=1 observation: "
+                f"{self.false_vouch_fabricated_subject_observations} < "
+                f"{self.false_vouch_fabricated}"
             )
         if (
             self.false_vouch_saw_player_observations + self.false_vouch_corroborations
@@ -578,12 +648,32 @@ def _restricted_grounded_subjects(
     )
 
 
-def _false_vouch_subjects(
+def _grounded_split(
     meeting: _VJMeeting, roles: Mapping[PlayerId, Role]
-) -> frozenset[PlayerId]:
-    """Co-impostor subjects placed by a living impostor ``saw_player`` false vouch."""
+) -> tuple[int, int, int, int, int]:
+    """Per-meeting false-vouch grounded split, both granularities.
 
-    subjects: set[PlayerId] = set()
+    Returns ``(subject_events, grounded, fabricated,
+    grounded_subject_observations, fabricated_subject_observations)``.
+
+    Chokepoint granularity is per-meeting-per-subject: each co-impostor subject a
+    living impostor false-vouches for is one subject event, classified grounded
+    iff it is in the impostor-restricted grounded set, else fabricated. The split
+    partitions subject events, NOT the observation count -- the production
+    chokepoint dedups subjects internally and returns a subject set, so repeat
+    placements of the same teammate in one meeting are one event here (see the
+    module docstring, predicate 8, for why no per-observation verdict is
+    derivable without the re-derivation the DoD forbids).
+
+    The last two counts are the observation-level COMPANION join: every false
+    vouch observation (the ``false_vouch_saw_player_observations`` predicate),
+    bucketed by its SUBJECT's chokepoint verdict. They partition the observation
+    numerator exactly, reconciling it with the subject-event split downstream.
+    They are a join on the subject verdict, NOT per-observation grounding: a
+    duplicate placement inherits its subject's classification.
+    """
+
+    observations_by_subject: dict[PlayerId, int] = {}
     for turn in meeting.transcript.turns:
         speaker = turn.speaker
         if roles[speaker] != "IMPOSTOR" or speaker not in meeting.living:
@@ -595,31 +685,26 @@ def _false_vouch_subjects(
                 and obs.subject in meeting.living
                 and roles[obs.subject] == "IMPOSTOR"
             ):
-                subjects.add(obs.subject)
-    return frozenset(subjects)
-
-
-def _grounded_split(
-    meeting: _VJMeeting, roles: Mapping[PlayerId, Role]
-) -> tuple[int, int, int]:
-    """Per-meeting false-vouch grounded split: (subject_events, grounded, fabricated).
-
-    Chokepoint granularity is per-meeting-per-subject: each co-impostor subject a
-    living impostor false-vouches for is one subject event, classified grounded
-    iff it is in the impostor-restricted grounded set, else fabricated. The split
-    partitions subject events, NOT the observation count -- the production
-    chokepoint dedups subjects internally and returns a subject set, so repeat
-    placements of the same teammate in one meeting are one event here (see the
-    module docstring, predicate 8, for why no per-observation verdict is
-    derivable without the re-derivation the DoD forbids).
-    """
-
-    subjects = _false_vouch_subjects(meeting, roles)
-    if not subjects:
-        return 0, 0, 0
+                observations_by_subject[obs.subject] = (
+                    observations_by_subject.get(obs.subject, 0) + 1
+                )
+    if not observations_by_subject:
+        return 0, 0, 0, 0, 0
     grounded_set = _restricted_grounded_subjects(meeting, roles)
-    grounded = sum(1 for subject in subjects if subject in grounded_set)
-    return len(subjects), grounded, len(subjects) - grounded
+    grounded = sum(1 for subject in observations_by_subject if subject in grounded_set)
+    grounded_obs = sum(
+        count
+        for subject, count in observations_by_subject.items()
+        if subject in grounded_set
+    )
+    total_obs = sum(observations_by_subject.values())
+    return (
+        len(observations_by_subject),
+        grounded,
+        len(observations_by_subject) - grounded,
+        grounded_obs,
+        total_obs - grounded_obs,
+    )
 
 
 def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsReport:
@@ -654,6 +739,8 @@ def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsRepor
     false_vouch_subject_events = 0
     false_vouch_grounded = 0
     false_vouch_fabricated = 0
+    false_vouch_grounded_subject_observations = 0
+    false_vouch_fabricated_subject_observations = 0
 
     for walk in walks:
         roles = walk.roles
@@ -692,10 +779,14 @@ def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsRepor
             corroboration_claims_impostor += corr_impostor
             false_vouch_corroborations += corr_false
 
-            events, grounded, fabricated = _grounded_split(meeting, roles)
+            events, grounded, fabricated, grounded_obs, fabricated_obs = (
+                _grounded_split(meeting, roles)
+            )
             false_vouch_subject_events += events
             false_vouch_grounded += grounded
             false_vouch_fabricated += fabricated
+            false_vouch_grounded_subject_observations += grounded_obs
+            false_vouch_fabricated_subject_observations += fabricated_obs
 
     report = assemble_tournament_report(sample_dir)
     report_meetings_total = sum(len(game.meetings) for game in report.games)
@@ -745,6 +836,12 @@ def compute_deception_instruments(sample_dir: Path) -> DeceptionInstrumentsRepor
         false_vouch_fabricated=false_vouch_fabricated,
         false_vouch_grounded_share=_rate_or_none(
             false_vouch_grounded, false_vouch_subject_events
+        ),
+        false_vouch_grounded_subject_observations=(
+            false_vouch_grounded_subject_observations
+        ),
+        false_vouch_fabricated_subject_observations=(
+            false_vouch_fabricated_subject_observations
         ),
         alibi_fabrication=alibi,
         effective_deflection=deflection,
