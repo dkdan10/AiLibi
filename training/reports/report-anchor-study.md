@@ -6,7 +6,7 @@
 > **Anchors:** training/bakeoff/harness.py `inner_episode_fitness` (:569-590,
 > the anchor penalty seam); training/bakeoff/utility_es.py:708-718 (the full
 > budget); replays/ml_corpus/9p2i/ (the filtered-BC source).
-> **Substrate:** baseline-5; substrate sha `02b7dfa80e802f0c4b6cb7a6e4a6f7dcc6515a7d1f9905eeda95940427e45ad7`
+> **Substrate:** baseline-5; substrate sha `8b08fd1031744d770c7e863bcbe27dfe3d964d8909a005976f47877380db725f`
 > (every frozen artifact under `training/artifacts/anchor_study/` carries it —
 > the 18.24 stale-seed refusal reads it).
 > **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
@@ -14,8 +14,8 @@
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
 > **Command:** `uv run python -m training.anchor_study run --budget full`
-> (exit 0, 1212 s training + 77 s
-> scoring/walk = 1289 s wall-clock, CPU-only, $0).
+> (exit 0, 1479 s training + 90 s
+> scoring/walk = 1569 s wall-clock, CPU-only, $0).
 > **Report-only:** no champion ships from this study; the ES leg under the
 > refined anchor is deliberately NOT run here (the harness's anchor-CE is
 > computed against the FSM's own choice; the anchor-policy seam lands at
