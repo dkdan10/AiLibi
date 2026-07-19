@@ -137,6 +137,8 @@ from meetings.transcript import (
     is_canonically_ordered,
     is_weak_contradiction,
     next_chain_step,
+    vent_placement_contradictions_enabled,
+    whereabouts_interior_flags_enabled,
 )
 from agents.memory.beliefs import (
     CONTRADICTION_SUSPICION_DELTA,
@@ -353,7 +355,12 @@ def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
     return None, has_observation
 
 
-def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]:
+def _genuine_subjects(
+    transcript: Any,
+    roster: frozenset[str],
+    *,
+    detector_env: Mapping[str, str],
+) -> frozenset[str]:
     """Re-derive the genuine CANON-interior subjects (one-home, Task 10.4).
 
     Re-runs the imported repaired detector
@@ -365,10 +372,16 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
     diagnostic class). Imported, never re-implemented: on post-repair
     recordings the re-run equals the recorded flags byte-for-byte (verified by
     the genuine-class cross-check invariant).
+
+    ``detector_env`` (Task 18.11) is the recording's OWN lever mapping
+    (:func:`_detector_env_from_stamp`), threaded here exactly as into
+    :func:`_rederive_meeting_contradictions`: the exemption lever changes which
+    ``alibi_vs_sighting`` flags are interior-class, so an ambient shell must
+    never decide this classification.
     """
 
     genuine: set[str] = set()
-    for flag in detect_contradictions(transcript, roster=roster):
+    for flag in detect_contradictions(transcript, roster=roster, env=detector_env):
         if flag.kind != "alibi_vs_sighting":
             continue
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
@@ -396,6 +409,20 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
     return frozenset(genuine)
 
 
+# The vent_sighting flag's minted description (meetings/transcript.py, the
+# quote-the-record ``_describe_*`` contract): "{speaker} witnessed {subject}
+# vent in {room} at tick {tick}; venting is impostor-only, and the spoken
+# observation matches the witness's own record." Player/room ids are
+# whitespace-free tokens, so \S+ captures are exact; the full-sentence anchor
+# means any detector format drift fails the parse LOUD instead of silently
+# rebuilding a wrong record.
+_VENT_RECORD_QUOTE_RE = re.compile(
+    r"^\S+ witnessed (?P<subject>\S+) vent in (?P<room>\S+) at tick "
+    r"(?P<tick>\d+); venting is impostor-only, and the spoken observation "
+    r"matches the witness's own record\.$"
+)
+
+
 def _vent_records_from_recorded_flags(
     entry: MeetingReplayEntry,
 ) -> dict[str, tuple[VentWitnessRecord, ...]]:
@@ -407,23 +434,27 @@ def _vent_records_from_recorded_flags(
     replay persists no private :class:`VentWitnessRecord`s (the 15.4 replay
     boundary), but a recorded ``vent_sighting`` flag IS the record-time
     grounding verdict: its ``event_a_id`` names the spoken
-    :class:`SawVentObservation` that matched the speaker's own channel. Minting
-    a record from that observation's TYPED fields lets the detector re-run the
-    REAL grounded-only vent-placement mechanism on recorded bytes — ids and
-    typed fields only, never a text parse.
-
-    Bounded fidelity caveat: the rebuilt record carries the SPOKEN tick, which
-    grounding only guarantees to be IN-WINDOW of the true record tick — so when
-    a speaker misstated the tick (within the window), a re-derived
-    ``vent_sighting`` flag's DESCRIPTION quotes the spoken tick where the
-    recorded one quoted the record's. Flag ids / kinds / subjects reproduce
-    exactly (verified: committed 9p2i re-derives 179/179 meetings byte-exact;
-    the 18.11 probe arms 65/66 and 74/75, the single divergence per arm being
-    this description-tick class on one meeting).
+    :class:`SawVentObservation` that matched the speaker's own channel, and its
+    DESCRIPTION quotes the RECORD's typed fields verbatim (the detector's
+    quote-the-record contract: "Quote the RECORD ... never the spoken
+    observation's values"). The record fields are recovered from that minted
+    description rather than the spoken observation, because grounding permits
+    tick fuzz: a spoken tick may sit a window away from the record tick, and
+    the vent-PLACEMENT variant decides ``alibi_vs_physical`` overlap against
+    the RECORD tick — a rebuilt record carrying the spoken tick would drop
+    exactly the placement flags a vent-ON recording minted. Parsing our own
+    detector's deterministic minted format is this tool's established idiom
+    (the defaulted-turn / invalid-target marker regexes above); an unparseable
+    description fails LOUD (a detector format drift, never a silent skew).
+    Verified: committed 9p2i re-derives 179/179 meetings byte-exact and both
+    18.11 probe arms 66/66 + 75/75 (the earlier spoken-tick rebuild left one
+    description-drift meeting per arm; the record-tick recovery closes it).
     """
 
-    flagged_event_ids = {
-        flag.event_a_id for flag in entry.contradictions if flag.kind == "vent_sighting"
+    flag_by_event_id = {
+        flag.event_a_id: flag
+        for flag in entry.contradictions
+        if flag.kind == "vent_sighting"
     }
     records: dict[str, list[VentWitnessRecord]] = {}
     for turn in entry.transcript.turns:
@@ -431,13 +462,22 @@ def _vent_records_from_recorded_flags(
             if not isinstance(observation, SawVentObservation):
                 continue
             event_id = _turn_observation_id(turn=turn, index=index)
-            if event_id not in flagged_event_ids:
+            flag = flag_by_event_id.get(event_id)
+            if flag is None:
                 continue
+            match = _VENT_RECORD_QUOTE_RE.match(flag.description)
+            if match is None:
+                raise SystemExit(
+                    f"unparseable vent_sighting description for {event_id} "
+                    f"({flag.description!r}) — the detector's minted format "
+                    "changed; update _VENT_RECORD_QUOTE_RE to keep the record "
+                    "rebuild faithful."
+                )
             records.setdefault(turn.speaker, []).append(
                 VentWitnessRecord(
-                    subject=observation.subject,
-                    room=observation.room,
-                    tick=observation.tick,
+                    subject=match.group("subject"),
+                    room=match.group("room"),
+                    tick=int(match.group("tick")),
                 )
             )
     return {speaker: tuple(rows) for speaker, rows in records.items()}
@@ -778,6 +818,7 @@ def _analyze_meeting(
     invariant_failures: list[str],
     defaulted_vote_rendered_max: Mapping[str, float],
     roll_call_round_recorded: bool = False,
+    detector_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Per-meeting chain facts + chain-protocol mechanical checks (v2).
 
@@ -1592,7 +1633,11 @@ def _analyze_meeting(
     # the per-meeting set so the genuine-class records can be assembled with
     # cross-meeting context in the per-game loop.
     ballot_voter_roster = frozenset(b.voter for b in meeting_entry.ballots)
-    genuine_subjects = _genuine_subjects(meeting_entry.transcript, ballot_voter_roster)
+    genuine_subjects = _genuine_subjects(
+        meeting_entry.transcript,
+        ballot_voter_roster,
+        detector_env=detector_env if detector_env is not None else {},
+    )
 
     # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
     # who followed through on their own target.
@@ -2119,6 +2164,43 @@ def main() -> int:
         detector_env = _detector_env_from_stamp(
             game_end.substrate_flags if game_end is not None else None
         )
+        # The tool's OWN detector re-runs are stamp-true regardless of the shell
+        # (detector_env above). The SHIPPED eval folds this audit cross-checks
+        # against (eval.vote_correctness / meeting_quality, out of 18.11 scope)
+        # still read the ambient env — so an ambient detector-lever state that
+        # DISAGREES with a stamped recording is refused up front rather than
+        # letting the two halves of the report silently diverge (the same
+        # match-the-env-to-the-stamp requirement the validity gate and the
+        # replay loader already enforce). Unstamped legacy recordings skip the
+        # check, mirroring the loader.
+        if game_end is not None and game_end.substrate_flags is not None:
+            stamped = game_end.substrate_flags
+            ambient_mismatches = [
+                f"{env_var}: recording stamps {bool(stamped.get(key))}, "
+                f"ambient resolves {resolver(None)}"
+                for env_var, key, resolver in (
+                    (
+                        ENV_WHEREABOUTS_INTERIOR_FLAGS,
+                        "whereabouts_interior_flags",
+                        whereabouts_interior_flags_enabled,
+                    ),
+                    (
+                        ENV_VENT_PLACEMENT_CONTRADICTIONS,
+                        "vent_placement_contradictions",
+                        vent_placement_contradictions_enabled,
+                    ),
+                )
+                if resolver(None) != bool(stamped.get(key))
+            ]
+            if ambient_mismatches:
+                raise SystemExit(
+                    f"seed {seed}: ambient detector-lever env disagrees with the "
+                    f"recording's substrate stamp ({'; '.join(ambient_mismatches)}). "
+                    "Export/unset the AILIBI_* vars to match the stamp before "
+                    "extracting — the shipped eval cross-checks read the ambient "
+                    "env and would silently diverge from this tool's stamp-true "
+                    "re-derivations."
+                )
         meeting_by_tick = {
             e.tick: _rederive_meeting_contradictions(e, detector_env=detector_env)
             for e in meeting_entries
@@ -2387,6 +2469,7 @@ def main() -> int:
                     meeting_entry.meeting_id, {}
                 ),
                 roll_call_round_recorded=roll_call_round_recorded,
+                detector_env=detector_env,
             )
             meetings_out.append(m_facts)
             total_meetings += 1

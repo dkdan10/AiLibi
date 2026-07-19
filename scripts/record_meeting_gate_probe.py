@@ -112,6 +112,14 @@ _LEVER_STAMP_KEYS: dict[str, str] = {
 # not be importable); the validity gate re-pins the same id from the bytes.
 _LOCKED_MODEL: str = "Qwen/Qwen3.6-27B"
 
+# The canonical hosted endpoint (llm.featherless_client
+# .DEFAULT_FEATHERLESS_BASE_URL) — the same literal scripts/record_ml_corpus.sh
+# pins. build_default_client honors AILIBI_FEATHERLESS_BASE_URL, so a leftover
+# mock/staging export would record the whole probe against an alternate
+# endpoint while the model/cost census still LOOKS coherent (a mock can echo
+# the locked model id at $0) — preflight refuses any non-default value.
+_DEFAULT_BASE_URL: str = "https://api.featherless.ai/v1"
+
 # Cooperative-stop signal, shared across the worker threads; the SIGINT handler
 # sets it and terminates in-flight children so ^C is responsive.
 _STOP = threading.Event()
@@ -465,6 +473,16 @@ def _preflight(*, dry_run: bool) -> None:
                 f"non-locked model (the Task-16.2 lock is {_LOCKED_MODEL!r}); "
                 "unset it or set it to the locked model"
             )
+    base_url_override = os.environ.get("AILIBI_FEATHERLESS_BASE_URL", "").strip()
+    if base_url_override and base_url_override != _DEFAULT_BASE_URL:
+        # The record_ml_corpus.sh endpoint guard, mirrored: a leftover
+        # mock/staging endpoint can echo the locked model id at $0, so the
+        # validity gate's census would NOT catch it — refuse before any spend.
+        problems.append(
+            f"AILIBI_FEATHERLESS_BASE_URL={base_url_override!r} would record "
+            f"the probe against a non-canonical endpoint (the hosted default "
+            f"is {_DEFAULT_BASE_URL!r}); unset it before recording"
+        )
     if os.environ.get("AILIBI_ABSENCE_PRIOR", "").strip():
         # The record_ml_corpus.sh absence-prior guard, mirrored: the lever is a
         # live stamped toggle that is part of NO probe arm (its graduation rides
