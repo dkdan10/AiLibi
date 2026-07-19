@@ -859,6 +859,28 @@ this record moves is re-pinned in the same PR.
 
 **Implementation hint:**
 
+THE RULED SLATE (gate audit §9, CREW-ONLY): exactly FOUR levers graduate — the roll-call
+round, the endpoint exemption, the vent variant, and the absence prior. `impostor_roll_call`
+STAYS a default-OFF toggle, so this contract's "if the impostor-answer arm ships" clauses
+read FALSE: the `IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` fold and the game.py registry flip
+DO NOT execute, and the recorder `REQUIRED_PROMPT_VERSIONS` re-lock is a no-op (the registry
+does not move) — the preflight leg still lands (slate = four ON + impostor_roll_call OFF).
+The record audit carries three coordination corrections when quoting the gate's cells (the
+17.17 correction pattern — the ratified memo is not rewritten): (a) the CREW-ONLY coverage
+z re-computes to +7.07 on the stated n=75 (the quoted +6.93 back-solves to n=72;
+conservative, verdict-neutral); (b) the impostor-win z −2.08 is the memo's declared
+one-sample-vs-0.36 convention — the pooled two-proportion read vs 18/50 is −1.79
+(immaterial: the 0.16 < 0.20 bright-line miss and the self-flag clause decided bar (c));
+(c) memo §6's "each bound to its home-module resolver by identity" holds for 3 of 4 — the
+`impostor_roll_call` entry is a deliberate local mirror (loader import-cost isolation).
+Watch item during the record: the validity gate's `cost_and_provenance_exact` has a known
+blindness around the `(deadline_default)` synthetic marker (routed by PR #299 to a future
+eval/ contract, unassigned — the close inherits it if unclaimed); a seed whose opening
+defaults is a FAILED recording and re-records, per the standing rule. Shipping-layer
+expectations for the §0 sanity read are the gate audit §7's CREW-ONLY cells (coverage 1.00,
+impostor win 0.32, conversion 0.525) with the vent variant's yield expected in the [7, 28]
+bracket — its first live measurement in the shipping combination is THIS record.
+
 The 16.17 close-record runbook is the template (graduation flips + record + floor pins +
 byte-coupled re-pin sweep in one PR). Record 4p1i first to validate the pipeline, then the
 9p2i leg. The Q5 provenance convention applies (recording sha back-filled on merge; the tag
