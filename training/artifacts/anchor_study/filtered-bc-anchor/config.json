@@ -144,7 +144,7 @@
       1148,
       1149
     ],
-    "rule": "crew-winning (recorded winner CREWMATES) OR high-flag (persisted contradiction rows per meeting >= the baseline-5 flags_per_meeting supply floor); games satisfying BOTH weigh double"
+    "rule": "crew-winning (recorded winner CREWMATES) OR high-flag (persisted contradiction rows per meeting >= the configured flags_per_meeting supply floor, the high_flag_floor field); games satisfying BOTH weigh double"
   },
   "genome_length": 19,
   "learning_rate": 0.3,

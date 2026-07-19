@@ -98,6 +98,7 @@ from training.bakeoff.harness import (
     BAKEOFF_NUM_IMPOSTORS,
     BAKEOFF_NUM_PLAYERS,
     BAKEOFF_TASKS_PER_CREWMATE,
+    CORPUS_SPLITS_PATH,
     BakeoffProtocolConfig,
     BakeoffResult,
     TrainedCandidate,
@@ -1278,8 +1279,9 @@ def _freeze_filtered_bc_anchor(
                 "rule": (
                     "crew-winning (recorded winner CREWMATES) OR high-flag "
                     "(persisted contradiction rows per meeting >= the "
-                    "baseline-5 flags_per_meeting supply floor); games "
-                    "satisfying BOTH weigh double"
+                    "configured flags_per_meeting supply floor, the "
+                    "high_flag_floor field); games satisfying BOTH weigh "
+                    "double"
                 ),
             },
             "genome_length": len(genome),
@@ -1355,6 +1357,20 @@ def run_anchor_study(
     """
 
     started = time.perf_counter()
+    # The λ sweep trains through the COMMITTED utility_es_budget, whose train
+    # seeds bind to the harness corpus (a public seam this study must not
+    # fork). A swept study against a DIFFERENT corpus directory would stamp
+    # its artifacts with one corpus while training on another (Codex review
+    # on PR #292) — refuse it; a substrate adoption re-points the harness
+    # corpus first (the 18.13/18.14 re-pins), and a fit-only re-run
+    # (``lambda_grid=()``) stays free to target any corpus.
+    if lambda_grid and corpus_dir.resolve() != CORPUS_SPLITS_PATH.parent.resolve():
+        raise ValueError(
+            f"the λ sweep's training seeds bind to the harness corpus "
+            f"({CORPUS_SPLITS_PATH.parent}), not {corpus_dir}; re-point the "
+            "harness corpus (the 18.13/18.14 re-pins) before sweeping, or "
+            "run a fit-only study (lambda_grid=())"
+        )
     # ONE protocol instance for the whole run (the staleness-cap doctrine: one
     # cumulative surrogate counter outlives every cell this run scores), and
     # the substrate sha is keyed to THAT protocol's baseline — a re-pinned
@@ -1657,6 +1673,14 @@ def render_report(
         if check is not None
         else "the grid held no λ=1.0 cell (no cross-check ran)."
     )
+    # The rendered budget must be the one the run ACTUALLY used — a ci or
+    # rehearsal render must not read as full-budget results (Codex review on
+    # PR #292); the full budget's shape is spelled out only when it applies.
+    budget_detail = (
+        " — ES 20 gen × 12 pop × 6 train seeds, σ 0.3, seed 0"
+        if report.train_budget == "full"
+        else ""
+    )
 
     return f"""# The anchor study — λ sweep + filtered-BC anchor refinement (Task 18.5)
 
@@ -1673,7 +1697,7 @@ def render_report(
 > (float-hex `weights.json` + `weights.json.sha256` + `config.json` with the
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
-> **Command:** `uv run python -m training.anchor_study run --budget full`
+> **Command:** `uv run python -m training.anchor_study run --budget {report.train_budget}`
 > (exit 0, {train_wall_clock_s:.0f} s training + {wall_clock_s - train_wall_clock_s:.0f} s
 > scoring/walk = {wall_clock_s:.0f} s wall-clock, CPU-only, $0).
 > **Report-only:** no champion ships from this study; the ES leg under the
@@ -1686,9 +1710,9 @@ def render_report(
 ## 1. Protocol (fixed before any run)
 
 - **Sweep grid:** λ ∈ {{{", ".join(str(value) for value in report.lambda_grid)}}} over
-  the committed utility-es full budget (ES 20 gen × 12 pop × 6 train seeds,
-  σ 0.3, seed 0 — `utility_es_budget("full", anchor_weight=λ)`); every champion
-  scored through the standing fake-path protocol
+  the committed utility-es `{report.train_budget}` budget
+  (`utility_es_budget("{report.train_budget}", anchor_weight=λ)`{budget_detail});
+  every champion scored through the standing fake-path protocol
   (`evaluate_candidate`, the frozen 30-seed corpus test split
   {report.eval_seeds[0]}…{report.eval_seeds[-1]}), one shared protocol instance
   (one cumulative surrogate-staleness counter).
@@ -1782,7 +1806,7 @@ Every quoted number is a pure function of the committed bytes; nothing was
 hand-computed.
 
 ```bash
-uv run python -m training.anchor_study run --budget full
+uv run python -m training.anchor_study run --budget {report.train_budget}
 ```
 
 - The λ=1.0 byte-identity + artifact integrity pins:

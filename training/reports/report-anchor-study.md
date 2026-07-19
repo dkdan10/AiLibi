@@ -26,9 +26,9 @@
 ## 1. Protocol (fixed before any run)
 
 - **Sweep grid:** λ ∈ {0.25, 0.5, 1.0, 2.0, 4.0} over
-  the committed utility-es full budget (ES 20 gen × 12 pop × 6 train seeds,
-  σ 0.3, seed 0 — `utility_es_budget("full", anchor_weight=λ)`); every champion
-  scored through the standing fake-path protocol
+  the committed utility-es `full` budget
+  (`utility_es_budget("full", anchor_weight=λ)` — ES 20 gen × 12 pop × 6 train seeds, σ 0.3, seed 0);
+  every champion scored through the standing fake-path protocol
   (`evaluate_candidate`, the frozen 30-seed corpus test split
   1004…1149), one shared protocol instance
   (one cumulative surrogate-staleness counter).

@@ -528,6 +528,11 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
     assert row.weights_sha256[:12] in rendered
     assert FILTERED_BC_ENTRANT in rendered
     assert substrate_sha in rendered
+    # The render names the budget the run ACTUALLY used, never "full" prose
+    # over a ci run.
+    assert "--budget ci" in rendered
+    assert 'utility_es_budget("ci"' in rendered
+    assert "20 gen × 12 pop" not in rendered
 
     # The recommendation always names the refined anchor (the 18.16 seam's
     # entrant), and every named seed is a frozen artifact dir.
@@ -570,6 +575,20 @@ def test_substrate_sha_follows_the_protocol_baseline(tmp_path: Path) -> None:
     assert report.sweep_rows == ()
     assert report.determinism_cross_check is None
     assert report.recommended_campaign_seeds == (FILTERED_BC_ENTRANT,)
+
+
+def test_sweep_refuses_a_non_harness_corpus(tmp_path: Path) -> None:
+    # The λ sweep trains through the committed utility_es_budget, whose seeds
+    # bind to the harness corpus — sweeping against a different corpus dir
+    # would stamp artifacts with one corpus while training on another (Codex
+    # review on PR #292). A fit-only study (empty grid) stays free.
+    with pytest.raises(ValueError, match="bind to the harness corpus"):
+        run_anchor_study(
+            budget="ci",
+            lambda_grid=(1.0,),
+            corpus_dir=tmp_path / "9p2i",
+            artifact_root=tmp_path / "artifacts",
+        )
 
 
 def test_lambda_1_cross_check_raises_on_a_drifted_full_budget_champion() -> None:
