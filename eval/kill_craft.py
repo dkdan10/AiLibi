@@ -124,7 +124,10 @@ a MEETING tick with no meeting row, a meeting ``state_hash_before`` /
 alive in the pre-advance state, the census-agreement breach above, a replay whose
 bytes end before the game reaches GAME_OVER (an EOF-truncated recording would
 silently under-count kills and actions; mirrors the missing-terminal-outcome
-check in ``eval.watchability``), and a ``sample_dir`` containing no
+check in ``eval.watchability``), a replay carrying tick / meeting rows AFTER the
+terminal GAME_OVER tick (the walk stops at the terminal event, so trailing rows
+hold recorded actions it never validated or folded; mirrors the watchability
+trailing-row rejection), and a ``sample_dir`` containing no
 ``replay-seed-*.jsonl`` files at all (a path typo must not pin a zero-game
 "measurement"). An
 instrument must never silently under-measure (AGENTS.md "no silent fallbacks"), so
@@ -226,7 +229,9 @@ class KillCraftReconstructionError(RuntimeError):
     action whose actor is missing or not alive in the pre-advance state; a crew
     witness that lands in neither the co-present nor the one-hop census; a
     replay whose bytes end before the game reaches GAME_OVER (EOF truncation);
-    and a replay-set directory with no ``replay-seed-*.jsonl`` files at all.
+    a replay carrying tick / meeting rows after the terminal GAME_OVER tick
+    (trailing bytes the walk never validated or folded); and a replay-set
+    directory with no ``replay-seed-*.jsonl`` files at all.
     """
 
 
@@ -421,6 +426,7 @@ def _walk_game(
     )
 
     walk = _GameWalk()
+    terminal_tick: int | None = None
     for entry in tick_entries:
         # The pre-advance decision state: the recorded actions were decided here,
         # and it is the census frame for both folds (see the docstring).
@@ -449,7 +455,8 @@ def _walk_game(
                 walk.kills.append(_kill_row(seed, event, pre_players, roles, game_map))
 
         if state.phase == "GAME_OVER":
-            return walk
+            terminal_tick = entry.tick
+            break
         if state.phase != "MEETING":
             continue
 
@@ -490,16 +497,31 @@ def _walk_game(
                 f"recorded {meeting_entry.state_hash_after!r}"
             )
         if state.phase == "GAME_OVER":
-            return walk
+            terminal_tick = entry.tick
+            break
 
     # Every committed game terminates: falling out of the entry loop means the
     # bytes ended while the game was still in play — an EOF-truncated recording
     # whose kills / actions would otherwise be silently under-counted.
-    raise KillCraftReconstructionError(
-        f"{game_id}: replay bytes end with phase {state.phase!r} at tick "
-        f"{state.tick} — the game never reached GAME_OVER (truncated / partial "
-        "recording); refusing to silently under-measure"
-    )
+    if terminal_tick is None:
+        raise KillCraftReconstructionError(
+            f"{game_id}: replay bytes end with phase {state.phase!r} at tick "
+            f"{state.tick} — the game never reached GAME_OVER (truncated / partial "
+            "recording); refusing to silently under-measure"
+        )
+    # And no replay row may follow the terminal event: the walk stops at
+    # GAME_OVER, so trailing tick / meeting rows carry recorded actions and
+    # meetings it never validated or folded (mirrors the watchability
+    # trailing-row rejection, with instrument fail-loud semantics).
+    if any(entry.tick > terminal_tick for entry in tick_entries) or any(
+        tick > terminal_tick for tick in meeting_by_tick
+    ):
+        raise KillCraftReconstructionError(
+            f"{game_id}: replay rows recorded after the terminal GAME_OVER tick "
+            f"{terminal_tick} — trailing bytes the walk never validated or "
+            "folded; refusing to silently under-measure"
+        )
+    return walk
 
 
 def _fold_entropy(

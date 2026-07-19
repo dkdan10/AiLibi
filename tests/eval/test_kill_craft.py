@@ -320,6 +320,31 @@ def test_fail_loud_on_truncated_replay(tmp_path: Path) -> None:
         compute_kill_craft_report(tmp_path)
 
 
+def test_fail_loud_on_trailing_rows_after_game_over(tmp_path: Path) -> None:
+    # A replay carrying a tick row AFTER the terminal GAME_OVER tick (a partially
+    # appended / doubled candidate file with a unique tick id) holds recorded
+    # actions the walk never validates or folds: it must raise, never return a
+    # report that silently ignored them.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    tick_rows = [row for row in map(json.loads, source_lines) if row["kind"] == "tick"]
+    trailing = dict(tick_rows[-1])
+    trailing["tick"] = max(row["tick"] for row in tick_rows) + 100
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join([*source_lines, json.dumps(trailing)]) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(KillCraftReconstructionError, match="after the terminal"):
+        compute_kill_craft_report(tmp_path)
+
+
 def test_fail_loud_on_empty_replay_set(tmp_path: Path) -> None:
     # A directory with no replay-seed-*.jsonl files (a path typo, or the parent
     # corpus dir) must raise, never pin a zero-game "measurement".
