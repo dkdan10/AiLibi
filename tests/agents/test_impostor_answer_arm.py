@@ -137,6 +137,13 @@ _WHEREABOUTS_SHAPE = '{"type": "whereabouts", "tick": <int>, "room": "<room id>"
 _ROLL_CALL_ASK = "Answer the roll-call"
 _EMPTY_LIST_CONTRACT = 'Keep "observations" as an empty list'
 _EXPLAIN_NOTHING = "must be about OTHER players"
+# A turn that carries an observation item must advertise the discriminator on
+# BOTH item kinds — the claims-only wording beside a required whereabouts row
+# contradicts itself and invites type-less rows the schema rejects (PR #297
+# review). The default impostor opening keeps the claims-only wording because
+# its observations really are hard-coded empty.
+_TYPE_ON_BOTH_KINDS = '"type" appears only inside each observation/claim item'
+_TYPE_ON_CLAIMS_ONLY = '"type" appears only inside each claim item'
 _TEAMMATE_FIREWALL = (
     "never claim you were with a teammate, and never place them anywhere"
 )
@@ -469,6 +476,12 @@ class TestVariantRendersSelfPlacementContract:
             assert _WHEREABOUTS_SHAPE in text, label
             assert _EMPTY_LIST_CONTRACT not in text, label
             assert _EXPLAIN_NOTHING not in _flat(text), label
+            # The output contract advertises the discriminator on both item
+            # kinds now that an observation item is required (PR #297 review:
+            # the claims-only wording beside a required whereabouts row invites
+            # type-less rows the MeetingTurn schema rejects).
+            assert _TYPE_ON_BOTH_KINDS in text, label
+            assert _TYPE_ON_CLAIMS_ONLY not in text, label
 
     def test_impostor_reply_answers_the_whereabouts_ask(self) -> None:
         text = self._on()["reply/imp=True/body=True"]
@@ -476,6 +489,7 @@ class TestVariantRendersSelfPlacementContract:
         assert _WHEREABOUTS_SHAPE in text
         assert _EMPTY_LIST_CONTRACT not in text
         assert _EXPLAIN_NOTHING not in _flat(text)
+        assert _TYPE_ON_BOTH_KINDS in text
         # The (e) self-accusation fix survives the variant: the accusation slot
         # stays closed to the speaker's own name.
         assert "your own name is never on it" in _flat(text)

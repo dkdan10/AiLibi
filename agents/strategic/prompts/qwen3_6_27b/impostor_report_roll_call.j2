@@ -116,7 +116,7 @@ Every concrete detail about ANOTHER player is cross-checked against the public r
 </rules>
 
 <output_format>
-Respond with a single JSON object only. No commentary, no markdown, no code fences. It has EXACTLY these 8 top-level keys, every one present and no others ("type" appears only inside each claim item, never on the turn itself):
+Respond with a single JSON object only. No commentary, no markdown, no code fences. It has EXACTLY these 8 top-level keys, every one present and no others ("type" appears only inside each observation/claim item, never on the turn itself):
 {"turn_id": "t", "turn_index": 0, "speaker": "{{ agent_id }}", "turn_kind": "opening", "reply_to": null, "observations": [{"type": "whereabouts", "tick": <int>, "room": "<room id>"}], "claims": [{"type": "accusation", "against": "<one living player id>", "confidence": 0.6, "reason": "<their suspicious movement, one short phrase>"}], "free_text": "<your 2-3 sentence opening>"}
 The "whereabouts" item is your roll-call answer — the room you claim for yourself at the tick that matters (one room, one tick; the speaker is always you, so it names no subject). Keep "observations" as exactly that one item, and keep "free_text" consistent with it.
 If you are not sure yet who to accuse, use "claims": [] instead of the accusation and write the word "unsure" in "free_text" — your "whereabouts" answer stays either way.
