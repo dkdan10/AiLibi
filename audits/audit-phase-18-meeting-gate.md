@@ -26,18 +26,20 @@ the owner ruling — recorded here as an explicit open slot, never a guessed val
 
 ## 0. Verdict in one line
 
-**PENDING — offline evidence complete; the LIVE probe and the owner ruling have NOT been
-executed.** The four mechanisms are merged and inert; the substrate-flag snapshot registry that
-makes a probe/adoption recording self-describe its arms is wired in this PR (§6), and the
-offline `extract_gameplay_facts` opt-in-eligibility gate is relaxed under the recorded roll-call
-stamp so ON-path recordings do not false-flag (verified correct AND load-bearing against real
-roll-call transcripts, §6). What remains is the OPERATOR leg — two 25-seed 9p2i real-path
-recordings (FULL and CREW-ONLY), ~8–9 h at 2 workers — and the OWNER ruling on the assembled
-cells. Per the Task-18.11 integration-risk note and the 17.14 PENDING pattern, **this PR stays
-open with the memo complete and the DoD honest; no ruling that has not happened is recorded, and
-no surgery in a ruled direction is performed.** The ruling slots (§9) are pre-authored so the
-owner rules against a criterion, not a vibe (the 15.18 convention); the surgery (§10) executes
-only once the probe lands and the owner signs.
+**The probe is recorded and every bar cell is measured; the pre-registered criteria read
+CREW-ONLY** — the operator leg ran 2026-07-19 (6 h 07 m at 2 workers, seeds 2000–2024 both
+arms, §7): crew roll-call coverage **1.00 ≥ 0.60** on BOTH arms (bar (a) PASS, z ≈ +6.6/+6.9);
+the absence counterfactual re-run on probe bytes reads **0/66 = 0.000** (FULL) and **3/75 =
+0.040** (CREW-ONLY) new-over-gate **≤ 0.20** (bar (b) PASS, z = −3.46 on the deciding arm); the
+impostor-answer arm **FAILS bar (c) on both clauses** — probe impostor win **4/25 = 0.16 <
+0.20** (below the not-annihilated floor; z = −2.08 vs the FSM comparator 0.36) AND STRONG
+self-flag rate **42/100 = 0.42 > 0.25** (z = +3.93 — the prompt ladder's ≥ 44 % self-flag
+class, re-measured almost exactly). On the pre-authored §9 criteria this reads **CREW-ONLY**
+(round + exemption graduate; impostor-answer arm stays inert), with the absence prior
+GRADUATING on the ratified 17.7 §6 bar (both clauses pass on the round's bytes) and the vent
+variant SHIPPING with the package (live FULL yield 28 STRONG flags, ALL impostor). **The owner
+ruling is recorded verbatim in §9**; a CREW-ONLY ruling's surgery is *no structural change*
+(the Baseline-numbering block) — 18.12 flips the ruled arms.
 
 ## 1. What this gate decides — the package and its arms [VERIFIED]
 
@@ -216,52 +218,82 @@ contradiction with their own stated path, and the recorded impostors are the one
   companion note recording this turn-allocation surface is owner-side (the 18.12 adopting
   record), not edited here.
 
-## 7. The live probe — what it measures, the two arms, the runbook [PENDING — operator leg]
+## 7. The live probe — recorded, validity-gated, measured [VERIFIED — operator leg executed 2026-07-19]
 
-The ruling turns on cells that CANNOT be read offline: the round changes the recorded
-transcripts, so crew coverage under the round (a), the absence counterfactual re-run on the
-round's bytes (b), and the impostor-answer arm's win + self-flag (c) exist only in a fresh
-recording. Two probe sets, 25 seeds 9p2i each, real Featherless path ($0 flat-rate), the arms
-stamp-proven via the substrate-flag snapshot in the recorded bytes:
+Two probe sets, 25 seeds 9p2i each (seeds **2000–2024, same seeds both arms** — same-seed
+comparable), real Featherless path, recorded by the operator on their machine via
+`scripts/record_meeting_gate_probe.py` (2 work-stealing workers, per-seed crash-retry,
+`AILIBI_SEED_MAX_ATTEMPTS=8`), **wall 6 h 07 m** total across both arms. Working artifacts
+stayed OUTSIDE the tree (only these measurements are committed). The arms are **stamp-proven in
+the recorded bytes**: every FULL `game_over` stamps
+`{roll_call_round: True, whereabouts_interior_flags: True, vent_placement_contradictions: True,
+impostor_roll_call: True}` and its meetings record the variant prompt versions
+(`impostor_report_roll_call.qwen3_6_27b.v1` / `accusation_round_roll_call.qwen3_6_27b.v1`);
+every CREW-ONLY `game_over` stamps only the first two levers True and records the default v3
+impostor templates. Model `Qwen/Qwen3.6-27B` on every real call; **total cost $0.0000** on every
+row of both arms.
 
-- **FULL** = `AILIBI_ROLL_CALL_ROUND=1 AILIBI_WHEREABOUTS_INTERIOR_FLAGS=1
-  AILIBI_VENT_PLACEMENT_CONTRADICTIONS=1 AILIBI_IMPOSTOR_ROLL_CALL=1` (plus
-  `AILIBI_LLM_PROVIDER=featherless AILIBI_PROMPT_SET=qwen3_6_27b`). The impostor-answer variant
-  exists ONLY for `qwen3_6_27b` (any other prompt set fails loud); its recorded version strings
-  are `impostor_report_roll_call.qwen3_6_27b.v1` / `accusation_round_roll_call.qwen3_6_27b.v1`.
-- **CREW-ONLY** = the first two flags only (round + exemption; the vent variant travels with the
-  package and is measured on the FULL arm; impostor templates stay default).
+**Validity + byte-verify (per arm, under the arm's env so the ambient snapshot matches the
+recorded stamp):** byte-identical reconstruction **25/25 clean on both arms**
+(`scripts/verify_samples.sh`); the validity gate reads **9/10 checks PASS on both arms**
+(meeting rate 1.0; 66 resolved meetings FULL / 75 CREW-ONLY; zero duplicate rows, tick-1 kills,
+friendly fire, betrayal ballots, railroading, dangling reason ids; substrate stamped exact on
+all 25 games; every cost row $0). The single failing row is `cost_and_provenance_exact`'s model
+census, which fails **only** on the synthetic `(deadline_default)` marker that the manager
+stamps on defaulted-opening visibility rows — 3 FULL games / 1 CREW-ONLY game carry one
+defaulted opening each; **no real off-model call exists in either arm** (the only true model
+everywhere is the expected `Qwen/Qwen3.6-27B`). The committed baseline-5 sets happen to carry
+zero defaulted openings, so the gate's census had never met the marker; a probe recording an
+opening default is the known live-path fail-soft (the 10.3/10.12 machinery), not an off-substrate
+row. The gate's marker-blindness is noted for a future contract (`eval/` is out of 18.11 scope).
 
-Every lever read happens at runner CONSTRUCTION, so the full arm environment is exported BEFORE
-any worker process starts, never mid-run. Operator runbook (the standing 16.14/16.17 discipline;
-`scripts/record_ml_corpus.sh`): 2 staggered Featherless seed workers, `AILIBI_SEED_MAX_ATTEMPTS=8`,
-jittered backoff, per-seed atomic staging, working artifacts OUTSIDE the tree (only the
-measurements are committed — no probe record lands in `replays/`). Duration honesty: the
-baseline-5 samples re-record ran ~11.8 min/worker per 9p2i meeting-bearing seed
-(`audits/audit-phase-16-close.md`:31-32, 50 seeds / 2 workers / 4 h 54 m); the round adds ~+36 %
-meeting calls and the FULL arm adds the impostor-answer turns on top, so **~8–9 h total across
-both arms at 2 workers** (consistent with a single FULL-arm seed exceeding 7 min of wall in a
-one-off timing check during this PR). Acceptance per set before any cell is read:
-`uv run python scripts/validity_gate.py <probe-dir> --expected-model Qwen/Qwen3.6-27B
---require-zero-cost` PASS, then byte-verify.
+**The measured cells, beside their pre-registered bars** (the z convention is §2's; bar cells
+are one-sample z vs the bar-threshold null on the cell's own denominator, and the FULL/CREW-ONLY
+comparison rows quote the pooled two-proportion z):
 
-**The measurement recipe (pure, offline, over the probe dir):**
-
-| cell | how | bar |
-|---|---|---|
-| (a) crew coverage | `eval.funnel.compute_pooling_funnel(<probe-dir>).roll_call_coverage_crew_mean` | ≥ 0.60 |
-| (b) new-over-gate | the `TestAbsencePriorOnCommittedBytes` walk re-pointed at `<probe-dir>` → new_over_gate_meetings / meetings | ≤ 0.20 |
-| (c) impostor win | `sum(read_game_outcome(seed)=="IMPOSTORS")/25` on the FULL probe | ≥ 0.20 (FSM 0.36) |
-| (c) STRONG self-flag rate | answered impostor roll-calls (impostor `WhereaboutsClaim` turns) that carry a STRONG `alibi_vs_sighting`/`alibi_vs_physical` flag naming the answerer / total answered impostor roll-calls | ≤ 0.25 |
-| (d) vent live yield | count of `alibi_vs_physical` flags in the FULL probe contradictions, by subject role | measured (informational vs the offline 7/6-impostor census) |
-
-| cell | pre-registered bar | probe (FULL) | probe (CREW-ONLY) | two-proportion z | verdict |
+| cell | pre-registered bar | probe (FULL) | probe (CREW-ONLY) | z beside the verdict | verdict |
 |---|---|---|---|---|---|
-| (a) crew coverage | ≥ 0.60 | **[PENDING]** | **[PENDING]** | vs 0.60 null on the crew-meeting denominator | **[PENDING]** |
-| (b) new-over-gate | ≤ 0.20 | **[PENDING]** | **[PENDING]** | vs 0.20 null on the meeting denominator | **[PENDING]** |
-| (c) impostor win | ≥ 0.20 | **[PENDING]** | n/a (default templates) | vs FSM 0.36 on n=25 | **[PENDING]** |
-| (c) self-flag rate | ≤ 0.25 | **[PENDING]** | n/a | vs 0.25 null on answered-roll-call denominator | **[PENDING]** |
-| (d) vent live yield | measured | **[PENDING]** | **[PENDING]** | — | **[PENDING]** |
+| (a) crew coverage (`roll_call_coverage_crew_mean`) | ≥ 0.60 | **1.00** (302 crew placements) | **1.00** (326 crew placements) | +6.63 / +6.93 vs the 0.60 null (66 / 75 meeting denominators) | **PASS both arms** |
+| (b) absence new-over-gate on probe bytes | ≤ 0.20 | **0/66 = 0.000** | **3/75 = 0.040** | (undefined at p̂=0) / **−3.46** vs the 0.20 null | **PASS both arms** |
+| (c₁) impostor win | ≥ 0.20 (FSM comparator 0.36) | **4/25 = 0.16** | 8/25 = 0.32 (context — arm runs default templates) | −0.50 vs the 0.20 null (< 1σ, underpowered — say so); **−2.08 vs the 0.36 comparator**; FULL-vs-CREW-ONLY pooled z = −1.32 (n=25+25, underpowered) | **FAIL (FULL)** |
+| (c₂) STRONG self-flag rate of answered impostor roll-calls | ≤ 0.25 | **42/100 = 0.42** | 2/57 = 0.035 (context) | **+3.93** vs the 0.25 null; FULL-vs-CREW-ONLY pooled z = +5.17 | **FAIL (FULL)** |
+| (d) vent-variant live yield (STRONG `alibi_vs_physical`) | measured, not extrapolated | **28 flags, ALL impostor subjects, all vent-grounded** | 0 (variant OFF on this arm — the clean negative control) | — | **measured** |
+
+Cell provenance: (a) is the committed funnel fold (`eval.funnel.compute_pooling_funnel`) run on
+each arm dir; (b) is the committed `TestAbsencePriorOnCommittedBytes` counterfactual machinery
+re-pointed at each arm dir (walk + voter-row re-derivation unchanged; the FULL walk resolves the
+variant prompt stamps through `IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS`, analysis-side); (c₁) is
+`read_game_outcome` over the 25 seeds; (c₂) joins each impostor turn carrying a spoken
+`WhereaboutsClaim` (the roll-call answer) to the meeting's recorded non-weak flags by the
+`turn:{turn_id}:whereabouts:{i}` event id — 100 impostor answers on FULL (coverage 1.0: every
+impostor answered every meeting), 42 of them minting a STRONG flag against the answerer; (d)
+counts STRONG `alibi_vs_physical` mints (one weak `[weak signal: single-voice physical
+contradiction]` row with a crew subject exists on FULL and is a different, pre-existing detector
+class — excluded, stated here).
+
+**What the round did to the economy (context cells, quoted from the arm reports and folds):**
+
+| cell | baseline 5 (off-path) | probe CREW-ONLY | probe FULL |
+|---|---|---|---|
+| crew coverage / impostor coverage | 0.4624 / 0.0894 | **1.00 / 0.46** | **1.00 / 1.00** |
+| asked / answered / answer rate | 496 / 360 / 0.726 | 438 / 383 / **0.874** | 402 / 402 / **1.000** |
+| absent sets non-empty | 163/179 (median 3.0, max 7) | **18/75** (all singletons — the refusal channel isolated) | **0/66** (empty every meeting) |
+| STRONG flag subjects, crew : impostor (`alibi_vs_sighting`) | (roll-call lies weak by construction) | 32 : 2 | 31 : 28 |
+| flags per set (weak/STRONG) | — | 59 (25w/34s) over 75 meetings | 81 (22w/59s) + 76 more STRONG over 66 meetings (135 STRONG total incl. vent + vent_sighting) |
+| testimony conversion | — | 0.525 | 0.808 |
+| impostor win | 0.36 (FSM, 50-seed committed) | 0.32 | 0.16 |
+
+The reads the ruling needs: (i) the round DELIVERS the crew clause everywhere — coverage 1.0 on
+both arms, and even CREW-ONLY impostor coverage rises 0.089 → 0.46 (the role-blind roll-call ask
+reaches impostors through the default templates' opt-in surface). (ii) The absence prior's
+designed calibration arrives exactly as the 16.8/17.7 theory predicted: at full crew coverage
+the absent set collapses to REFUSAL — 18/75 CREW-ONLY meetings hold exactly one unplaced player
+(overwhelmingly the refusing impostor), 0/66 FULL. (iii) The exemption's offline 5.7:1
+crew-skew (§5) survives on CREW-ONLY (32:2 — crew lie about whereabouts; impostors mostly
+refuse), and the impostor-answer arm REBALANCES it to ~1:1 (31:28) — but at the measured cost:
+0.42 of answered impostor roll-calls mint a STRONG self-flag, testimony conversion jumps to
+0.808, and impostor win drops to 0.16. The ladder's fear was not a prompt artifact; it is the
+substrate's honest price.
 
 ## 8. Pricing both directions honestly [VERIFIED / INFERRED]
 
@@ -288,40 +320,60 @@ evidence in hand:
   prior stays OFF with the ratified bar unmet, and roll-call lies stay economically unpunishable
   (endpoint-banded to weak) — the exact gaps the phase's training signal needs.
 
-## 9. The ruling slots — pre-authored, PENDING owner [PENDING]
+**The measured update (post-probe):** the direction-pricing above survives contact with the
+probe intact, with the quantities now live (§7): FULL's risk realized decisively (self-flag
+0.42, z +3.93; win 0.16) while its benefit also proved real (31:28 flag balance, 28
+all-impostor vent flags, conversion 0.808) — the arm works exactly as designed and the price is
+exactly what the ladder measured; CREW-ONLY's forfeit is now precise (the 32:2 crew-skewed
+exemption economy and no new impostor lie material, though impostor coverage still rises 0.089
+→ 0.46 through the role-blind ask); and NONE's forfeit is now known to be a bar-clearing
+substrate left on the table ((a) and (b) both pass with room). One forward-looking note for
+18.24: the impostor-answer arm stays INERT, not deleted — a TRAINED impostor policy may lie
+better than the scripted-prompt lie the probe measured, and the arm + its bars remain available
+for a future owner-gated re-probe on trained bytes.
 
-The §1–§8 memo is assembled FIRST; the ruling is put to the owner in-session against the probe
-cells (the 17.7 shape). Each slot follows the Task-14.6 locked-decision shape. **No slot is
-filled until the probe lands AND the owner signs — this memo records the criteria, not a
-guessed outcome.**
+## 9. The rulings — the measured criteria, put to the owner [criterion reads VERIFIED; ruling slots follow]
 
-### Ruling A — the package: **[PENDING — FULL / CREW-ONLY / NONE]**
+The §1–§8 memo was assembled and the §7 cells measured FIRST; the three couplings are then put
+to the owner in-session with a plain-terms implication briefing per direction (the 17.7 shape).
+Each slot follows the Task-14.6 locked-decision shape. **The criterion reads below are
+arithmetic over the measured cells; only the owner's recorded answer makes them a ruling.**
 
-- **FULL** ships iff (a) ≥ 0.60 AND (b) ≤ 0.20 AND (c) win ≥ 0.20 AND self-flag ≤ 0.25. Surgery:
-  no structural change (all four arms graduate at 18.12; `tasks/phase-18.md` Baseline-numbering
-  block — "a FULL or CREW-ONLY ruling changes no structure").
-- **CREW-ONLY** ships iff (a) ≥ 0.60 AND (b) ≤ 0.20 but (c) fails (win < 0.20 OR self-flag >
-  0.25). Surgery: no structural change; the impostor-answer arm stays inert (unshipped arms stay
-  default-OFF), the round + exemption + vent graduate at 18.12.
-- **NONE** if (a) < 0.60 OR (b) > 0.20 (the crew clause / absence bar unreachable even with the
-  round). Surgery (§10): remove 18.12/18.13/18.14, rewire 18.15/18.16 deps to the baseline-5
-  corpus, renumber the 18.28 mover baseline 7 → 6; the absence prior stays OFF with the ratified
-  bar restated unmet.
+### Ruling A — the package: the measured criteria read **CREW-ONLY**
 
-### Ruling B — the absence-prior graduation: **[PENDING — GRADUATE / STAY-OFF]**
+- **FULL** ships iff (a) ≥ 0.60 AND (b) ≤ 0.20 AND (c) win ≥ 0.20 AND self-flag ≤ 0.25. On the
+  probe: (a) PASS, (b) PASS, **(c) FAILS both clauses** (0.16 < 0.20; 0.42 > 0.25, z +3.93) —
+  **FULL is not available on the pre-registered bars.**
+- **CREW-ONLY** ships iff (a) ≥ 0.60 AND (b) ≤ 0.20 but (c) fails. On the probe: **exactly this
+  case** — (a) 1.00 both arms, (b) 0.000/0.040, (c) failed. Surgery: no structural change; the
+  impostor-answer arm stays inert (unshipped arms stay default-OFF), the round + exemption (+
+  vent, Ruling C) graduate at 18.12.
+- **NONE** if (a) < 0.60 OR (b) > 0.20 — did not occur (both pass with wide margins).
 
-Rides Ruling A: GRADUATE iff (a) ≥ 0.60 AND (b) ≤ 0.20 on the probe (the ratified
-`audits/audit-phase-17-absence-gate.md` §6 bar, re-read on the round's bytes); else STAY-OFF with
-the probe cells named. Under NONE the absence prior stays OFF by construction (no adopting record
-to carry it).
+### Ruling B — the absence-prior graduation: the ratified bar reads **GRADUATE**
 
-### Ruling C — the vent widening + its flag-minting variant: **[PENDING — SHIP / HOLD]**
+The ratified `audits/audit-phase-17-absence-gate.md` §6 bar, re-read on the round's bytes:
+crew coverage **1.00 ≥ 0.60** AND new-over-gate **0.040 ≤ 0.20** (the CREW-ONLY arm — the
+shipping substrate under Ruling A's read; the FULL arm reads 1.00 / 0.000). Both clauses pass
+for the first time; top-churn reported informationally per the bar: **4/75** (0.053, down from
+114/179 = 0.637 off-path — the round removed the churn surface too). The lever's remaining
+footprint is exactly its designed target: the 18/75 singleton absent sets are the refusers.
 
-The 17.7 Ruling-2 HOLD travels here. Re-ruled WITH the package: under FULL or CREW-ONLY the vent
-variant SHIPS with the meeting-layer record (it is meeting-layer and now has an adopting record
-to travel with, unlike the 17.7 STAY-OFF branch); under NONE it HOLDs again. Its live yield (§7
-cell (d)) is measured on the FULL probe, so the ruling reads a measured flag count, not the
-offline 7/6-impostor extrapolation.
+### Ruling C — the vent widening + its flag-minting variant: the package read is **SHIP**
+
+The 17.7 Ruling-2 HOLD travels here and is re-ruled WITH the package: under CREW-ONLY the vent
+variant ships with the meeting-layer record (it is meeting-layer and now has an adopting record
+to travel with). Its live yield was measured on the FULL arm per the pre-registered design: **28
+STRONG `alibi_vs_physical` flags, ALL impostor subjects, all vent-grounded** (the offline census
+predicted 7/6-impostor; impostor self-placements amplified it ~4×). Honest note: the CREW-ONLY
+arm ran the variant OFF (its arm definition), so the vent-under-CREW-ONLY live yield is not
+separately measured — the mechanism's material there is bounded below by the offline census
+(7 flags on bytes with impostor coverage 0.089) and above by the FULL read; it mints only
+STRONG impostor-side flags through the grounded-only firewall either way.
+
+### The recorded ruling [owner slot]
+
+**[PENDING — the owner's verbatim answer is recorded here when given.]**
 
 ## 10. The surgery record [PENDING — executes only in the ruled direction]
 
@@ -348,11 +400,12 @@ graph.
 - **Registry + tooling leg:** COMPLETE and verified (§6 — the four flags registered, byte-identity
   preserved, the crew-stamp committed-set pin closed, `extract_gameplay_facts` relaxed and
   verified correct + load-bearing).
-- **Live probe (operator, ~8–9 h):** **PENDING** — the two 25-seed real-path recordings (§7).
-- **Owner ruling (FULL / CREW-ONLY / NONE + absence graduation + vent re-rule):** **PENDING** —
-  the ruling slots (§9) are pre-authored; the owner rules on the assembled probe cells.
-- **Surgery:** **PENDING** — executes only in the ruled direction (§10); the DAG is unchanged
-  until then.
-
-Per the Task-18.11 integration-risk note (the 17.14 PENDING pattern): the PR stays open with
-this memo complete and the DoD honest. **No ruling that has not happened is recorded here.**
+- **Live probe (operator):** **COMPLETE** — recorded 2026-07-19 by the operator (6 h 07 m,
+  seeds 2000–2024 both arms), byte-verified 25/25 per arm, validity-gated (9/10 rows PASS per
+  arm; the one failing row is the synthetic `(deadline_default)` marker census, §7), every bar
+  cell measured with its z (§7).
+- **Owner ruling:** **PENDING** — the three couplings were put to the owner with the measured
+  cells (the criteria read CREW-ONLY / GRADUATE / SHIP); §9's owner slot records the verbatim
+  answer when given. Never a ruling that has not happened.
+- **Surgery:** **PENDING the ruling** (§10) — a CREW-ONLY ruling changes no structure; the
+  phase-doc banner records the ruling and 18.12 executes the graduation flips.

@@ -11,8 +11,13 @@ recorded, that worker steals seeds from the slower arm so both finish together.
 Per-seed invocations are load-bearing, not just convenient — every ``AILIBI_*``
 lever is read ONCE at runner construction, so a worker cannot switch arms
 mid-process; a stolen seed instead runs as a FRESH ``run_tournament.py`` process
-under the other arm's env, and the child env clears every non-arm lever so a
-stray parent export can never leak into an arm's recorded substrate stamp.
+under the other arm's env. The child env clears every live substrate lever in
+``_ALL_LEVER_VARS`` (the four arm levers AND ``absence_prior``, which is part of
+no arm) before applying the arm's own exports, and preflight additionally
+REFUSES a parent-shell ``AILIBI_ABSENCE_PRIOR`` export outright (the
+``record_ml_corpus.sh`` guard), so a stray export can neither leak into an arm's
+recorded substrate stamp nor sit ambient when the validity gate later runs in
+the same shell.
 
 Resumable + Ctrl-C-safe: a seed whose ``replay-seed-<seed>.jsonl`` already carries
 a ``game_over`` row is skipped, so re-running continues where a previous run (or a
@@ -71,14 +76,21 @@ _ARMS: dict[str, dict[str, str]] = {
     },
 }
 
-# Every lever an arm might set — cleared from the child env before an arm's own
-# vars are applied, so a crew-only seed can never inherit a stray FULL export
-# (the recorded substrate stamp must reflect EXACTLY the arm under test).
+# Every LIVE substrate lever that is not part of an arm's own exports — cleared
+# from the child env before an arm's vars are applied, so a crew-only seed can
+# never inherit a stray FULL export and NO probe seed can inherit a stray
+# absence-prior export (the recorded substrate stamp must reflect EXACTLY the
+# arm under test; ``absence_prior`` is a live stamped toggle that is part of NO
+# probe arm — its graduation rides the gate ruling, so a leak here would both
+# change gameplay and contaminate bars (a)/(b)). The parent-shell export is
+# additionally REFUSED at preflight, mirroring scripts/record_ml_corpus.sh's
+# absence-prior guard.
 _ALL_LEVER_VARS: tuple[str, ...] = (
     "AILIBI_ROLL_CALL_ROUND",
     "AILIBI_WHEREABOUTS_INTERIOR_FLAGS",
     "AILIBI_VENT_PLACEMENT_CONTRADICTIONS",
     "AILIBI_IMPOSTOR_ROLL_CALL",
+    "AILIBI_ABSENCE_PRIOR",
 )
 
 _ARM_DIR: dict[str, str] = {"full": "full", "crew-only": "crew-only"}
@@ -122,7 +134,10 @@ def _has_game_over(path: Path) -> bool:
             line = line.strip()
             if not line:
                 continue
-            if json.loads(line).get("kind") == "game_over":
+            row = json.loads(line)
+            # A valid-JSON-but-non-object line (a corrupt row) must read as
+            # "incomplete", not crash the resume scan.
+            if isinstance(row, dict) and row.get("kind") == "game_over":
                 return True
     except (OSError, json.JSONDecodeError):
         return False
@@ -374,6 +389,18 @@ def _preflight(*, dry_run: bool) -> None:
         )
     if not os.environ.get("FEATHERLESS_API_KEY"):
         problems.append("FEATHERLESS_API_KEY must be set for the real-path probe")
+    if os.environ.get("AILIBI_ABSENCE_PRIOR", "").strip():
+        # The record_ml_corpus.sh absence-prior guard, mirrored: the lever is a
+        # live stamped toggle that is part of NO probe arm (its graduation rides
+        # the gate ruling). The child env scrubs it too (_ALL_LEVER_VARS), but a
+        # polluted parent shell would ALSO run the later validity gate under the
+        # same export — refuse up front rather than record anything from a shell
+        # whose ambient substrate disagrees with the probe's intent.
+        problems.append(
+            "AILIBI_ABSENCE_PRIOR is exported — the absence prior is not part of "
+            "any probe arm (its graduation rides the 18.11 ruling); unset it "
+            "before recording"
+        )
     if problems and not dry_run:
         for problem in problems:
             print(f"error: {problem}", file=sys.stderr)
@@ -388,7 +415,14 @@ def _install_sigint() -> None:
         if _STOP.is_set():
             return
         _STOP.set()
-        _log("^C — halting in-flight seeds; re-run the same command to resume.")
+        # No _log here: the handler runs on the main thread, which may already
+        # hold the non-reentrant _PRINT_LOCK inside _log — taking it again would
+        # deadlock the handler. A bare os.write to stderr is async-signal-safe
+        # enough for this one-line notice.
+        os.write(
+            2,
+            b"\n^C - halting in-flight seeds; re-run the same command to resume.\n",
+        )
         with _ACTIVE_LOCK:
             for proc in _ACTIVE.values():
                 try:
@@ -512,6 +546,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         _log(
             f"finished with {len(board.failed)} unrecorded seed(s): "
             f"{sorted(board.failed)} — re-run to retry them."
+        )
+        return 1
+    # Completeness is re-derived FROM DISK, never from the counters: a worker
+    # thread that died on an unexpected exception leaves its claimed seed
+    # unrecorded without touching board.failed, and "ALL recorded" on an
+    # incomplete probe would silently starve the gate measurement.
+    final_board, _ = _build_board(
+        start_seed=args.start_seed, num_seeds=args.num_seeds, probe_root=probe_root
+    )
+    _done, still_missing, _mean = final_board.snapshot()
+    if still_missing:
+        _log(
+            f"finished but {still_missing} seed(s) are NOT on disk with a "
+            f"game_over ({dict(final_board.per_arm_left())}) — a worker likely "
+            "died; re-run the SAME command to record them."
         )
         return 1
     _log(
