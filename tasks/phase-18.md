@@ -365,6 +365,19 @@ adopts BEFORE the campaigns record.
 The 17.7 gate shape: evidence first, decision slots explicit, bars proposed with both
 directions priced. Rare-event cells (frame conversions at n=5) get advisory framing — the
 memo must say what denominator would power them and whether the phase expects to reach it.
+Batch findings the memo MUST navigate (from the merged 18.1–18.3, verified):
+(a) the grounded/fabricated vouch split partitions SUBJECT EVENTS (corpus 28 = 21
+grounded + 7 fabricated), not the 34-observation numerator — quote the right denominator
+per cell (the companion join 26+8=34 reconciles them); the 7 fabricated events are all
+Rule-3-excluded weaponized co-presence, none whole-cloth invention. (b) The committed FSM
+kills ONLY when alone: co-present-crew is 0 on all 863 pinned kills, so the co-present
+correlation cell is None/undefined — pre-register kill-craft on the WITHIN-ONE-HOP
+point-biserial (0.27899 corpus 9p2i), and note that any nonzero co-present count in a
+learned mover's recordings is itself a behavioral departure. (c) 18.2 pins no corpus-4p1i
+cell. (d) Only teammate-accusation and frame-conversion cells ship as RareEventCells; the
+memo computes Wilson/advisory itself for any other rare cell it registers (e.g. the n=7
+fabricated-vouch cell). (e) The off-menu by-kind/by-target classification plane is the
+ENGINE INTENT KIND (action type string), not OptionKind — register on that plane.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-4-emergence-preregistration.md`
 
@@ -735,6 +748,21 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 - [ ] `bash scripts/check.sh` passes locally.
 
 **Implementation hint:**
+
+Two pre-probe obligations the Wave-1 merges routed here, both load-bearing BEFORE any
+ON-path seed records: (a) the four lever flags are deliberately NOT in
+`orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` (18.8/18.9 deferred registration to
+this task — the scope's snapshot-registry leg); (b) the offline audit tool
+`audits/workflows/extract_gameplay_facts.py` re-derives Phase-3 opt-in eligibility and
+WILL flag ON-path roll-call recordings — relax it under the flag before the probe (its
+DESIGN.md §5.2 companion note is owner-side and recorded, never edited here). Cheap
+closure while in replay.py: the dedicated committed-set round-trip pin for the crew-stamp
+schema (the 18.7 verifier's one soft spot). The offline censuses the memo quotes are
+committed and verified: the exemption promotes 20 claims corpus+samples (crew 17 /
+impostor 3 — the honest price runs ~5.7:1 against crew), converting only 14/25 of the
+audit's funnel-lie cell (11 conflict-only lies stay weak — say so); the vent variant mints
+7 flags across 6 subjects, ALL impostor (`tests/meetings/test_contradictions.py`
+:2554-2730).
 
 Memo before ruling (the 15.18 shape). The 25-seed probe is deliberately underpowered for
 fine effects — the bars are chosen so a fail is a >1σ read at n=25 (quote the two-proportion
@@ -1356,7 +1384,7 @@ by construction) and quantize everything through the established integer-grid he
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
 **Depends on:** 18.16, 18.21, 18.22
-**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1495-1501, 1556; `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
+**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1508-1514, 1570 (post-18.7 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
 The training-grounds instrument: an `initial_state` injection seam on the headless game
@@ -1433,7 +1461,16 @@ swap MAY adopt scenario legs, recorded per-generation in the rows — the close 
 still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
-deterministic), never consumed stale. Report: campaign rows, the cycling-detector
+deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
+`training.anchor_study.compute_substrate_sha` (composite: baseline + MANIFEST digest +
+splits digest + set + floor) and `training.bakeoff.map_elites.bakeoff_substrate_sha`
+(raw MANIFEST digest) — the refusal logic dispatches per artifact family, never assumes
+one key. The 18.5 report names the seed candidates: `lambda-4.0` (Pareto-dominant —
+anchor-CE 0.61 at fitness 19.22; legibility is free at the fake-path budget) and
+`filtered-bc-anchor` (via 18.16's anchor-policy seam). Instrument sweeps over campaign
+recordings require BYTE-COMPLETE recordings: 18.3's walk accepts partial recordings by
+design (an EOF-truncated file silently shrinks the decision denominator — the 18.2
+byte-completeness fence is the model); the sweep leg verifies completeness first. Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;

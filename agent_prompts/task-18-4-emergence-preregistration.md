@@ -58,6 +58,19 @@ adopts BEFORE the campaigns record.
 The 17.7 gate shape: evidence first, decision slots explicit, bars proposed with both
 directions priced. Rare-event cells (frame conversions at n=5) get advisory framing — the
 memo must say what denominator would power them and whether the phase expects to reach it.
+Batch findings the memo MUST navigate (from the merged 18.1–18.3, verified):
+(a) the grounded/fabricated vouch split partitions SUBJECT EVENTS (corpus 28 = 21
+grounded + 7 fabricated), not the 34-observation numerator — quote the right denominator
+per cell (the companion join 26+8=34 reconciles them); the 7 fabricated events are all
+Rule-3-excluded weaponized co-presence, none whole-cloth invention. (b) The committed FSM
+kills ONLY when alone: co-present-crew is 0 on all 863 pinned kills, so the co-present
+correlation cell is None/undefined — pre-register kill-craft on the WITHIN-ONE-HOP
+point-biserial (0.27899 corpus 9p2i), and note that any nonzero co-present count in a
+learned mover's recordings is itself a behavioral departure. (c) 18.2 pins no corpus-4p1i
+cell. (d) Only teammate-accusation and frame-conversion cells ship as RareEventCells; the
+memo computes Wilson/advisory itself for any other rare cell it registers (e.g. the n=7
+fabricated-vouch cell). (e) The off-menu by-kind/by-target classification plane is the
+ENGINE INTENT KIND (action type string), not OptionKind — register on that plane.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

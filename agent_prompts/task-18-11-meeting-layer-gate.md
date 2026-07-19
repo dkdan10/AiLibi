@@ -59,6 +59,21 @@ the Baseline-numbering block enumerates; prompts regenerate; validator green.
 
 ## Implementation hint
 
+Two pre-probe obligations the Wave-1 merges routed here, both load-bearing BEFORE any
+ON-path seed records: (a) the four lever flags are deliberately NOT in
+`orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` (18.8/18.9 deferred registration to
+this task — the scope's snapshot-registry leg); (b) the offline audit tool
+`audits/workflows/extract_gameplay_facts.py` re-derives Phase-3 opt-in eligibility and
+WILL flag ON-path roll-call recordings — relax it under the flag before the probe (its
+DESIGN.md §5.2 companion note is owner-side and recorded, never edited here). Cheap
+closure while in replay.py: the dedicated committed-set round-trip pin for the crew-stamp
+schema (the 18.7 verifier's one soft spot). The offline censuses the memo quotes are
+committed and verified: the exemption promotes 20 claims corpus+samples (crew 17 /
+impostor 3 — the honest price runs ~5.7:1 against crew), converting only 14/25 of the
+audit's funnel-lie cell (11 conflict-only lies stay weak — say so); the vent variant mints
+7 flags across 6 subjects, ALL impostor (`tests/meetings/test_contradictions.py`
+:2554-2730).
+
 Memo before ruling (the 15.18 shape). The 25-seed probe is deliberately underpowered for
 fine effects — the bars are chosen so a fail is a >1σ read at n=25 (quote the two-proportion
 z beside each verdict; the crew-coverage and self-flag cells have per-meeting denominators

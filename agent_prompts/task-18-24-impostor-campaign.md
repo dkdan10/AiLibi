@@ -29,7 +29,16 @@ swap MAY adopt scenario legs, recorded per-generation in the rows — the close 
 still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
-deterministic), never consumed stale. Report: campaign rows, the cycling-detector
+deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
+`training.anchor_study.compute_substrate_sha` (composite: baseline + MANIFEST digest +
+splits digest + set + floor) and `training.bakeoff.map_elites.bakeoff_substrate_sha`
+(raw MANIFEST digest) — the refusal logic dispatches per artifact family, never assumes
+one key. The 18.5 report names the seed candidates: `lambda-4.0` (Pareto-dominant —
+anchor-CE 0.61 at fitness 19.22; legibility is free at the fake-path budget) and
+`filtered-bc-anchor` (via 18.16's anchor-policy seam). Instrument sweeps over campaign
+recordings require BYTE-COMPLETE recordings: 18.3's walk accepts partial recordings by
+design (an EOF-truncated file silently shrinks the decision denominator — the 18.2
+byte-completeness fence is the model); the sweep leg verifies completeness first. Report: campaign rows, the cycling-detector
 reading, per-entrant floor-sensitivity on the real re-ranks, the emergence-instrument
 sweeps (18.1/18.2/18.3) over the campaign's real-path recordings against the 18.4 memo's
 cells, and the named finalists for 18.26. Operator shape: fake-path legs are hours;
