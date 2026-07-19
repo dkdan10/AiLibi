@@ -59,6 +59,29 @@ Each wrapper conforms to the :class:`~meetings.render_contract.ReportPromptRende
 :mod:`meetings.render_contract` so the loader-built callables can be passed
 straight into :class:`~meetings.manager.MeetingManager` without an
 intermediate adapter layer.
+
+The impostor-answer template arm (Task 18.10)
+=============================================
+
+The gate's highest-variance arm, built inert: behind the default-OFF
+:func:`impostor_roll_call_enabled` lever (``AILIBI_IMPOSTOR_ROLL_CALL``),
+the two impostor-facing templates are swapped for their ``*_roll_call.j2``
+VARIANT siblings — the impostor opening and reply ANSWER the whereabouts
+ask with a structured self-placement instead of the hard-coded
+``"observations": []`` (audits/audit-phase-18-planning.md §3.4, the
+structural refusal). Routing is by template FILENAME: the wrapper
+callables take an explicit ``template_name`` and
+:func:`build_prompt_renderers` resolves the lever ONCE at construction and
+binds the variant filenames into the returned bundle, so a runner renders
+and stamps one consistent decision (the PR #203 binding discipline applied
+to the lever). The variant templates exist only in the ``qwen3_6_27b``
+set; lever ON with any other set fails loud at
+:func:`build_prompt_renderers` — no silent fallback. Lever OFF (the
+default) binds the exact default filenames, so the rendered prompt set is
+byte-identical to the committed registry. The matching provenance side
+lives in :data:`orchestrator.game.IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS`
+(recorded ``prompt_versions`` come from that registry, never from this
+loader).
 """
 
 from __future__ import annotations
@@ -70,7 +93,7 @@ from functools import partial
 from pathlib import Path
 from typing import Final
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from meetings.render_contract import (
     ReportPromptRenderer,
@@ -157,6 +180,64 @@ IMPOSTOR_REPORT_TEMPLATE: Final[str] = "impostor_report.j2"
 ACCUSATION_ROUND_TEMPLATE: Final[str] = "accusation_round.j2"
 VOTE_BALLOT_TEMPLATE: Final[str] = "vote_ballot.j2"
 
+# Task 18.10 impostor-answer VARIANT filenames (qwen3_6_27b only): the impostor
+# opening and reply answer the whereabouts ask with a structured self-placement
+# instead of the hard-coded ``"observations": []``. Selected ONLY through the
+# default-OFF :func:`impostor_roll_call_enabled` lever; the default filename
+# constants above stay the served path everywhere else.
+IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE: Final[str] = "impostor_report_roll_call.j2"
+ACCUSATION_ROUND_ROLL_CALL_TEMPLATE: Final[str] = "accusation_round_roll_call.j2"
+
+# Task 18.10 impostor-answer lever — DEFAULT-OFF (the 16.8 ``absence_prior_enabled``
+# pattern: env-gated, NOT retired). Deliberately NOT registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` yet — Task 18.11 wires the
+# substrate stamp (with the other three Phase-18 lever flags) before any probe
+# seed records; Task 18.12 is the graduation flip if the gate rules SHIP.
+ENV_IMPOSTOR_ROLL_CALL: Final[str] = "AILIBI_IMPOSTOR_ROLL_CALL"
+_IMPOSTOR_ROLL_CALL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 18.10 impostor-answer lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_IMPOSTOR_ROLL_CALL` from ``env`` (defaulting to the real
+    process environment), mirroring the 16.8
+    :func:`agents.memory.beliefs.absence_prior_enabled` resolver it clones
+    (itself the 16.4 ``hard_evidence_gate`` live-toggle pattern; the 18.8
+    :func:`meetings.manager.roll_call_round_enabled` sibling). Default OFF: an
+    unset / empty / unrecognised value is ``False`` so the loader keeps serving
+    the exact default template filenames and the rendered prompt set stays
+    byte-identical to the committed registry (the committed recordings and the
+    ``tests/meetings/test_prompt_byte_golden.py`` reconstruction stay clean).
+    Accepts ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets
+    tests toggle the lever deterministically without mutating ``os.environ``.
+
+    ON swaps the two impostor-facing templates for their ``*_roll_call.j2``
+    variant siblings (:data:`IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE` /
+    :data:`ACCUSATION_ROUND_ROLL_CALL_TEMPLATE`, authored only in the
+    ``qwen3_6_27b`` set): the impostor opening and reply ANSWER the
+    whereabouts ask with one structured ``whereabouts`` self-placement — the
+    two-tier design lets the claim be a lie, manufacturing exactly the
+    contradiction material the alibi rules prosecute
+    (audits/audit-phase-18-planning.md §3.4) — at the measured risk of the
+    >=44% self-flag class the prompt ladder closed. The 18.11 probe measures
+    both (pre-registered bar (c): probe impostor win >= 0.20 AND STRONG
+    self-flag rate <= 0.25 of answered impostor roll-calls); the graduation
+    flip, if ruled, is Task 18.12. Recorded provenance moves WITH the lever
+    through :func:`orchestrator.game.prompt_versions_for_set`
+    (:data:`~orchestrator.game.IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS`), so
+    variant bytes and default bytes never share a version stamp
+    (audits/audit-phase-17-absence-gate.md Ruling 3(d)).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_IMPOSTOR_ROLL_CALL, "").strip().lower()
+        in _IMPOSTOR_ROLL_CALL_FLAG_TRUE
+    )
+
 
 def crewmate_report_prompt(
     *,
@@ -231,6 +312,7 @@ def impostor_report_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
+    template_name: str | None = None,
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -260,11 +342,30 @@ def impostor_report_prompt(
     references neither, so the prompt is byte-unchanged (the
     widen-the-contract-inert pattern, landed once so 16.15/16.16 edit only the
     template).
+
+    ``template_name`` (Task 18.10) selects the template FILE this wrapper
+    renders: the default ``None`` resolves it live from the
+    :func:`impostor_roll_call_enabled` lever (OFF — the default — is the
+    exact pre-task :data:`IMPOSTOR_REPORT_TEMPLATE` path, byte-identical),
+    while :func:`build_prompt_renderers` passes an explicit name so a
+    recording runner's routing decision is pinned at construction time (the
+    PR #203 binding discipline). Lever ON outside the ``qwen3_6_27b`` set
+    fails loud with :class:`jinja2.TemplateNotFound` — the variant file
+    exists only there, and there is no silent fallback.
     """
 
+    resolved_template = (
+        template_name
+        if template_name is not None
+        else (
+            IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE
+            if impostor_roll_call_enabled()
+            else IMPOSTOR_REPORT_TEMPLATE
+        )
+    )
     return (
         (environment or _ENV)
-        .get_template(IMPOSTOR_REPORT_TEMPLATE)
+        .get_template(resolved_template)
         .render(
             agent_id=agent_id,
             current_tick=current_tick,
@@ -296,6 +397,7 @@ def accusation_round_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     environment: Environment | None = None,
+    template_name: str | None = None,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -357,11 +459,33 @@ def accusation_round_prompt(
     references neither, so the prompt is byte-unchanged (the
     widen-the-contract-inert pattern, landed once so 16.15/16.16 edit only the
     template).
+
+    ``template_name`` (Task 18.10) selects the template FILE this wrapper
+    renders: the default ``None`` resolves it live from the
+    :func:`impostor_roll_call_enabled` lever (OFF — the default — is the
+    exact pre-task :data:`ACCUSATION_ROUND_TEMPLATE` path, byte-identical),
+    while :func:`build_prompt_renderers` passes an explicit name so a
+    recording runner's routing decision is pinned at construction time (the
+    PR #203 binding discipline). The variant file swaps ONLY the impostor
+    reply surfaces; the crew reply and the role-blind info-share render
+    byte-identically through it (fixture-pinned), which is why the swap is
+    per-FILE rather than per-role — one meeting's ``accusation_round``
+    prompts all carry one provenance stamp. Lever ON outside the
+    ``qwen3_6_27b`` set fails loud with :class:`jinja2.TemplateNotFound`.
     """
 
+    resolved_template = (
+        template_name
+        if template_name is not None
+        else (
+            ACCUSATION_ROUND_ROLL_CALL_TEMPLATE
+            if impostor_roll_call_enabled()
+            else ACCUSATION_ROUND_TEMPLATE
+        )
+    )
     return (
         (environment or _ENV)
-        .get_template(ACCUSATION_ROUND_TEMPLATE)
+        .get_template(resolved_template)
         .render(
             agent_id=agent_id,
             rendered_memory=rendered_memory,
@@ -474,22 +598,64 @@ def build_prompt_renderers(
     resolved set keeps a recording's rendered templates and recorded
     ``prompt_versions`` on one set, which is the replay-provenance invariant
     (DESIGN.md §11.4). An unknown set raises via :func:`build_environment`.
+
+    The Task 18.10 impostor-answer lever is resolved HERE, once, from the same
+    ``env`` mapping (the PR #203 binding discipline extended to the lever):
+    lever OFF — the default — binds the exact default template filenames, so
+    the bundle is byte-identical to the pre-task path; lever ON binds the two
+    ``*_roll_call.j2`` variant filenames into the impostor-report and
+    statement renderers. ON with a set that does not carry the variant files
+    (only ``qwen3_6_27b`` does) raises :class:`ValueError` at construction —
+    no silent fallback, and no half-routed bundle can reach a runner.
+    ``prompt_versions_for_set`` reads the same lever from the same ``env``,
+    which is what keeps a recording's rendered bytes and recorded stamps on
+    one routing decision.
     """
 
     environment = build_environment(prompt_set, root=root, env=env)
+    variant = impostor_roll_call_enabled(env)
+    impostor_report_template = (
+        IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE if variant else IMPOSTOR_REPORT_TEMPLATE
+    )
+    statement_template = (
+        ACCUSATION_ROUND_ROLL_CALL_TEMPLATE if variant else ACCUSATION_ROUND_TEMPLATE
+    )
+    if variant:
+        for name in (impostor_report_template, statement_template):
+            try:
+                environment.get_template(name)
+            except TemplateNotFound as exc:
+                raise ValueError(
+                    f"Prompt set {resolve_prompt_set(prompt_set, env=env)!r} has "
+                    f"no impostor-answer variant template {name!r}; the Task "
+                    "18.10 lever (AILIBI_IMPOSTOR_ROLL_CALL) is only authored "
+                    "for the 'qwen3_6_27b' set — unset the lever or select a "
+                    "variant-capable set"
+                ) from exc
     return PromptRenderers(
         crewmate_report=partial(crewmate_report_prompt, environment=environment),
-        impostor_report=partial(impostor_report_prompt, environment=environment),
-        statement=partial(accusation_round_prompt, environment=environment),
+        impostor_report=partial(
+            impostor_report_prompt,
+            environment=environment,
+            template_name=impostor_report_template,
+        ),
+        statement=partial(
+            accusation_round_prompt,
+            environment=environment,
+            template_name=statement_template,
+        ),
         vote=partial(vote_ballot_prompt, environment=environment),
     )
 
 
 __all__ = [
+    "ACCUSATION_ROUND_ROLL_CALL_TEMPLATE",
     "ACCUSATION_ROUND_TEMPLATE",
     "CREWMATE_REPORT_TEMPLATE",
     "DEFAULT_PROMPT_SET",
+    "ENV_IMPOSTOR_ROLL_CALL",
     "ENV_PROMPT_SET",
+    "IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE",
     "IMPOSTOR_REPORT_TEMPLATE",
     "VOTE_BALLOT_TEMPLATE",
     "PromptRenderers",
@@ -498,6 +664,7 @@ __all__ = [
     "build_prompt_renderers",
     "crewmate_report_prompt",
     "impostor_report_prompt",
+    "impostor_roll_call_enabled",
     "resolve_prompt_set",
     "vote_ballot_prompt",
 ]
