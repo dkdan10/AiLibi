@@ -345,6 +345,119 @@ def test_fail_loud_on_trailing_rows_after_game_over(tmp_path: Path) -> None:
         compute_kill_craft_report(tmp_path)
 
 
+def test_fail_loud_on_missing_game_over_row(tmp_path: Path) -> None:
+    # A recording truncated BETWEEN the terminal tick and the game_over stamp
+    # still reconstructs to GAME_OVER, so completeness requires the row itself.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    kept = [line for line in source_lines if json.loads(line)["kind"] != "game_over"]
+    assert len(kept) < len(source_lines)  # the committed game carries the stamp
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(kept) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(KillCraftReconstructionError, match="no game_over row"):
+        compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_duplicate_meeting_rows(tmp_path: Path) -> None:
+    # A doubled meeting row (same tick AND meeting id) is silently collapsed by
+    # a tick-keyed lookup, leaving the dropped row's hashes unvalidated: the
+    # walk must reject it before folding.
+    source_lines: list[str] = []
+    meeting_indexes: list[int] = []
+    for seed in range(50):
+        source_lines = (
+            (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+        meeting_indexes = [
+            i
+            for i, line in enumerate(source_lines)
+            if json.loads(line)["kind"] == "meeting"
+        ]
+        if meeting_indexes:
+            break
+    else:
+        pytest.fail("no committed 4p1i sample game carries a meeting row")
+    index = meeting_indexes[0]
+    doubled = [
+        *source_lines[: index + 1],
+        source_lines[index],
+        *source_lines[index + 1 :],
+    ]
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(doubled) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(KillCraftReconstructionError, match="duplicate meeting rows"):
+        compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_doubled_actor_action(tmp_path: Path) -> None:
+    # A second action for the same actor in one tick row can be a state no-op
+    # (the hash chain still verifies) yet would inflate the entropy decisions:
+    # the recorder's one-action-per-living-player invariant is enforced.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    first = json.loads(source_lines[0])
+    assert first["kind"] == "tick"
+    first["actions"] = [*first["actions"], dict(first["actions"][0])]
+    source_lines[0] = json.dumps(first)
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(source_lines) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(
+        KillCraftReconstructionError, match="one action per living player"
+    ):
+        compute_kill_craft_report(tmp_path)
+
+
+def test_fail_loud_on_dropped_actor_action(tmp_path: Path) -> None:
+    # The symmetric tamper: dropping one action (a no-op wait can vanish without
+    # moving the hash chain) would silently UNDER-count the entropy decisions.
+    seed = 0
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    source_lines = (
+        (_SAMPLES_4P1I / f"replay-seed-{seed}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    first = json.loads(source_lines[0])
+    assert first["kind"] == "tick"
+    first["actions"] = first["actions"][1:]
+    source_lines[0] = json.dumps(first)
+    (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(source_lines) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(
+        KillCraftReconstructionError, match="one action per living player"
+    ):
+        compute_kill_craft_report(tmp_path)
+
+
 def test_fail_loud_on_empty_replay_set(tmp_path: Path) -> None:
     # A directory with no replay-seed-*.jsonl files (a path typo, or the parent
     # corpus dir) must raise, never pin a zero-game "measurement".

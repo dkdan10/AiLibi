@@ -120,14 +120,19 @@ Fail-loud instrument semantics (the funnel precedent, NOT watchability's
 floor-the-set referee semantics): :class:`KillCraftReconstructionError` is raised
 — naming the game/tick and what disagreed — on a per-tick ``state_hash`` mismatch,
 a MEETING tick with no meeting row, a meeting ``state_hash_before`` /
-``state_hash_after`` mismatch, a recorded action whose actor is missing or not
-alive in the pre-advance state, the census-agreement breach above, a replay whose
-bytes end before the game reaches GAME_OVER (an EOF-truncated recording would
-silently under-count kills and actions; mirrors the missing-terminal-outcome
-check in ``eval.watchability``), a replay carrying tick / meeting rows AFTER the
-terminal GAME_OVER tick (the walk stops at the terminal event, so trailing rows
-hold recorded actions it never validated or folded; mirrors the watchability
-trailing-row rejection), and a ``sample_dir`` containing no
+``state_hash_after`` mismatch, a duplicate meeting row (same tick or meeting id —
+the collapsed duplicate's hashes would never be validated), a tick row whose
+recorded action actors do not exactly match the living players of the pre-advance
+state (a doubled, dropped, or injected action can pass the hash chain — a
+repeated ``wait`` is a state no-op — while mis-counting the entropy decisions;
+the recorder emits exactly one action per living player), the census-agreement
+breach above, a replay whose bytes end before the game reaches GAME_OVER (an
+EOF-truncated recording would silently under-count kills and actions), a replay
+carrying tick / meeting rows AFTER the terminal GAME_OVER tick (trailing rows
+hold recorded actions the walk never validated or folded), a recording with no
+terminal ``game_over`` row (a file truncated between the terminal tick and the
+outcome stamp — this completeness trio mirrors the watchability terminal /
+trailing-row / duplicate-meeting checks), and a ``sample_dir`` containing no
 ``replay-seed-*.jsonl`` files at all (a path typo must not pin a zero-game
 "measurement"). An
 instrument must never silently under-measure (AGENTS.md "no silent fallbacks"), so
@@ -203,6 +208,7 @@ from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.schemas import MeetingResult
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
+    GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
@@ -225,12 +231,14 @@ class KillCraftReconstructionError(RuntimeError):
     under-measuring (AGENTS.md "no silent fallbacks"; the funnel fail-loud
     precedent, NOT watchability's floor-the-set referee semantics). Fired on: a
     per-tick ``state_hash`` mismatch; a MEETING tick with no meeting row; a
-    meeting ``state_hash_before`` / ``state_hash_after`` mismatch; a recorded
-    action whose actor is missing or not alive in the pre-advance state; a crew
-    witness that lands in neither the co-present nor the one-hop census; a
-    replay whose bytes end before the game reaches GAME_OVER (EOF truncation);
-    a replay carrying tick / meeting rows after the terminal GAME_OVER tick
-    (trailing bytes the walk never validated or folded); and a replay-set
+    meeting ``state_hash_before`` / ``state_hash_after`` mismatch; a duplicate
+    meeting row (same tick or meeting id); a tick row whose recorded action
+    actors do not match the living players of the pre-advance state (a doubled,
+    dropped, or injected action); a crew witness that lands in neither the
+    co-present nor the one-hop census; a replay whose bytes end before the game
+    reaches GAME_OVER (EOF truncation); a replay carrying tick / meeting rows
+    after the terminal GAME_OVER tick (trailing bytes the walk never validated
+    or folded); a recording with no terminal ``game_over`` row; and a replay-set
     directory with no ``replay-seed-*.jsonl`` files at all.
     """
 
@@ -413,9 +421,25 @@ def _walk_game(
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
+    meeting_entries = [
+        entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    ]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+        entry.tick: entry for entry in meeting_entries
     }
+    # A doubled meeting row (same tick or meeting id) would be silently collapsed
+    # by the dict above, leaving the dropped row's before/after hashes never
+    # validated (mirrors the watchability duplicate-meeting-row rejection).
+    if len(meeting_by_tick) != len(meeting_entries) or len(
+        {entry.meeting_id for entry in meeting_entries}
+    ) != len(meeting_entries):
+        raise KillCraftReconstructionError(
+            f"{game_id}: duplicate meeting rows (same tick or meeting id) — the "
+            "collapsed duplicate's hashes would never be validated"
+        )
+    game_end = next(
+        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
+    )
 
     state = seed_initial_state(
         seed=seed,
@@ -521,6 +545,16 @@ def _walk_game(
             f"{terminal_tick} — trailing bytes the walk never validated or "
             "folded; refusing to silently under-measure"
         )
+    # A complete recording also stamps its terminal game_over row: a file
+    # truncated BETWEEN the terminal tick and that stamp still sets
+    # ``terminal_tick``, so completeness requires the row itself (mirrors the
+    # missing-terminal-outcome check in ``eval.watchability``).
+    if game_end is None:
+        raise KillCraftReconstructionError(
+            f"{game_id}: no game_over row recorded — an incomplete recording "
+            "(the recorder always stamps the terminal outcome); refusing to "
+            "certify partial bytes"
+        )
     return walk
 
 
@@ -535,19 +569,27 @@ def _fold_entropy(
     """Fold each recorded action into its ``bucket -> kind`` tally (Fold 2).
 
     Reads the raw ``actor`` / ``type`` off the recorded action dict (before
-    deserialization) and buckets by the actor's pre-advance coarse state. Raises
-    on an action whose actor is missing or not alive in the pre-advance state.
+    deserialization) and buckets by the actor's pre-advance coarse state. The
+    recorder emits EXACTLY one action per living player per tick
+    (``orchestrator.action_ordering`` rejects duplicates at record time), and a
+    violation can pass the state-hash chain while mis-counting the entropy
+    decisions (a doubled or dropped ``wait`` is a state no-op), so the walk
+    enforces the invariant before folding.
     """
 
+    actors = sorted(raw["actor"] for raw in entry.actions)
+    living = sorted(pid for pid, player in pre_players.items() if player.alive)
+    if actors != living:
+        raise KillCraftReconstructionError(
+            f"{game_id}: tick {entry.tick} recorded action actors {actors!r} != "
+            f"living players {living!r} in the pre-advance state — the recorder "
+            "emits exactly one action per living player per tick, so a doubled, "
+            "dropped, or injected action would mis-count the entropy decisions"
+        )
     for raw in entry.actions:
         actor: PlayerId = raw["actor"]
         kind: str = raw["type"]
-        player = pre_players.get(actor)
-        if player is None or not player.alive:
-            raise KillCraftReconstructionError(
-                f"{game_id}: tick {entry.tick} recorded an action for actor "
-                f"{actor!r} that is missing or not alive in the pre-advance state"
-            )
+        player = pre_players[actor]
         occupancy = sum(
             1
             for other in pre_players.values()
