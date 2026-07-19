@@ -203,7 +203,10 @@ def _corpus_replays_sha256(corpus_dir: Path) -> str:
 
 
 def compute_substrate_sha(
-    corpus_dir: Path = CORPUS_DIR, *, baseline_id: str = BAKEOFF_BASELINE_ID
+    corpus_dir: Path = CORPUS_DIR,
+    *,
+    baseline_id: str = BAKEOFF_BASELINE_ID,
+    high_flag_floor: float = HIGH_FLAG_FLOOR,
 ) -> str:
     """The corpus/floor substrate identity this study's artifacts bind to.
 
@@ -220,9 +223,11 @@ def compute_substrate_sha(
       themselves (:func:`_corpus_replays_sha256` — the fit source; any
       re-record or byte drift moves the sha even if the metadata files were
       wrongly left untouched), and
-    * the ``flags_per_meeting`` floor value this study filters against (the
-      floor substrate; a floor re-pin without a corpus re-record still moves
-      the sha through the committed constant).
+    * the ``flags_per_meeting`` floor value this study filters against — the
+      floor ACTUALLY USED (``high_flag_floor``, defaulting to the committed
+      baseline-5 pin): a re-fit at an adopted baseline passes the re-pinned
+      floor alongside its ``baseline_id`` and the sha moves with both (Codex
+      review on PR #292).
 
     A Wave-1 substrate adoption (the 18.13 corpus re-record) changes this sha,
     which is exactly the 18.24 stale-seed refusal firing: every artifact under
@@ -238,7 +243,7 @@ def compute_substrate_sha(
         "corpus_replays_sha256": _corpus_replays_sha256(corpus_dir),
         "corpus_set": corpus_dir.name,
         "corpus_splits_sha256": _sha256_hex((corpus_dir / "splits.json").read_bytes()),
-        "flags_per_meeting_floor": HIGH_FLAG_FLOOR,
+        "flags_per_meeting_floor": high_flag_floor,
     }
     return _sha256_hex(json.dumps(payload, sort_keys=True).encode("utf-8"))
 
@@ -327,8 +332,15 @@ class CorpusGameFacts:
     ``flags_per_meeting`` counts the PERSISTED contradiction rows on the
     game's meeting entries (the byte-committed evidence record; the referee's
     set-level gauge additionally re-derives transcript flags, so this count is
-    conservative — stated in the report). ``high_flag`` compares it to
-    :data:`HIGH_FLAG_FLOOR`; ``crew_winning`` reads the recorded winner.
+    conservative — stated in the report). This is the production gauge's own
+    trust posture (``eval/watchability`` reads persisted vent flags because
+    the transcript re-derivation structurally cannot reproduce them);
+    contradiction rows are not part of the engine hash chain, and their byte
+    identity is pinned instead by the substrate sha's replay-bytes digest —
+    a drifted/forged row moves :func:`compute_substrate_sha` and the 18.24
+    stale-seed refusal fires. ``high_flag`` compares against the
+    ``high_flag_floor`` the walk was given (default: the committed baseline-5
+    pin :data:`HIGH_FLAG_FLOOR`); ``crew_winning`` reads the recorded winner.
     """
 
     seed: int
@@ -374,6 +386,7 @@ def walk_corpus_game(
     num_players: int = BAKEOFF_NUM_PLAYERS,
     num_impostors: int = BAKEOFF_NUM_IMPOSTORS,
     tasks_per_crewmate: int = BAKEOFF_TASKS_PER_CREWMATE,
+    high_flag_floor: float = HIGH_FLAG_FLOOR,
 ) -> tuple[CorpusGameFacts, tuple[CorpusDecision, ...]]:
     """Re-derive one recorded game's impostor decision stream from its bytes.
 
@@ -657,7 +670,7 @@ def walk_corpus_game(
         persisted_flags=persisted_flags,
         flags_per_meeting=flags_per_meeting,
         crew_winning=winner == "CREWMATES",
-        high_flag=meetings > 0 and flags_per_meeting >= HIGH_FLAG_FLOOR,
+        high_flag=meetings > 0 and flags_per_meeting >= high_flag_floor,
         decisions=len(decisions),
         fsm_offmenu_decisions=offmenu,
     )
@@ -669,6 +682,7 @@ def walk_corpus(
     *,
     corpus_dir: Path = CORPUS_DIR,
     game_map: Map | None = None,
+    high_flag_floor: float = HIGH_FLAG_FLOOR,
 ) -> tuple[tuple[CorpusGameFacts, ...], tuple[CorpusDecision, ...]]:
     """Walk the listed corpus games; return per-game facts + the pooled stream."""
 
@@ -677,7 +691,9 @@ def walk_corpus(
     decisions: list[CorpusDecision] = []
     for seed in seeds:
         game_facts, game_decisions = walk_corpus_game(
-            corpus_dir / f"replay-seed-{seed}.jsonl", game_map=resolved_map
+            corpus_dir / f"replay-seed-{seed}.jsonl",
+            game_map=resolved_map,
+            high_flag_floor=high_flag_floor,
         )
         facts.append(game_facts)
         decisions.extend(game_decisions)
@@ -1035,6 +1051,7 @@ def run_lambda_sweep(
     artifact_root: Path = ANCHOR_STUDY_ARTIFACT_ROOT,
     substrate_sha: str,
     game_map: Map | None = None,
+    verify_committed_champion: bool = True,
 ) -> tuple[tuple[SweepRow, ...], DeterminismCrossCheck | None, float]:
     """Train + score the anchor-weight grid through the standing protocol.
 
@@ -1045,6 +1062,15 @@ def run_lambda_sweep(
     byte-compared against the committed champion and a mismatch RAISES — a
     training loop that no longer reproduces the committed genome invalidates
     every other cell silently, so the sweep refuses to report over it.
+
+    ``verify_committed_champion=False`` is the documented POST-ADOPTION
+    escape (Codex review on PR #292): the committed champion is a baseline-5
+    artifact, so the stale-seed recovery re-run at an ADOPTED substrate
+    (new meeting layer / re-recorded corpus) legitimately produces different
+    bytes — the comparison still runs and is RECORDED in the cross-check,
+    it just no longer refuses the sweep. At the standing substrate the
+    default (``True``) keeps the fail-loud guard.
+
     Returns ``(rows, cross_check, train_wall_clock_s)``; ``cross_check`` is
     ``None`` when the grid holds no λ=1.0 cell.
     """
@@ -1079,7 +1105,7 @@ def run_lambda_sweep(
         )
         if lambda_value == 1.0:
             cross_check = _cross_check_committed_champion(
-                relabeled, enforce=budget == "full"
+                relabeled, enforce=budget == "full" and verify_committed_champion
             )
         result = evaluate_candidate(
             relabeled, resolved_protocol, artifact_root=artifact_root, game_map=game_map
@@ -1247,7 +1273,7 @@ def _freeze_filtered_bc_anchor(
             "feature_names": list(OPTION_FEATURE_NAMES),
             "filter": {
                 "both_criteria_weight": BOTH_CRITERIA_WEIGHT,
-                "high_flag_floor": HIGH_FLAG_FLOOR,
+                "high_flag_floor": filter_summary.high_flag_floor,
                 "qualifying_seeds": list(filter_summary.qualifying_seeds),
                 "rule": (
                     "crew-winning (recorded winner CREWMATES) OR high-flag "
@@ -1266,7 +1292,9 @@ def _freeze_filtered_bc_anchor(
     return str(entrant_dir), digest
 
 
-def _filter_summary(facts: Sequence[CorpusGameFacts]) -> CorpusFilterSummary:
+def _filter_summary(
+    facts: Sequence[CorpusGameFacts], *, high_flag_floor: float = HIGH_FLAG_FLOOR
+) -> CorpusFilterSummary:
     qualifying = [game for game in facts if game.qualifies]
     # Only ON-MENU decisions carry likelihood into the fit
     # (:func:`fit_filtered_bc_anchor` excludes off-menu FSM choices), so the
@@ -1291,7 +1319,7 @@ def _filter_summary(facts: Sequence[CorpusGameFacts]) -> CorpusFilterSummary:
             for game in qualifying
         ),
         fsm_offmenu_decisions=sum(game.fsm_offmenu_decisions for game in facts),
-        high_flag_floor=HIGH_FLAG_FLOOR,
+        high_flag_floor=high_flag_floor,
         both_criteria_weight=BOTH_CRITERIA_WEIGHT,
     )
 
@@ -1306,6 +1334,8 @@ def run_anchor_study(
     protocol: BakeoffProtocolConfig | None = None,
     report_path: Path | None = None,
     game_map: Map | None = None,
+    high_flag_floor: float = HIGH_FLAG_FLOOR,
+    verify_committed_champion: bool = True,
 ) -> AnchorStudyReport:
     """The study driver: sweep + walk + fit + offline eval + freeze + report.
 
@@ -1315,6 +1345,13 @@ def run_anchor_study(
     scores through :func:`default_protocol_config` (the standing 30-seed
     protocol); tests pass a tiny protocol. When ``report_path`` is set the
     rendered Markdown report is written there.
+
+    The POST-ADOPTION re-fit (the 18.24 stale-seed recovery) passes the
+    adopted substrate explicitly: the re-pinned ``high_flag_floor`` beside
+    the protocol's new ``baseline_id`` (both fold into the substrate sha),
+    and ``verify_committed_champion=False`` (the committed λ=1.0 champion is
+    a baseline-5 artifact — see :func:`run_lambda_sweep`). The committed
+    defaults reproduce the shipped study byte-for-byte.
     """
 
     started = time.perf_counter()
@@ -1325,7 +1362,9 @@ def run_anchor_study(
     # trail the module default (Codex review on PR #292).
     resolved_protocol = protocol if protocol is not None else default_protocol_config()
     substrate_sha = compute_substrate_sha(
-        corpus_dir, baseline_id=resolved_protocol.baseline_id
+        corpus_dir,
+        baseline_id=resolved_protocol.baseline_id,
+        high_flag_floor=high_flag_floor,
     )
     sweep_rows, cross_check, train_wall_clock = run_lambda_sweep(
         budget=budget,
@@ -1334,6 +1373,7 @@ def run_anchor_study(
         artifact_root=artifact_root,
         substrate_sha=substrate_sha,
         game_map=game_map,
+        verify_committed_champion=verify_committed_champion,
     )
 
     seeds = (
@@ -1341,8 +1381,13 @@ def run_anchor_study(
         if corpus_seed_subset is not None
         else corpus_seeds(corpus_dir)
     )
-    facts, decisions = walk_corpus(seeds, corpus_dir=corpus_dir, game_map=game_map)
-    summary = _filter_summary(facts)
+    facts, decisions = walk_corpus(
+        seeds,
+        corpus_dir=corpus_dir,
+        game_map=game_map,
+        high_flag_floor=high_flag_floor,
+    )
+    summary = _filter_summary(facts, high_flag_floor=high_flag_floor)
 
     weight_by_seed = {game.seed: game.sample_weight for game in facts}
     fit_decisions = [

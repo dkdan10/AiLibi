@@ -548,14 +548,21 @@ def test_substrate_sha_follows_the_protocol_baseline(tmp_path: Path) -> None:
             baseline_id="baseline-x",
             surrogate_artifact_dir=None,
         ),
+        high_flag_floor=0.9,
     )
     assert report.baseline_id == "baseline-x"
-    assert report.substrate_sha == compute_substrate_sha(baseline_id="baseline-x")
+    assert report.substrate_sha == compute_substrate_sha(
+        baseline_id="baseline-x", high_flag_floor=0.9
+    )
     assert report.substrate_sha != compute_substrate_sha()
+    # The floor actually used flows into the frozen census and config, not
+    # the module default (the post-adoption re-fit path).
+    assert report.filtered_bc.filter_summary.high_flag_floor == 0.9
     config = json.loads(
         (tmp_path / "artifacts" / FILTERED_BC_ENTRANT / "config.json").read_text()
     )
     assert config["substrate_sha"] == report.substrate_sha
+    assert config["filter"]["high_flag_floor"] == 0.9
     assert report.sweep_rows == ()
     assert report.determinism_cross_check is None
     assert report.recommended_campaign_seeds == (FILTERED_BC_ENTRANT,)
