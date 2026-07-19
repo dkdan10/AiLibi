@@ -70,13 +70,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agents.memory.beliefs import absence_prior_enabled
-from agents.strategic.prompts.loader import impostor_roll_call_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.manager import roll_call_round_enabled
@@ -92,6 +92,32 @@ from meetings.transcript import (
     vent_placement_contradictions_enabled,
     whereabouts_interior_flags_enabled,
 )
+
+# The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
+# ``agents.strategic.prompts.loader.impostor_roll_call_enabled``: the loader
+# builds its Jinja environment at IMPORT time from ``AILIBI_PROMPT_SET`` and
+# raises on an unknown set, so importing it here would make every replay-only
+# consumer (sample byte-verification, MANIFEST reads, the API replay loader)
+# fail on a stray prompt-set export before reading a single JSONL row. The env
+# name and truthy-token set mirror the loader's
+# ``ENV_IMPOSTOR_ROLL_CALL`` / ``_IMPOSTOR_ROLL_CALL_FLAG_TRUE`` byte-for-byte,
+# and ``tests/orchestrator/test_replay.py`` pins the two resolvers EQUIVALENT
+# over the env grid (the CI substitute for the identity binding the other three
+# levers keep — read-site and stamp cannot drift without that pin failing).
+ENV_IMPOSTOR_ROLL_CALL: Final[str] = "AILIBI_IMPOSTOR_ROLL_CALL"
+_IMPOSTOR_ROLL_CALL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def _impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """The 18.10 lever's stamp-side resolver (mirrors the loader's, see above)."""
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_IMPOSTOR_ROLL_CALL, "").strip().lower()
+        in _IMPOSTOR_ROLL_CALL_FLAG_TRUE
+    )
 
 
 class LLMCallRecord(BaseModel):
@@ -533,10 +559,12 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 #   turn-allocation surface), 18.9's ``whereabouts_interior_flags`` (the
 #   endpoint-band exemption) and ``vent_placement_contradictions`` (the
 #   grounded-vent flag variant), and 18.10's ``impostor_roll_call`` (the
-#   impostor-answer template arm). Their resolvers live in their home modules
-#   (``meetings.manager`` / ``meetings.transcript`` / ``agents.strategic.prompts
-#   .loader``) and are bound here BY IDENTITY so the replay stamp and each
-#   lever's read-site share one source of truth.
+#   impostor-answer template arm). The manager/transcript resolvers are bound
+#   here BY IDENTITY so the replay stamp and each lever's read-site share one
+#   source of truth; the impostor-answer lever binds the LOCAL
+#   :func:`_impostor_roll_call_enabled` mirror instead (the loader's
+#   import-time Jinja build is prompt-set-sensitive — see the mirror's comment
+#   block), with a CI equivalence pin standing in for identity.
 #
 # A bare-environment snapshot stamps all five ``False``, matching the committed
 # baseline-5 recordings (made bare, and predating every one of these keys), so
@@ -553,7 +581,7 @@ _TOGGLEABLE_LEVER_RESOLVERS: Final[
     ("roll_call_round", roll_call_round_enabled),
     ("whereabouts_interior_flags", whereabouts_interior_flags_enabled),
     ("vent_placement_contradictions", vent_placement_contradictions_enabled),
-    ("impostor_roll_call", impostor_roll_call_enabled),
+    ("impostor_roll_call", _impostor_roll_call_enabled),
 )
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):

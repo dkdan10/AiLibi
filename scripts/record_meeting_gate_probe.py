@@ -504,6 +504,73 @@ def _preflight(*, dry_run: bool) -> None:
             _log(f"[dry-run] would refuse a real run: {problem}")
 
 
+def _run_metadata_now() -> dict[str, str]:
+    """The endpoint/model/substrate lineage of THIS run, as preflight resolved it."""
+
+    return {
+        "base_url": os.environ.get("AILIBI_FEATHERLESS_BASE_URL", "").strip()
+        or _DEFAULT_BASE_URL,
+        "model": _LOCKED_MODEL,
+        "provider": os.environ.get("AILIBI_LLM_PROVIDER", ""),
+        "prompt_set": os.environ.get("AILIBI_PROMPT_SET", ""),
+    }
+
+
+def _check_run_metadata(probe_root: Path, *, dry_run: bool) -> None:
+    """Bind resumed files to a verifiable run lineage (``.probe-meta.json``).
+
+    The replay bytes do not record WHICH endpoint served them, so a resumed
+    file that passes the stamp check could still predate the endpoint pin (or
+    come from a mock that echoed the locked model at $0) — the preflight only
+    protects children this run actually launches. The marker closes that gap:
+    a fresh run writes the resolved endpoint/model/provider/prompt-set to
+    ``<probe-root>/.probe-meta.json`` BEFORE any seed records; a resume run
+    refuses when the marker mismatches the current environment, and refuses
+    completed files that predate the marker entirely (an unverifiable lineage
+    — delete them or move them out to proceed). Dry-run reports and writes
+    nothing.
+    """
+
+    marker = probe_root / ".probe-meta.json"
+    now = _run_metadata_now()
+    have_completed = any(
+        _has_game_over(path)
+        for arm in _ARMS
+        for path in sorted((probe_root / _ARM_DIR[arm]).glob("replay-seed-*.jsonl"))
+        if (probe_root / _ARM_DIR[arm]).is_dir()
+        and not path.name.endswith(".audit.jsonl")
+    )
+    if marker.exists():
+        recorded = json.loads(marker.read_text(encoding="utf-8"))
+        if recorded != now:
+            print(
+                f"error: {marker} records a different run lineage "
+                f"({recorded!r}) than the current environment ({now!r}); "
+                "completed files under this root cannot be mixed with a "
+                "different endpoint/model/prompt-set — fix the environment or "
+                "use a fresh --probe-root",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        return
+    if have_completed:
+        print(
+            f"error: {probe_root} holds completed recordings but no "
+            f"{marker.name} lineage marker — their recording endpoint is "
+            "unverifiable (they may predate the endpoint pin or come from a "
+            "mock that echoed the locked model). Delete or move them, or "
+            "re-record into a fresh --probe-root",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if dry_run:
+        _log(f"[dry-run] would write the run-lineage marker {marker}")
+        return
+    probe_root.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps(now, indent=2, sort_keys=True), encoding="utf-8")
+    _log(f"wrote run-lineage marker {marker}")
+
+
 def _install_sigint() -> None:
     def _handler(_signum: int, _frame: FrameType | None) -> None:
         if _STOP.is_set():
@@ -598,8 +665,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.num_seeds < 1 or args.workers < 1 or args.max_attempts < 1:
         parser.error("--num-seeds, --workers, and --max-attempts must be >= 1")
 
+    # Probe recordings are working artifacts OUTSIDE the tree (18.11
+    # Files-NOT-in-scope) — refuse a root under the repo before creating
+    # anything, dry-run included (a relative path from the repo root would
+    # otherwise dirty the worktree with out-of-scope replay sets).
+    probe_root: Path = args.probe_root.resolve()
+    repo = REPO_ROOT.resolve()
+    if probe_root == repo or repo in probe_root.parents:
+        parser.error(
+            f"--probe-root {probe_root} is inside the repository ({repo}); "
+            "probe recordings are working artifacts and must live OUTSIDE the "
+            "tree — pick a path outside the repo"
+        )
+
     _preflight(dry_run=args.dry_run)
-    probe_root: Path = args.probe_root
+    _check_run_metadata(probe_root, dry_run=args.dry_run)
     board, already = _build_board(
         start_seed=args.start_seed, num_seeds=args.num_seeds, probe_root=probe_root
     )

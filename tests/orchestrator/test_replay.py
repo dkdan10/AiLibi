@@ -32,11 +32,11 @@ from agents.memory.beliefs import (
     absence_prior_enabled,
 )
 from agents.memory.store import ENV_OBSERVATION_ID_RENDERING
-from agents.strategic.prompts.loader import (
-    ENV_IMPOSTOR_ROLL_CALL,
-    impostor_roll_call_enabled,
-)
 from meetings.constants import ENV_CITATION_GATE
+from orchestrator.replay import (
+    ENV_IMPOSTOR_ROLL_CALL,
+    _impostor_roll_call_enabled,
+)
 from meetings.manager import ENV_ROLL_CALL_ROUND, roll_call_round_enabled
 from meetings.transcript import (
     ENV_VENT_PLACEMENT_CONTRADICTIONS,
@@ -103,9 +103,13 @@ ENV_ABSENCE_PRIOR_KEY = "absence_prior"
 # under test. All DEFAULT-OFF; their resolvers live in their home modules
 # (18.8 ``meetings.manager.roll_call_round_enabled``, 18.9
 # ``meetings.transcript.whereabouts_interior_flags_enabled`` /
-# ``vent_placement_contradictions_enabled``, 18.10
-# ``agents.strategic.prompts.loader.impostor_roll_call_enabled``) and are bound
-# here BY IDENTITY. Task 18.12 graduates whichever arms the gate rules SHIP.
+# ``vent_placement_contradictions_enabled``) and are bound here BY IDENTITY;
+# the 18.10 impostor-answer lever binds ``orchestrator.replay``'s LOCAL
+# ``_impostor_roll_call_enabled`` mirror instead — the loader's import-time
+# Jinja build is prompt-set-sensitive, so importing it into the replay module
+# would break every replay-only consumer on a stray AILIBI_PROMPT_SET export
+# — with the equivalence pin below standing in for identity. Task 18.12
+# graduates whichever arms the gate rules SHIP.
 ENV_ROLL_CALL_ROUND_KEY = "roll_call_round"
 ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY = "whereabouts_interior_flags"
 ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY = "vent_placement_contradictions"
@@ -399,7 +403,7 @@ class TestSubstrateFlagStamp:
             ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY: (
                 vent_placement_contradictions_enabled
             ),
-            ENV_IMPOSTOR_ROLL_CALL_KEY: impostor_roll_call_enabled,
+            ENV_IMPOSTOR_ROLL_CALL_KEY: _impostor_roll_call_enabled,
         }
         # Order pin: absence_prior first (the pre-existing live toggle), then the
         # four Phase-18 flags in DAG order (18.8 → 18.9 round/exemption → 18.9 vent
@@ -597,7 +601,7 @@ class TestSubstrateFlagStamp:
             (
                 ENV_IMPOSTOR_ROLL_CALL,
                 ENV_IMPOSTOR_ROLL_CALL_KEY,
-                impostor_roll_call_enabled,
+                _impostor_roll_call_enabled,
             ),
         ],
     )
@@ -618,6 +622,67 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({env_var: "nope"})[flag_key] is False
         assert substrate_flag_snapshot({env_var: "1"})[flag_key] is True
         assert substrate_flag_snapshot({env_var: "yes"})[flag_key] is True
+
+    def test_impostor_roll_call_mirror_equivalent_to_the_loader_resolver(
+        self,
+    ) -> None:
+        # The 18.10 lever's stamp-side resolver is a LOCAL mirror in
+        # ``orchestrator.replay`` (importing the loader would execute its
+        # import-time, prompt-set-sensitive Jinja build in every replay-only
+        # consumer). This pin is the CI substitute for the identity binding the
+        # other three levers keep: the mirror and the loader's
+        # ``impostor_roll_call_enabled`` must agree over the env grid, so the
+        # replay stamp and the lever's read-site cannot drift apart without
+        # this failing. The loader import happens HERE (the test env carries a
+        # valid default prompt set), never in the replay module.
+        from agents.strategic.prompts.loader import (
+            ENV_IMPOSTOR_ROLL_CALL as LOADER_ENV,
+        )
+        from agents.strategic.prompts.loader import impostor_roll_call_enabled
+
+        assert LOADER_ENV == ENV_IMPOSTOR_ROLL_CALL
+        for env in (
+            {},
+            {ENV_IMPOSTOR_ROLL_CALL: "1"},
+            {ENV_IMPOSTOR_ROLL_CALL: "true"},
+            {ENV_IMPOSTOR_ROLL_CALL: "YES"},
+            {ENV_IMPOSTOR_ROLL_CALL: " on "},
+            {ENV_IMPOSTOR_ROLL_CALL: "0"},
+            {ENV_IMPOSTOR_ROLL_CALL: "nope"},
+            {ENV_IMPOSTOR_ROLL_CALL: ""},
+        ):
+            assert _impostor_roll_call_enabled(env) == impostor_roll_call_enabled(
+                env
+            ), env
+
+    def test_replay_module_imports_under_a_garbage_prompt_set(self) -> None:
+        # The regression the local mirror exists to prevent: ``import
+        # orchestrator.replay`` must succeed even when the shell carries an
+        # unknown AILIBI_PROMPT_SET (importing the loader here would raise at
+        # its module-level Jinja build and take down every replay-only
+        # consumer — sample byte-verification, MANIFEST reads, the API replay
+        # loader — before a single JSONL row is read).
+        import os
+        import subprocess
+        import sys
+
+        env = dict(os.environ)
+        env["AILIBI_PROMPT_SET"] = "no-such-prompt-set"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import orchestrator.replay; "
+                "print(orchestrator.replay.substrate_flag_snapshot({}))",
+            ],
+            cwd=str(Path(__file__).resolve().parents[2]),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "impostor_roll_call" in result.stdout
 
     def test_full_arm_recording_stamps_all_four_phase18_flags_on(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

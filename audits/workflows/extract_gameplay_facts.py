@@ -126,6 +126,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     ENV_VENT_PLACEMENT_CONTRADICTIONS,
     ENV_WHEREABOUTS_INTERIOR_FLAGS,
+    MeetingTriggerKind,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_PROXY_INTRA_TURN,
@@ -422,6 +423,21 @@ _VENT_RECORD_QUOTE_RE = re.compile(
     r"matches the witness's own record\.$"
 )
 
+# The vent-PLACEMENT variant's minted description (the 18.9 lever-2
+# ``_describe_vent_placement`` format) quotes ITS grounding record the same way
+# before the ", but ..." alibi clause. Parsed alongside the sighting format
+# because the two flags may quote DIFFERENT records: the sighting mint quotes
+# the FIRST role-proof match in channel order, while the placement scan tests
+# every matching record and can mint from a LATER one whose tick overlaps the
+# stated account — rebuilding from sighting quotes alone would drop exactly
+# those records and lose placement flags on re-extraction.
+_VENT_PLACEMENT_QUOTE_RE = re.compile(
+    r"^\S+ witnessed (?P<subject>\S+) vent in (?P<room>\S+) at tick "
+    r"(?P<tick>\d+), but \S+'s own account places them in \S+ "
+    r"\(ticks \d+-\d+\) -- venting is impostor-only, physically incompatible "
+    r"with the stated account\.$"
+)
+
 
 def _vent_records_from_recorded_flags(
     entry: MeetingReplayEntry,
@@ -451,36 +467,54 @@ def _vent_records_from_recorded_flags(
     description-drift meeting per arm; the record-tick recovery closes it).
     """
 
-    flag_by_event_id = {
-        flag.event_a_id: flag
-        for flag in entry.contradictions
-        if flag.kind == "vent_sighting"
-    }
-    records: dict[str, list[VentWitnessRecord]] = {}
+    # Every SawVentObservation's event id -> its speaker, so a flag whose
+    # ``event_a_id`` lands in this map is vent-grounded by construction (both
+    # the sighting mint and the placement mint reference the spoken
+    # observation on event_a; the weak single-voice / kill-scene
+    # ``alibi_vs_physical`` classes reference other event shapes and fall out
+    # of the map naturally).
+    vent_obs_speaker: dict[str, str] = {}
     for turn in entry.transcript.turns:
         for index, observation in enumerate(turn.observations):
-            if not isinstance(observation, SawVentObservation):
-                continue
-            event_id = _turn_observation_id(turn=turn, index=index)
-            flag = flag_by_event_id.get(event_id)
-            if flag is None:
-                continue
-            match = _VENT_RECORD_QUOTE_RE.match(flag.description)
-            if match is None:
-                raise SystemExit(
-                    f"unparseable vent_sighting description for {event_id} "
-                    f"({flag.description!r}) — the detector's minted format "
-                    "changed; update _VENT_RECORD_QUOTE_RE to keep the record "
-                    "rebuild faithful."
+            if isinstance(observation, SawVentObservation):
+                vent_obs_speaker[_turn_observation_id(turn=turn, index=index)] = (
+                    turn.speaker
                 )
-            records.setdefault(turn.speaker, []).append(
-                VentWitnessRecord(
-                    subject=match.group("subject"),
-                    room=match.group("room"),
-                    tick=int(match.group("tick")),
-                )
+    seen: dict[str, set[tuple[str, str, int]]] = {}
+    records: dict[str, list[VentWitnessRecord]] = {}
+    for flag in entry.contradictions:
+        if flag.kind not in ("vent_sighting", "alibi_vs_physical"):
+            continue
+        speaker = vent_obs_speaker.get(flag.event_a_id or "")
+        if speaker is None:
+            continue
+        pattern = (
+            _VENT_RECORD_QUOTE_RE
+            if flag.kind == "vent_sighting"
+            else _VENT_PLACEMENT_QUOTE_RE
+        )
+        match = pattern.match(flag.description)
+        if match is None:
+            raise SystemExit(
+                f"unparseable {flag.kind} description for {flag.event_a_id} "
+                f"({flag.description!r}) — the detector's minted format "
+                "changed; update the vent-record quote regexes to keep the "
+                "record rebuild faithful."
             )
-    return {speaker: tuple(rows) for speaker, rows in records.items()}
+        row = (match.group("subject"), match.group("room"), int(match.group("tick")))
+        if row in seen.setdefault(speaker, set()):
+            continue
+        seen[speaker].add(row)
+        records.setdefault(speaker, []).append(
+            VentWitnessRecord(subject=row[0], room=row[1], tick=row[2])
+        )
+    # Channel order approximates the live accessor's append/tick order: sort
+    # deterministically by (tick, subject, room) so the sighting mint's
+    # "first matching record" read is reproducible.
+    return {
+        speaker: tuple(sorted(rows, key=lambda r: (r.tick, r.subject, r.room)))
+        for speaker, rows in records.items()
+    }
 
 
 def _detector_env_from_stamp(
@@ -512,6 +546,7 @@ def _rederive_meeting_contradictions(
     entry: MeetingReplayEntry,
     *,
     detector_env: Mapping[str, str],
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> MeetingReplayEntry:
     """Re-run the CURRENT detector over the recorded transcript (Task 13.3).
 
@@ -548,6 +583,7 @@ def _rederive_meeting_contradictions(
             "contradictions": detect_contradictions(
                 entry.transcript,
                 roster=roster,
+                trigger_kind=trigger_kind,
                 vent_witness_records=_vent_records_from_recorded_flags(entry),
                 env=detector_env,
             )
@@ -2201,10 +2237,13 @@ def main() -> int:
                     "env and would silently diverge from this tool's stamp-true "
                     "re-derivations."
                 )
-        meeting_by_tick = {
-            e.tick: _rederive_meeting_contradictions(e, detector_env=detector_env)
-            for e in meeting_entries
-        }
+        # RAW entries here; the re-derivation happens per meeting inside the
+        # walk, where the reconstructed trigger kind is known — the live
+        # manager's final detection runs with ``trigger_kind`` (an emergency
+        # meeting's ``triggering_body_rooms`` ignores a fabricated opening
+        # body), so re-deriving without it would diverge on exactly those
+        # meetings.
+        meeting_by_tick = {e.tick: e for e in meeting_entries}
         total_meeting_records += len(meeting_entries)
 
         # Meetings whose OPENING defaulted (exhausted its single retry): the
@@ -2413,8 +2452,8 @@ def main() -> int:
                 continue
 
             # Meeting resolved this tick.
-            meeting_entry = meeting_by_tick.get(entry.tick)
-            if meeting_entry is None:
+            raw_meeting_entry = meeting_by_tick.get(entry.tick)
+            if raw_meeting_entry is None:
                 # Partial replay (meeting opened, never resolved). Stop the walk.
                 break
 
@@ -2425,6 +2464,22 @@ def main() -> int:
                 if isinstance(ev, MeetingTriggeredEvent):
                     body_id = ev.body_id
                     trigger_kind = ev.trigger
+
+            # Task 13.3/18.11: the $0 re-extraction spine, run HERE where the
+            # reconstructed trigger kind is known so the re-derivation mirrors
+            # the manager's final detection exactly (``"emergency" if
+            # _trigger_is_emergency(trigger) else "report"``; the engine event's
+            # trigger literal is already that pair).
+            meeting_trigger_kind: MeetingTriggerKind | None = (
+                "emergency"
+                if trigger_kind == "emergency"
+                else ("report" if trigger_kind == "report" else None)
+            )
+            meeting_entry = _rederive_meeting_contradictions(
+                raw_meeting_entry,
+                detector_env=detector_env,
+                trigger_kind=meeting_trigger_kind,
+            )
 
             # Schema-verified against meetings/schemas.py::MeetingResult
             # (Task 8.7 shape): meeting_id, triggered_by,
