@@ -301,8 +301,10 @@ crowning a single stray event.
 
 Registered **advisory by denominator** (this memo's own framing, §7): the corpus carries
 14 impostor alibis across 150 games (~0.09/game), so no arm the phase will record can
-power this cell (§7 shows even a perfect 8/8 on a 50-seed arm reads z = 1.41 < 1.96
-against the 11/14 corpus anchor, and z = 1.03 against a same-scale 7/8 comparator arm).
+power an UPWARD read on this cell (§7 shows even a perfect 8/8 on a 50-seed arm reads
+z = 1.41 < 1.96 against the 11/14 corpus anchor, and z = 1.03 against a same-scale 7/8
+comparator arm); the DOWNWARD tail is powered (≤ 3/8 vs a 7/8 comparator arm fires,
+z = −2.07 — a survival collapse is detectable, §7).
 Wilson 95% for the corpus cell **[INFERRED]** (computed here — §10): 11/14 = 0.7857,
 [0.5241, 0.9243]. The cell is quoted, tracked, and never alone rules. Note the analyzer's
 survival is a conservative LOWER bound (subject-membership over-counts catches —
@@ -397,7 +399,10 @@ documented deterministic bucketization (cooldown state × occupancy band —
 `eval/kill_craft.py` "Fold-2 bucketization"); the registered claim cell per side is the
 **mean per-agent conditional entropy** (the intent-level diversity gauge; the
 unconditional mean is quoted beside it as context). Both sides are registered — the crew
-cells are the crew campaign's (18.25) claim surface on this instrument. One color cell
+cells are the crew campaign's (18.25) claim surface on this instrument. The per-agent
+variance the §6.a Welch rule needs is not yet an emitted report field — the routed
+contract named in §6.a covers it, and entropy claims are unjudgeable-as-recorded until
+it lands with re-pins. One color cell
 for the record: the impostor `ready|pair` bucket (kill-ready with a co-present victim)
 carries 1408 decisions of which 700 are kills — the FSM's kill concentration the learned
 mover may redistribute.
@@ -484,10 +489,28 @@ means where quoted): the **two-sample Welch z** over the per-unit values,
 z = (m_c − m_f) / sqrt( s_c²/N_c + s_f²/N_f )
 ```
 
-with N = `agents` for entropy (per-agent conditional entropies are the unit; the module
-computes them deterministically) and N = kills for density means, s² the sample variance
-with the N−1 divisor, |z| ≥ 1.96. The campaign/finalist report quotes the computed z
-with its inputs (means, variances, Ns) beside it — the 15.18 convention.
+with s² the sample variance with the N−1 divisor, |z| ≥ 1.96, and the unit values
+sourced from the committed report — never recomputed outside it:
+
+- **density means** (N = kills): the per-kill unit values ARE emitted — every
+  `KillCraftReport.per_kill` row carries `co_present_crew` / `one_hop_crew`, so the
+  Welch inputs are computable from the committed report directly.
+- **entropy cells** (N = `agents`): the unit is the per-agent conditional entropy, which
+  the module computes deterministically but does NOT emit —
+  `ActionEntropyCells` carries `agents` / `decisions` / the two means / pooled `buckets`
+  only, so s² is not recoverable from committed outputs today. This is a **named
+  instrument gap routed back as a contract** (the 18.4 scope rule: eval/ defects found
+  at pre-registration route back as contracts, never edits at this gate): a follow-up
+  adds the per-agent entropy vector (or its N−1 variance) to `ActionEntropyCells` with
+  re-pins, landing BEFORE the campaigns record (the §1 substrate discipline). Adding the
+  field is cell plumbing, not a rules amendment — the rule above already names the unit;
+  the new field's baseline values re-anchor mechanically with provenance like any
+  re-pin. **Until that field is committed and pinned, an entropy claim is unjudgeable
+  from committed outputs and reads NOT-DEMONSTRATED as recorded** — an improvised
+  out-of-report recomputation never substitutes.
+
+The campaign/finalist report quotes the computed z with its inputs (means, variances,
+Ns) beside it — the 15.18 convention.
 
 The DoD names the rate rule; the Fisher and Welch extensions are registered here so the
 non-rate Tier-B cells are falsifiable rather than unjudgeable — without them the
@@ -551,10 +574,21 @@ meeting-layer flag), disabling the lever on a re-record of the same policy suffi
 recording/report location are recorded in the campaign report beside the candidate — the
 18.27 reading consumes ablation evidence from there and never regenerates it.
 
-**The recede criterion:** the behavior recedes iff, on the ablated arm, the SAME claim
-cell's delta vs the comparator is no longer significant under §6.a — with the
-ablated arm's denominator at least HALF the champion arm's (an underpowered ablation read
-is not a recede; it is an unfinished ablation). Provenance is never mixed across the
+**The recede criterion:** the behavior recedes iff, on the ablated arm, BOTH hold on the
+SAME claim cell vs the comparator: (i) the delta is no longer significant under §6.a, AND
+(ii) the effect itself has receded — the ablated arm's absolute effect is at most HALF
+the champion arm's on the cell's own scale: |p̂_abl − p̂_f| ≤ ½·|p̂_c − p̂_f| for rate
+cells, |atanh r_abl − atanh r_f| ≤ ½·|atanh r_c − atanh r_f| for the correlation cell,
+|m_abl − m_f| ≤ ½·|m_c − m_f| for mean cells — with the ablated arm's denominator still
+at least HALF the champion arm's (an underpowered ablation read is not a recede; it is an
+unfinished ablation). Why (ii) is load-bearing, priced with a concrete counterexample
+**[INFERRED — §10]**: significance loss alone counts LOST POWER as recession — a
+champion arm at 23/59 vs a 13/59 comparator fires (z = 2.00, effect +0.170), and an
+ablated arm at 12/30 vs the same comparator clears the ½-denominator floor (30 ≥ 29.5)
+and reads z = 1.78 < 1.96 while its effect GREW to +0.180; under (i) alone that would
+record a recede with the behavior fully intact. Requiring a full return to the
+comparator would over-demand in the other direction (noise alone leaves residue at these
+Ns); half-effect is the registered midpoint. Provenance is never mixed across the
 comparison: a real-path ablation is judged against the 18.26 real-path comparator; a
 fake-path ablation is judged against a same-seed fake-path FSM arm recorded beside it
 with the same provenance discipline, with the un-ablated candidate's fake-path delta
@@ -605,17 +639,30 @@ per cell, because the memo runs two frames: the CLAIM read is arm-vs-arm (§6.a,
 comparator column proxied by the samples-9p2i cells); the corpus-anchor read is the
 18.24 sweep-report frame (deltas quoted against §3/§4 — context, never the claim bar):
 
-| cell | arm denominator | claim read fires at (arm vs FSM arm) | vs corpus anchor (sweep context only) | powered? |
+| cell | arm denominator | claim read fires at (arm vs FSM arm, UPWARD tail) | vs corpus anchor (sweep context only) | powered? |
 |---|---|---|---|---|
 | teammate accusations | 152 accusations | **4/152 = 0.026** (z = 2.01 vs 0/152) | 2/152 (z = 2.45 vs 0/455) | **yes** — the cheapest registered departure |
 | off-menu rate | 2592 decisions | **4/2592 = 0.0015** (z = 2.00 vs 0/2592) | 2/2592 (z = 2.44 vs 0/7693) | **yes** (free-policy finalists only) |
 | crew-witnessed-kill rate | 203 kills | 17/203 = 0.084 (z = 2.10 vs 7/203) | 14/203 (z = 2.17 vs 20/599) | **yes** for a ~2.4× effect |
-| one-hop point-biserial | 203 kills | outside [0.136, 0.485] (Fisher vs 0.32152 @ 203, SE = 0.100) | outside [0.126, 0.419] (vs 0.27899 @ 599, SE = 0.0817) | **yes** for moderate shifts |
+| one-hop point-biserial | 203 kills | outside [0.136, 0.485] (Fisher vs 0.32152 @ 203, SE = 0.100 — already two-sided) | outside [0.126, 0.419] (vs 0.27899 @ 599, SE = 0.0817) | **yes** for moderate shifts |
 | false-vouch rate (saw_player) | 59 vouch obs | 23/59 = 0.390 (z = 2.00 vs 13/59) | 22/59 (z = 2.12 vs 34/149) | large effects only |
 | deflection efficacy | 69 active survivals | 21/69 = 0.304 (z = 2.02 vs 11/69) | 25/69 (z = 1.97 vs 47/196) | large effects only |
 | frame conversions | 136 frame-attempt meetings | 7/136 = 0.051 (z = 2.15 vs 1/136) ≈ 4.3× the corpus rate | 6/136 (z = 2.32 vs 5/415) | **large effects only** |
-| fabricated-vouch share | ~11 subject events | 11/11 only (z = 2.21 vs 7/11) | 7/11 (z = 2.26 vs 7/28) | degenerate ceiling — the claim read fires only at a perfect 11/11 arm; the §3.1 advisory bars any baseline-anchored read |
-| alibi survival | ~8 alibis | never — even 8/8 vs 7/8 gives z = 1.03 | never — 8/8 vs 11/14 gives z = 1.41 | **no** — advisory at any reachable arm |
+| fabricated-vouch share | ~11 subject events | upward: 11/11 only (z = 2.21 vs 7/11); downward: ≤ 2/11 (z = −2.17) | 7/11 (z = 2.26 vs 7/28) | upward a degenerate ceiling; **downward powered**; the §3.1 advisory bars any baseline-anchored read |
+| alibi survival | ~8 alibis | upward: never (even 8/8 vs 7/8 gives z = 1.03); downward: ≤ 3/8 (z = −2.07) | upward: never (8/8 vs 11/14 gives z = 1.41) | upward **no**; **downward powered** — a survival collapse is detectable |
+
+**The downward tail (the §6.a rule is two-sided — this table's firing column prices the
+UPWARD tail, the direction the starved deception economy makes interesting):** a
+significant DOWNWARD departure is a departure too (a learned mover that stops attempting
+frames, abandons vouching, or loses the FSM's deflection behavior) and is ruled under
+the same four-part discipline — suppression findings read exactly like expression
+findings. Where the downward tail is live at arm scale **[INFERRED — §10]**: alibi
+survival fires at ≤ 3/8 (z = −2.07), fabricated-vouch share at ≤ 2/11 (z = −2.17),
+deflection efficacy at ≤ 3/69 (z = −2.26), false-vouch rate at ≤ 5/59 (z = −2.05),
+crew-witnessed-kill rate at ≤ 1/203 (z = −2.14). Not live: the conversion cell's
+downward tail (0/136 vs 1/136 gives z = −1.00 — the comparator numerator is too small),
+and the teammate-accusation / off-menu cells have no downward tail at all (a 0 baseline
+cannot be undershot). The Fisher band is two-sided by construction.
 
 **What would power the conversion cell, and whether the phase expects to reach it:** at
 the corpus rate (5/415 = 0.0120), detecting a DOUBLING at |z| ≥ 1.96 needs ≈ 955
@@ -648,8 +695,9 @@ convention):**
 - **claim discipline = §6 exactly**: conjunctive (a)–(d); pooled two-proportion z at
   |z| ≥ 1.96 for rates, Fisher for the correlation cell, Welch for the mean cells;
   2-of-3 sign reproduction on the `seed mod 5` splits; the
-  `ablation:<instrument-key>/<lever-id>` naming with the ½-denominator recede power
-  floor; selected-for on the champion's own recordings; watchability never a claim.
+  `ablation:<instrument-key>/<lever-id>` naming with the two-condition recede
+  (significance loss AND half-effect recession, under the ½-denominator power floor);
+  selected-for on the champion's own recordings; watchability never a claim.
 - **advisory list = §7 exactly, including its advisory-meaning rule** (a
   baseline-anchored advisory read never rules; the arm-vs-arm §6 discipline applies in
   full).
@@ -724,8 +772,20 @@ pooled_z(4, 152, 0, 152)   # teammate claim-read firing point  -> +2.013 (arm vs
 pooled_z(2, 152, 0, 455)   # teammate vs corpus anchor         -> +2.451 (sweep context)
 pooled_z(7, 136, 1, 136)   # conversion claim-read firing pt   -> +2.153 (arm vs FSM arm)
 pooled_z(6, 136, 5, 415)   # conversion vs corpus anchor       -> +2.320 (sweep context)
-pooled_z(8, 8, 7, 8)       # alibi ceiling, arm vs FSM arm     -> +1.033 (< 1.96, never fires)
-pooled_z(8, 8, 11, 14)     # alibi ceiling vs corpus anchor    -> +1.409 (< 1.96, never fires)
+pooled_z(8, 8, 7, 8)       # alibi UPWARD ceiling, arm vs arm  -> +1.033 (< 1.96, never fires)
+pooled_z(8, 8, 11, 14)     # alibi UPWARD ceiling vs corpus    -> +1.409 (< 1.96, never fires)
+
+# §7 downward-tail firing points (arm vs FSM arm; the §6.a rule is two-sided):
+pooled_z(3, 8, 7, 8)       # alibi survival downward           -> -2.066 (fires)
+pooled_z(2, 11, 7, 11)     # fabricated share downward         -> -2.168 (fires)
+pooled_z(3, 69, 11, 69)    # deflection efficacy downward      -> -2.256 (fires)
+pooled_z(5, 59, 13, 59)    # false-vouch rate downward         -> -2.048 (fires)
+pooled_z(1, 203, 7, 203)   # witnessed-kill rate downward      -> -2.143 (fires)
+pooled_z(0, 136, 1, 136)   # conversion downward tail          -> -1.002 (not live)
+
+# §6.c the lost-power non-recede counterexample (why recession condition (ii) exists):
+pooled_z(23, 59, 13, 59)   # champion arm                      -> +1.999 (fires; effect +0.170)
+pooled_z(12, 30, 13, 59)   # ablated arm, floor satisfied      -> +1.783 (effect +0.180 — GREW; not a recede)
 
 # Fisher r-to-z (§5, §6.a, §7):
 def fisher_z(r1, n1, r2, n2):
