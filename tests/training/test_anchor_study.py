@@ -203,6 +203,74 @@ def test_walk_fails_loud_on_an_unvisited_meeting_row(tmp_path: Path) -> None:
         walk_corpus_game(corrupted)
 
 
+def test_corpus_seeds_rejects_a_bad_split_partition(tmp_path: Path) -> None:
+    # A duplicated seed would double-weight its game in the fit; a listed-but
+    # -missing or present-but-unlisted replay would drop/shadow a game while
+    # the substrate sha still hashes the bytes (Codex review on PR #292).
+    corpora = iter(range(10))
+
+    def build(splits: dict[str, object], seeds_on_disk: list[int]) -> Path:
+        corpus = tmp_path / f"corpus-{next(corpora)}"
+        corpus.mkdir()
+        (corpus / "splits.json").write_text(json.dumps(splits))
+        for seed in seeds_on_disk:
+            (corpus / f"replay-seed-{seed}.jsonl").write_text("")
+        return corpus
+
+    duplicated = build({"train": [1, 2], "val": [2], "test": [3]}, [1, 2, 3])
+    with pytest.raises(ValueError, match="more than one bucket"):
+        corpus_seeds(duplicated)
+    missing = build({"train": [1], "val": [2], "test": [3]}, [1, 2])
+    with pytest.raises(ValueError, match="listed-but-missing"):
+        corpus_seeds(missing)
+    unlisted = build({"train": [1], "val": [2], "test": [3]}, [1, 2, 3, 4])
+    with pytest.raises(ValueError, match="present-but-unlisted"):
+        corpus_seeds(unlisted)
+
+
+def test_walk_fails_loud_on_a_duplicate_meeting_row(tmp_path: Path) -> None:
+    # Collapsing duplicate meeting rows would let the surviving row (honest
+    # state hashes, forged contradictions) pass the visited check AND move the
+    # flags census (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    meeting_line = next(
+        line for line in lines if json.loads(line).get("kind") == "meeting"
+    )
+    corrupted = tmp_path / "replay-seed-1000.jsonl"
+    corrupted.write_text("\n".join(lines[:-1] + [meeting_line, lines[-1]]) + "\n")
+    with pytest.raises(CorpusWalkError, match="duplicate meeting rows"):
+        walk_corpus_game(corrupted)
+
+
+def test_walk_fails_loud_on_a_ghost_actor_row(tmp_path: Path) -> None:
+    # A non-roster actor's row is engine-rejected without moving the state
+    # hash — bytes no orchestrator run could have produced must not pass as
+    # verified (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    first = json.loads(lines[0])
+    first["actions"].append({"actor": "ghost", "payload": {}, "type": "wait"})
+    lines[0] = json.dumps(first)
+    corrupted = tmp_path / "replay-seed-1000.jsonl"
+    corrupted.write_text("\n".join(lines) + "\n")
+    with pytest.raises(CorpusWalkError, match="outside the living roster"):
+        walk_corpus_game(corrupted)
+
+
+def test_walk_fails_loud_on_tick_rows_after_game_over(tmp_path: Path) -> None:
+    # The GAME_OVER break stops validating, so trailing forged tick rows would
+    # otherwise ride along unverified (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    last_tick_line = next(
+        line for line in reversed(lines) if json.loads(line).get("kind") == "tick"
+    )
+    forged = json.loads(last_tick_line)
+    forged["tick"] = forged["tick"] + 1
+    corrupted = tmp_path / "replay-seed-1000.jsonl"
+    corrupted.write_text("\n".join(lines[:-1] + [json.dumps(forged), lines[-1]]) + "\n")
+    with pytest.raises(CorpusWalkError, match="after the terminal GAME_OVER"):
+        walk_corpus_game(corrupted)
+
+
 def test_walk_fails_loud_on_duplicate_action_rows(tmp_path: Path) -> None:
     # The orchestrator submits one action per living actor; a duplicated row
     # (which duplicate ``wait``s may hide from the hash check) must raise

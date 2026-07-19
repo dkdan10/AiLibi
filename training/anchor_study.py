@@ -244,15 +244,38 @@ def compute_substrate_sha(
 
 
 def corpus_seeds(corpus_dir: Path = CORPUS_DIR) -> tuple[int, ...]:
-    """Every corpus game seed, from the committed ``splits.json`` (sorted)."""
+    """Every corpus game seed, from the committed ``splits.json`` (sorted).
 
-    raw = json.loads((corpus_dir / "splits.json").read_text())
-    seeds = sorted(
-        int(seed) for bucket in ("train", "val", "test") for seed in raw[bucket]
-    )
-    if not seeds:
-        raise ValueError(f"{corpus_dir / 'splits.json'} lists no game seeds")
-    return tuple(seeds)
+    Validated as a UNIQUE partition that exactly matches the corpus's
+    ``replay-seed-*.jsonl`` files (Codex review on PR #292): a seed
+    duplicated across buckets would silently double-weight its game in the
+    filtered-BC fit, and a listed-but-missing (or present-but-unlisted)
+    replay would silently drop (or shadow) a game while the substrate sha
+    still hashes the on-disk bytes — both fail loud instead.
+    """
+
+    splits_path = corpus_dir / "splits.json"
+    raw = json.loads(splits_path.read_text())
+    listed = [int(seed) for bucket in ("train", "val", "test") for seed in raw[bucket]]
+    if not listed:
+        raise ValueError(f"{splits_path} lists no game seeds")
+    duplicates = sorted({seed for seed in listed if listed.count(seed) > 1})
+    if duplicates:
+        raise ValueError(
+            f"{splits_path} lists seeds in more than one bucket (or twice in "
+            f"one): {duplicates!r}"
+        )
+    on_disk = {
+        _seed_from_replay_path(path) for path in corpus_dir.glob("replay-seed-*.jsonl")
+    }
+    missing = sorted(set(listed) - on_disk)
+    unlisted = sorted(on_disk - set(listed))
+    if missing or unlisted:
+        raise ValueError(
+            f"{splits_path} does not match the corpus replay files: "
+            f"listed-but-missing {missing!r}, present-but-unlisted {unlisted!r}"
+        )
+    return tuple(sorted(listed))
 
 
 # --------------------------------------------------------------------------- #
@@ -387,9 +410,19 @@ def walk_corpus_game(
 
     entries = read_all_entries(replay_path)
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick: dict[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
+    meeting_by_tick: dict[int, MeetingReplayEntry] = {}
+    for meeting_row in entries:
+        if not isinstance(meeting_row, MeetingReplayEntry):
+            continue
+        if meeting_row.tick in meeting_by_tick:
+            # Collapsing duplicates would let the LAST row (with, e.g., forged
+            # contradictions but honest state hashes) both pass the visited
+            # check and move the flags census (Codex review on PR #292).
+            raise CorpusWalkError(
+                f"seed {seed}: replay carries duplicate meeting rows for tick "
+                f"{meeting_row.tick}"
+            )
+        meeting_by_tick[meeting_row.tick] = meeting_row
     game_end = next(
         (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
     )
@@ -424,8 +457,10 @@ def walk_corpus_game(
     observation_service = ObservationService(
         game_map=resolved_map, audit_log_path=Path(os.devnull)
     )
+    processed_rows = 0
     try:
         for entry in tick_entries:
+            processed_rows += 1
             recorded_by_actor: dict[str, Mapping[str, object]] = {}
             for raw in entry.actions:
                 actor = raw.get("actor")
@@ -444,21 +479,31 @@ def walk_corpus_game(
                         f"action rows for actor {actor!r}"
                     )
                 recorded_by_actor[actor] = raw
+            # The production invariant, enforced exactly: one action per
+            # LIVING actor at the pre-action state — an extra row (a ghost or
+            # dead actor, engine-rejected without moving the hash) or a
+            # missing row (a dropped ``wait`` the hash may not catch) is
+            # corruption, never a silent no-op (Codex review on PR #292).
+            living = {
+                player_id for player_id, player in state.players.items() if player.alive
+            }
+            ghost_actors = sorted(set(recorded_by_actor) - living)
+            if ghost_actors:
+                raise CorpusWalkError(
+                    f"seed {seed}: tick {entry.tick} carries action rows from "
+                    f"actors outside the living roster: {ghost_actors!r}"
+                )
+            unaccounted = sorted(living - set(recorded_by_actor))
+            if unaccounted:
+                raise CorpusWalkError(
+                    f"seed {seed}: tick {entry.tick} has no recorded action "
+                    f"rows for the living players {unaccounted!r} (partial or "
+                    "corrupted replay row)"
+                )
             for pid in impostor_ids:
                 raw_action = recorded_by_actor.get(pid)
                 if raw_action is None:
-                    # Dead/ejected impostors submit nothing; an ALIVE impostor
-                    # with no recorded action row is a corrupted/partial replay
-                    # — and a dropped ``wait`` row may not trip the state-hash
-                    # check, so it must not silently thin the verified stream
-                    # (Codex review on PR #292).
-                    if state.players[pid].alive:
-                        raise CorpusWalkError(
-                            f"seed {seed}: tick {entry.tick} has no recorded "
-                            f"action for the alive impostor {pid!r} (partial "
-                            "or corrupted replay row)"
-                        )
-                    continue
+                    continue  # dead/ejected (the living-set check ran above)
                 packet = observation_service.build_packet(
                     world_state=state, agent_id=pid, engine_events=last_events
                 )
@@ -578,6 +623,15 @@ def walk_corpus_game(
         raise CorpusWalkError(
             f"seed {seed}: reconstructed winner {winner!r} != recorded "
             f"game_over winner {game_end.winner!r}"
+        )
+
+    # No tick rows may trail the terminal state: the GAME_OVER break stops
+    # validating, so an appended forged row would otherwise ride along inside
+    # "verified" bytes without ever being checked (Codex review on PR #292).
+    if processed_rows != len(tick_entries):
+        raise CorpusWalkError(
+            f"seed {seed}: replay carries {len(tick_entries) - processed_rows} "
+            "tick rows after the terminal GAME_OVER state (never validated)"
         )
 
     # Every meeting row must have been visited (state-hash-verified) by the
