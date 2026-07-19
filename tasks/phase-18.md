@@ -10,16 +10,19 @@ below were ratified by the owner on 2026-07-18 at the planning session's decisio
 (`audits/audit-phase-18-planning.md` §8), sign-off additionally riding the merge of this
 phase doc (the 15.18 convention).
 
-**18.11 meeting-layer gate — PENDING (2026-07-19).** The gate memo
-`audits/audit-phase-18-meeting-gate.md` is assembled with the offline evidence (the 18.9
-exemption + vent censuses, the baseline-5 absence + crew-coverage pins) quoted against the
-pre-registered bars, and the substrate-flag snapshot registry + `extract_gameplay_facts`
-relaxation land in the 18.11 PR. The LIVE probe (operator, two 25-seed real-path sets, ~8–9 h)
-and the owner ruling (FULL / CREW-ONLY / NONE, with the absence-prior graduation and the vent
-re-rule riding it) are **not yet executed**, so no meeting-layer surgery has been performed and
-the DAG below is UNCHANGED — the 17.14 PENDING pattern (the PR stays open with the memo complete
-and the DoD honest; never a ruling that has not happened). The ruling directions and their
-surgery are pre-authored in the gate memo §9–§10 and in the Baseline-numbering block below.
+**18.11 meeting-layer gate — RULED: CREW-ONLY package (owner, 2026-07-19,
+`audits/audit-phase-18-meeting-gate.md` §9).** The probe ran 2026-07-19 (two 25-seed 9p2i
+real-path sets, seeds 2000–2024, 6 h 07 m at 2 workers) and the owner ruled on the measured
+cells: **(A) CREW-ONLY** — the roll-call round (18.8) and endpoint-band exemption (18.9 lever
+1) SHIP; the impostor-answer arm (18.10) stays INERT (bar (c) failed both clauses: impostor
+win 4/25 = 0.16 < 0.20, STRONG self-flag 42/100 = 0.42 > 0.25 at z = +3.93 — the arm + its
+bars stay in the tree for a future owner-gated re-probe on trained bytes); **(B) the absence
+prior GRADUATES** (the ratified 17.7 §6 bar passes both clauses for the first time: crew
+coverage 1.00 ≥ 0.60, new-over-gate 3/75 = 0.04 ≤ 0.20); **(C) the vent variant + widening
+SHIP** (the 17.7 Ruling-2 HOLD lifted; live FULL yield 28 STRONG flags, all impostor). Per the
+Baseline-numbering block a CREW-ONLY ruling changes NO structure: 18.12–18.14 proceed, and
+18.12's graduation flips cover the round, the exemption, the vent variant/widening, and the
+absence prior, while `impostor_roll_call` stays a default-OFF toggle.
 
 ## Locked decisions (owner-ratified 2026-07-18)
 
@@ -76,7 +79,9 @@ surgery are pre-authored in the gate memo §9–§10 and in the Baseline-numberi
   the roll-call round (18.8), the endpoint-band exemption (18.9), and the impostor-answer
   variant (18.10) each ship flag-gated with no default-path byte movement, proven by
   committed-bytes counterfactuals where offline measurement is possible; the gate (18.11)
-  rules what graduates; the adopting record (18.12) flips what ships.
+  rules what graduates; the adopting record (18.12) flips what ships. *Ruled 2026-07-19
+  (CREW-ONLY, the STATUS banner above): the round, the exemption, the vent variant/widening,
+  and the absence prior graduate at 18.12; the impostor-answer variant stays inert.*
 - **Pre-registration precedes measurement.** The emergence bars (18.4) are ratified before
   any campaign records; campaign reports read against them, never the reverse. An emergence
   claim needs the full discipline: significance vs the same-seed FSM comparator,

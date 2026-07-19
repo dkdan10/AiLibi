@@ -26,20 +26,21 @@ the owner ruling — recorded here as an explicit open slot, never a guessed val
 
 ## 0. Verdict in one line
 
-**The probe is recorded and every bar cell is measured; the pre-registered criteria read
-CREW-ONLY** — the operator leg ran 2026-07-19 (6 h 07 m at 2 workers, seeds 2000–2024 both
-arms, §7): crew roll-call coverage **1.00 ≥ 0.60** on BOTH arms (bar (a) PASS, z ≈ +6.6/+6.9);
-the absence counterfactual re-run on probe bytes reads **0/66 = 0.000** (FULL) and **3/75 =
-0.040** (CREW-ONLY) new-over-gate **≤ 0.20** (bar (b) PASS, z = −3.46 on the deciding arm); the
-impostor-answer arm **FAILS bar (c) on both clauses** — probe impostor win **4/25 = 0.16 <
-0.20** (below the not-annihilated floor; z = −2.08 vs the FSM comparator 0.36) AND STRONG
-self-flag rate **42/100 = 0.42 > 0.25** (z = +3.93 — the prompt ladder's ≥ 44 % self-flag
-class, re-measured almost exactly). On the pre-authored §9 criteria this reads **CREW-ONLY**
-(round + exemption graduate; impostor-answer arm stays inert), with the absence prior
-GRADUATING on the ratified 17.7 §6 bar (both clauses pass on the round's bytes) and the vent
-variant SHIPPING with the package (live FULL yield 28 STRONG flags, ALL impostor). **The owner
-ruling is recorded verbatim in §9**; a CREW-ONLY ruling's surgery is *no structural change*
-(the Baseline-numbering block) — 18.12 flips the ruled arms.
+**CREW-ONLY package (owner, 2026-07-19, §9): the roll-call round + endpoint exemption + vent
+variant SHIP, the impostor-answer arm stays INERT, and the absence prior GRADUATES** — the
+probe (recorded 2026-07-19, 6 h 07 m at 2 workers, seeds 2000–2024 both arms, §7) read: crew
+roll-call coverage **1.00 ≥ 0.60** on BOTH arms (bar (a) PASS, z ≈ +6.6/+6.9); the absence
+counterfactual on probe bytes **0/66 = 0.000** (FULL) and **3/75 = 0.040** (CREW-ONLY)
+new-over-gate **≤ 0.20** (bar (b) PASS, z = −3.46 on the shipping arm — the ratified 17.7 §6
+bar passes both clauses for the first time); the impostor-answer arm **FAILED bar (c) on both
+clauses** — probe impostor win **4/25 = 0.16 < 0.20** (z = −2.08 vs the FSM comparator 0.36)
+AND STRONG self-flag rate **42/100 = 0.42 > 0.25** (z = +3.93 — the prompt ladder's ≥ 44 %
+self-flag class, re-measured almost exactly). The vent variant's live FULL yield: **28 STRONG
+flags, ALL impostor** (Ruling C lifts the 17.7 HOLD; it ships with the package). A CREW-ONLY
+ruling's surgery is *no structural change* (the Baseline-numbering block): 18.12–18.14 proceed,
+18.12 flips the ruled arms (round + exemption + vent + absence graduation) and the unshipped
+impostor-answer arm stays default-OFF with its bars preserved for a future owner-gated re-probe
+on trained bytes.
 
 ## 1. What this gate decides — the package and its arms [VERIFIED]
 
@@ -332,12 +333,13 @@ substrate left on the table ((a) and (b) both pass with room). One forward-looki
 better than the scripted-prompt lie the probe measured, and the arm + its bars remain available
 for a future owner-gated re-probe on trained bytes.
 
-## 9. The rulings — the measured criteria, put to the owner [criterion reads VERIFIED; ruling slots follow]
+## 9. THE RULINGS — the measured criteria and the owner's recorded answer
 
-The §1–§8 memo was assembled and the §7 cells measured FIRST; the three couplings are then put
-to the owner in-session with a plain-terms implication briefing per direction (the 17.7 shape).
-Each slot follows the Task-14.6 locked-decision shape. **The criterion reads below are
-arithmetic over the measured cells; only the owner's recorded answer makes them a ruling.**
+The §1–§8 memo was assembled and the §7 cells measured FIRST; the three couplings were then put
+to the owner in-session on 2026-07-19 with a plain-terms implication briefing per direction
+(the 17.7 shape). Each block follows the Task-14.6 locked-decision shape. The criterion reads
+below are arithmetic over the measured cells; the owner's recorded answer (the final block)
+makes them the ruling.
 
 ### Ruling A — the package: the measured criteria read **CREW-ONLY**
 
@@ -371,28 +373,66 @@ separately measured — the mechanism's material there is bounded below by the o
 (7 flags on bytes with impostor coverage 0.089) and above by the FULL read; it mints only
 STRONG impostor-side flags through the grounded-only firewall either way.
 
-### The recorded ruling [owner slot]
+### The recorded ruling — **CREW-ONLY package (owner, 2026-07-19)**
 
-**[PENDING — the owner's verbatim answer is recorded here when given.]**
+The three couplings were put to the owner in-session with the §7 measured cells and a
+plain-terms implication briefing per direction (the 17.7 shape). The owner's one probing
+question was answered on the record BEFORE the ruling — *if the pre-registered criteria are
+disregarded, does the recommendation change to FULL? The idea being that training would raise
+or balance the baseline, and 0.16 is close to 0.20.* The recorded answer: no — the win-clause
+miss is indeed noise-level (z = −0.50, under the contract's own >1σ power framing), but the
+DECISIVE fail is the self-flag clause (0.42, z = +3.93), which this phase's training attacks
+only indirectly: the campaigns train the TACTICAL layer while the lie itself lives in the
+frozen meeting-layer templates (locked decision 1 rejected the fine-tune), so a learned mover
+shrinks the contradiction SURFACE but cannot make the LLM lie more consistently; the undo
+costs are asymmetric (CREW-ONLY keeps the arm inert and re-probeable on trained bytes at a
+later owner gate, ~4 h; FULL bakes the self-incrimination economy into the ~18–20 h corpus and
+every artifact fit on it, ~25–30 h to unwind); and the corpus under FULL would describe a
+regime the mover is supposed to escape. FULL remained available as an explicit recorded
+override; the owner did not take it.
 
-## 10. The surgery record [PENDING — executes only in the ruled direction]
+The owner's recorded ruling, verbatim: **"CREW-ONLY, go ahead with the recomendation"** — the
+combined slot covering all three rulings, adopting the §9 criterion reads as proposed:
 
-Per `tasks/phase-18.md` Baseline-numbering block, executed only AFTER Ruling A is recorded:
+- **Ruling A — the package: CREW-ONLY.** The roll-call round (18.8) and the endpoint-band
+  exemption (18.9 lever 1) SHIP — graduation flips at 18.12. The impostor-answer template arm
+  (18.10) stays INERT: default templates keep recording; the arm, its variant registry, and
+  its pre-registered bars stay in the tree for a future owner-gated re-probe (e.g. on
+  trained-impostor bytes at/after 18.24), never silently deleted.
+  **Rejected — FULL:** bar (c) failed both clauses ((c₁) 0.16 < 0.20; (c₂) 0.42 > 0.25,
+  z = +3.93); the override was offered and declined. **Rejected — NONE:** bars (a) and (b)
+  passed with wide margins; leaving a bar-clearing substrate unadopted forfeits the crew
+  clause, the absence graduation, and the lie-prosecuting economy for nothing.
+- **Ruling B — the absence prior: GRADUATE.** The ratified 17.7 §6 bar passes both clauses for
+  the first time (crew coverage 1.00 ≥ 0.60; new-over-gate 0.040 ≤ 0.20 on the shipping arm;
+  top-churn 4/75 reported informationally). Graduation executes at 18.12 per the ratified bar.
+- **Ruling C — the vent widening + flag-minting variant: SHIP.** The 17.7 Ruling-2 HOLD is
+  lifted: the variant ships WITH the package's adopting record (live FULL yield 28 STRONG
+  flags, all impostor, all vent-grounded; grounded-only firewall intact). The widening's
+  absent-set hygiene ships with the same record.
 
-- **FULL / CREW-ONLY:** changes no structure (the arms that ship are 18.12's business;
-  18.12–18.14 proceed either way). This memo's ruling banner is added to `tasks/phase-18.md`;
-  prompts regenerate; validator green.
-- **NONE:** removes 18.12, 18.13, 18.14 (contracts + prompts, with a drop record naming this
-  audit), rewires 18.15's `Depends on:` to `18.11`, rewires 18.16's `Depends on:` to `18.15`
-  alone (the removed 18.14's constant-flip is moot under NONE — the bar stays baseline-5; the
-  Wave-2 DAG edge becomes `18.15 -> 18.16`), binds 18.15 to the standing baseline-5 corpus,
-  leaves `BAKEOFF_BASELINE_ID = "baseline-5"` untouched, and renumbers the 18.28 mover record
-  baseline 7 → 6. The absence prior stays OFF with the ratified bar unmet, restated here.
+Sign-off additionally rides the merge of this PR (the 15.18 convention).
 
-**Until the ruling is recorded, NO surgery is performed and the phase DAG is unchanged** — the
-gate is dispatchable-consistent with the surviving DAG exactly as it stands (18.12–18.14 remain,
-awaiting the ruling), and `scripts/compute_next_task.py --phase 18` is green on the current
-graph.
+## 10. The surgery record (the CREW-ONLY direction, executed in this PR)
+
+Exactly what the phase doc's Baseline-numbering block enumerates for a CREW-ONLY ruling —
+**no structural change** ("a FULL or CREW-ONLY ruling at 18.11 changes no structure (the arms
+that ship are the ruling's business; 18.12–18.14 proceed either way)"):
+
+- **No task is removed and no dependency rewires**: 18.12 (baseline-6 adopting record), 18.13
+  (corpus re-record), and 18.14 (surrogate re-ground) proceed as contracted; the 18.28 mover
+  record stays **baseline 7**; `BAKEOFF_BASELINE_ID` stays `"baseline-5"` until 18.14.
+- **The `tasks/phase-18.md` STATUS banner records the three rulings** (replacing the PENDING
+  note), and the preamble designer-ruling line that pointed at the pending gate now carries the
+  ruled outcome — so every downstream contract inherits WHICH arms graduate at 18.12: the
+  roll-call round, the endpoint exemption, the vent variant (flag + widening), and the absence
+  prior; the impostor-answer arm stays inert (its graduation-flip clauses in 18.12's contract
+  are conditioned on "if the impostor-answer arm ships", which now reads false).
+- **Prompts regenerated mechanically** (`scripts/generate_prompts.py --check` green — the
+  banner is preamble-only, so no generated prompt moved); validator and
+  `scripts/compute_next_task.py --phase 18` green on the unchanged DAG.
+- The NONE surgery (removal of 18.12–18.14 + Wave-2 rewires) was pre-enumerated and did NOT
+  execute — recorded here per the 16.2 GO-banner convention, inverted.
 
 ## 11. Status
 
@@ -404,8 +444,13 @@ graph.
   seeds 2000–2024 both arms), byte-verified 25/25 per arm, validity-gated (9/10 rows PASS per
   arm; the one failing row is the synthetic `(deadline_default)` marker census, §7), every bar
   cell measured with its z (§7).
-- **Owner ruling:** **PENDING** — the three couplings were put to the owner with the measured
-  cells (the criteria read CREW-ONLY / GRADUATE / SHIP); §9's owner slot records the verbatim
-  answer when given. Never a ruling that has not happened.
-- **Surgery:** **PENDING the ruling** (§10) — a CREW-ONLY ruling changes no structure; the
-  phase-doc banner records the ruling and 18.12 executes the graduation flips.
+- **Owner ruling:** **RECORDED** (owner, 2026-07-19, §9 verbatim): **CREW-ONLY package** —
+  round + exemption + vent SHIP, impostor-answer INERT, absence prior GRADUATES.
+- **Surgery:** **COMPLETE** in the CREW-ONLY direction (§10 — no structural change; the
+  phase-doc banner records the rulings; 18.12 executes the graduation flips).
+- **The sequencing consequence (the merge criterion's named line):** the baseline-6 adopting
+  record (18.12) is UNBLOCKED once this PR and the remaining Wave-0/1 dependencies merge — it
+  flips the FOUR ruled levers (roll-call round, endpoint exemption, vent variant, absence
+  prior) to unconditional, records `replays/samples/` at the new layer, and 18.13's corpus
+  then records at the FINAL Phase-18 meeting layer by construction (locked decision 2's
+  sequencing requirement, discharged on the CREW-ONLY branch).
