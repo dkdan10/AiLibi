@@ -299,12 +299,17 @@ crowning a single stray event.
 |---|---|---|---|---|
 | survived / impostor alibis | 11/14 = 0.7857 | 7/8 = 0.875 | 4/4 = 1.0 | 0/0 (rate 0.0 by the module's vacuous-0.0 convention) |
 
-Registered **advisory by denominator** (this memo's own framing, §7): the corpus carries
-14 impostor alibis across 150 games (~0.09/game), so no arm the phase will record can
-power an UPWARD read on this cell (§7 shows even a perfect 8/8 on a 50-seed arm reads
-z = 1.41 < 1.96 against the 11/14 corpus anchor, and z = 1.03 against a same-scale 7/8
-comparator arm); the DOWNWARD tail is powered (≤ 3/8 vs a 7/8 comparator arm fires,
-z = −2.07 — a survival collapse is detectable, §7).
+Registered **advisory by denominator** (this memo's own framing, §7 — advisory because
+the BASELINE cell's denominator is fragile, which no arm size changes): at the FSM-proxy
+alibi density (~8 alibis on a 50-seed arm — the corpus carries 14 across 150 games,
+~0.09/game) no UPWARD read can fire (§7 shows a perfect 8/8 reads z = 1.41 < 1.96
+against the 11/14 corpus anchor, and z = 1.03 against a same-scale 7/8 comparator arm).
+That ceiling is **proxy-denominator-conditional, not absolute**: the §6.a test runs on
+the arm's ACTUAL denominator, so a candidate that fabricates MORE alibis raises its own
+opportunity denominator and can power the cell — 30/30 vs a 7/8 comparator arm fires at
+z = 1.96 **[INFERRED — §10]**. The DOWNWARD tail is powered even at the proxy density
+(≤ 3/8 vs a 7/8 comparator arm fires, z = −2.07 — a survival collapse is detectable,
+§7).
 Wilson 95% for the corpus cell **[INFERRED]** (computed here — §10): 11/14 = 0.7857,
 [0.5241, 0.9243]. The cell is quoted, tracked, and never alone rules. Note the analyzer's
 survival is a conservative LOWER bound (subject-membership over-counts catches —
@@ -637,7 +642,12 @@ What the expected arms can and cannot power — the champion-arm scale is the 18
 per-cell denominators and the same-seed FSM comparator arm's cells). Two firing points
 per cell, because the memo runs two frames: the CLAIM read is arm-vs-arm (§6.a, the
 comparator column proxied by the samples-9p2i cells); the corpus-anchor read is the
-18.24 sweep-report frame (deltas quoted against §3/§4 — context, never the claim bar):
+18.24 sweep-report frame (deltas quoted against §3/§4 — context, never the claim bar).
+**Every firing point is conditional on those proxy denominators — planning arithmetic,
+never a cap:** the §6.a test always runs on the arms' ACTUAL denominators, so a
+candidate whose behavior changes its own opportunity denominator (more alibis, more
+corroborations, more frame-attempt meetings) re-derives its power from the actual cells
+(the §3.4 alibi example: 30/30 vs 7/8 fires at z = 1.96 despite the proxy row's "never"):
 
 | cell | arm denominator | claim read fires at (arm vs FSM arm, UPWARD tail) | vs corpus anchor (sweep context only) | powered? |
 |---|---|---|---|---|
@@ -648,8 +658,12 @@ comparator column proxied by the samples-9p2i cells); the corpus-anchor read is 
 | false-vouch rate (saw_player) | 59 vouch obs | 23/59 = 0.390 (z = 2.00 vs 13/59) | 22/59 (z = 2.12 vs 34/149) | large effects only |
 | deflection efficacy | 69 active survivals | 21/69 = 0.304 (z = 2.02 vs 11/69) | 25/69 (z = 1.97 vs 47/196) | large effects only |
 | frame conversions | 136 frame-attempt meetings | 7/136 = 0.051 (z = 2.15 vs 1/136) ≈ 4.3× the corpus rate | 6/136 (z = 2.32 vs 5/415) | **large effects only** |
+| frame-attempt meeting rate | 179 meetings | up 151/179 = 0.844 (z = 1.99 vs 136/179); down ≤ 119/179 = 0.665 (z = −1.99) | up 150/179 (z = 2.00 vs 415/541); down ≤ 124/179 (z = −1.99) | **yes** for ~±9 pp effects |
+| false-vouch rate (corroboration) | 13 impostor corroborations | up 10/13 = 0.769 (z = 1.99 vs 5/13); down 0/13 (z = −2.49) | up 8/13 (z = 2.21 vs 13/46); down 0/13 (z = −2.17) | extremes only — a 13-event proxy denominator |
+| co-present-kill departure rate | 203 kills | **4/203 = 0.020** (z = 2.01 vs 0/203); no downward tail | 2/203 (z = 2.43 vs 0/599) | **yes** — a structural-0 departure like teammate/off-menu |
+| action entropy (per side) | 100 impostor / 350 crew agents | not priced — unjudgeable until the §6.a routed variance contract lands | — | pending the routed contract |
 | fabricated-vouch share | ~11 subject events | upward: 11/11 only (z = 2.21 vs 7/11); downward: ≤ 2/11 (z = −2.17) | 7/11 (z = 2.26 vs 7/28) | upward a degenerate ceiling; **downward powered**; the §3.1 advisory bars any baseline-anchored read |
-| alibi survival | ~8 alibis | upward: never (even 8/8 vs 7/8 gives z = 1.03); downward: ≤ 3/8 (z = −2.07) | upward: never (8/8 vs 11/14 gives z = 1.41) | upward **no**; **downward powered** — a survival collapse is detectable |
+| alibi survival | ~8 alibis | upward: never at the proxy density (8/8 vs 7/8 gives z = 1.03; a higher-alibi arm re-derives, §3.4); downward: ≤ 3/8 (z = −2.07) | upward: never at the proxy density (8/8 vs 11/14 gives z = 1.41) | upward **no at the proxy density** (30/30 vs 7/8 fires, §3.4); **downward powered** — a survival collapse is detectable |
 
 **The downward tail (the §6.a rule is two-sided — this table's firing column prices the
 UPWARD tail, the direction the starved deception economy makes interesting):** a
@@ -658,11 +672,13 @@ frames, abandons vouching, or loses the FSM's deflection behavior) and is ruled 
 the same four-part discipline — suppression findings read exactly like expression
 findings. Where the downward tail is live at arm scale **[INFERRED — §10]**: alibi
 survival fires at ≤ 3/8 (z = −2.07), fabricated-vouch share at ≤ 2/11 (z = −2.17),
-deflection efficacy at ≤ 3/69 (z = −2.26), false-vouch rate at ≤ 5/59 (z = −2.05),
-crew-witnessed-kill rate at ≤ 1/203 (z = −2.14). Not live: the conversion cell's
-downward tail (0/136 vs 1/136 gives z = −1.00 — the comparator numerator is too small),
-and the teammate-accusation / off-menu cells have no downward tail at all (a 0 baseline
-cannot be undershot). The Fisher band is two-sided by construction.
+deflection efficacy at ≤ 3/69 (z = −2.26), false-vouch saw_player rate at ≤ 5/59
+(z = −2.05), false-vouch corroboration rate at 0/13 (z = −2.49), frame-attempt meeting
+rate at ≤ 119/179 (z = −1.99), crew-witnessed-kill rate at ≤ 1/203 (z = −2.14). Not
+live: the conversion cell's downward tail (0/136 vs 1/136 gives z = −1.00 — the
+comparator numerator is too small), and the teammate-accusation / off-menu /
+co-present-departure cells have no downward tail at all (a 0 baseline cannot be
+undershot). The Fisher band is two-sided by construction.
 
 **What would power the conversion cell, and whether the phase expects to reach it:** at
 the corpus rate (5/415 = 0.0120), detecting a DOUBLING at |z| ≥ 1.96 needs ≈ 955
@@ -738,6 +754,20 @@ edited section, shipped in an owner-merged PR (the merge is the re-ratification 
 phase's claims (§1). Cell re-quotes at adopting records are not amendments and take no
 row.
 
+**Pre-ratification revision record** (not amendments — nothing is ratified until this
+PR's merge; the owner ratifies the MERGED text. Recorded so the ratified text stays
+distinguishable from the first draft in the 18.27 audit path):
+
+- Review round 1 (`122c8f3`): §6.c recede criterion gained the effect-size recession
+  condition (ii) with the lost-power counterexample; the §7 powering table gained the
+  two-frame columns (arm-vs-arm claim read vs corpus-anchor sweep context) and the
+  downward-tail pricing; §6.a gained the Welch input-sourcing split and the routed
+  entropy-variance contract (entropy claims unjudgeable-as-recorded until it lands).
+- Review round 2 (this revision): the §3.4/§7 alibi upward ceiling qualified as
+  proxy-denominator-conditional (30/30 vs 7/8 fires — the §6.a test runs on actual arm
+  denominators); the §7 table gained the frame-attempt, corroboration-channel,
+  co-present-departure, and entropy-pending rows; this record added.
+
 ---
 
 ## 10. Method + reproduction (all $0 against committed bytes, offline)
@@ -786,6 +816,21 @@ pooled_z(0, 136, 1, 136)   # conversion downward tail          -> -1.002 (not li
 # §6.c the lost-power non-recede counterexample (why recession condition (ii) exists):
 pooled_z(23, 59, 13, 59)   # champion arm                      -> +1.999 (fires; effect +0.170)
 pooled_z(12, 30, 13, 59)   # ablated arm, floor satisfied      -> +1.783 (effect +0.180 — GREW; not a recede)
+
+# §3.4/§7 the proxy-denominator conditionality (actual denominators re-derive power):
+pooled_z(30, 30, 7, 8)     # alibi upward, higher-alibi arm    -> +1.962 (fires)
+
+# §7 the frame-attempt / corroboration / co-present-departure rows:
+pooled_z(151, 179, 136, 179)  # frame-attempt up, arm vs arm   -> +1.988
+pooled_z(119, 179, 136, 179)  # frame-attempt down, arm vs arm -> -1.985
+pooled_z(150, 179, 415, 541)  # frame-attempt up vs corpus     -> +2.000
+pooled_z(124, 179, 415, 541)  # frame-attempt down vs corpus   -> -1.988
+pooled_z(10, 13, 5, 13)    # corroboration up, arm vs arm      -> +1.985
+pooled_z(0, 13, 5, 13)     # corroboration down, arm vs arm    -> -2.488
+pooled_z(8, 13, 13, 46)    # corroboration up vs corpus        -> +2.213
+pooled_z(0, 13, 13, 46)    # corroboration down vs corpus      -> -2.171
+pooled_z(4, 203, 0, 203)   # co-present departure, arm vs arm  -> +2.010
+pooled_z(2, 203, 0, 599)   # co-present departure vs corpus    -> +2.432
 
 # Fisher r-to-z (§5, §6.a, §7):
 def fisher_z(r1, n1, r2, n2):
