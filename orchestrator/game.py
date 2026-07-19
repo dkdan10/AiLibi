@@ -46,6 +46,7 @@ from agents.strategic.prompts import (
     build_prompt_renderers,
     resolve_prompt_set,
 )
+from agents.strategic.prompts.loader import impostor_roll_call_enabled
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.actions import Action
@@ -360,6 +361,32 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 }
 
 
+# Task 18.10 (the impostor-answer template arm): the VARIANT version registry,
+# served by :func:`prompt_versions_for_set` ONLY while the default-OFF
+# ``impostor_roll_call_enabled`` lever is ON. The variant swaps the two
+# impostor-facing templates for their ``*_roll_call.j2`` siblings (authored
+# only in the ``qwen3_6_27b`` set), so exactly those two keys carry variant
+# stamps; ``crewmate_report`` / ``vote_ballot`` render the same committed v3
+# bodies and keep their v3 stamps. The variant stamps follow the
+# ``<template>.<set>.<version>`` convention with the template component naming
+# the actual variant FILE (``impostor_report_roll_call``) on its OWN v1
+# lineage: a variant body can never share a stamp with any default
+# ``impostor_report.qwen3_6_27b.vN`` body, past or future — the provenance
+# separation audits/audit-phase-17-absence-gate.md Ruling 3(d) requires when
+# impostor bytes move (the bar re-reads on the new bytes, distinguished by
+# stamp). If the 18.11 gate rules SHIP, Task 18.12 flips these values into
+# :data:`PROMPT_VERSION_SETS` as the default-served entries; until then the
+# default registry above is untouched and committed recordings resolve
+# through it byte-identically.
+IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
+    "qwen3_6_27b": {
+        **_bespoke_versions("qwen3_6_27b", version="v3"),
+        "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
+        "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v1",
+    },
+}
+
+
 def prompt_versions_for_set(
     prompt_set: str | None = None,
     *,
@@ -372,9 +399,32 @@ def prompt_versions_for_set(
     :data:`PROMPT_VERSION_SETS`. An unregistered set raises :class:`ValueError`
     -- no silent fallback (AGENTS.md §"No silent fallbacks"). With the default
     (9B) set this returns :data:`DEFAULT_PROMPT_VERSIONS` byte-identically.
+
+    The Task 18.10 impostor-answer lever moves provenance WITH the rendered
+    bytes: while :func:`agents.strategic.prompts.loader.impostor_roll_call_enabled`
+    reads ON from the same ``env``, the lookup is served from
+    :data:`IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` instead, so recordings made
+    under the variant templates stamp the variant versions (recorded
+    ``prompt_versions`` come from THIS registry, never from the loader — a
+    lever read here and not in :func:`build_default_meeting_runner`'s renderer
+    binding, or vice versa, is exactly the render-one-stamp-another failure
+    this pairing exists to prevent). Lever ON with a set that has no variant
+    entry raises :class:`ValueError` — the loader has no variant templates for
+    it either, and there is no silent fallback.
     """
 
     name = resolve_prompt_set(prompt_set, env=env)
+    if impostor_roll_call_enabled(env):
+        try:
+            return IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS[name]
+        except KeyError as exc:
+            known = ", ".join(sorted(IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS))
+            raise ValueError(
+                f"Prompt set {name!r} has no impostor-answer variant registry "
+                "entry; the Task 18.10 lever (AILIBI_IMPOSTOR_ROLL_CALL) is "
+                f"only registered for: {known} — unset the lever or select a "
+                "variant-capable set"
+            ) from exc
     try:
         return PROMPT_VERSION_SETS[name]
     except KeyError as exc:
@@ -2746,6 +2796,7 @@ __all__ = [
     "HEADLESS_MEETING_DEADLINES",
     "HeadlessGame",
     "HeadlessGameResult",
+    "IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS",
     "MeetingArtifacts",
     "MeetingAwareAgent",
     "MeetingPacingAgent",
