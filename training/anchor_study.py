@@ -183,6 +183,25 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _corpus_replays_sha256(corpus_dir: Path) -> str:
+    """One digest over the corpus's recorded game bytes (sorted filenames).
+
+    Per-file sha256 digests folded in sorted-filename order, so the substrate
+    sha moves when ANY replay byte moves — even a refresh that (wrongly)
+    leaves ``MANIFEST.md``/``splits.json`` untouched (Codex review on
+    PR #292): the filtered-BC anchor is fitted FROM these bytes, so their
+    identity is part of the substrate, not a workflow assumption.
+    """
+
+    digest = hashlib.sha256()
+    for path in sorted(corpus_dir.glob("replay-seed-*.jsonl")):
+        digest.update(path.name.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(_sha256_hex(path.read_bytes()).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 def compute_substrate_sha(
     corpus_dir: Path = CORPUS_DIR, *, baseline_id: str = BAKEOFF_BASELINE_ID
 ) -> str:
@@ -196,8 +215,11 @@ def compute_substrate_sha(
 
     * the baseline id the selection floors are keyed by,
     * content digests of the corpus ``MANIFEST.md`` + ``splits.json`` (the
-      recorded substrate: model, prompt versions, lever slate, git shas, and
-      the by-game split rule — any re-record moves these bytes), and
+      recorded substrate's provenance: model, prompt versions, lever slate,
+      git shas, and the by-game split rule) AND of the recorded game bytes
+      themselves (:func:`_corpus_replays_sha256` — the fit source; any
+      re-record or byte drift moves the sha even if the metadata files were
+      wrongly left untouched), and
     * the ``flags_per_meeting`` floor value this study filters against (the
       floor substrate; a floor re-pin without a corpus re-record still moves
       the sha through the committed constant).
@@ -213,6 +235,7 @@ def compute_substrate_sha(
         "corpus_manifest_sha256": _sha256_hex(
             (corpus_dir / "MANIFEST.md").read_bytes()
         ),
+        "corpus_replays_sha256": _corpus_replays_sha256(corpus_dir),
         "corpus_set": corpus_dir.name,
         "corpus_splits_sha256": _sha256_hex((corpus_dir / "splits.json").read_bytes()),
         "flags_per_meeting_floor": HIGH_FLAG_FLOOR,
@@ -393,6 +416,7 @@ def walk_corpus_game(
     decisions: list[CorpusDecision] = []
     offmenu = 0
     winner: WinnerSide | None = None
+    visited_meeting_ticks: set[int] = set()
     last_events: tuple[EngineEvent, ...] = ()
 
     # The observation audit is routed to the null device exactly like the
@@ -402,9 +426,24 @@ def walk_corpus_game(
     )
     try:
         for entry in tick_entries:
-            recorded_by_actor = {
-                str(raw["actor"]): raw for raw in entry.actions if "actor" in raw
-            }
+            recorded_by_actor: dict[str, Mapping[str, object]] = {}
+            for raw in entry.actions:
+                actor = raw.get("actor")
+                if not isinstance(actor, str):
+                    raise CorpusWalkError(
+                        f"seed {seed}: tick {entry.tick} carries an action row "
+                        f"without a string actor: {dict(raw)!r}"
+                    )
+                if actor in recorded_by_actor:
+                    # The orchestrator submits exactly one action per living
+                    # actor; a duplicate row is corruption, and duplicate
+                    # ``wait`` rows may not trip the state-hash check — never
+                    # collapse them silently (Codex review on PR #292).
+                    raise CorpusWalkError(
+                        f"seed {seed}: tick {entry.tick} carries duplicate "
+                        f"action rows for actor {actor!r}"
+                    )
+                recorded_by_actor[actor] = raw
             for pid in impostor_ids:
                 raw_action = recorded_by_actor.get(pid)
                 if raw_action is None:
@@ -489,6 +528,7 @@ def walk_corpus_game(
                     f"seed {seed}: tick {entry.tick} entered MEETING but the "
                     "replay carries no meeting row for that tick"
                 )
+            visited_meeting_ticks.add(entry.tick)
             if meeting_entry.state_hash_before != actual:
                 raise CorpusWalkError(
                     f"seed {seed}: meeting at tick {entry.tick} recorded "
@@ -519,13 +559,37 @@ def walk_corpus_game(
     finally:
         observation_service.close()
 
-    if game_end is not None and game_end.winner is not None:
-        if winner is not None and winner != game_end.winner:
-            raise CorpusWalkError(
-                f"seed {seed}: reconstructed winner {winner!r} != recorded "
-                f"game_over winner {game_end.winner!r}"
-            )
-        winner = game_end.winner
+    # The walk's charter is VERIFIED committed bytes: a corpus game is always
+    # terminal, so a missing/void ``game_over`` row or a tick stream that never
+    # reached GAME_OVER is a truncated or partial replay — fail loud instead of
+    # silently entering a ``winner=None`` game into the filter and the fit
+    # (Codex review on PR #292).
+    if game_end is None or game_end.winner is None:
+        raise CorpusWalkError(
+            f"seed {seed}: replay carries no terminal game_over winner "
+            "(truncated or partial recording)"
+        )
+    if winner is None:
+        raise CorpusWalkError(
+            f"seed {seed}: the reconstructed walk never reached GAME_OVER "
+            "(truncated tick stream)"
+        )
+    if winner != game_end.winner:
+        raise CorpusWalkError(
+            f"seed {seed}: reconstructed winner {winner!r} != recorded "
+            f"game_over winner {game_end.winner!r}"
+        )
+
+    # Every meeting row must have been visited (state-hash-verified) by the
+    # walk: a stale extra row at a tick the engine never entered could move
+    # the flags census — and therefore ``high_flag`` and the fit set — without
+    # ever being verified (Codex review on PR #292).
+    unvisited = sorted(set(meeting_by_tick) - visited_meeting_ticks)
+    if unvisited:
+        raise CorpusWalkError(
+            f"seed {seed}: replay carries meeting rows at ticks {unvisited!r} "
+            "the reconstructed walk never entered (stale or corrupted rows)"
+        )
 
     meetings = len(meeting_by_tick)
     persisted_flags = sum(
@@ -1150,7 +1214,13 @@ def _freeze_filtered_bc_anchor(
 
 def _filter_summary(facts: Sequence[CorpusGameFacts]) -> CorpusFilterSummary:
     qualifying = [game for game in facts if game.qualifies]
-    fit_decisions = sum(game.decisions for game in qualifying)
+    # Only ON-MENU decisions carry likelihood into the fit
+    # (:func:`fit_filtered_bc_anchor` excludes off-menu FSM choices), so the
+    # frozen census counts exactly the rows the fit consumed (Codex review on
+    # PR #292); the off-menu tally stays reported beside it.
+    fit_decisions = sum(
+        game.decisions - game.fsm_offmenu_decisions for game in qualifying
+    )
     return CorpusFilterSummary(
         games_walked=len(facts),
         crew_winning_games=sum(1 for game in facts if game.crew_winning),
@@ -1163,7 +1233,8 @@ def _filter_summary(facts: Sequence[CorpusGameFacts]) -> CorpusFilterSummary:
         total_decisions=sum(game.decisions for game in facts),
         fit_decisions=fit_decisions,
         fit_weight_total=math.fsum(
-            game.sample_weight * game.decisions for game in qualifying
+            game.sample_weight * (game.decisions - game.fsm_offmenu_decisions)
+            for game in qualifying
         ),
         fsm_offmenu_decisions=sum(game.fsm_offmenu_decisions for game in facts),
         high_flag_floor=HIGH_FLAG_FLOOR,

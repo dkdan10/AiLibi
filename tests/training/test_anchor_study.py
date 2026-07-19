@@ -66,6 +66,25 @@ def test_substrate_sha_is_stable_and_moves_with_the_corpus_bytes(
     assert compute_substrate_sha(drifted_dir) != committed
 
 
+def test_substrate_sha_moves_with_the_replay_bytes_alone(tmp_path: Path) -> None:
+    # A corpus refresh that changes RECORDED GAME bytes but (wrongly) leaves
+    # MANIFEST.md/splits.json untouched must still move the sha — the
+    # filtered-BC anchor is fitted from the replay bytes (Codex review on
+    # PR #292).
+    def build(replay_suffix: str) -> Path:
+        corpus = tmp_path / f"corpus{len(replay_suffix)}"
+        corpus.mkdir()
+        shutil.copy(CORPUS_DIR / "MANIFEST.md", corpus / "MANIFEST.md")
+        shutil.copy(CORPUS_DIR / "splits.json", corpus / "splits.json")
+        replay = _SEED_1000_REPLAY.read_text() + replay_suffix
+        (corpus / "replay-seed-1000.jsonl").write_text(replay)
+        return corpus
+
+    pristine = build("")
+    drifted = build("\n")
+    assert compute_substrate_sha(pristine) != compute_substrate_sha(drifted)
+
+
 def test_corpus_seeds_lists_the_committed_150_games() -> None:
     seeds = corpus_seeds()
     assert len(seeds) == 150
@@ -152,6 +171,50 @@ def test_walk_fails_loud_when_an_alive_impostor_action_is_missing(
     drifted.write_text("\n".join(lines) + "\n")
     with pytest.raises(CorpusWalkError, match="no recorded action"):
         walk_corpus_game(drifted)
+
+
+def test_walk_fails_loud_on_a_truncated_replay_without_game_over(
+    tmp_path: Path,
+) -> None:
+    # A replay missing its terminal game_over row is a partial recording; the
+    # walk must refuse it rather than enter a winner-less game into the
+    # filter/fit (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    assert json.loads(lines[-1])["kind"] == "game_over"
+    truncated = tmp_path / "replay-seed-1000.jsonl"
+    truncated.write_text("\n".join(lines[:-1]) + "\n")
+    with pytest.raises(CorpusWalkError, match="no terminal game_over"):
+        walk_corpus_game(truncated)
+
+
+def test_walk_fails_loud_on_an_unvisited_meeting_row(tmp_path: Path) -> None:
+    # A stale extra meeting row at a tick the engine never enters is never
+    # hash-verified, yet it would move the flags census — the walk must
+    # refuse it (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    meeting_line = next(
+        line for line in lines if json.loads(line).get("kind") == "meeting"
+    )
+    stale = json.loads(meeting_line)
+    stale["tick"] = 1  # a PLAY tick the walk never enters as a meeting
+    corrupted = tmp_path / "replay-seed-1000.jsonl"
+    corrupted.write_text("\n".join(lines[:-1] + [json.dumps(stale), lines[-1]]) + "\n")
+    with pytest.raises(CorpusWalkError, match="never entered"):
+        walk_corpus_game(corrupted)
+
+
+def test_walk_fails_loud_on_duplicate_action_rows(tmp_path: Path) -> None:
+    # The orchestrator submits one action per living actor; a duplicated row
+    # (which duplicate ``wait``s may hide from the hash check) must raise
+    # (Codex review on PR #292).
+    lines = _SEED_1000_REPLAY.read_text().splitlines()
+    first = json.loads(lines[0])
+    first["actions"].append(first["actions"][0])
+    lines[0] = json.dumps(first)
+    corrupted = tmp_path / "replay-seed-1000.jsonl"
+    corrupted.write_text("\n".join(lines) + "\n")
+    with pytest.raises(CorpusWalkError, match="duplicate action rows"):
+        walk_corpus_game(corrupted)
 
 
 # --------------------------------------------------------------------------- #
