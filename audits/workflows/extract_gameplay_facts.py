@@ -485,7 +485,15 @@ def _vent_records_from_recorded_flags(
     for flag in entry.contradictions:
         if flag.kind not in ("vent_sighting", "alibi_vs_physical"):
             continue
-        speaker = vent_obs_speaker.get(flag.event_a_id or "")
+        # The vent observation may sit on EITHER event id: _build_contradiction
+        # canonicalises the pair lexicographically, so a placement flag pairing
+        # an AlibiClaim (":claim:") against a SawVentObservation (":obs:") can
+        # land the observation on event_b (4 of the FULL probe's 28 placement
+        # flags do). An event_a-only lookup would skip exactly the
+        # later-record placement quotes this parser exists to preserve.
+        speaker = vent_obs_speaker.get(flag.event_a_id or "") or vent_obs_speaker.get(
+            flag.event_b_id or ""
+        )
         if speaker is None:
             continue
         pattern = (
