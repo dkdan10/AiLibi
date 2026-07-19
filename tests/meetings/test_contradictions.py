@@ -1529,63 +1529,36 @@ class TestCrossSpeakerConflictStrength:
 
 
 class TestWhereaboutsInteriorFlagsResolver:
-    """The Task 18.9 lever-1 resolver -- DEFAULT-OFF, the 16.8 clone.
+    """The Task 18.9 lever-1 resolver -- UNCONDITIONAL since the Task-18.12
+    baseline-6 record.
 
-    Mirrors :class:`tests.agents.test_absence_prior.TestAbsencePriorResolver`:
-    an unset / empty / unrecognised value reads ``False`` so
-    :func:`detect_contradictions` re-derives the committed substrate
-    byte-identically; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed)
-    reads ``True``. ``env=None`` falls back to the live process environment.
+    Retired to the always-ON substrate (the 16.17 move, on the CREW-ONLY
+    graduation slate): the resolver ignores its ``env`` argument and always
+    returns ``True``, so :func:`detect_contradictions` always applies the
+    endpoint-band exemption. ``ENV_WHEREABOUTS_INTERIOR_FLAGS`` is retained for
+    signature/stamp-key provenance but no longer read.
     """
 
-    def test_default_off_on_an_empty_mapping(self) -> None:
-        assert whereabouts_interior_flags_enabled(env={}) is False
-
-    def test_default_off_when_the_key_is_absent(self) -> None:
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert whereabouts_interior_flags_enabled() is True
+        assert whereabouts_interior_flags_enabled(env={}) is True
         assert (
             whereabouts_interior_flags_enabled(env={"AILIBI_SOMETHING_ELSE": "1"})
-            is False
+            is True
         )
+        monkeypatch.delenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, raising=False)
+        assert whereabouts_interior_flags_enabled() is True
+        assert whereabouts_interior_flags_enabled(env=None) is True
 
-    @pytest.mark.parametrize(
-        "value",
-        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
-    )
-    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
-        self, value: str
-    ) -> None:
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # Any value -- truthy, falsy, or junk -- reads ON.
         assert (
             whereabouts_interior_flags_enabled(
                 env={ENV_WHEREABOUTS_INTERIOR_FLAGS: value}
             )
             is True
         )
-
-    @pytest.mark.parametrize(
-        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
-    )
-    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
-        # An allow-list membership test, not a truthiness cast.
-        assert (
-            whereabouts_interior_flags_enabled(
-                env={ENV_WHEREABOUTS_INTERIOR_FLAGS: value}
-            )
-            is False
-        )
-
-    def test_env_none_reads_the_live_process_environment_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, "1")
-        assert whereabouts_interior_flags_enabled() is True
-        assert whereabouts_interior_flags_enabled(env=None) is True
-
-    def test_env_none_reads_the_live_process_environment_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, raising=False)
-        assert whereabouts_interior_flags_enabled() is False
-        assert whereabouts_interior_flags_enabled(env=None) is False
 
     def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
         env = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "on", "AILIBI_OTHER": "x"}
@@ -1596,55 +1569,28 @@ class TestWhereaboutsInteriorFlagsResolver:
 
 
 class TestVentPlacementContradictionsResolver:
-    """The Task 18.9 lever-2 resolver -- DEFAULT-OFF, the same 16.8 clone."""
+    """The Task 18.9 lever-2 resolver -- UNCONDITIONAL since the Task-18.12
+    baseline-6 record (graduated on the same CREW-ONLY slate)."""
 
-    def test_default_off_on_an_empty_mapping(self) -> None:
-        assert vent_placement_contradictions_enabled(env={}) is False
-
-    def test_default_off_when_the_key_is_absent(self) -> None:
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert vent_placement_contradictions_enabled() is True
+        assert vent_placement_contradictions_enabled(env={}) is True
         assert (
             vent_placement_contradictions_enabled(env={"AILIBI_SOMETHING_ELSE": "1"})
-            is False
+            is True
         )
+        monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
+        assert vent_placement_contradictions_enabled() is True
+        assert vent_placement_contradictions_enabled(env=None) is True
 
-    @pytest.mark.parametrize(
-        "value",
-        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
-    )
-    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
-        self, value: str
-    ) -> None:
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
         assert (
             vent_placement_contradictions_enabled(
                 env={ENV_VENT_PLACEMENT_CONTRADICTIONS: value}
             )
             is True
         )
-
-    @pytest.mark.parametrize(
-        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
-    )
-    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
-        assert (
-            vent_placement_contradictions_enabled(
-                env={ENV_VENT_PLACEMENT_CONTRADICTIONS: value}
-            )
-            is False
-        )
-
-    def test_env_none_reads_the_live_process_environment_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, "1")
-        assert vent_placement_contradictions_enabled() is True
-        assert vent_placement_contradictions_enabled(env=None) is True
-
-    def test_env_none_reads_the_live_process_environment_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
-        assert vent_placement_contradictions_enabled() is False
-        assert vent_placement_contradictions_enabled(env=None) is False
 
     def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
         env = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "on", "AILIBI_OTHER": "x"}
@@ -1653,14 +1599,15 @@ class TestVentPlacementContradictionsResolver:
         assert vent_placement_contradictions_enabled(env=env) is True
         assert env == before
 
-    def test_the_two_levers_are_independent_keys(self) -> None:
-        # Each lever reads its OWN key; setting one never flips the other.
+    def test_both_levers_are_unconditional_since_baseline_6(self) -> None:
+        # Both graduated at the 18.12 record: neither reads its key any more, so
+        # every env cell (including the other lever's key) resolves ON.
         env_w = {ENV_WHEREABOUTS_INTERIOR_FLAGS: "1"}
         env_v = {ENV_VENT_PLACEMENT_CONTRADICTIONS: "1"}
         assert whereabouts_interior_flags_enabled(env=env_w) is True
-        assert vent_placement_contradictions_enabled(env=env_w) is False
+        assert vent_placement_contradictions_enabled(env=env_w) is True
         assert vent_placement_contradictions_enabled(env=env_v) is True
-        assert whereabouts_interior_flags_enabled(env=env_v) is False
+        assert whereabouts_interior_flags_enabled(env=env_v) is True
 
 
 # --- Task 18.9 lever 1: the endpoint-band whereabouts exemption -------------

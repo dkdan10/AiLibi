@@ -44,13 +44,15 @@ A meeting is one ordered ``transcript.turns`` list followed by a vote:
    decay) stays the orchestrator-owned post-meeting absorb, exactly as
    the 9.8 design wired it.
 
-Roll-call round (Task 18.8, default-OFF)
-========================================
+Roll-call round (Task 18.8, unconditional since baseline 6)
+===========================================================
 
-Task 18.8 adds a DEFAULT-OFF roll-call round between the opt-in phase
-(PHASE 3) and voting, behind :func:`roll_call_round_enabled` (the 16.8
-``absence_prior_enabled`` lever pattern -- env-gated, not retired). ON,
-every living player who has not yet spoken takes one terminal
+Task 18.8 adds a roll-call round between the opt-in phase (PHASE 3) and
+voting, behind :func:`roll_call_round_enabled` -- UNCONDITIONAL since the
+Task-18.12 baseline-6 record (the CREW-ONLY graduation slate; it was
+default-OFF and env-gated at Wave 1, retired to always-on once baseline 6
+adopted it, mirroring the 16.17 slate). Every living player who has not yet
+spoken takes one terminal
 ``opt_in``-surface turn in ascending player-id order, executing the
 turn-taking routing of ``audits/audit-phase-17-absence-gate.md``
 Ruling 3(a). The measured cost is honest and large
@@ -95,7 +97,6 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -796,32 +797,33 @@ class DefaultedCall:
     rendered_vote_max: float | None = None
 
 
-# Task 18.8 roll-call-round lever — DEFAULT-OFF (the 16.8 ``absence_prior_enabled``
-# pattern: env-gated, NOT retired). Deliberately NOT registered in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` yet — Task 18.11 wires the
-# substrate stamp (with the other three Phase-18 lever flags) before any probe
-# seed records; Task 18.12 is the graduation flip if the gate rules SHIP.
+# Task 18.8 roll-call-round lever — UNCONDITIONAL since the Task-18.12 baseline-6
+# record (the meeting-layer graduation slate, audits/audit-phase-18-baseline-6.md
+# §0.1; the CREW-ONLY ruling of audits/audit-phase-18-meeting-gate.md §9). The
+# lever was adopted by the baseline-6 re-record, so — mirroring the
+# 14.9/14.12/15.7/16.17 graduations — it is now the default substrate rather than
+# an env-gated toggle: :meth:`MeetingManager.run` always inserts the roll-call
+# round. This is byte-identical to the baseline-6 recording (which ran the lever
+# ON), and it lets the committed set reconstruct/serve under a BARE environment
+# (no AILIBI_* export). The lever is stamped unconditionally ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is a
+# legacy (baseline-5-or-earlier) artifact that fails loud (no cross-substrate
+# replay). ``ENV_ROLL_CALL_ROUND`` is retained (no longer read) for the stamp
+# key's naming provenance and backward-compatible imports.
 ENV_ROLL_CALL_ROUND: Final[str] = "AILIBI_ROLL_CALL_ROUND"
-_ROLL_CALL_ROUND_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.8 roll-call-round lever is ON. DEFAULT OFF.
+    """Whether the Task 18.8 roll-call-round lever is ON — now always True.
 
-    Reads :data:`ENV_ROLL_CALL_ROUND` from ``env`` (defaulting to the real
-    process environment), mirroring the 16.8
-    :func:`agents.memory.beliefs.absence_prior_enabled` resolver it clones
-    (itself the 16.4 ``hard_evidence_gate`` live-toggle pattern). Default OFF:
-    an unset / empty / unrecognised value is ``False`` so
-    :meth:`MeetingManager.run` keeps the exact three-phase turn allocation of
-    the committed baseline-5 substrate -- the round is path-gated at its single
-    call site in ``run``, so a lever-OFF meeting takes the identical code path
-    (and bytes) as before the lever existed (``scripts/verify_samples.sh`` and
-    the 179-meeting committed-bytes reconstruction stay clean). Accepts
-    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests toggle
-    the lever deterministically without mutating ``os.environ``.
+    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
+    applied to this lever once baseline 6 adopted it per the CREW-ONLY graduation
+    slate — the probe's live crew roll-call coverage cleared the ratified >= 0.60
+    bar, audits/audit-phase-18-meeting-gate.md §7). The round is inserted at
+    exactly ONE call site in :meth:`MeetingManager.run` (after the opt-in phase,
+    before ballots). The ``env`` argument is accepted and ignored (retained so the
+    call site and the substrate stamp read one source of truth without a signature
+    churn).
 
     ON inserts the roll-call round after the opt-in phase and before ballots:
     every living player who has not yet spoken takes exactly one terminal
@@ -838,16 +840,13 @@ def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
     player-meetings never speak, so the round adds +3.13 turn calls/meeting
     (496 -> 1057 turn calls over the samples denominator, 2.13x), ~+36% meeting
     LLM calls -- the number the 18.11 gate memo and the 18.13 duration plan
-    both quote. The live measurement against the ratified bar is Task 18.11
-    (the meeting-layer gate); the graduation flip, if ruled, is Task 18.12 (the
+    both quote. The live measurement against the ratified bar was Task 18.11
+    (the meeting-layer gate); the graduation flip is this record, Task 18.12 (the
     baseline-6 adopting record).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_ROLL_CALL_ROUND, "").strip().lower()
-        in _ROLL_CALL_ROUND_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 class MeetingManager:

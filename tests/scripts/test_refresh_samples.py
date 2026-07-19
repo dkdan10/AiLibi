@@ -181,11 +181,12 @@ def test_dry_run_default_provider_is_anthropic() -> None:
 def test_dry_run_featherless_provider_echoes_substrate() -> None:
     # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
     # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
-    # the substrate provenance so the locked tuple is never silent (AGENTS.md
-    # "no silent fallbacks"). All five levers are unconditionally ON (the four
-    # 13.5 levers since Task 14.9, the Task-14.10 evidence_quality_lift lever
-    # since the 14.12 close), so no substrate env vars are exported and the echo
-    # states the unconditional substrate.
+    # the substrate provenance so the ruled slate is never silent (AGENTS.md
+    # "no silent fallbacks"). Since the Task-18.12 baseline-6 record the four
+    # meeting-layer levers graduated unconditional ON beside the earlier
+    # graduations and impostor_roll_call stays default-OFF (the CREW-ONLY ruling),
+    # so no substrate env vars are exported and the echo states the baseline-6
+    # slate.
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
@@ -197,8 +198,17 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
     assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
     assert (
-        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
-        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
+        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
+        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
+        "vent_placement_contradictions, absence_prior graduated at Task 18.12), "
+        "impostor_roll_call default-OFF (CREW-ONLY ruling)" in proc.stdout
+    )
+    # Task 18.12: the dry-run also describes the new substrate-lever preflight, so
+    # the ruled shipped/unshipped state the real record enforces is never silent.
+    assert (
+        "[dry-run] substrate-lever preflight: would require the live lever slate "
+        "to equal the ruled baseline-6 state (four meeting-layer levers ON, "
+        "impostor_roll_call OFF) and refuse a stale AILIBI_* export" in proc.stdout
     )
 
 
@@ -426,9 +436,10 @@ def test_dry_run_featherless_echoes_model_set_coupling() -> None:
 
 
 def test_featherless_refresh_accepts_locked_substrate() -> None:
-    # Task 14.12: with the locked prompt set, the substrate guard passes -- no
-    # lever env needed (all five levers are unconditional). Use --dry-run so the
-    # test never spends.
+    # Task 14.12 / 18.12: with the locked prompt set the substrate guard passes --
+    # no lever env needed (the meeting-layer levers are unconditional since baseline
+    # 6 and impostor_roll_call stays default-OFF). Use --dry-run so the test never
+    # spends.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
     env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
@@ -436,8 +447,10 @@ def test_featherless_refresh_accepts_locked_substrate() -> None:
     assert proc.returncode == 0
     assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
     assert (
-        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
-        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
+        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
+        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
+        "vent_placement_contradictions, absence_prior graduated at Task 18.12), "
+        "impostor_roll_call default-OFF (CREW-ONLY ruling)" in proc.stdout
     )
 
 

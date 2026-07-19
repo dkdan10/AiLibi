@@ -98,7 +98,7 @@ from meetings.transcript import (
     _turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
-from orchestrator.replay import _TOGGLEABLE_LEVER_RESOLVERS  # noqa: PLC2701
+from orchestrator.replay import _RETIRED_ALWAYS_ON_LEVERS  # noqa: PLC2701
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate (inclusive)
 _NEUTRAL = 0.50  # the neutral suspicion prior
@@ -164,57 +164,34 @@ def _strong_flag(subject: str) -> ContradictionRef:
 
 
 class TestAbsencePriorResolver:
-    """The Task-16.8 lever resolver -- DEFAULT-OFF, the 16.4 live-toggle pattern.
+    """The Task-16.8 lever resolver -- UNCONDITIONAL since the Task-18.12
+    baseline-6 record.
 
-    Clones :func:`agents.memory.beliefs.hard_evidence_gate_enabled` (itself the
-    retired 13.5 / 14.10 / 15.5 pattern): an unset / empty / unrecognised value
-    reads ``False`` so the pre-vote fold stays byte-identical to the committed
-    baseline-5 substrate; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed)
-    reads ``True``. ``env=None`` falls back to the live process environment.
+    Retired to the always-ON substrate (the 16.17 move): the Phase-16 slate's
+    recorded STAY-OFF was re-routed to Phase 18 by
+    audits/audit-phase-17-absence-gate.md Ruling 3, and the 18.11 meeting-layer
+    gate cleared the ratified bar beside the 18.8 roll-call elicitation, so the
+    CREW-ONLY ruling graduated it. The resolver ignores its ``env`` argument and
+    always returns ``True``, so the pre-vote absent-set fold is the default
+    behavior. ``ENV_ABSENCE_PRIOR`` is retained for signature/stamp-key provenance
+    but no longer read.
     """
 
-    def test_default_off_on_an_empty_mapping(self) -> None:
-        # The DEFAULT: a bare env cell resolves OFF, so no absent subject lifts.
-        assert absence_prior_enabled(env={}) is False
-
-    def test_default_off_when_the_key_is_absent(self) -> None:
-        # An unrelated export leaves the lever OFF -- only its own key counts.
-        assert absence_prior_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is False
-
-    @pytest.mark.parametrize(
-        "value",
-        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
-    )
-    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
-        self, value: str
-    ) -> None:
-        # Every documented truthy token, plus case + surrounding-whitespace
-        # variants (the resolver strips then lowercases before the set test).
-        assert absence_prior_enabled(env={ENV_ABSENCE_PRIOR: value}) is True
-
-    @pytest.mark.parametrize(
-        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
-    )
-    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
-        # Explicit falsy tokens, the empty string, and junk all read OFF: the
-        # resolver is an allow-list membership test, not a truthiness cast.
-        assert absence_prior_enabled(env={ENV_ABSENCE_PRIOR: value}) is False
-
-    def test_env_none_reads_the_live_process_environment_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # ``env=None`` (and the bare call) reads ``os.environ`` LIVE.
-        monkeypatch.setenv(ENV_ABSENCE_PRIOR, "1")
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env can turn it off any more -- every mapping, and the ambient
+        # process environment, resolves ON.
+        assert absence_prior_enabled() is True
+        assert absence_prior_enabled(env={}) is True
+        assert absence_prior_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is True
+        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
         assert absence_prior_enabled() is True
         assert absence_prior_enabled(env=None) is True
 
-    def test_env_none_reads_the_live_process_environment_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # With the export deleted the live read is OFF -- the default.
-        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        assert absence_prior_enabled() is False
-        assert absence_prior_enabled(env=None) is False
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # The ``env`` argument is accepted and ignored (retained for signature
+        # stability); any value -- truthy, falsy, or junk -- reads ON.
+        assert absence_prior_enabled(env={ENV_ABSENCE_PRIOR: value}) is True
 
     def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
         # The resolver never writes its env argument (pure read), so two calls on
@@ -225,12 +202,11 @@ class TestAbsencePriorResolver:
         assert absence_prior_enabled(env=env) is True
         assert env == before
 
-    def test_resolver_is_the_registered_toggleable_lever(self) -> None:
-        # The FOURTH live entry in the replay registry (16.4 -> 16.5 -> 16.6 ->
-        # 16.8 chain order); the registry suite owns the ordering pin, this is a
-        # light identity check that the resolver object is the one registered.
-        registered = dict(_TOGGLEABLE_LEVER_RESOLVERS)
-        assert registered["absence_prior"] is absence_prior_enabled
+    def test_resolver_is_retired_to_always_on(self) -> None:
+        # Graduated at the 18.12 baseline-6 record: the lever moved out of the
+        # replay toggle table into the retired-always-on tuple (stamped True via
+        # ``dict.fromkeys``; no resolver identity binding survives).
+        assert "absence_prior" in _RETIRED_ALWAYS_ON_LEVERS
 
 
 # --------------------------------------------------------------------------- #
@@ -801,30 +777,24 @@ class TestAbsenceFlagIndependence:
 # --------------------------------------------------------------------------- #
 
 
-class TestAbsenceOffPathByteIdentity:
-    """Lever OFF (or an empty absent set) is byte-identical to the pre-16.8 fold.
+class TestAbsenceEmptySetIsANoOp:
+    """An EMPTY absent set is byte-identical to the pre-16.8 fold.
 
-    The lever is the ONLY switch: OFF the fold path is not even entered for an
-    absence-only meeting, and the emitted graph is the input graph by identity; ON
-    the rows change (0.58 rows appear).
+    The lever graduated to unconditional-ON at the Task-18.12 baseline-6 record,
+    so the env is no longer a switch. The surviving no-op path is the EMPTY absent
+    set: with nothing to lift, the fold produces no absence rows and the graph
+    early-return hands back the input by identity; a NON-empty absent set changes
+    the rows (0.58 rows appear -- see ``test_graph_level_on_materialises...``).
     """
 
-    def test_off_fold_with_absent_equals_the_no_absent_fold(self) -> None:
-        # (i) fold level: lever OFF with ``absent`` non-empty produces a state
-        # equal (rows + suspicion + provenance) to the no-absent fold. A seeded
-        # decaying prior + an informed bump make the comparison non-vacuous.
+    def test_empty_absent_fold_materialises_no_absence_row(self) -> None:
+        # (i) fold level: the unconditional lever with an EMPTY ``absent`` applies
+        # no delta -- the fold has nothing to lift, so no phantom absent row
+        # appears and the informed bump lands exactly. A seeded decaying prior +
+        # an informed bump make the assertion non-vacuous. (env is ignored now.)
         base = BeliefState()
         base.seed_player("p-7", suspicion=0.7, trust=0.5)
-        with_absent = apply_meeting_evidence_rules(
-            base,
-            own_id="observer",
-            accused=("p-5",),
-            phase="pre_vote",
-            pre_vote_informed=frozenset({"p-5"}),
-            absent=frozenset({"p-3"}),
-            env=_LEVER_OFF,
-        )
-        without_absent = apply_meeting_evidence_rules(
+        folded = apply_meeting_evidence_rules(
             base,
             own_id="observer",
             accused=("p-5",),
@@ -833,20 +803,20 @@ class TestAbsenceOffPathByteIdentity:
             absent=frozenset(),
             env=_LEVER_OFF,
         )
-        assert _snapshot(with_absent) == _snapshot(without_absent)
-        # No absence row OFF; the informed bump landed exactly.
-        assert "p-3" not in with_absent.known_players()
-        assert (
-            with_absent.view("p-5").suspicion == _NEUTRAL + ACCUSATION_SUSPICION_DELTA
-        )
+        # No absent subject -> no absence row; the informed bump landed exactly.
+        assert "p-3" not in folded.known_players()
+        assert folded.view("p-5").suspicion == _NEUTRAL + ACCUSATION_SUSPICION_DELTA
 
-    def test_graph_level_off_returns_the_input_tuple_by_identity(self) -> None:
-        # (ii) graph level: an absence-ONLY meeting (no flags / folds /
-        # corroborations) with the lever OFF never enters the fold path -- the
-        # early return hands back the INPUT graph tuple, by identity.
+    def test_graph_level_empty_absent_returns_the_input_tuple_by_identity(
+        self,
+    ) -> None:
+        # (ii) graph level: an absence-ONLY meeting with an EMPTY absent set (no
+        # flags / folds / corroborations) never enters the fold path -- the early
+        # return hands back the INPUT graph tuple, by identity -- even though the
+        # lever is unconditional since baseline 6.
         graph = (SuspicionEntry(player_id="p-3", suspicion=_NEUTRAL, trust=0.5),)
         evidence = MeetingBeliefEvidence(
-            accused=(), corroborated=(), contradicted=(), absent=("p-3",)
+            accused=(), corroborated=(), contradicted=(), absent=()
         )
         emitted = _suspicion_graph_with_contradictions(
             voter_id="voter",

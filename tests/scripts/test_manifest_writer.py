@@ -127,14 +127,16 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
 def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # A re-record stamps its substrate config onto the replay's game_over
     # record; the MANIFEST flags column reports the ON levers, sorted. This is
-    # the stamp -> manifest provenance path. ALL NINE levers are unconditionally
-    # ON (the four 13.5 levers since Task 14.9, the Task-14.10
+    # the stamp -> manifest provenance path. ALL THIRTEEN retired levers are
+    # unconditionally ON (the four 13.5 levers since Task 14.9, the Task-14.10
     # evidence_quality_lift lever since the Task-14.12 close, Task 15.5's
-    # reporter_exculpation since the Task-15.7 baseline-3 record, and the three
+    # reporter_exculpation since the Task-15.7 baseline-3 record, the three
     # Task-16.17 graduates — citation_gate, hard_evidence_gate,
-    # observation_id_rendering), so a bare-env recording stamps every one of them —
-    # no env export needed. (Graduated to nine at the Task-16.17 baseline-5
-    # re-record.)
+    # observation_id_rendering — and the four meeting-layer levers graduated at the
+    # Task-18.12 baseline-6 record — absence_prior, roll_call_round,
+    # whereabouts_interior_flags, vent_placement_contradictions), so a bare-env
+    # recording stamps every one of them — no env export needed. Task 18.10's
+    # impostor_roll_call stays default-OFF and is NOT listed.
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")
@@ -145,9 +147,11 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
         samples, 5, "Qwen/Qwen3.6-27B"
     )
     assert flags == (
-        "citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
+        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "vent_placement_contradictions, whereabouts_interior_flags, "
+        "witnessed_kill_evidence"
     )
     # This game_end row carries the substrate stamp but no tactical-policy stamp,
     # so the policy cell reads the FSM-default label.
@@ -164,10 +168,10 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
     # Task 14.10: the lever round-trips stamp -> read_substrate_flags ->
     # MANIFEST flags cell, so the Task-14.12 lever-ON recording
     # self-describes. The AILIBI_EVIDENCE_QUALITY_LIFT export is a no-op (the
-    # lever is unconditional), and the bare-env stamp lists all nine retired
-    # levers — including reporter_exculpation, graduated at the Task-15.7
-    # baseline-3 record, and the three Task-16.17 graduates stamped at the
-    # baseline-5 re-record.
+    # lever is unconditional), and the bare-env stamp lists all thirteen retired
+    # levers — including reporter_exculpation (graduated at the Task-15.7
+    # baseline-3 record), the three Task-16.17 graduates, and the four meeting-layer
+    # levers graduated at the Task-18.12 baseline-6 record.
     monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     samples = tmp_path / "samples"
     samples.mkdir()
@@ -177,9 +181,11 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
 
     _, _, flags, _, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3.6-27B")
     assert flags == (
-        "citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
+        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "vent_placement_contradictions, whereabouts_interior_flags, "
+        "witnessed_kill_evidence"
     )
 
 

@@ -824,58 +824,31 @@ class TestOptIn:
 
 
 class TestRollCallResolver:
-    """The Task-18.8 roll-call-round lever resolver -- DEFAULT-OFF, the 16.8
-    ``absence_prior_enabled`` live-toggle pattern (itself the 16.4
-    hard-evidence-gate pattern): an unset / empty / unrecognised value reads
-    ``False`` so :meth:`MeetingManager.run` keeps the committed three-phase
-    allocation; ``1/true/yes/on`` (case-insensitive, whitespace-trimmed) reads
-    ``True``. ``env=None`` falls back to the live process environment. The
-    resolver is NOT registered in the replay lever registry yet (Task 18.11),
-    so -- unlike the 16.8 suite -- there is no registry-identity pin here.
+    """The Task-18.8 roll-call-round lever resolver -- UNCONDITIONAL since the
+    Task-18.12 baseline-6 record.
+
+    Retired to the always-ON substrate (the 16.17 move, applied to this lever
+    once baseline 6 adopted it per the CREW-ONLY graduation slate): the resolver
+    ignores its ``env`` argument and always returns ``True``, so
+    :meth:`MeetingManager.run` always inserts the roll-call round. ``ENV_ROLL_CALL_ROUND``
+    is retained for signature/stamp-key provenance but no longer read.
     """
 
-    def test_default_off_on_an_empty_mapping(self) -> None:
-        # The DEFAULT: a bare env cell resolves OFF, so the round is skipped.
-        assert roll_call_round_enabled(env={}) is False
-
-    def test_default_off_when_an_unrelated_ailibi_key_is_set(self) -> None:
-        # An unrelated export leaves the lever OFF -- only its own key counts.
-        assert roll_call_round_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is False
-
-    @pytest.mark.parametrize(
-        "value",
-        ["1", "true", "yes", "on", "TRUE", "Yes", "On", " on ", " 1 ", "\tyes\n"],
-    )
-    def test_on_for_each_truthy_value_and_case_or_whitespace_variant(
-        self, value: str
-    ) -> None:
-        # Every documented truthy token, plus case + surrounding-whitespace
-        # variants (the resolver strips then lowercases before the set test).
-        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is True
-
-    @pytest.mark.parametrize(
-        "value", ["0", "", "garbage", "2", "no", "off", "false", "yesno", "  "]
-    )
-    def test_off_for_falsy_or_unrecognised_values(self, value: str) -> None:
-        # Explicit falsy tokens, the empty string, and junk all read OFF: the
-        # resolver is an allow-list membership test, not a truthiness cast.
-        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is False
-
-    def test_env_none_reads_the_live_process_environment_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # ``env=None`` (and the bare call the manager makes) reads ``os.environ``.
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env can turn it off any more -- every mapping, and the ambient
+        # process environment, resolves ON.
+        assert roll_call_round_enabled() is True
+        assert roll_call_round_enabled(env={}) is True
+        assert roll_call_round_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is True
+        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
         assert roll_call_round_enabled() is True
         assert roll_call_round_enabled(env=None) is True
 
-    def test_env_none_reads_the_live_process_environment_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # With the export deleted the live read is OFF -- the default.
-        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
-        assert roll_call_round_enabled() is False
-        assert roll_call_round_enabled(env=None) is False
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # The ``env`` argument is accepted and ignored (retained for signature
+        # stability); any value -- truthy, falsy, or junk -- reads ON.
+        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is True
 
     def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
         # The resolver never writes its env argument (pure read), so two calls on
