@@ -777,12 +777,15 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # suspicion theater — every game with rendered-suspicion separation now
     # carries a converted backed accusation or a contradiction flag, so the gate
     # zeroes nothing and live separation equals the frozen spec's on every seed
-    # (honest-zero census; baseline 5 gated 2/4/10/12/37/47 to 0 live).
-    for seed in ():
-        assert live[seed].floor_multiplier == 1.0
-        assert live[seed].d2_separation_norm == 0.0
-        assert hist[seed].d2_separation_norm > 0.0
-        assert live[seed].score < hist[seed].score
+    # (honest-zero census; baseline 5 gated 2/4/10/12/37/47 to 0 live). The
+    # patch-1-zeroed set is therefore EMPTY: no seed has live separation collapsed
+    # to zero while the historical path kept it positive.
+    patch1_zeroed = {
+        seed
+        for seed in live
+        if live[seed].d2_separation_norm == 0.0 and hist[seed].d2_separation_norm > 0.0
+    }
+    assert patch1_zeroed == set()
 
 
 def test_testimony_backed_conversion_requires_observation_backing() -> None:

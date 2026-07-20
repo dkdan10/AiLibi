@@ -6846,9 +6846,7 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
         # honest census the committed bytes support, pinned exactly.
         assert result.informed_candidates == 9
         assert len(result.conversions) == 1
-        assert result.conversions == (
-            (26, "headless-seed-26:meeting-0", "p-3"),
-        )
+        assert result.conversions == ((26, "headless-seed-26:meeting-0", "p-3"),)
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()

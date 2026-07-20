@@ -3824,7 +3824,9 @@ class TestReporterExculpationOnCommittedBytes:
             elif on_max < _GATE:
                 kept += 1  # the soft accusation was the deciding lift -> exculpated
             else:
-                hard_convicted += 1  # a standing prior/flag carries it; damp cannot reach
+                hard_convicted += (
+                    1  # a standing prior/flag carries it; damp cannot reach
+                )
 
         # The one census meeting is the hard-flag-backed p-6 conviction.
         assert (kept, already_sub_gate, hard_convicted) == (0, 0, 1)
