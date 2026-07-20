@@ -7,7 +7,7 @@
 **Substrate:** the baseline-6 slate — the four meeting-layer levers graduated to unconditional ON (`roll_call_round`, `whereabouts_interior_flags`, `vent_placement_contradictions`, `absence_prior`) beside the nine already-retired levers; `impostor_roll_call` stays default-OFF (the CREW-ONLY ruling, audits/audit-phase-18-meeting-gate.md §9).
 **Grounding:** the baseline-5 adopting-record runbook (audits/audit-phase-16-close.md, the template this reprises); the baseline-5 floor block (eval/watchability.py:755-762, the block the new baseline-6 block sits beside); the phase-17 close's corpus-denominator canary anchors (audits/audit-phase-17-close.md §3); the 18.11 ruling (which arms flip).
 **Recording:** `scripts/refresh_samples.sh --full` per set, under the graduated bare environment (no `AILIBI_*` lever export — the substrate-lever preflight refuses one); validity-gated; MANIFEST + `tournament-eval-report.json` rebuilt per set.
-**Verdict in one line:** ADOPTED — the validity gate PASSES on both sets ($0, 13-ON/impostor-OFF stamp exact, byte-identical reconstruction), the baseline-6 floor block is pinned at self-consistent equality, and NEITHER §0.4 banded canary fires (R1 win share ROSE to 0.68, successor 0.8916), so the NO-GO pairing is not triggered; the record's one documented precision cost is a ~11 pp ejection-accuracy drop (0.9143 → 0.80, 20 crew of 100 ejections) that surfaces one innocent-reporter false positive (seed-21 m3 p-6) the reporter-exculpation over-damping canary still absorbs at zero outcome changes.
+**Verdict in one line:** ADOPTED — the validity gate PASSES on both sets ($0, 13-ON/impostor-OFF stamp exact, byte-identical reconstruction), the baseline-6 floor block is pinned at self-consistent equality, and NEITHER §0.4 banded canary fires (R1 win share ROSE to 0.62, successor 0.8861), so the NO-GO pairing is not triggered; the record's one documented precision cost is a ~14 pp ejection-accuracy drop (0.9143 → 0.7723, 23 crew of 101 ejections) that surfaces two innocent-reporter false positives (seed-17 m0 and seed-39 m0 p-1) the reporter-exculpation over-damping canary still absorbs at zero outcome changes; the vent-variant live yield (6) lands one below its [7, 28] sanity band, a reported near-miss with the mechanism confirmed live.
 
 ---
 
@@ -41,8 +41,8 @@ here and is lifted). This record ships both:
   and the live vote-time override), so a vent-flagged subject is not ALSO priced as absent by the
   graduated absence prior — the double-count the 17.5 widening retires. Driven by the recorded
   `vent_sighting` flag channel (byte-identical to the record-driven `include_vent_sightings` form,
-  and identical live vs replay). Absent this, the record double-counts vent-placed subjects (27 of
-  156 9p2i meetings, 7 of 39 4p1i) — found in code review on the first record cut and fixed with a
+  and identical live vs replay). Absent this, the record double-counts vent-placed subjects (23 of
+  165 9p2i meetings, 8 of 39 4p1i) — found in code review on the first record cut and fixed with a
   full re-record before merge.
 
 #### 0.1.4 The absence prior (16.8): **GRADUATE-ON**
@@ -165,7 +165,7 @@ FAILED recording and re-records, per the standing rule. The Q5 provenance conven
 
 | set | verdict | 10 checks | resolved meetings | meeting rate | cost |
 |---|---|---|---|---|---|
-| 9p2i | **PASS** | all 10 green | 156 | 1.00 | $0 |
+| 9p2i | **PASS** | all 10 green | 165 | 1.00 | $0 |
 | 4p1i | **PASS** | all 10 green | 39 | 0.78 | $0 |
 
 The 10 checks (both sets): `all_games_reach_game_over`, `meeting_rate_and_resolution`,
@@ -188,67 +188,81 @@ The Tier-A deception instruments, the V&J instruments, and the kill-craft fold, 
 | instrument | baseline 5 | baseline 6 | note |
 |---|---|---|---|
 | V&J rendered-row mismatches | 459 | **0** | the graduation eliminates the render/override drift |
-| V&J provenance-sum breaches | 0 / 2879 | **0 / 4210** | clean |
-| V&J convictions | — | 100 | zero-flag convictions 6 (rate 0.06; 0 crew / 6 imp) |
-| V&J citation compliance | 1.000 | 0.9980 (508/509) | one uncited eject ballot |
-| deception: frame attempts | — | 187 / 150 mtg | impostor self-accusations 1 |
-| deception: false vouches | — | 30 (grounded 12 / fabricated 5, grounded-share 0.706) | false_vouch_saw_player_rate 0.092 |
-| kill-craft: kills / crew-witnessed | — | 173 / 7 | one-hop witnessed 2.571 vs unwitnessed 0.837; point-biserial 0.294 |
-| off-menu impostor decisions | — | 2145, **0 off-menu** (rate 0.0) | the menu discipline holds |
+| V&J provenance-sum breaches | 0 / 2879 | **0 / 4550** | clean |
+| V&J convictions | — | 101 | zero-flag convictions 11 (rate 0.1089; 3 crew / 8 imp) |
+| V&J citation compliance | 1.000 | 1.000 (520/520) | every eject ballot cited |
+| deception: frame attempts | — | 201 / 165 mtg | impostor self-accusations 0 |
+| deception: false vouches | — | 34 (grounded 14 / fabricated 4, grounded-share 0.778) | false_vouch_saw_player_rate 0.099 |
+| kill-craft: kills / crew-witnessed | — | 177 / 6 | one-hop witnessed 2.333 vs unwitnessed 0.830; point-biserial 0.238 |
+| off-menu impostor decisions | — | 2461, **0 off-menu** (rate 0.0) | the menu discipline holds |
 
 **Vent-variant first live yield (the shipping combination's debut):** the grounded
-vent-placement `alibi_vs_physical` flags in the recorded 9p2i samples number **9** — inside the
-pre-registered **[7, 28]** bracket (§0). (4p1i carries 0, as expected on the flat set.)
+vent-placement `alibi_vs_physical` flags in the recorded 9p2i samples number **6** (every one
+STRONG, and — verified against the eval-report roles — every subject an IMPOSTOR, so the
+"vents are impostor-only" grounding chain holds live). This lands **one below** the
+pre-registered **[7, 28]** sanity bracket (§0): a REPORTED near-miss of the band's lower edge, not
+a banded canary (§0.4 bands only R1 and the successor). The variant's flag-minting arm is
+unchanged by the widening — the shortfall is the re-record trajectory cascade (the widened
+absent-set fold shifts belief/vote/movement paths, so grounded vent placements coincide with a
+contradicting stated alibi slightly less often), and the mechanism is confirmed live and
+correct. Adjudicated as within noise of the sanity floor; no phase pause. (4p1i carries 0, as
+expected on the flat set.)
 
 ## 3. The information funnel re-measured (baseline 5 → baseline 6)
 
 | stage | 9p2i b5 → b6 | 4p1i b5 → b6 |
 |---|---|---|
-| report meetings | 170 → 142 | 35 → 35 |
-| killer in candidate set | 156 → 126 | 35 → 35 |
-| killer accused | — → 88 | 25 → 28 |
-| report ejections | 61 → 86 | — → 9 |
-| votes outside small set | 7 → 21 | — → 1 |
-| reporter ejected (innocent) | 0 → 1 (1) | 0 → 1 (1) |
+| report meetings | 170 → 151 | 35 → 35 |
+| killer in candidate set | 156 → 132 | 35 → 35 |
+| killer accused | — → 92 | 25 → 27 |
+| report ejections | 61 → 87 | — → 8 |
+| votes outside small set | 7 → 18 | — → 0 |
+| reporter ejected (innocent) | 0 → 2 (2) | 0 → 0 (0) |
 | killer self-reported | 0 → 0 | 0 → 0 |
 
-The report-ejection rise (61 → 86 on 9p2i) is the graduated meeting layer converting more; the
-`reporter_ejected_innocent` 0 → 1 is the seed-21 m3 p-6 case (§4, §9).
+The report-ejection rise (61 → 87 on 9p2i) is the graduated meeting layer converting more; the
+`reporter_ejected_innocent` 0 → 2 is the two whereabouts-exemption cases — seed-17 m0 p-1 and
+seed-39 m0 p-1, both innocent crew reporters (§4, §9). On 4p1i the widening cascade clears the
+prior single innocent-reporter ejection (1 → 0).
 
 ## 4. R-gate + the §0.4 canaries under the pre-registered bands — NEITHER BAND FIRES
 
 | cell | baseline-6 (samples) | band-fire threshold | verdict |
 |---|---|---|---|
-| **R1 eject-decided win share** | **34/50 = 0.6800** | ≤ 0.5067 | does **NOT** fire (ROSE from 0.500) |
-| **genuine-class successor** | **74/83 = 0.8916** | ≤ 0.8091 | does **NOT** fire (from 0.900) |
+| **R1 eject-decided win share** | **31/50 = 0.6200** | ≤ 0.5067 | does **NOT** fire (ROSE from 0.500) |
+| **genuine-class successor** | **70/79 = 0.8861** | ≤ 0.8091 | does **NOT** fire (from 0.900) |
 
 **The named NO-GO pairing is NOT triggered** — neither banded cell fires, so the phase does not
 pause. The monitored (unbanded) cells, baseline 5 → baseline 6:
 
 | cell | b5 samples | b6 samples | read |
 |---|---|---|---|
-| zero-flag conviction rate | 2/70 = 0.0286 | 6/100 = 0.0600 | up (more flags, more convictions) |
-| **ejection accuracy** | 64/70 = 0.9143 | **80/100 = 0.8000** | **DOWN ~11 pp** — the precision cost (20 crew of 100 ejections) |
-| testimony-backed conversion | 64/135 = 0.4741 | 78/133 = 0.5865 | up |
-| citation compliance | 405/405 = 1.000 | 508/509 = 0.9980 | ~flat |
+| zero-flag conviction rate | 2/70 = 0.0286 | 11/101 = 0.1089 | up (more flags, more convictions; 3 crew / 8 imp) |
+| **ejection accuracy** | 64/70 = 0.9143 | **78/101 = 0.7723** | **DOWN ~14 pp** — the precision cost (23 crew of 101 ejections) |
+| testimony-backed conversion | 64/135 = 0.4741 | 78/136 = 0.5735 | up |
+| citation compliance | 405/405 = 1.000 | 520/520 = 1.000 | flat (every eject ballot cited) |
 | impostor win rate | 18/50 = 0.360 | 15/50 = 0.300 | down (crew win economy improved) |
-| roll-call coverage (crew / imp) | 0.4624 / 0.0894 | **0.9966 / 0.4872** | the roll-call round graduation, working |
-| whereabouts lies detected | 6 | 56 | the whereabouts exemption graduation, surfacing |
-| provenance-sum breaches | 0 / 2879 | 0 / 4210 | clean |
+| roll-call coverage (crew / imp) | 0.4624 / 0.0894 | **0.9958 / 0.4545** | the roll-call round graduation, working |
+| whereabouts lies detected | 6 | 50 | the whereabouts exemption graduation, surfacing |
+| provenance-sum breaches | 0 / 2879 | 0 / 4550 | clean |
 
 **§0 sanity read** (the gate §7 CREW-ONLY probe cells, first live measurement in the shipping
-combination): crew roll-call coverage **0.9966 ≈ 1.00** ✓; impostor win **0.30 ≈ 0.32** ✓;
-testimony conversion **0.5865** (above the ≈ 0.525 expectation) ✓; the vent-variant live yield
-**9 ∈ [7, 28]** ✓. The absence-prior graduation clause (new-over-gate ≤ 0.20) held at the 18.11
-probe (3/75 = 0.040); on the record it manifests as a single innocent-reporter over-gate case
-(§9, well under the ceiling).
+combination): crew roll-call coverage **0.9958 ≈ 1.00** ✓; impostor win **0.30 ≈ 0.32** ✓;
+testimony conversion **0.5735** (above the ≈ 0.525 expectation) ✓; the vent-variant live yield
+**6** lands **one below** the **[7, 28]** sanity band — a REPORTED near-miss of the lower edge,
+not a banded canary (§2: the variant's flag-minting is unchanged, every one of the 6 STRONG and
+impostor-subject, so the mechanism is confirmed live; the shortfall is the re-record trajectory
+cascade). The absence-prior graduation clause (new-over-gate ≤ 0.20) held at the 18.11 probe
+(3/75 = 0.040); on the record it manifests as TWO innocent-reporter over-gate cases (§9, both well
+under the ceiling and driven by the whereabouts exemption, not the absence prior alone).
 
-**The one adverse read — ejection accuracy 0.9143 → 0.80 — is reported, not banded, and is the
+**The one adverse read — ejection accuracy 0.9143 → 0.7723 — is reported, not banded, and is the
 declared precision cost of the graduation** (§0.4's failure-mode note: the roll-call round +
 absence prior + vent variant add flag pressure that can over-convict). It does not fire a band,
-the win economy IMPROVED (R1 0.68, impostor win 0.30), and the safety canary that guards against
+the win economy IMPROVED (R1 0.62, impostor win 0.30), and the safety canary that guards against
 its worst form (the reporter-exculpation over-damping sweep) holds at ZERO hard-flag-backed
-outcome changes across all 86 report-ejections (§9). Adopted with the finding on the record.
+outcome changes across all 87 report-ejections (78 hard-backed, §9). Adopted with the finding on
+the record.
 
 ## 5. Selection referee + baseline-6 floors — PASS at self-consistent equality
 
@@ -260,25 +274,31 @@ baseline-5 one); the referee PASSES at exact floor == measured equality on its o
 
 | gauge | 9p2i (value, numerator) | 4p1i (value, numerator) |
 |---|---|---|
-| witnessed_event_rate | 0.04046 (7) | 0.01639 (1, ADVISORY) |
-| flags_per_meeting | 1.3269 (207 = 94 vent + 113 transcript) | 0.41026 (16) |
-| testimony_backed_conversion | 0.58647 (78) | 0.33333 (10) |
+| witnessed_event_rate | 0.03390 (6) | 0.01639 (1, ADVISORY) |
+| flags_per_meeting | 1.09091 (180 = 96 vent + 84 transcript) | 0.41026 (16) |
+| testimony_backed_conversion | 0.57353 (78) | 0.30000 (9) |
 
-Watchability mean score rose 42.25 → **54.97** (9p2i) and 4.09 → **4.88** (4p1i);
+Watchability mean score rose 42.25 → **54.58** (9p2i) and 4.09 → **4.70** (4p1i);
 `integrity_ok` True both sets.
 
 ## 6. Uptake findings per elicitation ask
 
-- **Roll-call round (18.8):** crew roll-call coverage 0.4624 → **0.9966** (answer rate 0.877);
-  the surface the gate ratified at ≥ 0.60 lands at ceiling. Impostor coverage 0.0894 → 0.4872.
-- **Whereabouts-interior exemption (18.9 lever 1):** whereabouts lies detected 6 → **56**; the
-  single-tick self-alibi-vs-sighting now mints STRONG. Its precision cost is one innocent-crew
-  false positive (§9).
-- **Vent-placement variant (18.9 lever 2):** first live yield **9** grounded vent-placement
-  `alibi_vs_physical` flags (∈ [7, 28]); every subject an impostor (vents are impostor-only).
+- **Roll-call round (18.8):** crew roll-call coverage 0.4624 → **0.9958** (answer rate 0.868);
+  the surface the gate ratified at ≥ 0.60 lands at ceiling. Impostor coverage 0.0894 → 0.4545.
+- **Whereabouts-interior exemption (18.9 lever 1):** whereabouts lies detected 6 → **50**; the
+  single-tick self-alibi-vs-sighting now mints STRONG. Its precision cost is TWO innocent-crew
+  false positives — both also body reporters (seed-17 m0 and seed-39 m0 p-1, §9).
+- **Vent-placement variant (18.9 lever 2):** first live yield **6** grounded vent-placement
+  `alibi_vs_physical` flags — every one STRONG and every subject an impostor (vents are
+  impostor-only), so the mechanism is confirmed live; the count lands one below the [7, 28]
+  sanity band, a REPORTED near-miss (§2, §4).
 - **Absence prior (16.8):** graduated per the ratified bar; the pre-vote +0.08 on the
-  publicly-unplaced holds sub-gate alone (0.58 < 0.60) and surfaces one over-gate interaction
-  only in combination with a STRONG flag (the seed-21 p-6 case, §9).
+  publicly-unplaced holds sub-gate alone (0.58 < 0.60). It surfaces an over-gate outcome only in
+  combination with a STRONG flag; on this record the two innocent-reporter convictions (§9) are
+  carried by the whereabouts-exemption STRONG flags, not the absence prior alone (each convicts
+  0.80 with the flag present regardless of the prior). The vent-widening fold now removes
+  grounded-vent subjects from the absent set (the 17.5 firewall's second half, §0.1.3), so a
+  vent-placed impostor is never double-charged as absent.
 
 ## 7. Provenance
 
@@ -299,17 +319,20 @@ validity-gate blindness (PR #299) is inherited by the close if unclaimed.
 
 1. **The record is ADOPTED.** Validity gate PASS both sets ($0, exact stamp, byte-identical
    reconstruction); neither §0.4 banded canary fires; floors pin at self-consistent equality.
-2. **The seed-21 m3 p-6 finding (a precision cost, adopted with the record).** The graduated
-   whereabouts-interior exemption promotes p-6's single-tick roll-call self-alibi ("EAST_HALL
-   ticks 31-31" vs a "CAFETERIA at tick 31" sighting) to a STRONG `alibi_vs_sighting` FALSE
-   POSITIVE. p-6 is an innocent crewmate AND the body reporter, so an innocent reporter is
-   ejected on a hard flag — the first `reporter_ejected_innocent` since baseline 4. This is NOT
-   an over-damping regression: p-6 convicts damp-ON and damp-OFF alike (0.80 both ways; the hard
-   flag stands), so the reporter-exculpation damp neither causes nor removes it, and the
-   over-damping canary (ZERO hard-flag-backed convictions change outcome, swept over all 86
-   report-ejections) still holds. It is the population-level face of the ejection-accuracy drop
-   (§4): more flags → more ejections (100 vs 70), 20 on crew (vs 6). Pinned as a documented
-   regression case in `tests/agents/test_beliefs.py::TestReporterExculpationOnCommittedBytes`.
+2. **The two innocent-reporter findings (a precision cost, adopted with the record).** The
+   graduated whereabouts-interior exemption promotes two single-tick roll-call self-alibis to
+   STRONG `alibi_vs_sighting` FALSE POSITIVES: seed-17 m0 p-1 ("ENGINEERING ticks 6-6" vs a
+   "EAST_HALL at tick 6" sighting) and seed-39 m0 p-1 ("CAFETERIA ticks 8-8" vs "EAST_HALL at
+   tick 8"). In each the subject is an innocent crewmate AND the body reporter, so an innocent
+   reporter is ejected on a hard flag — the `reporter_ejected_innocent` census rises 0 → 2 (it was
+   1 on baseline 4, 0 on baseline 5). This is NOT an over-damping regression: each convicts damp-ON
+   and damp-OFF alike (seed-17 lifts 0.80 → 0.75 under the damp, seed-39 holds 0.80 → 0.80, both
+   over the 0.60 gate either way; the hard flag stands), so the reporter-exculpation damp neither
+   causes nor removes them, and the over-damping canary (ZERO hard-flag-backed convictions change
+   outcome, swept over all 87 report-ejections; 78 hard-backed) still holds. They are the
+   population-level face of the ejection-accuracy drop (§4): more flags → more ejections (101 vs
+   70), 23 on crew (vs 6). Pinned as documented regression cases in
+   `tests/agents/test_beliefs.py::TestReporterExculpationOnCommittedBytes`.
 3. **The census re-derivation scope-to-samples (`tests/meetings/test_contradictions.py`).** The
    four graduated levers are unconditional, so the OFF→ON env-toggle differential the
    pre-graduation census measured collapses to zero. The re-derivation census + byte-identity
@@ -321,8 +344,13 @@ validity-gate blindness (PR #299) is inherited by the close if unclaimed.
    (the committed 4p1i eval-report; the gate-marker chip test, whose baseline-5 16.5/16.6
    coercion cases collapsed and re-anchored to the live under-gate redirect), `tests/scripts/`
    (the measure-baseline CLI R-gate numbers; the gate-spec fixture regenerated from the new
-   bytes), and `tests/training/` (the FO-6 surrogate, which reverts to the baseline-3/4
-   eject-majority degeneracy). All are substrate re-pins, not logic changes.
+   bytes), and `tests/training/` (the FO-6 surrogate, whose behavioral always-SKIP degeneracy
+   reverts to the baseline-3/4 eject-majority form and STRENGTHENS — it now skips all 101 true
+   ejection meetings). One surrogate sub-claim FLIPPED on the re-record and was re-pinned to the
+   measured truth rather than asserted stale: the physical rank's top-1 no longer collapses to the
+   per-candidate base rate — it rises to 20/101 = 0.198 (above 1/9), still far under the honest
+   reachability ceiling (0.861). The load-bearing behavioral-degeneracy asserts are unchanged; the
+   flipped value is pinned exactly, not loosened. All are substrate re-pins, not logic changes.
 5. **Scenario-class collapses re-framed as honest-zero censuses, not deletions.** Three pinned
    scenario classes vanished under the graduation and are re-pinned as documented honest-zero
    censuses (mechanism kept covered by synthetic tests): the D2 patch-1 live-zeroing
