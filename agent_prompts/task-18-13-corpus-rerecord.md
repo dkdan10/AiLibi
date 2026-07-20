@@ -1,4 +1,4 @@
-# Agent Prompt — 18.13 The corpus re-record at baseline 6 (operator ~18–20h, $0)
+# Agent Prompt — 18.13 The corpus re-record at baseline 6 (operator ~21–22h, $0)
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 18.13 — The corpus re-record at baseline 6 (operator ~18–20h, $0), anchored to scripts/record_ml_corpus.sh (the pin block moves to the baseline-6 substrate); replays/ml_corpus/README.md; tasks/phase-17.md 17.9 (the runbook this reprises); audits/audit-phase-17-close.md §5 (the staleness rule this discharges). Do not implement work outside these references.
+Implement Task 18.13 — The corpus re-record at baseline 6 (operator ~21–22h, $0), anchored to scripts/record_ml_corpus.sh (the pin block moves to the baseline-6 substrate); replays/ml_corpus/README.md; tasks/phase-17.md 17.9 (the runbook this reprises); audits/audit-phase-17-close.md §5 (the staleness rule this discharges). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -52,9 +52,18 @@ the continuity anchor).
 
 ## Implementation hint
 
-The 17.9 runbook verbatim plus the checkpoint-push discipline (an ~20 h session WILL span
+The 17.9 runbook verbatim plus the checkpoint-push discipline (a ~22 h session WILL span
 reclaim risk). 4p1i first, then the 9p2i long leg sharded across 2 staggered workers with
-jittered backoff and `AILIBI_SEED_MAX_ATTEMPTS=8`.
+jittered backoff and `AILIBI_SEED_MAX_ATTEMPTS=8`. Context corrections from the 18.12
+verification: the record's truth is `audits/audit-phase-18-baseline-6.md` — PR #300's BODY
+quotes superseded first-cut numbers from before the vent-widening fix re-record; never cite
+the PR body. Two cells this corpus gives their first powered read: the vent variant's
+STRONG yield (samples read 6, one under the pre-registered [7,28] bracket — an adjudicated
+near-miss; the corpus is the first large-N read) and the absence-prior top-churn (not
+re-measured on the baseline-6 samples; last measurement is the gate's 4/75). The audit §2
+false-vouch split (34 with grounded 14 / fabricated 4) is internally underdetermined as
+printed — this corpus re-derivation states the partition cleanly. The `record_ml_corpus.sh`
+relabel routed by PR #300 lands here.
 
 ## Integration risk
 
@@ -96,5 +105,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-18-corpus-rerecord` with a title like `task 18.13: the corpus re-record at baseline 6 (operator ~18–20h, $0)`.
+Open a PR from branch `phase-18-corpus-rerecord` with a title like `task 18.13: the corpus re-record at baseline 6 (operator ~21–22h, $0)`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing scripts/record_ml_corpus.sh (the pin block moves to the baseline-6 substrate); replays/ml_corpus/README.md; tasks/phase-17.md 17.9 (the runbook this reprises); audits/audit-phase-17-close.md §5 (the staleness rule this discharges)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -896,7 +896,7 @@ seam.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-12-baseline-6-record.md`
 
-### Task 18.13 — The corpus re-record at baseline 6 (operator ~18–20h, $0)
+### Task 18.13 — The corpus re-record at baseline 6 (operator ~21–22h, $0)
 **Branch:** `phase-18-corpus-rerecord`
 **Depends on:** 18.12
 **Section refs:** scripts/record_ml_corpus.sh (the pin block moves to the baseline-6 substrate); replays/ml_corpus/README.md; tasks/phase-17.md 17.9 (the runbook this reprises); audits/audit-phase-17-close.md §5 (the staleness rule this discharges)
@@ -938,9 +938,18 @@ the continuity anchor).
 
 **Implementation hint:**
 
-The 17.9 runbook verbatim plus the checkpoint-push discipline (an ~20 h session WILL span
+The 17.9 runbook verbatim plus the checkpoint-push discipline (a ~22 h session WILL span
 reclaim risk). 4p1i first, then the 9p2i long leg sharded across 2 staggered workers with
-jittered backoff and `AILIBI_SEED_MAX_ATTEMPTS=8`.
+jittered backoff and `AILIBI_SEED_MAX_ATTEMPTS=8`. Context corrections from the 18.12
+verification: the record's truth is `audits/audit-phase-18-baseline-6.md` — PR #300's BODY
+quotes superseded first-cut numbers from before the vent-widening fix re-record; never cite
+the PR body. Two cells this corpus gives their first powered read: the vent variant's
+STRONG yield (samples read 6, one under the pre-registered [7,28] bracket — an adjudicated
+near-miss; the corpus is the first large-N read) and the absence-prior top-churn (not
+re-measured on the baseline-6 samples; last measurement is the gate's 4/75). The audit §2
+false-vouch split (34 with grounded 14 / fabricated 4) is internally underdetermined as
+printed — this corpus re-derivation states the partition cleanly. The `record_ml_corpus.sh`
+relabel routed by PR #300 lands here.
 
 **Integration risk:**
 
