@@ -589,60 +589,60 @@ def test_funnel_reproduces_report_meeting_count(
     # qwen3_6_27b.v3 across all four templates). Re-derived from the committed
     # 9p2i bytes via eval.funnel.
     assert nine_funnel.games_total == 50
-    assert nine_funnel.report_meetings == 142
+    assert nine_funnel.report_meetings == 151
 
 
 def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) -> None:
     # Baseline-5 committed bytes: the oracle is a diagnostic ceiling; the median
-    # holds at 3, and killer-in-set is preserved via one-hop reachability (the
+    # holds at 2, and killer-in-set is preserved via one-hop reachability (the
     # model never wrongly alibis the killer).
-    assert nine_funnel.candidate_set_median == 3
+    assert nine_funnel.candidate_set_median == 2
     assert nine_funnel.candidate_set_mean is not None
-    assert round(nine_funnel.candidate_set_mean, 2) == 2.75
-    assert nine_funnel.killer_in_set == 126
+    assert round(nine_funnel.candidate_set_mean, 2) == 2.62
+    assert nine_funnel.killer_in_set == 132
     assert nine_funnel.candidate_set_pm1_mean is not None
-    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.24
-    # 48 singleton ±1-window sets, of which 44 hold EXACTLY the killer — the 4
+    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.17
+    # 55 singleton ±1-window sets, of which 51 hold EXACTLY the killer — the 4
     # misses are dead-killer late reports (unique_killer never over-counts a
     # singleton that convicted the wrong player).
-    assert nine_funnel.candidate_singleton_pm1 == 48
-    assert nine_funnel.unique_killer_pm1 == 44
-    assert nine_funnel.candidate_le2_pm1 == 90
+    assert nine_funnel.candidate_singleton_pm1 == 55
+    assert nine_funnel.unique_killer_pm1 == 51
+    assert nine_funnel.candidate_le2_pm1 == 98
 
 
 def test_funnel_reproduces_possession_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    assert nine_funnel.vent_witnessed == 91
-    assert nine_funnel.kill_witnessed == 7
-    assert nine_funnel.killer_at_scene == 32
-    assert nine_funnel.last_seen_with_killer == 46
+    assert nine_funnel.vent_witnessed == 93
+    assert nine_funnel.kill_witnessed == 6
+    assert nine_funnel.killer_at_scene == 30
+    assert nine_funnel.last_seen_with_killer == 50
     # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen (baseline 5: vent
     # witnessing rose sharply on the Qwen3.6-27B / qwen3_6_27b.v3 re-record).
-    assert nine_funnel.hard_clue_held == 114
+    assert nine_funnel.hard_clue_held == 120
 
 
 def test_funnel_reproduces_transmission_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    # Baseline-5 transmission census: free-text vent mentions cover 90 of the 91
-    # held vents, and innocent-reporter ejections stand at 1.
-    assert nine_funnel.vent_mentioned == 90
-    assert nine_funnel.vent_meetings == 91
-    assert nine_funnel.reporter_ejected == 1
-    assert nine_funnel.reporter_ejected_innocent == 1
-    assert nine_funnel.report_ejections == 86
+    # Baseline-5 transmission census: free-text vent mentions cover 91 of the 93
+    # held vents, and innocent-reporter ejections stand at 2.
+    assert nine_funnel.vent_mentioned == 91
+    assert nine_funnel.vent_meetings == 93
+    assert nine_funnel.reporter_ejected == 2
+    assert nine_funnel.reporter_ejected_innocent == 2
+    assert nine_funnel.report_ejections == 87
     # Votes outside the ≤3 exact-tick candidate set.
-    assert nine_funnel.votes_outside_small_set == 21
-    assert nine_funnel.small_set_ejections == 58
+    assert nine_funnel.votes_outside_small_set == 18
+    assert nine_funnel.small_set_ejections == 56
     # The messenger-innocent-prior tripwire: no committed killer self-reports.
     assert nine_funnel.killer_self_reported == 0
-    # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable — 91
+    # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable — 93
     # structured vent observations on baseline 5. Pinned so the folds cannot
     # silently drift.
-    assert nine_funnel.structured_vent_observed == 91
-    assert nine_funnel.killer_placement_observed == 32
-    assert nine_funnel.killer_accused == 88
+    assert nine_funnel.structured_vent_observed == 93
+    assert nine_funnel.killer_placement_observed == 35
+    assert nine_funnel.killer_accused == 92
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:
