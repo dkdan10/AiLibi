@@ -3577,7 +3577,7 @@ class TestCommittedBytes107VoicePins:
         # two-witness fold never sees it and a bare pile-on cannot convert. On
         # baseline-3 no bare pile-on existed (every multi-accuser subject was
         # voiced); the leaner Qwen3.6-27B substrate emits fewer observation-backed
-        # accusations, so bare pile-ons RE-APPEAR (27 of them on the Task 18.12
+        # accusations, so bare pile-ons RE-APPEAR (29 of them on the Task 18.12
         # baseline-6 re-record, pinned below). The mechanism
         # correctly denies EVERY ONE a voice -- that is the whole list of unvoiced
         # multi-accuser subjects, and each is safe (no voice => no conversion). The
@@ -3613,29 +3613,31 @@ class TestCommittedBytes107VoicePins:
         # no observation-backed accuser), and the mechanism denies every one a
         # voice -- so none can convert via the two-witness fold.
         assert multi_accuser_unvoiced == [
-            (0, 1, "p-1"),
             (1, 0, "p-8"),
+            (2, 1, "p-3"),
+            (4, 2, "p-9"),
             (6, 1, "p-1"),
+            (6, 3, "p-4"),
+            (7, 0, "p-2"),
+            (7, 0, "p-4"),
             (8, 2, "p-7"),
             (8, 3, "p-4"),
-            (9, 1, "p-9"),
-            (12, 1, "p-2"),
-            (12, 2, "p-7"),
-            (12, 2, "p-9"),
-            (14, 1, "p-3"),
-            (22, 3, "p-7"),
-            (25, 0, "p-8"),
-            (27, 3, "p-3"),
-            (28, 0, "p-1"),
-            (30, 1, "p-5"),
-            (30, 2, "p-4"),
+            (12, 1, "p-9"),
+            (13, 1, "p-2"),
+            (17, 2, "p-5"),
+            (18, 1, "p-1"),
+            (18, 3, "p-7"),
+            (20, 1, "p-8"),
+            (21, 2, "p-4"),
+            (21, 3, "p-6"),
+            (27, 0, "p-3"),
+            (33, 1, "p-9"),
             (33, 2, "p-2"),
-            (35, 1, "p-5"),
-            (37, 1, "p-2"),
-            (39, 4, "p-7"),
-            (41, 1, "p-9"),
-            (43, 1, "p-7"),
-            (45, 0, "p-7"),
+            (35, 1, "p-2"),
+            (36, 0, "p-7"),
+            (40, 0, "p-4"),
+            (40, 2, "p-1"),
+            (42, 1, "p-1"),
             (47, 1, "p-6"),
             (48, 0, "p-6"),
             (48, 1, "p-1"),

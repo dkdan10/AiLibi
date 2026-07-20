@@ -2505,21 +2505,21 @@ class TestExemptionCensus:
 
     def test_samples_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/9p2i"]
-        assert cell.meetings == 156
-        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 33, "IMPOSTOR": 7}
-        assert cell.exempt_off_distinct_by_class == {"whereabouts": 39, "alibi": 1}
-        assert cell.exempt_off_flag_count == 46
-        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 33, "IMPOSTOR": 7}
-        assert cell.exempt_on_strong_flag_count == 46
+        assert cell.meetings == 165
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 37, "IMPOSTOR": 3}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 38, "alibi": 2}
+        assert cell.exempt_off_flag_count == 48
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 37, "IMPOSTOR": 3}
+        assert cell.exempt_on_strong_flag_count == 48
 
     def test_samples_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/4p1i"]
         assert cell.meetings == 39
-        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 2}
-        assert cell.exempt_off_distinct_by_class == {"whereabouts": 2}
-        assert cell.exempt_off_flag_count == 2
-        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 2}
-        assert cell.exempt_on_strong_flag_count == 2
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 1}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 1}
+        assert cell.exempt_off_flag_count == 1
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 1}
+        assert cell.exempt_on_strong_flag_count == 1
 
     def test_live_census_equals_recorded_on_the_census_walk(
         self, census: dict[str, _SetCensus]
