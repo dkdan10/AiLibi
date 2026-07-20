@@ -719,8 +719,14 @@ class TestReactiveChain:
     def test_no_new_accusation_terminates_chain(self) -> None:
         result, _ = _run_meeting(_make_responder(accusations={"p-1": None}))
 
-        # Opening with no accusation -> chain is just the opening turn.
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening"]
+        # Opening with no accusation -> the chain is just the opening turn; the
+        # unconditional roll-call round then asks the three silent non-speakers.
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "opt_in",
+            "opt_in",
+            "opt_in",
+        ]
 
     def test_re_accusation_cycle_terminates_chain(self) -> None:
         # p-1 accuses p-2; p-2 re-accuses p-1, who already opened.
@@ -750,8 +756,14 @@ class TestReactiveChain:
         # (Since Task 10.3 the dropped target also makes the opening
         # narration-only, so the deterministic stub burns its single retry
         # and the opening records as the fail-soft default -- still exactly
-        # one opening turn, never a reply.)
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening"]
+        # one opening turn, never a reply.) The unconditional roll-call round
+        # then asks the three silent non-speakers.
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "opt_in",
+            "opt_in",
+            "opt_in",
+        ]
 
 
 # --- Opt-in info-share -----------------------------------------------------

@@ -1856,10 +1856,9 @@ class TestCommittedBytesSeedPins:
         assert placeholder_claim_rooms == 0
 
     def test_recorded_conflict_flag_census(self) -> None:
-        # On the Task 16.17 baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3
-        # prompts, the graduated substrate) the alibi_conflict surface carries
-        # exactly TWO recorded flags (seed-13 m2 p-7, seed-23 m0 p-1), BOTH WEAK —
-        # so the band is non-empty but carries ZERO strong. The baseline-1
+        # On the Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate)
+        # the alibi_conflict surface carries exactly TWELVE recorded flags, ALL
+        # WEAK — so the band is non-empty but carries ZERO strong. The baseline-1
         # lone-STRONG cross-speaker deception conflict remains GONE. The
         # STRONG-conflict tripwire stays armed (rule 3): if a future re-record
         # surfaces a STRONG conflict here, that is a new deception-surface signal
@@ -1874,7 +1873,7 @@ class TestCommittedBytesSeedPins:
                     conflict_sites.append((seed, index, flag.subjects))
                     if not is_weak_contradiction(flag):
                         strong_sites.append((seed, index, flag.subjects))
-        assert len(conflict_sites) == 2
+        assert len(conflict_sites) == 12
         assert sorted(strong_sites) == []
 
     @pytest.mark.parametrize(
@@ -2752,17 +2751,17 @@ class TestCommittedBytes106Pins:
         assert _rederived_suspicion("p-7") == pytest.approx(0.50)
 
     def test_strong_flags_surface_under_the_wave_e_substrate(self) -> None:
-        # The Task 16.17 baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3
-        # prompts, the graduated substrate) lights a LEANER R7 detector surface:
-        # 77 strong flags across the 160 committed meetings. Composition is all
-        # legitimate detector kinds (vent_sighting 75, alibi_vs_sighting 2) — no
-        # forbidden leak shape, and NO strong alibi_conflict (the lone-STRONG
-        # cross-speaker conflict of baseline 1 stays gone with the railroad
-        # elimination). The transcript-derived contradiction surface stays lean on
-        # this substrate (alibi_vs_sighting 13 total, alibi_vs_physical 0), so the
-        # strong band is carried almost entirely by Task 15.4's vent observability
-        # (vent_sighting 75); the weak band holds 13 flags — ALIVE (gated, not
-        # killed).
+        # The Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate, with
+        # the whereabouts-interior and vent-placement levers now UNCONDITIONAL)
+        # lights a RICHER R7 detector surface: 167 strong flags across the committed
+        # meetings. Composition is all legitimate detector kinds (vent_sighting 94,
+        # alibi_vs_sighting 60, alibi_vs_physical 13) — no forbidden leak shape, and
+        # NO strong alibi_conflict (the lone-STRONG cross-speaker conflict of
+        # baseline 1 stays gone with the railroad elimination). The graduated
+        # whereabouts-interior exemption promotes single-tick self-alibi-vs-sighting
+        # flags into the strong band, and Task 15.4's vent observability plus the
+        # grounded vent-placement variant carry the rest; the weak band holds 49
+        # flags — ALIVE (gated, not killed).
         weak = strong = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -2771,8 +2770,8 @@ class TestCommittedBytes106Pins:
                         weak += 1
                     else:
                         strong += 1
-        assert strong == 77  # the R7 detector surface, now vent-carried (15.4)
-        assert weak == 13  # the weak band stays alive (gated, not killed)
+        assert strong == 167  # the R7 detector surface (vent + graduated levers)
+        assert weak == 49  # the weak band stays alive (gated, not killed)
 
     def test_seed2_m0_surviving_corroborations_are_interior_tick(self) -> None:
         # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
@@ -2816,31 +2815,27 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 73 pairs survive the gate on the Task 16.17 baseline-5 re-record
-        # (Qwen/Qwen3.6-27B, qwen3_6_27b.v3 prompts, the graduated substrate).
-        # EVERY surviving pair still passes the per-pair spawn-window leak assert
-        # above (tick > SPAWN_WINDOW_LAST_TICK), so the no-spawn-window-leak firewall
-        # holds; the count moved with the substrate's saw_player supply (660
-        # recorded saw_player observations set-wide). The over-suppression
-        # tripwire: a future change driving this to 0 means the channel died, which
-        # the audit ranks as bad as the artifacts. Well above zero: gated, not killed.
-        assert surviving == 73
+        # 228 pairs survive the gate on the Task 18.12 baseline-6 re-record (the
+        # CREW-ONLY graduation slate). EVERY surviving pair still passes the
+        # per-pair spawn-window leak assert above (tick > SPAWN_WINDOW_LAST_TICK), so
+        # the no-spawn-window-leak firewall holds; the count moved with the
+        # substrate's saw_player supply. The over-suppression tripwire: a future
+        # change driving this to 0 means the channel died, which the audit ranks as
+        # bad as the artifacts. Well above zero: gated, not killed.
+        assert surviving == 228
 
 
 class TestCommittedBytes1010Pins:
-    """Task 10.10 DoD pins, re-pointed at the Task 16.14 baseline-4 re-record.
+    """Task 10.10 DoD pins, re-pointed at the Task 18.12 baseline-6 re-record.
 
-    audit-2026-06-13-1816 C-C-2/C-C-3. The set was recorded WITH the
-    same-speaker guard, so re-derivation is byte-identical (no divergence;
-    ``TestCommittedBytesArtifactCollapse._REPAIRED_SITES`` is empty). On the
-    baseline-4 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts) the
-    transcript-derived alibi surface COLLAPSED (alibi_vs_sighting 147 -> 7 all
-    crew-subject, alibi_conflict 4 -> 0), so no same-speaker-authors-both-events
-    proxy pair survives anywhere on the set — the guard is DORMANT (zero committed
-    firing sites; doctrine rule 3 honest-absence pins below). The guard LOGIC is
-    fully pinned by the synthetic ``TestProxyIntraTurnGuard`` shapes; these
-    committed-bytes pins now guard that the dormancy is honest and that no future
-    drift silently re-targets a two-author disagreement.
+    audit-2026-06-13-1816 C-C-2/C-C-3. On the baseline-6 re-record (the CREW-ONLY
+    graduation slate) the richer graduated alibi surface revives the same-speaker
+    guard: it fires at THREE committed sites (pinned below), each a single narrator
+    authoring both events of a contradiction about a third party, re-targeted WEAK
+    at the speaker. The guard LOGIC is fully pinned by the synthetic
+    ``TestProxyIntraTurnGuard`` shapes; these committed-bytes pins now guard that
+    every firing stays weak-banded and that no future drift silently re-targets a
+    two-author disagreement.
     """
 
     def test_seed5_m0_flag_retargets_weak_at_p9(self) -> None:
@@ -2917,16 +2912,15 @@ class TestCommittedBytes1010Pins:
             assert argmax != "p-6"
 
     def test_proxy_intra_turn_retargets_weak_set_wide(self) -> None:
-        # INTENT-PRESERVED (doctrine rule 3) on the Task 16.14 baseline-4 re-record
-        # (Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts, all six substrate levers ON).
-        # The same-speaker guard fires at ZERO committed sites now: the
-        # transcript-derived alibi surface collapsed (alibi_vs_sighting 147 -> 7 all
-        # crew-subject, alibi_conflict 4 -> 0), so no one narrator authors both
-        # events of a surviving contradiction about a third party. The invariant the
-        # C-C-3 guard protects -- every proxy-intra-turn retarget stays weak-banded
-        # -- is asserted in-loop (vacuously, the loop finds none) and the honest
-        # empty census is pinned. A future re-record firing the guard again at a
-        # NON-weak band, OR firing it at all without review, re-triggers scrutiny.
+        # INTENT-PRESERVED (doctrine rule 3) on the Task 18.12 baseline-6 re-record
+        # (the CREW-ONLY graduation slate). With the richer graduated alibi surface
+        # the same-speaker guard fires again: at THREE committed sites a single
+        # narrator authors both events of a contradiction about a third party and
+        # the flag re-targets WEAK at the speaker. The invariant the C-C-3 guard
+        # protects -- every proxy-intra-turn retarget stays weak-banded -- is
+        # asserted in-loop (and holds at all three sites) and the census is pinned.
+        # A future re-record firing the guard at a NON-weak band re-triggers
+        # scrutiny.
         retargets: list[tuple[int, int, tuple[str, ...]]] = []
         for seed in range(50):
             for index, entry in enumerate(_committed_meetings(seed)):
@@ -2934,13 +2928,17 @@ class TestCommittedBytes1010Pins:
                     if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
                         assert is_weak_contradiction(flag)
                         retargets.append((seed, index, flag.subjects))
-        assert sorted(set(retargets)) == []
+        assert sorted(set(retargets)) == [
+            (2, 0, ("p-6",)),
+            (40, 0, ("p-1",)),
+            (40, 0, ("p-3",)),
+        ]
 
     def test_seed25_m0_weak_cross_speaker_conflict_not_retargeted(self) -> None:
-        # THE TRIPWIRE, INTENT-PRESERVED (doctrine rule 3) on the Task 16.17
-        # baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3 prompts). The
-        # alibi_conflict band carries TWO flags set-wide (seed-13 m2 p-7, seed-23
-        # m0 p-1), each a WEAK two-author same-subject disagreement the same-speaker
+        # THE TRIPWIRE, INTENT-PRESERVED (doctrine rule 3) on the Task 18.12
+        # baseline-6 re-record (the CREW-ONLY graduation slate). The
+        # alibi_conflict band carries TWELVE flags set-wide, each a WEAK two-author
+        # same-subject disagreement the same-speaker
         # guard must NOT re-target. The tripwire's spirit -- the guard must NEVER
         # re-target a two-author disagreement -- is pinned directly on real bytes:
         # the conflicts exist, re-derive with the same count, and NONE carries the
@@ -2961,8 +2959,8 @@ class TestCommittedBytes1010Pins:
                 rederived_conflicts.extend(
                     flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
                 )
-        assert len(recorded_conflicts) == 2
-        assert len(rederived_conflicts) == 2
+        assert len(recorded_conflicts) == 12
+        assert len(rederived_conflicts) == 12
         # The same-speaker guard re-targets NONE of the two-author conflicts.
         assert not any(
             WEAK_REASON_PROXY_INTRA_TURN in flag.description
@@ -3597,22 +3595,22 @@ class TestCommittedBytes107VoicePins:
         assert multi_accuser_total > 20
 
     def test_seed16_m2_derives_two_voices_for_p4(self) -> None:
-        # Yield-pin (re-anchored to the Task 16.14 baseline-4 re-record --
-        # Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts): seed-16 m2 p-9 takes a
-        # two-voice pre-vote fold -- two observation-backed voices under echo-dedup.
+        # Yield-pin (re-anchored to the Task 18.12 baseline-6 re-record -- the
+        # CREW-ONLY graduation slate): seed-16 m2 p-9 takes a multi-voice pre-vote
+        # fold -- four observation-backed voices under echo-dedup.
         entry = _committed_meetings(16)[2]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-9") == ("p-4", "p-6")
+        assert voices.get("p-9") == ("p-4", "p-5", "p-6", "p-8")
 
     def test_seed8_m0_derives_multiple_voices_for_p1(self) -> None:
-        # The richer yield shape (re-anchored to the Task 16.17 baseline-5 re-record
-        # -- Qwen/Qwen3.6-27B, qwen3_6_27b.v3 prompts): seed-0 m0 p-6 takes a
-        # three-voice pre-vote fold (voices p-3/p-5/p-7) -- an observation-backed
+        # The richer yield shape (re-anchored to the Task 18.12 baseline-6 re-record
+        # -- the CREW-ONLY graduation slate): seed-0 m0 p-6 takes a deep pre-vote
+        # fold (voices p-1/p-3/p-4/p-5/p-7/p-8/p-9) -- an observation-backed
         # accuser plus aligned corroborations, the richest multi-voice fold in the
         # set on this substrate. (The property is "the mechanism derives a
         # multi-voice fold", not the exact width.)
         entry = _committed_meetings(0)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-6") == ("p-3", "p-5", "p-7")
+        assert voices.get("p-6") == ("p-1", "p-3", "p-4", "p-5", "p-7", "p-8", "p-9")

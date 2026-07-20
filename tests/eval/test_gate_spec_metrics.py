@@ -892,14 +892,14 @@ def _load_committed_9p2i() -> TournamentEvalReport:
 
 
 class TestCommittedW2GateSpecPins:
-    """The gp-7 pins over the committed Wave-2 bytes (baseline-5 canonical re-record).
+    """The gp-7 pins over the committed Wave-2 bytes (baseline-6 canonical re-record).
 
     These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
-    (W1 -> W2); the current bytes are the Task-16.17 canonical re-record ("baseline
-    5") on the qwen3_6_27b.v3 prompts (all four templates) for model
+    (W1 -> W2); the current bytes are the Task-18.12 canonical re-record ("baseline
+    6") on the qwen3_6_27b.v3 prompts (all four templates) for model
     Qwen/Qwen3.6-27B with the substrate levers unconditionally ON. On the
-    baseline-5 model/set the transcript contradiction channel stays collapsed:
-    the census reads 64 impostor ejections and only 15 flags split 13w/2s. The
+    baseline-6 model/set the transcript contradiction channel is live:
+    the census reads 80 impostor ejections and 113 flags split 49w/64s. The
     frozen prior-era A/B anchors (corrected_w0_baseline.json and
     corrected_w1_baseline.json) are pinned separately by the two
     ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.

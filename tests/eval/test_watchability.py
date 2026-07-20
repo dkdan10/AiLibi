@@ -742,19 +742,21 @@ def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
 
 
 def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
-    """LIVE-PATH SNAPSHOT: the 15.19 D2 patch demonstrably fires on real bytes.
+    """LIVE-PATH SNAPSHOT: the 15.19 D2 patches measured on the committed bytes.
 
     The historical parity pin guards only the FROZEN path, and the CLI aggregate
-    (mean 42.25) is a single scalar — neither shows the patches acting on any
+    (mean 54.97) is a single scalar — neither shows the patches acting on any
     real committed game. This pins the live-vs-historical per-game delta on the
-    baseline-5 9p2i bytes: the subject-aware railroad floor (patch 2) newly floors
+    baseline-6 9p2i bytes: the subject-aware railroad floor (patch 2) floors
     NO committed game (the graduated slate's citation gate leaves ZERO
     evidence-free crew railroads on the committed bytes — the mechanism stays
     covered by the synthetic ``test_subject_aware_backing_gates_conversion_and_railroad``;
-    baseline 4 floored one, 29; baseline 3 four, 19/27/29/31), while the
-    conversion-coupled D2 gate (patch 1) zeroes the separation term on seeds
-    2/4/10/12/37/47 (games with live separation but no converted backed
-    accusation and no flag) without flooring them.
+    baseline 4 floored one, 29; baseline 3 four, 19/27/29/31), and on baseline-6
+    the conversion-coupled D2 gate (patch 1) zeroes the separation term on NO
+    committed game either — every game with live separation now carries a
+    converted backed accusation or a flag, so live separation equals the frozen
+    spec's on all 50 seeds (honest-zero census; baseline 5 zeroed 2/4/10/12/37/47,
+    the mechanism itself pinned on synthetic bytes elsewhere in this file).
     """
 
     live = {s.seed: s for s in _score_committed_set(_NINE)}
@@ -771,10 +773,12 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # the mechanism itself is pinned on synthetic bytes elsewhere in this file).
     assert live_floored - hist_floored == set()
 
-    # Patch 1 (conversion-coupled D2): these games carry rendered-suspicion
-    # separation but no converted backed accusation and no contradiction flag —
-    # suspicion theater, gated to 0 live, intact under the frozen spec.
-    for seed in (2, 4, 10, 12, 37, 47):
+    # Patch 1 (conversion-coupled D2): on baseline-6 NO committed game is
+    # suspicion theater — every game with rendered-suspicion separation now
+    # carries a converted backed accusation or a contradiction flag, so the gate
+    # zeroes nothing and live separation equals the frozen spec's on every seed
+    # (honest-zero census; baseline 5 gated 2/4/10/12/37/47 to 0 live).
+    for seed in ():
         assert live[seed].floor_multiplier == 1.0
         assert live[seed].d2_separation_norm == 0.0
         assert hist[seed].d2_separation_norm > 0.0

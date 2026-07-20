@@ -2705,13 +2705,13 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
 
 
 def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
-    """The flat 4p/1i set's successor cells, pinned at the baseline-5 re-record.
+    """The flat 4p/1i set's successor cells, pinned at the baseline-6 re-record.
 
     NOT immutable — the next re-record regenerates and updates these. The
-    reference set supplies 10 witnessed-vent pairs and converts all 10; the
-    2 recorded whereabouts-lie flags (the close §2 4p1i census) name crew
-    liars, so the whereabouts cell reads 0 impostor pairs; the legacy cell
-    reads its 0/0.
+    reference set supplies 11 pairs — 10 witnessed-vent (all 10 converted) plus
+    1 sighting-contradiction pair — and converts all 11; the recorded
+    whereabouts-lie flags name crew liars, so the whereabouts cell reads 0
+    impostor pairs; the legacy cell reads 1/1.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2719,17 +2719,17 @@ def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 10
-    assert result.converted == 10
+    assert result.supplied == 11
+    assert result.converted == 11
     assert result.conversion_rate == 1.0
     assert result.witnessed_vent_supplied == 10
     assert result.witnessed_vent_converted == 10
-    assert result.sighting_contradiction_supplied == 0
+    assert result.sighting_contradiction_supplied == 1
     assert result.whereabouts_lie_supplied == 0
 
-    assert result.legacy_alibi_supplied == 0
-    assert result.legacy_alibi_converted == 0
-    assert result.legacy_alibi_conversion_rate is None
+    assert result.legacy_alibi_supplied == 1
+    assert result.legacy_alibi_converted == 1
+    assert result.legacy_alibi_conversion_rate == pytest.approx(1.0)
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied
     assert result.legacy_alibi_converted == committed_legacy.converted
