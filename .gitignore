@@ -40,3 +40,4 @@ replays/samples/.ailibi-refresh-stage-*/
 
 # Design-thread local working docs (not committed; the canonical plan lives in tasks/ + memory)
 *.local.md
+scratchpad/
