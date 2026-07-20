@@ -19,7 +19,7 @@ Three layers:
   soft/hard split's rendered-value axis still pins clean (0 rendered-value
   mismatches), and the typed and proxy splits AGREE on every zero-flag
   conviction (2/2 on the hard axis). The provenance axis reads 0 sum breaches:
-  the gauge learned the J1 clamp-exemption (Task 17.1), so the five by-design
+  the gauge learned the J1 clamp-exemption (Task 17.1), so the eight by-design
   J1-clamped seed-12 rows — the ballot-graph scalar clamped to 0.59 while the
   raw typed provenance sums to 0.60 — are exempt by the production predicate,
   not integrity failures (their identities pinned per-row in
@@ -384,14 +384,15 @@ def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # zero-flag convictions (3 agreements, 3 disagreements).
     assert nine.provenance_rows_checked == 4210
     # 0 sum breaches: the gauge now mirrors the graduated J1 clamp (Task 17.1;
-    # audits/audit-phase-16-close.md §8 routed contract (a)). The five rows that
-    # read as phantom breaches on the lever-ON baseline-5 record — seed 12,
-    # meeting headless-seed-12:meeting-2, subject p-2, whose ballot-graph scalar
-    # is clamped to 0.59 while the raw typed provenance sums to 0.60, across five
-    # voters' graphs — are J1-clamp-exempt by the production predicate (the clamp
-    # keeps the raw provenance BY DESIGN, tests/agents/test_beliefs_hard_evidence_
-    # gate.py::test_clamps_the_scalar_but_keeps_raw_provenance). Their identities
-    # are pinned per-row in test_9p2i_j1_clamp_exempt_rows_pinned below.
+    # audits/audit-phase-16-close.md §8 routed contract (a)). The eight rows that
+    # would read as phantom breaches under the naive raw-only invariant — seed 12,
+    # meeting headless-seed-12:meeting-2, subjects p-1 and p-2, whose ballot-graph
+    # scalar is clamped to 0.59 while the raw typed provenance sums to 0.60, across
+    # the five living voters' graphs — are J1-clamp-exempt by the production
+    # predicate (the clamp keeps the raw provenance BY DESIGN,
+    # tests/agents/test_beliefs_hard_evidence_gate.py::test_clamps_the_scalar_but_
+    # keeps_raw_provenance). Their identities are pinned per-row in
+    # test_9p2i_j1_clamp_exempt_rows_pinned below.
     assert nine.provenance_sum_breaches == 0
     assert nine.rendered_rows_compared == 4210
     assert nine.rendered_row_mismatches == 0
@@ -412,26 +413,29 @@ def _seed12_meeting2(walks: list[_VJGameWalk]) -> _VJMeeting:
 
 
 def test_9p2i_j1_clamp_exempt_rows_pinned(nine_walk: list[_VJGameWalk]) -> None:
-    # DoD: the five previously-phantom provenance-sum breaches (the Phase-16
-    # close §2 signature, routed to this task by §8 contract (a)) are asserted
-    # INDIVIDUALLY as J1-clamp-exempt, identities pinned. They are one subject in
-    # one meeting — seed 12, headless-seed-12:meeting-2, subject p-2 — whose
-    # entirely-soft conviction-grade row (raw 0.5 + Σ = 0.60, all carried_soft) is
-    # clamped to the J1 render ceiling 0.59 in five voters' pre-vote graphs while
-    # the raw typed provenance is kept. Each is exempt by the PRODUCTION predicate
+    # DoD: the previously-phantom provenance-sum breaches (the Phase-16 close §2
+    # signature, routed to this task by §8 contract (a)) are asserted INDIVIDUALLY
+    # as J1-clamp-exempt, identities pinned. On the baseline-6 re-record (Task
+    # 18.12 re-recorded 9p2i) the clamp shifted which subjects hit the ceiling:
+    # seed 12, headless-seed-12:meeting-2 now carries EIGHT such rows over TWO
+    # clamped subjects — p-1 and p-2 — spread across the five living voters'
+    # pre-vote graphs (living = {p-2, p-3, p-5, p-7, p-9}). Each clamped row is an
+    # entirely-soft conviction-grade row (raw 0.5 + Σ = 0.60, all carried_soft)
+    # clamped to the J1 render ceiling 0.59 while the raw typed provenance is kept.
+    # Each is exempt by the PRODUCTION predicate
     # (agents.memory.beliefs.hard_evidence_gated_suspicion), so none is a breach.
     meeting = _seed12_meeting2(nine_walk)
     graphs = _pre_vote_graphs(meeting)
-    exempt_voters: list[str] = []
+    exempt_rows: list[tuple[str, str]] = []
     for voter in sorted(meeting.living):
         for entry in graphs[voter]:
             if not _row_is_j1_clamp_exempt(entry):
                 # every non-exempt row is sound under the J1-aware invariant
                 assert not _row_sum_breaches(entry)
                 continue
-            exempt_voters.append(voter)
-            # identity: the clamped subject is p-2, rendered at the J1 ceiling
-            assert entry.player_id == "p-2"
+            # identity pinned in the exact-list assertion below; each clamped
+            # subject renders at the J1 ceiling
+            exempt_rows.append((voter, entry.player_id))
             assert entry.suspicion == pytest.approx(HARD_EVIDENCE_GATE_RENDER_CEIL)
             raw, clamped = _row_expected_scalars(entry)
             # the raw 16.3 invariant WOULD flag it (raw 0.60 != rendered 0.59) ...
@@ -441,8 +445,17 @@ def test_9p2i_j1_clamp_exempt_rows_pinned(nine_walk: list[_VJGameWalk]) -> None:
             # so the gauge does NOT count it as a breach.
             assert clamped == pytest.approx(entry.suspicion)
             assert not _row_sum_breaches(entry)
-    # exactly the five voters' graphs, in sorted order
-    assert exempt_voters == ["p-1", "p-3", "p-5", "p-7", "p-9"]
+    # exactly these eight (voter, clamped-subject) rows, in graph order
+    assert exempt_rows == [
+        ("p-2", "p-1"),
+        ("p-3", "p-1"),
+        ("p-3", "p-2"),
+        ("p-5", "p-1"),
+        ("p-5", "p-2"),
+        ("p-7", "p-2"),
+        ("p-9", "p-1"),
+        ("p-9", "p-2"),
+    ]
 
 
 def test_cross_check_exempts_the_j1_clamp_but_catches_real_breaches() -> None:
