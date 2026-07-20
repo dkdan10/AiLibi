@@ -9,7 +9,7 @@ Every case is hermetic and makes NO network call and NO real-provider record:
 * the preflight cases fail loud BEFORE any tournament invocation (wrong
   provider / missing key / wrong prompt set), so no record ever starts — the
   ambient FEATHERLESS_API_KEY / ANTHROPIC_API_KEY are stripped by _clean_env so
-  a test can never accidentally kick off the ~14–15h operator recording;
+  a test can never accidentally kick off the ~18–20h operator recording;
 * --splits-only derives splits.json from stub replay files in a tmp corpus root
   (AILIBI_ML_CORPUS_ROOT) with no provider call at all.
 """
@@ -31,44 +31,48 @@ from orchestrator.replay import substrate_flag_snapshot
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RECORD_SH = _REPO_ROOT / "scripts" / "record_ml_corpus.sh"
 
-# The committed corpus under replays/ml_corpus/ is the PRIOR baseline-3 recording
-# (Qwen/Qwen3-32B), byte-frozen PENDING the Phase-17 re-grounding (Task 16.17).
-# The recorder now pins the BASELINE-5 substrate on TWO axes its freeze-path
-# provenance guard (check_replay_provenance) gates: the recorded MODEL id AND the
-# game_over substrate_flags stamp (the committed bytes carry the baseline-3
-# six-lever slate, missing the three 16.4/16.5/16.6 graduations). It legitimately
-# REFUSES the committed bytes as off-substrate on both. The record-path fixtures
-# below need a substrate-CURRENT replay to exercise the guard's positive / stamp /
-# model paths, and no committed baseline-5 corpus exists yet — so they rebase the
-# one committed replay's model id AND its substrate slate onto baseline 5.
-# read_tactical_policy_stamp reads the untouched stamp block and compute_cost_usd
-# sums the recorded (all-$0) cost fields, so the rebase leaves the canonical
-# fsm-default stamp and the $0 provenance intact.
+# The committed corpus under replays/ml_corpus/ IS the baseline-6 re-record (Task
+# 18.13), so it satisfies every axis the recorder's freeze-path provenance guard
+# (check_replay_provenance) gates: the canonical fsm-default stamp, the locked
+# MODEL id on every recorded call, $0 cost, and the baseline-6 lever slate on the
+# game_over substrate_flags stamp. The record-path fixtures below borrow one
+# committed replay as their substrate-CURRENT input; the model rebase is retained
+# as a no-op safety net so the fixture stays valid if a future re-record lands
+# before this pin moves. read_tactical_policy_stamp reads the untouched stamp
+# block and compute_cost_usd sums the recorded (all-$0) cost fields, so the rebase
+# leaves the canonical fsm-default stamp and the $0 provenance intact.
 _STALE_CORPUS_MODEL = "Qwen/Qwen3-32B"
 _BASELINE_MODEL = "Qwen/Qwen3.6-27B"
 _COMMITTED_CORPUS_REPLAY = (
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
 )
 
-# The bare baseline-5 graduated-lever slate a substrate-current recording stamps
-# (Task 17.9): the nine retired always-on levers True + absence_prior OFF (the
-# 16.17 recorded stay-OFF). Derived from the build snapshot with an explicit bare
-# env so the fixture always tracks the recorder's documented substrate — the same
-# slate check_replay_provenance now asserts positively in the recorded bytes.
-_BASELINE5_SUBSTRATE_SLATE = substrate_flag_snapshot(env={})
+# The bare baseline-6 lever slate a substrate-current recording stamps (Task
+# 18.13): the THIRTEEN retired always-on levers True — including the four
+# meeting-layer graduations of Task 18.12 (roll_call_round,
+# whereabouts_interior_flags, vent_placement_contradictions, absence_prior) — with
+# impostor_roll_call OFF (the unshipped impostor-answer arm; the CREW-ONLY ruling
+# of audits/audit-phase-18-meeting-gate.md §9). Derived from the build snapshot
+# with an explicit bare env so the fixture always tracks the recorder's documented
+# substrate — the same slate check_replay_provenance asserts positively in the
+# recorded bytes.
+_BASELINE6_SUBSTRATE_SLATE = substrate_flag_snapshot(env={})
 
-# The stale baseline-3 slate (the committed corpus's PRE-re-record substrate): the
-# six baseline-3 levers True, MISSING the three 16.4/16.5/16.6 graduations and
-# absence_prior. Synthesized here because the committed bytes are now themselves
-# the baseline-5 re-record (Task 17.9), so the negative slate test can no longer
+# The stale baseline-5 slate (the committed corpus's PRE-re-record substrate): the
+# nine baseline-5 levers True, MISSING the four Task-18.12 meeting-layer
+# graduations. Synthesized here because the committed bytes are now themselves the
+# baseline-6 re-record (Task 18.13), so the negative slate test can no longer
 # borrow a genuinely-stale replay off disk.
-_STALE_BASELINE3_SLATE = {
+_STALE_BASELINE5_SLATE = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
     "movement_perception": True,
     "unfreeze_memory": True,
     "evidence_quality_lift": True,
     "reporter_exculpation": True,
+    "hard_evidence_gate": True,
+    "observation_id_rendering": True,
+    "citation_gate": True,
 }
 
 
@@ -90,19 +94,19 @@ def _rewrite_game_over_substrate(text: str, flags: Mapping[str, bool]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _baseline5_corpus_replay_text() -> str:
-    """The one committed corpus replay, rebased onto the baseline-5 substrate.
+def _baseline6_corpus_replay_text() -> str:
+    """The one committed corpus replay, rebased onto the baseline-6 substrate.
 
-    Yields a replay that carries the canonical fsm-default stamp, the baseline-5
-    model on every recorded call, $0 cost, AND the baseline-5 graduated-lever
-    slate on its game_over stamp — the substrate the re-pinned recorder now
-    accepts on every check_replay_provenance axis.
+    Yields a replay that carries the canonical fsm-default stamp, the baseline
+    model on every recorded call, $0 cost, AND the baseline-6 lever slate on its
+    game_over stamp — the substrate the re-pinned recorder accepts on every
+    check_replay_provenance axis.
     """
 
     text = _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
         f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
     )
-    return _rewrite_game_over_substrate(text, _BASELINE5_SUBSTRATE_SLATE)
+    return _rewrite_game_over_substrate(text, _BASELINE6_SUBSTRATE_SLATE)
 
 
 pytestmark = pytest.mark.skipif(
@@ -114,7 +118,7 @@ def _clean_env() -> dict[str, str]:
     """Ambient env with every ``AILIBI_*`` override AND every provider key stripped.
 
     Stripping the keys is a SAFETY invariant: a test must never be able to fall
-    into the real record path (which would start the ~14–15h operator recording).
+    into the real record path (which would start the ~18–20h operator recording).
     """
 
     return {
@@ -182,7 +186,7 @@ def test_dry_run_default_is_both_sets() -> None:
 
 def test_dry_run_9p2i_seed_range_and_roster() -> None:
     # The primary set: 150 seeds at 1000..1149 (fresh range, disjoint from the
-    # canonical 0–49 sets), roster 9p/2i @ 2 tasks/crewmate (baseline-5 9p2i).
+    # canonical 0–49 sets), roster 9p/2i @ 2 tasks/crewmate (baseline-6 9p2i).
     proc = _run("--set", "9p2i", "--dry-run")
     assert proc.returncode == 0
     assert "seed range: 1000..1149 (150 games)" in proc.stdout
@@ -219,6 +223,28 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "prompt versions: locked to [accusation_round.qwen3_6_27b.v3, "
         "crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, "
         "vote_ballot.qwen3_6_27b.v3]" in proc.stdout
+    )
+
+
+def test_dry_run_announces_baseline6_substrate_and_lever_preflight() -> None:
+    # Task 18.13: the plan names the ruled baseline-6 lever slate AND the
+    # substrate-lever preflight that enforces it, so an operator previewing a
+    # ~18–20h run can confirm the substrate before spending. Mirrors the Task-18.12
+    # echo in scripts/refresh_samples.sh (tests/scripts/test_refresh_samples.py).
+    proc = _run("--dry-run")
+    assert proc.returncode == 0
+    assert (
+        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
+        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
+        "vent_placement_contradictions, absence_prior graduated at Task 18.12, "
+        "beside the earlier graduations), impostor_roll_call default-OFF "
+        "(CREW-ONLY ruling)" in proc.stdout
+    )
+    assert (
+        "[dry-run] substrate-lever preflight: would require the live lever slate "
+        "to equal the ruled baseline-6 state (thirteen retired levers ON, "
+        "impostor_roll_call OFF) and refuse a stale AILIBI_* export before any "
+        "seed stages" in proc.stdout
     )
 
 
@@ -323,7 +349,7 @@ def test_invalid_seed_max_attempts_fails_loud() -> None:
 
 
 def test_preflight_refuses_non_featherless_provider(tmp_path: Path) -> None:
-    # The corpus is baseline-5 == Featherless: any other provider (incl. the fake
+    # The corpus is baseline-6 == Featherless: any other provider (incl. the fake
     # CI provider) is refused so a corpus game can never be recorded off-substrate.
     corpus_root = tmp_path / "ml_corpus"
     env = dict(
@@ -381,7 +407,7 @@ def test_preflight_requires_locked_prompt_set_before_record(tmp_path: Path) -> N
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-5 substrate" in out
+    assert "locked baseline-6 substrate" in out
     assert "AILIBI_PROMPT_SET must be 'qwen3_6_27b'" in out
     assert not corpus_root.exists()
 
@@ -408,24 +434,28 @@ def test_preflight_refuses_non_baseline_model_override(
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-5 model" in out
+    assert "locked baseline-6 model" in out
     assert model_env in out
     assert not corpus_root.exists()  # refused before any record
 
 
-@pytest.mark.parametrize("lever_value", ["1", "true", "0"])
-def test_preflight_refuses_absence_prior_export(
+@pytest.mark.parametrize("lever_value", ["1", "true"])
+def test_preflight_refuses_impostor_roll_call_export(
     tmp_path: Path, lever_value: str
 ) -> None:
-    # absence_prior is the ONE live env-gated toggle left after the 16.17
-    # graduation slate, and the baseline-5 substrate this recorder freezes is
-    # its recorded stay-OFF (audits/audit-phase-16-close.md §0.1.4). A leftover
-    # AILIBI_ABSENCE_PRIOR export (e.g. from a Phase-17 counterfactual session)
-    # would record the whole corpus lever-ON while the preflight echo claims
-    # the OFF substrate — and an acceptance gate run in the SAME polluted shell
-    # would then PASS coherently (substrate_flag_snapshot() reads the same
-    # env). The preflight refuses ANY set value, truthy or not (the documented
-    # recording environment is BARE), BEFORE any record (PR #269 review).
+    # impostor_roll_call is the ONE live env-gated toggle left after the Task-18.12
+    # meeting-layer graduation (which retired absence_prior — the lever this test
+    # previously guarded — alongside roll_call_round /
+    # whereabouts_interior_flags / vent_placement_contradictions), and the
+    # baseline-6 substrate this recorder freezes is its recorded stay-OFF: the
+    # CREW-ONLY ruling did NOT ship the impostor-answer arm
+    # (audits/audit-phase-18-meeting-gate.md §9; audits/audit-phase-18-baseline-6.md
+    # §0.1). A leftover AILIBI_IMPOSTOR_ROLL_CALL export (e.g. from a
+    # counterfactual probe session) would record the whole ~18–20h corpus lever-ON
+    # while the preflight echo claims the ruled substrate — and an acceptance gate
+    # run in the SAME polluted shell would then PASS coherently
+    # (substrate_flag_snapshot() reads the same env). The preflight refuses it
+    # BEFORE any record.
     corpus_root = tmp_path / "ml_corpus"
     env = dict(
         _clean_env(),
@@ -434,13 +464,38 @@ def test_preflight_refuses_absence_prior_export(
         AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
-    env["AILIBI_ABSENCE_PRIOR"] = lever_value
+    env["AILIBI_IMPOSTOR_ROLL_CALL"] = lever_value
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "absence_prior lever is the recorded stay-OFF" in out
-    assert "Unset AILIBI_ABSENCE_PRIOR" in out
+    assert "does not equal the ruled baseline-6 state" in out
+    assert "impostor_roll_call must be OFF" in out
+    assert "Unset any stale AILIBI_* lever export" in out
     assert not corpus_root.exists()  # refused before any record
+
+
+def test_preflight_accepts_explicitly_off_impostor_roll_call(tmp_path: Path) -> None:
+    # The preflight is a POSITIVE slate check, not a variable-name blacklist: an
+    # export that resolves to the ruled state (impostor_roll_call OFF) records the
+    # substrate this recorder documents, so it passes the lever gate and the run
+    # proceeds to the next preflight rung. Pinned so the check can never regress
+    # into refusing a value that agrees with the ruled slate.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_IMPOSTOR_ROLL_CALL="0",
+        AILIBI_LLM_MEETING_MODEL="some-other/Model-7B",  # stops the run one rung on
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env)
+    out = proc.stdout + proc.stderr
+    assert "Locked substrate OK" in out
+    assert "does not equal the ruled baseline-6 state" not in out
+    assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
+    assert "locked baseline-6 model" in out
 
 
 def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
@@ -467,7 +522,7 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
 
 
 def test_prompt_version_registry_matches_locked_script_constant() -> None:
-    # The corpus contract freezes the baseline-5 prompt VERSIONS (all four
+    # The corpus contract freezes the baseline-6 prompt VERSIONS (all four
     # templates at v3), not just the set name — the recorder's preflight asserts
     # the live registry still resolves qwen3_6_27b to its locked constant. Pin the
     # two together here: if a later task bumps the registry entry, this test
@@ -481,7 +536,7 @@ def test_prompt_version_registry_matches_locked_script_constant() -> None:
     locked = match.group(1)
     resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].values()))
     assert resolved == locked, (
-        "PROMPT_VERSION_SETS['qwen3_6_27b'] has moved off the locked baseline-5 "
+        "PROMPT_VERSION_SETS['qwen3_6_27b'] has moved off the locked baseline-6 "
         "corpus versions; recording/resuming the 15.12 corpus would now drift. "
         "Re-locking is an owner decision (re-record + re-freeze)."
     )
@@ -561,7 +616,7 @@ def test_record_path_refuses_unstamped_present_replay(tmp_path: Path) -> None:
 
 def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
     # The positive half: a present replay whose bytes DO carry the explicit
-    # fsm-default stamp (the committed corpus game, rebased onto the baseline-5
+    # fsm-default stamp (the committed corpus game, rebased onto the baseline
     # model) passes the policy guard, and the run proceeds to the next pre-spend
     # step — pinned here by a roster.json that disagrees with the set's config,
     # which fails loud AFTER the stamp check and still before any tournament
@@ -569,10 +624,10 @@ def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    # The committed corpus is stale baseline-3; rebase its model to the baseline-5
-    # substrate so a substrate-current stamped replay is present for the guard.
+    # The committed corpus IS the baseline-6 record; the rebase is a no-op safety
+    # net so a substrate-current stamped replay is present for the guard.
     (set_dir / "replay-seed-1000.jsonl").write_text(
-        _baseline5_corpus_replay_text(), encoding="utf-8"
+        _baseline6_corpus_replay_text(), encoding="utf-8"
     )
     (set_dir / "roster.json").write_text(
         json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2})
@@ -603,9 +658,9 @@ def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    # Baseline-5-rebased committed replay (the committed corpus is stale
-    # baseline-3), then doctor the game_over stamp's method field.
-    lines = _baseline5_corpus_replay_text().splitlines()
+    # Baseline-6-rebased committed replay, then doctor the game_over stamp's
+    # method field.
+    lines = _baseline6_corpus_replay_text().splitlines()
     for i, line in enumerate(lines):
         record = json.loads(line)
         if record.get("kind") == "game_over" and record.get("tactical_policy"):
@@ -636,13 +691,13 @@ def test_record_path_refuses_non_baseline_model_in_replay_bytes(
     # resumed replay recorded under another model (but carrying a valid stamp)
     # must be refused by its BYTES before the skip-scan treats it as complete —
     # not left for the external validity gate to fail after the freeze. Fixture:
-    # the baseline-5-rebased committed replay with every recorded model id then
+    # the baseline-6-rebased committed replay with every recorded model id then
     # rewritten to a foreign model. Hermetic: refused before any tournament
     # invocation.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    doctored = _baseline5_corpus_replay_text().replace(
+    doctored = _baseline6_corpus_replay_text().replace(
         '"model":"Qwen/Qwen3.6-27B"', '"model":"Other/Model-32B"'
     )
     assert '"model":"Other/Model-32B"' in doctored  # the fixture has LLM calls
@@ -661,21 +716,22 @@ def test_record_path_refuses_non_baseline_model_in_replay_bytes(
     assert "non-baseline model(s) recorded: Other/Model-32B" in out
 
 
-def test_record_path_refuses_stale_baseline3_substrate_slate(tmp_path: Path) -> None:
-    # The 17.9 POSITIVE slate gate, negative direction: a present replay carrying
-    # the STALE baseline-3 substrate slate (the six-lever set, missing the three
-    # 16.4/16.5/16.6 graduations) is refused by its BYTES, not just by the env
-    # preflight — so the committed stale corpus can never be resumed-over and
-    # silently frozen. Fixture: the baseline-5-model replay with its game_over
-    # substrate stamp rewritten to the six-lever baseline-3 slate (missing the
-    # three graduations), so the model check passes and the slate check fires.
-    # (Synthesized rather than read off disk: the committed corpus is itself the
-    # baseline-5 re-record now, so it no longer carries a stale slate to borrow.)
+def test_record_path_refuses_stale_baseline5_substrate_slate(tmp_path: Path) -> None:
+    # The 17.9 POSITIVE slate gate, negative direction, re-grounded at 18.13: a
+    # present replay carrying the STALE baseline-5 substrate slate (the nine-lever
+    # set, missing the four Task-18.12 meeting-layer graduations) is refused by its
+    # BYTES, not just by the env preflight — so the PRIOR corpus recording can
+    # never be resumed-over and silently frozen into the baseline-6 corpus.
+    # Fixture: the substrate-current replay with its game_over substrate stamp
+    # rewritten to the nine-lever baseline-5 slate, so the model check passes and
+    # the slate check fires. (Synthesized rather than read off disk: the committed
+    # corpus is itself the baseline-6 re-record now, so it no longer carries a
+    # stale slate to borrow.)
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
     stale_substrate = _rewrite_game_over_substrate(
-        _baseline5_corpus_replay_text(), _STALE_BASELINE3_SLATE
+        _baseline6_corpus_replay_text(), _STALE_BASELINE5_SLATE
     )
     (set_dir / "replay-seed-1000.jsonl").write_text(stale_substrate, encoding="utf-8")
     env = dict(
@@ -689,12 +745,13 @@ def test_record_path_refuses_stale_baseline3_substrate_slate(tmp_path: Path) -> 
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
-    assert "disagrees with the baseline-5 graduated-lever slate" in out
-    # The three missing Phase-16 graduations are named — the substrate axis this
-    # re-record discharges.
-    assert "hard_evidence_gate" in out
-    assert "observation_id_rendering" in out
-    assert "citation_gate" in out
+    assert "disagrees with the baseline-6 lever slate" in out
+    # The four missing meeting-layer graduations are named — the substrate axis
+    # this re-record discharges.
+    assert "roll_call_round" in out
+    assert "whereabouts_interior_flags" in out
+    assert "vent_placement_contradictions" in out
+    assert "absence_prior" in out
 
 
 def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
@@ -706,17 +763,17 @@ def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
     # remaining default-OFF toggle (the CREW-ONLY ruling did not ship it), so a
     # lever-ON recording (e.g. bytes from an impostor-arm probe session) must be
     # refused by its BYTES even though the model + stamp + cost are all
-    # baseline-current. (``_BASELINE5_SUBSTRATE_SLATE`` reads the live snapshot, so
-    # it now carries the baseline-6 slate; before graduation this deviation was
-    # flipped on absence_prior, which has since graduated into the always-on set.)
+    # baseline-current. (``_BASELINE6_SUBSTRATE_SLATE`` reads the live snapshot, so
+    # it carries the baseline-6 slate; before graduation this deviation was flipped
+    # on absence_prior, which has since graduated into the always-on set.)
     # Fixture: the substrate-current replay with impostor_roll_call flipped True.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    lever_on = dict(_BASELINE5_SUBSTRATE_SLATE)
+    lever_on = dict(_BASELINE6_SUBSTRATE_SLATE)
     lever_on["impostor_roll_call"] = True
     (set_dir / "replay-seed-1000.jsonl").write_text(
-        _rewrite_game_over_substrate(_baseline5_corpus_replay_text(), lever_on),
+        _rewrite_game_over_substrate(_baseline6_corpus_replay_text(), lever_on),
         encoding="utf-8",
     )
     env = dict(
@@ -730,20 +787,20 @@ def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
-    assert "disagrees with the baseline-5 graduated-lever slate" in out
+    assert "disagrees with the baseline-6 lever slate" in out
     assert "impostor_roll_call" in out
 
 
 def test_record_path_refuses_missing_substrate_stamp(tmp_path: Path) -> None:
     # A replay carrying the canonical fsm-default stamp, the baseline model, and $0
     # cost but NO game_over substrate_flags stamp (a pre-14.7 recording) is refused:
-    # presence + a policy stamp is not enough, the graduated-lever slate must be
+    # presence + a policy stamp is not enough, the baseline-6 lever slate must be
     # positively present in the bytes. Fixture: the substrate-current replay with
     # its game_over substrate_flags stripped out entirely.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    lines = _baseline5_corpus_replay_text().splitlines()
+    lines = _baseline6_corpus_replay_text().splitlines()
     for i, line in enumerate(lines):
         record = json.loads(line)
         if record.get("kind") == "game_over":
