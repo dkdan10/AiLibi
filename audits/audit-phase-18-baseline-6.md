@@ -30,10 +30,20 @@ The exemption that lets a single-tick self-alibi contradicted by a first-hand si
 STRONG `alibi_vs_sighting` flag (audits/audit-phase-18-planning.md §3.3). Graduates with the
 package: `meetings.transcript.whereabouts_interior_flags_enabled` → unconditional.
 
-#### 0.1.3 The vent-placement flag variant (18.9 lever 2): **GRADUATE-ON**
-The grounded-vent flag-minting arm (the 17.5 scope firewall's flag-minting side). Its FIRST
-live yield in the shipping combination is measured on THIS record (§2). Graduates:
-`meetings.transcript.vent_placement_contradictions_enabled` → unconditional.
+#### 0.1.3 The vent variant — flag-minting AND widening (18.9 lever 2 + 17.5): **GRADUATE-ON (both halves)**
+The 18.11 ruling C ships the vent variant as a PACKAGE — BOTH the grounded-vent flag-minting arm
+AND the 17.5 absent-set WIDENING (the two halves of the same scope firewall; the 17.7 HOLD travels
+here and is lifted). This record ships both:
+- **flag-minting:** `meetings.transcript.vent_placement_contradictions_enabled` → unconditional; its
+  first live yield in the shipping combination is measured on THIS record (§2).
+- **widening:** the manager now removes GROUNDED vent-placed subjects from the absent set
+  (`meetings.transcript.grounded_vent_subjects_from_flags`, wired into `derive_belief_evidence`
+  and the live vote-time override), so a vent-flagged subject is not ALSO priced as absent by the
+  graduated absence prior — the double-count the 17.5 widening retires. Driven by the recorded
+  `vent_sighting` flag channel (byte-identical to the record-driven `include_vent_sightings` form,
+  and identical live vs replay). Absent this, the record double-counts vent-placed subjects (27 of
+  156 9p2i meetings, 7 of 39 4p1i) — found in code review on the first record cut and fixed with a
+  full re-record before merge.
 
 #### 0.1.4 The absence prior (16.8): **GRADUATE-ON**
 The Phase-16 slate's recorded STAY-OFF (audits/audit-phase-16-close.md §0.1.4), re-routed to

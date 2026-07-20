@@ -482,21 +482,31 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Model registry OK: $REQUIRED_SET_OWNER_MODEL is registered in the production client."
-  # Substrate-lever preflight (Task 18.12): until now the wrapper preflighted only
-  # the prompt set + model. The meeting-layer graduation (the CREW-ONLY ruling,
-  # audits/audit-phase-18-meeting-gate.md §9) makes the substrate LEVER slate
-  # load-bearing for the ~6-7h baseline-6 record: the four graduated levers
-  # (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
-  # absence_prior) are unconditional ON and impostor_roll_call must stay OFF (it
-  # was NOT shipped). A stale AILIBI_* export — most dangerously
-  # AILIBI_IMPOSTOR_ROLL_CALL=1, which would ship the UNSHIPPED impostor-answer arm
-  # into the record — would silently mis-substrate every seed and only reveal it in
-  # the MANIFEST flags afterward, wasting the whole (multi-hour) spend. POSITIVELY
-  # check the live substrate snapshot equals the ruled baseline-6 state and fail
-  # loud HERE, before any staging (AGENTS.md "no silent fallbacks"). The graduated
-  # levers ignore the environment, so the only way the live slate deviates is a
-  # truthy impostor export (or a partial graduation in the tree).
-  if ! substrate_diag="$(uv run python -c '
+else
+  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
+    exit 1
+  fi
+  echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
+fi
+
+# Substrate-lever preflight (Task 18.12): until now the wrapper preflighted only
+# the prompt set + model. The meeting-layer graduation (the CREW-ONLY ruling,
+# audits/audit-phase-18-meeting-gate.md §9) makes the substrate LEVER slate
+# load-bearing for the ~6-7h baseline-6 record: the four graduated levers
+# (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
+# absence_prior) are unconditional ON and impostor_roll_call must stay OFF (it
+# was NOT shipped). A stale AILIBI_* export — most dangerously
+# AILIBI_IMPOSTOR_ROLL_CALL=1, which would ship the UNSHIPPED impostor-answer arm
+# into the record — would silently mis-substrate every seed and only reveal it in
+# the MANIFEST flags afterward, wasting the whole (multi-hour) spend. The substrate
+# slate is PROVIDER-INDEPENDENT (it is the game-lever state, not the LLM backend),
+# so this runs for EVERY provider — anthropic/ollama/featherless alike — not just
+# the featherless leg. POSITIVELY check the live substrate snapshot equals the
+# ruled baseline-6 state and fail loud HERE, before any staging (AGENTS.md "no
+# silent fallbacks"). The graduated levers ignore the environment, so the only way
+# the live slate deviates is a truthy impostor export (or a partial graduation).
+if ! substrate_diag="$(uv run python -c '
 import sys
 from orchestrator.replay import substrate_flag_snapshot, TOGGLEABLE_SUBSTRATE_FLAG_KEYS
 GRADUATED = ("roll_call_round", "whereabouts_interior_flags", "vent_placement_contradictions", "absence_prior")
@@ -510,21 +520,14 @@ if bad:
     sys.stderr.write("; ".join(bad))
     sys.exit(1)
 ' 2>&1)"; then
-    echo "Error: the live substrate-lever slate does not equal the ruled baseline-6 state." >&2
-    echo "       Mismatch: ${substrate_diag}" >&2
-    echo "       Unset any stale AILIBI_* lever export (notably AILIBI_IMPOSTOR_ROLL_CALL); the" >&2
-    echo "       four meeting-layer levers are unconditional since baseline 6 and" >&2
-    echo "       impostor_roll_call must stay OFF (the CREW-ONLY ruling). Nothing was staged." >&2
-    exit 1
-  fi
-  echo "Substrate slate OK: four meeting-layer levers ON, impostor_roll_call OFF (baseline 6)."
-else
-  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
-    exit 1
-  fi
-  echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
+  echo "Error: the live substrate-lever slate does not equal the ruled baseline-6 state." >&2
+  echo "       Mismatch: ${substrate_diag}" >&2
+  echo "       Unset any stale AILIBI_* lever export (notably AILIBI_IMPOSTOR_ROLL_CALL); the" >&2
+  echo "       four meeting-layer levers are unconditional since baseline 6 and" >&2
+  echo "       impostor_roll_call must stay OFF (the CREW-ONLY ruling). Nothing was staged." >&2
+  exit 1
 fi
+echo "Substrate slate OK: four meeting-layer levers ON, impostor_roll_call OFF (baseline 6)."
 
 # Create the target set directory before any spend (Task 7.4). A per-set refresh
 # (e.g. AILIBI_SAMPLE_DIR=replays/samples/9p2i) may point at a brand-new subdir;

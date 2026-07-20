@@ -231,7 +231,7 @@ testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -1275,8 +1275,13 @@ def absent_players(
 
     ``include_vent_sightings`` (Task 17.5, the PR #264 vent-placement
     widening; default ``False`` -> byte-identical for every existing
-    caller, and NOTHING in production passes it -- whether the widening
-    SHIPS is the 17.7 gate's ruling). When ``True``, a GROUNDED vent
+    caller). The widening SHIPS since the Task-18.12 baseline-6 record (the
+    17.7 HOLD was lifted by the 18.11 CREW-ONLY ruling C -- it travels with
+    the vent package). Production applies it through the EQUIVALENT flag
+    channel (:func:`grounded_vent_subjects_from_flags`, driven by the
+    recorded/computed ``vent_sighting`` flags), which this docstring
+    guarantees equals the record-driven set below; this ``vent_witness_records``
+    signature is the record-driven form the tests pin. When ``True``, a GROUNDED vent
     sighting also places its subject: a spoken
     :class:`~meetings.schemas.SawVentObservation` matched against the
     SPEAKER'S OWN typed :class:`~meetings.schemas.VentWitnessRecord`
@@ -1310,6 +1315,30 @@ def absent_players(
             transcript, vent_witness_records=vent_witness_records, roster=roster
         )
     return tuple(sorted(unplaced))
+
+
+def grounded_vent_subjects_from_flags(
+    contradictions: Sequence[ContradictionRef],
+) -> frozenset[PlayerId]:
+    """The vent-placement widening's subject set, read off the flag channel.
+
+    The Task-18.12 production driver for the Task-17.5 absent-set widening (shipped
+    with the vent package under the 18.11 CREW-ONLY ruling C). A GROUNDED vent
+    sighting is recorded as a ``vent_sighting`` flag naming its subject, and
+    :func:`_grounded_vent_subjects` (the record-driven form) is guaranteed to return
+    exactly those same subjects (they share one grounding predicate --
+    :func:`_vent_observation_matches_record`). So reading the widened set off the
+    ``vent_sighting`` flags is byte-identical to the record-driven widening AND
+    identical live vs replay: at record time the flags are freshly computed from the
+    private records; at replay time they are read from the recorded bytes. Pure.
+    """
+
+    return frozenset(
+        subject
+        for flag in contradictions
+        if flag.kind == "vent_sighting"
+        for subject in flag.subjects
+    )
 
 
 # Task 18.9 lever 1 -- the endpoint-band whereabouts exemption (audit-phase-18-
@@ -3478,6 +3507,7 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
+    "grounded_vent_subjects_from_flags",
     "grounded_vouch_subjects",
     "independent_voices",
     "is_canonically_ordered",

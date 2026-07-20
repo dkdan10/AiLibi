@@ -153,6 +153,7 @@ from meetings.transcript import (
     canonical_rooms,
     detect_contradictions,
     detect_corroborations,
+    grounded_vent_subjects_from_flags,
     grounded_vouch_subjects,
     independent_voices,
     is_relevant_sighting,
@@ -1214,10 +1215,18 @@ class MeetingManager:
         # derivation is also what the replay path already computes
         # (:func:`extract_belief_evidence` receives the trigger kind), so
         # live and replay agree on every meeting.
+        # Task 18.12: apply the 17.5 vent-placement widening here too (the
+        # ``vent_sighting`` flag channel, byte-identical to the record-driven
+        # widening), so the live absent set matches the replay re-derivation above.
+        _vent_placed = grounded_vent_subjects_from_flags(contradictions)
         evidence = replace(
             evidence,
-            absent=absent_players(
-                transcript, roster=roster, trigger_kind=meeting_trigger_kind
+            absent=tuple(
+                player
+                for player in absent_players(
+                    transcript, roster=roster, trigger_kind=meeting_trigger_kind
+                )
+                if player not in _vent_placed
             ),
         )
         ballots = await self._collect_ballots(
@@ -3457,9 +3466,20 @@ def derive_belief_evidence(
         # Task 16.8: the absent set rides the SAME derivation (same roster,
         # same trigger_kind) as every other evidence fold here, so the replay
         # path re-derives it bit-identically from the public record alone.
-        # Inert data unless the default-OFF absence_prior lever is ON at the
-        # vote-time fold -- deriving it unconditionally changes no bytes.
-        absent=absent_players(transcript, roster=roster, trigger_kind=trigger_kind),
+        # Task 18.12: the 17.5 vent-placement WIDENING ships with the vent package
+        # (18.11 ruling C) -- a GROUNDED vent sighting places its subject, so a
+        # vent-flagged subject is removed from the absent set rather than
+        # double-counted as absent by the graduated absence prior. Driven by the
+        # ``vent_sighting`` flag channel (:func:`grounded_vent_subjects_from_flags`),
+        # which is byte-identical to the record-driven widening AND identical live vs
+        # replay -- ``contradictions`` is the public record here.
+        absent=tuple(
+            player
+            for player in absent_players(
+                transcript, roster=roster, trigger_kind=trigger_kind
+            )
+            if player not in grounded_vent_subjects_from_flags(contradictions)
+        ),
     )
 
 
