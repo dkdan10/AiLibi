@@ -2868,13 +2868,13 @@ class TestCommittedBytes1010Pins:
     """Task 10.10 DoD pins, re-pointed at the Task 18.12 baseline-6 re-record.
 
     audit-2026-06-13-1816 C-C-2/C-C-3. On the baseline-6 re-record (the CREW-ONLY
-    graduation slate) the richer graduated alibi surface revives the same-speaker
-    guard: it fires at THREE committed sites (pinned below), each a single narrator
-    authoring both events of a contradiction about a third party, re-targeted WEAK
-    at the speaker. The guard LOGIC is fully pinned by the synthetic
-    ``TestProxyIntraTurnGuard`` shapes; these committed-bytes pins now guard that
-    every firing stays weak-banded and that no future drift silently re-targets a
-    two-author disagreement.
+    graduation slate, after the vent-widening cascade) the same-speaker guard is
+    DORMANT: it fires at ZERO committed sites -- no single narrator authors both
+    events of a contradiction about a third party anywhere in the re-recorded set.
+    The guard LOGIC is fully pinned by the synthetic ``TestProxyIntraTurnGuard``
+    shapes; these committed-bytes pins now pin the honest absence (no firing) and
+    guard that no future drift silently re-targets a two-author disagreement onto
+    the speaker (the alibi_conflict tripwire below).
     """
 
     def test_seed5_m0_flag_retargets_weak_at_p9(self) -> None:
@@ -2952,14 +2952,15 @@ class TestCommittedBytes1010Pins:
 
     def test_proxy_intra_turn_retargets_weak_set_wide(self) -> None:
         # INTENT-PRESERVED (doctrine rule 3) on the Task 18.12 baseline-6 re-record
-        # (the CREW-ONLY graduation slate). With the richer graduated alibi surface
-        # the same-speaker guard fires again: at THREE committed sites a single
-        # narrator authors both events of a contradiction about a third party and
-        # the flag re-targets WEAK at the speaker. The invariant the C-C-3 guard
-        # protects -- every proxy-intra-turn retarget stays weak-banded -- is
-        # asserted in-loop (and holds at all three sites) and the census is pinned.
-        # A future re-record firing the guard at a NON-weak band re-triggers
-        # scrutiny.
+        # (the CREW-ONLY graduation slate, after the vent-widening cascade). The
+        # same-speaker guard is DORMANT on this re-record: NO single narrator authors
+        # both events of a contradiction about a third party, so the guard re-targets
+        # nothing -- the census collapses to the empty set (the prior baseline-6
+        # sites seed-2 m0 / seed-40 m0 dissolved with the alibi-surface shift). The
+        # invariant the C-C-3 guard protects -- every proxy-intra-turn retarget stays
+        # weak-banded -- is still asserted in-loop (vacuous here) and the honest
+        # absence is pinned. A future re-record firing the guard at a NON-weak band
+        # re-triggers scrutiny.
         retargets: list[tuple[int, int, tuple[str, ...]]] = []
         for seed in range(50):
             for index, entry in enumerate(_committed_meetings(seed)):
@@ -2967,16 +2968,12 @@ class TestCommittedBytes1010Pins:
                     if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
                         assert is_weak_contradiction(flag)
                         retargets.append((seed, index, flag.subjects))
-        assert sorted(set(retargets)) == [
-            (2, 0, ("p-6",)),
-            (40, 0, ("p-1",)),
-            (40, 0, ("p-3",)),
-        ]
+        assert sorted(set(retargets)) == []
 
     def test_seed25_m0_weak_cross_speaker_conflict_not_retargeted(self) -> None:
         # THE TRIPWIRE, INTENT-PRESERVED (doctrine rule 3) on the Task 18.12
         # baseline-6 re-record (the CREW-ONLY graduation slate). The
-        # alibi_conflict band carries TWELVE flags set-wide, each a WEAK two-author
+        # alibi_conflict band carries EIGHT flags set-wide, each a WEAK two-author
         # same-subject disagreement the same-speaker
         # guard must NOT re-target. The tripwire's spirit -- the guard must NEVER
         # re-target a two-author disagreement -- is pinned directly on real bytes:
@@ -2998,8 +2995,8 @@ class TestCommittedBytes1010Pins:
                 rederived_conflicts.extend(
                     flag for flag in _rederive(entry) if flag.kind == "alibi_conflict"
                 )
-        assert len(recorded_conflicts) == 12
-        assert len(rederived_conflicts) == 12
+        assert len(recorded_conflicts) == 8
+        assert len(rederived_conflicts) == 8
         # The same-speaker guard re-targets NONE of the two-author conflicts.
         assert not any(
             WEAK_REASON_PROXY_INTRA_TURN in flag.description

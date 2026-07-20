@@ -259,11 +259,11 @@ def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
     "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the Task 18.12 baseline-6 conversion pins (9p2i 78/133, 4p1i 10/30; the
-    baseline-5 record was 64/135 and 10/28).
+    to the vent-widening baseline-6 conversion pins (9p2i 78/136, 4p1i 9/30; the
+    pre-widening baseline-6 record was 78/133 and 10/30).
     """
 
-    expected = {_NINE: 78 / 133, _FOUR: 10 / 30}
+    expected = {_NINE: 78 / 136, _FOUR: 9 / 30}
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name

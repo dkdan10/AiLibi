@@ -1306,11 +1306,11 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
     # one-event floor on this roster).
     assert [g["advisory"] for g in report["supply_gauges"]] == [False, False, False]
-    # The HARDENED mean over the committed baseline-6 bytes (was 42.25 on
-    # baseline 5 — the meeting-layer graduation's richer flag supply and higher
-    # conversion lift the geomean; the conversion-coupled D2 gate still sinks the
-    # suspicion-theater games).
-    assert report["mean_score"] == pytest.approx(54.97)
+    # The HARDENED mean over the committed baseline-6 bytes (was 54.97 pre-widening,
+    # 42.25 on baseline 5 — the meeting-layer graduation's richer flag supply and
+    # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks
+    # the suspicion-theater games).
+    assert report["mean_score"] == pytest.approx(54.58)
 
 
 def test_cli_watchability_human_output() -> None:
