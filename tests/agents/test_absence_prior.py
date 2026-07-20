@@ -1309,20 +1309,20 @@ class TestAbsencePriorOnCommittedBytes:
     # -- the census this counterfactual is measured over ---------------------
 
     def test_meeting_census(self, counterfactual: _AbsenceCounterfactual) -> None:
-        # 179 reconstructed meetings on the committed baseline-5 9p2i set.
-        assert counterfactual.total_meetings == 179
+        # 156 reconstructed meetings on the committed baseline-6 9p2i set.
+        assert counterfactual.total_meetings == 156
 
     # -- (1) how many meetings carry a non-empty absent set ------------------
 
     def test_nonempty_absent_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 163 of the 179 meetings still have at least one publicly-unplaced living
-        # player, but the sets are SMALLER now the 16.15 roll-call elicitation is
-        # LIVE and populates whereabouts claims (mean |absent| ~3.09 / median 3.0,
-        # down from baseline-4's ~3.6 / 4.0). Absence still stays OFF per the
-        # baseline-5 slate -- Phase 17 re-measures the lever on this substrate.
-        assert counterfactual.nonempty_absent == 163
+        # 38 of the 156 meetings still have at least one publicly-unplaced living
+        # player, but the sets are MUCH SMALLER now the 16.15 roll-call elicitation
+        # is LIVE and populates whereabouts claims (mean |absent| ~0.24 / median 0.0,
+        # down from baseline-4's ~3.6 / 4.0). Absence graduated to unconditional-ON
+        # at the 18.12 baseline-6 record, so both re-derivation legs fold it.
+        assert counterfactual.nonempty_absent == 38
 
     def test_every_absent_set_is_a_subset_of_the_living_roster(
         self, counterfactual: _AbsenceCounterfactual
@@ -1336,79 +1336,73 @@ class TestAbsencePriorOnCommittedBytes:
     def test_absent_set_size_distribution(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The full histogram of |absent| across the 179 meetings, and its min /
-        # max / median. Sizes span 0..7 (a 9-player set minus the reporter and any
-        # placed players); with live roll-call the median meeting now leaves 3
+        # The full histogram of |absent| across the 156 meetings, and its min /
+        # max / median. Sizes span 0..1 (a 9-player set minus the reporter and any
+        # placed players); with live roll-call the median meeting now leaves 0
         # players unplaced (baseline-4 left 4, and reached 8).
         assert counterfactual.absent_histogram == (
-            (0, 16),
-            (1, 23),
-            (2, 26),
-            (3, 39),
-            (4, 32),
-            (5, 28),
-            (6, 11),
-            (7, 4),
+            (0, 118),
+            (1, 38),
         )
         assert counterfactual.absent_min == 0
-        assert counterfactual.absent_max == 7
-        assert counterfactual.absent_median == 3.0
+        assert counterfactual.absent_max == 1
+        assert counterfactual.absent_median == 0.0
 
     # -- (3) how many meetings the delta WOULD flip --------------------------
 
     def test_new_over_gate_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The new-must-vote channel: in 53 meetings the lever ON creates at least
-        # one NEW at-or-over-the-rendered-gate candidate (for some voter) that OFF
-        # had under it. Absence only lifts, so no recorded conviction is ever lost
-        # -- this is a pure ADDITION of vote-worthy candidates.
-        assert counterfactual.new_over_gate_meetings == 53
+        # The new-must-vote channel: in 0 meetings does the lever ON leg create a
+        # NEW at-or-over-the-rendered-gate candidate (for some voter) that the OFF
+        # leg left under it -- absence graduated to unconditional-ON at baseline 6,
+        # so both re-derivation legs fold it identically and the delta is a no-op.
+        assert counterfactual.new_over_gate_meetings == 0
 
     def test_top_candidate_change_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # In 114 meetings some voter's §4.6 TOP candidate (argmax by rendered
-        # suspicion, ties by sorted id) CHANGES identity under the lever -- high
-        # because a near-neutral graph is tie-broken by id, so a fresh 0.58 absence
-        # row readily becomes (or displaces) the rendered argmax. The re-derivation
-        # uses the production-faithful reporter predicate (reporter=None on the 9
-        # emergency meetings, where _collect_one_ballot passes None); on the
-        # baseline-5 bytes (Task 16.17 re-record) threading a reporter into those
-        # emergency meetings leaves this count unchanged at 114.
-        assert counterfactual.top_candidate_change_meetings == 114
+        # In 0 meetings does some voter's §4.6 TOP candidate (argmax by rendered
+        # suspicion, ties by sorted id) CHANGE identity between the legs -- absence
+        # graduated to unconditional-ON at baseline 6, so the OFF and ON legs fold
+        # identically and neither the argmax nor its tie-break can differ. The
+        # re-derivation uses the production-faithful reporter predicate
+        # (reporter=None on the 14 emergency meetings, where _collect_one_ballot
+        # passes None); on the baseline-6 bytes threading a reporter into those
+        # emergency meetings leaves this count unchanged at 0.
+        assert counterfactual.top_candidate_change_meetings == 0
 
     def test_emergency_meeting_census(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 9 of the 179 committed meetings are EMERGENCY meetings (the walk's
+        # 14 of the 156 committed meetings are EMERGENCY meetings (the walk's
         # reconstructed trigger kind) -- the meetings whose re-derivation must
         # pass reporter=None to mirror _collect_one_ballot.
-        assert counterfactual.emergency_meetings == 9
+        assert counterfactual.emergency_meetings == 14
 
     # -- (4) Task 17.5: the double-count counterfactual (the widened column) --
 
     def test_recorded_vent_flag_census(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The grounding-verdict supply the widening reads: 75 recorded
-        # ``vent_sighting`` flags across 66 of the 179 committed meetings --
+        # The grounding-verdict supply the widening reads: 94 recorded
+        # ``vent_sighting`` flags across 71 of the 156 committed meetings --
         # the substrate DOES speak grounded vents at scale (the 17.6
         # re-anchor's same supply reading).
-        assert counterfactual.vent_flag_count == 75
-        assert counterfactual.vent_flag_meetings == 66
+        assert counterfactual.vent_flag_count == 94
+        assert counterfactual.vent_flag_meetings == 71
 
     def test_vent_double_count_population(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # THE double-count population (the 17.7 gate's first cell): 46 of the
-        # 179 meetings hold a vent-sighted subject who is ALSO priced as
+        # THE double-count population (the 17.7 gate's first cell): 27 of the
+        # 156 meetings hold a vent-sighted subject who is ALSO priced as
         # absent -- and never more than ONE such subject per meeting, so the
-        # widening would re-place exactly 46 subject-meetings. In the other
-        # 20 vent-flagged meetings the flagged subject was already placed by
+        # widening would re-place exactly 27 subject-meetings. In the other
+        # 44 vent-flagged meetings the flagged subject was already placed by
         # a sighting/whereabouts, so the widening is a no-op there.
-        assert counterfactual.vent_double_count_histogram == ((0, 133), (1, 46))
-        assert counterfactual.vent_double_count_meetings == 46
+        assert counterfactual.vent_double_count_histogram == ((0, 129), (1, 27))
+        assert counterfactual.vent_double_count_meetings == 27
 
     def test_widened_mechanism_agrees_with_recorded_flags(
         self, counterfactual: _AbsenceCounterfactual
@@ -1424,34 +1418,29 @@ class TestAbsencePriorOnCommittedBytes:
     def test_widened_absent_set_size_distribution(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The widened absent-set sizes beside the unwidened cells: 159 (vs
-        # 163) meetings keep a non-empty absent set, the max falls 7 -> 6,
-        # the median holds at 3.0, and the histogram shifts exactly the 46
+        # The widened absent-set sizes beside the unwidened cells: 11 (vs
+        # 38) meetings keep a non-empty absent set, the max holds at 1,
+        # the median holds at 0.0, and the histogram shifts exactly the 27
         # re-placed subject-meetings down one bucket each.
         assert counterfactual.widened_absent_histogram == (
-            (0, 20),
-            (1, 22),
-            (2, 32),
-            (3, 39),
-            (4, 34),
-            (5, 23),
-            (6, 9),
+            (0, 145),
+            (1, 11),
         )
-        assert counterfactual.widened_nonempty_absent == 159
+        assert counterfactual.widened_nonempty_absent == 11
         assert counterfactual.widened_absent_min == 0
-        assert counterfactual.widened_absent_max == 6
-        assert counterfactual.widened_absent_median == 3.0
+        assert counterfactual.widened_absent_max == 1
+        assert counterfactual.widened_absent_median == 0.0
 
     def test_widened_new_over_gate_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The widened new-must-vote channel: 53 meetings -- UNCHANGED from the
+        # The widened new-must-vote channel: 0 meetings -- UNCHANGED from the
         # unwidened column, structurally: a vent-sighted subject carries the
         # STRONG vent flag (+0.30, joint-capped at prior+0.30) in BOTH env
         # legs, so they are already at/over the rendered gate OFF-side and can
         # never be a NEW over-gate candidate; retiring their absence lift
         # therefore removes nothing this cell counts.
-        assert counterfactual.widened_new_over_gate_meetings == 53
+        assert counterfactual.widened_new_over_gate_meetings == 0
         assert (
             counterfactual.widened_new_over_gate_meetings
             == counterfactual.new_over_gate_meetings
@@ -1460,13 +1449,13 @@ class TestAbsencePriorOnCommittedBytes:
     def test_widened_top_candidate_change_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The widened top-churn cell: 114 meetings -- also UNCHANGED. The
+        # The widened top-churn cell: 0 meetings -- also UNCHANGED. The
         # flag-carrying subject's ~0.80 joint-capped row dominates the §4.6
         # argmax with or without the stacked absence +0.08 (0.80 either way
         # under the cap), so removing the double-count moves no voter's top
         # candidate on these bytes: the widening's whole measured effect is
         # the absent-set shrinkage above, not the fold outcomes.
-        assert counterfactual.widened_top_candidate_change_meetings == 114
+        assert counterfactual.widened_top_candidate_change_meetings == 0
         assert (
             counterfactual.widened_top_candidate_change_meetings
             == counterfactual.top_candidate_change_meetings
