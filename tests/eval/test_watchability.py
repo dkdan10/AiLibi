@@ -693,13 +693,13 @@ _BASELINE_2_9P2I_FLOORS = SupplyFloors(
 )
 
 
-def test_baseline_5_sets_pass_the_hardened_referee_end_to_end() -> None:
-    """The committed scripted-FSM baseline-5 sets clear their own re-pinned floors.
+def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
+    """The committed scripted-FSM baseline-6 sets clear their own re-pinned floors.
 
-    The DoD anchor (15.19, re-recorded on the graduated slate at Task 16.17): every
-    gauge row passes, not just the composed verdict (the exact floor == measured
-    equality is pinned separately by
-    ``test_baseline_5_floor_pins_equal_the_measured_bytes``).
+    The DoD anchor (15.19, re-recorded on the meeting-layer graduation slate at Task
+    18.12): every gauge row passes, not just the composed verdict (the exact
+    floor == measured equality is pinned separately by
+    ``test_baseline_6_floor_pins_equal_the_measured_bytes``).
     """
 
     for sample_dir in (_NINE, _FOUR):
@@ -709,26 +709,26 @@ def test_baseline_5_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert all(gauge.passed for gauge in report.supply_gauges)
 
 
-def test_baseline_5_floor_pins_equal_the_measured_bytes() -> None:
+def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
     """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
 
     ``passed`` alone is one-sided (any floor at or below the true measured value
     clears it), so an under-pinned floor would silently weaken the gate with CI
-    green. This pins BOTH sides at the Task 16.17 baseline-5 re-record: the
+    green. This pins BOTH sides at the Task 18.12 baseline-6 re-record: the
     measured gauge IS the recorded fraction, and the pinned floor IS the measured
     gauge — "the baseline passes at equality", made an assertion not a comment.
     """
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 7 / 203,  # crew-witnessed kills (was 9/178)
-            "flags_per_meeting": 90 / 179,  # 75 vent + 15 transcript (was 86/160)
-            "testimony_backed_conversion": 64 / 135,  # SUBJECT-AWARE (was 77/123)
+            "witnessed_event_rate": 7 / 173,  # crew-witnessed kills (was 7/203)
+            "flags_per_meeting": 207 / 156,  # 94 vent + 113 transcript (was 90/179)
+            "testimony_backed_conversion": 78 / 133,  # SUBJECT-AWARE (was 64/135)
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (was 1/58)
-            "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (was 11/39)
-            "testimony_backed_conversion": 10 / 28,  # SUBJECT-AWARE (was 17/29)
+            "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (unchanged)
+            "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (unchanged)
+            "testimony_backed_conversion": 10 / 30,  # SUBJECT-AWARE (was 10/28)
         },
     }
     for sample_dir, fractions in expected.items():
@@ -1057,19 +1057,19 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
     assert report.per_game == ()
 
 
-def test_baseline_5_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 7/203 = 3.45% crew-witnessed anchor.
+def test_baseline_6_witnessed_event_rate_is_the_measured_anchor() -> None:
+    """The 9p2i witnessed-event rate is the 7/173 = 4.05% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    default baseline: baseline 5 records 7 crew-witnessed of 203 kills in 9p2i
-    (baseline 4 was 9/178 = 5.06%; baseline 3 was 5/154 = 3.25%).
+    default baseline: baseline 6 records 7 crew-witnessed of 173 kills in 9p2i
+    (baseline 5 was 7/203 = 3.45%; baseline 4 was 9/178 = 5.06%).
     """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(7 / 203)
+    assert witnessed.measured == pytest.approx(7 / 173)
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1292,17 +1292,17 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-5"
+    assert report["baseline_id"] == "baseline-6"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
     # one-event floor on this roster).
     assert [g["advisory"] for g in report["supply_gauges"]] == [False, False, False]
-    # The HARDENED mean over the committed baseline-5 bytes (the frozen
-    # pre-15.19 instrument read 44.12 on the same bytes — the conversion-coupled
-    # D2 gate sinks the suspicion-theater games; the historical parity pin above
-    # keeps the frozen number reproducible).
-    assert report["mean_score"] == pytest.approx(42.25)
+    # The HARDENED mean over the committed baseline-6 bytes (was 42.25 on
+    # baseline 5 — the meeting-layer graduation's richer flag supply and higher
+    # conversion lift the geomean; the conversion-coupled D2 gate still sinks the
+    # suspicion-theater games).
+    assert report["mean_score"] == pytest.approx(54.97)
 
 
 def test_cli_watchability_human_output() -> None:
