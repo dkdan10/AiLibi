@@ -7,7 +7,7 @@
 **Substrate:** the baseline-6 slate — the four meeting-layer levers graduated to unconditional ON (`roll_call_round`, `whereabouts_interior_flags`, `vent_placement_contradictions`, `absence_prior`) beside the nine already-retired levers; `impostor_roll_call` stays default-OFF (the CREW-ONLY ruling, audits/audit-phase-18-meeting-gate.md §9).
 **Grounding:** the baseline-5 adopting-record runbook (audits/audit-phase-16-close.md, the template this reprises); the baseline-5 floor block (eval/watchability.py:755-762, the block the new baseline-6 block sits beside); the phase-17 close's corpus-denominator canary anchors (audits/audit-phase-17-close.md §3); the 18.11 ruling (which arms flip).
 **Recording:** `scripts/refresh_samples.sh --full` per set, under the graduated bare environment (no `AILIBI_*` lever export — the substrate-lever preflight refuses one); validity-gated; MANIFEST + `tournament-eval-report.json` rebuilt per set.
-**Verdict in one line:** [PENDING POST-RECORD — the validity gate PASS on both sets, the baseline-6 floor block pinned at self-consistent equality, and the §0.4 canaries read under band.]
+**Verdict in one line:** ADOPTED — the validity gate PASSES on both sets ($0, 13-ON/impostor-OFF stamp exact, byte-identical reconstruction), the baseline-6 floor block is pinned at self-consistent equality, and NEITHER §0.4 banded canary fires (R1 win share ROSE to 0.68, successor 0.8916), so the NO-GO pairing is not triggered; the record's one documented precision cost is a ~11 pp ejection-accuracy drop (0.9143 → 0.80, 20 crew of 100 ejections) that surfaces one innocent-reporter false positive (seed-21 m3 p-6) the reporter-exculpation over-damping canary still absorbs at zero outcome changes.
 
 ---
 
@@ -149,43 +149,134 @@ FAILED recording and re-records, per the standing rule. The Q5 provenance conven
 
 ---
 
-## 1. HARD validity gate — [PENDING POST-RECORD]
+## 1. HARD validity gate — PASS (both sets, $0)
 
-`scripts/validity_gate.py <dir> --expected-model Qwen/Qwen3.6-27B --require-zero-cost` on both
-sets: [PASS/FAIL, resolved-meeting counts, $0 provenance]. Byte-identical reconstruction under
-a bare environment: [PENDING]. Substrate flags in the recorded bytes matching the ruling
-exactly: [PENDING — the thirteen-ON / impostor-OFF stamp].
+`scripts/validity_gate.py <dir> --expected-model Qwen/Qwen3.6-27B --require-zero-cost`:
 
-## 2. The close reading: the deception-instrument tier before/after (baseline 5 → baseline 6) — [PENDING POST-RECORD]
+| set | verdict | 10 checks | resolved meetings | meeting rate | cost |
+|---|---|---|---|---|---|
+| 9p2i | **PASS** | all 10 green | 156 | 1.00 | $0 |
+| 4p1i | **PASS** | all 10 green | 39 | 0.78 | $0 |
 
-The Tier-A deception instruments (18.1 false-vouch / frame-jobs / teammate-immunity), the V&J
-instruments, and the kill-craft fold (18.2), quoted before (from `baseline5-final-measure.json`)
-and after (the re-recorded bytes). The vent-variant's first live yield in the shipping
-combination reported against the [7, 28] bracket.
+The 10 checks (both sets): `all_games_reach_game_over`, `meeting_rate_and_resolution`,
+`no_duplicate_meeting_rows`, `no_tick_1_kills`, `no_friendly_fire_kills`,
+`no_betrayal_ballots_or_accusations`, `no_railroaded_crew_ejections`,
+`no_dangling_primary_reason_id`, `cost_and_provenance_exact`, `byte_identical_reconstruction`.
+Byte-identical reconstruction PASSES under a bare environment (the graduated substrate
+restores the reconstruction that the pre-record tree read RED by design — §0.2). The recorded
+`game_over` substrate stamp is exact on all 50 games per set: **thirteen levers True**
+(`absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, movement_perception,
+observation_id_rendering, reporter_exculpation, roll_call_round, testimony_as_content,
+unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags,
+witnessed_kill_evidence`) and **`impostor_roll_call` False** — the CREW-ONLY ruling enacted.
 
-## 3. The information funnel re-measured (baseline 5 → baseline 6) — [PENDING POST-RECORD]
+## 2. The close reading: the deception-instrument tier before/after (baseline 5 → baseline 6)
 
-The funnel stages (meeting / oracle / possession / transmission) before/after, both sets.
+The Tier-A deception instruments, the V&J instruments, and the kill-craft fold, quoted before
+(from `baseline5-final-measure.json`) and after (the re-recorded bytes), 9p2i:
 
-## 4. R-gate + the §0.4 canaries under the pre-registered bands — [PENDING POST-RECORD]
+| instrument | baseline 5 | baseline 6 | note |
+|---|---|---|---|
+| V&J rendered-row mismatches | 459 | **0** | the graduation eliminates the render/override drift |
+| V&J provenance-sum breaches | 0 / 2879 | **0 / 4210** | clean |
+| V&J convictions | — | 100 | zero-flag convictions 6 (rate 0.06; 0 crew / 6 imp) |
+| V&J citation compliance | 1.000 | 0.9980 (508/509) | one uncited eject ballot |
+| deception: frame attempts | — | 187 / 150 mtg | impostor self-accusations 1 |
+| deception: false vouches | — | 30 (grounded 12 / fabricated 5, grounded-share 0.706) | false_vouch_saw_player_rate 0.092 |
+| kill-craft: kills / crew-witnessed | — | 173 / 7 | one-hop witnessed 2.571 vs unwitnessed 0.837; point-biserial 0.294 |
+| off-menu impostor decisions | — | 2145, **0 off-menu** (rate 0.0) | the menu discipline holds |
 
-R1 eject-decided win share and the genuine-class successor read against the §0.4 band-fire
-thresholds; the NO-GO pairing adjudicated. The §0 sanity-read cells (crew coverage, impostor
-win, conversion, absence new-over-gate, vent yield) reported against expectations.
+**Vent-variant first live yield (the shipping combination's debut):** the grounded
+vent-placement `alibi_vs_physical` flags in the recorded 9p2i samples number **9** — inside the
+pre-registered **[7, 28]** bracket (§0). (4p1i carries 0, as expected on the flat set.)
 
-## 5. Selection referee + baseline-6 floors — [PENDING POST-RECORD]
+## 3. The information funnel re-measured (baseline 5 → baseline 6)
 
-The baseline-6 floor block pinned from the recorded bytes with the 16.11
-`population_relative_conversion_floor` derivation, referee PASS at exact floor==measured
-equality on its own record (the self-consistency check). `_DEFAULT_BASELINE_ID` flipped to
-`baseline-6`.
+| stage | 9p2i b5 → b6 | 4p1i b5 → b6 |
+|---|---|---|
+| report meetings | 170 → 142 | 35 → 35 |
+| killer in candidate set | 156 → 126 | 35 → 35 |
+| killer accused | — → 88 | 25 → 28 |
+| report ejections | 61 → 86 | — → 9 |
+| votes outside small set | 7 → 21 | — → 1 |
+| reporter ejected (innocent) | 0 → 1 (1) | 0 → 1 (1) |
+| killer self-reported | 0 → 0 | 0 → 0 |
 
-## 6. Uptake findings per elicitation ask — [PENDING POST-RECORD]
+The report-ejection rise (61 → 86 on 9p2i) is the graduated meeting layer converting more; the
+`reporter_ejected_innocent` 0 → 1 is the seed-21 m3 p-6 case (§4, §9).
 
-## 7. Provenance — [PENDING POST-RECORD]
+## 4. R-gate + the §0.4 canaries under the pre-registered bands — NEITHER BAND FIRES
 
-MANIFEST provenance per seed (model / prompt versions / flags / $0 cost / winner); the
-recording sha (Q5 back-filled on merge).
+| cell | baseline-6 (samples) | band-fire threshold | verdict |
+|---|---|---|---|
+| **R1 eject-decided win share** | **34/50 = 0.6800** | ≤ 0.5067 | does **NOT** fire (ROSE from 0.500) |
+| **genuine-class successor** | **74/83 = 0.8916** | ≤ 0.8091 | does **NOT** fire (from 0.900) |
+
+**The named NO-GO pairing is NOT triggered** — neither banded cell fires, so the phase does not
+pause. The monitored (unbanded) cells, baseline 5 → baseline 6:
+
+| cell | b5 samples | b6 samples | read |
+|---|---|---|---|
+| zero-flag conviction rate | 2/70 = 0.0286 | 6/100 = 0.0600 | up (more flags, more convictions) |
+| **ejection accuracy** | 64/70 = 0.9143 | **80/100 = 0.8000** | **DOWN ~11 pp** — the precision cost (20 crew of 100 ejections) |
+| testimony-backed conversion | 64/135 = 0.4741 | 78/133 = 0.5865 | up |
+| citation compliance | 405/405 = 1.000 | 508/509 = 0.9980 | ~flat |
+| impostor win rate | 18/50 = 0.360 | 15/50 = 0.300 | down (crew win economy improved) |
+| roll-call coverage (crew / imp) | 0.4624 / 0.0894 | **0.9966 / 0.4872** | the roll-call round graduation, working |
+| whereabouts lies detected | 6 | 56 | the whereabouts exemption graduation, surfacing |
+| provenance-sum breaches | 0 / 2879 | 0 / 4210 | clean |
+
+**§0 sanity read** (the gate §7 CREW-ONLY probe cells, first live measurement in the shipping
+combination): crew roll-call coverage **0.9966 ≈ 1.00** ✓; impostor win **0.30 ≈ 0.32** ✓;
+testimony conversion **0.5865** (above the ≈ 0.525 expectation) ✓; the vent-variant live yield
+**9 ∈ [7, 28]** ✓. The absence-prior graduation clause (new-over-gate ≤ 0.20) held at the 18.11
+probe (3/75 = 0.040); on the record it manifests as a single innocent-reporter over-gate case
+(§9, well under the ceiling).
+
+**The one adverse read — ejection accuracy 0.9143 → 0.80 — is reported, not banded, and is the
+declared precision cost of the graduation** (§0.4's failure-mode note: the roll-call round +
+absence prior + vent variant add flag pressure that can over-convict). It does not fire a band,
+the win economy IMPROVED (R1 0.68, impostor win 0.30), and the safety canary that guards against
+its worst form (the reporter-exculpation over-damping sweep) holds at ZERO hard-flag-backed
+outcome changes across all 86 report-ejections (§9). Adopted with the finding on the record.
+
+## 5. Selection referee + baseline-6 floors — PASS at self-consistent equality
+
+The baseline-6 floor block is pinned from the recorded bytes with the 16.11
+`population_relative_conversion_floor` derivation (`eval/watchability.py`, the block beside the
+baseline-5 one); the referee PASSES at exact floor == measured equality on its own record
+(`referee_passed` and `supply_floors_passed` both True, both sets), the self-consistency check.
+`_DEFAULT_BASELINE_ID` is flipped to `baseline-6`. The pinned gauges:
+
+| gauge | 9p2i (value, numerator) | 4p1i (value, numerator) |
+|---|---|---|
+| witnessed_event_rate | 0.04046 (7) | 0.01639 (1, ADVISORY) |
+| flags_per_meeting | 1.3269 (207 = 94 vent + 113 transcript) | 0.41026 (16) |
+| testimony_backed_conversion | 0.58647 (78) | 0.33333 (10) |
+
+Watchability mean score rose 42.25 → **54.97** (9p2i) and 4.09 → **4.88** (4p1i);
+`integrity_ok` True both sets.
+
+## 6. Uptake findings per elicitation ask
+
+- **Roll-call round (18.8):** crew roll-call coverage 0.4624 → **0.9966** (answer rate 0.877);
+  the surface the gate ratified at ≥ 0.60 lands at ceiling. Impostor coverage 0.0894 → 0.4872.
+- **Whereabouts-interior exemption (18.9 lever 1):** whereabouts lies detected 6 → **56**; the
+  single-tick self-alibi-vs-sighting now mints STRONG. Its precision cost is one innocent-crew
+  false positive (§9).
+- **Vent-placement variant (18.9 lever 2):** first live yield **9** grounded vent-placement
+  `alibi_vs_physical` flags (∈ [7, 28]); every subject an impostor (vents are impostor-only).
+- **Absence prior (16.8):** graduated per the ratified bar; the pre-vote +0.08 on the
+  publicly-unplaced holds sub-gate alone (0.58 < 0.60) and surfaces one over-gate interaction
+  only in combination with a STRONG flag (the seed-21 p-6 case, §9).
+
+## 7. Provenance
+
+Every MANIFEST row (both sets) carries model `Qwen/Qwen3.6-27B`, the four `qwen3_6_27b.v3`
+prompt templates, the thirteen-ON / `impostor_roll_call`-OFF substrate stamp, `$0` flat-rate
+cost, and the recorded winner. The validity gate's `cost_and_provenance_exact` PASSES on both
+sets (no `(deadline_default)` residue survived — dirty seeds were re-recorded until clean per the
+standing rule). The recording sha is Q5-back-filled on merge.
 
 ## 8. The permanent record: the staleness rule (re-stated) + routed contracts
 
@@ -194,7 +285,44 @@ until the 18.13 re-record restores it as the canonical canary denominator. Every
 comparator number over `replays/samples/` is superseded by this record. The `(deadline_default)`
 validity-gate blindness (PR #299) is inherited by the close if unclaimed.
 
-## 9. Decisions — [PENDING POST-RECORD — see the PR `## Decisions` section]
+## 9. Decisions
+
+1. **The record is ADOPTED.** Validity gate PASS both sets ($0, exact stamp, byte-identical
+   reconstruction); neither §0.4 banded canary fires; floors pin at self-consistent equality.
+2. **The seed-21 m3 p-6 finding (a precision cost, adopted with the record).** The graduated
+   whereabouts-interior exemption promotes p-6's single-tick roll-call self-alibi ("EAST_HALL
+   ticks 31-31" vs a "CAFETERIA at tick 31" sighting) to a STRONG `alibi_vs_sighting` FALSE
+   POSITIVE. p-6 is an innocent crewmate AND the body reporter, so an innocent reporter is
+   ejected on a hard flag — the first `reporter_ejected_innocent` since baseline 4. This is NOT
+   an over-damping regression: p-6 convicts damp-ON and damp-OFF alike (0.80 both ways; the hard
+   flag stands), so the reporter-exculpation damp neither causes nor removes it, and the
+   over-damping canary (ZERO hard-flag-backed convictions change outcome, swept over all 86
+   report-ejections) still holds. It is the population-level face of the ejection-accuracy drop
+   (§4): more flags → more ejections (100 vs 70), 20 on crew (vs 6). Pinned as a documented
+   regression case in `tests/agents/test_beliefs.py::TestReporterExculpationOnCommittedBytes`.
+3. **The census re-derivation scope-to-samples (`tests/meetings/test_contradictions.py`).** The
+   four graduated levers are unconditional, so the OFF→ON env-toggle differential the
+   pre-graduation census measured collapses to zero. The re-derivation census + byte-identity
+   pin now walk the two committed SAMPLE sets only (baseline 6, where re-derived == recorded);
+   the ml_corpus re-derivation returns when Task 18.13 re-records it on baseline 6. The
+   ml_corpus-only funnel reconciliation and the frozen counterfactual live in this audit.
+4. **Byte-coupled re-pins beyond the listed dirs.** The `uv run pytest` DoD required re-pinning
+   byte-coupled cells outside the contract's explicitly-listed test dirs: `tests/api/`
+   (the committed 4p1i eval-report; the gate-marker chip test, whose baseline-5 16.5/16.6
+   coercion cases collapsed and re-anchored to the live under-gate redirect), `tests/scripts/`
+   (the measure-baseline CLI R-gate numbers; the gate-spec fixture regenerated from the new
+   bytes), and `tests/training/` (the FO-6 surrogate, which reverts to the baseline-3/4
+   eject-majority degeneracy). All are substrate re-pins, not logic changes.
+5. **Scenario-class collapses re-framed as honest-zero censuses, not deletions.** Three pinned
+   scenario classes vanished under the graduation and are re-pinned as documented honest-zero
+   censuses (mechanism kept covered by synthetic tests): the D2 patch-1 live-zeroing
+   (`test_watchability`), the 16.5/16.6 coercion chips (`test_view_model`), and the seed-8 p-7
+   relevance-gate coordinate (re-anchored to seed-11 p-9).
+6. **`(deadline_default)` cleanup.** Dirty seeds surfaced by the validity gate's known
+   `cost_and_provenance_exact` blindness (PR #299) were re-recorded until the gate read clean.
+7. **The impostor-answer arm stays inert** (CREW-ONLY): no `orchestrator.game` registry flip,
+   no `IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` fold, the recorder `REQUIRED_PROMPT_VERSIONS`
+   re-lock a no-op. `impostor_roll_call` remains the sole live env-gated lever.
 
 ## 10. Method + reproduction (all $0 against committed bytes, offline)
 
