@@ -351,24 +351,24 @@ def nine_walk() -> list[_VJGameWalk]:
 
 def test_9p2i_zero_flag_channel_pins(nine: VJInstrumentReport) -> None:
     # The residual zero-flag conviction channel (close audit §11 bullet 3),
-    # measured on baseline 5 (Task 16.17 re-record) — convictions_total ==
-    # the vote-correctness ejection census (70 on 9p2i).
+    # measured on baseline 6 (Task 18.12 re-record) — convictions_total ==
+    # the vote-correctness ejection census (100 on 9p2i).
     assert nine.games_total == 50
-    assert nine.meetings_total == 179
-    assert nine.convictions_total == 70
-    assert nine.zero_flag_convictions == 2
-    assert nine.zero_flag_conviction_rate == pytest.approx(2 / 70)
-    assert nine.zero_flag_crew_convictions == 1
-    assert nine.zero_flag_impostor_convictions == 1
-    # The 16.3 TYPED split of the 2 zero-flag convictions. Vent flags
-    # dominate, so both land soft_only — the hard_backed / unattributed /
-    # no-row classes are an honest zero here.
-    assert nine.zero_flag_hard_backed == 0
-    assert nine.zero_flag_soft_only == 2
+    assert nine.meetings_total == 156
+    assert nine.convictions_total == 100
+    assert nine.zero_flag_convictions == 6
+    assert nine.zero_flag_conviction_rate == pytest.approx(6 / 100)
+    assert nine.zero_flag_crew_convictions == 0
+    assert nine.zero_flag_impostor_convictions == 6
+    # The 16.3 TYPED split of the 6 zero-flag convictions. Vent flags
+    # dominate, so five land soft_only and one is hard_backed — the
+    # unattributed / no-row classes are an honest zero here.
+    assert nine.zero_flag_hard_backed == 1
+    assert nine.zero_flag_soft_only == 5
     assert nine.zero_flag_unattributed_only == 0
     assert nine.zero_flag_no_row == 0
     # The planning-doc rendered-value proxy, beside it.
-    assert nine.zero_flag_proxy_hard_backed == 0
+    assert nine.zero_flag_proxy_hard_backed == 4
     assert nine.zero_flag_proxy_soft_only == 2
     assert nine.zero_flag_proxy_sub_gate == 0
     assert nine.zero_flag_proxy_no_render == 0
@@ -380,9 +380,9 @@ def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # suspicion) and is consistent with the rendered-value proxy within the
     # documented tolerance. On committed baseline-5 bytes the reconstruction
     # reproduces every rendered per-player value exactly (0 rendered-value
-    # mismatches), and the typed/proxy splits AGREE on both zero-flag
-    # convictions (2/2 on the hard axis, 0 disagreements).
-    assert nine.provenance_rows_checked == 2879
+    # mismatches), and the typed/proxy splits agree on three of the six
+    # zero-flag convictions (3 agreements, 3 disagreements).
+    assert nine.provenance_rows_checked == 4210
     # 0 sum breaches: the gauge now mirrors the graduated J1 clamp (Task 17.1;
     # audits/audit-phase-16-close.md §8 routed contract (a)). The five rows that
     # read as phantom breaches on the lever-ON baseline-5 record — seed 12,
@@ -393,10 +393,10 @@ def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # gate.py::test_clamps_the_scalar_but_keeps_raw_provenance). Their identities
     # are pinned per-row in test_9p2i_j1_clamp_exempt_rows_pinned below.
     assert nine.provenance_sum_breaches == 0
-    assert nine.rendered_rows_compared == 2879
+    assert nine.rendered_rows_compared == 4210
     assert nine.rendered_row_mismatches == 0
-    assert nine.zero_flag_split_agreements == 2
-    assert nine.zero_flag_split_disagreements == 0
+    assert nine.zero_flag_split_agreements == 3
+    assert nine.zero_flag_split_disagreements == 3
 
 
 def _seed12_meeting2(walks: list[_VJGameWalk]) -> _VJMeeting:
@@ -499,65 +499,64 @@ def test_row_predicates_classify_raw_clamp_and_breach() -> None:
 
 
 def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
-    # Baseline-5 records the citation levers ON: every eject ballot cites a
-    # valid turn or observation (compliance 1.0), no dangling citations, and
-    # the observation_id channel is now live (146 valid observation
-    # citations). The citation gate fired live twice — 2 ballots carry the
-    # UNCITED_ZERO_FLAG_EJECT coercion prefix — and the observation-id gate
-    # nulled 1 rendered id.
-    assert nine.ballots_total == 1057
-    assert nine.skip_ballots == 652
-    assert nine.eject_ballots == 405
-    assert nine.turn_citations == 327
-    assert nine.turn_citations_valid == 327
+    # Baseline-6 records the citation levers ON: nearly every eject ballot
+    # cites a valid turn or observation (compliance ~0.998), no dangling
+    # citations, and the observation_id channel is now live (151 valid
+    # observation citations). The reason-id gate nulled 1 rendered id; the
+    # citation gate and the observation-id gate did not fire.
+    assert nine.ballots_total == 933
+    assert nine.skip_ballots == 424
+    assert nine.eject_ballots == 509
+    assert nine.turn_citations == 468
+    assert nine.turn_citations_valid == 468
     assert nine.turn_citations_dangling == 0
-    assert nine.observation_citations == 146
-    assert nine.observation_citations_valid == 146
+    assert nine.observation_citations == 151
+    assert nine.observation_citations_valid == 151
     assert nine.observation_citations_dangling == 0
-    assert nine.cited_eject_ballots == 405
-    assert nine.citation_compliance_rate == pytest.approx(405 / 405)
-    assert nine.nulled_reason_id_markers == 0
-    assert nine.nulled_observation_id_markers == 1
-    assert nine.coerced_zero_flag_markers == 2
+    assert nine.cited_eject_ballots == 508
+    assert nine.citation_compliance_rate == pytest.approx(508 / 509)
+    assert nine.nulled_reason_id_markers == 1
+    assert nine.nulled_observation_id_markers == 0
+    assert nine.coerced_zero_flag_markers == 0
 
 
 def test_9p2i_ballot_calibration_pins_the_baseline_5_cell(
     nine: VJInstrumentReport,
 ) -> None:
-    # Baseline-5 vote-ballot calibration (Task 16.17 re-record): ECE 0.0565 at
-    # n=405, equal to the committed accusation-calibration fold's
+    # Baseline-6 vote-ballot calibration (Task 18.12 re-record): ECE 0.1502 at
+    # n=509, equal to the committed accusation-calibration fold's
     # vote_ballot_ece and to measure_baseline --json's vote_ballot_ece /
     # vote_ballot_total (one sample stream).
-    assert nine.ballot_calibration_total == 405
-    assert nine.ballot_confidence_ece == pytest.approx(0.056493827160495905)
-    assert nine.ballot_confidence_brier == pytest.approx(0.1073604938271605)
-    assert nine.ballot_calibration_low_power is False
+    assert nine.ballot_calibration_total == 509
+    assert nine.ballot_confidence_ece == pytest.approx(0.150196463654225)
+    assert nine.ballot_confidence_brier == pytest.approx(0.17909174852652257)
+    assert nine.ballot_calibration_low_power is True
 
 
 def test_9p2i_voice_tier_pins(nine: VJInstrumentReport) -> None:
-    assert nine.voice_ballots_total == 1057
-    assert nine.echo_ballots == 4
-    assert nine.within_meeting_echo_rate == pytest.approx(0.003784295175023652)
-    assert nine.response_skeleton_share == pytest.approx(0.052980132450331126)
-    assert nine.distinct_skeletons == 944
-    assert nine.distinct_skeleton_ratio == pytest.approx(0.8930936613055819)
-    assert nine.distinct_1 == pytest.approx(0.08404478298655488)
-    assert nine.distinct_2 == pytest.approx(0.2875054042369217)
+    assert nine.voice_ballots_total == 933
+    assert nine.echo_ballots == 0
+    assert nine.within_meeting_echo_rate == pytest.approx(0.0)
+    assert nine.response_skeleton_share == pytest.approx(0.027867095391211148)
+    assert nine.distinct_skeletons == 896
+    assert nine.distinct_skeleton_ratio == pytest.approx(0.9603429796355841)
+    assert nine.distinct_1 == pytest.approx(0.09726775956284153)
+    assert nine.distinct_2 == pytest.approx(0.3340242989577935)
 
 
 def test_9p2i_pooling_rides_the_same_report(nine: VJInstrumentReport) -> None:
     # DoD: 16.17 reads voice ALONGSIDE zero-flag — pooling + judgment +
     # voice are one machine-readable object per set.
     assert nine.pooling.meetings_total == nine.meetings_total
-    assert nine.pooling.whereabouts_claims_total == 360
-    assert nine.pooling.vouch_observations_total == 545
-    assert len(nine.per_meeting) == 179
+    assert nine.pooling.whereabouts_claims_total == 818
+    assert nine.pooling.vouch_observations_total == 1297
+    assert len(nine.per_meeting) == 156
 
 
 def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
     assert four.games_total == 50
     assert four.meetings_total == 39
-    assert four.convictions_total == 10
+    assert four.convictions_total == 13
     assert four.zero_flag_convictions == 0
     assert four.zero_flag_crew_convictions == 0
     assert four.zero_flag_impostor_convictions == 0
