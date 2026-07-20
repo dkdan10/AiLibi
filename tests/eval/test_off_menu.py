@@ -104,16 +104,16 @@ def _assert_all_on_menu(
 
 
 def test_samples_four_all_on_menu(samples_four: OffMenuActionReport) -> None:
-    """samples/4p1i (50 games): all-on-menu, N == 628 impostor decisions."""
+    """samples/4p1i (50 games): all-on-menu, N == 632 impostor decisions."""
 
-    _assert_all_on_menu(samples_four, games=50, decisions=628)
+    _assert_all_on_menu(samples_four, games=50, decisions=632)
     assert (samples_four.num_players, samples_four.num_impostors) == (4, 1)
 
 
 def test_samples_nine_all_on_menu(samples_nine: OffMenuActionReport) -> None:
-    """samples/9p2i (50 games): all-on-menu, N == 2145 impostor decisions."""
+    """samples/9p2i (50 games): all-on-menu, N == 2461 impostor decisions."""
 
-    _assert_all_on_menu(samples_nine, games=50, decisions=2145)
+    _assert_all_on_menu(samples_nine, games=50, decisions=2461)
     assert (samples_nine.num_players, samples_nine.num_impostors) == (9, 2)
 
 

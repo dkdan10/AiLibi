@@ -1,23 +1,23 @@
 {
   "conversion_per_meeting": {
-    "conversion_per_meeting": 0.5128205128205128,
-    "impostor_ejections": 80,
-    "resolved_meetings": 156
+    "conversion_per_meeting": 0.4727272727272727,
+    "impostor_ejections": 78,
+    "resolved_meetings": 165
   },
   "effective_deflection": {
-    "accused_impostor_events": 139,
-    "accused_impostor_survivals": 60,
-    "active_survivals": 56,
+    "accused_impostor_events": 148,
+    "accused_impostor_survivals": 70,
+    "active_survivals": 67,
     "effective_deflections": 23,
-    "named_target_deflections": 6,
-    "skip_saved_active_survivals": 33,
-    "third_party_deflections": 17
+    "named_target_deflections": 8,
+    "skip_saved_active_survivals": 44,
+    "third_party_deflections": 15
   },
   "genuine_class_conversion": {
-    "conversion_rate": 0.5,
-    "converted": 4,
+    "conversion_rate": 0.75,
+    "converted": 3,
     "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins).",
-    "supplied": 8
+    "supplied": 4
   },
   "impostor_ejection_channels": {
     "seed-0:m0": [
@@ -35,20 +35,11 @@
     "seed-11:m2": [
       "vent_witness"
     ],
-    "seed-12:m1": [
-      "prior_meeting_carry",
-      "vent_witness"
-    ],
-    "seed-12:m3": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
     "seed-13:m1": [
-      "vent_witness"
+      "body_proximity"
     ],
     "seed-14:m2": [
-      "prior_meeting_carry",
-      "vent_witness"
+      "body_proximity"
     ],
     "seed-14:m3": [
       "prior_meeting_carry",
@@ -61,23 +52,24 @@
       "vent_witness"
     ],
     "seed-16:m1": [
-      "body_proximity"
-    ],
-    "seed-16:m2": [
-      "prior_meeting_carry",
       "vent_witness"
     ],
-    "seed-17:m0": [
+    "seed-16:m2": [
       "vent_witness"
     ],
     "seed-17:m1": [
-      "vent_witness"
+      "body_proximity"
+    ],
+    "seed-17:m4": [
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-18:m0": [
       "vent_witness"
     ],
-    "seed-18:m2": [
-      "contradiction_flag"
+    "seed-18:m4": [
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-19:m0": [
       "vent_witness"
@@ -88,11 +80,13 @@
     "seed-1:m0": [
       "vent_witness"
     ],
-    "seed-1:m2": [
-      "prior_meeting_carry",
+    "seed-1:m1": [
+      "contradiction_flag"
+    ],
+    "seed-20:m0": [
       "vent_witness"
     ],
-    "seed-20:m1": [
+    "seed-20:m2": [
       "prior_meeting_carry",
       "vent_witness"
     ],
@@ -102,14 +96,11 @@
     "seed-22:m0": [
       "vent_witness"
     ],
-    "seed-22:m4": [
-      "prior_meeting_carry",
-      "vent_witness"
+    "seed-22:m2": [
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-23:m0": [
-      "vent_witness"
-    ],
-    "seed-23:m2": [
       "vent_witness"
     ],
     "seed-24:m0": [
@@ -124,22 +115,20 @@
     "seed-25:m3": [
       "vent_witness"
     ],
+    "seed-26:m0": [
+      "vent_witness"
+    ],
     "seed-26:m1": [
       "body_proximity"
-    ],
-    "seed-26:m2": [
-      "prior_meeting_carry",
-      "vent_witness"
     ],
     "seed-27:m0": [
       "vent_witness"
     ],
     "seed-28:m0": [
-      "contradiction_flag",
       "vent_witness"
     ],
     "seed-28:m1": [
-      "vent_witness"
+      "body_proximity"
     ],
     "seed-29:m0": [
       "vent_witness"
@@ -152,21 +141,26 @@
       "prior_meeting_carry",
       "vent_witness"
     ],
+    "seed-2:m3": [
+      "prior_meeting_carry",
+      "vent_witness"
+    ],
+    "seed-30:m2": [
+      "body_proximity",
+      "prior_meeting_carry"
+    ],
     "seed-31:m2": [
       "vent_witness"
     ],
-    "seed-32:m0": [
-      "vent_witness"
-    ],
     "seed-32:m1": [
-      "vent_witness"
+      "body_proximity"
     ],
     "seed-33:m0": [
       "vent_witness"
     ],
-    "seed-33:m2": [
-      "contradiction_flag",
-      "prior_meeting_carry"
+    "seed-33:m3": [
+      "prior_meeting_carry",
+      "vent_witness"
     ],
     "seed-34:m0": [
       "vent_witness"
@@ -174,24 +168,24 @@
     "seed-34:m1": [
       "vent_witness"
     ],
-    "seed-35:m1": [
-      "contradiction_flag"
-    ],
     "seed-35:m2": [
+      "body_proximity"
+    ],
+    "seed-35:m3": [
       "prior_meeting_carry",
       "vent_witness"
-    ],
-    "seed-36:m0": [
-      "body_proximity"
     ],
     "seed-36:m1": [
       "vent_witness"
     ],
-    "seed-38:m1": [
+    "seed-37:m2": [
+      "prior_meeting_carry",
+      "vent_witness"
+    ],
+    "seed-38:m0": [
       "body_proximity"
     ],
-    "seed-39:m2": [
-      "prior_meeting_carry",
+    "seed-38:m1": [
       "vent_witness"
     ],
     "seed-3:m0": [
@@ -201,12 +195,9 @@
       "prior_meeting_carry",
       "vent_witness"
     ],
-    "seed-40:m1": [
-      "vent_witness"
-    ],
     "seed-40:m2": [
-      "prior_meeting_carry",
-      "vent_witness"
+      "body_proximity",
+      "prior_meeting_carry"
     ],
     "seed-41:m0": [
       "vent_witness"
@@ -218,27 +209,24 @@
     "seed-42:m0": [
       "contradiction_flag"
     ],
-    "seed-42:m1": [
-      "body_proximity",
-      "prior_meeting_carry"
-    ],
     "seed-43:m0": [
       "vent_witness"
     ],
     "seed-43:m1": [
+      "prior_meeting_carry",
+      "vent_witness"
+    ],
+    "seed-44:m1": [
       "body_proximity",
       "prior_meeting_carry"
     ],
-    "seed-44:m0": [
-      "body_proximity"
-    ],
-    "seed-44:m3": [
+    "seed-44:m2": [
       "body_proximity"
     ],
     "seed-45:m0": [
       "vent_witness"
     ],
-    "seed-45:m1": [
+    "seed-45:m2": [
       "prior_meeting_carry",
       "vent_witness"
     ],
@@ -259,7 +247,12 @@
     "seed-49:m1": [
       "vent_witness"
     ],
+    "seed-4:m2": [
+      "body_proximity",
+      "prior_meeting_carry"
+    ],
     "seed-5:m0": [
+      "contradiction_flag",
       "vent_witness"
     ],
     "seed-5:m2": [
@@ -274,10 +267,11 @@
       "vent_witness"
     ],
     "seed-7:m1": [
+      "prior_meeting_carry",
       "vent_witness"
     ],
     "seed-8:m0": [
-      "vent_witness"
+      "body_proximity"
     ],
     "seed-9:m0": [
       "vent_witness"
@@ -288,42 +282,42 @@
     ]
   },
   "indistinguishability": {
-    "crewmate_actions_total": 7262,
-    "crewmate_do_task": 3511,
-    "crewmate_wait": 1043,
-    "crewmate_wait_share": 0.14362434591021758,
-    "impostor_actions_total": 2145,
-    "impostor_do_task": 368,
-    "impostor_wait": 147,
-    "impostor_wait_share": 0.06853146853146853,
-    "top_idler_wait_share": 0.5917947667122658
+    "crewmate_actions_total": 8136,
+    "crewmate_do_task": 3703,
+    "crewmate_wait": 1415,
+    "crewmate_wait_share": 0.17391838741396262,
+    "impostor_actions_total": 2461,
+    "impostor_do_task": 415,
+    "impostor_wait": 168,
+    "impostor_wait_share": 0.0682649329540837,
+    "top_idler_wait_share": 0.5267964040552421
   },
   "multi_signal_conversion": {
-    "conversions_with_body_proximity": 12,
-    "conversions_with_contradiction_flag": 5,
+    "conversions_with_body_proximity": 20,
+    "conversions_with_contradiction_flag": 3,
     "conversions_with_prior_meeting_carry": 25,
     "conversions_with_single_witness_inform": 0,
-    "conversions_with_vent_witness": 64,
-    "impostor_ejections": 80,
+    "conversions_with_vent_witness": 56,
+    "impostor_ejections": 78,
     "multi_signal_conversions": 26,
-    "multi_signal_rate": 0.325,
-    "single_signal_conversions": 54,
+    "multi_signal_rate": 0.3333333333333333,
+    "single_signal_conversions": 52,
     "unattributed_conversions": 0
   },
   "sample_dir": "9p2i",
   "supply_gauges": {
-    "accused_impostor_meetings": 125,
-    "flag_subjects_crew": 97,
-    "flag_subjects_impostor": 16,
-    "genuine_subject_meetings": 40,
-    "genuine_subject_share": 0.2564102564102564,
-    "meetings_total": 156,
-    "over_gate_listener_rows": 476,
-    "over_gate_listeners_per_accused_impostor_meeting": 3.808,
-    "strong_flags": 64,
-    "total_flags": 113,
-    "weak_flags": 49,
-    "zero_contradiction_meetings": 106,
-    "zero_contradiction_share": 0.6794871794871795
+    "accused_impostor_meetings": 134,
+    "flag_subjects_crew": 75,
+    "flag_subjects_impostor": 9,
+    "genuine_subject_meetings": 41,
+    "genuine_subject_share": 0.24848484848484848,
+    "meetings_total": 165,
+    "over_gate_listener_rows": 506,
+    "over_gate_listeners_per_accused_impostor_meeting": 3.7761194029850746,
+    "strong_flags": 58,
+    "total_flags": 84,
+    "weak_flags": 26,
+    "zero_contradiction_meetings": 115,
+    "zero_contradiction_share": 0.696969696969697
   }
 }

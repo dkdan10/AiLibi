@@ -1817,9 +1817,9 @@ class TestCommittedBytesArtifactCollapse:
         # weak-banded by preference over exclusion — an endpoint mismatch
         # can still convert under corroboration). The invariant is that every
         # endpoint-reason flag carries the weak marker (asserted in-loop); the
-        # count is 44 on the Task 18.12 baseline-6 re-record (the CREW-ONLY
-        # graduation slate) — the re-derived alibi_vs_sighting surface is 95 flags
-        # total on this substrate, of which 44 sit in the endpoint/boundary weak
+        # count is 26 on the Task 18.12 baseline-6 re-record (the CREW-ONLY
+        # graduation slate) — the re-derived alibi_vs_sighting surface is 76 flags
+        # total on this substrate, of which 26 sit in the endpoint/boundary weak
         # band; the remainder are interior (strong, or narrow/self-banded), not
         # endpoint-banded.
         endpoint_weak = 0
@@ -1832,7 +1832,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 44
+        assert endpoint_weak == 26
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -1897,7 +1897,7 @@ class TestCommittedBytesSeedPins:
 
     def test_recorded_conflict_flag_census(self) -> None:
         # On the Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate)
-        # the alibi_conflict surface carries exactly TWELVE recorded flags, ALL
+        # the alibi_conflict surface carries exactly EIGHT recorded flags, ALL
         # WEAK — so the band is non-empty but carries ZERO strong. The baseline-1
         # lone-STRONG cross-speaker deception conflict remains GONE. The
         # STRONG-conflict tripwire stays armed (rule 3): if a future re-record
@@ -1913,13 +1913,13 @@ class TestCommittedBytesSeedPins:
                     conflict_sites.append((seed, index, flag.subjects))
                     if not is_weak_contradiction(flag):
                         strong_sites.append((seed, index, flag.subjects))
-        assert len(conflict_sites) == 12
+        assert len(conflict_sites) == 8
         assert sorted(strong_sites) == []
 
     @pytest.mark.parametrize(
         ("meeting_index", "seed", "subject", "interior_tick"),
         [
-            (3, 38, "p-7", 31),
+            (0, 42, "p-4", 10),
         ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
@@ -1936,12 +1936,13 @@ class TestCommittedBytesSeedPins:
         #
         # INTENT-PRESERVATION (doctrine rule 3): on the Task 18.12 baseline-6
         # re-record (the CREW-ONLY graduation slate) the interior STRONG
-        # alibi_vs_sighting supply this pin anchors on is the two flags at seed-38
-        # m3 p-7 — alibi places p-7 in ADMIN (ticks 23-34) vs two CAFETERIA
-        # sightings that both land on interior tick 31 (strictly inside the
-        # window), so each carries neither the endpoint-tick nor the
-        # boundary-overlap weak reason. This pin RE-ANCHORS to that coordinate (the
-        # prior baseline-5 seed-25 m1 p-4 anchor has no successor). The test guards
+        # alibi_vs_sighting supply this pin anchors on is the two flags at seed-42
+        # m0 p-4 (an IMPOSTOR) — alibi places p-4 in EAST_HALL (ticks 9-11) vs two
+        # LABS sightings that both land on interior tick 10 (strictly inside the
+        # multi-tick window, 9 < 10 < 11), so each carries neither the endpoint-tick
+        # nor the boundary-overlap weak reason. This pin RE-ANCHORS to that
+        # coordinate (the prior baseline-6 seed-38 m3 p-7 anchor has no successor --
+        # seed 38 now holds only two meetings). The test guards
         # the checkable half — the interior STRONG detection CHANNEL is alive,
         # lights R7 (no weak marker), and re-derives byte-identically. The bytes are
         # recorded with the 13.14 self-stated down-weight already dropped, so the
@@ -2791,14 +2792,14 @@ class TestCommittedBytes106Pins:
     def test_strong_flags_surface_under_the_wave_e_substrate(self) -> None:
         # The Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate, with
         # the whereabouts-interior and vent-placement levers now UNCONDITIONAL)
-        # lights a RICHER R7 detector surface: 167 strong flags across the committed
-        # meetings. Composition is all legitimate detector kinds (vent_sighting 94,
-        # alibi_vs_sighting 60, alibi_vs_physical 13) — no forbidden leak shape, and
+        # lights a RICHER R7 detector surface: 160 strong flags across the committed
+        # meetings. Composition is all legitimate detector kinds (vent_sighting 96,
+        # alibi_vs_sighting 58, alibi_vs_physical 6) — no forbidden leak shape, and
         # NO strong alibi_conflict (the lone-STRONG cross-speaker conflict of
         # baseline 1 stays gone with the railroad elimination). The graduated
         # whereabouts-interior exemption promotes single-tick self-alibi-vs-sighting
         # flags into the strong band, and Task 15.4's vent observability plus the
-        # grounded vent-placement variant carry the rest; the weak band holds 49
+        # grounded vent-placement variant carry the rest; the weak band holds 26
         # flags — ALIVE (gated, not killed).
         weak = strong = 0
         for seed in range(50):
@@ -2808,8 +2809,8 @@ class TestCommittedBytes106Pins:
                         weak += 1
                     else:
                         strong += 1
-        assert strong == 167  # the R7 detector surface (vent + graduated levers)
-        assert weak == 49  # the weak band stays alive (gated, not killed)
+        assert strong == 160  # the R7 detector surface (vent + graduated levers)
+        assert weak == 26  # the weak band stays alive (gated, not killed)
 
     def test_seed2_m0_surviving_corroborations_are_interior_tick(self) -> None:
         # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
@@ -2853,14 +2854,14 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 228 pairs survive the gate on the Task 18.12 baseline-6 re-record (the
+        # 245 pairs survive the gate on the Task 18.12 baseline-6 re-record (the
         # CREW-ONLY graduation slate). EVERY surviving pair still passes the
         # per-pair spawn-window leak assert above (tick > SPAWN_WINDOW_LAST_TICK), so
         # the no-spawn-window-leak firewall holds; the count moved with the
         # substrate's saw_player supply. The over-suppression tripwire: a future
         # change driving this to 0 means the channel died, which the audit ranks as
         # bad as the artifacts. Well above zero: gated, not killed.
-        assert surviving == 228
+        assert surviving == 245
 
 
 class TestCommittedBytes1010Pins:

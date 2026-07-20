@@ -721,14 +721,14 @@ def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 7 / 173,  # crew-witnessed kills (was 7/203)
-            "flags_per_meeting": 207 / 156,  # 94 vent + 113 transcript (was 90/179)
-            "testimony_backed_conversion": 78 / 133,  # SUBJECT-AWARE (was 64/135)
+            "witnessed_event_rate": 6 / 177,  # crew-witnessed kills (was 7/173)
+            "flags_per_meeting": 180 / 165,  # 96 vent + 84 transcript (was 207/156)
+            "testimony_backed_conversion": 78 / 136,  # SUBJECT-AWARE (was 78/133)
         },
         _FOUR: {
             "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (unchanged)
             "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (unchanged)
-            "testimony_backed_conversion": 10 / 30,  # SUBJECT-AWARE (was 10/28)
+            "testimony_backed_conversion": 9 / 30,  # SUBJECT-AWARE (was 10/30)
         },
     }
     for sample_dir, fractions in expected.items():
@@ -1065,18 +1065,19 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
 
 
 def test_baseline_6_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 7/173 = 4.05% crew-witnessed anchor.
+    """The 9p2i witnessed-event rate is the 6/177 = 3.39% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    default baseline: baseline 6 records 7 crew-witnessed of 173 kills in 9p2i
-    (baseline 5 was 7/203 = 3.45%; baseline 4 was 9/178 = 5.06%).
+    default baseline: the vent-widening baseline 6 records 6 crew-witnessed of 177
+    kills in 9p2i (the pre-widening baseline 6 was 7/173 = 4.05%; baseline 5 was
+    7/203 = 3.45%).
     """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(7 / 173)
+    assert witnessed.measured == pytest.approx(6 / 177)
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:

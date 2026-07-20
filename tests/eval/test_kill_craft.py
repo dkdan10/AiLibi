@@ -92,28 +92,28 @@ def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
 
 def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
     assert samples_9p2i_report.games_total == 50
-    assert samples_9p2i_report.kills_total == 173
-    assert samples_9p2i_report.crew_witnessed_kills == 7
-    assert dict(samples_9p2i_report.co_present_histogram) == {0: 173}
+    assert samples_9p2i_report.kills_total == 177
+    assert samples_9p2i_report.crew_witnessed_kills == 6
+    assert dict(samples_9p2i_report.co_present_histogram) == {0: 177}
     assert dict(samples_9p2i_report.one_hop_histogram) == {
-        0: 93,
-        1: 28,
-        2: 34,
-        3: 12,
-        4: 5,
+        0: 96,
+        1: 30,
+        2: 33,
+        3: 13,
+        4: 4,
         5: 1,
     }
     assert samples_9p2i_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert samples_9p2i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
     assert samples_9p2i_report.mean_one_hop_witnessed == pytest.approx(
-        2.5714285714285716
+        2.3333333333333335
     )
     assert samples_9p2i_report.mean_one_hop_unwitnessed == pytest.approx(
-        0.8373493975903614
+        0.8304093567251462
     )
     assert samples_9p2i_report.witnessed_point_biserial_co_present is None
     assert samples_9p2i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.29346666591094617
+        0.238331042011978
     )
 
 
@@ -191,16 +191,16 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
     crew = samples_9p2i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 350
-    assert crew.decisions == 7262
-    assert crew.mean_conditional_entropy == pytest.approx(0.837784795383759)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.1522761680543325)
+    assert crew.decisions == 8136
+    assert crew.mean_conditional_entropy == pytest.approx(0.8789489039463282)
+    assert crew.mean_unconditional_entropy == pytest.approx(1.1994131474293237)
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 100
-    assert impostor.decisions == 2145
-    assert impostor.mean_conditional_entropy == pytest.approx(0.6593104925549508)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.761135421210043)
+    assert impostor.decisions == 2461
+    assert impostor.mean_conditional_entropy == pytest.approx(0.7069138997083648)
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.7642325293949697)
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -214,16 +214,16 @@ def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
 def test_samples_4p1i_entropy(samples_4p1i_report: KillCraftReport) -> None:
     crew = samples_4p1i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 150
-    assert crew.decisions == 1576
-    assert crew.mean_conditional_entropy == pytest.approx(0.6523766065895121)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.1003268490730924)
+    assert crew.decisions == 1584
+    assert crew.mean_conditional_entropy == pytest.approx(0.6529321621450677)
+    assert crew.mean_unconditional_entropy == pytest.approx(1.0988807344951677)
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_4p1i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 50
-    assert impostor.decisions == 628
-    assert impostor.mean_conditional_entropy == pytest.approx(0.4875280808302486)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.5193845256661798)
+    assert impostor.decisions == 632
+    assert impostor.mean_conditional_entropy == pytest.approx(0.490861414163582)
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.5135518536786732)
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",

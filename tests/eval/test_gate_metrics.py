@@ -827,77 +827,74 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     immutable — the next re-record regenerates the report and updates these
     pins, the standard re-record pattern.
 
-    Recorded values: genuine-class 4 converted / 8 supplied — on the baseline-6
+    Recorded values: genuine-class 3 converted / 4 supplied — on the baseline-6
     model/set the genuine (interior, non-proxy) impostor-subject flag class has
     instances again (the transcript contradiction channel is live), so the
-    PRIMARY gate reads 0.5; lost openings 1 against 0 cap-defaulted turns;
-    accused-impostor survival 60/139 with the partition 29 rendered-met + 1
-    sheltered + 30 unevidenced.
+    PRIMARY gate reads 0.75; lost openings 0 against 0 cap-defaulted turns;
+    accused-impostor survival 70/148 with the partition 34 rendered-met + 0
+    sheltered + 36 unevidenced.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 8
-    assert genuine.converted == 4
-    assert genuine.conversion_rate == 0.5
+    assert genuine.supplied == 4
+    assert genuine.converted == 3
+    assert genuine.conversion_rate == 0.75
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 1
+    assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 139
-    assert gate.accused_impostor_survivals == 60
-    # The 60 accused-impostor survivals partition into rendered-met (voters saw a
+    assert gate.accused_impostor_events == 148
+    assert gate.accused_impostor_survivals == 70
+    # The 70 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
-    # and unevidenced. On the baseline-6 re-record the sheltered class carries one
-    # survivor — the re-derived transcript flag is live again — so survivors split
-    # rendered-met (29), sheltered (1), and unevidenced (30), the largest share
-    # still unevidenced.
-    assert gate.survivals_rendered_met == 29
-    assert gate.survivals_sheltered_sub_gate == 1
-    assert gate.survivals_unevidenced == 30
+    # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
+    # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
+    # largest share still unevidenced.
+    assert gate.survivals_rendered_met == 34
+    assert gate.survivals_sheltered_sub_gate == 0
+    assert gate.survivals_unevidenced == 36
 
     # Per-seed identities re-derived from the same committed games: the
-    # genuine-class supply, the lost openings, and the sheltered survivals sit
-    # exactly where documented above. The per-seed fold confirms each aggregate
-    # is the sum of its per-seed parts, not a masked cancellation. On baseline-6
-    # the genuine-class supply spans seeds {17, 18, 27, 33, 35, 37, 42} with
-    # conversions on {18, 33, 35, 42}, the lost opening lands on seed 33, and the
-    # sheltered survival on seed 12 — so the fold proves each aggregate is a real
-    # per-seed sum, not a single-seed masking.
+    # genuine-class supply and conversions sit exactly where documented above. The
+    # per-seed fold confirms each aggregate is the sum of its per-seed parts, not a
+    # masked cancellation. On baseline-6 the genuine-class supply spans seeds
+    # {1, 5, 31, 42} with conversions on {1, 5, 42}; there are no lost openings and
+    # no sheltered survivals on this re-record, so both fold to the empty set.
     supplied_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
-    assert supplied_seeds == {17, 18, 27, 33, 35, 37, 42}
+    assert supplied_seeds == {1, 5, 31, 42}
     converted_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).converted > 0
     }
-    assert converted_seeds == {18, 33, 35, 42}
+    assert converted_seeds == {1, 5, 42}
     lost_opening_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).lost_opening_accusations > 0
     }
-    assert lost_opening_seeds == {33}
+    assert lost_opening_seeds == set()
     sheltered_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).survivals_sheltered_sub_gate > 0
     }
-    assert sheltered_seeds == {12}
+    assert sheltered_seeds == set()
 
     # JSON-level guard: the committed file itself serves the gate surface and
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 8
-    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 4
+    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 4
+    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 3
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )
@@ -928,7 +925,7 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 32
+    assert gate.accused_impostor_events == 31
     assert gate.accused_impostor_survivals == 22
     assert gate.survivals_rendered_met == 3
     assert gate.survivals_sheltered_sub_gate == 0

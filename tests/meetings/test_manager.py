@@ -5801,10 +5801,10 @@ class TestCommittedBytes107FoldPins:
                         voiceless_folds.append((seed, meeting_index, subject))
         # The STOP tripwire: a fold requires a voice, set-wide.
         assert voiceless_folds == []
-        # Non-vacuous: the fold DID fire across the committed set (133 folds on
+        # Non-vacuous: the fold DID fire across the committed set (123 folds on
         # the baseline-6 re-record — a byte-coupled count that re-pins on each
         # re-record).
-        assert folded_total == 133
+        assert folded_total == 123
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
         # The two-witness fold's conversion on baseline 6 (Qwen/Qwen3.6-27B, Task
