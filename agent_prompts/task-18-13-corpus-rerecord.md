@@ -52,9 +52,20 @@ the continuity anchor).
 
 ## Implementation hint
 
-The 17.9 runbook verbatim plus the checkpoint-push discipline (a ~22 h session WILL span
-reclaim risk). 4p1i first, then the 9p2i long leg sharded across 2 staggered workers with
-jittered backoff and `AILIBI_SEED_MAX_ATTEMPTS=8`. Context corrections from the 18.12
+The 17.9 runbook verbatim plus the checkpoint-push discipline. THIS IS A LOCAL OPERATOR
+SESSION (the owner's machine, not a dispatch container — chosen to remove container-reclaim
+risk from the ~22 h leg): run `bash scripts/setup_env.sh` first, export ONLY the recording
+environment (`AILIBI_LLM_PROVIDER=featherless`, `AILIBI_PROMPT_SET=qwen3_6_27b`,
+`AILIBI_SEED_MAX_ATTEMPTS=8`, `FEATHERLESS_API_KEY`) — the four graduated levers are
+always-on in code and need no env; `AILIBI_IMPOSTOR_ROLL_CALL` must stay UNSET (the
+recorder's preflight refuses it ON); work on the contract branch `phase-18-corpus-rerecord`
+from current `main`. Checkpoint-push stays mandatory as crash/interruption insurance:
+commit-and-push each completed seed range even though reclaim risk is gone. One arm the
+local credential RE-OPENS: the annotated-tag half of the Q5 convention (dispatch
+environments refuse tag pushes — the 16.14 limitation; locally
+`git tag -a phase-18-corpus-<sha>` is available at the owner's discretion, with the
+FROZEN-line shas remaining the operative guarantee either way). 4p1i first, then the 9p2i
+long leg sharded across 2 staggered workers with jittered backoff. Context corrections from the 18.12
 verification: the record's truth is `audits/audit-phase-18-baseline-6.md` — PR #300's BODY
 quotes superseded first-cut numbers from before the vent-widening fix re-record; never cite
 the PR body. Two cells this corpus gives their first powered read: the vent variant's
