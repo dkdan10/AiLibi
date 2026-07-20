@@ -784,7 +784,9 @@ class TestOptIn:
 
     def test_relevant_non_speaker_takes_one_opt_in_turn(self) -> None:
         # Opening places p-2 in the body room; p-2 (a non-speaker) becomes
-        # opt-in eligible. p-4 is never observed and stays silent.
+        # opt-in eligible and takes the genuine co-presence opt-in FIRST. p-4 is
+        # never observed, so it takes no co-presence opt-in -- it appears only in
+        # the terminal roll-call tail, never as a chain turn.
         result, _ = _run_meeting(
             _make_responder(
                 accusations={"p-1": "p-3"},
@@ -793,9 +795,13 @@ class TestOptIn:
         )
 
         opt_ins = [t for t in result.transcript.turns if t.turn_kind == "opt_in"]
-        assert [t.speaker for t in opt_ins] == ["p-2"]
-        speakers = {t.speaker for t in result.transcript.turns}
-        assert "p-4" not in speakers
+        assert [t.speaker for t in opt_ins] == ["p-2", "p-4"]
+        # p-4 is never a chain turn -- its only turn is the roll-call opt-in.
+        assert all(
+            t.turn_kind == "opt_in"
+            for t in result.transcript.turns
+            if t.speaker == "p-4"
+        )
 
     def test_opt_in_is_in_player_id_order(self) -> None:
         result, _ = _run_meeting(
@@ -821,15 +827,25 @@ class TestOptIn:
         )
 
         kinds = [t.turn_kind for t in result.transcript.turns]
-        assert kinds == ["opening", "reply", "opt_in"]
-        # p-4 never speaks (the opt-in accusation did not extend the chain).
-        assert all(t.speaker != "p-4" for t in result.transcript.turns)
+        assert kinds == ["opening", "reply", "opt_in", "opt_in"]
+        # The opt-in accusation did not extend the chain: p-4 gets no reply
+        # turn -- it appears only in the terminal roll-call opt-in tail.
+        assert all(
+            t.turn_kind != "reply"
+            for t in result.transcript.turns
+            if t.speaker == "p-4"
+        )
 
     def test_no_eligible_non_speaker_means_no_opt_in(self) -> None:
-        # No observations -> no co-presence -> no opt-in turns.
+        # No observations -> no co-presence eligibility, so there is no GENUINE
+        # opt-in; the only opt-in turns are the unconditional roll-call round
+        # asking the two silent non-speakers p-2, p-4.
         result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
 
-        assert all(t.turn_kind != "opt_in" for t in result.transcript.turns)
+        opt_in_speakers = [
+            t.speaker for t in result.transcript.turns if t.turn_kind == "opt_in"
+        ]
+        assert opt_in_speakers == ["p-2", "p-4"]
 
 
 # --- Roll-call round (Task 18.8, DEFAULT-OFF) ------------------------------
@@ -1146,14 +1162,26 @@ class TestRollCallOffPath:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
-        # Same fixture as the ON test: p-1 -> p-3 chain, p-2/p-4 never speak.
+        # Same fixture as the ON test: p-1 -> p-3 chain; since the Task-18.12
+        # graduation the round is UNCONDITIONAL, so the env no longer suppresses
+        # it -- the two silent non-speakers p-2, p-4 take roll-call opt-ins.
         result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
 
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
-        assert {t.speaker for t in result.transcript.turns} == {"p-1", "p-3"}
-        # 2 turn calls (opening + reply) + 4 vote calls, and provably zero
-        # roll-call calls -- the OFF path issues no extra LLM work.
-        assert len(client.calls) == 6
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "reply",
+            "opt_in",
+            "opt_in",
+        ]
+        assert {t.speaker for t in result.transcript.turns} == {
+            "p-1",
+            "p-2",
+            "p-3",
+            "p-4",
+        }
+        # 2 turn calls (opening + reply) + 2 roll-call opt-in calls + 4 vote
+        # calls -- the round fires regardless of the (now-ignored) env.
+        assert len(client.calls) == 8
 
     @pytest.mark.parametrize("value", ["0", "false", "off"])
     def test_explicit_falsy_env_is_the_identical_off_path(
@@ -1162,9 +1190,21 @@ class TestRollCallOffPath:
         monkeypatch.setenv(ENV_ROLL_CALL_ROUND, value)
         result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
 
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
-        assert {t.speaker for t in result.transcript.turns} == {"p-1", "p-3"}
-        assert len(client.calls) == 6
+        # The graduated round is unconditional: any env value reads identically
+        # ON, so the two silent non-speakers still take roll-call opt-ins.
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "reply",
+            "opt_in",
+            "opt_in",
+        ]
+        assert {t.speaker for t in result.transcript.turns} == {
+            "p-1",
+            "p-2",
+            "p-3",
+            "p-4",
+        }
+        assert len(client.calls) == 8
 
 
 # --- Turn ids --------------------------------------------------------------
@@ -1358,8 +1398,9 @@ class TestVotePromptInputs:
 
         vote_calls = [c for c in client.calls if "PHASE=VOTE" in c.prompt]
         p1_call = next(c for c in vote_calls if "voter=p-1\n" in c.prompt)
-        # p-1's prior for p-2 (0.40) surfaces verbatim.
-        assert "p-2:0.40/0.50" in p1_call.prompt
+        # p-1's prior for p-2 (0.40) surfaces, absence-prior shifted (+0.08)
+        # since p-2 is publicly unplaced: 0.40 -> 0.48.
+        assert "p-2:0.48/0.50" in p1_call.prompt
 
     def test_full_transcript_is_surfaced_to_vote_prompt(self) -> None:
         _, client = _run_meeting(
@@ -1367,8 +1408,9 @@ class TestVotePromptInputs:
         )
 
         vote_calls = [c for c in client.calls if "PHASE=VOTE" in c.prompt]
-        # opening + one reply = 2 turns visible at the vote.
-        assert all("TURNS_COUNT=2" in c.prompt for c in vote_calls)
+        # opening + one reply + the two roll-call opt-ins (p-3, p-4) = 4 turns
+        # visible at the vote.
+        assert all("TURNS_COUNT=4" in c.prompt for c in vote_calls)
 
 
 class TestTurnPromptLivingRoster:
@@ -2064,8 +2106,14 @@ class TestTeammateGuardOnProductionPath:
             not (isinstance(c, AccusationClaim) and c.against == "p-5")
             for c in opening.claims
         )
-        # No reply by p-5 (the chain did not pass to the teammate).
-        assert all(t.speaker != "p-5" for t in result.transcript.turns[1:])
+        # No reply by p-5 (the chain did not pass to the teammate) -- p-5
+        # appears only in the unconditional roll-call opt-in tail, never as a
+        # chain turn.
+        assert all(
+            t.speaker != "p-5"
+            for t in result.transcript.turns[1:]
+            if t.turn_kind != "opt_in"
+        )
 
     def test_impostor_reply_accusation_of_teammate_is_dropped(self) -> None:
         # p-1 opens accusing p-4 (impostor); p-4 replies accusing teammate
@@ -2081,7 +2129,13 @@ class TestTeammateGuardOnProductionPath:
             not (isinstance(c, AccusationClaim) and c.against == "p-5")
             for c in reply.claims
         )
-        assert all(t.speaker != "p-5" for t in result.transcript.turns)
+        # p-5 never speaks in the chain -- its only turn is the unconditional
+        # roll-call opt-in.
+        assert all(
+            t.speaker != "p-5"
+            for t in result.transcript.turns
+            if t.turn_kind != "opt_in"
+        )
 
     def test_no_impostor_ejected_by_teammate_betrayal_vote(self) -> None:
         # Both impostors are told to vote the OTHER impostor; the guard
@@ -2602,9 +2656,15 @@ class TestFakeProviderInterop:
             )
         )
         # FakeProvider emits an accusation-free opening -> chain is just the
-        # opening, votes normalise to SKIP -> SKIPPED.
+        # opening; the unconditional roll-call round then asks the three silent
+        # non-speakers. Votes normalise to SKIP -> SKIPPED.
         assert result.outcome == "SKIPPED"
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening"]
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "opt_in",
+            "opt_in",
+            "opt_in",
+        ]
 
     def test_two_runs_with_fake_provider_are_byte_identical(self) -> None:
         def _once() -> MeetingResult:
@@ -3395,12 +3455,19 @@ class TestDefaultsSurfacedAndOpeningRetry:
             )
         )
 
-        # opening (p-1 -> p-3) then a defaulted reply by p-3.
-        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
+        # opening (p-1 -> p-3), a defaulted reply by p-3, then the two roll-call
+        # opt-ins (p-2, p-4) which the reply-invalid client also defaults.
+        assert [t.turn_kind for t in result.transcript.turns] == [
+            "opening",
+            "reply",
+            "opt_in",
+            "opt_in",
+        ]
         assert result.transcript.turns[1].free_text == DEFAULT_TURN_FREE_TEXT
-        # Only the opening retries; the reply is attempted exactly once.
-        assert client.reply_calls == 1
-        assert len(manager.defaulted_calls) == 1
+        # No turn retries: the reply and the two roll-call opt-ins are each
+        # attempted exactly once (3 PHASE=TURN calls in all).
+        assert client.reply_calls == 3
+        assert len(manager.defaulted_calls) == 3
         default = manager.defaulted_calls[0]
         assert default.phase == "reply"
         assert default.agent_id == "p-3"
@@ -3454,9 +3521,9 @@ class TestDefaultsSurfacedAndOpeningRetry:
         # 2-decimal precision the vote_ballot.j2 line renders and
         # parse_rendered_max_suspicion recovers, so a defaulted ballot near the
         # gate classifies IDENTICALLY whether read from the persisted field or a
-        # logged prompt. A raw 0.596 renders as **0.60** (-> MUST-vote); the
-        # persisted value must be 0.60, not the raw 0.596 (which would read
-        # MUST-skip and split the two telemetry surfaces).
+        # logged prompt. A raw 0.596, absence-prior shifted (+0.08 since p-2 is
+        # publicly unplaced) to 0.676, renders as **0.68**; the persisted value
+        # must match that 2-decimal render (0.68), not the raw 0.676.
         participants = (
             _participant(
                 "p-1",
@@ -3485,14 +3552,16 @@ class TestDefaultsSurfacedAndOpeningRetry:
             for v in manager.defaulted_calls
             if v.phase == "vote" and v.agent_id == "p-1"
         )
-        assert p1_vote.rendered_vote_max == 0.60
-        # The other voters hold no row over a candidate -> rendered max 0.00.
+        assert p1_vote.rendered_vote_max == 0.68
+        # The other voters hold no explicit row, but the absence prior
+        # materialises their publicly-unplaced candidates at 0.58 -> rendered
+        # max 0.58.
         p2_vote = next(
             v
             for v in manager.defaulted_calls
             if v.phase == "vote" and v.agent_id == "p-2"
         )
-        assert p2_vote.rendered_vote_max == 0.0
+        assert p2_vote.rendered_vote_max == 0.58
 
     def test_defaulted_calls_reset_between_runs(self) -> None:
         # The manager is reused across a game's meetings, so its default ledger
@@ -3738,8 +3807,10 @@ class TestOpeningAccuseOrUnsureValidation:
         reply = result.transcript.turns[1]
         assert reply.turn_kind == "reply"
         assert reply.free_text == "I deny that completely."
+        # reply (p-3) plus the two roll-call opt-ins (p-2, p-4) = 3 PHASE=TURN
+        # calls; the narration-only reply still records on its single attempt.
         turn_calls = [c for c in client.calls if "PHASE=TURN" in c.prompt]
-        assert len(turn_calls) == 1
+        assert len(turn_calls) == 3
 
 
 class TestCoverDirectiveThreading:
@@ -4859,9 +4930,11 @@ class TestOpeningUnsureDegrade:
         assert any(isinstance(o, FoundBodyObservation) for o in opening.observations)
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
         # The kept sighting makes p-3 opt-in-eligible (co-present with the
-        # body room), so the meeting still has an info-share phase...
+        # body room), so the meeting still has an info-share phase; the
+        # unconditional roll-call round then asks the silent non-speakers p-2,
+        # p-4...
         opt_ins = [t for t in result.transcript.turns if t.turn_kind == "opt_in"]
-        assert [t.speaker for t in opt_ins] == ["p-3"]
+        assert [t.speaker for t in opt_ins] == ["p-3", "p-2", "p-4"]
         # ...and every living participant still casts a ballot.
         assert sorted(b.voter for b in result.ballots) == [
             "p-1",
@@ -5272,19 +5345,27 @@ class TestPreVoteFoldOnProductionPath:
         # the §4.6 gate where the flat +0.05 inform left it at 0.55); p-4's
         # 0.55 parked-listener prior crosses to 0.67. The same-phase
         # corroboration of p-1 (the vouched accuser) renders symmetrically and
-        # stays the flat -0.05: p-4's existing 0.50 row reads 0.45.
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.87/0.50"
+        # stays the flat -0.05: p-4's existing 0.50 row reads 0.45. The absence
+        # prior (+0.08) additionally materialises every publicly-unplaced
+        # listener at 0.58.
+        assert (
+            _stub_vote_graph(client, voter="p-1")
+            == "suspicion=p-2:0.87/0.50,p-3:0.58/0.50,p-4:0.58/0.50"
+        )
         assert (
             _stub_vote_graph(client, voter="p-3")
-            == "suspicion=p-1:0.45/0.50,p-2:0.62/0.50"
+            == "suspicion=p-1:0.45/0.50,p-2:0.62/0.50,p-4:0.58/0.50"
         )
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.45/0.50,p-2:0.67/0.50"
+            == "suspicion=p-1:0.45/0.50,p-2:0.67/0.50,p-3:0.58/0.50"
         )
         # The subject votes too: no self row, and the defended accuser
-        # renders lowered in their graph as well.
-        assert _stub_vote_graph(client, voter="p-2") == "suspicion=p-1:0.45/0.50"
+        # renders lowered in their graph as well (with the absence-prior rows).
+        assert (
+            _stub_vote_graph(client, voter="p-2")
+            == "suspicion=p-1:0.45/0.50,p-3:0.58/0.50,p-4:0.58/0.50"
+        )
 
     def test_folded_per_meeting_total_equals_unfolded_total(self) -> None:
         # THE mandatory double-fold pin, meeting-level: the pre-vote fold
@@ -5342,11 +5423,19 @@ class TestPreVoteFoldOnProductionPath:
         evidence = extract_belief_evidence(result)
         assert evidence.pre_vote_folded == ()
         assert evidence.pre_vote_informed == ("p-2",)
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
-        assert _stub_vote_graph(client, voter="p-3") == "suspicion=p-2:0.55/0.50"
+        # The absence prior (+0.08) additionally materialises every
+        # publicly-unplaced listener at 0.58.
+        assert (
+            _stub_vote_graph(client, voter="p-1")
+            == "suspicion=p-2:0.80/0.50,p-3:0.58/0.50,p-4:0.58/0.50"
+        )
+        assert (
+            _stub_vote_graph(client, voter="p-3")
+            == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50,p-4:0.58/0.50"
+        )
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50"
+            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50,p-3:0.58/0.50"
         )
 
         # The pre-vote inform REPLACES the post-vote single-accuser bump, so
@@ -5384,9 +5473,11 @@ class TestPreVoteFoldOnProductionPath:
         assert evidence.accused == ("p-1", "p-2", "p-3")
         assert evidence.pre_vote_folded == ()
         assert evidence.pre_vote_informed == ()
+        # No fold/inform moves p-2 off its 0.55 prior; the absence prior (+0.08)
+        # shifts the publicly-unplaced rows: p-2 0.55->0.63 and p-3 to 0.58.
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50"
+            == "suspicion=p-1:0.50/0.50,p-2:0.63/0.50,p-3:0.58/0.50"
         )
 
     def test_echoed_accusers_inform_not_fold_on_production_path(self) -> None:
@@ -5416,10 +5507,11 @@ class TestPreVoteFoldOnProductionPath:
         assert evidence.pre_vote_folded == ()
         assert evidence.pre_vote_informed == ("p-2",)
         # The inform still spreads exactly one +0.05: p-4's near-gate 0.55
-        # crosses to 0.60, never to 0.65 (no doubled fold from the echo).
+        # crosses to 0.60, never to 0.65 (no doubled fold from the echo). The
+        # absence prior (+0.08) additionally materialises p-3 at 0.58.
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50"
+            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50,p-3:0.58/0.50"
         )
 
     def test_inform_leaves_the_equal_tally_and_tie_skip_frozen(self) -> None:
@@ -5475,10 +5567,18 @@ class TestPreVoteFoldOnProductionPath:
 
         assert extract_belief_evidence(result).pre_vote_folded == ("p-2",)
         # The impostor voter (p-4) carries NO teammate edge -- the graduated
-        # two-voice lift rides the §4.7 guard exactly as the flat bump did.
-        assert _stub_vote_graph(client, voter="p-4") == "suspicion=p-1:0.45/0.50"
-        # The crew listener takes the graduated +0.12 fold: 0.75 -> 0.87.
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.87/0.50"
+        # two-voice lift rides the §4.7 guard exactly as the flat bump did (the
+        # absence prior still materialises the unplaced p-3 at 0.58).
+        assert (
+            _stub_vote_graph(client, voter="p-4")
+            == "suspicion=p-1:0.45/0.50,p-3:0.58/0.50"
+        )
+        # The crew listener takes the graduated +0.12 fold: 0.75 -> 0.87 (plus
+        # the absence-prior rows for the unplaced p-3, p-4).
+        assert (
+            _stub_vote_graph(client, voter="p-1")
+            == "suspicion=p-2:0.87/0.50,p-3:0.58/0.50,p-4:0.58/0.50"
+        )
 
     def test_fold_is_deterministic_across_runs(self) -> None:
         first_result, first_client = _run_meeting(
@@ -5587,7 +5687,9 @@ class TestRenderAfterFoldConsistency:
         sub_gate = prompts["p-3"]
 
         assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate
-        assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.55)
+        # The absence prior materialises the unplaced listener p-4 at 0.58,
+        # which is the rendered max here (still below the 0.60 gate).
+        assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.58)
         # De-imperatived (v7): a sub-gate max no longer emits a MUST-skip
         # command; the deterministic tally floor enforces the below-threshold
         # skip regardless of the prompt.
@@ -5699,28 +5801,29 @@ class TestCommittedBytes107FoldPins:
                         voiceless_folds.append((seed, meeting_index, subject))
         # The STOP tripwire: a fold requires a voice, set-wide.
         assert voiceless_folds == []
-        # Non-vacuous: the fold DID fire across the committed set (50 folds on
-        # baseline 5 — a byte-coupled count that re-pins on each re-record).
-        assert folded_total == 50
+        # Non-vacuous: the fold DID fire across the committed set (133 folds on
+        # the baseline-6 re-record — a byte-coupled count that re-pins on each
+        # re-record).
+        assert folded_total == 133
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
-        # The two-witness fold's conversion on baseline 5 (Qwen/Qwen3.6-27B
-        # qwen3_6_27b.v3, Task 16.17). NOTE: the fold is LIVE at record time, so the
-        # recorded vote graphs are ALREADY post-fold -- read them directly
-        # (replaying the fold over them would double-apply). Re-anchored to seed 18
-        # m0: a multi-voice fold on impostor p-5 (voices p-1/p-6/p-9) lifts the
-        # LISTENERS p-4 and p-8 over the §4.6 gate in the recorded graphs; they
-        # target p-5, and p-5 (the seed-18 impostor, verified from the kill actions)
-        # is ejected. The §6.3 fold conversion catching a true impostor, end to end
-        # on real bytes.
-        entry = _committed_meeting(18, 0)
-        assert entry.ejected_player_id == "p-5"
+        # The two-witness fold's conversion on baseline 6 (Qwen/Qwen3.6-27B, Task
+        # 18.12 -- the CREW-ONLY graduation slate). NOTE: the fold is LIVE at record
+        # time, so the recorded vote graphs are ALREADY post-fold -- read them
+        # directly (replaying the fold over them would double-apply). Re-anchored to
+        # seed 14 m2: a two-witness fold on impostor p-9 (voices p-4/p-6) lifts the
+        # LISTENERS p-7 and p-8 over the §4.6 gate in the recorded graphs; they
+        # target p-9, and p-9 (the seed-14 impostor, verified from the eval-report
+        # roles) is ejected. The §6.3 fold conversion catching a true impostor, end
+        # to end on real bytes.
+        entry = _committed_meeting(14, 2)
+        assert entry.ejected_player_id == "p-9"
         _, recorded, _ = self._replay_pre_vote_fold(entry)
         voices = set(
             independent_voices(
                 entry.transcript,
                 roster=frozenset(ballot.voter for ballot in entry.ballots),
-            ).get("p-5", ())
+            ).get("p-9", ())
         )
         assert len(voices) >= 2  # the two-witness fold drove the conversion
         ballots = {ballot.voter: ballot.target for ballot in entry.ballots}
@@ -5728,23 +5831,23 @@ class TestCommittedBytes107FoldPins:
             voter
             for voter, graph in recorded.items()
             if voter not in voices
-            and graph.get("p-5", 0.0) >= 0.60
-            and ballots.get(voter) == "p-5"
+            and graph.get("p-9", 0.0) >= 0.60
+            and ballots.get(voter) == "p-9"
         )
-        assert listeners_over_gate == ["p-4", "p-8"]
+        assert listeners_over_gate == ["p-7", "p-8"]
 
     def test_seed7_m2_defended_subject_corroborated_not_folded(self) -> None:
-        # Same-phase symmetry (re-anchored to baseline 5 -- Qwen/Qwen3.6-27B
-        # qwen3_6_27b.v3, Task 16.17): a defended subject's vouches are ingested as
-        # a CORROBORATION (which lowers its suspicion same-phase), never as a
-        # pile-on fold. Anchored to seed 20 m0: the corroborated subject p-1 (a
-        # crewmate -- the seed-20 impostor is p-2 -- with ZERO accusation voices, so
-        # it can only reach the corroboration channel) is never folded, while the
-        # impostor p-2 takes the fold. The audited suspicion-math (a corroboration
-        # drops the defended subject below the §4.6 gate) is covered by the synthetic
-        # corroboration-delta tests; here we pin that the bytes route the defended
-        # subject to the corroboration channel, not the fold.
-        entry = _committed_meeting(20, 0)
+        # Same-phase symmetry (re-anchored to baseline 6 -- Qwen/Qwen3.6-27B, Task
+        # 18.12): a defended subject's vouches are ingested as a CORROBORATION
+        # (which lowers its suspicion same-phase), never as a pile-on fold. Anchored
+        # to seed 32 m0: the corroborated subject p-1 (a crewmate -- the seed-32
+        # impostors are p-5/p-6 -- with ZERO accusation voices, so it can only reach
+        # the corroboration channel) is never folded, while the impostor p-5 takes
+        # the fold. The audited suspicion-math (a corroboration drops the defended
+        # subject below the §4.6 gate) is covered by the synthetic corroboration-
+        # delta tests; here we pin that the bytes route the defended subject to the
+        # corroboration channel, not the fold.
+        entry = _committed_meeting(32, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
@@ -5756,7 +5859,7 @@ class TestCommittedBytes107FoldPins:
         assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
         assert "p-1" in evidence.corroborated
         assert "p-1" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-2",)
+        assert evidence.pre_vote_folded == ("p-5",)
 
 
 # ---------------------------------------------------------------------------
@@ -6703,51 +6806,48 @@ def _derive_inform_yield() -> _InformYield:
 class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the committed bytes.
 
-    The deliverable number, re-anchored to the baseline-5 re-record
+    The deliverable number, re-anchored to the latest re-record
     (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17). The derivation first reproduces
-    the §4(3) partition EXACTLY off the committed bytes (baseline 5: 75 accused
-    living-impostor meeting-subjects the ballots did not eject; 37 of them rendered
-    over the §4.6 gate yet lost plurality -- prior baseline 4 read 46 / 19,
-    baseline 3 read 46 / 10, baseline 2 read 72 / 38), which validates the offline
+    the §4(3) partition EXACTLY off the committed bytes (60 accused
+    living-impostor meeting-subjects the ballots did not eject; 29 of them rendered
+    over the §4.6 gate yet lost plurality -- prior re-record read 75 / 37, then
+    46 / 19, 46 / 10, 72 / 38), which validates the offline
     oracle, then counts how many the single-witness inform converts WITHOUT any
-    tally change (baseline 5: 4; baseline 4: 4; baselines 2 & 3: none).
+    tally change (this re-record: 1; prior: 4, 4, none, none).
     """
 
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the baseline-5 committed bytes
-        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17). The prior baseline-4 re-record
-        # read 46 accused-not-ejected / 19 over-gate-lost-plurality; baseline 5 moves
-        # accused-not-ejected to 75 and over-gate-lost-plurality to 37 -- a
+        # The §4(3) partition, re-derived from the committed bytes
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17). The prior re-record read 75
+        # accused-not-ejected / 37 over-gate-lost-plurality; this re-record moves
+        # accused-not-ejected to 60 and over-gate-lost-plurality to 29 -- a
         # legitimate era move (pure functions of the bytes, re-derived by the SAME
         # offline oracle). The accused-not-ejected count cross-checks the
         # effective-deflection survivals (accused_impostor_survivals in the eval-layer
         # metrics) exactly.
-        assert result.accused_not_ejected == 75
-        assert result.over_gate_lost_plurality == 37
+        assert result.accused_not_ejected == 60
+        assert result.over_gate_lost_plurality == 29
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
 
-        # 21 of the 37 over-gate-lost-plurality subjects are single-witness-informed
-        # (one observation-backed voice under echo-dedup) on baseline 5
-        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17; prior baseline 4: 12 of 19).
-        # BASELINE-5 BEHAVIOR: as on baseline 4 (and unlike baselines 2 & 3, 0
-        # conversions each) the +0.05 inform DOES lift FOUR single-witness candidates
+        # 9 of the 29 over-gate-lost-plurality subjects are single-witness-informed
+        # (one observation-backed voice under echo-dedup) on this re-record
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17; prior re-record: 21 of 37).
+        # As on the prior re-records (and unlike baselines 2 & 3, 0
+        # conversions each) the +0.05 inform DOES lift ONE single-witness candidate
         # to a strict plurality under the frozen equal-votes + tie->SKIP tally (the
         # earliest redistribute era read 14 of 97). The flip set is still the
         # conservative one (only recorded SKIP voters whose rendered value sits in
         # [gate - inform, gate) -- a baseline below that band still cannot cross on
-        # the inform alone, the owner principle); these four conversions are the
+        # the inform alone, the owner principle); this one conversion is the
         # honest census the committed bytes support, pinned exactly.
-        assert result.informed_candidates == 21
-        assert len(result.conversions) == 4
+        assert result.informed_candidates == 9
+        assert len(result.conversions) == 1
         assert result.conversions == (
-            (9, "headless-seed-9:meeting-2", "p-4"),
-            (19, "headless-seed-19:meeting-2", "p-9"),
-            (28, "headless-seed-28:meeting-2", "p-4"),
-            (37, "headless-seed-37:meeting-2", "p-9"),
+            (26, "headless-seed-26:meeting-0", "p-3"),
         )
 
     def test_derivation_is_deterministic(self) -> None:
@@ -7027,7 +7127,7 @@ class TestUnfreezeRenderedMemory:
             assert "FROZEN-OPEN-p-1" not in prompt
 
     def test_ballot_override_equals_the_suspicion_graph_it_renders(self) -> None:
-        # The override fed to the hook must be EXACTLY the per-voter post-fold
+        # The override fed to the hook must be the per-voter post-fold
         # suspicion_graph the SAME ballot prompt renders -- so the belief lines
         # and the suspicion_graph kwarg agree by construction (PR #198 fix).
         captured: list[dict[str, float]] = []
@@ -7045,7 +7145,17 @@ class TestUnfreezeRenderedMemory:
         )
         # The hook fired exactly once for p-1 (its single ballot), not on turns.
         assert len(captured) == 1
-        assert captured[0] == _suspicion_block_to_dict(ballot_prompt)
+        # The ballot renders each suspicion with ``:.2f`` (agents/memory/store.py),
+        # so compare the override at that SAME rendered precision. The Task 18.12
+        # absence prior can push a value to a non-2-decimal float (e.g. 0.40 + 0.08
+        # = 0.48000000000000004) that the prompt still renders "0.48"; rounding the
+        # override to the render precision keeps the divergence guard intact (a real
+        # pre/post-fold mismatch is >= 0.01 and still fails) while tolerating the
+        # float-representation epsilon.
+        rendered_override = {
+            pid: float(f"{value:.2f}") for pid, value in captured[0].items()
+        }
+        assert rendered_override == _suspicion_block_to_dict(ballot_prompt)
 
     def test_no_hook_uses_the_frozen_open_tick_render(self) -> None:
         # Default participants carry no hook: the manager reads the frozen
@@ -7196,10 +7306,11 @@ class TestVentObservabilityEndToEnd:
         ] == []
         # No hard evidence minted: p-3 appears in the voters' graphs only
         # through the accusation-side testimony fold (the single-voice
-        # +0.05 inform), never the 0.30 STRONG lift.
+        # +0.05 inform) plus the absence prior (+0.08, p-3 publicly unplaced) =
+        # 0.63, never the 0.30 STRONG lift (which would read 0.80).
         for voter in ("p-2", "p-4"):
             assert _vote_prompt_suspicion(client, voter=voter, of="p-3") == (
-                pytest.approx(0.55)
+                pytest.approx(0.63)
             )
 
     def test_mismatched_record_raises_no_flag(self) -> None:
@@ -7307,7 +7418,9 @@ class TestVentSceneOptInEligibility:
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
         ]
-        assert opt_in_speakers == ["p-4"]
+        # p-4 takes the genuine vent-scene opt-in FIRST; the silent non-speaker
+        # p-2 then takes the unconditional roll-call opt-in.
+        assert opt_in_speakers == ["p-4", "p-2"]
 
     def test_without_the_vent_observation_the_scene_grants_nothing(self) -> None:
         # The non-vacuity control: the same sighting of p-4 in MEDBAY, with
@@ -7327,11 +7440,13 @@ class TestVentSceneOptInEligibility:
         )
         result, _client = _run_meeting(responder)
 
+        # No vent scene means no genuine opt-in; the only opt-ins are the
+        # unconditional roll-call round asking the silent non-speakers p-2, p-4.
         assert [
             turn.speaker
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
-        ] == []
+        ] == ["p-2", "p-4"]
 
     def test_compound_vent_room_label_still_places_a_sighting_at_the_scene(
         self,
@@ -7372,12 +7487,14 @@ class TestVentSceneOptInEligibility:
         assert [
             flag.kind for flag in result.contradictions if flag.kind == "vent_sighting"
         ] == ["vent_sighting"]
-        # ...and the MEDBAY sighting counts as placed at the vent scene.
+        # ...and the MEDBAY sighting counts as placed at the vent scene: p-4
+        # takes the genuine opt-in FIRST, then the silent non-speaker p-2 takes
+        # the unconditional roll-call opt-in.
         assert [
             turn.speaker
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
-        ] == ["p-4"]
+        ] == ["p-4", "p-2"]
 
     def test_non_spatial_vent_room_label_grants_no_scene(self) -> None:
         # A placeholder vent room canonicalises to nothing (the detector's
@@ -7407,8 +7524,10 @@ class TestVentSceneOptInEligibility:
             ),
         )
 
+        # No scene means no genuine opt-in; the only opt-ins are the
+        # unconditional roll-call round asking the silent non-speakers p-2, p-4.
         assert [
             turn.speaker
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
-        ] == []
+        ] == ["p-2", "p-4"]
