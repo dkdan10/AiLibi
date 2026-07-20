@@ -378,18 +378,22 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     nine_p_two_i_loader: ReplayLoader,
 ) -> None:
     """Task 18.12: the gate-rewrite markers surface as spectator chips on the live
-    cases the committed BASELINE-6 9p2i set carries, re-anchored from baseline 5.
+    cases the committed BASELINE-6 9p2i set carries, re-anchored after the vent
+    widening re-record cascaded the trajectories.
 
-    The two baseline-5 fixtures (seed 39's lone 16.6 coercion, seed 48's STACKED
-    16.5+16.6 case) COLLAPSED under the meeting-layer graduation: the roll-call
-    round plus the graduated flag pressure leave NO uncited zero-flag eject to
-    coerce (16.6) and NO nulled observation citation (16.5) anywhere on the
-    committed set -- an honest-zero census, asserted below. The live gate-marker
-    chip on baseline 6 is the under-gate eject REDIRECT (the owner-principle
-    guard: an under-gate eject target is redirected, never left to a random
-    innocent), which fires on 17 ballots; it is re-anchored here as the real-bytes
-    chip pin so a future substrate cannot silently drop the chips. The DTO/chip
-    rendering mechanism itself stays covered synthetically by tests/api/test_schemas.
+    Census over the 971 committed ballots after the vent-widening re-record:
+    invalid_reason_id x2, invalid_target x3, uncited_coerced (16.6) x1, and the
+    live gate chip under_gate_redirect x13. The 16.5 nulled-observation citation
+    (invalid_observation_id) stays honest-zero -- NO nulled observation citation
+    survives anywhere on the committed set, asserted below. The 16.6 coercion
+    (uncited_coerced) is NOT zero on baseline 6: exactly ONE ballot carries it
+    (seed 36 m0, p-7's SKIP, STACKED with invalid_reason_id), re-pinned below (it
+    was an honest-zero on the pre-widening record). The live gate-marker chip is
+    the under-gate eject REDIRECT (the owner-principle guard: an under-gate eject
+    target is redirected, never left to a random innocent), which fires on 13
+    ballots (was 17); it is re-anchored here as the real-bytes chip pin so a future
+    substrate cannot silently drop the chips. The DTO/chip rendering mechanism
+    itself stays covered synthetically by tests/api/test_schemas.
     """
 
     ballots = [
@@ -399,33 +403,35 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
         for b in meeting.ballots
     ]
 
-    # The baseline-5 coercion / observation-null scenario class collapsed: no
-    # uncited-coerced (16.6) and no invalid-observation-id (16.5) ballot survives
-    # on the baseline-6 committed set.
-    assert not [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
+    # The 16.5 observation-null scenario class stays collapsed: no
+    # invalid-observation-id (16.5) ballot survives on the baseline-6 committed set.
     assert not [b for b in ballots if "invalid_observation_id" in b.rewrite_reasons]
+    # The 16.6 coercion re-appears with the vent-widening trajectories: exactly one
+    # uncited-coerced ballot (seed 36 m0, stacked with invalid_reason_id).
+    coerced = [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
+    assert len(coerced) == 1
 
-    # The live gate-marker chip: the under-gate eject redirect. 17 ballots carry it.
+    # The live gate-marker chip: the under-gate eject redirect. 13 ballots carry it.
     redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
-    assert len(redirected) == 17
+    assert len(redirected) == 13
 
-    # Anchor seed 6 m2: an under-gate eject redirected off the sub-gate target,
+    # Anchor seed 22 m2: an under-gate eject redirected off the sub-gate target,
     # the marker stripped from the served render (the chip is NOT a fabricated
     # addition -- the clean prose is a suffix of the raw text).
-    replay_6 = nine_p_two_i_loader.load_replay("headless-seed-6")
+    replay_22 = nine_p_two_i_loader.load_replay("headless-seed-22")
     anchored = [
         b
-        for b in replay_6.meetings[2].ballots
+        for b in replay_22.meetings[2].ballots
         if "under_gate_redirect" in b.rewrite_reasons
     ]
     assert len(anchored) == 1
-    (ballot_6,) = anchored
-    assert ballot_6.rewrite_reasons == ("under_gate_redirect",)
-    assert ballot_6.rationale_text_clean
+    (ballot_22,) = anchored
+    assert ballot_22.rewrite_reasons == ("under_gate_redirect",)
+    assert ballot_22.rationale_text_clean
     assert BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] not in (
-        ballot_6.rationale_text_clean
+        ballot_22.rationale_text_clean
     )
-    assert ballot_6.rationale_text.endswith(ballot_6.rationale_text_clean)
+    assert ballot_22.rationale_text.endswith(ballot_22.rationale_text_clean)
 
 
 # ---------------------------------------------------------------------------
