@@ -22,6 +22,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
+    SawVentObservation,
 )
 from meetings.transcript import (
     CANONICAL_ROOMS,
@@ -490,13 +491,17 @@ class TestWeakContradictionClassification:
         assert is_weak_contradiction(flags[0]) is False
 
     def test_narrow_and_endpoint_reasons_render_in_fixed_order(self) -> None:
-        # A single-tick self-alibi with the sighting on that tick matches the
-        # narrow + endpoint vs-sighting patterns; the reasons render in the
-        # fixed order narrow -> endpoint so the marker is byte-stable across
-        # runs. Task 13.14 drops the self-stated reason from the sighting path
-        # (the owner LONE-STRONG reversal), so the marker no longer leads with
-        # self-stated; the flag STAYS weak on the surviving narrow/endpoint
-        # guards.
+        # A MULTI-tick narrow self-alibi (from != to, window 1 < 2) with the
+        # sighting on its endpoint tick matches the narrow + endpoint vs-sighting
+        # patterns; the reasons render in the fixed order narrow -> endpoint so the
+        # marker is byte-stable across runs. Task 13.14 drops the self-stated reason
+        # from the sighting path (the owner LONE-STRONG reversal), so the marker no
+        # longer leads with self-stated; the flag STAYS weak on the surviving
+        # narrow/endpoint guards. Re-anchored at baseline 6: the SINGLE-tick
+        # (from == to) degenerate class now graduates to STRONG under the
+        # unconditional whereabouts-interior exemption, so the marker-ordering
+        # coverage moves to this multi-tick narrow case, which the exemption (scoped
+        # to from == to) leaves untouched.
         transcript = MeetingTranscript(
             turns=(
                 _alibi_turn(
@@ -504,11 +509,11 @@ class TestWeakContradictionClassification:
                     speaker="p-5",
                     subject="p-5",
                     from_tick=7,
-                    to_tick=7,
+                    to_tick=8,
                     room="ADMIN",
                 ),
                 _sighting_turn(
-                    turn_index=1, speaker="p-2", subject="p-5", tick=7, room="MEDBAY"
+                    turn_index=1, speaker="p-2", subject="p-5", tick=8, room="MEDBAY"
                 ),
             )
         )
@@ -1573,6 +1578,25 @@ def _sighting_rooms_by_event_id(
     }
 
 
+def _vent_observation_event_ids(entry: MeetingReplayEntry) -> frozenset[str]:
+    """Detector-id set for every spoken :class:`SawVentObservation`.
+
+    The Task 18.9 lever-2 (grounded vent-placement) variant of
+    ``alibi_vs_physical`` pairs one of these vent observations with the subject's
+    own placement, GROUNDED against the speaker's typed vent-witness channel --
+    which is not in the transcript. A bare re-derivation (no vent channel) never
+    mints it, exactly like the Task 15.4 ``vent_sighting`` kind, so those recorded
+    flags are recorded-only and excluded from the re-derivation-exactness pin.
+    """
+
+    return frozenset(
+        f"turn:{turn.turn_id}:obs:{index}"
+        for turn in entry.transcript.turns
+        for index, observation in enumerate(turn.observations)
+        if isinstance(observation, SawVentObservation)
+    )
+
+
 def _classify_removed_flag(
     entry: MeetingReplayEntry, flag: ContradictionRef
 ) -> set[str]:
@@ -1652,13 +1676,15 @@ class TestCommittedBytesArtifactCollapse:
     once again pure exactness: re-derivation reproduces every recorded
     transcript-derivable flag byte-for-byte, with no removed and no added sites.
 
-    Task 16.14 baseline 4: the recorded set now carries the grounded Task 15.4
-    ``vent_sighting`` kind (79 flags), which is GROUNDED against each speaker's
-    typed vent-witness channel rather than the transcript, so a bare
-    re-derivation never mints it. Those recorded-only vent flags are excluded
-    from the recorded side of the exactness comparison below (re-derivation and
-    the recorded vent census are disjoint); the 7 transcript-derivable flags
-    still re-derive byte-for-byte.
+    Task 16.14 baseline 4: the recorded set carries the grounded Task 15.4
+    ``vent_sighting`` kind, which is GROUNDED against each speaker's typed
+    vent-witness channel rather than the transcript, so a bare re-derivation never
+    mints it. Task 18.12 baseline 6: the graduated lever-2 adds the GROUNDED
+    vent-placement variant of ``alibi_vs_physical`` (9 flags), grounded the same
+    way. Both grounded kinds are excluded from the recorded side of the exactness
+    comparison below (re-derivation and the recorded vent census are disjoint);
+    the transcript-derivable flags -- including the 6 INFERENTIAL co-presence
+    ``alibi_vs_physical`` flags -- still re-derive byte-for-byte.
 
     The structural guards stay armed: any removal must still be explained by a
     repair (placeholder kill or a proxy re-target) and any addition must still
@@ -1690,17 +1716,30 @@ class TestCommittedBytesArtifactCollapse:
         promoted_to_strong = 0
         for seed in range(50):
             for index, entry in enumerate(_committed_meetings(seed)):
-                # ``vent_sighting`` (Task 15.4) is GROUNDED against each
-                # speaker's typed vent-witness channel, which is not in the
-                # transcript, so a bare re-derivation never mints it -- the
+                # ``vent_sighting`` (Task 15.4) AND the Task 18.9 lever-2 GROUNDED
+                # vent-placement variant of ``alibi_vs_physical`` are both grounded
+                # against each speaker's typed vent-witness channel, which is not in
+                # the transcript, so a bare re-derivation never mints them -- the
                 # recorded vent flags are recorded-only and disjoint from the
                 # re-derived set (mirrors eval.watchability's vent-aware merge).
                 # The re-derivation-exactness pin is over the transcript-derivable
-                # kinds, so vent flags are excluded from the recorded side here.
+                # kinds, so both are excluded from the recorded side here. A
+                # grounded vent-placement flag is one referencing a spoken
+                # SawVentObservation (the INFERENTIAL alibi_vs_physical -- a plain
+                # co-presence contradiction -- has no vent-observation side and
+                # re-derives normally).
+                vent_obs_ids = _vent_observation_event_ids(entry)
                 recorded_by_id = {
                     flag.contradiction_id: flag
                     for flag in entry.contradictions
                     if flag.kind != "vent_sighting"
+                    and not (
+                        flag.kind == "alibi_vs_physical"
+                        and (
+                            flag.event_a_id in vent_obs_ids
+                            or flag.event_b_id in vent_obs_ids
+                        )
+                    )
                 }
                 rederived_by_id = {
                     flag.contradiction_id: flag for flag in _rederive(entry)
@@ -1759,9 +1798,10 @@ class TestCommittedBytesArtifactCollapse:
         # committed bytes already carry those repairs).
         assert removed_sites == self._REPAIRED_SITES
         # Re-derivation preserves the transcript-derivable flag COUNT (none added
-        # or removed; 7==7 non-vent flags on the Task 16.14 baseline-4 bytes --
-        # the 79 recorded grounded ``vent_sighting`` flags are excluded above, as
-        # re-derivation without the vent channel cannot mint them).
+        # or removed) on the Task 18.12 baseline-6 bytes -- the recorded grounded
+        # ``vent_sighting`` and grounded vent-placement ``alibi_vs_physical`` flags
+        # are excluded above, as re-derivation without the vent channel cannot mint
+        # them; every remaining transcript-derivable flag re-derives byte-for-byte.
         assert recorded_total == rederived_total
         # Task 16.14 baseline-4: the bytes are RECORDED under 13.14, so
         # the self-stated down-weight is already baked into every recorded
@@ -1879,7 +1919,7 @@ class TestCommittedBytesSeedPins:
     @pytest.mark.parametrize(
         ("meeting_index", "seed", "subject", "interior_tick"),
         [
-            (1, 25, "p-4", 19),
+            (3, 38, "p-7", 31),
         ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
@@ -1894,20 +1934,18 @@ class TestCommittedBytesSeedPins:
         # different class, covered by test_surviving_endpoint_flags_are_weak_banded)
         # while the real interior genuine supply disappears.
         #
-        # INTENT-PRESERVATION (doctrine rule 3): on the Task 16.17 baseline-5
-        # re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3 prompts) the interior STRONG
-        # alibi_vs_sighting supply is the two flags at seed-25 m1 p-4 — alibi
-        # places p-4 in ADMIN (ticks 13-22) vs two CAFETERIA sightings that both
-        # land on interior tick 19 (strictly inside the window), so each carries
-        # neither the endpoint-tick nor the boundary-overlap weak reason. This pin
-        # RE-ANCHORS to that coordinate (the prior baseline-4 seed-20 m1 p-9 anchor
-        # has no successor). Its subject p-4 is CREW (seed-25 impostor is p-6,
-        # verified from the kill actions), so the "true impostor" property of the
-        # original pin still has zero instances and is documented as lost; the test
-        # guards the checkable half — the interior STRONG detection CHANNEL is
-        # alive, lights R7 (no weak marker), and re-derives byte-identically. The
-        # bytes are recorded with the 13.14 self-stated down-weight already dropped,
-        # so the interior flags are recorded STRONG directly and re-derivation is
+        # INTENT-PRESERVATION (doctrine rule 3): on the Task 18.12 baseline-6
+        # re-record (the CREW-ONLY graduation slate) the interior STRONG
+        # alibi_vs_sighting supply this pin anchors on is the two flags at seed-38
+        # m3 p-7 — alibi places p-7 in ADMIN (ticks 23-34) vs two CAFETERIA
+        # sightings that both land on interior tick 31 (strictly inside the
+        # window), so each carries neither the endpoint-tick nor the
+        # boundary-overlap weak reason. This pin RE-ANCHORS to that coordinate (the
+        # prior baseline-5 seed-25 m1 p-4 anchor has no successor). The test guards
+        # the checkable half — the interior STRONG detection CHANNEL is alive,
+        # lights R7 (no weak marker), and re-derives byte-identically. The bytes are
+        # recorded with the 13.14 self-stated down-weight already dropped, so the
+        # interior flags are recorded STRONG directly and re-derivation is
         # byte-identical.
         entry = _committed_meetings(seed)[meeting_index]
         recorded = [
@@ -3534,15 +3572,15 @@ class TestCommittedBytes107VoicePins:
     """The Task 10.7 DoD voice coordinates, walked offline (no re-record)."""
 
     def test_seed12_m0_derives_no_voice_for_bare_pile_on_p4(self) -> None:
-        # THE owner-principle tripwire, pinned SET-WIDE on the Task 16.14 baseline-4
-        # re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts). The anti-railroad
+        # THE owner-principle tripwire, pinned SET-WIDE on the Task 18.12 baseline-6
+        # re-record (the CREW-ONLY graduation slate). The anti-railroad
         # safety property: a BARE pile-on (a subject with >= 2 distinct accusers,
         # NONE observation-backed) must derive NO independent voice, so the
         # two-witness fold never sees it and a bare pile-on cannot convert. On
         # baseline-3 no bare pile-on existed (every multi-accuser subject was
         # voiced); the leaner Qwen3.6-27B substrate emits fewer observation-backed
-        # accusations, so bare pile-ons RE-APPEAR (13 of them on the Task 16.17
-        # baseline-5 re-record, qwen3_6_27b.v3, pinned below). The mechanism
+        # accusations, so bare pile-ons RE-APPEAR (27 of them on the Task 18.12
+        # baseline-6 re-record, pinned below). The mechanism
         # correctly denies EVERY ONE a voice -- that is the whole list of unvoiced
         # multi-accuser subjects, and each is safe (no voice => no conversion). The
         # census is the tripwire: if a future re-record makes one of these bare
@@ -3577,19 +3615,33 @@ class TestCommittedBytes107VoicePins:
         # no observation-backed accuser), and the mechanism denies every one a
         # voice -- so none can convert via the two-witness fold.
         assert multi_accuser_unvoiced == [
-            (4, 0, "p-1"),
-            (7, 0, "p-4"),
-            (9, 1, "p-7"),
-            (10, 0, "p-2"),
-            (21, 0, "p-9"),
+            (0, 1, "p-1"),
+            (1, 0, "p-8"),
+            (6, 1, "p-1"),
+            (8, 2, "p-7"),
+            (8, 3, "p-4"),
+            (9, 1, "p-9"),
+            (12, 1, "p-2"),
+            (12, 2, "p-7"),
+            (12, 2, "p-9"),
+            (14, 1, "p-3"),
             (22, 3, "p-7"),
-            (25, 3, "p-9"),
-            (26, 0, "p-9"),
-            (35, 0, "p-6"),
-            (36, 0, "p-7"),
-            (42, 1, "p-6"),
-            (43, 0, "p-5"),
-            (47, 1, "p-7"),
+            (25, 0, "p-8"),
+            (27, 3, "p-3"),
+            (28, 0, "p-1"),
+            (30, 1, "p-5"),
+            (30, 2, "p-4"),
+            (33, 2, "p-2"),
+            (35, 1, "p-5"),
+            (37, 1, "p-2"),
+            (39, 4, "p-7"),
+            (41, 1, "p-9"),
+            (43, 1, "p-7"),
+            (45, 0, "p-7"),
+            (47, 1, "p-6"),
+            (48, 0, "p-6"),
+            (48, 1, "p-1"),
+            (48, 4, "p-6"),
         ]
         # Non-vacuous: multi-accuser subjects DO occur across the committed set.
         assert multi_accuser_total > 20
