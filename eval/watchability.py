@@ -788,34 +788,37 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         # Measured on replays/samples/9p2i (baseline 6, the Task-18.12 adopting
         # record: locked model + qwen3_6_27b v3 + the meeting-layer graduation slate
         # — roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
-        # absence_prior all unconditional beside the earlier graduations;
-        # impostor_roll_call OFF, the CREW-ONLY ruling), via the compute_watchability
-        # gauge seam:
-        #   witnessed_event_rate        = 7/173  = 0.04046242774566474
-        #   flags_per_meeting           = 207/156 = 1.3269230769230769 (94
-        #                                 persisted vent flags + 113 re-derived
+        # absence_prior all unconditional beside the earlier graduations, PLUS the
+        # 17.5 vent-placement WIDENING wired into the absent-set fold (Codex P1 fix,
+        # PR #300); impostor_roll_call OFF, the CREW-ONLY ruling), via the
+        # compute_watchability gauge seam:
+        #   witnessed_event_rate        = 6/177  = 0.03389830508474576
+        #   flags_per_meeting           = 180/165 = 1.0909090909090908 (96
+        #                                 persisted vent flags + 84 re-derived
         #                                 transcript flags)
-        #   testimony_backed_conversion = 78/133 = 0.5864661654135338
+        #   testimony_backed_conversion = 78/136 = 0.5735294117647058
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
         # TASK 16.11 derivation (population_relative_conversion=True): the
         # evaluated floor per scored population is
-        #   floor = 0.5864661654135338 * (1.3269230769230769 / measured
+        #   floor = 0.5735294117647058 * (1.0909090909090908 / measured
         #           flags_per_meeting), capped at 1.0.
-        # The baseline itself: flags 207/156 -> ratio exactly 1.0 -> derived
-        # floor = pin = 0.5864661654135338; measured 78/133 -> PASS at exact
-        # equality (self-consistency). The flag census jumps vs baseline 5
-        # (90/179 = 0.5028 -> 207/156 = 1.3269; transcript flags 15 -> 113) are the
-        # graduated meeting layer working as designed — the roll-call round elicits
-        # whereabouts answers the endpoint-band exemption bands STRONG, and the vent
-        # variant mints grounded-vent STRONG flags — so evidence supply rises with
-        # the conviction rate (64/135 = 0.4741 -> 78/133 = 0.5865; the roll-call
-        # supply feeds cited convictions). audits/audit-phase-18-baseline-6.md §5
-        # quotes this derivation and the direction read.
+        # The baseline itself: flags 180/165 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.5735294117647058; measured 78/136 -> PASS at exact
+        # equality (self-consistency). The flag census still rises sharply vs
+        # baseline 5 (90/179 = 0.5028 -> 180/165 = 1.0909) — the graduated meeting
+        # layer working as designed (the roll-call round elicits whereabouts answers
+        # the endpoint-band exemption bands STRONG, and the vent variant mints
+        # grounded-vent STRONG flags) — so evidence supply rises with the conviction
+        # rate (64/135 = 0.4741 -> 78/136 = 0.5735). The vent WIDENING re-record
+        # (removing grounded-vent subjects from the absent set so the absence prior
+        # no longer double-charges them) shifted the game trajectories — meetings
+        # 156 -> 165, flags 207 -> 180, kills 173 -> 177 — the honest cascade of a
+        # corrected substrate. audits/audit-phase-18-baseline-6.md §5 quotes this.
         "9p2i": SupplyFloors(
-            witnessed_event_rate=FloorPin(value=0.04046242774566474, numerator=7),
-            flags_per_meeting=FloorPin(value=1.3269230769230769, numerator=207),
+            witnessed_event_rate=FloorPin(value=0.03389830508474576, numerator=6),
+            flags_per_meeting=FloorPin(value=1.0909090909090908, numerator=180),
             testimony_backed_conversion=FloorPin(
-                value=0.5864661654135338, numerator=78
+                value=0.5735294117647058, numerator=78
             ),
             population_relative_conversion=True,
         ),
@@ -826,23 +829,22 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #   flags_per_meeting           = 16/39 = 0.41025641025641024 (11
         #                                 persisted vent flags + 5 re-derived
         #                                 transcript flags)
-        #   testimony_backed_conversion = 10/30 = 0.3333333333333333
+        #   testimony_backed_conversion = 9/30 = 0.3
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
         # TASK 16.11 derivation (same shape, this roster's pins):
-        #   floor = 0.3333333333333333 * (0.41025641025641024 / measured
-        #           flags_per_meeting), capped at 1.0.
+        #   floor = 0.3 * (0.41025641025641024 / measured flags_per_meeting),
+        #           capped at 1.0.
         # The baseline itself: flags 16/39 -> ratio exactly 1.0 -> derived
-        # floor = pin = 0.3333333333333333; measured 10/30 -> PASS at exact
-        # equality (self-consistency). The 4p1i flag census is unchanged from
-        # baseline 5 (the small 4p1i games elicit no new roll-call/vent flags); the
-        # conversion floor eases slightly (10/28 -> 10/30, two more backed
-        # attempts, same conversions).
+        # floor = pin = 0.3; measured 9/30 -> PASS at exact equality
+        # (self-consistency). The 4p1i witnessed + flag censuses are unchanged from
+        # the pre-widening cut (the small 4p1i games elicit no new roll-call/vent
+        # flags and the widening removes no absent-set subject that flips an
+        # outcome); the conversion floor eases by one converted attempt (10/30 ->
+        # 9/30) as the widening's absence-prior change nudges one backed accusation.
         "4p1i": SupplyFloors(
             witnessed_event_rate=FloorPin(value=0.01639344262295082, numerator=1),
             flags_per_meeting=FloorPin(value=0.41025641025641024, numerator=16),
-            testimony_backed_conversion=FloorPin(
-                value=0.3333333333333333, numerator=10
-            ),
+            testimony_backed_conversion=FloorPin(value=0.3, numerator=9),
             population_relative_conversion=True,
         ),
     },
