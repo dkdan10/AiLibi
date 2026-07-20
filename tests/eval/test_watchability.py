@@ -16,10 +16,11 @@ Four pillars:
   referee-failing) so ``replays/ml_corpus/4p1i`` passes the referee.
 * **Floor trips** — a railroaded crew ejection, a friendly-fire kill, and a
   determinism breach each force a game's score to 0 (synthetic ``_GameFacts``).
-* **Evidence-supply floors** — the committed baseline (baseline-5) passes its own
-  pinned floors (subject-aware since 15.19, re-recorded on the graduated slate at
-  Task 16.17); a synthetic evidence-starved set (high meeting rate, zero flags,
-  zero witnesses) FAILS.
+* **Evidence-supply floors** — the committed baseline (baseline-6) passes its own
+  pinned floors (subject-aware since 15.19, re-recorded on the meeting-layer
+  graduation slate at Task 18.12, with the ML corpus re-ground onto the same
+  substrate at Task 18.13); a synthetic evidence-starved set (high meeting rate,
+  zero flags, zero witnesses) FAILS.
 """
 
 from __future__ import annotations
@@ -658,17 +659,21 @@ def test_corpus_4p1i_passes_the_referee_via_the_advisory_rule() -> None:
     """``replays/ml_corpus/4p1i`` PASSES: the one-event floor is advisory.
 
     The pause audit §1 finding: corpus-4p1i measures 0.0 on
-    ``witnessed_event_rate`` (baseline-5 floor 1/61 ≈ 0.0164, a one-event
+    ``witnessed_event_rate`` (baseline-6 floor 1/61 ≈ 0.0164, a one-event
     numerator) while passing the hard validity gate and both other supply floors.
     Under the advisory rule the set passes the referee; the miss is still reported.
 
-    Task 17.9 note: the corpus is now re-recorded at BASELINE-5 (the re-ground),
-    so it is measured against its OWN baseline-5 block — the Q3 restoration:
-    same-substrate evidence again, no longer the DEGRADED-Q3 stale-context read
-    that pinned the prior baseline-3 recording to the baseline-3 floors.
+    Task 18.13 note: the corpus is now re-recorded at BASELINE 6 (the meeting-layer
+    re-ground), so it is measured against its OWN baseline-6 block — the Q3
+    restoration held forward: same-substrate evidence again, never the stale-context
+    read that would score baseline-6 bytes against the prior block's floors. (The
+    4p1i ``witnessed_event_rate`` and ``flags_per_meeting`` pins are numerically
+    identical across the two blocks — the small 4p1i games elicit no new roll-call
+    or vent flags — so this flip moves only the population-relative conversion
+    floor, and the verdicts below are unchanged.)
     """
 
-    report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-5")
+    report = compute_watchability(_CORPUS_FOUR, baseline_id="baseline-6")
     assert report.integrity_ok is True
     assert report.referee_passed is True
     assert report.supply_floors_passed is True
