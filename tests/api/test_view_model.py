@@ -395,9 +395,7 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
     ballots = [
         b
         for seed in range(50)
-        for meeting in nine_p_two_i_loader.load_replay(
-            f"headless-seed-{seed}"
-        ).meetings
+        for meeting in nine_p_two_i_loader.load_replay(f"headless-seed-{seed}").meetings
         for b in meeting.ballots
     ]
 
