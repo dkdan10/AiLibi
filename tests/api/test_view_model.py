@@ -377,54 +377,57 @@ def test_ballot_markers_parse_on_the_real_9p2i_set(
 def test_gate_marker_chips_on_committed_9p2i_bytes(
     nine_p_two_i_loader: ReplayLoader,
 ) -> None:
-    """Task 17.3: the 16.5/16.6 markers surface as spectator chips on the two
-    live cases the committed baseline-5 9p2i set carries.
+    """Task 18.12: the gate-rewrite markers surface as spectator chips on the live
+    cases the committed BASELINE-6 9p2i set carries, re-anchored from baseline 5.
 
-    seed 39 holds a lone 16.6 coercion (an uncited zero-flag eject coerced to
-    SKIP); seed 48 holds the STACKED case (16.5 nulled the observation citation,
-    16.6 then coerced the now-uncited ballot) -- both chips in stack order, the
-    coercion outside the observation-null. These are the DoD fixtures: the two
-    real cases found on the committed sets, pinned so a future substrate cannot
-    silently drop the chips.
+    The two baseline-5 fixtures (seed 39's lone 16.6 coercion, seed 48's STACKED
+    16.5+16.6 case) COLLAPSED under the meeting-layer graduation: the roll-call
+    round plus the graduated flag pressure leave NO uncited zero-flag eject to
+    coerce (16.6) and NO nulled observation citation (16.5) anywhere on the
+    committed set -- an honest-zero census, asserted below. The live gate-marker
+    chip on baseline 6 is the under-gate eject REDIRECT (the owner-principle
+    guard: an under-gate eject target is redirected, never left to a random
+    innocent), which fires on 17 ballots; it is re-anchored here as the real-bytes
+    chip pin so a future substrate cannot silently drop the chips. The DTO/chip
+    rendering mechanism itself stays covered synthetically by tests/api/test_schemas.
     """
 
-    # seed 39: the lone coercion chip.
-    replay_39 = nine_p_two_i_loader.load_replay("headless-seed-39")
-    coerced = [
+    ballots = [
         b
-        for meeting in replay_39.meetings
+        for seed in range(50)
+        for meeting in nine_p_two_i_loader.load_replay(
+            f"headless-seed-{seed}"
+        ).meetings
         for b in meeting.ballots
-        if "uncited_coerced" in b.rewrite_reasons
     ]
-    assert len(coerced) == 1, "expected exactly one coerced ballot in seed 39"
-    (ballot_39,) = coerced
-    assert ballot_39.rewrite_reasons == ("uncited_coerced",)
-    assert ballot_39.target == SKIP_TARGET
-    # The coercion marker is stripped; the model prose survives, and the chip is
-    # NOT a fabricated addition to the served text.
-    assert ballot_39.rationale_text_clean
-    assert UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0] not in (
-        ballot_39.rationale_text_clean
-    )
-    assert ballot_39.rationale_text.endswith(ballot_39.rationale_text_clean)
 
-    # seed 48: the stacked case -- both chips, coercion outside observation-null.
-    replay_48 = nine_p_two_i_loader.load_replay("headless-seed-48")
-    stacked = [
+    # The baseline-5 coercion / observation-null scenario class collapsed: no
+    # uncited-coerced (16.6) and no invalid-observation-id (16.5) ballot survives
+    # on the baseline-6 committed set.
+    assert not [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
+    assert not [b for b in ballots if "invalid_observation_id" in b.rewrite_reasons]
+
+    # The live gate-marker chip: the under-gate eject redirect. 17 ballots carry it.
+    redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
+    assert len(redirected) == 17
+
+    # Anchor seed 6 m2: an under-gate eject redirected off the sub-gate target,
+    # the marker stripped from the served render (the chip is NOT a fabricated
+    # addition -- the clean prose is a suffix of the raw text).
+    replay_6 = nine_p_two_i_loader.load_replay("headless-seed-6")
+    anchored = [
         b
-        for meeting in replay_48.meetings
-        for b in meeting.ballots
-        if "invalid_observation_id" in b.rewrite_reasons
+        for b in replay_6.meetings[2].ballots
+        if "under_gate_redirect" in b.rewrite_reasons
     ]
-    assert len(stacked) == 1, "expected exactly one stacked ballot in seed 48"
-    (ballot_48,) = stacked
-    assert ballot_48.rewrite_reasons == ("uncited_coerced", "invalid_observation_id")
-    assert ballot_48.target == SKIP_TARGET
-    assert (
-        ballot_48.rationale_text_clean
-        == "I found p-3. p-6 reported it. Suspicion holds."
+    assert len(anchored) == 1
+    (ballot_6,) = anchored
+    assert ballot_6.rewrite_reasons == ("under_gate_redirect",)
+    assert ballot_6.rationale_text_clean
+    assert BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] not in (
+        ballot_6.rationale_text_clean
     )
-    assert ballot_48.rationale_text.endswith(ballot_48.rationale_text_clean)
+    assert ballot_6.rationale_text.endswith(ballot_6.rationale_text_clean)
 
 
 # ---------------------------------------------------------------------------

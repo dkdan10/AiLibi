@@ -370,29 +370,34 @@ def test_recorded_ballot_confidence_calibration_is_reported() -> None:
 def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
     """The re-run FO-6 decision head degenerates to always-SKIP on 9p2i (§5.2).
 
-    Its top-1 clears the ~1/9 base rate (the physical rank has SOME signal) but its
-    binary decision head never predicts an ejection — it skips the majority (in
-    fact all) of true ejection meetings. On the baseline-3/4 bytes that trivial
-    policy was also WORSE than the always-eject constant (eject-majority meeting
-    mix), which is what ``degenerates_to_skip`` encodes; the baseline-5 close
-    record flipped the mix to skip-majority (109 SKIP vs 70 EJECT of 179 — the
-    graduated citation chain convicts less often), so always-skip now trivially
-    BEATS always-eject and that flag reads False. The behavioral collapse is
-    unchanged and still pinned below; the surrogate stays prior-substrate-anchored
-    by design (audits/audit-phase-16-close.md §8 — Phase 17 re-grounds before any
-    training read).
+    Its binary decision head almost never predicts an ejection — it skips 99 of the
+    100 true ejection meetings. On the baseline-3/4 bytes that trivial policy was
+    also WORSE than the always-eject constant (eject-majority meeting mix), which is
+    what ``degenerates_to_skip`` encodes; the baseline-5 close record flipped the mix
+    to skip-majority so always-skip briefly BEAT always-eject and the flag read
+    False. The Task-18.12 baseline-6 re-record REVERTS the mix to eject-majority (100
+    EJECT of 156 resolved — the graduated meeting layer convicts more often), so
+    always-skip is once again WORSE than always-eject and the eject-era degeneracy
+    flag reads True. And the physical rank's residual signal collapses to the base
+    rate: top-1 falls to 0.11, at/below the ~1/9 per-candidate rate. The behavioral
+    collapse is unchanged; the surrogate stays prior-substrate-anchored by design
+    (audits/audit-phase-16-close.md §8 — Phase 17 re-grounds before any training read).
     """
 
     report = fo6_rebaseline(build_meeting_table(_NINE))
     assert report.model_name == "fo6-physical-logistic"
-    assert report.top1 > 1.0 / 9.0  # beats the per-candidate base rate
-    assert report.ejection_predicted_skips == report.ejection_meetings  # never ejects
+    # The physical rank's residual signal collapses to the base rate on baseline 6.
+    assert report.top1 == pytest.approx(0.11)
+    assert report.top1 <= 1.0 / 9.0  # no longer beats the per-candidate base rate
+    # Almost never ejects: 99 SKIP of 100 true ejection meetings.
+    assert report.ejection_meetings == 100
+    assert report.ejection_predicted_skips == 99
     assert 2 * report.ejection_predicted_skips > report.ejection_meetings
-    # The substrate-contingent halves, pinned at their baseline-5 truth: the
-    # meeting mix is skip-majority, so the all-skip head scores above the
-    # always-eject constant and the eject-era degeneracy flag reads False.
-    assert report.skip_vs_eject_accuracy > report.always_eject_baseline
-    assert not report.degenerates_to_skip
+    # The substrate-contingent halves, re-pinned at their baseline-6 truth: the
+    # meeting mix is eject-majority again, so the all-skip head scores BELOW the
+    # always-eject constant and the eject-era degeneracy flag reads True.
+    assert report.skip_vs_eject_accuracy < report.always_eject_baseline
+    assert report.degenerates_to_skip
 
 
 def test_fidelity_runs_on_the_small_preset() -> None:
