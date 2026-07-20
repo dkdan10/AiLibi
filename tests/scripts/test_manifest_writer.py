@@ -79,16 +79,18 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     assert "vote_ballot.qwen3_6_27b.v3" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
-    # The Task-16.17 baseline-5 re-record keeps all NINE retired substrate levers ON
-    # (the four Phase-13.5 levers, the Task-14.10 evidence_quality_lift lever,
-    # Task-15.5's reporter_exculpation lever, and the three Task-16.17 graduates —
-    # citation_gate, hard_evidence_gate, observation_id_rendering), stamped onto the
-    # replay's game_over record, so the flags column reports all nine ON levers
-    # (sorted).
+    # The Task-18.12 baseline-6 re-record keeps all THIRTEEN retired substrate
+    # levers ON (the earlier graduations plus the four meeting-layer levers —
+    # absence_prior, roll_call_round, whereabouts_interior_flags,
+    # vent_placement_contradictions), stamped onto the replay's game_over record, so
+    # the flags column reports all thirteen ON levers (sorted); impostor_roll_call
+    # stays default-OFF and is NOT listed.
     assert flags == (
-        "citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
+        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "vent_placement_contradictions, whereabouts_interior_flags, "
+        "witnessed_kill_evidence"
     )
     # The baseline runs on a hosted provider with $0 provider-keyed cost, so the
     # recorded per-seed cost is exactly 0.
@@ -108,15 +110,16 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     # No stamp on the committed baseline -> FSM-default label.
     assert policy == "fsm-default"
-    # A no-meeting seed records no prompt versions, but the Task-16.17 substrate
+    # A no-meeting seed records no prompt versions, but the Task-18.12 substrate
     # stamp lives on the game_over record (not a meeting), so a flag-ON re-record
-    # still reports all nine ON levers (the four 13.5 levers + the Task-14.10
-    # evidence_quality_lift lever + Task-15.5's graduated reporter_exculpation lever
-    # + the three Task-16.17 graduates) in the flags column.
+    # still reports all thirteen ON levers (the earlier graduations + the four
+    # meeting-layer levers graduated at the baseline-6 record) in the flags column.
     assert flags == (
-        "citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
+        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "vent_placement_contradictions, whereabouts_interior_flags, "
+        "witnessed_kill_evidence"
     )
     assert cost == "0.0000"
     # No LLM call recorded -> attributed to the directory's meeting model.

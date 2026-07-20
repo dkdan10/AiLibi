@@ -128,7 +128,11 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     rows = _finalist_rows()
     assert set(rows) == {"utility-es", "policy-es"}
     fsm_rate = _fsm_comparator_win_rate()
-    assert fsm_rate == pytest.approx(0.36)
+    # The FSM comparator win rate reads the LIVE 9p2i samples; the Task-18.12
+    # baseline-6 re-record moves it 0.36 -> 0.30 (15/50 IMPOSTORS). The finalist-eval
+    # rows below are frozen (results-finalist-eval.jsonl, not re-recorded), so only
+    # this comparator and the two win-edge deltas that subtract it move.
+    assert fsm_rate == pytest.approx(0.30)
 
     for row in rows.values():
         # The stamp-proof precondition: all 50 recordings named the loaded
@@ -145,7 +149,7 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     # utility-es: win edge YES, referee FAIL (the starved conversion economy).
     utility = rows["utility-es"]
     assert utility["core"]["impostor_win_rate"] == pytest.approx(0.52)
-    assert utility["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(0.16)
+    assert utility["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(0.22)
     assert utility["watchability"]["referee_passed"] is False
     assert utility["watchability"]["mean_score"] == pytest.approx(41.47, abs=0.01)
     gauges = {
@@ -195,7 +199,7 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
         min(1.0, (64 / 135) * ((90 / 179) / flags["measured"]))
     )
     assert policy["core"]["impostor_win_rate"] == pytest.approx(0.02)
-    assert policy["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(-0.34)
+    assert policy["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(-0.28)
 
 
 # -- on FAIL the default provably does not move -------------------------------
