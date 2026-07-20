@@ -401,15 +401,17 @@ class TestReplayRecordsMeetingArtifacts:
         meeting = meeting_entries[0]
         # Transcript is the ordered chain (DESIGN.md §5.2): the reporter's
         # opening turn accuses _ACCUSED, who replies without re-accusing,
-        # terminating the chain. The stub provides no observations, so no
-        # opt-in turn is eligible.
-        assert len(meeting.transcript.turns) == 2
-        opening, reply = meeting.transcript.turns
+        # terminating the discussion chain. roll_call is now unconditional, so
+        # each not-yet-spoken living player then takes one terminal opt_in turn
+        # (opening + reply + 2 opt_in = 4 turns).
+        assert len(meeting.transcript.turns) == 4
+        opening, reply, *opt_in_turns = meeting.transcript.turns
         assert opening.turn_kind == "opening"
         assert opening.speaker == "p-1"  # the reporter opens
         assert reply.turn_kind == "reply"
         assert reply.speaker == _ACCUSED  # the chain passes to the accused
         assert reply.reply_to == opening.turn_id
+        assert all(t.turn_kind == "opt_in" for t in opt_in_turns)
         # 4 ballots from 4 living voters.
         assert len(meeting.ballots) == 4
         # Contradictions field exists (empty in this stub).
@@ -442,10 +444,10 @@ class TestReplayRecordsMeetingArtifacts:
         assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v8"
         assert meeting.prompt_versions["impostor_report"] == "impostor_report_v6"
         # LLM cost metadata recorded per call. The chain protocol:
-        #   turns: 1 opening + 1 reply = 2 calls
+        #   turns: 1 opening + 1 reply + 2 unconditional opt_in = 4 calls
         #   ballots: 4 living voters = 4 calls
-        # Total: 6 calls.
-        assert len(meeting.llm_calls) == 6
+        # Total: 8 calls.
+        assert len(meeting.llm_calls) == 8
         assert all(call.cost_usd == 0.002 for call in meeting.llm_calls)
         assert all(call.model == "deterministic-stub" for call in meeting.llm_calls)
         # State hashes pin the engine-side mutation envelope.
@@ -536,9 +538,10 @@ class TestReplayRecordsMeetingArtifacts:
         # (opening turn → reactive chain → voting → resolution →
         # engine resume). DESIGN.md §5.2 + §11.4.
         assert len(meeting_entries) >= 1
-        # And the meeting was a full chain cycle: 2 turns (opening +
-        # reply) + 4 ballots = 6 LLM calls.
-        assert len(meeting_entries[0].llm_calls) == 6
+        # And the meeting was a full chain cycle: 4 turns (opening +
+        # reply + 2 unconditional opt_in roll_call turns) + 4 ballots =
+        # 8 LLM calls.
+        assert len(meeting_entries[0].llm_calls) == 8
         # The replay log carries at least one tick entry per game
         # tick the loop processed.
         assert len(tick_entries) >= 1

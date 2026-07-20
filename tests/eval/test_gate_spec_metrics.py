@@ -892,21 +892,21 @@ def _load_committed_9p2i() -> TournamentEvalReport:
 
 
 class TestCommittedW2GateSpecPins:
-    """The gp-7 pins over the committed Wave-2 bytes (baseline-5 canonical re-record).
+    """The gp-7 pins over the committed Wave-2 bytes (baseline-6 canonical re-record).
 
     These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
-    (W1 -> W2); the current bytes are the Task-16.17 canonical re-record ("baseline
-    5") on the qwen3_6_27b.v3 prompts (all four templates) for model
+    (W1 -> W2); the current bytes are the Task-18.12 canonical re-record ("baseline
+    6") on the qwen3_6_27b.v3 prompts (all four templates) for model
     Qwen/Qwen3.6-27B with the substrate levers unconditionally ON. On the
-    baseline-5 model/set the transcript contradiction channel stays collapsed:
-    the census reads 64 impostor ejections and only 15 flags split 13w/2s. The
+    baseline-6 model/set the transcript contradiction channel is live:
+    the census reads 78 impostor ejections and 84 flags split 26w/58s. The
     frozen prior-era A/B anchors (corrected_w0_baseline.json and
     corrected_w1_baseline.json) are pinned separately by the two
     ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
     """
 
     def test_committed_ejections_decompose_as_the_w2_baseline(self) -> None:
-        # W2 (baseline-5, qwen3_6_27b.v3, all four templates): 64 impostor
+        # W2 (baseline-6, qwen3_6_27b.v3, all four templates): 78 impostor
         # ejections, each site's channel set keyed "seed-{seed}:m{index}". Sourced
         # from the committed W2 baseline fixture rather than transcribed, so the pin
         # is the rederived-channels == committed-baseline equality the operator
@@ -925,48 +925,47 @@ class TestCommittedW2GateSpecPins:
         assert channels_by_site == expected
 
     def test_multi_signal_conversion_reads_18_of_64(self) -> None:
-        # Re-extracted on the baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3,
+        # Re-extracted on the baseline-6 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3,
         # all four templates, the substrate levers unconditionally ON; this test reads
         # the committed report JSON directly, so the census re-derives under the bare
-        # env, no substrate guard). The gate ejects 64 impostors on this substrate.
-        # With the transcript contradiction channel collapsed on baseline-5, most of
-        # those rows carry a SINGLE signal channel: 18 of 64 multi-signal, 46
-        # single-signal, 0 unattributed — the multi-signal rate is 18/64. The channel
-        # decomposition per site is pinned below against the committed W2 baseline
-        # fixture.
+        # env, no substrate guard). The gate ejects 78 impostors on this substrate.
+        # With the transcript contradiction channel live on baseline-6, 26 of 78 rows
+        # carry MULTIPLE signal channels, 52 carry a single channel, 0 unattributed —
+        # the multi-signal rate is 26/78. The channel decomposition per site is pinned
+        # below against the committed W2 baseline fixture.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 64
-        assert result.multi_signal_conversions == 18
-        assert result.single_signal_conversions == 46
+        assert result.impostor_ejections == 78
+        assert result.multi_signal_conversions == 26
+        assert result.single_signal_conversions == 52
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(18 / 64)
+        assert result.multi_signal_rate == pytest.approx(26 / 78)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The supply row, re-extracted on the baseline-5 re-record (Qwen/Qwen3.6-27B,
+        # The supply row, re-extracted on the baseline-6 re-record (Qwen/Qwen3.6-27B,
         # qwen3_6_27b.v3, all four templates, the substrate levers unconditionally
         # ON; this test reads the committed report JSON directly, so the flag census
-        # re-derives under the bare env). On the baseline-5 model/set the transcript
-        # contradiction channel stays collapsed: only 15 flags split 13w/2s across
-        # 179 meetings, and the flag role split is 14 CREW / 1 IMP — one surviving
-        # flag names an impostor subject, so the impostor-subject flag census reads 1.
-        # 167 zero-contradiction meetings, genuine-subject supply 1, accused-impostor
-        # 135, and 411 over-gate §6.6 listener rows (the vote graph still renders
+        # re-derives under the bare env). On the baseline-6 model/set the transcript
+        # contradiction channel is live: 84 flags split 26w/58s across 165 meetings,
+        # and the flag role split is 75 CREW / 9 IMP — 9 surviving flags name an
+        # impostor subject, so the impostor-subject flag census reads 9. 115
+        # zero-contradiction meetings, genuine-subject supply 41, accused-impostor
+        # 134, and 506 over-gate §6.6 listener rows (the vote graph still renders
         # densely on this set).
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 179
-        assert gauges.total_flags == 15
-        assert gauges.weak_flags == 13
-        assert gauges.strong_flags == 2
-        assert gauges.zero_contradiction_meetings == 167
-        assert gauges.genuine_subject_meetings == 1
-        assert gauges.flag_subjects_crew == 14
-        assert gauges.flag_subjects_impostor == 1
-        assert gauges.accused_impostor_meetings == 135
-        assert gauges.over_gate_listener_rows == 411
+        assert gauges.meetings_total == 165
+        assert gauges.total_flags == 84
+        assert gauges.weak_flags == 26
+        assert gauges.strong_flags == 58
+        assert gauges.zero_contradiction_meetings == 115
+        assert gauges.genuine_subject_meetings == 41
+        assert gauges.flag_subjects_crew == 75
+        assert gauges.flag_subjects_impostor == 9
+        assert gauges.accused_impostor_meetings == 134
+        assert gauges.over_gate_listener_rows == 506
 
     def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,

@@ -936,12 +936,13 @@ class TestHardEvidenceGateOnCommittedBytes:
     def test_report_ejection_census(
         self, funnel: InformationFunnelReport, counterfactual: _GateCounterfactual
     ) -> None:
-        # 61 EJECTED report meetings on the committed baseline-5 9p2i set (down
-        # from the 79 baseline-4 recorded; the baseline-5 re-record under the
-        # qwen3_6_27b v3 prompt set with the three levers graduated to
-        # unconditional thinned the ejection rate further).
-        assert funnel.report_ejections == 61
-        assert counterfactual.total_ejections == 61
+        # 87 EJECTED report meetings on the committed baseline-6 9p2i set after
+        # the Task-18.12 vent-widening re-record (was 86 pre-widening, up from the
+        # 79 baseline-4 recorded; the qwen3_6_27b v3 prompt set with the
+        # meeting-layer levers graduated to unconditional plus the vent widening
+        # cascaded the trajectories and raised the ejection rate further).
+        assert funnel.report_ejections == 87
+        assert counterfactual.total_ejections == 87
 
     # -- (i) the soft-only split, by ejectee role ----------------------------
 
@@ -951,8 +952,8 @@ class TestHardEvidenceGateOnCommittedBytes:
         #   already     = off < 0.60 at graph level (render-side / LLM-read eject);
         #   still_over  = off >= 0.60 AND on >= 0.60 (fresh same-meeting lift holds).
         # Split by ejectee role -- CREWMATE = mis-ejects the clamp neutralises,
-        # IMPOSTOR = genuine catches the clamp risks. On baseline-5 the polarity is
-        # NEUTRAL: both soft-only ejections (1 crew, 1 impostor) carry fresh
+        # IMPOSTOR = genuine catches the clamp risks. On baseline-6 the polarity is
+        # NEUTRAL: all 7 soft-only ejections (0 crew, 7 impostor) carry fresh
         # same-meeting hard lift that holds over the gate ON as well as OFF, so the
         # clamp neutralises ZERO crew mis-ejects and risks ZERO impostor catches --
         # no soft-only ejection outcome moves. (The baseline-4 split was 1-crew
@@ -961,18 +962,18 @@ class TestHardEvidenceGateOnCommittedBytes:
         # figure.)
         assert counterfactual.kept == {"CREWMATE": 0, "IMPOSTOR": 0}
         assert counterfactual.already_sub_gate == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.still_over == {"CREWMATE": 1, "IMPOSTOR": 1}
-        assert counterfactual.soft_only_total == 2
+        assert counterfactual.still_over == {"CREWMATE": 0, "IMPOSTOR": 7}
+        assert counterfactual.soft_only_total == 7
 
     # -- (ii) the hard-backed count (non-vacuity floor) ----------------------
 
     def test_hard_backed_count_is_non_vacuous(
         self, counterfactual: _GateCounterfactual
     ) -> None:
-        # There ARE hard-flag-backed convictions to guard: 59 of the 61 ejections
+        # There ARE hard-flag-backed convictions to guard: 80 of the 87 ejections
         # carry a grounded (hard_total > atol) post-fold row for the ejectee.
         assert counterfactual.hard_backed >= _HARD_BACKED_FLOOR
-        assert counterfactual.hard_backed == 59
+        assert counterfactual.hard_backed == 80
         assert (
             counterfactual.hard_backed + counterfactual.soft_only_total
             == counterfactual.total_ejections
@@ -992,7 +993,7 @@ class TestHardEvidenceGateOnCommittedBytes:
         self, counterfactual: _GateCounterfactual
     ) -> None:
         # The broader sweep: NO hard-backed subject row (ejectee or not, any voter)
-        # flips across the 0.60 verdict under the clamp, anywhere in the 179 meetings.
+        # flips across the 0.60 verdict under the clamp, anywhere in the 165 meetings.
         assert counterfactual.subject_level_flips == ()
 
     def test_the_clamp_never_raises_an_ejectee_row(

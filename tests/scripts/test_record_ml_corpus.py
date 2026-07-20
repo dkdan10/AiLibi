@@ -697,18 +697,24 @@ def test_record_path_refuses_stale_baseline3_substrate_slate(tmp_path: Path) -> 
     assert "citation_gate" in out
 
 
-def test_record_path_refuses_absence_prior_on_in_recorded_slate(tmp_path: Path) -> None:
+def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
+    tmp_path: Path,
+) -> None:
     # The slate gate also refuses a replay whose game_over stamp records
-    # absence_prior ON: the baseline-5 substrate's absence_prior is the 16.17
-    # recorded STAY-OFF, so a lever-ON recording (e.g. bytes from a Phase-17
-    # counterfactual session) must be refused by its BYTES even though the model +
-    # stamp + cost are all baseline-current. Fixture: the substrate-current replay
-    # with absence_prior flipped True in the stamp.
+    # impostor_roll_call ON: after the Task-18.12 baseline-6 graduation the four
+    # meeting-layer levers are unconditional and impostor_roll_call is the SOLE
+    # remaining default-OFF toggle (the CREW-ONLY ruling did not ship it), so a
+    # lever-ON recording (e.g. bytes from an impostor-arm probe session) must be
+    # refused by its BYTES even though the model + stamp + cost are all
+    # baseline-current. (``_BASELINE5_SUBSTRATE_SLATE`` reads the live snapshot, so
+    # it now carries the baseline-6 slate; before graduation this deviation was
+    # flipped on absence_prior, which has since graduated into the always-on set.)
+    # Fixture: the substrate-current replay with impostor_roll_call flipped True.
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
     lever_on = dict(_BASELINE5_SUBSTRATE_SLATE)
-    lever_on["absence_prior"] = True
+    lever_on["impostor_roll_call"] = True
     (set_dir / "replay-seed-1000.jsonl").write_text(
         _rewrite_game_over_substrate(_baseline5_corpus_replay_text(), lever_on),
         encoding="utf-8",
@@ -725,7 +731,7 @@ def test_record_path_refuses_absence_prior_on_in_recorded_slate(tmp_path: Path) 
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
     assert "disagrees with the baseline-5 graduated-lever slate" in out
-    assert "absence_prior" in out
+    assert "impostor_roll_call" in out
 
 
 def test_record_path_refuses_missing_substrate_stamp(tmp_path: Path) -> None:

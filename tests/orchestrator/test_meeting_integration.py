@@ -1143,14 +1143,16 @@ class TestDefaultMeetingRunner:
         assert len(meeting_entries) == 1
         meeting = meeting_entries[0]
         assert meeting.outcome == "SKIPPED"
-        # The chain protocol with a claim-free stub: 1 opening turn + 3
-        # ballots from the 3 living players = 4 LLM calls (no accusation, so
-        # no reply chain; no observations, so no opt-in turn).
-        assert len(meeting.llm_calls) == 4
+        # The chain protocol with a claim-free stub: 1 opening turn + 2 opt_in
+        # roll_call turns (now unconditional, one per not-yet-spoken living
+        # player) + 3 ballots from the 3 living players = 6 LLM calls (no
+        # accusation, so no reply chain).
+        assert len(meeting.llm_calls) == 6
         # Each call carries cost metadata.
         assert all(call.cost_usd == 0.01 for call in meeting.llm_calls)
-        # Transcript is the ordered turn chain: the reporter's opening only.
-        assert len(meeting.transcript.turns) == 1
+        # Transcript is the ordered turn chain: the reporter's opening followed
+        # by the two unconditional opt_in roll_call turns.
+        assert len(meeting.transcript.turns) == 3
         assert meeting.transcript.turns[0].turn_kind == "opening"
         assert meeting.transcript.turns[0].speaker == "p-1"
         # Prompt versions metadata persisted.
@@ -1334,10 +1336,11 @@ class TestDefaultMeetingRunner:
 
         # The second meeting's artifacts must NOT include records
         # from the first (failed) meeting. The second meeting issues
-        # 1 opening turn + 3 votes = 4 calls; if leakage occurred,
-        # we'd see > 4 here (the failed meeting recorded its one
-        # successful opening-turn call before raising on the vote).
-        assert len(artifacts.llm_calls) == 4
+        # 1 opening turn + 2 unconditional opt_in roll_call turns + 3
+        # votes = 6 calls; if leakage occurred, we'd see > 6 here (the
+        # failed meeting recorded its one successful opening-turn call
+        # before raising on the vote).
+        assert len(artifacts.llm_calls) == 6
 
 
 class TestMeetingFirewallContract:
@@ -1885,9 +1888,12 @@ class TestSeed6ImpostorMeetingCoordination:
             assert ballots[impostor_id].target != mate
             assert ballots[impostor_id].target == "SKIP"
         # The chain handed the floor to an impostor: the crewmate opening
-        # accused p-3, whose reply is the guard's real test surface.
+        # accused p-3, whose reply is the guard's real test surface. The
+        # now-unconditional roll_call then appends one terminal opt_in turn per
+        # not-yet-spoken living player, so the opening + reply pair is followed
+        # by five opt_in turns (7 turns total).
         turns = result.transcript.turns
-        assert len(turns) == 2
+        assert len(turns) == 7
         assert turns[0].speaker == "p-1"
         assert turns[1].turn_kind == "reply"
         assert turns[1].speaker == "p-3"

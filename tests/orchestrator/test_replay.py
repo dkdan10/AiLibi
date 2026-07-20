@@ -212,32 +212,36 @@ class TestGameEndRecording:
 class TestSubstrateFlagStamp:
     """The Task-14.7 substrate-flag stamp on the game_over record.
 
-    A replay self-describes which substrate levers generated it. NINE levers are
-    unconditionally ON with their env gates retired: the four 13.5 levers since
+    A replay self-describes which substrate levers generated it. THIRTEEN levers
+    are unconditionally ON with their env gates retired: the four 13.5 levers since
     Task 14.9, Task 14.10's ``evidence_quality_lift`` since the Task-14.12 close,
-    Task 15.5's ``reporter_exculpation`` since the Task-15.7 baseline-3 record,
-    and the three Phase-16 levers graduated at the Task-16.17 baseline-5 record
-    per the graduation slate — 16.4's ``hard_evidence_gate``, 16.5's
-    ``observation_id_rendering``, 16.6's ``citation_gate``. Task 16.8's
-    ``absence_prior`` is the ONE remaining LIVE env-gated toggle
-    (``_TOGGLEABLE_LEVER_RESOLVERS`` — the slate's recorded STAY-OFF),
-    DEFAULT-OFF: a bare-environment recording stamps the nine retired levers True
-    and ``absence_prior`` False — byte-identical to the committed baseline-5
-    substrate (``_assert_substrate_matches`` reads a missing key as ``False`` on
-    both sides, so the committed replays reconstruct under a bare env). An ambient
-    ``AILIBI_ABSENCE_PRIOR`` export flips the live toggle's stamp ON; the nine
-    retired levers never read env again.
+    Task 15.5's ``reporter_exculpation`` since the Task-15.7 baseline-3 record, the
+    three Phase-16 levers graduated at the Task-16.17 baseline-5 record — 16.4's
+    ``hard_evidence_gate``, 16.5's ``observation_id_rendering``, 16.6's
+    ``citation_gate`` — and the FOUR meeting-layer levers graduated at the
+    Task-18.12 baseline-6 record on the CREW-ONLY ruling: 16.8's ``absence_prior``,
+    18.8's ``roll_call_round``, and 18.9's ``whereabouts_interior_flags`` and
+    ``vent_placement_contradictions``. Task 18.10's ``impostor_roll_call`` is the
+    ONE remaining LIVE env-gated toggle (``_TOGGLEABLE_LEVER_RESOLVERS`` — the
+    CREW-ONLY ruling did NOT ship it), DEFAULT-OFF: a bare-environment recording
+    stamps the thirteen retired levers True and ``impostor_roll_call`` False —
+    exactly the committed baseline-6 substrate (``_assert_substrate_matches`` reads
+    a missing key as ``False`` on both sides). An ambient
+    ``AILIBI_IMPOSTOR_ROLL_CALL`` export flips the live toggle's stamp ON; the
+    thirteen retired levers never read env again.
     """
 
     def test_retired_levers_are_all_on_and_env_independent(self) -> None:
-        # All nine retired levers report True under ANY env — a bare mapping, an
-        # explicit legacy "0", the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export, a
-        # stray AILIBI_REPORTER_EXCULPATION export, or a stray export of any of the
-        # three Phase-16 levers graduated at the Task-16.17 baseline-5 record
-        # (hard_evidence_gate / observation_id_rendering / citation_gate) all read
-        # identically. The ONLY lever that still reads env is Task 16.8's
-        # default-OFF absence_prior (the single entry in _TOGGLEABLE_LEVER_RESOLVERS),
-        # which is scoped out here so this pin stays about the always-on set.
+        # All thirteen retired levers report True under ANY env — a bare mapping,
+        # an explicit legacy "0", the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export,
+        # a stray AILIBI_REPORTER_EXCULPATION export, a stray export of any of the
+        # three Phase-16 levers graduated at 16.17, or a stray export of any of the
+        # four meeting-layer levers graduated at the Task-18.12 baseline-6 record
+        # (absence_prior / roll_call_round / whereabouts_interior_flags /
+        # vent_placement_contradictions) all read identically. The ONLY lever that
+        # still reads env is Task 18.10's default-OFF impostor_roll_call (the single
+        # entry in _TOGGLEABLE_LEVER_RESOLVERS), scoped out here so this pin stays
+        # about the always-on set.
         retired = tuple(
             key
             for key in SUBSTRATE_FLAG_KEYS
@@ -253,6 +257,10 @@ class TestSubstrateFlagStamp:
             {ENV_HARD_EVIDENCE_GATE: "0"},
             {ENV_OBSERVATION_ID_RENDERING: "0"},
             {ENV_CITATION_GATE: "0"},
+            {ENV_ABSENCE_PRIOR: "0"},
+            {ENV_ROLL_CALL_ROUND: "0"},
+            {ENV_WHEREABOUTS_INTERIOR_FLAGS: "0"},
+            {ENV_VENT_PLACEMENT_CONTRADICTIONS: "0"},
         ):
             snapshot = substrate_flag_snapshot(env)
             assert all(snapshot[key] is True for key in retired)
@@ -266,14 +274,12 @@ class TestSubstrateFlagStamp:
             "hard_evidence_gate",
             "observation_id_rendering",
             "citation_gate",
-        }
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
             "absence_prior",
             "roll_call_round",
             "whereabouts_interior_flags",
             "vent_placement_contradictions",
-            "impostor_roll_call",
-        )
+        }
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == ("impostor_roll_call",)
 
     def test_reporter_exculpation_graduated_unconditional_on(self) -> None:
         # Graduated to unconditional-ON at the Task-15.7 baseline-3 record: the
@@ -378,50 +384,25 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is True
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin (Task 16.8 DoD "registered"; the Task-18.11 snapshot
-        # registry leg): FIVE live toggles in ``_TOGGLEABLE_LEVER_RESOLVERS`` now —
-        # 16.8's ``absence_prior`` (the Phase-16 slate's recorded STAY-OFF,
-        # re-routed to Phase 18 by the 17.7 gate) plus the four Phase-18
-        # meeting-layer lever flags REGISTERED HERE at the gate before any probe
-        # seed records: 18.8's ``roll_call_round``, 18.9's
-        # ``whereabouts_interior_flags`` and ``vent_placement_contradictions``, and
-        # 18.10's ``impostor_roll_call``. The four were built default-OFF and inert
-        # at Wave 1 but DELIBERATELY not registered there — 18.8/18.9/18.10 deferred
-        # the substrate-stamp wiring to this gate so a probe/adoption recording
-        # self-describes which arms it ran under. Each key is bound to its resolver
-        # BY IDENTITY, so the replay stamp and the lever's read-site share one
-        # source of truth. ``SUBSTRATE_FLAG_KEYS`` appends the five live keys after
-        # the nine retired always-on keys; ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS`` is
-        # exactly the live-toggle subset the loader's mismatch-remediation hint
-        # branches on. Task 18.12 graduates whichever arms the gate rules SHIP into
-        # ``_RETIRED_ALWAYS_ON_LEVERS`` (as 16.4/16.5/16.6 graduated at 16.17).
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 5
+        # Registration pin (the Task-18.12 graduation flip): ONE live toggle left in
+        # ``_TOGGLEABLE_LEVER_RESOLVERS`` now — 18.10's ``impostor_roll_call``, the
+        # arm the CREW-ONLY ruling did NOT ship (audits/audit-phase-18-meeting-gate.md
+        # §9). The four meeting-layer levers registered at the 18.11 gate
+        # (``absence_prior`` / ``roll_call_round`` / ``whereabouts_interior_flags`` /
+        # ``vent_placement_contradictions``) graduated into
+        # ``_RETIRED_ALWAYS_ON_LEVERS`` at the baseline-6 record (as 16.4/16.5/16.6
+        # graduated at 16.17), so they no longer appear here. ``SUBSTRATE_FLAG_KEYS``
+        # appends the sole live key after the thirteen retired always-on keys;
+        # ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS`` is exactly that one-element live subset
+        # the loader's mismatch-remediation hint branches on.
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 1
         assert dict(_TOGGLEABLE_LEVER_RESOLVERS) == {
-            ENV_ABSENCE_PRIOR_KEY: absence_prior_enabled,
-            ENV_ROLL_CALL_ROUND_KEY: roll_call_round_enabled,
-            ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY: whereabouts_interior_flags_enabled,
-            ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY: (
-                vent_placement_contradictions_enabled
-            ),
             ENV_IMPOSTOR_ROLL_CALL_KEY: _impostor_roll_call_enabled,
         }
-        # Order pin: absence_prior first (the pre-existing live toggle), then the
-        # four Phase-18 flags in DAG order (18.8 → 18.9 round/exemption → 18.9 vent
-        # → 18.10).
         assert tuple(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS) == (
-            ENV_ABSENCE_PRIOR_KEY,
-            ENV_ROLL_CALL_ROUND_KEY,
-            ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY,
-            ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY,
             ENV_IMPOSTOR_ROLL_CALL_KEY,
         )
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
-            ENV_ABSENCE_PRIOR_KEY,
-            ENV_ROLL_CALL_ROUND_KEY,
-            ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY,
-            ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY,
-            ENV_IMPOSTOR_ROLL_CALL_KEY,
-        )
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_IMPOSTOR_ROLL_CALL_KEY,)
         assert SUBSTRATE_FLAG_KEYS == (
             "testimony_as_content",
             "witnessed_kill_evidence",
@@ -439,68 +420,46 @@ class TestSubstrateFlagStamp:
             "impostor_roll_call",
         )
 
-    def test_absence_prior_resolver_is_a_pure_constant_function(self) -> None:
-        # Resolver constant-ness at graduation readiness (the Task 16.8 DoD): the
-        # sole remaining live toggle's registered resolver IS
-        # ``agents.memory.beliefs.absence_prior_enabled`` by identity, and it is
-        # a deterministic PURE function of its env mapping — the same mapping in
-        # yields the same bool out, repeatedly and independent of the object's
-        # identity, and it never mutates the mapping. This is the seam a FUTURE
-        # graduation flips exactly as ``reporter_exculpation`` did at 15.7 and the
-        # three sibling Phase-16 levers did at the Task-16.17 baseline-5 record:
-        # retire the resolver, the table shrinks, and the stamp goes unconditional
-        # — with no other read-site to reconcile because the fold gate and the
-        # manager's fold-path guard both resolve here (absence_prior is the slate's
-        # recorded STAY-OFF; Phase 17 re-measures on the baseline-5 bytes).
-        (_key, resolver) = _TOGGLEABLE_LEVER_RESOLVERS[0]
-        assert resolver is absence_prior_enabled
-        for env in (
-            {},
-            {ENV_ABSENCE_PRIOR: "1"},
-            {ENV_ABSENCE_PRIOR: "0"},
-        ):
-            before = dict(env)
-            result = resolver(env)
-            assert resolver(env) == result
-            assert resolver(dict(env)) == result
-            assert env == before
-        assert resolver({}) is False
-        assert resolver({ENV_ABSENCE_PRIOR: "1"}) is True
-
-    def test_absence_prior_toggle_reads_env_default_off(self) -> None:
-        # The sole remaining live toggle (Task 16.8 DoD "registered" + lever OFF =
-        # byte-identical): OFF (unset / bare / unrecognised) and ON (a truthy
-        # export), env-passed so no ``os.environ`` mutation. DEFAULT-OFF is the
-        # byte-identical baseline-5 substrate (the pre-vote absence fold is
-        # never entered OFF). Truthy values mirror the retired 16.4/16.5/16.6
-        # resolvers it clones (``1/true/yes/on``, case-insensitive).
-        assert substrate_flag_snapshot({})[ENV_ABSENCE_PRIOR_KEY] is False
-        assert (
-            substrate_flag_snapshot({ENV_ABSENCE_PRIOR: "nope"})[ENV_ABSENCE_PRIOR_KEY]
-            is False
-        )
-        assert (
-            substrate_flag_snapshot({ENV_ABSENCE_PRIOR: "1"})[ENV_ABSENCE_PRIOR_KEY]
-            is True
-        )
-        assert (
-            substrate_flag_snapshot({ENV_ABSENCE_PRIOR: "yes"})[ENV_ABSENCE_PRIOR_KEY]
-            is True
-        )
-
-    def test_absence_prior_snapshot_env_none_honors_process_environment(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        ("env_var", "flag_key", "resolver"),
+        [
+            (ENV_ABSENCE_PRIOR, ENV_ABSENCE_PRIOR_KEY, absence_prior_enabled),
+            (ENV_ROLL_CALL_ROUND, ENV_ROLL_CALL_ROUND_KEY, roll_call_round_enabled),
+            (
+                ENV_WHEREABOUTS_INTERIOR_FLAGS,
+                ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY,
+                whereabouts_interior_flags_enabled,
+            ),
+            (
+                ENV_VENT_PLACEMENT_CONTRADICTIONS,
+                ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY,
+                vent_placement_contradictions_enabled,
+            ),
+        ],
+    )
+    def test_meeting_layer_lever_graduated_unconditional_on(
+        self,
+        env_var: str,
+        flag_key: str,
+        resolver: object,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # The 16.8 toggle — now the ONLY live toggle, after the 16.4/16.5/16.6
-        # siblings graduated at the Task-16.17 baseline-5 record — resolves the
-        # process environment when ``env`` is None: an ambient
-        # ``AILIBI_ABSENCE_PRIOR`` export flips the default-OFF stamp ON, and
-        # deleting it restores OFF — the seam the offline counterfactual and
-        # sweep configs drive without threading a mapping.
-        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        assert substrate_flag_snapshot()[ENV_ABSENCE_PRIOR_KEY] is False
-        monkeypatch.setenv(ENV_ABSENCE_PRIOR, "1")
-        assert substrate_flag_snapshot()[ENV_ABSENCE_PRIOR_KEY] is True
+        # The four meeting-layer levers graduated to unconditional-ON at the
+        # Task-18.12 baseline-6 record (the 16.17 move, on the CREW-ONLY ruling):
+        # the snapshot reports each True under a bare mapping, an unrecognised
+        # value, an explicit "0", or a truthy export alike — env is no longer
+        # consulted. With ``env`` None an ambient export (either polarity) no longer
+        # flips the stamp. This REPLACES the retired default-OFF toggle-reads-env
+        # and env-none-honors-process-environment pins (each resolver is now
+        # ``del env; return True``). The resolver itself is likewise unconditional.
+        for env in ({}, {env_var: "nope"}, {env_var: "0"}):
+            assert substrate_flag_snapshot(env)[flag_key] is True
+            assert resolver(env) is True  # type: ignore[operator]
+        assert substrate_flag_snapshot({env_var: "1"})[flag_key] is True
+        monkeypatch.delenv(env_var, raising=False)
+        assert substrate_flag_snapshot()[flag_key] is True
+        monkeypatch.setenv(env_var, "0")
+        assert substrate_flag_snapshot()[flag_key] is True
 
     def test_snapshot_retired_lever_independent_of_the_process_environment(
         self, monkeypatch: pytest.MonkeyPatch
@@ -515,16 +474,12 @@ class TestSubstrateFlagStamp:
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Recording under a bare environment stamps all nine retired levers ON
-        # (byte-identical to the committed baseline-5 set — the graduated
-        # reporter_exculpation lever and the three Phase-16 levers graduated at the
-        # Task-16.17 baseline-5 record need no env export) and the FIVE remaining
-        # live default-OFF toggles (Task 16.8's absence_prior + the four Phase-18
-        # meeting-layer flags registered at Task 18.11) OFF. The four Phase-18 keys
-        # are ABSENT from the committed baseline-5 bytes but stamp False on a fresh
-        # bare recording, which the loader/validity guards read as equal (missing
-        # key == False on both sides) — so this fresh stamp is coherent with the
-        # committed sets even though it carries four keys they never had.
+        # Recording under a bare environment stamps all thirteen retired levers ON
+        # (byte-identical to the committed baseline-6 set — the earlier graduations
+        # plus the four meeting-layer levers graduated at the Task-18.12 baseline-6
+        # record need no env export) and the ONE remaining live default-OFF toggle
+        # (Task 18.10's impostor_roll_call) OFF. The four meeting-layer keys stamp
+        # True on a fresh bare recording, exactly the baseline-6 substrate.
         monkeypatch.delenv(ENV_REPORTER_EXCULPATION, raising=False)
         monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
         monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
@@ -550,33 +505,34 @@ class TestSubstrateFlagStamp:
             "hard_evidence_gate": True,
             "observation_id_rendering": True,
             "citation_gate": True,
-            "absence_prior": False,
-            "roll_call_round": False,
-            "whereabouts_interior_flags": False,
-            "vent_placement_contradictions": False,
+            "absence_prior": True,
+            "roll_call_round": True,
+            "whereabouts_interior_flags": True,
+            "vent_placement_contradictions": True,
             "impostor_roll_call": False,
         }
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
 
-    def test_absence_prior_on_recording_round_trips_the_stamp(
+    def test_impostor_roll_call_on_recording_round_trips_the_stamp(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # With the sole remaining live toggle exported, ``record_game_end`` stamps
         # it ON and the file reader round-trips it — the recording self-describes
-        # the substrate it ran under (a future adopting-baseline shape a Phase-17
-        # graduation would record; the MANIFEST ``flags`` cell renders from this
-        # same ``read_substrate_flags`` value). The nine retired levers stay ON
-        # alongside it — a lever-ON recording is NOT byte-identical to the OFF
-        # baseline-5 stamp, so it fails loud against a committed OFF stamp under
-        # ``_assert_substrate_matches`` unless the loader opts into the mismatch.
-        monkeypatch.setenv(ENV_ABSENCE_PRIOR, "1")
-        path = tmp_path / "absence-on.jsonl"
-        ReplayLog(path, game_id="g-absence").record_game_end(
+        # the substrate it ran under (the shape a FUTURE gate that ships the
+        # impostor arm would graduate; the MANIFEST ``flags`` cell renders from this
+        # same ``read_substrate_flags`` value). The thirteen retired levers stay ON
+        # alongside it — an impostor-ON recording is NOT byte-identical to the
+        # baseline-6 (impostor-OFF) stamp, so it fails loud against a committed OFF
+        # stamp under ``_assert_substrate_matches`` unless the loader opts into the
+        # mismatch.
+        monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
+        path = tmp_path / "impostor-on.jsonl"
+        ReplayLog(path, game_id="g-impostor").record_game_end(
             winner="CREWMATES", reason="CREWMATE_EJECT", tick=17
         )
         flags = read_substrate_flags(path)
         assert flags is not None
-        assert flags[ENV_ABSENCE_PRIOR_KEY] is True
+        assert flags[ENV_IMPOSTOR_ROLL_CALL_KEY] is True
         # The retired always-on levers stay ON alongside the live toggle.
         assert all(
             flags[key]
@@ -587,17 +543,6 @@ class TestSubstrateFlagStamp:
     @pytest.mark.parametrize(
         ("env_var", "flag_key", "resolver"),
         [
-            (ENV_ROLL_CALL_ROUND, ENV_ROLL_CALL_ROUND_KEY, roll_call_round_enabled),
-            (
-                ENV_WHEREABOUTS_INTERIOR_FLAGS,
-                ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY,
-                whereabouts_interior_flags_enabled,
-            ),
-            (
-                ENV_VENT_PLACEMENT_CONTRADICTIONS,
-                ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY,
-                vent_placement_contradictions_enabled,
-            ),
             (
                 ENV_IMPOSTOR_ROLL_CALL,
                 ENV_IMPOSTOR_ROLL_CALL_KEY,
@@ -605,18 +550,20 @@ class TestSubstrateFlagStamp:
             ),
         ],
     )
-    def test_phase18_toggle_default_off_reads_env(
+    def test_impostor_roll_call_toggle_default_off_reads_env(
         self,
         env_var: str,
         flag_key: str,
         resolver: object,
     ) -> None:
-        # Each of the four Phase-18 meeting-layer lever flags registered at Task
-        # 18.11 is a live DEFAULT-OFF toggle: unset / bare / unrecognised stamps
-        # False (byte-identical to the committed baseline-5 sets, which predate the
-        # key), and a truthy AILIBI_* export flips it True — the seam the FULL /
-        # CREW-ONLY probe environments drive so a recording self-describes its arms.
-        # The snapshot key is bound to its home-module resolver BY IDENTITY.
+        # Task 18.10's impostor_roll_call is the SOLE remaining live DEFAULT-OFF
+        # toggle after the 18.12 graduation of the other three meeting-layer levers:
+        # unset / bare / unrecognised stamps False (byte-identical to the committed
+        # baseline-6 set, which predates the key having any effect), and a truthy
+        # AILIBI_IMPOSTOR_ROLL_CALL export flips it True — the seam a future gate
+        # that ships the impostor arm would drive. The snapshot key is bound to its
+        # local mirror resolver BY IDENTITY. (Parametrised for parallelism with the
+        # graduated-lever test above, though only one toggle remains.)
         assert dict(_TOGGLEABLE_LEVER_RESOLVERS)[flag_key] is resolver
         assert substrate_flag_snapshot({})[flag_key] is False
         assert substrate_flag_snapshot({env_var: "nope"})[flag_key] is False
@@ -630,7 +577,8 @@ class TestSubstrateFlagStamp:
         # ``orchestrator.replay`` (importing the loader would execute its
         # import-time, prompt-set-sensitive Jinja build in every replay-only
         # consumer). This pin is the CI substitute for the identity binding the
-        # other three levers keep: the mirror and the loader's
+        # graduated levers' read-sites kept before they retired: the mirror and the
+        # loader's
         # ``impostor_roll_call_enabled`` must agree over the env grid, so the
         # replay stamp and the lever's read-site cannot drift apart without
         # this failing. The loader import happens HERE (the test env carries a
@@ -684,66 +632,55 @@ class TestSubstrateFlagStamp:
         assert result.returncode == 0, result.stderr
         assert "impostor_roll_call" in result.stdout
 
-    def test_full_arm_recording_stamps_all_four_phase18_flags_on(
+    def test_impostor_on_recording_stamps_every_lever_on(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The FULL probe arm exports all four Phase-18 flags, so a recording made
-        # under it stamps every one ON — the stamp-proof that a probe seed ran the
-        # arm under test (the 18.11 DoD: "the arms under test stamp-proven via the
-        # substrate-flag snapshot in the recorded bytes"). absence_prior stays OFF
-        # (it is not part of any probe arm — its graduation rides the ruling).
-        for env_var in (
-            ENV_ROLL_CALL_ROUND,
-            ENV_WHEREABOUTS_INTERIOR_FLAGS,
-            ENV_VENT_PLACEMENT_CONTRADICTIONS,
-            ENV_IMPOSTOR_ROLL_CALL,
-        ):
-            monkeypatch.setenv(env_var, "1")
+        # A recording made with the sole live toggle exported stamps every one of
+        # the fourteen levers ON — the four meeting-layer levers (absence_prior,
+        # roll_call_round, whereabouts_interior_flags, vent_placement_contradictions)
+        # are unconditional since the Task-18.12 baseline-6 record regardless of
+        # env, and the impostor_roll_call export adds the last one. This is the
+        # would-be shape a future gate that ships the impostor arm records; it is
+        # NOT the baseline-6 substrate (which keeps impostor_roll_call OFF).
+        monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
+        # These exports are no-ops now (the levers ignore env), pinned to prove it.
         monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        path = tmp_path / "full-arm.jsonl"
+        monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
+        path = tmp_path / "impostor-on.jsonl"
         ReplayLog(path, game_id="g-full").record_game_end(
             winner="IMPOSTORS", reason="IMPOSTOR_PARITY", tick=23
         )
         flags = read_substrate_flags(path)
         assert flags is not None
-        assert flags["roll_call_round"] is True
-        assert flags["whereabouts_interior_flags"] is True
-        assert flags["vent_placement_contradictions"] is True
-        assert flags["impostor_roll_call"] is True
-        assert flags["absence_prior"] is False
-        # The nine retired always-on levers stay ON alongside the arm flags.
-        assert all(
-            flags[key]
-            for key in SUBSTRATE_FLAG_KEYS
-            if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
-        )
+        assert all(flags[key] is True for key in SUBSTRATE_FLAG_KEYS)
 
-    def test_crew_only_arm_stamps_round_and_exemption_only(
+    def test_baseline6_bare_recording_stamps_the_graduated_slate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The CREW-ONLY probe arm exports the roll-call round + endpoint exemption
-        # (and the vent variant, 18.9's second arm, travels with the package), but
-        # NOT the impostor-answer template lever — so an impostor-answer stamp of
-        # False proves the impostor templates stayed default on this arm.
+        # The baseline-6 substrate: the four meeting-layer levers stamp ON
+        # (graduated at the Task-18.12 record on the CREW-ONLY ruling) and
+        # impostor_roll_call stamps OFF (the arm the ruling did NOT ship) under a
+        # BARE environment — no AILIBI_* lever export needed, exactly what the
+        # substrate-lever preflight in scripts/refresh_samples.sh enforces before a
+        # record stages. This is the record the committed baseline-6 samples carry.
         for env_var in (
             ENV_ROLL_CALL_ROUND,
             ENV_WHEREABOUTS_INTERIOR_FLAGS,
-        ):
-            monkeypatch.setenv(env_var, "1")
-        for env_var in (
             ENV_VENT_PLACEMENT_CONTRADICTIONS,
-            ENV_IMPOSTOR_ROLL_CALL,
             ENV_ABSENCE_PRIOR,
+            ENV_IMPOSTOR_ROLL_CALL,
         ):
             monkeypatch.delenv(env_var, raising=False)
-        path = tmp_path / "crew-only-arm.jsonl"
-        ReplayLog(path, game_id="g-crew-only").record_game_end(
+        path = tmp_path / "baseline6.jsonl"
+        ReplayLog(path, game_id="g-baseline6").record_game_end(
             winner="CREWMATES", reason="CREWMATE_EJECT", tick=31
         )
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags["roll_call_round"] is True
         assert flags["whereabouts_interior_flags"] is True
+        assert flags["vent_placement_contradictions"] is True
+        assert flags["absence_prior"] is True
         assert flags["impostor_roll_call"] is False
 
     def test_retired_reporter_exculpation_export_still_stamps_on(

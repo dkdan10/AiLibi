@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from orchestrator.replay import MeetingReplayEntry
 
 from agents.memory.beliefs import (
+    ABSENCE_SUSPICION_DELTA,
     ACCUSATION_SUSPICION_DELTA,
     BODY_PROXIMITY_SUSPICION_DELTA,
     CONTRADICTION_RENDER_CEIL,
@@ -2438,35 +2439,35 @@ class TestGraduatedTestimonySpread:
 
 
 class TestRelevanceGatedFoldOnCommittedBytes:
-    """The trajectory pin: gated Rule 3 lets accusation carry climb.
+    """The trajectory pin: the relevance gate lets a kill-scene accusation stand.
 
-    Audit C-C-3: a repeat-accused subject's accusation carry is cancelled or
-    partly offset in-meeting by an evidentially-empty Rule-3 vouch (an accuser's
-    OWN kill-scene sighting, which places the subject at the scene inside their
-    corroborated alibi window). Under the relevance gate the kill-scene
-    vouches die, so the re-derived cross-meeting fold stays ELEVATED across
-    the accused meetings instead of netting back toward the prior.
+    Audit C-C-3: a subject accused at the kill-scene meeting has that accusation
+    cancelled or partly offset in-meeting by an evidentially-empty Rule-3 vouch (an
+    accuser's OWN kill-scene sighting, which places the subject at the scene inside
+    their corroborated alibi window). Under the relevance gate the kill-scene vouch
+    dies, so the re-derived cross-meeting fold stays ELEVATED after the accused
+    meeting instead of netting back toward the prior.
 
-    Re-anchored at the Task-16.17 baseline-5 re-record (qwen3_6_27b v3, the three
-    graduated levers unconditional + the 16.15 roll-call now LIVE): the baseline-4
-    coordinate (seed-18 crewmate p-6) folds IDENTICALLY gated and ungated on the
-    baseline-5 bytes -- its kill-scene vouch supply vanished under the re-record, so
-    it no longer bites (and p-6 is no longer ejected). Seven corpus coordinates DO
-    still exhibit the gate-load-bearing property; the nearest one matching the
-    established shape is another repeat-accused CREWMATE, seed-8 p-7, five committed
-    meetings -- a subject whose corroborating sightings sit at the triggering-body
-    rooms, so the gate still bites (it keeps an INNOCENT subject's carry elevated,
-    from meeting 0 onward). WITH the relevance gate those kill-scene presence vouches
-    are dropped and the accusation carry climbs monotonically above the 0.5 prior
-    (0.55 -> 0.60 -> 0.65 -> 0.65 -> 0.70, clear over the §4.6 gate); WITHOUT the
-    gate (re-derived below) those vouches partly offset the accusations and the carry
-    lands one rung lower at every reinforced meeting (0.50 -> 0.55 -> 0.60 -> 0.60 ->
-    0.65) -- the gate is the difference between a carry that climbs to 0.70 and one
-    held a rung lower at 0.65 end to end. (p-7 is not itself ejected on baseline-5;
-    the trajectory divergence is the load-bearing signal, not a conviction.)
+    Re-anchored at the Task-18.12 baseline-6 vent-widening re-record (the CREW-ONLY
+    graduation slate -- the whereabouts/vent/roll-call/absence-prior levers
+    unconditional): the prior baseline-6 coordinate (seed-11 crewmate p-9) folds
+    IDENTICALLY gated and ungated after the vent widening -- its kill-scene vouch
+    supply no longer bites (gated == ungated == [0.55, 0.60, 0.575]). The nearest
+    still-load-bearing coordinate matching the established shape is another CREWMATE,
+    seed-9 p-9, three committed meetings -- accused at its kill-scene meeting (m2)
+    with a corroborating sighting at the triggering-body room, so the gate still
+    bites (it keeps an INNOCENT subject's carry elevated). WITH the relevance gate
+    that kill-scene presence vouch is dropped and the accusation lands: meetings 0-1
+    are quiet at the prior, then the carry rises to 0.55 at the kill-scene meeting
+    (-> [0.50, 0.50, 0.55], ABOVE the 0.5 prior). WITHOUT the gate (re-derived below)
+    the vouch survives and fully offsets the accusation, so the carry renders FLAT at
+    the prior end to end (-> [0.50, 0.50, 0.50]) -- the gate is the difference
+    between a carry lifted to 0.55 at the kill-scene meeting and one held flat at
+    0.50. (p-9 is not itself ejected on baseline-6; the trajectory divergence is the
+    load-bearing signal, not a conviction -- it stays under the §4.6 gate.)
     """
 
-    def _seed8_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
+    def _seed9_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
         from pathlib import Path
 
         import meetings.transcript as transcript_mod
@@ -2479,7 +2480,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
             / "replays"
             / "samples"
             / "9p2i"
-            / "replay-seed-8.jsonl"
+            / "replay-seed-9.jsonl"
         )
 
         # The ungated comparison disables ONLY the relevance predicate (a
@@ -2523,60 +2524,61 @@ class TestRelevanceGatedFoldOnCommittedBytes:
                     corroborated=evidence.corroborated,
                     contradicted=evidence.contradicted,
                 )
-                trajectory.append(beliefs.view("p-7").suspicion)
+                trajectory.append(beliefs.view("p-9").suspicion)
         finally:
             setattr(transcript_mod, "is_relevant_sighting", original_gate)
         return trajectory
 
-    def test_seed8_subject_is_a_crewmate(self) -> None:
-        # On baseline-5 the baseline-4 coordinate (seed-18 p-6) folds identically
-        # gated and ungated, so the re-anchor coordinate is the nearest still-load-
-        # bearing one: a repeat-accused CREWMATE, seed-8 p-7. Re-derive the roster
-        # via the seeder (as the other committed-bytes tests do) at the recorded
-        # 9p/2i config and confirm p-7 is a CREWMATE -- the gate here keeps an
-        # INNOCENT subject's carry elevated (a heuristic tradeoff), the honest
-        # baseline-5 shape of a mechanism baseline-3 exercised on a guilty impostor.
+    def test_seed9_subject_is_a_crewmate(self) -> None:
+        # After the Task-18.12 vent-widening re-record the prior baseline-6
+        # coordinate (seed-11 p-9) folds identically gated and ungated, so the
+        # re-anchor coordinate is the nearest still-load-bearing one: a CREWMATE,
+        # seed-9 p-9. Re-derive the roster via the seeder (as the other
+        # committed-bytes tests do) at the recorded 9p/2i config and confirm p-9 is a
+        # CREWMATE -- the gate here keeps an INNOCENT subject's carry elevated (a
+        # heuristic tradeoff), the honest baseline-6 shape of a mechanism baseline-3
+        # exercised on a guilty impostor.
         from engine.world import load_canonical_map
         from orchestrator.seeder import seed_initial_state
 
         state = seed_initial_state(
-            seed=8,
+            seed=9,
             game_map=load_canonical_map(),
             num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
         )
-        assert state.players["p-7"].role == "CREWMATE"
+        assert state.players["p-9"].role == "CREWMATE"
 
-    def test_seed8_p7_trajectory_rises_instead_of_rendering_flat(self) -> None:
-        trajectory = self._seed8_trajectory()
+    def test_seed9_p9_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed9_trajectory()
 
-        # Five committed meetings; crewmate p-7 is repeat-accused from meeting 0.
-        # The relevance gate lets the carry climb rather than being partly offset
-        # in-meeting by evidence-free kill-scene vouches: the carry rises 0.55 ->
-        # 0.60 -> 0.65 -> 0.65 -> 0.70, monotonically ABOVE the 0.5 prior and clear
-        # over the §4.6 gate, because the kill-scene presence vouches that would
-        # offset it are dropped by the gate.
-        assert len(trajectory) == 5
-        assert trajectory == pytest.approx([0.55, 0.6, 0.65, 0.65, 0.7])
-        # Climbs above the prior and never settles back to it (contrast the
-        # ungated trajectory below, which lands one rung lower every meeting).
+        # Three committed meetings; crewmate p-9 is accused at its kill-scene meeting
+        # (m2). The relevance gate lets that accusation stand rather than being
+        # offset in-meeting by an evidence-free kill-scene vouch: meetings 0-1 are
+        # quiet at the prior, then the carry rises to 0.55 at the kill-scene meeting
+        # -> [0.50, 0.50, 0.55], ABOVE the 0.5 prior (the vouch that would offset it
+        # is dropped by the gate). It stays under the §4.6 gate -- the divergence is
+        # the signal, not a conviction.
+        assert len(trajectory) == 3
+        assert trajectory == pytest.approx([0.5, 0.5, 0.55])
+        # Ends above the prior rather than netting back to it (contrast the ungated
+        # trajectory below, which renders flat at the prior end to end).
         assert trajectory[-1] > _DEFAULT_SUSPICION  # stays above prior, not flat
 
-    def test_seed8_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
+    def test_seed9_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
         # The gate's contribution, isolated: WITHOUT the relevance predicate the
-        # detector re-derives presence-at-the-kill-scene corroborations for p-7
-        # from body-room sightings confirmed by third parties, which vouch p-7 and
-        # partly offset the accusation bumps -- so the ungated carry lands one rung
-        # lower at every reinforced meeting (starting at the meeting-0 prior, where
-        # the vouch fully offsets the first accusation). The gate dropping those
-        # vouches is the difference between a carry that climbs to 0.70 and one held
-        # a rung lower at 0.65.
-        gated = self._seed8_trajectory()
-        ungated = self._seed8_trajectory(gate_killscene_vouches=False)
+        # detector re-derives a presence-at-the-kill-scene corroboration for p-9
+        # from a body-room sighting confirmed by a third party, which vouches p-9 and
+        # fully offsets the kill-scene accusation -- so the ungated carry renders FLAT
+        # at the prior end to end (the vouch cancels the m2 accusation). The gate
+        # dropping that vouch is the difference between a carry lifted to 0.55 at the
+        # kill-scene meeting and one held flat at 0.50.
+        gated = self._seed9_trajectory()
+        ungated = self._seed9_trajectory(gate_killscene_vouches=False)
 
-        assert ungated == pytest.approx([0.5, 0.55, 0.6, 0.6, 0.65])
-        # meeting-0: the ungated vouch fully offsets the first accusation.
+        assert ungated == pytest.approx([0.5, 0.5, 0.5])
+        # meeting-0: quiet -- no accusation yet, so the carry sits at the prior.
         assert ungated[0] == pytest.approx(0.5)
         assert gated[-1] > ungated[-1]  # the gate is what keeps it more elevated
 
@@ -3332,9 +3334,17 @@ class TestSelfRefutedAlibiDowngrade:
         )
 
         rendered = {entry.player_id: entry.suspicion for entry in captured["p-2"]}
+        # Bound 2 downgrades the self-refuted alibi's STRONG flag to WEAK (+0.08),
+        # so p-1 renders far below the STRONG 0.80. A self-refuted alibi leaves p-1
+        # publicly UNPLACED, so the graduated (Task 18.12) absence prior adds a
+        # second +0.08 on top -- the value stays well under the 0.80 the downgrade
+        # prevents, which is what this seam pins.
         assert rendered["p-1"] == pytest.approx(
-            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+            _DEFAULT_SUSPICION
+            + WEAK_CONTRADICTION_SUSPICION_DELTA
+            + ABSENCE_SUSPICION_DELTA
         )
+        assert rendered["p-1"] < 0.80
 
     def test_contradiction_fold_without_transcript_fails_loud(self) -> None:
         # PR #217 review (Codex P2), now UNCONDITIONAL (the 14.12 close): a
@@ -3368,10 +3378,10 @@ class TestSelfRefutedAlibiDowngrade:
 
 
 class TestEvidenceQualityLiftOnCommittedBytes:
-    """The Task-14.10 lever on the committed BASELINE-5 bytes (re-pinned at Task
-    16.17).
+    """The Task-14.10 lever on the committed BASELINE-6 bytes (re-recorded at Task
+    18.12).
 
-    Baseline 5 was recorded with the lever unconditionally ON (stamped), so the
+    Baseline 6 was recorded with the lever unconditionally ON (stamped), so the
     committed bytes ARE the lever-ON fold and the railroad is eliminated.
     Re-derives the production vote-time fold seeded from the ReplayLoader memory
     walk (the walk is lever-neutral; the ``allow_substrate_mismatch`` override lets
@@ -3385,33 +3395,36 @@ class TestEvidenceQualityLiftOnCommittedBytes:
       only on meetings that took no separate spread lift; the anchor meetings are
       chosen from that clean set.)
     * the lever is LOAD-BEARING and no crew row reaches certain guilt, verified
-      SET-WIDE: the max crew rendered suspicion is 0.90 — comfortably BELOW the 0.97
+      SET-WIDE: the max crew rendered suspicion is 0.92 — comfortably BELOW the 0.97
       ``CONTRADICTION_RENDER_CEIL`` (bound 1) and far below the 1.0 clamp. On
-      baseline-5 NO crew row even reaches the ceiling (unlike baseline-4, where a
+      baseline-6 NO crew row even reaches the ceiling (unlike baseline-4, where a
       single would-be-railroad crew row landed exactly ON it); the certain-guilt
       exclusion therefore holds with margin, the load-bearing proof being the
       set-wide < 1.0 bound. The lever still CEILS any row that would hit the ceiling
-      before the clamp; on baseline-5 no crew row is pushed that high.
-    * a baseline-5 TRUE-impostor catch (seed-36 m2, the over-damping canary) still
+      before the clamp; on baseline-6 no crew row is pushed that high.
+    * a baseline-6 TRUE-impostor catch (seed-7 m1, the over-damping canary) still
       convicts: genuine cross-referenced evidence is unaffected by the lever.
     """
 
-    # baseline-5 re-anchor (Task 16.17). No would-be-railroad ceiling row survives
-    # on baseline-5: the set-wide max crew render is 0.90 (seed-28 m1 p-3, voter
-    # p-8), well under the 0.97 CONTRADICTION_RENDER_CEIL and the 1.0 clamp, so
-    # bound 1 does not fire on any crew row (contrast baseline-4, where seed-48 m3
-    # p-6 landed exactly on 0.97). The lever's effect -- that a would-be-certain-
-    # guilt crew row CEILS at 0.97 rather than clamping to 1.0 -- lives in git
-    # history + the close audits; the set-wide < 1.0 bound is the surviving proof.
-    # Two committed meetings anchor the exactness reproduction (both from the
-    # contradiction-fold-clean set); seed-36 m2 (a true impostor, p-4, caught on the
-    # contradiction channel) is the over-damping canary.
+    # baseline-6 re-anchor (Task 18.12, vent-widening re-record). No would-be-railroad
+    # ceiling row survives: the set-wide max crew render is 0.92, well under the 0.97
+    # CONTRADICTION_RENDER_CEIL and the 1.0 clamp, so bound 1 does not fire on any
+    # crew row (contrast baseline-4, where seed-48 m3 p-6 landed exactly on 0.97).
+    # The lever's effect -- that a would-be-certain-guilt crew row CEILS at 0.97
+    # rather than clamping to 1.0 -- lives in git history + the close audits; the
+    # set-wide < 1.0 bound is the surviving proof. Two committed meetings anchor the
+    # exactness reproduction, both re-chosen from the contradiction-fold-clean set
+    # (the vent widening moved several prior anchors off it: seed-5 m0 now folds
+    # p-1's row to 0.62 vs the recorded 0.50, and seed-26 m2 onto the J1 render
+    # ceiling where the fold-only harness reads 0.60 vs the recorded 0.59). seed-7 m1
+    # (a true impostor, p-7, caught on the contradiction channel) still reproduces
+    # exactly and is the over-damping canary; seed-2 m0 is the second clean anchor.
     _REPRODUCE_MEETINGS = (
-        (26, "headless-seed-26:meeting-2"),
-        (36, "headless-seed-36:meeting-2"),
+        (2, "headless-seed-2:meeting-0"),
+        (7, "headless-seed-7:meeting-1"),
     )
-    _CANARY = (36, "headless-seed-36:meeting-2")
-    _MAX_CREW_RENDER = 0.90
+    _CANARY = (7, "headless-seed-7:meeting-1")
+    _MAX_CREW_RENDER = 0.92
 
     _SET_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
     _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
@@ -3546,11 +3559,11 @@ class TestEvidenceQualityLiftOnCommittedBytes:
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The load-bearing proof in its SET-WIDE form on baseline-5: the
+        # The load-bearing proof in its SET-WIDE form on baseline-6: the
         # certain-guilt exclusion (bound 1) holds NO crew row at 1.0 anywhere in the
-        # committed set — the max crew rendered suspicion is 0.90, comfortably below
+        # committed set — the max crew rendered suspicion is 0.92, comfortably below
         # the 0.97 CONTRADICTION_RENDER_CEIL and far below the 1.0 clamp. On
-        # baseline-5 no crew row even reaches the ceiling (contrast baseline-4, where
+        # baseline-6 no crew row even reaches the ceiling (contrast baseline-4, where
         # seed-48 m3 p-6 / voter p-7 landed precisely ON the 0.97 constant), so the
         # exclusion holds with margin. The lever's effect (crew never renders 1.0)
         # is verified across the whole set; the single-row lever-OFF counterfactual
@@ -3576,16 +3589,16 @@ class TestEvidenceQualityLiftOnCommittedBytes:
         assert max_crew < 1.0  # no crew row clamps to certain guilt
         assert max_crew == pytest.approx(
             self._MAX_CREW_RENDER
-        )  # the measured ceiling touch (bound 1 fires exactly here)
+        )  # the measured set-wide max crew render, below the 0.97 ceiling
 
-    def test_seed36_m2_true_impostor_catch_still_gate_crosses(
+    def test_seed7_m1_true_impostor_catch_still_gate_crosses(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
         # The over-damping canary: genuine multi-witness evidence must still
-        # convict under the lever. The canary (seed-36 m2 on baseline-5) ejects a
-        # TRUE impostor (p-4) caught on the contradiction channel, so it still rides
+        # convict under the lever. The canary (seed-7 m1 on baseline-6) ejects a
+        # TRUE impostor (p-7) caught on the contradiction channel, so it still rides
         # the §4.6 gate.
         seed, meeting_id = self._CANARY
         entry = self._meeting_entry(seed, meeting_id)
@@ -3600,9 +3613,9 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 
 class TestReporterExculpationOnCommittedBytes:
     """The Task-15.5 reporter-exculpation lever (graduated to unconditional at Task
-    15.7), measured on the committed BASELINE-5 9p2i bytes (re-pinned at Task 16.17).
+    15.7), measured on the committed BASELINE-6 9p2i bytes (re-recorded at Task 18.12).
 
-    Baseline 5 was recorded WITH the lever unconditionally ON, so the committed
+    Baseline 6 was recorded WITH the lever unconditionally ON, so the committed
     fold IS the damped fold. The lever is no longer env-toggleable, so the
     counterfactual is driven by the ``reporter`` ARGUMENT of the vote-time fold
     (the manager passes the body-reporter for a body report and ``None`` for an
@@ -3610,11 +3623,24 @@ class TestReporterExculpationOnCommittedBytes:
     baseline. The offline measurement the 15.5 DoD required -- how many of the
     innocent-reporter convictions the damp keeps below the §4.6 gate, and the
     over-damping canary (ZERO hard-flag-backed convictions change outcome) -- is
-    preserved in this argument-driven form. The counterfactual keeps shrinking with
-    the recorded innocent-reporter census: baseline 5 now has ZERO such meetings
-    (down from 1 on baseline 4, 4 on baseline 3, and the retired baseline-2 22), so
-    the damp's LIVE population effect is empty -- the over-damping canary, swept over
-    all 61 report-ejections, is what carries the class's safety contract now.
+    preserved in this argument-driven form.
+
+    Task 18.12 finding (the record adopts it, documented in
+    ``audits/audit-phase-18-baseline-6.md``): the innocent-reporter census, ZERO on
+    baseline 5, rises to TWO on baseline 6 -- seed 17 meeting-0 and seed 39 meeting-0,
+    both reporter p-1 (innocent crewmates). Each is
+    HARD-flag-backed: the graduated whereabouts-interior exemption (Task 18.9 lever 1)
+    promotes a SINGLE-tick self-alibi-vs-sighting ("Alibi places p-1 in ENGINEERING
+    ticks 6-6; sighting reports p-1 in EAST_HALL at tick 6" on seed 17; "CAFETERIA
+    ticks 8-8" vs "EAST_HALL at tick 8" on seed 39) to a STRONG ``alibi_vs_sighting``
+    -- a false positive on an innocent crew roll-call answer that happened to land on
+    the body reporter. This is a PRECISION cost of the adopted graduation, NOT an
+    over-damping regression: each convicts damp-ON and damp-OFF alike (seed 17 lifts
+    0.80 -> 0.75 under the damp, seed 39 holds 0.80 -> 0.80; BOTH stay over the §4.6
+    gate either way, so the hard flag stands), so the damp neither causes nor removes
+    the conviction. The over-damping canary -- ZERO hard-flag-backed convictions
+    change outcome, swept over all 87 report-ejections -- still holds, and remains the
+    class's safety contract.
 
     A subject is "hard-flag-backed" when a NON-weak contradiction flag names it OR
     a seeded prior renders a witnessed vent/kill pin (>= ``_VENTKILL_PRIOR``). A
@@ -3637,7 +3663,7 @@ class TestReporterExculpationOnCommittedBytes:
 
         # The memory walk is lever-neutral (reconstruction never runs the vote-time
         # fold), so one loader serves both reporter-argument cells. The override is
-        # retained defensively (harmless: baseline 5's lever stamp matches).
+        # retained defensively (harmless: baseline 6's lever stamp matches).
         return ReplayLoader(self._SET_DIR, allow_substrate_mismatch=True)
 
     @pytest.fixture(scope="class")
@@ -3754,13 +3780,16 @@ class TestReporterExculpationOnCommittedBytes:
     def test_measured_corpus_census_and_zero_self_report(
         self, funnel: InformationFunnelReport
     ) -> None:
-        # The census on baseline-5: 0 of 61 report-meeting ejections removed the
-        # reporter -- down from 1 of 79 on baseline 4, 4 of 95 on baseline 3, and 22
-        # of 106 on baseline 2 -- and the impostor self-report rate is EXACTLY ZERO
-        # (no report meeting had the killer as its reporter).
-        assert funnel.report_ejections == 61
-        assert funnel.reporter_ejected == 0
-        assert funnel.reporter_ejected_innocent == 0
+        # The census on baseline-6: 2 of 87 report-meeting ejections removed the
+        # reporter (seed-17 m0 and seed-39 m0, both innocent crewmate p-1 -- the
+        # graduated whereabouts-interior exemption's single-tick false positives), and
+        # both are also innocent-reporter ejections. The impostor self-report rate is
+        # still EXACTLY ZERO (no report meeting had the killer as its reporter).
+        # Prior baselines: 0 of 61 (baseline 5), 1 of 79 (baseline 4), 4 of 95
+        # (baseline 3), 22 of 106 (baseline 2).
+        assert funnel.report_ejections == 87
+        assert funnel.reporter_ejected == 2
+        assert funnel.reporter_ejected_innocent == 2
         assert funnel.killer_self_reported == 0
 
     # -- (a) the damp's effect on the innocent-reporter convictions ----------
@@ -3771,21 +3800,21 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # On baseline-5 the recorded innocent-reporter census is ZERO (down from 1
-        # on baseline 4, 4 on baseline 3, 22 on baseline 2): NO report-meeting
-        # ejection removed its reporter, so the graduated lever's LIVE population
-        # effect is empty -- there is no innocent-reporter conviction for the damp
-        # to move. The per-meeting damp behaviour this would have measured (the
-        # never-raises invariant, and the kept / already-sub-gate / prior-convicted
-        # split) is still guarded structurally by test_damp_touches_only_the_reporter
-        # and by the over-damping canary below; the loop is retained so that a future
-        # re-record that re-populates the census measures the split again.
+        # On baseline-6 the recorded innocent-reporter census is TWO (seed 17 m0 and
+        # seed 39 m0, both crewmate p-1). Each conviction is HARD-flag-backed (a STRONG
+        # alibi_vs_sighting from the graduated whereabouts-interior exemption): seed 17
+        # lifts 0.80 -> 0.75 under the damp and seed 39 holds 0.80 -> 0.80, but BOTH
+        # stay over the §4.6 gate either way -- the damp NEVER raises the reporter's
+        # suspicion and cannot drop these below the gate (hard evidence, not a soft
+        # accusation, carries them) -- so both land in the ``hard_convicted`` bucket.
+        # The kept / already-sub-gate split is still guarded structurally by
+        # test_damp_touches_only_the_reporter and by the over-damping canary below.
         meetings = self._innocent_reporter_meetings(funnel)
-        assert len(meetings) == 0
+        assert len(meetings) == 2
 
         kept = 0
         already_sub_gate = 0
-        prior_convicted = 0
+        hard_convicted = 0
         for seed, meeting_id, reporter in meetings:
             entry = self._entry(seed, meeting_id)
             roles = roles_by_seed[seed]
@@ -3801,25 +3830,63 @@ class TestReporterExculpationOnCommittedBytes:
             elif on_max < _GATE:
                 kept += 1  # the soft accusation was the deciding lift -> exculpated
             else:
-                prior_convicted += 1  # a standing prior carries it; damp cannot reach
+                hard_convicted += (
+                    1  # a standing prior/flag carries it; damp cannot reach
+                )
 
-        # Empty census -> every bucket is zero (the shrinking series reached 0).
-        assert (kept, already_sub_gate, prior_convicted) == (0, 0, 0)
-        assert kept + already_sub_gate + prior_convicted == 0
+        # Both census meetings are hard-flag-backed p-1 convictions.
+        assert (kept, already_sub_gate, hard_convicted) == (0, 0, 2)
+        assert kept + already_sub_gate + hard_convicted == 2
 
-    def test_no_innocent_reporter_conviction_is_hard_flag_backed(
+    def test_the_hard_flag_backed_innocent_reporters_are_the_two_whereabouts_cases(
         self,
         loader: ReplayLoader,
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # None of the innocent-reporter convictions rides a STRONG contradiction
-        # or a witnessed vent/kill pin -- every one is soft- or prior-decided, so
-        # the damp never removes hard evidence from a reporter.
+        # Task 18.12 finding (documented + adopted): baseline 5 had NO hard-flag-
+        # backed innocent-reporter conviction (the damp never had to fight hard
+        # evidence on a reporter). Baseline 6 has exactly TWO -- seed 17 m0 and seed 39
+        # m0, both crewmate p-1 -- because the graduated whereabouts-interior exemption
+        # promotes each one's single-tick roll-call self-alibi ("ENGINEERING ticks 6-6"
+        # vs a "EAST_HALL at tick 6" sighting on seed 17; "CAFETERIA ticks 8-8" vs
+        # "EAST_HALL at tick 8" on seed 39) to a STRONG alibi_vs_sighting false
+        # positive. This is a PRECISION cost of the adopted graduation, not an
+        # over-damping regression: the damp cannot remove the hard flag, so each
+        # convicts damp-ON and damp-OFF alike (the over-damping canary below stays at
+        # zero outcome changes). We pin the known cases exactly so any NEW hard-flag-
+        # backed innocent-reporter conviction (a fresh false positive) fails here
+        # loudly.
+        hard_backed_innocent: list[tuple[int, str, str]] = []
         for seed, meeting_id, reporter in self._innocent_reporter_meetings(funnel):
             entry = self._entry(seed, meeting_id)
-            _, priors = self._rederive(loader, seed, entry, roles_by_seed[seed], None)
-            assert not self._is_hard_backed(entry, reporter, priors), meeting_id
+            off_rows, priors = self._rederive(
+                loader, seed, entry, roles_by_seed[seed], None
+            )
+            if not self._is_hard_backed(entry, reporter, priors):
+                continue
+            # STRONG-flag-backed (the exemption false positive), not a vent/kill pin.
+            strong_flag = any(
+                reporter in flag.subjects and not is_weak_contradiction(flag)
+                for flag in entry.contradictions
+            )
+            ventkill = any(
+                prior.get(reporter, 0.0) >= self._VENTKILL_PRIOR
+                for prior in priors.values()
+            )
+            assert strong_flag and not ventkill, meeting_id
+            # The damp leaves the hard conviction's OUTCOME unchanged (it cannot
+            # exculpate hard evidence): p-1 convicts with the damp ON and OFF.
+            on_rows, _ = self._rederive(
+                loader, seed, entry, roles_by_seed[seed], reporter
+            )
+            assert self._subject_max(off_rows, reporter) >= _GATE
+            assert self._subject_max(on_rows, reporter) >= _GATE
+            hard_backed_innocent.append((seed, meeting_id, reporter))
+        assert hard_backed_innocent == [
+            (17, "headless-seed-17:meeting-0", "p-1"),
+            (39, "headless-seed-39:meeting-0", "p-1"),
+        ]
 
     # -- (b) the over-damping canary: zero hard-flag-backed outcome changes ---
 
@@ -3852,15 +3919,18 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The canary: over ALL 61 committed report-ejections, every hard-flag-
+        # The canary: over ALL 87 committed report-ejections, every hard-flag-
         # backed ejectee (a STRONG contradiction or a witnessed vent/kill pin)
-        # keeps its §4.6 gate outcome under the damp -- ZERO outcome changes.
+        # keeps its §4.6 gate outcome under the damp -- ZERO outcome changes. This
+        # includes the seed-17 m0 and seed-39 m0 p-1 cases: each STRONG-flag
+        # conviction stands damp-ON and damp-OFF, so both are among the 78 hard-backed
+        # ejectees that do NOT move.
         report_ejections = [
             row
             for row in funnel.per_meeting
             if row.outcome == "EJECTED" and row.ejected is not None
         ]
-        assert len(report_ejections) == 61
+        assert len(report_ejections) == 87
         hard_backed = 0
         outcome_changes = 0
         for row in report_ejections:

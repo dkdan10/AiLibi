@@ -35,7 +35,6 @@ soft, and never clamped, so evidence of unknown class is never suppressed.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
@@ -383,48 +382,43 @@ def hard_evidence_gated_suspicion(
     return min(suspicion, HARD_EVIDENCE_GATE_RENDER_CEIL) if soft_only else suspicion
 
 
-# Task 16.8 absence-prior lever — DEFAULT-OFF (the 16.4 live-toggle pattern,
-# env-gated, NOT retired). Registered as the FOURTH live entry in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` (behind 16.6's
-# ``citation_gate``, the 16.4 -> 16.5 -> 16.6 -> 16.8 registry-chain order) and
-# stamped via ``substrate_flag_snapshot``. On committed baseline-3 bytes the
-# absent set is often LARGE (the 16.15 roll-call elicitation does not exist
-# yet), which is exactly why this stays OFF until 16.17 measures the pair
-# together — see ``ABSENCE_SUSPICION_DELTA``'s docstring for the sizing
-# contract the lever guards.
+# Task 16.8 absence-prior lever — UNCONDITIONAL since the Task-18.12 baseline-6
+# record. The Phase-16 slate recorded this lever's STAY-OFF (baseline 5), and
+# audits/audit-phase-17-absence-gate.md Ruling 3 re-routed the graduation decision
+# to Phase 18, gating it on the ratified bar measured beside the 18.8 roll-call
+# elicitation (which supplies the placement channel that keeps the absent set
+# small). The 18.11 meeting-layer gate cleared that bar and the CREW-ONLY ruling
+# graduated it, so — mirroring the 14.9/14.12/15.7/16.17 graduations — it is now
+# the default substrate rather than an env-gated toggle: the pre-vote fold always
+# applies the delta to the absent set. Stamped unconditionally ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; ``ENV_ABSENCE_PRIOR`` is
+# retained (no longer read) for the stamp key's naming provenance and
+# backward-compatible imports.
 ENV_ABSENCE_PRIOR: Final[str] = "AILIBI_ABSENCE_PRIOR"
-_ABSENCE_PRIOR_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
 
 
 def absence_prior_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.8 absence-prior lever is ON. DEFAULT OFF.
+    """Whether the Task 16.8 absence-prior lever is ON — now always True.
 
-    Reads :data:`ENV_ABSENCE_PRIOR` from ``env`` (defaulting to the real
-    process environment), mirroring the 16.4 ``hard_evidence_gate`` resolver it
-    clones (and the retired 13.5 / 14.10 / 15.5 resolvers before it). Default
-    OFF: an unset / empty / unrecognised value is ``False`` so the pre-vote
-    fold stays byte-identical to the committed baseline-3 substrate
-    (``scripts/verify_samples.sh`` reconstructs clean); the live measurement
-    beside the 16.15 roll-call elicitation and the graduation decision are
-    Task 16.17. Accepts ``1/true/yes/on`` (case-insensitive). The ``env``
-    argument lets tests + the offline counterfactual toggle the lever
-    deterministically without mutating ``os.environ``.
+    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
+    applied to this lever once baseline 6 adopted it: the Phase-16 slate's recorded
+    STAY-OFF was re-routed to Phase 18 by audits/audit-phase-17-absence-gate.md
+    Ruling 3, and the 18.11 meeting-layer gate cleared the ratified bar beside the
+    18.8 roll-call elicitation). The fold applies at exactly the pre-vote
+    application region and the manager's fold-path guard -- both read THIS
+    resolver. The ``env`` argument is accepted and ignored (retained so the read
+    sites and the substrate stamp read one source of truth without a signature
+    churn).
 
     ON applies :data:`ABSENCE_SUSPICION_DELTA` to every absent subject
     (:func:`meetings.transcript.absent_players` -- the meeting's living roster
     minus the players public testimony placed) in the TRANSIENT ``pre_vote``
     half of :func:`apply_meeting_evidence_rules`, threaded by the manager's
-    vote-time fold. The gating lives at the fold's application region and the
-    manager's fold-path guard -- both read THIS resolver, so a lever-OFF
-    meeting takes the identical code path (and bytes) as before the lever
-    existed. The persistent absorb never applies the delta, lever ON or OFF.
+    vote-time fold. The persistent absorb never applies the delta.
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_ABSENCE_PRIOR, "").strip().lower()
-        in _ABSENCE_PRIOR_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 ABSENCE_SUSPICION_DELTA: Final[float] = 0.08

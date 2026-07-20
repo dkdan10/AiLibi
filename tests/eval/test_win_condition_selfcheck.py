@@ -121,7 +121,7 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
     # Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3 across all four templates, the
     # substrate levers unconditionally ON): the flat 4p/1i set ejects the
     # impostor in 10 of 50 games (CREWMATE_EJECT) — matching the set's
-    # impostor_ejections=10 (ejection_accuracy 10/10 = 1.0). Each elimination's
+    # impostor_ejections=10 (ejection_accuracy 10/12 ≈ 0.83). Each elimination's
     # first_zero == game_over tick is asserted above (the A-A-3 invariant, which
     # still holds set-wide); this pins the count the re-record produced, so the
     # §6.3 elimination path runs on the committed bytes, not only the hermetic

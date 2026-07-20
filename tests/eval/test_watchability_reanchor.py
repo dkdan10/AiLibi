@@ -253,17 +253,17 @@ def test_zero_conversion_with_backed_supply_also_fails() -> None:
 
 
 def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
-    """The committed default (baseline-5) sets clear their own DERIVED floor.
+    """The committed default (baseline-6) sets clear their own DERIVED floor.
 
     At the baseline's own evidence density the supply ratio is exactly 1.0 and
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
     "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the Task 16.17 baseline-5 conversion pins (9p2i 64/135, 4p1i 10/28; the
-    baseline-4 record was 77/123 and 17/29).
+    to the vent-widening baseline-6 conversion pins (9p2i 78/136, 4p1i 9/30; the
+    pre-widening baseline-6 record was 78/133 and 10/30).
     """
 
-    expected = {_NINE: 64 / 135, _FOUR: 10 / 28}
+    expected = {_NINE: 78 / 136, _FOUR: 9 / 30}
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name

@@ -784,18 +784,84 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             population_relative_conversion=True,
         ),
     },
+    "baseline-6": {
+        # Measured on replays/samples/9p2i (baseline 6, the Task-18.12 adopting
+        # record: locked model + qwen3_6_27b v3 + the meeting-layer graduation slate
+        # — roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
+        # absence_prior all unconditional beside the earlier graduations, PLUS the
+        # 17.5 vent-placement WIDENING wired into the absent-set fold (Codex P1 fix,
+        # PR #300); impostor_roll_call OFF, the CREW-ONLY ruling), via the
+        # compute_watchability gauge seam:
+        #   witnessed_event_rate        = 6/177  = 0.03389830508474576
+        #   flags_per_meeting           = 180/165 = 1.0909090909090908 (96
+        #                                 persisted vent flags + 84 re-derived
+        #                                 transcript flags)
+        #   testimony_backed_conversion = 78/136 = 0.5735294117647058
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (population_relative_conversion=True): the
+        # evaluated floor per scored population is
+        #   floor = 0.5735294117647058 * (1.0909090909090908 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 180/165 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.5735294117647058; measured 78/136 -> PASS at exact
+        # equality (self-consistency). The flag census still rises sharply vs
+        # baseline 5 (90/179 = 0.5028 -> 180/165 = 1.0909) — the graduated meeting
+        # layer working as designed (the roll-call round elicits whereabouts answers
+        # the endpoint-band exemption bands STRONG, and the vent variant mints
+        # grounded-vent STRONG flags) — so evidence supply rises with the conviction
+        # rate (64/135 = 0.4741 -> 78/136 = 0.5735). The vent WIDENING re-record
+        # (removing grounded-vent subjects from the absent set so the absence prior
+        # no longer double-charges them) shifted the game trajectories — meetings
+        # 156 -> 165, flags 207 -> 180, kills 173 -> 177 — the honest cascade of a
+        # corrected substrate. audits/audit-phase-18-baseline-6.md §5 quotes this.
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.03389830508474576, numerator=6),
+            flags_per_meeting=FloorPin(value=1.0909090909090908, numerator=180),
+            testimony_backed_conversion=FloorPin(
+                value=0.5735294117647058, numerator=78
+            ),
+            population_relative_conversion=True,
+        ),
+        # Measured on replays/samples/4p1i (baseline 6, this record):
+        #   witnessed_event_rate        = 1/61  = 0.01639344262295082
+        #                                 (numerator 1 -> ADVISORY, the 15.19
+        #                                 rare-event rule)
+        #   flags_per_meeting           = 16/39 = 0.41025641025641024 (11
+        #                                 persisted vent flags + 5 re-derived
+        #                                 transcript flags)
+        #   testimony_backed_conversion = 9/30 = 0.3
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (same shape, this roster's pins):
+        #   floor = 0.3 * (0.41025641025641024 / measured flags_per_meeting),
+        #           capped at 1.0.
+        # The baseline itself: flags 16/39 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.3; measured 9/30 -> PASS at exact equality
+        # (self-consistency). The 4p1i witnessed + flag censuses are unchanged from
+        # the pre-widening cut (the small 4p1i games elicit no new roll-call/vent
+        # flags and the widening removes no absent-set subject that flips an
+        # outcome); the conversion floor eases by one converted attempt (10/30 ->
+        # 9/30) as the widening's absence-prior change nudges one backed accusation.
+        "4p1i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.01639344262295082, numerator=1),
+            flags_per_meeting=FloorPin(value=0.41025641025641024, numerator=16),
+            testimony_backed_conversion=FloorPin(value=0.3, numerator=9),
+            population_relative_conversion=True,
+        ),
+    },
 }
 
-# baseline 5 is the committed canonical set since Task 16.17 (the phase-close
-# re-record on the graduated slate), so a bare ``measure_baseline.py
-# --watchability`` reads baseline 5's own floors — the referee accepts the
-# committed bytes at equality. (Baselines 3 and 4 moved here from Tasks 15.7
-# and 16.14 the same way; their blocks above stay scoreable via an explicit
-# --baseline-id.) The lag is now CLOSED: Task 17.11 flipped
-# ``BAKEOFF_BASELINE_ID`` to ``baseline-5``, so the bake-off now selects on
-# the same floors as this default (the phase-17 re-selection under the
-# close-substrate referee, audits/audit-phase-16-close.md §8).
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-5"
+# baseline 6 is the committed canonical SAMPLES set since Task 18.12 (the
+# meeting-layer adopting record on the graduated slate), so a bare
+# ``measure_baseline.py --watchability`` reads baseline 6's own floors — the
+# referee accepts the committed bytes at equality. (Baselines 3, 4, and 5 moved
+# here from Tasks 15.7, 16.14, and 16.17 the same way; their blocks above stay
+# scoreable via an explicit --baseline-id.) NOTE the bake-off lag REOPENS at this
+# record: ``BAKEOFF_BASELINE_ID`` (training/bakeoff/harness.py) stays
+# ``baseline-5`` until Task 18.14 flips it, so the training-side selection floors
+# deliberately lag this default until the surrogate re-ground
+# (audits/audit-phase-18-baseline-6.md §8; the corpus canary denominator is
+# restored at the 18.13 corpus re-record).
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-6"
 
 
 @dataclass(frozen=True)

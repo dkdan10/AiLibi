@@ -196,9 +196,10 @@ accusation-backing gate -- a self-placement is no evidence about the
 accused, so it cannot promote a bare accusation into an independent voice.
 
 Task 18.9 (audit-phase-18-planning.md §3.3; audit-phase-17-close.md §6 item 4):
-two INDEPENDENT default-OFF flag-minting levers, each cloning the 16.8
-absence-prior resolver's env-gated shape and leaving the committed substrate
-byte-identical when OFF (graduation is Task 18.11). (1) The endpoint-band
+two INDEPENDENT flag-minting levers, both UNCONDITIONAL since the Task-18.12
+baseline-6 record (the CREW-ONLY graduation slate). They were default-OFF and
+env-gated at Wave 1 (cloning the 16.8 absence-prior resolver's shape) and retired
+to always-on once baseline 6 adopted them (the 16.17 move). (1) The endpoint-band
 whereabouts exemption (:func:`whereabouts_interior_flags_enabled`): a spoken
 :class:`~meetings.schemas.WhereaboutsClaim` indexes as a DEGENERATE SINGLE-TICK
 SELF-ALIBI (``from_tick == to_tick``, speaker is subject), so a contradicting
@@ -229,9 +230,8 @@ testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
 
 from __future__ import annotations
 
-import os
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -1275,8 +1275,13 @@ def absent_players(
 
     ``include_vent_sightings`` (Task 17.5, the PR #264 vent-placement
     widening; default ``False`` -> byte-identical for every existing
-    caller, and NOTHING in production passes it -- whether the widening
-    SHIPS is the 17.7 gate's ruling). When ``True``, a GROUNDED vent
+    caller). The widening SHIPS since the Task-18.12 baseline-6 record (the
+    17.7 HOLD was lifted by the 18.11 CREW-ONLY ruling C -- it travels with
+    the vent package). Production applies it through the EQUIVALENT flag
+    channel (:func:`grounded_vent_subjects_from_flags`, driven by the
+    recorded/computed ``vent_sighting`` flags), which this docstring
+    guarantees equals the record-driven set below; this ``vent_witness_records``
+    signature is the record-driven form the tests pin. When ``True``, a GROUNDED vent
     sighting also places its subject: a spoken
     :class:`~meetings.schemas.SawVentObservation` matched against the
     SPEAKER'S OWN typed :class:`~meetings.schemas.VentWitnessRecord`
@@ -1312,37 +1317,55 @@ def absent_players(
     return tuple(sorted(unplaced))
 
 
+def grounded_vent_subjects_from_flags(
+    contradictions: Sequence[ContradictionRef],
+) -> frozenset[PlayerId]:
+    """The vent-placement widening's subject set, read off the flag channel.
+
+    The Task-18.12 production driver for the Task-17.5 absent-set widening (shipped
+    with the vent package under the 18.11 CREW-ONLY ruling C). A GROUNDED vent
+    sighting is recorded as a ``vent_sighting`` flag naming its subject, and
+    :func:`_grounded_vent_subjects` (the record-driven form) is guaranteed to return
+    exactly those same subjects (they share one grounding predicate --
+    :func:`_vent_observation_matches_record`). So reading the widened set off the
+    ``vent_sighting`` flags is byte-identical to the record-driven widening AND
+    identical live vs replay: at record time the flags are freshly computed from the
+    private records; at replay time they are read from the recorded bytes. Pure.
+    """
+
+    return frozenset(
+        subject
+        for flag in contradictions
+        if flag.kind == "vent_sighting"
+        for subject in flag.subjects
+    )
+
+
 # Task 18.9 lever 1 -- the endpoint-band whereabouts exemption (audit-phase-18-
-# planning.md §3.3; audit-phase-17-close.md §6 item 4). DEFAULT-OFF, cloning the
-# 16.8 ``absence_prior_enabled`` resolver (agents/memory/beliefs.py) -- itself the
-# 16.4 hard-evidence-gate pattern. Registered/graduated at Task 18.11; OFF keeps
-# the committed detector output byte-identical.
+# planning.md §3.3; audit-phase-17-close.md §6 item 4). UNCONDITIONAL since the
+# Task-18.12 baseline-6 record (the CREW-ONLY graduation slate,
+# audits/audit-phase-18-baseline-6.md §0.1): it was default-OFF and env-gated at
+# Wave 1, retired to always-on once baseline 6 adopted it (the 16.17 move). Stamped
+# unconditionally ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
+# ``ENV_WHEREABOUTS_INTERIOR_FLAGS`` is retained (no longer read) for the stamp
+# key's naming provenance and backward-compatible imports.
 ENV_WHEREABOUTS_INTERIOR_FLAGS: Final[str] = "AILIBI_WHEREABOUTS_INTERIOR_FLAGS"
-_WHEREABOUTS_INTERIOR_FLAGS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 # Task 18.9 lever 2 -- the vent-placement flag variant (the 17.5 scope firewall's
-# flag-minting arm). DEFAULT-OFF, same resolver shape / same graduation gate.
+# flag-minting arm). UNCONDITIONAL since the same Task-18.12 baseline-6 record; its
+# first live yield in the shipping combination was measured on this record.
 ENV_VENT_PLACEMENT_CONTRADICTIONS: Final[str] = "AILIBI_VENT_PLACEMENT_CONTRADICTIONS"
-_VENT_PLACEMENT_CONTRADICTIONS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def whereabouts_interior_flags_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.9 endpoint-band whereabouts exemption is ON. DEFAULT OFF.
+    """Whether the Task 18.9 endpoint-band whereabouts exemption is ON — now always True.
 
-    Reads :data:`ENV_WHEREABOUTS_INTERIOR_FLAGS` from ``env`` (defaulting to the
-    real process environment), cloning
-    :func:`agents.memory.beliefs.absence_prior_enabled` byte-for-byte. Default
-    OFF: an unset / empty / unrecognised value is ``False`` so
-    :func:`detect_contradictions` re-derives the committed baseline substrate
-    byte-identically (``scripts/verify_samples.sh`` reconstructs clean); the live
-    measurement and the graduation decision are Task 18.11. Accepts
-    ``1/true/yes/on`` (case-insensitive, whitespace-trimmed). The ``env``
-    argument lets tests + the offline counterfactual toggle the lever
-    deterministically without mutating ``os.environ``.
+    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
+    applied once baseline 6 adopted it per the CREW-ONLY graduation slate). The
+    exemption applies at exactly ONE read-site in :func:`detect_contradictions`,
+    which reads THIS resolver once and threads the boolean down. The ``env``
+    argument is accepted and ignored (retained so the call site and the substrate
+    stamp read one source of truth without a signature churn).
 
     ON, a DEGENERATE SINGLE-TICK SELF-ALIBI (``from_tick == to_tick`` with the
     speaker its own subject -- exactly how a
@@ -1357,24 +1380,21 @@ def whereabouts_interior_flags_enabled(env: Mapping[str, str] | None = None) -> 
     conviction-economy currency, nothing else moves).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_WHEREABOUTS_INTERIOR_FLAGS, "").strip().lower()
-        in _WHEREABOUTS_INTERIOR_FLAGS_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 def vent_placement_contradictions_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.9 vent-placement flag variant is ON. DEFAULT OFF.
+    """Whether the Task 18.9 vent-placement flag variant is ON — now always True.
 
-    Reads :data:`ENV_VENT_PLACEMENT_CONTRADICTIONS` from ``env`` (defaulting to
-    the real process environment), the sibling of
-    :func:`whereabouts_interior_flags_enabled` and the same clone of
-    :func:`agents.memory.beliefs.absence_prior_enabled`. Default OFF: an unset /
-    empty / unrecognised value is ``False`` so the committed detector output is
-    byte-identical (graduation is Task 18.11). Accepts ``1/true/yes/on``
-    (case-insensitive, whitespace-trimmed). The ``env`` argument toggles the
-    lever deterministically for tests + the offline counterfactual.
+    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the sibling of
+    :func:`whereabouts_interior_flags_enabled`, graduated on the same CREW-ONLY
+    slate once baseline 6 adopted it). The variant applies at exactly ONE read-site
+    in :func:`detect_contradictions`, which reads THIS resolver once and threads the
+    boolean down. Its first live yield in the shipping combination was measured on
+    this record. The ``env`` argument is accepted and ignored (retained so the call
+    site and the substrate stamp read one source of truth without a signature
+    churn).
 
     ON, a spoken :class:`~meetings.schemas.SawVentObservation` GROUNDED against
     the speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the
@@ -1385,11 +1405,8 @@ def vent_placement_contradictions_enabled(env: Mapping[str, str] | None = None) 
     firewall: an UNGROUNDED spoken vent claim mints nothing.
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_VENT_PLACEMENT_CONTRADICTIONS, "").strip().lower()
-        in _VENT_PLACEMENT_CONTRADICTIONS_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 def detect_contradictions(
@@ -1501,38 +1518,37 @@ def detect_contradictions(
     disagreement and the impostor-frames-innocent deception frame --
     untouched.
 
-    Task 18.9 lever 1 (:func:`whereabouts_interior_flags_enabled`, DEFAULT
-    OFF; audit-phase-18-planning.md §3.3): ON, a DEGENERATE SINGLE-TICK
-    SELF-ALIBI (a :class:`~meetings.schemas.WhereaboutsClaim` roll-call
-    answer, or a genuine single-tick self-stated
+    Task 18.9 lever 1 (:func:`whereabouts_interior_flags_enabled`,
+    UNCONDITIONAL since baseline 6; audit-phase-18-planning.md §3.3): a
+    DEGENERATE SINGLE-TICK SELF-ALIBI (a :class:`~meetings.schemas.WhereaboutsClaim`
+    roll-call answer, or a genuine single-tick self-stated
     :class:`~meetings.schemas.AlibiClaim` -- the same class by construction)
     contradicted by a first-hand sighting mints a STRONG ``alibi_vs_sighting``
     flag instead of the endpoint-banded WEAK one, the single tick adjudicated
     as the claim's interior (:func:`_detect_alibi_vs_sightings`). Multi-tick
-    endpoint semantics and the narrow-window band are untouched. OFF: the
-    ``alibi_vs_sighting`` path is byte-identical. The gate reads THIS resolver
-    once and threads the boolean down (one call site); graduation is Task
-    18.11.
+    endpoint semantics and the narrow-window band are untouched. The gate reads
+    THIS resolver once and threads the boolean down (one call site); it graduated
+    to always-on at the Task-18.12 baseline-6 record.
 
-    Task 18.9 lever 2 (:func:`vent_placement_contradictions_enabled`, DEFAULT
-    OFF; audit-phase-17-close.md §6 item 4): ON, a spoken
+    Task 18.9 lever 2 (:func:`vent_placement_contradictions_enabled`,
+    UNCONDITIONAL since baseline 6; audit-phase-17-close.md §6 item 4): a spoken
     :class:`~meetings.schemas.SawVentObservation` GROUNDED against the
     speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the 15.4
     chokepoint) whose RECORD contradicts the subject's OWN stated path mints a
     STRONG ``alibi_vs_physical`` flag beside the ``vent_sighting`` flag
     (:func:`_detect_vent_placement_contradictions`, joined after the 10.10
     proxy guard). Grounded-only is the firewall -- an ungrounded spoken vent
-    claim mints nothing. OFF: the block is never entered. Both levers resolve
-    from ``env`` (defaulting to :data:`os.environ`).
+    claim mints nothing. Both levers still resolve through ``env`` (their
+    now-unconditional resolvers ignore it), so the read-site and the substrate
+    stamp share one source of truth.
 
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
 
-    # Task 18.9: read BOTH default-OFF levers ONCE and thread the booleans down
-    # (the graduated-lever convention -- one resolver read, one call site per
-    # lever), so a lever-OFF meeting takes the identical code path (and bytes) as
-    # before the lever existed.
+    # Task 18.9: read BOTH now-unconditional levers ONCE and thread the booleans
+    # down (the graduated-lever convention -- one resolver read, one call site per
+    # lever). Both resolvers return True since the Task-18.12 baseline-6 record.
     whereabouts_interior_flags = whereabouts_interior_flags_enabled(env)
     vent_placement_contradictions = vent_placement_contradictions_enabled(env)
 
@@ -3491,6 +3507,7 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
+    "grounded_vent_subjects_from_flags",
     "grounded_vouch_subjects",
     "independent_voices",
     "is_canonically_ordered",

@@ -1867,25 +1867,24 @@ _COMMITTED_9P2I_REPORT = (
 
 
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
-    """The shipped 9p/2i report carries the recorded baseline-5 values exactly.
+    """The shipped 9p/2i report carries the recorded baseline-6 values exactly.
 
-    Re-anchored to the Task-16.17 baseline-5 re-record (model Qwen/Qwen3.6-27B,
-    prompt set qwen3_6_27b with all four templates at *.qwen3_6_27b.v3, the
-    substrate levers unconditionally ON). ejection_accuracy 64/70 = 0.9143,
-    impostor-accused conversion 64/135 = 0.4741, missed_skip 141.
+    Re-anchored to the baseline-6 meeting-layer-graduation re-record (model
+    Qwen/Qwen3.6-27B, prompt set qwen3_6_27b with all four templates at
+    *.qwen3_6_27b.v3; four meeting levers unconditional, impostor_roll_call
+    OFF). ejection_accuracy 78/101 = 0.772, impostor-accused conversion
+    78/134 = 0.582, missed_skip 129.
 
-    threshold_inversions rose to 99 on this substrate (the crew discretionary
+    threshold_inversions reads 87 on this substrate (the crew discretionary
     remainder — crew voters shown a met threshold over a living target that SKIP
-    without a by-design excuse). The missed_skip partition holds exactly: 141 =
-    42 impostor-voter (sanctioned in-character declines) + 0 invalid-target + 99
-    threshold_inversions. The teammate-coerced and invalid-target classes are
-    both empty on these bytes; the 2 live citation-gate coercion prefixes are a
-    16.6-deferred consumer — ``compute_conversion_report`` does not yet read the
-    marker (the partition learns the literal in Phase 17), so those gated crew
-    SKIPs fold into the threshold_inversions remainder.
+    without a by-design excuse). The missed_skip partition holds exactly: 129 =
+    41 impostor-voter (sanctioned in-character declines) + 1 invalid-target + 87
+    threshold_inversions. The teammate-coerced class is empty on these bytes, and
+    the re-record carries a single citation-gate coercion prefix (the coerced SKIP
+    diverted out of the missed partition into citation_coerced_skip_ballots).
 
-    The sentinel reads the recorded truth: all 64 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 64/64 = 1.0).
+    The sentinel reads the recorded truth: 72 of the 78 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 72/78 = 0.923).
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -1893,36 +1892,36 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 70
-    assert conversion.impostor_ejections == 64
-    assert conversion.ejection_accuracy == pytest.approx(64 / 70)
-    assert conversion.impostor_accused_meetings == 135
-    assert conversion.impostor_accused_conversions == 64
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(64 / 135)
-    assert conversion.skip_ballots == 652
-    assert conversion.correct_skip_ballots == 511
-    assert conversion.missed_skip_ballots == 141
+    assert conversion.total_ejections == 101
+    assert conversion.impostor_ejections == 78
+    assert conversion.ejection_accuracy == pytest.approx(78 / 101)
+    assert conversion.impostor_accused_meetings == 134
+    assert conversion.impostor_accused_conversions == 78
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(78 / 134)
+    assert conversion.skip_ballots == 451
+    assert conversion.correct_skip_ballots == 321
+    assert conversion.missed_skip_ballots == 129
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 42
+    assert conversion.missed_skip_impostor_voters == 41
     assert conversion.missed_skip_teammate_coerced == 0
-    assert conversion.missed_skip_invalid_target == 0
-    # The missed_skip partition holds exactly: 141 = 42 impostor-voter + 0
-    # invalid-target + 99 threshold_inversions (the crew discretionary remainder).
-    assert conversion.threshold_inversions == 99
+    assert conversion.missed_skip_invalid_target == 1
+    # The missed_skip partition holds exactly: 129 = 41 impostor-voter + 1
+    # invalid-target + 87 threshold_inversions (the crew discretionary remainder).
+    assert conversion.threshold_inversions == 87
 
-    # The sentinel reads the recorded truth: all 64 impostor ejections are
+    # The sentinel reads the recorded truth: 72 of the 78 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(1.0)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 64
-    assert report.vote_correctness.impostor_ejections == 64
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(72 / 78)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 72
+    assert report.vote_correctness.impostor_ejections == 78
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.9143, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 141
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(78 / 101, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 129
 
 
 # ---------------------------------------------------------------------------
@@ -2643,21 +2642,20 @@ def test_successor_model_validators_fail_loud() -> None:
 
 
 def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
-    """The successor's committed-bytes cells on the baseline-5 9p2i set.
+    """The successor's committed-bytes cells on the baseline-6 9p2i set.
 
-    Re-anchored to the Task-16.17 baseline-5 re-record (model
-    Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3, the substrate levers ON);
-    NOT immutable — the next re-record regenerates the report and updates
-    these pins, the standard re-record pattern.
+    Re-anchored to the baseline-6 meeting-layer-graduation re-record (model
+    Qwen/Qwen3.6-27B, prompt set qwen3_6_27b.v3; four meeting levers
+    unconditional, impostor_roll_call OFF); NOT immutable — the next re-record
+    regenerates the report and updates these pins, the standard re-record
+    pattern.
 
-    The substrate supplies the successor a NON-ZERO denominator where the
-    legacy cell reads 0/0: 75 recorded ``vent_sighting`` rows dedupe to 70
-    (meeting, impostor) pairs, 63 of them converted (rate 0.9). The residual
-    ``alibi_vs_sighting`` rows are endpoint-banded or crew-subject (the
-    baseline-4 §6 anatomy persisting) and the 6 recorded whereabouts-lie
-    flags — the close §6 roll-call finding — all name CREW liars, so the
-    sighting and whereabouts channels honestly read 0 impostor pairs on
-    these bytes: supplied channels, empty cells, proven semantics.
+    The substrate supplies the successor 79 (meeting, impostor) pairs across
+    three channels: 76 witnessed-vent pairs (68 converted), 2 sighting-
+    contradiction pairs (both converted), and 7 whereabouts-lie pairs (5
+    converted), for 70 conversions overall (rate 0.886). The legacy
+    alibi-anchored cell now reads a non-zero 4/3 (rate 0.75), mirrored from the
+    committed gate block.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2665,22 +2663,22 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 70
-    assert result.converted == 63
-    assert result.conversion_rate == pytest.approx(63 / 70)
-    assert result.witnessed_vent_supplied == 70
-    assert result.witnessed_vent_converted == 63
-    assert result.sighting_contradiction_supplied == 0
-    assert result.sighting_contradiction_converted == 0
-    assert result.whereabouts_lie_supplied == 0
-    assert result.whereabouts_lie_converted == 0
+    assert result.supplied == 79
+    assert result.converted == 70
+    assert result.conversion_rate == pytest.approx(70 / 79)
+    assert result.witnessed_vent_supplied == 76
+    assert result.witnessed_vent_converted == 68
+    assert result.sighting_contradiction_supplied == 2
+    assert result.sighting_contradiction_converted == 2
+    assert result.whereabouts_lie_supplied == 7
+    assert result.whereabouts_lie_converted == 5
 
-    # The legacy alibi-anchored cell: preserved, labeled, reading 0/0 — the
-    # second consecutive NO-DATA substrate (close §6/§8), mirrored exactly
-    # from the committed gate block (one home, never recomputed differently).
-    assert result.legacy_alibi_supplied == 0
-    assert result.legacy_alibi_converted == 0
-    assert result.legacy_alibi_conversion_rate is None
+    # The legacy alibi-anchored cell: preserved, labeled, now reading a non-zero
+    # 4/3 (rate 0.75), mirrored exactly from the committed gate block (one home,
+    # never recomputed differently).
+    assert result.legacy_alibi_supplied == 4
+    assert result.legacy_alibi_converted == 3
+    assert result.legacy_alibi_conversion_rate == pytest.approx(0.75)
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied
     assert result.legacy_alibi_converted == committed_legacy.converted
@@ -2691,7 +2689,7 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
 
     # Cross-surface sanity: converted pairs are impostor ejections, so the
     # successor's numerator is bounded by the recorded impostor-ejection
-    # census (63 of the set's 64).
+    # census (70 of the set's 78).
     assert result.converted <= report.vote_correctness.impostor_ejections
 
     # Per-seed identity: the aggregate is the sum of its per-seed parts
@@ -2708,13 +2706,13 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
 
 
 def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
-    """The flat 4p/1i set's successor cells, pinned at the baseline-5 re-record.
+    """The flat 4p/1i set's successor cells, pinned at the baseline-6 re-record.
 
     NOT immutable — the next re-record regenerates and updates these. The
-    reference set supplies 10 witnessed-vent pairs and converts all 10; the
-    2 recorded whereabouts-lie flags (the close §2 4p1i census) name crew
-    liars, so the whereabouts cell reads 0 impostor pairs; the legacy cell
-    reads its 0/0.
+    reference set supplies 11 pairs — 10 witnessed-vent (9 converted) plus
+    1 sighting-contradiction pair (converted) — and converts 10 of 11; the
+    recorded whereabouts-lie flags name crew liars, so the whereabouts cell reads
+    0 impostor pairs; the legacy cell reads 1/1.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2722,17 +2720,17 @@ def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 10
+    assert result.supplied == 11
     assert result.converted == 10
-    assert result.conversion_rate == 1.0
+    assert result.conversion_rate == pytest.approx(10 / 11)
     assert result.witnessed_vent_supplied == 10
-    assert result.witnessed_vent_converted == 10
-    assert result.sighting_contradiction_supplied == 0
+    assert result.witnessed_vent_converted == 9
+    assert result.sighting_contradiction_supplied == 1
     assert result.whereabouts_lie_supplied == 0
 
-    assert result.legacy_alibi_supplied == 0
-    assert result.legacy_alibi_converted == 0
-    assert result.legacy_alibi_conversion_rate is None
+    assert result.legacy_alibi_supplied == 1
+    assert result.legacy_alibi_converted == 1
+    assert result.legacy_alibi_conversion_rate == pytest.approx(1.0)
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied
     assert result.legacy_alibi_converted == committed_legacy.converted

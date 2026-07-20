@@ -178,7 +178,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 179
+    assert check.facts["resolved_meetings"] == 165
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -222,7 +222,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 179  # type: ignore[arg-type]
+    assert int(check.facts["meetings_total"]) == 165  # type: ignore[arg-type]
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -768,7 +768,7 @@ def test_run_validity_gate_reproduces_9p2i_close() -> None:
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 179
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 165
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:
