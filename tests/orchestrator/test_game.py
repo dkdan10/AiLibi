@@ -1023,8 +1023,10 @@ class _InvalidTurnClient:
 
     With deadline-free recording, an opening that never parses (retried once,
     still invalid) is the parse-failure path the retry guards -- exactly the
-    husk the audit found. The default opening names no accusation, so the chain
-    terminates on it and only the opening turn defaults.
+    husk the audit found. The default opening names no accusation, so the
+    discussion chain terminates on it; the now-unconditional roll_call then
+    gives each not-yet-spoken living player one terminal opt_in turn, which
+    defaults the same way, so the opening and every opt_in turn default.
     """
 
     async def complete(
@@ -1097,19 +1099,23 @@ def test_validation_default_recorded_end_to_end(
     meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
     failed = [e for e in entries if isinstance(e, FailedCallReplayEntry)]
 
-    # The husk opening defaulted -> exactly one visible deadline_default entry.
+    # The husk opening defaulted; roll_call is now unconditional, so each
+    # not-yet-spoken living player also takes a terminal opt_in turn that
+    # defaults the same way -> opening + opt_in visible deadline_default entries.
     assert meeting.outcome == "SKIPPED"
-    assert len(failed) == 1
+    assert len(failed) == 3
     entry = failed[0]
     assert entry.error_type == "deadline_default"
     assert "opening" in entry.error_message
     assert "validation" in entry.error_message
-    # Zero spend on the marker; the retried opening's real spend stays in the
-    # meeting's llm_calls (two "{}" attempts), so it is not double-counted.
+    # Zero spend on the marker; the turns' real spend stays in the meeting's
+    # llm_calls -- the opening is retried once (two "{}" attempts) and each of
+    # the two terminal opt_in turns is attempted once ("{}"), so it is not
+    # double-counted.
     assert entry.cost_usd == 0.0
     assert entry.input_tokens == 0 and entry.output_tokens == 0
     invalid_opening_calls = [c for c in meeting.llm_calls if c.response_text == "{}"]
-    assert len(invalid_opening_calls) == 2  # opening attempted twice (one retry)
+    assert len(invalid_opening_calls) == 4  # opening x2 (one retry) + 2 opt_in x1
 
 
 # --- Validation-default spend preservation + abort-path visibility (gp-2) ----
@@ -1206,21 +1212,25 @@ def test_provider_validation_default_preserves_spend_end_to_end(
     failed = [e for e in entries if isinstance(e, FailedCallReplayEntry)]
 
     assert meeting.outcome == "SKIPPED"
-    # The 2 burned opening attempts raised before the recording client logged
-    # them, so llm_calls holds only the 3 SKIP votes (no double-count)...
+    # The burned turn attempts (opening + the two unconditional opt_in turns)
+    # raised before the recording client logged them, so llm_calls holds only
+    # the 3 SKIP votes (no double-count)...
     assert len(meeting.llm_calls) == 3
     # ...and the burned spend is preserved as a deadline_default row with REAL
-    # values (not zeroed), so the audit trail stays accurate. The retry burned
-    # a byte-identical generation (this client, like a seeded local model,
-    # regenerates the same failing response for the unchanged prompt), so the
-    # single-write guard collapses it to exactly ONE row instead of the
-    # duplicate that double-counted seeds 8/36/39 (Task 9.10, audit gp-4).
-    assert len(failed) == 1
+    # values (not zeroed), so the audit trail stays accurate. Each turn's retry
+    # burned a byte-identical generation (this client, like a seeded local
+    # model, regenerates the same failing response for the unchanged prompt), so
+    # the single-write guard collapses each turn to ONE row instead of the
+    # duplicate that double-counted seeds 8/36/39 (Task 9.10, audit gp-4): one
+    # row for the opening plus one per opt_in turn.
+    assert len(failed) == 3
     assert all(f.error_type == "deadline_default" for f in failed)
     assert all(f.model == "qwen2.5:7b-instruct" for f in failed)
     assert all(f.input_tokens == 200 and f.output_tokens == 9 for f in failed)
     assert all(f.raw_response == "garbage not json" for f in failed)
-    assert all("opening" in f.error_message for f in failed)
+    assert all(
+        ("opening" in f.error_message or "opt_in" in f.error_message) for f in failed
+    )
 
 
 class _OpeningDefaultsThenBallotsDefaultClient:
@@ -1304,21 +1314,24 @@ def test_malformed_ballots_no_longer_abort_and_every_default_is_recorded(
     assert all(b.target == "SKIP" for b in meeting.ballots)
     assert all(b.rationale_text.startswith(marker_prefix) for b in meeting.ballots)
     # One visibility row per fired default: the opening (validation, after
-    # its retry) plus one per degraded ballot — none lost, none double-spent
-    # (manager-side validation rows are zero-spend; llm_calls holds the real
-    # spend).
+    # its retry), one per now-unconditional opt_in roll_call turn, plus one per
+    # degraded ballot — none lost, none double-spent (manager-side validation
+    # rows are zero-spend; llm_calls holds the real spend).
     deadline_defaults = [
         e
         for e in entries
         if isinstance(e, FailedCallReplayEntry) and e.error_type == "deadline_default"
     ]
     opening_rows = [e for e in deadline_defaults if "opening" in e.error_message]
+    opt_in_rows = [e for e in deadline_defaults if "opt_in" in e.error_message]
     vote_rows = [
         e for e in deadline_defaults if "vote defaulted (validation)" in e.error_message
     ]
     assert len(opening_rows) == 1
     assert len(vote_rows) == len(meeting.ballots)
-    assert len(deadline_defaults) == len(opening_rows) + len(vote_rows)
+    assert len(deadline_defaults) == len(opening_rows) + len(opt_in_rows) + len(
+        vote_rows
+    )
 
 
 class _OpeningDefaultsThenBallotTransportAbortsClient:
@@ -1389,13 +1402,15 @@ def test_default_recorded_when_a_later_ballot_aborts(
     entries = read_all_entries(replay_path)
     # The meeting aborted on the ballot, so no meeting row was recorded...
     assert not any(isinstance(e, MeetingReplayEntry) for e in entries)
-    # ...but the opening default that fired BEFORE the abort is still visible.
+    # ...but the defaults that fired BEFORE the abort are still visible: the
+    # opening plus each now-unconditional opt_in roll_call turn (all before the
+    # first ballot, which is where the transport abort lands).
     deadline_defaults = [
         e
         for e in entries
         if isinstance(e, FailedCallReplayEntry) and e.error_type == "deadline_default"
     ]
-    assert len(deadline_defaults) == 1
+    assert len(deadline_defaults) == 3
     assert "opening" in deadline_defaults[0].error_message
 
 
@@ -1515,10 +1530,11 @@ def test_recovered_failure_recorded_when_retry_succeeds_end_to_end(
 
     # The opening recovered on retry -> meeting completed (not aborted/default).
     assert meeting.outcome == "SKIPPED"
-    assert len(meeting.transcript.turns) == 1
-    # llm_calls: the recovered opening (1) + 3 SKIP votes = 4; the raised first
-    # attempt is NOT among them (no double-count).
-    assert len(meeting.llm_calls) == 4
+    # opening (recovered) + two now-unconditional opt_in roll_call turns.
+    assert len(meeting.transcript.turns) == 3
+    # llm_calls: the recovered opening (1) + 2 opt_in turns + 3 SKIP votes = 6;
+    # the raised first attempt is NOT among them (no double-count).
+    assert len(meeting.llm_calls) == 6
     # The burned first attempt is recorded once with its real spend...
     assert len(failed) == 1
     assert failed[0].input_tokens == 150 and failed[0].output_tokens == 8

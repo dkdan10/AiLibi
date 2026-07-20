@@ -160,8 +160,13 @@ class TestReporterAnnotationThreading:
             rendered_memory="(memory)",
             transcript=MeetingTranscript(turns=()),
             contradiction_flags=(),
+            # The graduated (Task 18.12) roll-call round + unconditional absence
+            # prior shift the manager-threaded graph: the absent `p-4` gains a
+            # +0.08 testimony-spread lift to suspicion 0.58 (from a 0.5 base),
+            # so the pinned expected graph carries that second entry.
             suspicion_graph=(
                 SuspicionEntry(player_id=_REPORTER, suspicion=0.5, trust=0.5),
+                SuspicionEntry(player_id="p-4", suspicion=0.58, trust=0.5),
             ),
             candidate_targets=("p-1", "p-4"),
             skip_confidence_threshold=0.6,
@@ -174,8 +179,11 @@ class TestReporterAnnotationThreading:
             rendered_memory="(memory)",
             transcript=MeetingTranscript(turns=()),
             contradiction_flags=(),
+            # Same graduated (Task 18.12) absence-prior graph as the annotated
+            # render above -- the two differ only by the additive reporter block.
             suspicion_graph=(
                 SuspicionEntry(player_id=_REPORTER, suspicion=0.5, trust=0.5),
+                SuspicionEntry(player_id="p-4", suspicion=0.58, trust=0.5),
             ),
             candidate_targets=("p-1", "p-4"),
             skip_confidence_threshold=0.6,

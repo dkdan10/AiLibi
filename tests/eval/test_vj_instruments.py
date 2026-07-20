@@ -566,16 +566,16 @@ def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
     assert four.zero_flag_split_agreements == 0
     assert four.zero_flag_split_disagreements == 0
     assert four.provenance_sum_breaches == 0
-    assert four.rendered_rows_compared == 100
+    assert four.rendered_rows_compared == 127
     assert four.rendered_row_mismatches == 0
     assert four.ballots_total == 117
-    assert four.turn_citations_valid == 15
+    assert four.turn_citations_valid == 23
     assert four.turn_citations_dangling == 0
-    assert four.cited_eject_ballots == 24
-    assert four.ballot_confidence_ece == pytest.approx(0.08874999999999998)
-    assert four.ballot_confidence_brier == pytest.approx(0.07114583333333334)
+    assert four.cited_eject_ballots == 28
+    assert four.ballot_confidence_ece == pytest.approx(0.07499999999999982)
+    assert four.ballot_confidence_brier == pytest.approx(0.13732142857142857)
     assert four.echo_ballots == 0
-    assert four.distinct_skeletons == 112
+    assert four.distinct_skeletons == 113
 
 
 def test_ballot_calibration_matches_the_committed_fold(
@@ -606,7 +606,7 @@ def test_per_meeting_rows_pair_voice_with_judgment(nine: VJInstrumentReport) -> 
     assert row.ballots > 0
     assert row.echo_rate is not None
     ejected_rows = [r for r in nine.per_meeting if r.outcome == "EJECTED"]
-    assert len(ejected_rows) == 70
+    assert len(ejected_rows) == 100
     assert all(r.typed_split is not None for r in ejected_rows)
     skipped_rows = [r for r in nine.per_meeting if r.outcome == "SKIPPED"]
     assert all(r.typed_split is None for r in skipped_rows)
@@ -640,9 +640,9 @@ def test_cli_vj_json_emits_the_machine_readable_report(
     assert len(payload) == 1
     report = VJInstrumentReport.model_validate(payload[0])
     assert report.replay_set_dir.endswith("4p1i")
-    assert report.convictions_total == 10
+    assert report.convictions_total == 13
     assert report.zero_flag_convictions == 0
-    assert report.pooling.whereabouts_claims_total == 67
+    assert report.pooling.whereabouts_claims_total == 85
 
 
 def test_cli_vj_human_render_names_the_gauges(
@@ -651,6 +651,6 @@ def test_cli_vj_human_render_names_the_gauges(
     assert measure_baseline.main([str(_FOUR), "--vj"]) == 0
     out = capsys.readouterr().out
     assert "V&J instruments" in out
-    assert "zero-flag convictions: 0/10" in out
+    assert "zero-flag convictions: 0/13" in out
     assert "voice:" in out
     assert "pooling:" in out

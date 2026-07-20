@@ -719,40 +719,40 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
         + nine_pooling.whereabouts_claims_opt_in_total
         == nine_pooling.whereabouts_claims_total
     )
-    assert nine_pooling.roll_call_asked_total == 496
-    assert nine_pooling.roll_call_answered_total == 360
-    assert nine_pooling.roll_call_answer_rate == pytest.approx(0.7258064516129032)
+    assert nine_pooling.roll_call_asked_total == 933
+    assert nine_pooling.roll_call_answered_total == 818
+    assert nine_pooling.roll_call_answer_rate == pytest.approx(0.8767416934619507)
 
 
 def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
     four_pooling: PoolingFunnelReport,
 ) -> None:
     # Re-derived from the committed baseline-5 4p1i bytes via eval.funnel; the
-    # same structured-refusal signal on the smaller roster (crew 0.782 vs
-    # impostor 0.154).
-    assert four_pooling.roll_call_placed_crew_total == 61
-    assert four_pooling.roll_call_placed_impostor_total == 6
+    # same structured-refusal signal on the smaller roster (crew 1.0 vs
+    # impostor 0.179).
+    assert four_pooling.roll_call_placed_crew_total == 78
+    assert four_pooling.roll_call_placed_impostor_total == 7
     assert (
         four_pooling.roll_call_placed_crew_total
         + four_pooling.roll_call_placed_impostor_total
         == four_pooling.roll_call_answered_total
     )
-    assert four_pooling.roll_call_coverage_crew_mean == pytest.approx(0.782051282051282)
+    assert four_pooling.roll_call_coverage_crew_mean == pytest.approx(1.0)
     assert four_pooling.roll_call_coverage_impostor_mean == pytest.approx(
-        0.15384615384615385
+        0.1794871794871795
     )
     assert four_pooling.whereabouts_claims_opening_total == 39
-    assert four_pooling.whereabouts_claims_reply_total == 13
-    assert four_pooling.whereabouts_claims_opt_in_total == 15
+    assert four_pooling.whereabouts_claims_reply_total == 10
+    assert four_pooling.whereabouts_claims_opt_in_total == 36
     assert (
         four_pooling.whereabouts_claims_opening_total
         + four_pooling.whereabouts_claims_reply_total
         + four_pooling.whereabouts_claims_opt_in_total
         == four_pooling.whereabouts_claims_total
     )
-    assert four_pooling.roll_call_asked_total == 97
-    assert four_pooling.roll_call_answered_total == 67
-    assert four_pooling.roll_call_answer_rate == pytest.approx(0.6907216494845361)
+    assert four_pooling.roll_call_asked_total == 117
+    assert four_pooling.roll_call_answered_total == 85
+    assert four_pooling.roll_call_answer_rate == pytest.approx(0.7264957264957265)
 
 
 def test_pooling_per_row_decomposition_identities(

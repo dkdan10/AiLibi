@@ -250,13 +250,13 @@ class TestConversionPerMeeting:
     def test_committed_w2_reads_64_of_179(self) -> None:
         # baseline-5 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record
         # with the Wave-0 substrate all unconditionally ON: the gate ejects
-        # 64 impostors across 179 resolved meetings — the per-meeting conversion KPI
+        # 80 impostors across 156 resolved meetings — the per-meeting conversion KPI
         # over the new bytes.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_conversion_per_meeting(report.report.games)
-        assert result.impostor_ejections == 64
-        assert result.resolved_meetings == 179
-        assert result.conversion_per_meeting == pytest.approx(64 / 179)
+        assert result.impostor_ejections == 80
+        assert result.resolved_meetings == 156
+        assert result.conversion_per_meeting == pytest.approx(80 / 156)
 
 
 # ---------------------------------------------------------------------------
@@ -391,20 +391,20 @@ class TestEffectiveDeflection:
     def test_committed_w2_reproduces_the_audit_subcount(self) -> None:
         # baseline-5 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record,
         # the Wave-0 substrate all unconditionally ON:
-        # 139 accused / 75 survived / 69 active; effective 11 = 4 named + 7 third
-        # (the gate subcount), NOT the raw 69. On the baseline-5 substrate the active
-        # split leans SKIP-saved (58) OVER active-deflection (11) — with the
+        # 139 accused / 60 survived / 56 active; effective 23 = 6 named + 17 third
+        # (the gate subcount), NOT the raw 56. On the baseline-5 substrate the active
+        # split leans SKIP-saved (33) OVER active-deflection (23) — with the
         # transcript contradiction channel collapsed, fewer of the impostor's
         # survivals come from landing plurality on a named or third-party target.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_effective_deflection(report.report.games)
         assert result.accused_impostor_events == 139
-        assert result.accused_impostor_survivals == 75
-        assert result.active_survivals == 69
-        assert result.named_target_deflections == 4
-        assert result.third_party_deflections == 7
-        assert result.effective_deflections == 11
-        assert result.skip_saved_active_survivals == 58
+        assert result.accused_impostor_survivals == 60
+        assert result.active_survivals == 56
+        assert result.named_target_deflections == 6
+        assert result.third_party_deflections == 17
+        assert result.effective_deflections == 23
+        assert result.skip_saved_active_survivals == 33
 
 
 # ---------------------------------------------------------------------------
@@ -461,20 +461,20 @@ class TestIndistinguishability:
     def test_committed_w2_tasks_fingerprint_closed(self) -> None:
         # baseline-5 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record,
         # the Wave-0 substrate all unconditionally ON:
-        # the toolkit keeps the D-D-1 fingerprint closed. Impostor do_task 412 vs
-        # crew 3776, and the impostor wait-share ~0.071 sits BELOW crew's ~0.170 —
+        # the toolkit keeps the D-D-1 fingerprint closed. Impostor do_task 368 vs
+        # crew 3511, and the impostor wait-share ~0.069 sits BELOW crew's ~0.144 —
         # the crew carry the dead-crewmate task burden yet idle MORE between
         # consoles, so impostors no longer idle their way to a fingerprint (the
         # closed property holds even more strongly than W1).
         report = build_report(_COMMITTED_9P2I_DIR)
         tally = tally_actions_by_role(_COMMITTED_9P2I_DIR, report.report.games)
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 412
-        assert result.crewmate_do_task == 3776
+        assert result.impostor_do_task == 368
+        assert result.crewmate_do_task == 3511
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.0710, abs=1e-3)
-        assert result.crewmate_wait_share == pytest.approx(0.1702, abs=1e-3)
+        assert result.impostor_wait_share == pytest.approx(0.0685, abs=1e-3)
+        assert result.crewmate_wait_share == pytest.approx(0.1436, abs=1e-3)
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # impostors now idle LESS than the task-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
@@ -575,14 +575,14 @@ class TestSingleWitnessInformChannel:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
         # carry it LIVE. Re-extracted on the baseline-4 Qwen/Qwen3.6-27B
         # (qwen3_6_27b.v1, all four templates, the 6-lever Wave-0 substrate all
-        # unconditionally ON) re-record the channel credits 1 conversion to the
+        # unconditionally ON) re-record the channel credits 0 conversions to the
         # single-witness inform band. (This reads the vote-prompt suspicion graph;
         # the parser's header anchor survives the qwen3_6_27b restyle — but on the
-        # baseline-4 substrate, with transcript contradiction flags collapsed, only
-        # one ejection re-derives into the single-witness inform band.)
+        # baseline-4 substrate, with transcript contradiction flags collapsed, no
+        # ejection re-derives into the single-witness inform band.)
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_multi_signal_conversion(report.report.games)
-        assert result.conversions_with_single_witness_inform == 1
+        assert result.conversions_with_single_witness_inform == 0
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

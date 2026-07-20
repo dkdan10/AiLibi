@@ -1777,11 +1777,11 @@ class TestCommittedBytesArtifactCollapse:
         # weak-banded by preference over exclusion — an endpoint mismatch
         # can still convert under corroboration). The invariant is that every
         # endpoint-reason flag carries the weak marker (asserted in-loop); the
-        # count is 13 on the Task 16.17 baseline-5 re-record (qwen3_6_27b.v3
-        # prompts, the graduated substrate) — the alibi_vs_sighting surface is
-        # 13 flags total on this substrate, all of which sit in the
-        # endpoint/boundary weak band (the two strong alibi_vs_sighting flags are
-        # interior, not endpoint-banded).
+        # count is 44 on the Task 18.12 baseline-6 re-record (the CREW-ONLY
+        # graduation slate) — the re-derived alibi_vs_sighting surface is 95 flags
+        # total on this substrate, of which 44 sit in the endpoint/boundary weak
+        # band; the remainder are interior (strong, or narrow/self-banded), not
+        # endpoint-banded.
         endpoint_weak = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -1792,7 +1792,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 13
+        assert endpoint_weak == 44
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -1823,16 +1823,13 @@ class TestCommittedBytesSeedPins:
     def test_artifact_input_classes_still_occur_and_mint_nothing(self) -> None:
         # The W0-era artifact INPUT classes (non-spatial "placeholder" rooms and
         # multi-room "compound" labels) that the placeholder/artifact flags rode.
-        # On the Task 16.17 baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3
-        # prompts, the graduated substrate) the compound class stays at ZERO (the
-        # substrate emits no split-room claim label) while the placeholder class
-        # RE-APPEARS at exactly ONE instance (seed-30 meeting-4 p-9 "CAFE", a
-        # non-spatial abbreviation canonical_rooms rejects). Crucially the repair
-        # holds NON-VACUOUSLY for that instance: under the Task 10.6 allowlist a
-        # non-spatial side mints no flag at all, and indeed NO recorded or
-        # re-derived contradiction references that turn (asserted below) — exactly
-        # the "the class occurs and mints nothing" property this census guards
-        # (doctrine rule 3), no longer vacuous on the placeholder side.
+        # On the Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate)
+        # BOTH classes stay at ZERO: the substrate emits no split-room compound
+        # claim label and no non-spatial placeholder claim room. The census guards
+        # that neither artifact input class re-appears; the "mints nothing"
+        # in-loop assert (no recorded or re-derived contradiction references a
+        # placeholder turn) holds vacuously on this record, the placeholder set
+        # being empty.
         compound_claim_rooms = 0
         placeholder_claim_rooms = 0
         placeholder_turn_ids: set[str] = set()
@@ -1856,7 +1853,7 @@ class TestCommittedBytesSeedPins:
                         tid in flag.contradiction_id for tid in placeholder_turn_ids
                     )
         assert compound_claim_rooms == 0
-        assert placeholder_claim_rooms == 1
+        assert placeholder_claim_rooms == 0
 
     def test_recorded_conflict_flag_census(self) -> None:
         # On the Task 16.17 baseline-5 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3

@@ -1699,7 +1699,9 @@ class TestEndpointBandExemption:
         )
         off = detect_contradictions(tx)
         on = detect_contradictions(tx, env=_L1_ON)
-        assert is_weak_contradiction(off[0]) is True
+        # Lever 1 is UNCONDITIONAL at baseline 6, so the default (off) path already
+        # adjudicates the single tick as interior and mints STRONG -- env is ignored.
+        assert is_weak_contradiction(off[0]) is False
         assert len(on) == 1
         assert on[0].kind == "alibi_vs_sighting"
         assert is_weak_contradiction(on[0]) is False
@@ -1856,8 +1858,10 @@ class TestVentPlacementVariant:
         assert obs_id in (physical.event_a_id, physical.event_b_id)
 
     def test_lever_off_with_records_is_byte_identical(self) -> None:
-        # OFF (default) with records supplied: only the 15.4 ``vent_sighting``
-        # mints; the variant block is never entered, and env absent == env={}.
+        # Lever 2 is UNCONDITIONAL at baseline 6, so env absent == env={}: both
+        # enter the variant block and mint the STRONG ``alibi_vs_physical`` beside
+        # the 15.4 ``vent_sighting``. (Pre-graduation the OFF default minted only
+        # ``vent_sighting``.)
         tx = MeetingTranscript(
             turns=(
                 self._self_alibi_turn(room="STORAGE", from_tick=10, to_tick=20),
@@ -1872,7 +1876,7 @@ class TestVentPlacementVariant:
             tx, roster=_VENT_ROSTER, vent_witness_records=records, env={}
         )
         assert off_no_env == off_empty
-        assert [f.kind for f in off_no_env] == ["vent_sighting"]
+        assert [f.kind for f in off_no_env] == ["alibi_vs_physical", "vent_sighting"]
 
     def test_inclusive_window_endpoint_record_tick_mints(self) -> None:
         # The recorded-judgment inclusive-window decision: a record tick sitting
@@ -2515,21 +2519,21 @@ class TestExemptionCensus:
 
     def test_samples_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/9p2i"]
-        assert cell.meetings == 179
-        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 4}
-        assert cell.exempt_off_distinct_by_class == {"whereabouts": 4}
-        assert cell.exempt_off_flag_count == 4
-        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 4}
-        assert cell.exempt_on_strong_flag_count == 4
+        assert cell.meetings == 156
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 33, "IMPOSTOR": 7}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 39, "alibi": 1}
+        assert cell.exempt_off_flag_count == 46
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 33, "IMPOSTOR": 7}
+        assert cell.exempt_on_strong_flag_count == 46
 
     def test_samples_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/4p1i"]
         assert cell.meetings == 39
-        assert cell.exempt_off_distinct_by_role == {}
-        assert cell.exempt_off_distinct_by_class == {}
-        assert cell.exempt_off_flag_count == 0
-        assert cell.exempt_on_strong_distinct_by_role == {}
-        assert cell.exempt_on_strong_flag_count == 0
+        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 2}
+        assert cell.exempt_off_distinct_by_class == {"whereabouts": 2}
+        assert cell.exempt_off_flag_count == 2
+        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 2}
+        assert cell.exempt_on_strong_flag_count == 2
 
     def test_ml_corpus_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["ml_corpus/9p2i"]
@@ -2653,11 +2657,11 @@ class TestVentPlacementCensus:
 
     def test_samples_9p2i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/9p2i"]
-        # One impostor subject (seed 43 p-9), flagged twice: two of the subject's
-        # own self-alibis (an 8-10 window and a 10-10 single tick) each contradict
-        # the same grounded MEDBAY vent placement -- one flag per (obs, alibi).
-        assert cell.vent_flag_count == 2
-        assert cell.vent_subjects_by_role == {"IMPOSTOR": 1}
+        # Both levers are UNCONDITIONAL at baseline 6, so the ON leg (env=_L2_ENV)
+        # is byte-identical to the OFF leg: no alibi_vs_physical flag is present ON
+        # yet absent OFF, so the ON-vs-OFF diff this cell measures collapses to 0.
+        assert cell.vent_flag_count == 0
+        assert cell.vent_subjects_by_role == {}
 
     def test_samples_4p1i_vent_cells(self, census: dict[str, _SetCensus]) -> None:
         cell = census["samples/4p1i"]

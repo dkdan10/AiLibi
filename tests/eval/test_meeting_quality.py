@@ -508,15 +508,14 @@ def test_conversion_model_rejects_negative_coerced() -> None:
 
 
 def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
-    """The 2-coerced pin: recompute reads the divert; the stored block predates it.
+    """The coerced-bucket pin: the baseline-6 re-record carries no coerced SKIPs.
 
-    audits/audit-phase-16-close.md §8 says "2 of 99 inversions" are coerced
-    SKIPs, but that is imprecise on the bytes: one of the two ballots was an
-    impostor-bucket entry (a met-threshold impostor SKIP), NOT an inversion.
-    Diverting both drops the recorded inversions 99 -> 98 and the impostor
-    voters 42 -> 41. The committed artifact is single-era until the 17.9
-    re-record, so its STORED conversion block still reads the pre-17.2
-    partition (``citation_coerced_skip_ballots`` folds to the default 0).
+    The meeting-layer graduation re-record (four levers unconditional,
+    impostor_roll_call OFF) produced no uncited zero-flag EJECT->SKIP coercion
+    prefixes, so ``citation_coerced_skip_ballots`` reads 0 and no ballot carries
+    the marker head. The STORED conversion block was regenerated at baseline 6,
+    so recompute agrees with it exactly (the divert changes nothing on these
+    bytes).
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -525,30 +524,31 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
 
     # STORED block: the pre-17.2 partition (single-era until the 17.9 re-record).
     assert report.conversion.citation_coerced_skip_ballots == 0
-    assert report.conversion.missed_skip_ballots == 141
-    assert report.conversion.threshold_inversions == 99
-    assert report.conversion.missed_skip_impostor_voters == 42
+    assert report.conversion.missed_skip_ballots == 113
+    assert report.conversion.threshold_inversions == 66
+    assert report.conversion.missed_skip_impostor_voters == 47
 
     # RECOMPUTE: the divert now populates the bucket and corrects the partition.
     result = compute_conversion_report(report.report.games)
 
-    assert result.total_ejections == 70
-    assert result.impostor_ejections == 64
-    assert result.ejection_accuracy == pytest.approx(64 / 70)
-    assert result.impostor_accused_meetings == 135
-    assert result.impostor_accused_conversions == 64
-    assert result.impostor_accused_conversion_rate == pytest.approx(64 / 135)
-    assert result.skip_ballots == 652
-    assert result.correct_skip_ballots == 511
-    assert result.missed_skip_ballots == 139
+    assert result.total_ejections == 100
+    assert result.impostor_ejections == 80
+    assert result.ejection_accuracy == pytest.approx(80 / 100)
+    assert result.impostor_accused_meetings == 125
+    assert result.impostor_accused_conversions == 80
+    assert result.impostor_accused_conversion_rate == pytest.approx(80 / 125)
+    assert result.skip_ballots == 424
+    assert result.correct_skip_ballots == 311
+    assert result.missed_skip_ballots == 113
     assert result.unclassified_skip_ballots == 0
-    assert result.citation_coerced_skip_ballots == 2
-    assert result.missed_skip_impostor_voters == 41
+    assert result.citation_coerced_skip_ballots == 0
+    assert result.missed_skip_impostor_voters == 47
     assert result.missed_skip_teammate_coerced == 0
     assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 98
+    assert result.threshold_inversions == 66
 
-    # Identify the two diverted ballots by scanning for the marker head.
+    # No ballot carries the marker head: the baseline-6 bytes have no coerced
+    # SKIPs, so the divert scan yields an empty set.
     head = UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0]
     diverted = [
         (game.game_id, ballot.voter, game.roles[ballot.voter])
@@ -557,9 +557,7 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
         for ballot in meeting.ballots
         if ballot.target == "SKIP" and ballot.rationale_text.startswith(head)
     ]
-    assert len(diverted) == 2
-    assert ("headless-seed-39", "p-5", "CREWMATE") in diverted
-    assert ("headless-seed-48", "p-7", "IMPOSTOR") in diverted
+    assert len(diverted) == 0
 
 
 def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
@@ -571,20 +569,20 @@ def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
     result = compute_conversion_report(report.report.games)
 
     assert result.citation_coerced_skip_ballots == 0
-    assert result.skip_ballots == 93
-    assert result.correct_skip_ballots == 87
-    assert result.missed_skip_ballots == 6
+    assert result.skip_ballots == 89
+    assert result.correct_skip_ballots == 84
+    assert result.missed_skip_ballots == 5
     assert result.unclassified_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 3
+    assert result.missed_skip_impostor_voters == 1
     assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 3
-    assert result.total_ejections == 10
-    assert result.impostor_ejections == 10
+    assert result.threshold_inversions == 4
+    assert result.total_ejections == 13
+    assert result.impostor_ejections == 11
 
 
 @pytest.mark.parametrize(
     ("path", "expected_coerced"),
-    [(_COMMITTED_9P2I_REPORT, 2), (_COMMITTED_4P1I_REPORT, 0)],
+    [(_COMMITTED_9P2I_REPORT, 0), (_COMMITTED_4P1I_REPORT, 0)],
 )
 def test_extended_invariant_holds_over_every_committed_meeting(
     path: Path, expected_coerced: int
