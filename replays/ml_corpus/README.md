@@ -268,10 +268,15 @@ All 10 came back clean on the first retry. **A refused freeze costs only the bad
 seeds**, never the good ones: provenance is checked separately from presence, so
 19 hours of recorded work survived the refusal untouched.
 
-> **Drop the phantoms only AFTER the leg drains.** The finalize has no "all N
-> present" assertion — it discovers seeds by globbing the set dir — so deleting
-> replays while the run is still going would let `write_splits` and the MANIFEST
-> backfill freeze a SHORT set (e.g. 146 games) as if it were complete.
+> **Dropping phantoms while the leg still runs is safe — the finalize refuses a
+> short set.** `check_seed_count` asserts the exact contiguous locked set
+> (every seed in the range, no gap) is on disk before `build_sample_report` /
+> `write_splits` / `freeze_manifest`, and again in `--splits-only`. So if a
+> defaulted replay is dropped from a still-running or resumed leg (or any in-range
+> replay is lost), the finalize fails loud with the missing seeds named rather
+> than globbing a short set into a frozen 146-game corpus. Still, the tidy order
+> is to drop after the drain: the guard turns a mistimed drop into a hard stop,
+> not a silent corruption.
 
 An unstamped replay (a pre-15.9 recording, a canonical sample copied in) is
 refused for the same reason: it would render in the `MANIFEST` policy column
@@ -289,8 +294,9 @@ For a long, flaky hosted run, raise the per-seed transport retry budget:
 directory that carries `replay-seed-*.jsonl` but no `FROZEN` line in its
 `MANIFEST.md` is a **partial** (not-yet-finished) recording — re-run to complete
 and freeze it before running the acceptance gate. A multi-day session spanning
-several UTC midnights is expected at ~18–20h; `MANIFEST` dates are honest
-per-seed (the 16.14 mixed-date precedent — the gate checks coherence, not
+several UTC midnights is expected at the measured **~22–23h** (see the section
+header for the per-leg breakdown); `MANIFEST` dates are honest per-seed (the
+16.14 mixed-date precedent — the gate checks coherence, not
 uniformity).
 
 ## Finding these bytes later: the annotated tag

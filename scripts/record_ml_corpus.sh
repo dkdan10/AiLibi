@@ -74,10 +74,12 @@
 # ~22-23h wall MEASURED at Task 18.13 (the baseline-6 roll-call round adds ~36%
 # meeting calls over the ~14-15h baseline-5 record, and a phantom-repair pass
 # re-records any seed carrying a (deadline_default) wall-clock-miss row — 10/150
-# on the 18.13 9p2i leg; drop those only AFTER the leg drains, since the finalize
-# has no all-N-present assertion and would freeze a short set). Commit is one
-# atomic PR after the gate + byte-verify pass per set, with checkpoint commits of
-# completed seed ranges along the way. May share the baseline-6 operator session.
+# on the 18.13 9p2i leg. Dropping those and resuming is safe at any time: the
+# finalize's check_seed_count asserts the exact locked set is present before it
+# freezes, so a mistimed drop fails loud with the missing seeds named rather than
+# freezing a short set). Commit is one atomic PR after the gate + byte-verify pass
+# per set, with checkpoint commits of completed seed ranges along the way. May
+# share the baseline-6 operator session.
 
 set -euo pipefail
 
@@ -780,7 +782,7 @@ fi
 # remaining env-gated lever, and the baseline-6 substrate this recorder freezes is
 # its recorded stay-OFF (audits/audit-phase-18-baseline-6.md §0.1). A leftover
 # AILIBI_IMPOSTOR_ROLL_CALL=1 export (e.g. from a counterfactual probe session)
-# would record the whole ~18–20h corpus lever-ON while this preflight's echo
+# would record the whole ~22-23h corpus lever-ON while this preflight's echo
 # claims the ruled substrate — and an acceptance gate run in the SAME polluted
 # shell would then PASS coherently (substrate_flag_snapshot() reads the same env),
 # which is exactly the C6 recording-preflight hazard the graduations discharge.
