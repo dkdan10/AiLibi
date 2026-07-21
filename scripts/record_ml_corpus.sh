@@ -18,10 +18,11 @@
 # replays/ml_corpus/ (NOT replays/samples/), at fresh seed ranges so a corpus game
 # can never be confused with a canonical 0–49 game.
 #
-# Two sets, ~3x the canonical 9p2i meeting/ejection volume (~18–20h wall with 2
-# Featherless seed workers — baseline-5 ran ~14–15h and the baseline-6 roll-call
-# round adds ~36% meeting LLM calls, so plan ~18–20h and treat the ~14–15h
-# baseline-5 figure as stale; the 16.14/17.9/18.12 operator notes apply:
+# Two sets, ~3x the canonical 9p2i meeting/ejection volume (~22-23h wall with 2
+# Featherless seed workers — the Task-18.13 MEASURED figure: 4p1i 0h45m + 9p2i
+# 19h26m + a 2h43m phantom-repair pass. Baseline-5 ran ~14-15h; the baseline-6
+# roll-call round adds ~36% meeting LLM calls and drives the 9p2i meeting rate to
+# 1.00, so treat the ~14-15h figure as stale; the 16.14/17.9/18.12 operator notes apply:
 # staggered worker starts, jittered backoff, per-seed atomic staging,
 # AILIBI_SEED_MAX_ATTEMPTS=8, and checkpoint-push of each completed seed range so
 # an interruption never loses a leg):
@@ -70,10 +71,13 @@
 # seed stages), and the per-template prompt versions (the registry must still
 # resolve qwen3_6_27b to the locked v3 map, and rows recorded off that map are
 # refused at freeze).
-# ~18–20h wall (the baseline-6 roll-call round adds ~36% meeting calls over the
-# ~14–15h baseline-5 record); commit is one atomic PR after the gate +
-# byte-verify pass per set, with checkpoint commits of completed seed ranges
-# along the way. May share the baseline-6 operator session.
+# ~22-23h wall MEASURED at Task 18.13 (the baseline-6 roll-call round adds ~36%
+# meeting calls over the ~14-15h baseline-5 record, and a phantom-repair pass
+# re-records any seed carrying a (deadline_default) wall-clock-miss row — 10/150
+# on the 18.13 9p2i leg; drop those only AFTER the leg drains, since the finalize
+# has no all-N-present assertion and would freeze a short set). Commit is one
+# atomic PR after the gate + byte-verify pass per set, with checkpoint commits of
+# completed seed ranges along the way. May share the baseline-6 operator session.
 
 set -euo pipefail
 

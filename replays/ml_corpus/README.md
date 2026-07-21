@@ -101,18 +101,30 @@ seed mod 5:  {0,1,2} -> train    {3} -> val    {4} -> test        (60/20/20)
 For 9p2i (150 games): 90 train / 30 val / 30 test.
 For 4p1i (50 games):  30 train / 10 val / 10 test.
 
-## Recording (operator, `$0`, ~18–20h)
+## Recording (operator, `$0`, ~22–23h MEASURED)
 
 This is an operator-run step gated on `FEATHERLESS_API_KEY`; it is **not** run in
 CI or by an agent session (the fake CI provider is refused — the corpus records
-only on Featherless). Baseline-5 ran **~14–15h** and the baseline-6 **roll-call
-round adds ~36% meeting LLM calls**, so plan **~18–20h** wall for both sets and
-treat the ~14–15h figure as stale — with the 16.14/17.9/18.12 operator notes
-applied (staggered worker starts, jittered backoff, per-seed atomic staging,
-`AILIBI_SEED_MAX_ATTEMPTS=8`) and **checkpoint-push discipline**: commit and push
-each completed seed range as it lands, so an interruption (machine sleep, a
-transport blip that kills the process, a reclaimed container) never loses a leg.
-Preview the plan first:
+only on Featherless). The Task-18.13 record is the measured figure, not an
+estimate:
+
+| leg | wall clock |
+|---|---|
+| 4p1i (50 games) | 0h 45m |
+| 9p2i (150 games) | 19h 26m |
+| phantom-repair pass (10 seeds, see below) | 2h 43m |
+| **total** | **~22h 54m** |
+
+Baseline-5 ran ~14–15h; the baseline-6 roll-call round adds ~36% meeting LLM
+calls and drives the 9p2i meeting rate to **1.00**, so budget **~22–23h** and
+treat both the ~14–15h baseline-5 figure and the pre-record ~18–20h projection as
+stale. Note the wall clock includes any time the machine spends asleep — a
+suspend pauses the run rather than corrupting it. Apply the 16.14/17.9/18.12
+operator notes (staggered worker starts, jittered backoff, per-seed atomic
+staging, `AILIBI_SEED_MAX_ATTEMPTS=8`) and **checkpoint-push discipline**: commit
+and push each completed seed range as it lands, so an interruption (machine
+sleep, a transport blip that kills the process, a reclaimed container) never
+loses a leg. Preview the plan first:
 
 ```bash
 bash scripts/record_ml_corpus.sh --dry-run
@@ -212,6 +224,33 @@ presence alone is not provenance: before a present replay is skipped as
   refused **at the recorder**, not only at the external validity gate. That
   refusal is what made this a re-record rather than a resume: pointed at the
   committed baseline-5 corpus, the guard refused all 200 replays by name.
+
+### The `(deadline_default)` phantom, and why a refused freeze is cheap
+
+A long hosted record produces occasional **wall-clock-miss phantoms**: a meeting
+turn that misses its deadline records a `failed_call` row stamped
+`model="(deadline_default)"` (`error_type: deadline_default`, e.g. "opening turn
+(turn 0) defaulted (validation)"). `check_replay_provenance` refuses those rows —
+they are not the locked model — so the set **will not freeze** while any survive.
+The Task-18.13 9p2i leg hit **10/150 (6.7%)**; the Task-18.12 samples record hit
+1/150. Longer baseline-6 meetings make the miss likelier, and the deadline cannot
+be widened to compensate without changing the locked substrate, so the remedy is
+to re-record (`audits/audit-phase-16-close.md` §5.2's runbook rule: the seed
+re-records clean and its MANIFEST row honestly stamps the re-record date):
+
+```bash
+# after a refused freeze: drop the offending replays, then resume
+bash scripts/record_ml_corpus.sh --set 9p2i     # records ONLY the dropped seeds, then re-finalizes
+```
+
+All 10 came back clean on the first retry. **A refused freeze costs only the bad
+seeds**, never the good ones: provenance is checked separately from presence, so
+19 hours of recorded work survived the refusal untouched.
+
+> **Drop the phantoms only AFTER the leg drains.** The finalize has no "all N
+> present" assertion — it discovers seeds by globbing the set dir — so deleting
+> replays while the run is still going would let `write_splits` and the MANIFEST
+> backfill freeze a SHORT set (e.g. 146 games) as if it were complete.
 
 An unstamped replay (a pre-15.9 recording, a canonical sample copied in) is
 refused for the same reason: it would render in the `MANIFEST` policy column
