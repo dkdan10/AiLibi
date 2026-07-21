@@ -293,6 +293,27 @@ several UTC midnights is expected at ~18–20h; `MANIFEST` dates are honest
 per-seed (the 16.14 mixed-date precedent — the gate checks coherence, not
 uniformity).
 
+## Finding these bytes later: the annotated tag
+
+The `FROZEN` line in each `MANIFEST.md` names the **recording-time code state** —
+`HEAD` at the moment the recorder ran, i.e. the engine/prompt/lever version that
+*produced* the bytes. It is deliberately **not** a pointer to the commit that
+*contains* them: that commit does not exist yet when the freeze line is written,
+so no recorder could name it. Checking that sha out gives you the generating code,
+not the corpus.
+
+The pointer to the bytes is an **annotated tag** cut after the record lands
+(`phase-18-corpus-<sha>` for this record). Dispatch environments refuse tag pushes
+(the 16.14 limitation), so this is an operator-session step:
+
+```bash
+git tag -a "phase-18-corpus-$(git rev-parse --short HEAD)" -m "…substrate + acceptance…"
+git push origin "phase-18-corpus-$(git rev-parse --short HEAD)"
+```
+
+Both halves are provenance: the freeze line answers "what code made this?", the
+tag answers "where are the bytes?".
+
 ## Acceptance (per set, before the PR merges)
 
 Hosted models do not byte-reproduce **fresh** generation; **recordings** replay
