@@ -225,18 +225,39 @@ presence alone is not provenance: before a present replay is skipped as
   refusal is what made this a re-record rather than a resume: pointed at the
   committed baseline-5 corpus, the guard refused all 200 replays by name.
 
-### The `(deadline_default)` phantom, and why a refused freeze is cheap
+### Defaulted turns, and why a refused freeze is cheap
 
-A long hosted record produces occasional **wall-clock-miss phantoms**: a meeting
-turn that misses its deadline records a `failed_call` row stamped
-`model="(deadline_default)"` (`error_type: deadline_default`, e.g. "opening turn
-(turn 0) defaulted (validation)"). `check_replay_provenance` refuses those rows —
-they are not the locked model — so the set **will not freeze** while any survive.
-The Task-18.13 9p2i leg hit **10/150 (6.7%)**; the Task-18.12 samples record hit
-1/150. Longer baseline-6 meetings make the miss likelier, and the deadline cannot
-be widened to compensate without changing the locked substrate, so the remedy is
-to re-record (`audits/audit-phase-16-close.md` §5.2's runbook rule: the seed
-re-records clean and its MANIFEST row honestly stamps the re-record date):
+A long hosted record produces occasional **defaulted turns**: a meeting turn that
+misses its deadline records a `failed_call` row with
+`error_type: deadline_default` (e.g. "opening turn (turn 0) defaulted
+(validation)"). The transcript then carries a **fallback husk** rather than model
+output, which a frozen training/eval corpus must not contain — so
+`check_replay_provenance` refuses the set and it **will not freeze** while any
+survive.
+
+**These rows come in TWO shapes, and only one is visible in the `model` column**
+(`orchestrator/game.py::_record_deadline_defaults`):
+
+| shape | `model` column | when |
+|---|---|---|
+| zero-spend marker | `"(deadline_default)"` sentinel | the participant submitted nothing |
+| **burned generation** | the **real baseline model** | the response failed to parse AND the in-turn retry also failed |
+
+A model-based check catches only the first. The recorder therefore keys on
+**`error_type`**, which is the property that actually matters — the shape is just
+an artifact of which branch emitted the row. (Note `scripts/validity_gate.py` has
+no `deadline_default` check at all; it rejects the sentinel shape only
+incidentally, via the model column. The corpus recorder is deliberately stricter
+than the gate here, because the corpus is a training artifact.)
+
+**Expect to iterate.** Across the Task-18.13 record, roughly **1 recording in 8**
+produced a defaulted turn of some shape, and a re-recorded seed can pick up a
+fresh one (seed 1115 did). Budget a repair pass or two; the 18.12 samples record
+hit only 1/150, so the rate is a property of the longer baseline-6 meetings. The
+deadline cannot be widened to compensate without changing the locked substrate, so
+re-recording is the only honest fix (`audits/audit-phase-16-close.md` §5.2's
+runbook rule: the seed re-records clean and its MANIFEST row honestly stamps the
+re-record date):
 
 ```bash
 # after a refused freeze: drop the offending replays, then resume

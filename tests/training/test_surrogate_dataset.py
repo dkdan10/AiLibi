@@ -47,6 +47,7 @@ from meetings.schemas import (
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
+    BeliefRenderParity,
     MeetingTableReconstructionError,
     MeetingTableRow,
     _ballot_is_coerced_skip,
@@ -870,31 +871,60 @@ def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
 
 
 _PENDING_BASELINE6_REGROUND = (
-    "corpus-derived J1 parity census moved with the Task-18.13 baseline-6 corpus "
+    "corpus-derived J1 parity CENSUS moved with the Task-18.13 baseline-6 corpus "
     "re-record; this file is in Task 18.14's Files-in-scope, which re-pins it"
 )
 
 
-@pytest.mark.xfail(reason=_PENDING_BASELINE6_REGROUND, strict=False)
-def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus() -> None:
-    """The J1 live-parity census the report records (§2.1), pinned end-to-end.
+@pytest.fixture(scope="module")
+def corpus_parity() -> BeliefRenderParity:
+    """Two full walks over the 150-game corpus (~20s); shared by both J1 tests."""
 
-    Two full walks over the 150-game corpus (~20s — the load-bearing 17.10
-    re-validation, kept in-suite deliberately). Fold fidelity is EXACT on all
-    16 198 cells, and the graduated J1 render clamp (unconditional since the
-    16.17 baseline-5 record) makes the live-served scalar diverge from the raw
-    ``belief_suspicion`` column the fit reads on exactly the measured cells —
-    the recorded train/serve skew the report states beside the verdict.
+    return measure_belief_render_parity(Path("replays/ml_corpus/9p2i"))
+
+
+def test_j1_fold_fidelity_is_exact_on_the_9p2i_corpus(
+    corpus_parity: BeliefRenderParity,
+) -> None:
+    """Fold fidelity is EXACT on every compared cell — the SAFETY half of J1.
+
+    Split out of the census test at the PR #301 review: these three assertions are
+    not pins that move with a re-record, they are the invariant that the offline
+    reconstruction still reproduces the production belief fold. Leaving them inside
+    the xfailed census test meant a genuine parity/reconstruction break on the new
+    corpus would surface as an expected failure and be waved through — and 18.14
+    would then re-fit on corrupted live-parity features. They must hold on ANY
+    corpus, so they stay LIVE across the baseline-6 re-record; only the numeric
+    census below is deferred.
     """
 
-    parity = measure_belief_render_parity(Path("replays/ml_corpus/9p2i"))
-    assert parity.games_total == 150
+    assert corpus_parity.raw_mismatches == 0
+    assert corpus_parity.trust_mismatches == 0
+    assert corpus_parity.max_raw_abs_delta == 0.0
+    # A vacuous pass (an empty walk) would satisfy the three above; require the
+    # walk to have actually compared something.
+    assert corpus_parity.games_total == 150
+    assert corpus_parity.cells_compared > 0
+
+
+@pytest.mark.xfail(reason=_PENDING_BASELINE6_REGROUND, strict=False)
+def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
+    corpus_parity: BeliefRenderParity,
+) -> None:
+    """The J1 live-parity CENSUS the report records (§2.1), pinned end-to-end.
+
+    The graduated J1 render clamp (unconditional since the 16.17 baseline-5
+    record) makes the live-served scalar diverge from the raw ``belief_suspicion``
+    column the fit reads on exactly the measured cells — the recorded train/serve
+    skew the report states beside the verdict. Every number here moved with the
+    Task-18.13 re-record; 18.14 re-pins them. The fidelity INVARIANTS are asserted
+    live in the test above, not here.
+    """
+
+    parity = corpus_parity
     assert parity.meetings_total == 541
     assert parity.rows_total == 3131
     assert parity.cells_compared == 16198
-    assert parity.raw_mismatches == 0
-    assert parity.trust_mismatches == 0
-    assert parity.max_raw_abs_delta == 0.0
     assert parity.j1_divergent_cells == 280
     assert parity.j1_divergent_rows == 254
     assert parity.j1_divergent_fit_cells == 251

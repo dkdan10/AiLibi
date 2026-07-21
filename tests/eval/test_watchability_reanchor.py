@@ -287,12 +287,12 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
 
     * 4p1i still PASSES — its conversion clears the derived population-relative
       floor and the one-event ``witnessed_event_rate`` floor is advisory.
-    * 9p2i still FAILS the referee on ``witnessed_event_rate`` (0.0254 < the 0.0339
+    * 9p2i still FAILS the referee on ``witnessed_event_rate`` (0.0238 < the 0.0339
       floor, a real rate miss, NOT the one-event advisory case) even though its
       conversion and flag-density floors clear — and clear by MORE than before: the
-      graduated meeting layer lifts flag density (1.209 vs the 1.091 floor) and
-      conversion (0.605 vs 0.517) while witnessed-kill supply falls further
-      (0.0334 -> 0.0254). Evidence supply rose on the channels the graduation
+      graduated meeting layer lifts flag density (1.244 vs the 1.091 floor) and
+      conversion (0.607 vs 0.503) while witnessed-kill supply falls further
+      (0.0334 -> 0.0238). Evidence supply rose on the channels the graduation
       touches and fell on the one it does not; a starved-supply rejection is the
       instrument working, never silent. The surrogate/bake-off consume the corpus
       as a TRAINING substrate regardless of this watchability verdict.
@@ -305,14 +305,14 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     witnessed_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed_nine.measured == 0.025440313111545987
+    assert witnessed_nine.measured == 0.023762376237623763
     assert witnessed_nine.floor == 0.03389830508474576
     assert witnessed_nine.passed is False  # a real rate miss, blocks the floor AND
     conversion_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_nine.measured == 0.6045340050377834
-    assert conversion_nine.floor == 0.5173371629409875  # derived population-relative
+    assert conversion_nine.measured == 0.6065989847715736
+    assert conversion_nine.floor == 0.5029244652406416  # derived population-relative
     assert (
         conversion_nine.passed is True
     )  # conversion clears; the miss is witnessed-supply

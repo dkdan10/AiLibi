@@ -65,13 +65,13 @@ def samples_4p1i_report() -> KillCraftReport:
 
 def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> None:
     assert corpus_report.games_total == 150
-    assert corpus_report.kills_total == 511
-    assert corpus_report.crew_witnessed_kills == 13
-    assert dict(corpus_report.co_present_histogram) == {0: 511}
+    assert corpus_report.kills_total == 505
+    assert corpus_report.crew_witnessed_kills == 12
+    assert dict(corpus_report.co_present_histogram) == {0: 505}
     assert dict(corpus_report.one_hop_histogram) == {
-        0: 274,
+        0: 269,
         1: 86,
-        2: 97,
+        2: 96,
         3: 45,
         4: 7,
         5: 2,
@@ -81,14 +81,14 @@ def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> No
 def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
     assert corpus_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert corpus_report.mean_co_present_unwitnessed == pytest.approx(0.0)
-    assert corpus_report.mean_one_hop_witnessed == pytest.approx(2.6923076923076925)
-    assert corpus_report.mean_one_hop_unwitnessed == pytest.approx(0.8393574297188755)
+    assert corpus_report.mean_one_hop_witnessed == pytest.approx(2.75)
+    assert corpus_report.mean_one_hop_unwitnessed == pytest.approx(0.847870182555781)
     # co_present is all-zero (zero variance) -> the point-biserial is undefined.
     # STILL all-zero at baseline 6: the kill-craft fold's structural finding — no
     # committed kill has ever had a co-present crewmate — survives the re-record.
     assert corpus_report.witnessed_point_biserial_co_present is None
     assert corpus_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.26082404627833533
+        0.2585155159660001
     )
 
 
@@ -143,30 +143,30 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
 def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
     crew = corpus_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 1050
-    assert crew.decisions == 22013
-    assert crew.mean_conditional_entropy == pytest.approx(0.8685342615319995)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.1888157677302782)
+    assert crew.decisions == 22095
+    assert crew.mean_conditional_entropy == pytest.approx(0.869323712309377)
+    assert crew.mean_unconditional_entropy == pytest.approx(1.1899868117224368)
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
     # One full bucket cell pinned (decisions + exact kinds + approx entropy).
     solo = crew.buckets["none|solo"]
-    assert solo.decisions == 7723
+    assert solo.decisions == 7713
     assert dict(solo.action_kinds) == {
-        "do_task": 4516,
+        "do_task": 4527,
         "emergency": 11,
-        "move": 2257,
+        "move": 2259,
         "repair_sabotage": 83,
-        "report": 337,
-        "wait": 519,
+        "report": 332,
+        "wait": 501,
     }
-    assert solo.entropy == pytest.approx(1.5140129767968076)
+    assert solo.entropy == pytest.approx(1.5054529064563125)
 
 
 def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     impostor = corpus_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 300
-    assert impostor.decisions == 6629
-    assert impostor.mean_conditional_entropy == pytest.approx(0.6527172198378607)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.7656880007065832)
+    assert impostor.decisions == 6663
+    assert impostor.mean_conditional_entropy == pytest.approx(0.6525758068858258)
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.7618425557336113)
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -178,15 +178,15 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     # The kill bucket (impostor ready + a co-present victim): the fold's sharpest
     # cell — kills concentrate here.
     ready_pair = impostor.buckets["ready|pair"]
-    assert ready_pair.decisions == 1182
+    assert ready_pair.decisions == 1205
     assert dict(ready_pair.action_kinds) == {
-        "do_task": 3,
-        "kill": 610,
-        "move": 525,
-        "sabotage": 6,
+        "do_task": 10,
+        "kill": 602,
+        "move": 548,
+        "sabotage": 7,
         "vent": 38,
     }
-    assert ready_pair.entropy == pytest.approx(1.2325617242362652)
+    assert ready_pair.entropy == pytest.approx(1.2749397234112307)
 
 
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:

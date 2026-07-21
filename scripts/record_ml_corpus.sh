@@ -464,6 +464,20 @@ PYINNER
 #   * every model recorded anywhere in it (meeting llm_calls AND failed-call
 #     rows) is the locked baseline model — this also refuses a wall-clock-miss
 #     "(deadline_default)" phantom, which the validity gate rejects too;
+#   * NO failed-call row carries error_type == "deadline_default", whatever its
+#     model field says. The model check above is NOT sufficient, and this is the
+#     PR #301 review finding: _record_deadline_defaults (orchestrator/game.py)
+#     writes deadline defaults in TWO shapes. A participant that submitted
+#     nothing yields the zero-spend marker stamped with the
+#     "(deadline_default)" sentinel model — caught by the model check. But a
+#     participant whose generation FAILED TO PARSE and whose in-turn retry also
+#     failed yields one row per burned generation stamped with the REAL baseline
+#     model, and the model check waves those straight through. Both shapes mean
+#     the same thing: that turn was DEFAULTED, so the transcript carries a
+#     fallback husk rather than model output. A frozen training/eval corpus must
+#     not contain degraded turns under either shape, so key on error_type, which
+#     is the property that actually matters, rather than on the model sentinel,
+#     which is an artifact of which branch emitted the row;
 #   * its summed cost is exactly $0 (the flat-rate provider contract);
 #   * its game_over substrate_flags stamp POSITIVELY carries the baseline-6
 #     lever slate — every retired always-on lever present and True (incl. the
@@ -519,14 +533,26 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
             f"fsm-default (got {stamp.model_dump()!r})"
         )
     models: set[str] = set()
+    defaulted = 0
     for entry in read_all_entries(path):
         if isinstance(entry, MeetingReplayEntry):
             models.update(call.model for call in entry.llm_calls)
         elif isinstance(entry, FailedCallReplayEntry):
             models.add(entry.model)
+            # Key on error_type, NOT on the model sentinel: the burned-generation
+            # branch stamps the REAL baseline model, so a model-only check misses
+            # it entirely (PR #301 review).
+            if entry.error_type == "deadline_default":
+                defaulted += 1
     foreign = sorted(models - {baseline_model})
     if foreign:
         bad.append(f"{path.name}: non-baseline model(s) recorded: {', '.join(foreign)}")
+    if defaulted:
+        bad.append(
+            f"{path.name}: {defaulted} deadline_default failed-call row(s) — the "
+            "turn(s) were DEFAULTED, so the transcript carries a fallback husk "
+            "rather than model output; re-record the seed"
+        )
     cost = compute_cost_usd(path)
     if cost != 0.0:
         bad.append(f"{path.name}: non-zero recorded cost ${cost:.4f}")
@@ -574,7 +600,17 @@ PYINNER
 # The MANIFEST already stamps git_sha per row (via _manifest_writer update). The
 # freeze is an ADDITIONAL explicit marker: a trailing prose line naming the SHA
 # of the run that FROZE the set, so a frozen set is unmistakable from the MANIFEST
-# alone. Any pre-existing FROZEN line is stripped first: a per-seed update
+# alone.
+#
+# WHAT THAT SHA IS, precisely (PR #301 review): it is HEAD at the moment the
+# recording RAN — the CODE STATE that produced these bytes (engine, prompts,
+# lever slate). It is NOT, and cannot be, the commit that CONTAINS the frozen
+# bytes: that commit does not exist yet when the freeze line is written, so no
+# recorder could name it. Checking the sha out therefore gives you the code that
+# generated the corpus, not the corpus. The line says so in as many words, because
+# reading it as an artifact pointer sends an auditor to the wrong tree. The
+# pointer TO the bytes is the commit/tag that lands them (see the corpus README's
+# note on the annotated tag). Any pre-existing FROZEN line is stripped first: a per-seed update
 # re-renders the table and drops it (so an incomplete re-run is never left looking
 # frozen), but a no-op re-finalize — all seeds present, no rows backfilled —
 # skips that rewrite, and without the strip each re-run would append a duplicate.
@@ -596,7 +632,7 @@ PYINNER
   fi
   {
     printf '\n'
-    printf '**FROZEN** at git_sha `%s` (recorded %s; Task 15.12, baseline-6 re-grounding per Task 18.13): the %s ML-calibration corpus is frozen at baseline-6 config (Qwen/Qwen3.6-27B Featherless, prompt set %s, the baseline-6 lever slate — the four meeting-layer levers unconditional, impostor_roll_call OFF — tactical policy %s). By-game split rule: %s. Do not re-record without re-freezing.\n' \
+    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-6 re-grounding per Task 18.13): the %s ML-calibration corpus is frozen at baseline-6 config (Qwen/Qwen3.6-27B Featherless, prompt set %s, the baseline-6 lever slate — the four meeting-layer levers unconditional, impostor_roll_call OFF — tactical policy %s). By-game split rule: %s. Do not re-record without re-freezing.\n' \
       "$git_sha" "$refreshed_at" "$set_name" "$REQUIRED_PROMPT_SET" "$POLICY_STAMP" "$SPLIT_RULE_DESC"
   } >>"$manifest"
   echo "  FROZEN: $manifest at git_sha $git_sha"
