@@ -377,6 +377,48 @@ if bad:
 PYINNER
 }
 
+# Refuse to FREEZE unless EXACTLY the locked seed set is present — every seed in
+# [start, last], no gap, no duplicate alias. check_seed_range above only bounds the
+# UPPER edge (no stray out-of-range file); it says nothing about a MISSING in-range
+# seed, so a set that lost a seed after seed_list was built (a defaulted replay
+# dropped from a still-running or resumed leg, a file deleted mid-run, an
+# interruption between the drop and the re-record) would still glob into the
+# finalize and freeze SHORT — build_sample_report / write_splits / freeze_manifest
+# all derive from "whatever replay-seed-*.jsonl are present" and none counts them
+# against the contract (PR #301 review). This closes that path: the finalize
+# asserts the full contiguous count is on disk before it publishes anything. Pure
+# Python, no network.
+check_seed_count() {
+  local set_dir="$1" start="$2" last="$3"
+  uv run python - "$set_dir" "$start" "$last" <<'PYINNER'
+import sys
+from pathlib import Path
+
+set_dir, start, last = Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+present: set[int] = set()
+for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+    core = path.stem[len("replay-seed-") :]
+    if core.isdigit() and str(int(core)) == core:
+        present.add(int(core))
+required = set(range(start, last + 1))
+missing = sorted(required - present)
+extra = sorted(present - required)  # check_seed_range should have caught these
+if missing or extra:
+    parts = []
+    if missing:
+        parts.append(f"{len(missing)} MISSING seed(s): {missing}")
+    if extra:
+        parts.append(f"{len(extra)} out-of-range seed(s): {extra}")
+    sys.stderr.write(
+        f"check_seed_count: {set_dir} is not the exact locked set "
+        f"{start}..{last} ({len(required)} games) — {'; '.join(parts)}. "
+        "Refusing to freeze a short/dirty corpus; record the missing seed(s) "
+        "and re-run.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
 # Assert the live registry still resolves $REQUIRED_PROMPT_SET to EXACTLY the
 # locked baseline-6 per-template versions. Run at preflight (fail before spend):
 # a later task bumping the set's registry entry must stop this recorder cold —
@@ -649,8 +691,12 @@ if [[ "$splits_only" -eq 1 ]]; then
       exit 1
     fi
     echo "=== splits-only: $set_name ($set_dir) ==="
-    # A stray out-of-range replay would otherwise be partitioned into the splits.
+    # A stray out-of-range replay would otherwise be partitioned into the splits,
+    # and a MISSING in-range seed would silently write a SHORT splits.json (a
+    # partial train/val/test is never a valid committed artifact). Both are
+    # refused before a byte is written.
     check_seed_range "$set_dir" "$_start" "$((_start + _count - 1))"
+    check_seed_count "$set_dir" "$_start" "$((_start + _count - 1))"
     write_splits "$set_name" "$set_dir"
   done
   exit 0
@@ -1111,6 +1157,16 @@ record_set() {
   # stray out-of-range replay that appeared mid-run must never be frozen in.
   if ! check_seed_range "$set_dir" "$start" "$last"; then
     echo "ERROR: $set_name holds replays outside seeds $start..$last; NOT freezing." >&2
+    return 1
+  fi
+  # ... and the EXACT count: refuse to freeze a set that is missing any in-range
+  # seed. The finalize below derives the MANIFEST/report/splits from whatever is
+  # present, so without this a short set (a defaulted seed dropped from a resumed
+  # leg, a lost replay) would freeze as if complete (PR #301 review). This is the
+  # hard invariant behind the README's "drop phantoms only after the leg drains"
+  # note — enforced now, not left to operator discipline.
+  if ! check_seed_count "$set_dir" "$start" "$last"; then
+    echo "ERROR: $set_name is not the exact locked seed set; NOT freezing." >&2
     return 1
   fi
 

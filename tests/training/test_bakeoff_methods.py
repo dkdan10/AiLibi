@@ -1107,32 +1107,37 @@ def test_map_elites_default_run_config_is_byte_stable(
         )
 
 
-# Task 18.13 (the baseline-6 ML-corpus re-record) rewrote the corpus MANIFEST.md
-# that bakeoff_substrate_sha() hashes, so the committed map-elites cells' recorded
-# substrate_sha256 no longer matches the live one. That fence is DESIGNED to move
-# on every re-record. Re-running map-elites is not in 18.13's scope, and this file
-# belongs to Task 18.6, which is CLOSED — so the re-run is currently unowned. See
-# the PR's Questions section (recommendation: fold into 18.14 alongside the
-# BAKEOFF_BASELINE_ID flip, so the substrate identity stops being hybrid).
-_PENDING_BASELINE6_REGROUND = (
-    "the committed map-elites cells' substrate_sha256 moved with the Task-18.13 "
-    "baseline-6 corpus re-record (the fence is designed to move); the map-elites "
-    "re-run is unowned (18.6 is closed) — see the 18.13 PR Questions section"
+# The baseline-5 substrate sha the committed map-elites cell pool still carries.
+# bakeoff_substrate_sha() hashes the corpus MANIFEST.md, so the Task-18.13
+# baseline-6 re-record moved the LIVE value; the committed pool was NOT re-run
+# (out of 18.13's scope — this file belongs to Task 18.6, CLOSED). This literal is
+# the recorded stale value; when the pool is re-run on baseline 6 it changes and
+# the tripwire below fails, forcing its own cleanup.
+_COMMITTED_BASELINE5_MAP_ELITES_SUBSTRATE_SHA = (
+    "fbf23457b58205ed86e7d3983a9170c1765115ecfe97bb37fc67c5339de58348"
 )
 
 
-@pytest.mark.xfail(reason=_PENDING_BASELINE6_REGROUND, strict=False)
-def test_committed_map_elites_cells_reload_bit_exact() -> None:
-    """The committed cell pool reloads bit-exact and agrees with the champion.
+def test_committed_map_elites_cells_are_the_known_stale_baseline5_fit() -> None:
+    """TRIPWIRE for the baseline-5-artifact / baseline-6-corpus hybrid (PR #301).
 
-    Pure file-read pin on the SHIPPED 18.6 tree: 30 cells reload with every sha
-    verified, ``filled_cells == 30``, and the index's substrate sha equals
-    :func:`bakeoff_substrate_sha`. That last pin TRIPS LOUDLY when a Wave-1
-    substrate adoption re-freezes the corpus MANIFEST — the designed
-    re-run-before-use fence. The max-fitness cell (the champion ``min`` over
-    ``(-fitness, genome)``) is cell (5, 0, 3) and its genome is bit-identical to
-    the committed champion artifact, so the persisted pool and the shipped
-    champion agree.
+    Was an ``xfail`` on ``substrate_sha256 == bakeoff_substrate_sha()``. The
+    substrate fence is DESIGNED to trip when the corpus MANIFEST is re-frozen, and
+    the baseline-6 re-record did exactly that — but xfailing it makes the hybrid
+    INVISIBLE, so a downstream bake-off could consume the stale cell pool as if its
+    provenance matched the live substrate while CI stays green. So assert the
+    hybrid EXPLICITLY and LIVE, and self-clear: when the pool is re-run on baseline
+    6 its recorded ``substrate_sha256`` moves off the literal below, this FAILS,
+    and that is the signal to delete this test and the literal. A green suite means
+    "the hybrid is present and tracked", never "the artifact is current".
+
+    Everything NOT substrate-sha-dependent (cell count, champion identity,
+    genome-vs-champion agreement) is the substrate-independent structure of the
+    committed pool and stays LIVE — a failure there is a real regression.
+
+    Re-running map-elites is out of 18.13's scope — see the PR's Questions section,
+    which asks the owner to fold it into 18.14 alongside the BAKEOFF_BASELINE_ID
+    flip so the substrate identity stops being hybrid.
     """
 
     root = Path("training/artifacts/impostor/map-elites")
@@ -1141,7 +1146,19 @@ def test_committed_map_elites_cells_reload_bit_exact() -> None:
 
     index = json.loads((root / "cells" / "index.json").read_text())
     assert index["filled_cells"] == 30
-    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+    # The committed pool still carries the baseline-5 substrate sha ...
+    assert (
+        index["substrate"]["substrate_sha256"]
+        == _COMMITTED_BASELINE5_MAP_ELITES_SUBSTRATE_SHA
+    ), (
+        "the map-elites substrate sha moved — if the pool was re-run on baseline 6, "
+        "delete this tripwire and the literal"
+    )
+    # ... and the LIVE substrate is NOT it: the hybrid this tripwire tracks.
+    assert index["substrate"]["substrate_sha256"] != bakeoff_substrate_sha(), (
+        "the live substrate now matches the committed map-elites pool — the hybrid "
+        "has resolved; delete this tripwire and the literal"
+    )
 
     champion_key, champion_cell = min(
         archive.items(), key=lambda item: (-item[1].fitness, item[1].genome)

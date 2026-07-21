@@ -835,8 +835,11 @@ def _stub_set(corpus_root: Path, set_name: str, seeds: list[int]) -> Path:
 
 
 def test_splits_only_emits_deterministic_partition(tmp_path: Path) -> None:
+    # The EXACT locked 9p2i set (150 games) — --splits-only refuses a short set
+    # (see test_splits_only_refuses_a_short_set), so the partition is exercised on
+    # the real committed shape (90/30/30), not a toy subset.
     corpus_root = tmp_path / "ml_corpus"
-    seeds = list(range(1000, 1010))
+    seeds = list(range(1000, 1150))
     set_dir = _stub_set(corpus_root, "9p2i", seeds)
     env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
     proc = _run("--set", "9p2i", "--splits-only", env=env)
@@ -857,7 +860,7 @@ def test_splits_only_emits_deterministic_partition(tmp_path: Path) -> None:
         assert seed in doc[bucket], (seed, bucket)
     assert doc["set"] == "9p2i"
     assert doc["total_games"] == len(seeds)
-    assert doc["counts"] == {"train": 6, "val": 2, "test": 2}
+    assert doc["counts"] == {"train": 90, "val": 30, "test": 30}
 
 
 def test_splits_only_writes_no_replays_and_makes_no_network_call(
@@ -867,7 +870,7 @@ def test_splits_only_writes_no_replays_and_makes_no_network_call(
     # splits.json, never invoking a provider. Prove it never records by stripping
     # every provider key AND leaving the set with only stub replays.
     corpus_root = tmp_path / "ml_corpus"
-    set_dir = _stub_set(corpus_root, "4p1i", list(range(1000, 1005)))
+    set_dir = _stub_set(corpus_root, "4p1i", list(range(1000, 1050)))
     before = {p.name for p in set_dir.iterdir()}
     env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
     proc = _run("--set", "4p1i", "--splits-only", env=env, timeout=60)
@@ -887,12 +890,34 @@ def test_splits_only_missing_set_dir_fails_loud(tmp_path: Path) -> None:
 
 
 def test_splits_only_empty_set_dir_fails_loud(tmp_path: Path) -> None:
+    # An empty set dir is a degenerate short set: every locked seed is missing, so
+    # the exact-count guard refuses it before write_splits is ever reached.
     corpus_root = tmp_path / "ml_corpus"
     (corpus_root / "9p2i").mkdir(parents=True)  # exists but holds no replays
     env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
     proc = _run("--set", "9p2i", "--splits-only", env=env)
     assert proc.returncode != 0
-    assert "no replay-seed-*.jsonl" in proc.stdout + proc.stderr
+    out = proc.stdout + proc.stderr
+    assert "check_seed_count" in out
+    assert "150 MISSING seed(s)" in out
+    assert not (corpus_root / "9p2i" / "splits.json").exists()
+
+
+def test_splits_only_refuses_a_short_set(tmp_path: Path) -> None:
+    # The exact-count guard (PR #301 review): a set missing even ONE in-range seed
+    # is refused before any splits.json is written, so a partial train/val/test can
+    # never be committed. Plant 149 of the 150 locked 9p2i seeds.
+    corpus_root = tmp_path / "ml_corpus"
+    seeds = [s for s in range(1000, 1150) if s != 1073]  # drop one
+    set_dir = _stub_set(corpus_root, "9p2i", seeds)
+    env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
+    proc = _run("--set", "9p2i", "--splits-only", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_seed_count" in out
+    assert "1 MISSING seed(s): [1073]" in out
+    assert "Refusing to freeze a short/dirty corpus" in out
+    assert not (set_dir / "splits.json").exists()
 
 
 def test_splits_only_rejects_out_of_range_replay(tmp_path: Path) -> None:
@@ -925,12 +950,12 @@ def test_splits_only_rejects_non_canonical_seed_alias(tmp_path: Path) -> None:
 
 def test_splits_only_both_sets(tmp_path: Path) -> None:
     corpus_root = tmp_path / "ml_corpus"
-    _stub_set(corpus_root, "9p2i", list(range(1000, 1006)))
-    _stub_set(corpus_root, "4p1i", list(range(1000, 1006)))
+    _stub_set(corpus_root, "9p2i", list(range(1000, 1150)))
+    _stub_set(corpus_root, "4p1i", list(range(1000, 1050)))
     env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
     proc = _run("--splits-only", env=env)
     assert proc.returncode == 0
-    for set_name in ("9p2i", "4p1i"):
+    for set_name, total in (("9p2i", 150), ("4p1i", 50)):
         doc = json.loads((corpus_root / set_name / "splits.json").read_text())
         assert doc["set"] == set_name
-        assert doc["total_games"] == 6
+        assert doc["total_games"] == total
