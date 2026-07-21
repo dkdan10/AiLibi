@@ -47,6 +47,7 @@ from meetings.schemas import (
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
+    BeliefRenderParity,
     MeetingTableReconstructionError,
     MeetingTableRow,
     _ballot_is_coerced_skip,
@@ -869,27 +870,63 @@ def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
     assert parity.j1_divergent_test_cells == 0
 
 
-def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus() -> None:
-    """The J1 live-parity census the report records (§2.1), pinned end-to-end.
+@pytest.fixture(scope="module")
+def corpus_parity() -> BeliefRenderParity:
+    """Two full walks over the 150-game corpus (~20s); shared by both J1 tests."""
 
-    Two full walks over the 150-game corpus (~20s — the load-bearing 17.10
-    re-validation, kept in-suite deliberately). Fold fidelity is EXACT on all
-    16 198 cells, and the graduated J1 render clamp (unconditional since the
-    16.17 baseline-5 record) makes the live-served scalar diverge from the raw
-    ``belief_suspicion`` column the fit reads on exactly the measured cells —
-    the recorded train/serve skew the report states beside the verdict.
+    return measure_belief_render_parity(Path("replays/ml_corpus/9p2i"))
+
+
+def test_j1_fold_fidelity_is_exact_on_the_9p2i_corpus(
+    corpus_parity: BeliefRenderParity,
+) -> None:
+    """Fold fidelity is EXACT on every compared cell — the SAFETY half of J1.
+
+    Split out of the census test at the PR #301 review: these three assertions are
+    not pins that move with a re-record, they are the invariant that the offline
+    reconstruction still reproduces the production belief fold. Leaving them inside
+    the xfailed census test meant a genuine parity/reconstruction break on the new
+    corpus would surface as an expected failure and be waved through — and 18.14
+    would then re-fit on corrupted live-parity features. They must hold on ANY
+    corpus, so they stay LIVE across the baseline-6 re-record; only the numeric
+    census below is deferred.
     """
 
-    parity = measure_belief_render_parity(Path("replays/ml_corpus/9p2i"))
-    assert parity.games_total == 150
-    assert parity.meetings_total == 541
-    assert parity.rows_total == 3131
-    assert parity.cells_compared == 16198
-    assert parity.raw_mismatches == 0
-    assert parity.trust_mismatches == 0
-    assert parity.max_raw_abs_delta == 0.0
-    assert parity.j1_divergent_cells == 280
-    assert parity.j1_divergent_rows == 254
-    assert parity.j1_divergent_fit_cells == 251
-    assert parity.j1_divergent_test_cells == 29
-    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)
+    assert corpus_parity.raw_mismatches == 0
+    assert corpus_parity.trust_mismatches == 0
+    assert corpus_parity.max_raw_abs_delta == 0.0
+    # A vacuous pass (an empty walk) would satisfy the three above; require the
+    # walk to have actually compared something.
+    assert corpus_parity.games_total == 150
+    assert corpus_parity.cells_compared > 0
+
+
+def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
+    corpus_parity: BeliefRenderParity,
+) -> None:
+    """The J1 live-parity CENSUS the report records (§2.1), pinned end-to-end.
+
+    The graduated J1 render clamp (unconditional since the 16.17 baseline-5
+    record) makes the live-served scalar diverge from the raw ``belief_suspicion``
+    column the fit reads on exactly the measured cells — the recorded train/serve
+    skew the report states beside the verdict. The fidelity INVARIANTS are asserted
+    live in the test above, not here.
+
+    RE-PINNED (not xfailed) at Task 18.13's baseline-6 re-record. Every number here
+    derives from the corpus bytes ALONE — ``measure_belief_render_parity`` reads no
+    fitted artifact — so it is honestly re-derivable now, and deferring it to 18.14
+    behind an expected failure would let the train/serve skew drift unrecorded in
+    the meantime (PR #301 review). The skew SHRANK on the graduated meeting layer:
+    divergent cells 280 -> 141 of 14 326 compared, and the max divergence 0.11 ->
+    0.06.
+    """
+
+    parity = corpus_parity
+    assert parity.meetings_total == 463
+    assert parity.rows_total == 2726
+    assert parity.cells_compared == 14326
+    assert parity.j1_divergent_cells == 141
+    assert parity.j1_divergent_rows == 130
+    assert parity.j1_divergent_fit_cells == 113
+    assert parity.j1_divergent_test_cells == 28
+    assert parity.j1_max_abs_divergence == pytest.approx(0.06, abs=1e-9)

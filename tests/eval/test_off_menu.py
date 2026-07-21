@@ -124,14 +124,18 @@ def test_corpus_four_all_on_menu(corpus_four: OffMenuActionReport) -> None:
 
 
 def test_corpus_nine_all_on_menu(corpus_nine: OffMenuActionReport) -> None:
-    """ml_corpus/9p2i (150 games): the canary denominator — all-on-menu, N == 7693.
+    """ml_corpus/9p2i (150 games): the canary denominator — all-on-menu, N == 6663.
 
-    The largest committed corpus (7693 impostor decisions) and hence the most
+    The largest committed corpus (6663 impostor decisions) and hence the most
     sensitive rate-0 pin: this is the set the definition-of-done's "committed
     FSM-generated corpus bytes read all-on-menu (rate 0)" most directly targets.
+    The denominator moved 7693 -> 6663 at the Task-18.13 baseline-6 re-record: the
+    graduated meeting layer resolves games in fewer ticks, so the impostors get
+    fewer tactical decisions. The menu discipline is unchanged — still exactly 0
+    off-menu at the larger-N read.
     """
 
-    _assert_all_on_menu(corpus_nine, games=150, decisions=7693)
+    _assert_all_on_menu(corpus_nine, games=150, decisions=6663)
     assert (corpus_nine.num_players, corpus_nine.num_impostors) == (9, 2)
 
 

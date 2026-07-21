@@ -15,15 +15,18 @@ artifact and the committed 9p2i corpus:
 * the surrogate path is byte-deterministic (double-run replay hash);
 * the committed artifact round-trips (provenance + determinism, incl. the
   re-derived ~143× staleness cap) and reproduces the pinned held-out fidelity
-  numbers and the re-measured baseline-5 GO verdict (Task 17.10 — the bar itself
-  is the pre-stated, owner-ratified 15.13 bar);
+  numbers and the re-measured GO verdict (Task 17.10 — the bar itself is the
+  pre-stated, owner-ratified 15.13 bar). These artifact-coupled pins are XFAILED
+  at Task 18.13: the baseline-6 corpus re-record moved the corpus half while the
+  committed fit stayed baseline-5, and the re-fit + re-pins are 18.14's;
 * fallback (a) is exercised regardless of the verdict (the bake-off trains today);
 * the §5.6 staleness cap is enforced, cumulatively across runner instances;
 * the fit/predict leakage fence holds (predict never reads labels, fit never reads
   outside the fit side, and a fit fence-violation fails loud);
 * coerced-SKIP rows (the J2 citation-gate marker) are dropped from every fit —
   their labels are never read — while the recorded bytes stay scored unfiltered
-  (Task 17.10 designer ruling; 0 such rows on the committed corpus);
+  (Task 17.10 designer ruling; ONE such row on the baseline-6 corpus, the first
+  time the exclusion drops a real row rather than only a synthetic one);
 * no module under ``training/`` re-implements the tally; and
 * the surrogate's OWN predicted-ballot calibration channel is distinct from the
   harness's recorded-ballot calibration.
@@ -100,6 +103,37 @@ from training.surrogate.runner import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "surrogate"
+
+# The Task-18.13 baseline-6 corpus re-record moved every corpus-derived surrogate
+# number, but the committed artifact under training/artifacts/surrogate/ is still
+# the baseline-5 FIT — and that directory is 18.13's Files-NOT-in-scope ("the
+# re-fit is 18.14's"). The two halves cannot be reconciled by a re-pin: :513 is a
+# single chained equality with one operand on each side of the scope line
+#
+#     assert cap.max_uses == derive_max_uses(fit_meetings) == 62_491
+#
+# where fit_meetings is corpus-derived (18.13's to move) and cap.max_uses is read
+# from the frozen artifact (18.14's), so re-pinning the corpus half is precisely
+# what breaks it. Pinning stale-artifact-on-new-corpus values would also record
+# numbers that 18.14 re-measures anyway.
+#
+# So: xfail until 18.14 lands, exactly as Task 17.9 did at the previous corpus
+# re-record (863e0ba added _PENDING_SURROGATE_REGROUND_1710 on six tests;
+# c513ac3 removed it and re-pinned at 17.10). strict=False is deliberate — several
+# assertions inside these tests are invariants that may well still hold, and an
+# XPASS must not go red. NOTE this marks SEVEN tests, not the six 17.9 marked:
+# test_go_verdict_holds_on_live_served_clamped_features was added after 17.9 and
+# reads the same artifact, so copying 17.9's list verbatim would leave it failing.
+#
+# The four corpus consumers that are NOT marked (test_predict_never_touches_test_
+# labels, test_fit_never_reads_outside_the_fit_side, test_fit_fence_raises_on_a_
+# held_out_view, test_committed_corpus_carries_zero_coerced_skip_rows) are the
+# real substrate fences and must stay green: a failure there is a finding, not a
+# pin update.
+_PENDING_SURROGATE_REGROUND_1814 = (
+    "corpus-derived surrogate numbers moved with the Task-18.13 baseline-6 corpus "
+    "re-record; the artifact re-fit + these re-pins are Task 18.14's scope"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -478,6 +512,48 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_committed_surrogate_artifact_is_the_known_stale_baseline5_fit(
+    corpus_table: MeetingTable,
+) -> None:
+    """TRIPWIRE for the known baseline-5-artifact / baseline-6-corpus hybrid.
+
+    Added at the PR #301 review. The seven xfails below defer the artifact re-fit
+    to 18.14, and the reviewer's objection is sharp: an expected failure makes the
+    hybrid INVISIBLE, so a downstream bake-off run could load the stale weights
+    against the new corpus while CI stays green. The load path cannot catch it
+    either — ``SurrogateStalenessCap`` carries only ``weights_sha256`` /
+    ``max_uses`` / ``unit``, no corpus identity, so
+    ``load_surrogate_runner_factory`` fails loud on weights drift but is BLIND to
+    substrate drift.
+
+    So assert the hybrid explicitly instead of hiding it. This test is LIVE, and
+    it is self-clearing: the moment 18.14 re-fits the artifact on the baseline-6
+    corpus, ``fit_meetings`` stops being 437 and this FAILS — which is the signal
+    to delete it together with the seven ``_PENDING_SURROGATE_REGROUND_1814``
+    markers. Until then, a green suite means "the hybrid is present and tracked",
+    never "the artifact is current".
+    """
+
+    cap = load_staleness_cap(_ARTIFACT_DIR)
+    # The committed cap encodes the baseline-5 fit-side meeting count (437 x 143).
+    assert cap.max_uses == 62_491, (
+        "the committed surrogate cap moved — if 18.14 re-fit the artifact, delete "
+        "this tripwire and the _PENDING_SURROGATE_REGROUND_1814 markers below"
+    )
+    # ... and the live corpus is NOT the corpus it was fitted on: the baseline-6
+    # re-record moved the fit-side meeting count off 437, which is precisely the
+    # mismatch the load path cannot see.
+    views = build_meeting_views(corpus_table)
+    assert corpus_table.splits is not None
+    test_seeds = set(corpus_table.splits.test)
+    fit_meetings = sum(1 for v in views if v.seed not in test_seeds)
+    assert fit_meetings != 437, (
+        "the live corpus now yields the artifact's fit-side meeting count — the "
+        "hybrid this tripwire tracks has resolved; delete it and the markers"
+    )
+
+
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_committed_artifact_round_trips_and_provenance_holds(
     corpus_table: MeetingTable,
 ) -> None:
@@ -538,6 +614,7 @@ def test_committed_artifact_round_trips_and_provenance_holds(
             assert refit_value == committed_value, key
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     corpus_table: MeetingTable,
 ) -> None:
@@ -586,6 +663,7 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     assert calibration.brier == pytest.approx(0.2775147125852713, abs=1e-9)
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_surrogate_fidelity_reproduces_pinned_numbers(
     surrogate_report: SurrogateFidelityReport,
 ) -> None:
@@ -625,6 +703,7 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.82, abs=1e-12)
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_go_no_go_reproduces_the_re_measured_go_verdict(
     surrogate_report: SurrogateFidelityReport,
     fo6_report: SurrogateFidelityReport,
@@ -650,6 +729,7 @@ def test_go_no_go_reproduces_the_re_measured_go_verdict(
     assert verdict.top1_bar == pytest.approx(0.615, abs=1e-12)
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_go_verdict_holds_on_live_served_clamped_features(
     corpus_table: MeetingTable,
     surrogate_report: SurrogateFidelityReport,
@@ -771,6 +851,7 @@ def test_go_verdict_holds_on_live_served_clamped_features(
     assert live_accuracy > surrogate_report.always_eject_baseline
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_fo6_rebaseline_reproduces_pinned_numbers(
     fo6_report: SurrogateFidelityReport,
 ) -> None:
@@ -1226,15 +1307,24 @@ def test_fit_fence_raises_on_a_held_out_view(corpus_table: MeetingTable) -> None
 def test_committed_corpus_carries_zero_coerced_skip_rows(
     corpus_table: MeetingTable,
 ) -> None:
-    """The baseline-5 corpus records NO J2-coerced ballots (the report's census).
+    """The baseline-6 corpus records ONE J2-coerced ballot — the census moved.
 
-    The 17.9 re-record produced zero ``UNCITED_ZERO_FLAG_EJECT_MARKER`` ballots
-    on either set, so the fit-side exclusion drops 0 rows on committed bytes —
-    the count the report states in §2.1. The fence itself is proven on a
-    synthetic marking below (a rule that cannot move is not a rule).
+    A FINDING, not a stale pin. Through baseline 5 this bucket was honestly EMPTY
+    on committed bytes: the 17.9 re-record produced zero
+    ``UNCITED_ZERO_FLAG_EJECT_MARKER`` ballots on either set, and the 18.12 samples
+    record likewise ("the coerced-SKIP bucket is honestly 0"), so the fit-side
+    exclusion had never actually dropped a row outside a synthetic fixture. At
+    baseline 6 it drops exactly ONE — ``headless-seed-1027:meeting-4`` on 9p2i
+    (4p1i stays 0) — so the citation gate's coercion path is now exercised by
+    committed corpus bytes for the first time, and the fit-side exclusion is
+    load-bearing rather than merely proven-in-fixture.
+
+    One row of 468 meetings is far too small to move any fit, so this is reported,
+    not banded. The fence itself is still proven on a synthetic marking below (a
+    rule that cannot move is not a rule).
     """
 
-    assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 0
+    assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 1
     four = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
     assert sum(row.ballot_coerced_skip for row in four.rows) == 0
 
@@ -1327,6 +1417,7 @@ def test_no_module_under_training_reimplements_the_tally() -> None:
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_predicted_ballot_calibration_is_a_distinct_channel(
     module_model: tuple[BallotSurrogateModel, list[MeetingView]],
     surrogate_report: SurrogateFidelityReport,

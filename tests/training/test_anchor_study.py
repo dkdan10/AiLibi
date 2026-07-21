@@ -109,17 +109,32 @@ def seed_1000_walk() -> tuple[CorpusGameFacts, tuple[CorpusDecision, ...]]:
     return walk_corpus_game(_SEED_1000_REPLAY)
 
 
+# Task 18.13 (the baseline-6 ML-corpus re-record) moved both the corpus replay
+# bytes and the corpus MANIFEST/splits digests that compute_substrate_sha() folds
+# in. The seed-1000 harvest pins are CORPUS-derived, so they are re-pinned LIVE
+# below. The committed study ARTIFACT's substrate fence needs a re-run that is out
+# of 18.13's scope (this file belongs to Task 18.5, CLOSED); rather than xfail it —
+# which would hide the baseline-5-artifact / baseline-6-corpus hybrid — it is a
+# live, self-clearing TRIPWIRE further down. See the PR's Questions section: the
+# recommendation is to fold the re-run into 18.14, the task that flips
+# BAKEOFF_BASELINE_ID, so both stale inputs to the substrate identity move at once.
+
+
 def test_walk_corpus_game_verifies_and_harvests(
     seed_1000_walk: tuple[CorpusGameFacts, tuple[CorpusDecision, ...]],
 ) -> None:
     facts, decisions = seed_1000_walk
-    # Committed-bytes pins for seed 1000 (5 meetings, 2 persisted flags,
+    # Committed-bytes pins for seed 1000 (2 meetings, 1 persisted flag,
     # recorded winner CREWMATES) — a drift in any of these means the corpus
-    # bytes or the walk changed.
+    # bytes or the walk changed. Re-pinned at Task 18.13's baseline-6 re-record
+    # (was 5 meetings / 2 flags at baseline 5). These are CORPUS-derived, so they
+    # are re-derivable from the new bytes and stay LIVE — only the committed
+    # STUDY ARTIFACT's substrate fence below needs an owned re-run (PR #301
+    # review: don't xfail what you can honestly re-pin).
     assert facts.winner == "CREWMATES"
     assert facts.crew_winning is True
-    assert facts.meetings == 5
-    assert facts.persisted_flags == 2
+    assert facts.meetings == 2
+    assert facts.persisted_flags == 1
     assert facts.high_flag is False
     assert facts.flags_per_meeting < HIGH_FLAG_FLOOR
     assert facts.decisions == len(decisions) > 0
@@ -639,15 +654,53 @@ def test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte() -> 
     assert sweep == committed
 
 
-def test_committed_study_artifacts_carry_the_substrate_sha() -> None:
-    substrate_sha = compute_substrate_sha()
+# The baseline-5 substrate sha the committed anchor-study artifacts still carry.
+# compute_substrate_sha() folds in the corpus MANIFEST digest, so the Task-18.13
+# baseline-6 re-record moved the LIVE value; the committed artifact was NOT
+# regenerated (its re-run is out of 18.13's scope). This literal is the recorded
+# stale value — when 18.14 (or an owned follow-up) re-runs the study on baseline 6,
+# it changes and the tripwire below fails, forcing this pin + the marker's deletion.
+_COMMITTED_BASELINE5_STUDY_SUBSTRATE_SHA = (
+    "8b08fd1031744d770c7e863bcbe27dfe3d964d8909a005976f47877380db725f"
+)
+
+
+def test_committed_study_artifacts_are_the_known_stale_baseline5_fit() -> None:
+    """TRIPWIRE for the baseline-5-artifact / baseline-6-corpus hybrid (PR #301).
+
+    Was an ``xfail`` on ``== compute_substrate_sha()``. The reviewer's objection is
+    correct: an expected failure makes the hybrid INVISIBLE — a downstream run
+    could consume the stale anchor-study artifacts as if their provenance matched
+    the live substrate while CI stays green. So assert the hybrid EXPLICITLY and
+    LIVE instead, and self-clear: the moment the study artifact is re-run on
+    baseline 6 its recorded ``substrate_sha`` moves off the literal below, this
+    FAILS, and that is the signal to delete this test, the literal, and the
+    together. A green suite means "the
+    hybrid is present and tracked", never "the artifact is current".
+
+    Re-running the study is out of 18.13's scope (this file belongs to Task 18.5,
+    CLOSED; ``training/anchor_study.py`` and ``training/artifacts/anchor_study/``
+    are named in no 18.13 in-scope list) — see the PR's Questions section, which
+    asks the owner to fold the re-run into 18.14.
+    """
+
     index = json.loads((ANCHOR_STUDY_ARTIFACT_ROOT / "study.json").read_text())
     report = AnchorStudyReport.model_validate(index)
-    assert report.substrate_sha == substrate_sha
+    # The committed artifact still carries the baseline-5 substrate sha ...
+    assert report.substrate_sha == _COMMITTED_BASELINE5_STUDY_SUBSTRATE_SHA, (
+        "the anchor-study substrate sha moved — if the study was re-run on "
+        "baseline 6, delete this tripwire and the literal"
+    )
+    # ... and the LIVE substrate is NOT it: the hybrid this tripwire tracks.
+    assert report.substrate_sha != compute_substrate_sha(), (
+        "the live substrate now matches the committed anchor-study artifact — the "
+        "hybrid has resolved; delete this tripwire and the marker"
+    )
+    # The substrate-INDEPENDENT structure of the committed artifact still holds and
+    # stays live (these are not what the re-record moved).
     assert report.lambda_grid == LAMBDA_GRID
     check = report.determinism_cross_check
     assert check is not None and check.byte_identical is True
-
     expected_entrants = [f"lambda-{value}" for value in LAMBDA_GRID] + [
         FILTERED_BC_ENTRANT
     ]
@@ -656,9 +709,9 @@ def test_committed_study_artifacts_carry_the_substrate_sha() -> None:
         weights = load_candidate_weights(entrant_dir)  # sha-verified reload
         assert len(weights) == utility_genome_length()
         config = json.loads((entrant_dir / "config.json").read_text())
-        assert config["substrate_sha"] == substrate_sha
-        # Config-driven identity: the entrant name lives in the bytes, and
-        # every λ cell names the training method it re-ran.
+        # Every cell agrees with the study index's (stale) substrate sha — internal
+        # consistency of the committed artifact, independent of the live substrate.
+        assert config["substrate_sha"] == report.substrate_sha
         assert config["entrant"] == entrant
         if entrant != FILTERED_BC_ENTRANT:
             assert config["base_entrant"] == "utility-es"
