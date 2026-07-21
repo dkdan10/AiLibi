@@ -14,11 +14,13 @@ artifact and the committed 9p2i corpus:
 * the cross-meeting belief fold consumes the surrogate result's ballot roster;
 * the surrogate path is byte-deterministic (double-run replay hash);
 * the committed artifact round-trips (provenance + determinism, incl. the
-  re-derived ~143× staleness cap) and reproduces the pinned held-out fidelity
-  numbers and the re-measured GO verdict (Task 17.10 — the bar itself is the
-  pre-stated, owner-ratified 15.13 bar). These artifact-coupled pins are XFAILED
-  at Task 18.13: the baseline-6 corpus re-record moved the corpus half while the
-  committed fit stayed baseline-5, and the re-fit + re-pins are 18.14's;
+  re-derived ~143× staleness cap = 143 × 367 = 52481) and reproduces the pinned
+  held-out fidelity numbers and the re-measured NO-GO verdict (Task 18.14 re-fit
+  on the baseline-6 corpus — the bar itself is the pre-stated, owner-ratified
+  15.13 bar; the verdict flipped GO → NO-GO because baseline 6 reverted to
+  eject-majority, so the all-SKIP decision head falls below always-eject);
+* the Task-18.14 fit-corpus fence binds the weights to the corpus identity, so
+  the loader catches substrate drift (not only weights drift);
 * fallback (a) is exercised regardless of the verdict (the bake-off trains today);
 * the §5.6 staleness cap is enforced, cumulatively across runner instances;
 * the fit/predict leakage fence holds (predict never reads labels, fit never reads
@@ -97,6 +99,8 @@ from training.surrogate.runner import (
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
     _meeting_index_from_id,  # noqa: PLC2701 - the id-parse fence is under test
+    fit_corpus_fingerprint,
+    load_fit_corpus_record,
     load_surrogate_runner_factory,
 )
 
@@ -104,36 +108,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "surrogate"
 
-# The Task-18.13 baseline-6 corpus re-record moved every corpus-derived surrogate
-# number, but the committed artifact under training/artifacts/surrogate/ is still
-# the baseline-5 FIT — and that directory is 18.13's Files-NOT-in-scope ("the
-# re-fit is 18.14's"). The two halves cannot be reconciled by a re-pin: :513 is a
-# single chained equality with one operand on each side of the scope line
-#
-#     assert cap.max_uses == derive_max_uses(fit_meetings) == 62_491
-#
-# where fit_meetings is corpus-derived (18.13's to move) and cap.max_uses is read
-# from the frozen artifact (18.14's), so re-pinning the corpus half is precisely
-# what breaks it. Pinning stale-artifact-on-new-corpus values would also record
-# numbers that 18.14 re-measures anyway.
-#
-# So: xfail until 18.14 lands, exactly as Task 17.9 did at the previous corpus
-# re-record (863e0ba added _PENDING_SURROGATE_REGROUND_1710 on six tests;
-# c513ac3 removed it and re-pinned at 17.10). strict=False is deliberate — several
-# assertions inside these tests are invariants that may well still hold, and an
-# XPASS must not go red. NOTE this marks SEVEN tests, not the six 17.9 marked:
-# test_go_verdict_holds_on_live_served_clamped_features was added after 17.9 and
-# reads the same artifact, so copying 17.9's list verbatim would leave it failing.
-#
-# The four corpus consumers that are NOT marked (test_predict_never_touches_test_
-# labels, test_fit_never_reads_outside_the_fit_side, test_fit_fence_raises_on_a_
-# held_out_view, test_committed_corpus_carries_zero_coerced_skip_rows) are the
-# real substrate fences and must stay green: a failure there is a finding, not a
-# pin update.
-_PENDING_SURROGATE_REGROUND_1814 = (
-    "corpus-derived surrogate numbers moved with the Task-18.13 baseline-6 corpus "
-    "re-record; the artifact re-fit + these re-pins are Task 18.14's scope"
-)
+# Task 18.14 re-fit the committed artifact on the baseline-6 corpus and re-pinned
+# every corpus-derived number below. The seven ``_PENDING_SURROGATE_REGROUND_1814``
+# xfails Task 18.13 left (deferring the re-fit) are cleared, and the
+# stale-baseline5 tripwire that tracked the hybrid is deleted — the artifact is now
+# current. The verdict FLIPPED GO -> NO-GO on the eject-majority baseline-6 economy
+# (axis 3, SKIP-vs-eject 0.375 < always-eject 0.625): see
+# training/reports/report-ballot-surrogate.md §5.
 
 
 # --------------------------------------------------------------------------- #
@@ -512,48 +493,80 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_committed_surrogate_artifact_is_the_known_stale_baseline5_fit(
+def test_committed_surrogate_artifact_is_the_baseline6_fit(
     corpus_table: MeetingTable,
 ) -> None:
-    """TRIPWIRE for the known baseline-5-artifact / baseline-6-corpus hybrid.
+    """The committed artifact IS the baseline-6 fit, and the load path proves it.
 
-    Added at the PR #301 review. The seven xfails below defer the artifact re-fit
-    to 18.14, and the reviewer's objection is sharp: an expected failure makes the
-    hybrid INVISIBLE, so a downstream bake-off run could load the stale weights
-    against the new corpus while CI stays green. The load path cannot catch it
-    either — ``SurrogateStalenessCap`` carries only ``weights_sha256`` /
-    ``max_uses`` / ``unit``, no corpus identity, so
-    ``load_surrogate_runner_factory`` fails loud on weights drift but is BLIND to
-    substrate drift.
-
-    So assert the hybrid explicitly instead of hiding it. This test is LIVE, and
-    it is self-clearing: the moment 18.14 re-fits the artifact on the baseline-6
-    corpus, ``fit_meetings`` stops being 437 and this FAILS — which is the signal
-    to delete it together with the seven ``_PENDING_SURROGATE_REGROUND_1814``
-    markers. Until then, a green suite means "the hybrid is present and tracked",
-    never "the artifact is current".
+    The inverse of the PR #301 tripwire this replaces (Task 18.14): where that
+    asserted the baseline-5-artifact / baseline-6-corpus HYBRID (a re-fit deferred
+    to this task), the re-ground makes the committed artifact current — the cap
+    re-derives to ``derive_max_uses(367) = 52481`` off the baseline-6 fit-side
+    meeting count, and the new fit-corpus fence (``load_fit_corpus_record`` +
+    ``fit_corpus_fingerprint``) binds the weights to the live corpus so the load
+    path is no longer BLIND to substrate drift — the exact gap the tripwire
+    tracked by hand.
     """
 
     cap = load_staleness_cap(_ARTIFACT_DIR)
-    # The committed cap encodes the baseline-5 fit-side meeting count (437 x 143).
-    assert cap.max_uses == 62_491, (
-        "the committed surrogate cap moved — if 18.14 re-fit the artifact, delete "
-        "this tripwire and the _PENDING_SURROGATE_REGROUND_1814 markers below"
-    )
-    # ... and the live corpus is NOT the corpus it was fitted on: the baseline-6
-    # re-record moved the fit-side meeting count off 437, which is precisely the
-    # mismatch the load path cannot see.
     views = build_meeting_views(corpus_table)
     assert corpus_table.splits is not None
     test_seeds = set(corpus_table.splits.test)
     fit_meetings = sum(1 for v in views if v.seed not in test_seeds)
-    assert fit_meetings != 437, (
-        "the live corpus now yields the artifact's fit-side meeting count — the "
-        "hybrid this tripwire tracks has resolved; delete it and the markers"
+    assert fit_meetings == 367
+    assert cap.max_uses == derive_max_uses(fit_meetings) == 52_481
+    # The fit-corpus fence: the committed record is keyed to these weights AND
+    # fingerprints the live corpus, so the loader now catches substrate drift.
+    _, weights_sha256 = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    record = load_fit_corpus_record(_ARTIFACT_DIR)
+    assert record.weights_sha256 == weights_sha256
+    assert record.corpus_set == "9p2i"
+    assert record.fit_side_meetings == 367
+    assert record.corpus_sha256 == fit_corpus_fingerprint(_CORPUS)
+
+
+def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
+    tmp_path: Path,
+) -> None:
+    """The Task-18.14 fence: the loader catches substrate drift and a keyed-wrong
+    record, and refuses a missing fit-corpus record.
+
+    ``SurrogateStalenessCap`` keys only on the weights, so a bake-off that loaded
+    these weights against a re-recorded corpus would raise on weights drift but
+    silently score against a stale surrogate. The committed fit-corpus record
+    closes that gap: a ``corpus_dir`` whose fingerprint disagrees raises, a
+    record keyed to different weights raises, and an absent record raises.
+    """
+
+    # Loading against the WRONG corpus (the 4p1i set) fingerprints differently.
+    with pytest.raises(ValueError, match="substrate drifted"):
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, corpus_dir=_REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
+        )
+    # The genuine corpus passes the same fingerprint gate.
+    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR, corpus_dir=_CORPUS))
+
+    # A copied artifact whose fit-corpus record is keyed to DIFFERENT weights
+    # (a botched re-fit that moved the weights but not the corpus record).
+    for name in (
+        "ballot-predictor.json",
+        "ballot-predictor.json.sha256",
+        "max-uses.json",
+    ):
+        (tmp_path / name).write_text((_ARTIFACT_DIR / name).read_text())
+    drifted = load_fit_corpus_record(_ARTIFACT_DIR).model_copy(
+        update={"weights_sha256": "a" * 64}
     )
+    (tmp_path / "fit-corpus.json").write_text(drifted.model_dump_json(indent=2) + "\n")
+    with pytest.raises(ValueError, match="fit-corpus record and the artifact"):
+        load_surrogate_runner_factory(tmp_path)
+
+    # An artifact with weights + cap but NO fit-corpus record fails loud.
+    (tmp_path / "fit-corpus.json").unlink()
+    with pytest.raises(FileNotFoundError, match="fit-corpus provenance"):
+        load_surrogate_runner_factory(tmp_path)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_committed_artifact_round_trips_and_provenance_holds(
     corpus_table: MeetingTable,
 ) -> None:
@@ -585,8 +598,8 @@ def test_committed_artifact_round_trips_and_provenance_holds(
     fit_meetings = len(
         {(r.seed, r.meeting_id) for r in corpus_table.rows if r.seed in fit_seeds}
     )
-    assert fit_meetings == 437
-    assert cap.max_uses == derive_max_uses(fit_meetings) == 62_491
+    assert fit_meetings == 367
+    assert cap.max_uses == derive_max_uses(fit_meetings) == 52_481
     assert cap.unit == "meetings"
 
     refit = json.loads(fit_corpus_ballot_predictor(corpus_table).to_artifact_json())
@@ -614,7 +627,6 @@ def test_committed_artifact_round_trips_and_provenance_holds(
             assert refit_value == committed_value, key
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     corpus_table: MeetingTable,
 ) -> None:
@@ -624,7 +636,8 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     committed artifact, and evaluating the FROZEN predictor (no refit — the
     ``predictor`` injection on :class:`BallotSurrogateModel`) over the held-out
     test views reproduces the report's ranking/decision census and the
-    predicted-ballot calibration channel.
+    predicted-ballot calibration channel (baseline-6: 96 test meetings, 60
+    ejections; the decision head still skips every meeting).
     """
 
     predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
@@ -634,7 +647,7 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     test_views = [
         view for view in build_meeting_views(corpus_table) if view.seed in test_seeds
     ]
-    assert len(test_views) == 104
+    assert len(test_views) == 96
 
     top1_hits = 0
     predicted_ejections = 0
@@ -650,108 +663,106 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
             predicted_ejections += 1
         if view.is_ejection and prediction.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 43
+    assert top1_hits == 46
     assert predicted_ejections == 0
-    assert predicted_skips == 104
-    assert correct_skips == 54
+    assert predicted_skips == 96
+    assert correct_skips == 36
 
     calibration = frozen.predicted_ballot_calibration(test_views)
-    assert calibration.predicted_ballots == 84
-    assert calibration.predicted_skips == 518
+    assert calibration.predicted_ballots == 100
+    assert calibration.predicted_skips == 457
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
-    assert calibration.brier == pytest.approx(0.2775147125852713, abs=1e-9)
+    assert calibration.brier == pytest.approx(0.2541857827042379, abs=1e-9)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_surrogate_fidelity_reproduces_pinned_numbers(
     surrogate_report: SurrogateFidelityReport,
 ) -> None:
     """The held-out surrogate report reproduces the pinned deterministic numbers.
 
-    Baseline-5 truth (Task 17.10 re-ground): the meeting economy flipped to
-    skip-majority (54 of the 104 scored meetings SKIP), the ranking channel is
-    strong (43/50 top-1), and the decision channel predicts SKIP on every
-    meeting — the honest reading is in the report's §5.
+    Baseline-6 truth (Task 18.14 re-ground): the meeting economy REVERTED to
+    eject-majority (60 of the 96 scored meetings EJECT), the ranking channel
+    stays strong (46/60 top-1) but the decision channel still predicts SKIP on
+    every meeting — which now scores BELOW the always-eject constant, so
+    ``degenerates_to_skip`` reads True and the verdict flips to NO-GO. The honest
+    reading is in the report's §5.
     """
 
     report = surrogate_report
     # Integer census — exact.
-    assert report.meetings_scored == 104
-    assert report.ejection_meetings == 50
-    assert report.skip_meetings == 54
-    assert report.top1_hits == 43
-    assert report.top2_hits == 49
+    assert report.meetings_scored == 96
+    assert report.ejection_meetings == 60
+    assert report.skip_meetings == 36
+    assert report.top1_hits == 46
+    assert report.top2_hits == 55
     assert report.predicted_ejections == 0
-    assert report.predicted_skips == 104
-    assert report.correct_skip_decisions == 54
+    assert report.predicted_skips == 96
+    assert report.correct_skip_decisions == 36
     assert report.correct_eject_decisions == 0
-    assert report.ejection_predicted_skips == 50
-    assert report.degenerates_to_skip is False
-    assert report.ballot_rows == 257
-    assert report.honest_ceiling.ejections_total == 50
-    assert report.honest_ceiling.reachable == 41
+    assert report.ejection_predicted_skips == 60
+    assert report.degenerates_to_skip is True
+    assert report.ballot_rows == 323
+    assert report.honest_ceiling.ejections_total == 60
+    assert report.honest_ceiling.reachable == 51
     # Floats — deterministic, pinned to the exact literals.
-    assert report.top1 == pytest.approx(0.86, abs=1e-12)
-    assert report.top2 == pytest.approx(0.98, abs=1e-12)
-    assert report.skip_vs_eject_accuracy == pytest.approx(0.5192307692307693, abs=1e-12)
-    assert report.always_eject_baseline == pytest.approx(0.4807692307692308, abs=1e-12)
-    assert report.brier == pytest.approx(0.05395870952903041, abs=1e-12)
-    assert report.ece == pytest.approx(0.0692479806336306, abs=1e-12)
-    assert report.ballot_brier == pytest.approx(0.12965797665369647, abs=1e-12)
-    assert report.ballot_ece == pytest.approx(0.10626459143968939, abs=1e-12)
-    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.82, abs=1e-12)
+    assert report.top1 == pytest.approx(0.7666666666666667, abs=1e-12)
+    assert report.top2 == pytest.approx(0.9166666666666666, abs=1e-12)
+    assert report.skip_vs_eject_accuracy == pytest.approx(0.375, abs=1e-12)
+    assert report.always_eject_baseline == pytest.approx(0.625, abs=1e-12)
+    assert report.brier == pytest.approx(0.06785997153616342, abs=1e-12)
+    assert report.ece == pytest.approx(0.09477687280149634, abs=1e-12)
+    assert report.ballot_brier == pytest.approx(0.1242077399380805, abs=1e-12)
+    assert report.ballot_ece == pytest.approx(0.048885448916408246, abs=1e-12)
+    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.85, abs=1e-12)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
-def test_go_no_go_reproduces_the_re_measured_go_verdict(
+def test_go_no_go_reproduces_the_re_measured_no_go_verdict(
     surrogate_report: SurrogateFidelityReport,
     fo6_report: SurrogateFidelityReport,
 ) -> None:
-    """``decide_go_no_go`` on the two same-population reports pins the baseline-5 GO.
+    """``decide_go_no_go`` on the two same-population reports pins the baseline-6 NO-GO.
 
-    The bar is the pre-stated, owner-ratified 15.13 bar, re-MEASURED on the 17.9
-    corpus (locked decision 4): all three population-relative axes pass, so the
-    pre-committed mapping promotes the surrogate to the bake-off's training-time
-    runner tier. The honest diagnosis beside the verdict (the decision channel
-    ties the trivial always-SKIP constant on a skip-majority population) lives in
-    the report's §5 — the verdict and its consequences are exactly what
-    ``decide_go_no_go`` encodes.
+    The bar is the pre-stated, owner-ratified 15.13 bar, re-MEASURED on the 18.13
+    corpus (locked decision 4 travels): axes 1 (ceiling) and 2 (beats FO-6) pass,
+    but axis 3 FAILS — the decision channel's all-SKIP accuracy (0.375) is below
+    the eject-majority always-eject constant (0.625) — so the conjunction is
+    NO-GO. Per the pre-committed mapping the surrogate ships DIAGNOSTIC-only and
+    the fake-provider MeetingManager stays the training-time runner (the bake-off
+    is never blocked, §5–§6).
     """
 
     verdict = decide_go_no_go(surrogate_report, fo6_report)
-    assert verdict.verdict == "GO"
+    assert verdict.verdict == "NO-GO"
     assert verdict.meets_ceiling_bar is True
     assert verdict.beats_prior_baseline is True
-    assert verdict.beats_always_eject is True
-    assert verdict.training_time_runner == "surrogate"
-    assert verdict.surrogate_role == "training-time-runner"
-    assert verdict.top1_bar == pytest.approx(0.615, abs=1e-12)
+    assert verdict.beats_always_eject is False
+    assert verdict.training_time_runner == "fake-provider-meeting-manager"
+    assert verdict.surrogate_role == "diagnostic-only"
+    assert verdict.top1_bar == pytest.approx(0.6375, abs=1e-12)
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
-def test_go_verdict_holds_on_live_served_clamped_features(
+def test_no_go_verdict_holds_on_live_served_clamped_features(
     corpus_table: MeetingTable,
     surrogate_report: SurrogateFidelityReport,
     fo6_report: SurrogateFidelityReport,
 ) -> None:
-    """The runner-path fidelity replay: the GO survives J1-clamped live serving.
+    """The runner-path fidelity replay: the NO-GO verdict inputs survive J1 serving.
 
-    The promoted live runner reads ``suspicion_graph_for_meeting()`` — the
+    The diagnostic runner reads ``suspicion_graph_for_meeting()`` — the
     J1-CLAMPED render — while the table (and therefore the §5 verdict's
-    scoring) reads the raw stored scalar; the measured divergence is 29
-    held-out cells (the 17.10 parity census). Codex review on PR #280: the
-    verdict must be shown to hold on the inputs the 17.12 bake-off runner
-    actually serves. So: replace every held-out cell's ``belief_suspicion``
-    with the PRODUCTION-served value (the memory-augmented walk's graphs — the
-    exact channel the runner reads), score the FROZEN committed artifact over
-    the same test views, and assert the verdict inputs reproduce EXACTLY —
-    same decision and same top-1 target on every one of the 104 meetings, so
-    all three GO axes hold unchanged on live-served features. The only
-    movement is a decision-irrelevant reorder from the third rank position
-    down on at most 2 meetings (2 on the recording platform, 1 on CI —
-    sub-top-rank order near probability ties is libm/ULP-sensitive across
-    CPUs, the same platform variance the artifact round-trip tolerates).
+    scoring) reads the raw stored scalar; the measured divergence is 28
+    held-out cells (the baseline-6 parity census). Codex review on PR #280: the
+    verdict must be shown to hold on the inputs a bake-off runner actually
+    serves. So: replace every held-out cell's ``belief_suspicion`` with the
+    PRODUCTION-served value (the memory-augmented walk's graphs — the exact
+    channel the runner reads), score the FROZEN committed artifact over the same
+    test views, and assert the verdict inputs reproduce EXACTLY — same decision
+    and same top-1 target on every one of the 96 meetings, so the two passing GO
+    axes AND the failing third axis (the NO-GO) hold unchanged on live-served
+    features. The only movement is a decision-irrelevant sub-top-rank reorder on
+    a handful of meetings (libm/ULP-sensitive near probability ties across CPUs,
+    the same platform variance the artifact round-trip tolerates).
     """
 
     assert corpus_table.splits is not None
@@ -807,7 +818,7 @@ def test_go_verdict_holds_on_live_served_clamped_features(
     )
     # Exactly the parity census's held-out J1-divergent cells move — the two
     # instruments cross-validate each other.
-    assert replaced == 29
+    assert replaced == 28
 
     predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
     raw_model = BallotSurrogateModel(corpus_table, predictor=predictor)
@@ -832,50 +843,50 @@ def test_go_verdict_holds_on_live_served_clamped_features(
                 correct_skips += 1
         if view.is_ejection and live_pred.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 43
-    assert predicted_skips == 104
-    assert correct_skips == 54
+    assert top1_hits == 46
+    assert predicted_skips == 96
+    assert correct_skips == 36
     # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
     # sits on near-ties in the softmax shares, so it is libm/ULP-sensitive
-    # across CPUs (2 on the recording platform, 1 on CI). The per-meeting
-    # decision/top-1 equality above is the load-bearing claim.
-    assert rank_reorders <= 2
+    # across CPUs. The per-meeting decision/top-1 equality above is the
+    # load-bearing claim.
+    assert rank_reorders <= 4
 
-    # The three GO axes re-stated on the live-served scoring, against the SAME
-    # population bar the §5 verdict used (every decision is SKIP, so the
-    # decision accuracy is exactly the correct-skip share).
+    # The three verdict axes re-stated on the live-served scoring, against the
+    # SAME population bar the §5 verdict used (every decision is SKIP, so the
+    # decision accuracy is exactly the correct-skip share). Axes 1–2 PASS and
+    # axis 3 FAILS unchanged — the NO-GO holds on the served features.
     live_top1 = top1_hits / surrogate_report.ejection_meetings
     live_accuracy = correct_skips / surrogate_report.meetings_scored
     assert live_top1 >= 0.75 * surrogate_report.honest_ceiling.max_achievable_top1
     assert live_top1 > fo6_report.top1
-    assert live_accuracy > surrogate_report.always_eject_baseline
+    assert live_accuracy < surrogate_report.always_eject_baseline
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_fo6_rebaseline_reproduces_pinned_numbers(
     fo6_report: SurrogateFidelityReport,
 ) -> None:
-    """The FO-6 prior baseline reproduces its all-SKIP decision head on the corpus.
+    """The FO-6 prior baseline reproduces its all-EJECT decision head on the corpus.
 
-    The behavioral collapse is unchanged on baseline 5 — the tuned head calls
-    SKIP on every one of the 50 true-ejection meetings — but the skip-majority
-    meeting mix now scores an all-skip policy ABOVE the always-eject constant,
-    so the eject-era ``degenerates_to_skip`` flag reads False by its own formula
-    (the same substrate flip the samples-set pin narrates in
-    ``test_surrogate_fidelity.py``).
+    Baseline-6 reverted the meeting mix to eject-majority, and the FO-6 physical
+    logistic now degenerates the OTHER way — it calls EJECT on all 96 meetings
+    (0 predicted skips), so its decision accuracy exactly ties the always-eject
+    constant (0.625) and ``degenerates_to_skip`` reads False by its own formula.
+    Its ranking is decent on the physical corpus (39/60 top-1) but stays below
+    the surrogate's 46/60 (axis 2 of the bar passes).
     """
 
     report = fo6_report
-    assert report.top1_hits == 11
-    assert report.ejection_meetings == 50
+    assert report.top1_hits == 39
+    assert report.ejection_meetings == 60
     assert report.degenerates_to_skip is False
-    assert report.predicted_ejections == 0
-    assert report.predicted_skips == 104
-    assert report.correct_skip_decisions == 54
-    assert report.ejection_predicted_skips == 50
-    assert report.top1 == pytest.approx(0.22, abs=1e-12)
-    assert report.top2 == pytest.approx(0.48, abs=1e-12)
-    assert report.skip_vs_eject_accuracy == pytest.approx(0.5192307692307693, abs=1e-12)
+    assert report.predicted_ejections == 96
+    assert report.predicted_skips == 0
+    assert report.correct_skip_decisions == 0
+    assert report.ejection_predicted_skips == 0
+    assert report.top1 == pytest.approx(0.65, abs=1e-12)
+    assert report.top2 == pytest.approx(0.7, abs=1e-12)
+    assert report.skip_vs_eject_accuracy == pytest.approx(0.625, abs=1e-12)
 
 
 # --------------------------------------------------------------------------- #
@@ -1417,7 +1428,6 @@ def test_no_module_under_training_reimplements_the_tally() -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_predicted_ballot_calibration_is_a_distinct_channel(
     module_model: tuple[BallotSurrogateModel, list[MeetingView]],
     surrogate_report: SurrogateFidelityReport,
@@ -1432,9 +1442,9 @@ def test_predicted_ballot_calibration_is_a_distinct_channel(
 
     model, test_views = module_model
     calib = model.predicted_ballot_calibration(test_views)
-    assert calib.predicted_ballots == 84
-    assert calib.predicted_skips == 518
-    assert calib.brier == pytest.approx(0.2775147125852713, abs=1e-12)
+    assert calib.predicted_ballots == 100
+    assert calib.predicted_skips == 457
+    assert calib.brier == pytest.approx(0.2541857827042379, abs=1e-12)
     # Distinct channel by construction.
     assert calib.brier != surrogate_report.ballot_brier
 

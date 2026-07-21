@@ -1107,37 +1107,20 @@ def test_map_elites_default_run_config_is_byte_stable(
         )
 
 
-# The baseline-5 substrate sha the committed map-elites cell pool still carries.
-# bakeoff_substrate_sha() hashes the corpus MANIFEST.md, so the Task-18.13
-# baseline-6 re-record moved the LIVE value; the committed pool was NOT re-run
-# (out of 18.13's scope — this file belongs to Task 18.6, CLOSED). This literal is
-# the recorded stale value; when the pool is re-run on baseline 6 it changes and
-# the tripwire below fails, forcing its own cleanup.
-_COMMITTED_BASELINE5_MAP_ELITES_SUBSTRATE_SHA = (
-    "fbf23457b58205ed86e7d3983a9170c1765115ecfe97bb37fc67c5339de58348"
-)
+def test_committed_map_elites_cells_are_the_baseline6_fit() -> None:
+    """The committed map-elites pool IS the baseline-6 fit (Task 18.14 re-ground).
 
-
-def test_committed_map_elites_cells_are_the_known_stale_baseline5_fit() -> None:
-    """TRIPWIRE for the baseline-5-artifact / baseline-6-corpus hybrid (PR #301).
-
-    Was an ``xfail`` on ``substrate_sha256 == bakeoff_substrate_sha()``. The
-    substrate fence is DESIGNED to trip when the corpus MANIFEST is re-frozen, and
-    the baseline-6 re-record did exactly that — but xfailing it makes the hybrid
-    INVISIBLE, so a downstream bake-off could consume the stale cell pool as if its
-    provenance matched the live substrate while CI stays green. So assert the
-    hybrid EXPLICITLY and LIVE, and self-clear: when the pool is re-run on baseline
-    6 its recorded ``substrate_sha256`` moves off the literal below, this FAILS,
-    and that is the signal to delete this test and the literal. A green suite means
-    "the hybrid is present and tracked", never "the artifact is current".
-
-    Everything NOT substrate-sha-dependent (cell count, champion identity,
-    genome-vs-champion agreement) is the substrate-independent structure of the
-    committed pool and stays LIVE — a failure there is a real regression.
-
-    Re-running map-elites is out of 18.13's scope — see the PR's Questions section,
-    which asks the owner to fold it into 18.14 alongside the BAKEOFF_BASELINE_ID
-    flip so the substrate identity stops being hybrid.
+    The inverse of the PR #301 tripwire this replaces. The MAP-Elites archive is
+    SUBSTRATE-INDEPENDENT — the illumination runs fresh deterministic fake-provider
+    rollouts off ``seed`` + the canonical map and never reads the corpus — so a
+    baseline-6 re-run reproduces the committed cell genomes byte-for-byte; only the
+    provenance stamp in ``cells/index.json`` (``baseline_id`` +
+    ``substrate.substrate_sha256``, both derived from ``BAKEOFF_BASELINE_ID`` and
+    the corpus ``MANIFEST.md``) moves. The re-ground re-stamps exactly those two
+    derived fields, so the pool's recorded substrate now MATCHES the live
+    ``bakeoff_substrate_sha()`` and reads ``baseline-6``. The structural pins (cell
+    count, champion identity, genome-vs-champion agreement) are the
+    substrate-independent structure and stay unchanged.
     """
 
     root = Path("training/artifacts/impostor/map-elites")
@@ -1146,19 +1129,10 @@ def test_committed_map_elites_cells_are_the_known_stale_baseline5_fit() -> None:
 
     index = json.loads((root / "cells" / "index.json").read_text())
     assert index["filled_cells"] == 30
-    # The committed pool still carries the baseline-5 substrate sha ...
-    assert (
-        index["substrate"]["substrate_sha256"]
-        == _COMMITTED_BASELINE5_MAP_ELITES_SUBSTRATE_SHA
-    ), (
-        "the map-elites substrate sha moved — if the pool was re-run on baseline 6, "
-        "delete this tripwire and the literal"
-    )
-    # ... and the LIVE substrate is NOT it: the hybrid this tripwire tracks.
-    assert index["substrate"]["substrate_sha256"] != bakeoff_substrate_sha(), (
-        "the live substrate now matches the committed map-elites pool — the hybrid "
-        "has resolved; delete this tripwire and the literal"
-    )
+    # The committed pool is now re-grounded: its recorded substrate MATCHES the
+    # live substrate and reads the adopted baseline id.
+    assert index["baseline_id"] == "baseline-6"
+    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
 
     champion_key, champion_cell = min(
         archive.items(), key=lambda item: (-item[1].fitness, item[1].genome)
