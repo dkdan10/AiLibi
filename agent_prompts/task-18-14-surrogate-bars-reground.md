@@ -27,6 +27,9 @@ reads.
 
 **Files in scope:**
 - training/artifacts/surrogate/ (weights + sidecar + max-uses, re-fit)
+- training/artifacts/anchor_study/ + tests/training/test_anchor_study.py (the baseline-6 re-run of the 18.5 study artifacts — cheap and deterministic; clears their substrate tripwires; PR #301's scope question, resolved by coordination: the re-ground task re-grounds everything substrate-bound in one place)
+- training/artifacts/impostor/map-elites/ + tests/training/test_bakeoff_methods.py (same, for the 18.6 cell artifacts)
+- training/surrogate/runner.py (ONE additive fence: the loader/cap learns the corpus identity — `SurrogateStalenessCap` is blind to substrate drift today; sha-keying extends to the fit corpus, fail-loud on mismatch)
 - training/reports/report-ballot-surrogate.md (the baseline-6 reading)
 - training/bakeoff/harness.py; (the two constant blocks ONLY)
 - tests/training/test_surrogate_runner.py
@@ -52,10 +55,17 @@ reads.
 
 ## Implementation hint
 
-The §8 recipe is executable as written; the only judgment call is the verdict prose — state
-the skip/eject economy of the new corpus plainly (a roll-call-round economy may no longer be
-skip-majority, which would put axis 3 back at full strength; that is a finding, not a
-problem).
+The §8 recipe is executable as written. The measured inputs (18.13 verification, computed
+from committed bytes): the baseline-6 corpus is **EJECT-MAJORITY** — 302/463 = 65.2%
+ejected meetings, voter-ballot SKIP share 42.1% (baseline 5 was skip-majority at 58.4%) —
+so axis 3's always-eject constant is back at FULL strength and a NO-GO is a plausible
+honest verdict (its consequence is pre-committed: diagnostic-only + the fake-provider
+fallback; the bake-off is never blocked, and 18.15's conviction model carries its own
+independent GO). Fit-side meetings are **367** (train+val; test 96), so the ~143× cap
+re-derives to **52,481**. Clear the seven `_PENDING_SURROGATE_REGROUND_1814` xfails and
+the self-clearing tripwires this re-fit trips. Record-provenance note: cite committed
+tests/README for corpus cells, never PR #301's body (pre-repair tables); the corpus
+MANIFEST per-row shas are the recording truth (the FROZEN lines carry re-finalize shas).
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

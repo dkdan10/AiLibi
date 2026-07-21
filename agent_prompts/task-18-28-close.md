@@ -53,10 +53,17 @@ demonstrated complete, and the Q5 provenance arms stated honestly.
 
 ## Implementation hint
 
-The 17.17 contract's "resist recording anything on the NO-FLIP path" discipline holds. The
-Phase-19 hand-off section matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the
-close audit should hand it the dead-spot candidates this phase noticed (duplicated walks,
-retired seams, the `episode_boundary` orphan) as review inputs, not as contracts.
+The 17.17 contract's "resist recording anything on the NO-FLIP path" discipline holds. One
+outstanding re-anchor this close owns (the 18.13 verification flagged it): the canary-family
+cells (R1 eject-decided share, the genuine-class successor, roll-call coverage,
+whereabouts-lie mints, ejection accuracy, impostor win) were never re-anchored on the
+restored baseline-6 corpus denominator — this close's §0 pre-registration derives its bands
+from the baseline-6 corpus, computing the anchors fresh. The Phase-19 hand-off section
+matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
+the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
+`episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
+and the un-unit-tested deadline_default freeze-guard branch, the unassigned validity-gate
+deadline_default blindness) as review inputs, not as contracts.
 
 ## Integration risk
 
