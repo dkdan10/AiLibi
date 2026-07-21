@@ -512,6 +512,47 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_committed_surrogate_artifact_is_the_known_stale_baseline5_fit(
+    corpus_table: MeetingTable,
+) -> None:
+    """TRIPWIRE for the known baseline-5-artifact / baseline-6-corpus hybrid.
+
+    Added at the PR #301 review. The seven xfails below defer the artifact re-fit
+    to 18.14, and the reviewer's objection is sharp: an expected failure makes the
+    hybrid INVISIBLE, so a downstream bake-off run could load the stale weights
+    against the new corpus while CI stays green. The load path cannot catch it
+    either — ``SurrogateStalenessCap`` carries only ``weights_sha256`` /
+    ``max_uses`` / ``unit``, no corpus identity, so
+    ``load_surrogate_runner_factory`` fails loud on weights drift but is BLIND to
+    substrate drift.
+
+    So assert the hybrid explicitly instead of hiding it. This test is LIVE, and
+    it is self-clearing: the moment 18.14 re-fits the artifact on the baseline-6
+    corpus, ``fit_meetings`` stops being 437 and this FAILS — which is the signal
+    to delete it together with the seven ``_PENDING_SURROGATE_REGROUND_1814``
+    markers. Until then, a green suite means "the hybrid is present and tracked",
+    never "the artifact is current".
+    """
+
+    cap = load_staleness_cap(_ARTIFACT_DIR)
+    # The committed cap encodes the baseline-5 fit-side meeting count (437 x 143).
+    assert cap.max_uses == 62_491, (
+        "the committed surrogate cap moved — if 18.14 re-fit the artifact, delete "
+        "this tripwire and the _PENDING_SURROGATE_REGROUND_1814 markers below"
+    )
+    # ... and the live corpus is NOT the corpus it was fitted on: the baseline-6
+    # re-record moved the fit-side meeting count off 437, which is precisely the
+    # mismatch the load path cannot see.
+    views = build_meeting_views(corpus_table)
+    assert corpus_table.splits is not None
+    test_seeds = set(corpus_table.splits.test)
+    fit_meetings = sum(1 for v in views if v.seed not in test_seeds)
+    assert fit_meetings != 437, (
+        "the live corpus now yields the artifact's fit-side meeting count — the "
+        "hybrid this tripwire tracks has resolved; delete it and the markers"
+    )
+
+
 @pytest.mark.xfail(reason=_PENDING_SURROGATE_REGROUND_1814, strict=False)
 def test_committed_artifact_round_trips_and_provenance_holds(
     corpus_table: MeetingTable,

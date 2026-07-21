@@ -126,18 +126,21 @@ _PENDING_BASELINE6_REGROUND = (
 )
 
 
-@pytest.mark.xfail(reason=_PENDING_BASELINE6_REGROUND, strict=False)
 def test_walk_corpus_game_verifies_and_harvests(
     seed_1000_walk: tuple[CorpusGameFacts, tuple[CorpusDecision, ...]],
 ) -> None:
     facts, decisions = seed_1000_walk
-    # Committed-bytes pins for seed 1000 (5 meetings, 2 persisted flags,
+    # Committed-bytes pins for seed 1000 (2 meetings, 1 persisted flag,
     # recorded winner CREWMATES) — a drift in any of these means the corpus
-    # bytes or the walk changed.
+    # bytes or the walk changed. Re-pinned at Task 18.13's baseline-6 re-record
+    # (was 5 meetings / 2 flags at baseline 5). These are CORPUS-derived, so they
+    # are re-derivable from the new bytes and stay LIVE — only the committed
+    # STUDY ARTIFACT's substrate fence below needs an owned re-run (PR #301
+    # review: don't xfail what you can honestly re-pin).
     assert facts.winner == "CREWMATES"
     assert facts.crew_winning is True
-    assert facts.meetings == 5
-    assert facts.persisted_flags == 2
+    assert facts.meetings == 2
+    assert facts.persisted_flags == 1
     assert facts.high_flag is False
     assert facts.flags_per_meeting < HIGH_FLAG_FLOOR
     assert facts.decisions == len(decisions) > 0

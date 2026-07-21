@@ -870,12 +870,6 @@ def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
     assert parity.j1_divergent_test_cells == 0
 
 
-_PENDING_BASELINE6_REGROUND = (
-    "corpus-derived J1 parity CENSUS moved with the Task-18.13 baseline-6 corpus "
-    "re-record; this file is in Task 18.14's Files-in-scope, which re-pins it"
-)
-
-
 @pytest.fixture(scope="module")
 def corpus_parity() -> BeliefRenderParity:
     """Two full walks over the 150-game corpus (~20s); shared by both J1 tests."""
@@ -907,7 +901,6 @@ def test_j1_fold_fidelity_is_exact_on_the_9p2i_corpus(
     assert corpus_parity.cells_compared > 0
 
 
-@pytest.mark.xfail(reason=_PENDING_BASELINE6_REGROUND, strict=False)
 def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     corpus_parity: BeliefRenderParity,
 ) -> None:
@@ -916,17 +909,24 @@ def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     The graduated J1 render clamp (unconditional since the 16.17 baseline-5
     record) makes the live-served scalar diverge from the raw ``belief_suspicion``
     column the fit reads on exactly the measured cells — the recorded train/serve
-    skew the report states beside the verdict. Every number here moved with the
-    Task-18.13 re-record; 18.14 re-pins them. The fidelity INVARIANTS are asserted
+    skew the report states beside the verdict. The fidelity INVARIANTS are asserted
     live in the test above, not here.
+
+    RE-PINNED (not xfailed) at Task 18.13's baseline-6 re-record. Every number here
+    derives from the corpus bytes ALONE — ``measure_belief_render_parity`` reads no
+    fitted artifact — so it is honestly re-derivable now, and deferring it to 18.14
+    behind an expected failure would let the train/serve skew drift unrecorded in
+    the meantime (PR #301 review). The skew SHRANK on the graduated meeting layer:
+    divergent cells 280 -> 141 of 14 326 compared, and the max divergence 0.11 ->
+    0.06.
     """
 
     parity = corpus_parity
-    assert parity.meetings_total == 541
-    assert parity.rows_total == 3131
-    assert parity.cells_compared == 16198
-    assert parity.j1_divergent_cells == 280
-    assert parity.j1_divergent_rows == 254
-    assert parity.j1_divergent_fit_cells == 251
-    assert parity.j1_divergent_test_cells == 29
-    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)
+    assert parity.meetings_total == 463
+    assert parity.rows_total == 2726
+    assert parity.cells_compared == 14326
+    assert parity.j1_divergent_cells == 141
+    assert parity.j1_divergent_rows == 130
+    assert parity.j1_divergent_fit_cells == 113
+    assert parity.j1_divergent_test_cells == 28
+    assert parity.j1_max_abs_divergence == pytest.approx(0.06, abs=1e-9)
