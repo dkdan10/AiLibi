@@ -1,362 +1,316 @@
-# Adversarial Goodhart probe — the baseline-5 re-run on the re-grounded surrogate (Task 17.15; probe design Task 15.14)
+# Adversarial Goodhart probe — the 18.18 conviction-path re-probe (probe design Task 15.14; conviction arms Task 18.18)
 
+**Why this re-run exists:** the training-signal role GREW at Task 18.16 — the
+GO-shipped conviction fitness term (`ConvictionFitnessTerm`, weight 0.5, in
+BOTH sides' inner fitness) and the gating referee pre-screen
+(`conviction_prescreen`) — and the standing rule binds: the probe re-runs
+BEFORE any campaign selection leans on the new signal. This run also
+discharges the carried §6 obligation of `audits/audit-phase-17-close.md`: the
+4p1i `d4-contest-farming` exploit (+61.8%, recorded at 17.15) is re-probed at
+the current substrate BEFORE any 4p1i-scored selection.
 **Subject under attack:** the committed champion-SELECTION referee
-(`eval/watchability.py::compute_watchability` — Task 15.2), now with the
-**baseline-5 evidence-supply floors** (the 16.11 population-relative derivation;
-the bake-off flipped to them at Task 17.11) and the **15.19 conversion-coupled
-D2 term** — the floor this probe's own baseline-3 run recommended, since applied.
-**Method:** unchanged from Task 15.14 — the shared ES core
-(`training/bakeoff/es.py`) run DIRECTLY on the COMPOSED referee (the
-deliberately-forbidden objective, SELECTION-ONLY DOCTRINE), plus the forced
-single-tactic reachability sweep, everything decomposed — now run on BOTH
-committed meeting models: (1) **fake-provider meetings** (re-earning the
-two-roster baseline at baseline-5), and (2) the **17.10 re-grounded ballot
-surrogate**, threaded through the probe's own entry point
-(`run_goodhart_probe(meeting_runner_factory=…)`) by the committed harness driver
-(`training/bakeoff/harness.py::run_goodhart_surrogate_rerun`, CLI
-`goodhart-surrogate`).
-**Anchors:** `GOODHART_9P2I_BASELINE` (`training/bakeoff/harness.py` — the
-fake-provider delta anchor RE-MEASURED at Task 17.11, never hand-copied;
-reproduced below, digest-verified); the 17.10 re-verdict
-(`training/reports/report-ballot-surrogate.md` — GO, ranking-earned); the
-binding channel verdicts of `audits/audit-phase-15-pause.md` §4.
-**Scoping:** neither committed meeting model is the real-LLM path (the pause
-audit's §11 limitation stands). This task does NOT edit the referee it attacks —
-every patch is a recommendation routed to the PAUSE.
+(`eval/watchability.py::compute_watchability`, baseline-6 floors — the 18.12
+pins, adopted at 18.14) AND, new at this run, the committed 18.16
+training-signal integration: the conviction term as `inner_episode_fitness`
+pays it, and the composed gate (`conviction_prescreen`'s predicted floors)
+beside the recorded supply floors.
+**Method:** the standing 15.14 machinery UNCHANGED (the shared ES core run
+directly on the composed referee + the forced single-tactic reachability
+sweep, everything decomposed), wrapped by the new conviction-path arms
+(`training/bakeoff/goodhart.py::run_conviction_path_probe`): per forced lever
+(plus the scripted-FSM baseline and the ES champion corner) the arms re-roll
+the same K seeds — the env is a pure function of the seed, so the bytes are
+identical to the set the standing bars scored — and read the conviction TERM
+(a prediction) beside the recorded REALITY (flags in bytes, the conviction
+table's mirrored labels), the task hint's narrow question. Every prediction
+runs through the committed 18.16 consumption paths
+(`ConvictionFitnessTerm.predict_meeting` + `conviction_prescreen`), metered on
+ONE shared sha-keyed `ConvictionUseCounter`.
+**Anchors:** `GOODHART_9P2I_BASELINE` (`training/bakeoff/harness.py`, baseline-6
+re-confirm at 18.14) — reproduced below, digest-verified; the carried §6
+numbers (17.15) — consumed as committed pins, never re-measured.
+**Scoping:** fake-provider meetings throughout (this task's substrate; the
+surrogate leg stays governed by its own standing cadence — the arms accept the
+same `meeting_runner_factory` seam). This task edits NEITHER instrument it
+attacks: `training/conviction/` and `training/bakeoff/harness.py` are consumed
+through their public seams; every guard below is routed to the 18.24 protocol.
+
+> The baseline-5 standing report this file extends (Task 17.15: the
+> re-grounded-surrogate re-run + the original carried-finding record) is
+> retained in git history at `7b54078`; its fake-provider numbers reproduce
+> here unchanged (substrate-independent, as the 18.14 re-confirm documented).
 
 ---
 
 ## Verdict
 
-| Path | Roster | Verdict | Baseline `mean_score` | ES champion | Strongest reachable | `referee_passed` (any genome) |
-|---|---|---|---|---|---|---|
-| fake provider, seeds 0–7 | **9p2i** | **HELD** | 3.28 | 3.70 (+12.98%) | 3.70 (`report` lever; the ES ties it) | False — supply-floor gate holds |
-| fake provider, seeds 0–7 | **4p1i** | **EXPLOITS-FOUND** | 0.85 | 0.85 (+0.0%) | **1.38 (+61.8%, `emergency`)** | False — supply-floor gate holds |
-| **re-grounded surrogate**, 30 eval seeds | **9p2i** | **HELD** (wrong-reason regime — see §Surrogate) | 3.33 | 3.47 (+4.4%) | 3.33 (= the baseline; every candidate inadmissible) | False — validity fail-closes every set |
+| Roster | Standing probe (15.14 bars) | Conviction-term channel | Composed gate (pre-screen vs recorded floors) | Composed 18.18 verdict |
+|---|---|---|---|---|
+| **9p2i** (campaign roster) | **HELD** — baseline 3.28, ES champion 3.70 (+12.98%), strongest reachable 3.70 (`report`), reproduces the 17.11/18.14 anchor digest-for-digest | **HELD** — no lever lifts predicted supply above the bar (max `emergency` +4.9%); the term PENALIZES the strongest levers (see reading) | **SUBSTRATE-DIVERGENT** — predicted floors PASS for the honest baseline AND `emergency` while recorded floors FAIL; no lever flips the gate | **EXPLOITS_FOUND** (1 consumption-hazard blocker, no score-channel exploit) |
+| **4p1i** (reference roster) | **EXPLOITS-FOUND** — the carried `d4-contest-farming` corner REPRODUCES: 0.85 → 1.38 (+61.8%), digest-identical to 17.15 | **EXPLOITS-FOUND** — `emergency` +205.6% and `kill` +25.7% predicted supply with recorded flags 0.0000 → 0.0000: the term pays fitness for evidence never minted | clean (nothing passes the 9p2i-pinned predicted floors; recorded floors also fail — no divergence) | **EXPLOITS_FOUND** (3 blockers) |
 
-Materiality bar (all runs): relative geomean gain over the scripted-FSM baseline
-**≥ 25%**, validity-gated. `baseline_id = "baseline-5"` everywhere.
+Materiality bar (all channels, the probe's UNCHANGED delta convention):
+relative gain over the scripted-FSM baseline **≥ 25%**, validity-gated.
+`baseline_id = "baseline-6"` everywhere. Composed verdicts compose over NAMED
+blockers — the 9p2i EXPLOITS_FOUND is carried by a consumption-hazard blocker
+alone (the composed-gate divergence below), NOT by any lever moving a score
+channel above the bar or flipping the recorded gate; the standing 9p2i verdict
+is HELD and reproduces the anchor.
 
-**The delta verdict (the 17.11 anchor threaded through the committed driver):**
-
-> 15.14 fake-provider verdict HELD (strongest reachable 3.7 via report) ->
-> surrogate-path verdict HELD (champion 3.47, strongest reachable 3.33,
-> referee_passed=False)
-
-**Headline:** the Phase-15 no-exploitable-seam conclusion **survives baseline 5
-at the measured scale, but it had to be re-earned and it narrowed.** No genome
-on either meeting model clears the materiality bar on 9p2i or launders past the
-composed selection gate (`referee_passed = False` for every genome on every
-path). Three things moved under it:
-
-1. **The baseline-3 exploit channel is closed.** The 9p2i fake-path verdict
-   flipped EXPLOITS-FOUND → HELD because the 15.19 conversion-coupled D2 floor —
-   the exact patch the original probe routed to the pause — now zeroes ungated
-   separation: the forced-`kill` "suspicion theater" lever collapsed from 16.62
-   (+155%) to 3.64 (+11.1%).
-2. **A new fake-path exploit opened on the short roster.** On 4p1i,
-   meeting-farming (`emergency`) now clears the bar: 0.85 → 1.38 (+61.8%) via
-   the D4 contest term (mechanism `d4-contest-farming`). Routed to the PAUSE
-   below.
-3. **The surrogate-vs-real divergence flipped sign and collapsed at the
-   outcome level.** Phase-15's surrogate over-ejected (ejection rate 0.924 vs
-   the fake path's 0.000 — the two models bracketed the real path). The
-   re-grounded baseline-5 surrogate **never ejects** (0/116 meetings on the
-   eval seeds, SKIP rate 1.000) — the mirror regime, driven by the citation
-   economy the 6-feature surrogate cannot see (§Citation blindness). The
-   recorded real-LLM test split ejects 50/104 meetings (0.481), so the
-   surrogate-vs-REAL decision-level divergence is now maximal and one-signed.
+**Headline.** The conviction term is attackable exactly where the referee
+already was, and nowhere new on the campaign roster: on 9p2i no forced lever
+launders predicted supply into fitness (the term would in fact pull AGAINST
+the strongest geomean corners), but on the short 4p1i roster the SAME
+meeting-farming corner that farms the D4 contest term also farms the
+conviction term — the carried exploit now has a conviction-path twin. And the
+composed gate has a substrate seam the honest baseline itself exposes: the
+pre-screen predicts the REAL-path supply economy it was fit on, so on any
+substrate whose meetings mint no flags its PASS is spend advice, never a
+recorded-floor read.
 
 ---
 
-## Budget (stated honestly — cheap insurance, not an exhaustive search)
+## Budget + the consumption discipline (stated honestly)
 
-- **Fake provider (both rosters):** the committed 15.14 shape — `generations=6`,
-  `population=6` (λ), `1 + 6×6 = 37` genome evaluations, each a K-seed average
-  over `seeds 0..7`; σ = 0.5, `seed = 0`, `init_scale = 0.5`; genome = the
-  packet-only tactic-MLP, length **66** (8 features → 4 hidden → 6 tactics).
-  Reachability sweep: 5 forced single-tactic levers. ≈ **344 games/roster**.
-- **Surrogate path (9p2i):** the same ES shape re-anchored on the fixed eval
-  seed set (the frozen corpus test split, 30 seeds `1004, 1009, …, 1149`;
-  `seed % 5 == 4`) — 37 genome evaluations + 5 sweep levers + the FSM baseline
-  = `(37+5)×30 + 30` = **1,290 games** (the Phase-15 §6 prose said "≈ 1,320";
-  that figure was inflated by one evaluation), plus the 30-seed × 2-path
-  ejection/SKIP measurement. Surrogate staleness
-  usage: **3,490 simulated meetings** metered against the committed
-  `max-uses.json` cap of **62,491** (≈ 5.6%), through one shared
-  `SurrogateUseCounter`. Wall-clock 295 s.
-
----
-
-## 9p2i, fake provider — HELD (the 17.11 anchor, reproduced)
-
-This run IS the re-measured delta anchor: its headline row matches
-`GOODHART_9P2I_BASELINE` field-for-field and its ES-core digest matches the
-pinned `a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14` —
-reproduced at this tree, never hand-copied.
-
-Champion `mean_score` per generation (index 0 = the seeded random genome):
-
-```
-3.28 → 3.70 → 3.70 → 3.70 → 3.70 → 3.70 → 3.70
-```
-
-One strict improvement, decomposed (no undecomposed gains): gen 1, **D1**
-(+0.42) — a resolution/meeting-mix shift (mean meetings 3.88 → 4.00), not an
-evidence term. The champion converges to the same corner as the forced-`report`
-lever (both 3.70), so the anchor names the lever.
-
-### Reachability sweep (the systematic net)
-
-| Lever | `mean_score` | rel. gain | moving term | validity | `referee_passed` |
-|---|---|---|---|---|---|
-| `emergency` (meeting-farming) | 2.85 | −13% | d2 (noise) | pass | False |
-| **`report`** | **3.70** | **+12.98%** | **d1** | pass | False |
-| `wait` (stall-to-clock) | 0.10 | −97% | d2 (noise) | **FAIL** | False |
-| `kill` (aggression) | 3.64 | +11.1% | d1 | pass | False |
-| `sabotage` | 0.65 | −80% | d2 (noise) | pass | False |
-
-- **The baseline-3 kill exploit does not reproduce**: 3.64 (+11.1%, D1
-  meeting-mix, mean meetings 3.62 → 3.00) vs 16.62 (+155%, D2 separation) at
-  baseline 3. The 15.19 conversion-coupled D2 term gates separation on
-  deduction evidence (a converted backed accusation or a contradiction/vent
-  flag); under fake meetings there is none, so suspicion theater now scores 0
-  on D2 — the channel the pause contracted shut IS shut.
-- The strongest reachable corner is now the mild `report`/D1 meeting-mix shift
-  at +12.98% — **below the bar**; `wait` still self-defeats (meeting-rate floor
-  → validity FAIL).
-
-### Why no champion is laundered — the supply-floor gate (baseline-5, 9p2i)
-
-Champion-set gauges (fake meetings): `witnessed_event_rate` 0.0 vs floor
-0.0345 ❌; `flags_per_meeting` 0.0 vs 0.5028 ❌; `testimony_backed_conversion`
-None vs 1.0 ❌ (the population-relative conversion floor evaluates at its 1.0
-cap when measured flags are 0). The fake provider mints no contradiction flags
-and no observation-backed accusations, so `referee_passed = False` for every
-genome — the two-layer gate holds independent of the geomean, exactly as at
-baseline 3.
+- **Standing probe, both rosters:** the committed 15.14 shape — `generations=6`,
+  `population=6`, σ = 0.5, `seed = 0`, `init_scale = 0.5`, K-seed average over
+  seeds 0–7; `1 + 6×6 = 37` genome evaluations + 5 forced levers + the FSM
+  baseline ≈ 344 games/roster. Genome = the packet-only tactic-MLP, length 66.
+- **Conviction arms, both rosters:** 7 policy re-rolls × 8 seeds = 56
+  games/roster (byte-identical re-rolls of already-scored sets) + one
+  conviction-table walk per policy.
+- **Conviction-model consumption (the metered quote):** **452 predicted
+  meetings** against the committed cap of **52,481** (**0.86%**), through ONE
+  shared sha-keyed counter (`4841f8e02eb7…`) spanning both rosters — 350 on
+  9p2i (175 recorded meetings × 2 committed consumption paths: the
+  fitness-term read and the pre-screen read), 102 on 4p1i (51 × 2). No
+  prediction ran unmetered; the report's JSON quotes the counter alongside the
+  cap (`conviction_uses` / `conviction_uses_total` / `conviction_max_uses`).
+- Wall-clock 237 s, $0, offline (fake provider; frozen committed artifacts).
 
 ---
 
-## 4p1i, fake provider — EXPLOITS-FOUND (meeting-farming on the short roster)
+## 9p2i — the campaign roster: term HELD, gate substrate-divergent
 
-Champion trace: `0.70 → 0.85 → 0.85 → 0.85 → 0.85 → 0.85 → 0.85` (one gen-1 D1
-improvement, decomposed; the ES only recovers to the scripted-FSM level 0.85,
-+0.0%). The sweep is what finds it, again:
+**The standing bars reproduce the anchor exactly** — verdict HELD, champion
+trace `3.28 → 3.70 → … → 3.70` (one gen-1 D1 improvement, decomposed), sweep
+row-for-row identical to the 18.14 re-confirm, ES-core digest
+`a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14` = the
+pinned `GOODHART_9P2I_BASELINE` digest. The conviction arms changed NOTHING in
+the standing probe's objective or trace — the arms ride beside it.
 
-| Lever | `mean_score` | rel. gain | moving term | validity | `referee_passed` |
-|---|---|---|---|---|---|
-| **`emergency` (meeting-farming)** | **1.38** | **+61.8%** | **d4** | pass | False |
-| `report` | 0.70 | −18% | d2 (noise) | pass | False |
-| `wait` (stall-to-clock) | 0.10 | −88% | d2 (noise) | **FAIL** | False |
-| `kill` | 0.55 | −35% | d2 (noise) | pass | False |
-| `sabotage` | 0.40 | −53% | d2 (noise) | pass | False |
+### The conviction-term delta per forced lever, beside the standing bars
 
-- **Mechanism (`d4-contest-farming`):** impostor-called emergency meetings lift
-  mean meetings/game **1.00 → 1.75**, moving the D4 contest term
-  `min(1, (n−1)/2)` with no added deduction. At baseline 3 this lever sat BELOW
-  the 4p1i baseline (1.38 vs 1.45, a null); the referee's D2 re-coupling since
-  15.19 lowered the honest FSM baseline to 0.85 while the farming corner is
-  unchanged — the same corner is now +61.8%, above the bar. The 9p2i roster
-  stays immune for the original FO-3 reason: its FSM baseline already averages
-  ~3.6 meetings/game, so the contest term is saturated; on the short roster one
-  meeting/game leaves headroom.
-- **Trajectory evidence:** forced-`emergency` lever, seeds 0–7, 4p1i — baseline
-  `mean_score = 0.85` (mean 1.00 meetings) → 1.38 (mean 1.75 meetings);
-  `referee_passed = False` throughout — the supply-floor gate rejects it (the
-  fake provider mints no contradiction flags and no observation-backed
-  accusations, so the meeting-driven baseline-5 floors — `flags_per_meeting`
-  0.4103, conversion at its population-relative cap — cannot clear). Champion-set
-  gauges for the roster: `witnessed_event_rate` 0.0 vs 0.0164 ❌,
-  `flags_per_meeting` 0.0 vs 0.4103 ❌, conversion None vs 1.0 ❌ — the same
-  two-layer story as 9p2i.
-- **Recommended floor (NOT applied here — `eval/watchability.py` is out of
-  scope):** cap the D4 contest term's reward for raw meeting COUNT (it already
-  saturates at n ≥ 3); gate contest on a per-meeting evidence floor so
-  impostor-farmed empty meetings cannot inflate it. Routed to the PAUSE.
-- **Blast radius, stated plainly:** the composed selection gate still rejects
-  every genome (supply floors), champion selection runs on 9p2i, and 4p1i is
-  the determinism/leak reference roster — so no champion can be laundered
-  through this today. The exploit lives on the `mean_score` sub-metric for any
-  consumer that reads it alone, on the short roster.
+Fitness-channel convention: per-episode mean predicted supply, K-seed
+averaged — EXACTLY what `inner_episode_fitness` pays (`weight 0.5 ×` the
+episode's `mean_predicted_supply`; a no-meeting episode contributes 0.0).
+"Recorded" = the conviction table's `flags_minted` labels mirrored from the
+replay bytes.
 
----
+| Policy | `mean_score` (standing bar) | meetings | predicted supply (episode mean) | recorded flags (episode mean) | term (0.5 × supply) | term Δ vs FSM | predicted-supply gain | launders? |
+|---|---|---|---|---|---|---|---|---|
+| scripted FSM (anchor) | 3.28 | 29 | **1.9389** | **0.0000** | +0.9695 | — | — | — |
+| `emergency` | 2.85 | 44 | 2.0335 | 0.0000 | +1.0168 | **+0.0473** | +4.9% | no (below bar) |
+| `report` | 3.70 | 32 | 0.9942 | 0.0000 | +0.4971 | −0.4723 | −48.7% | no |
+| `wait` | 0.10 | 0 | 0.0000 | 0.0000 | 0.0000 | −0.9695 | −100% | no (validity FAIL) |
+| `kill` | 3.64 | 24 | 1.2470 | 0.0000 | +0.6235 | −0.3460 | −35.7% | no |
+| `sabotage` | 0.65 | 14 | 1.1714 | 0.0000 | +0.5857 | −0.3838 | −39.6% | no |
+| ES champion | 3.70 | 32 | 1.0517 | 0.0000 | +0.5259 | −0.4436 | −45.8% | no |
 
-## The surrogate-path re-run (Task 17.15 — the divergence reading)
+- **No 9p2i lever launders predicted supply into fitness.** The honest FSM
+  baseline already plays evidence-rich 9p2i games (≈3.6 meetings/game, real
+  kill/vent pins in the packet stream), so its predicted supply is high
+  (1.94/episode) and the farming corner adds only +4.9% — far below the bar.
+  Every OTHER lever, and the ES champion (the `report` corner), REDUCES
+  predicted supply: had the conviction term been in this objective, it would
+  have pulled 0.35–0.48 fitness units AGAINST the strongest geomean corners.
+  Stated as an observation on the term's gradient direction, not a safety
+  claim — the probe did not optimize the composed inner fitness (the standing
+  probe attacks the SELECTION referee; the term rides the training fitness,
+  and its 18.24 exposure is priced by the blocker section below).
+- **Predicted vs actual conversion, side by side:** the baseline's conversion
+  head calls 79.3% of meetings converting (mean p = 0.732) while the recorded
+  bytes convert 0.0% — same story on every lever. This is the same divergence
+  as the flags channel and feeds the gate seam below.
 
-Discharged through the probe's OWN entry point —
-`run_goodhart_probe(meeting_runner_factory=load_surrogate_runner_factory(…))`
-via the committed `goodhart-surrogate` CLI — including the forced reachability
-sweep, against the **17.10 re-grounded artifact**
-(`training/artifacts/surrogate/ballot-predictor.json`, sha256
-`62d6cbfa3173bf9d56ccce7646c0722fd4e341e11c1ef2a6d2208b74c1408d28`, fit on the
-17.9 baseline-5 corpus, GO verdict).
-Verdict: **HELD (champion 3.47, +4.4%; zero exploits; zero improvements)** —
-and, exactly as in Phase 15, **a HELD here must NOT be read as exploit-caught.**
-It is held in the wrong-reason regime the task contract warns about:
+### The composed-gate check — SUBSTRATE-DIVERGENT, named, not lever laundering
 
-1. **The validity gate still fail-closes EVERY surrogate-path set, including
-   the scripted-FSM baseline** (`baseline_validity_passed = false`; the ES
-   fitness trace is pinned at the invalid sentinel −1.0 for the seeded genome
-   and all 6 generations —
-   a flat all-invalid landscape, zero improvements to decompose; the
-   "strongest reachable" 3.33 is the inadmissible baseline itself). The failing
-   check is unchanged: `cost_and_provenance_exact` — surrogate meetings record
-   no LLM calls, so the set carries no model provenance row. The Phase-15
-   routed-to-pause ask (a declared synthetic provenance stamp, or an explicit
-   surrogate-path gate mode) is still open; until it lands, surrogate probe
-   runs stay diagnostic-only.
-2. **The ejection/SKIP rate, alongside the verdict** (scripted-FSM baseline,
-   the same 30 eval seeds): the re-grounded surrogate resolves **0/116 meetings
-   with an ejection (ejection rate 0.000, SKIP rate 1.000)**; the fake-provider
-   path on the same seeds also resolves 0/116. The recorded **real-LLM test
-   split ejects 50/104 (0.481)**. Phase-15's bracket (fake 0.000 / surrogate
-   0.924, straddling the real path) has **collapsed onto the fake side**: the
-   under-ejection regime the 15.15 contract warned about is now the measured
-   one. The meeting-driven floors hold for supply reasons — champion-set
-   gauges: `witnessed_event_rate` 0.0204 vs floor 0.0345 ❌,
-   `flags_per_meeting` 0.0 ❌ (the surrogate synthesizes ballots, never the
-   contradiction flags the gauge counts), conversion None vs the 1.0
-   population-relative cap ❌ — never because the referee caught an exploit.
-3. **What the sweep DID show:** nothing near the bar. `kill` 3.59 (+7.8% vs
-   the surrogate-path FSM baseline 3.33; +11.1% under fake meetings — both far
-   under 25%); `report` 3.47 (+4.4%); `emergency` meeting-farming 2.68 (−19%:
-   farmed meetings that all SKIP just dilute the set); `wait` 0.10
-   (floor-tripped); `sabotage` 1.14 (−66%). No genome flips `referee_passed`;
-   no gate-laundering candidate exists on either path.
+The committed pre-screen (baseline-6 9p2i pins: flags ≥ 180/165 ≈ 1.0909
+per meeting, conversion pin 78/165, floor derived population-relative from
+the PREDICTED flags density) **PASSES the honest scripted baseline**
+(predicted 1.9967 flags/meeting, converting share 0.793) **and the
+`emergency` lever** (2.0841, 0.545) — while the recorded floors FAIL every
+9p2i set (fake meetings mint zero flags in bytes: `flags_per_meeting`
+measured 0.0 vs floor 1.0909; conversion None vs the maximal derived 1.0).
+By the standing baseline-relative gate convention this is **NOT laundering**
+— no lever flips a gate the honest baseline fails; it is the model
+faithfully predicting the REAL-path supply economy it was fit on (the 18.15
+GO verdict measured it there) on a substrate that structurally cannot mint
+those flags. `report`, `kill`, `sabotage` and the champion drop predicted
+supply below the pins and predicted-FAIL (no false-blocks: their recorded
+floors fail too).
 
-**Because the surrogate now skips every tally, it opens NOTHING the fake
-provider doesn't:** D2 conversion, D3 deflection and the meeting-driven supply
-floors are exactly as unreachable under this surrogate as under fake meetings.
-This re-run therefore probes strictly LESS of the referee than Phase-15's
-over-ejecting surrogate did — a null on the meeting-decided terms remains a
-scoping statement, not "referee safe".
+**The named blocker (consumption hazard, flagged regardless of magnitude —
+the standing gate-flip convention):**
+`prescreen-substrate-divergence[fsm-baseline+emergency,9p2i]` — a pre-screen
+PASS is real-path spend advice ONLY; the 18.24 protocol must never consume it
+as a recorded-floor read on any substrate whose meetings cannot mint flags
+(fake path today; any future decision-degenerate surrogate equally), and must
+pair every gating use with a recorded-bytes floor read.
 
 ---
 
-## Citation blindness — the seam this re-run was pointed at, addressed explicitly
+## 4p1i — the reference roster: the carried exploit reproduces, and it has a conviction twin
 
-Baseline 5's economy change is that **convictions demand citations**: the J2
-citation gate (unconditional since the 16.17 record) coerces any zero-flag
-EJECT ballot that cites neither a transcript turn (`primary_reason_id`) nor a
-first-hand observation (`primary_reason_observation_id`) to SKIP. That made the
-recorded economy skip-majority (voters SKIP 58.4% of ballots; 54/104 test
-meetings resolve SKIP) and raised the impostor win rate 0.24 → 0.36.
+**The carried `d4-contest-farming` re-read (the §6 obligation), with its
+materiality arithmetic:**
 
-The 6-feature surrogate is blind to that structure on three counts, by design
-(the live-parity fence, locked decision 4): its features
-(`belief_suspicion, belief_trust, is_reporter, witnessed_vent, meeting_index,
-alive_count`) carry no citation channel; the ballots it emits leave both
-citation fields None; and it feeds `tally_ballots` directly, bypassing the J2
-gate entirely.
+> carried (17.15, baseline-5 floors): mean_score 0.85 → 1.38 (**+61.8%**);
+> re-read (baseline-6 substrate, conviction path live): 0.85 → 1.38
+> (**+61.8%** vs the 25% bar) — byte-identical reproduction, ES-core digest
+> `5351db5ee8d1b3625655fa68f818738a51d526fe1afdcddfdeb5e8651cceb630` = the
+> 17.15 record. Moving term d4 (mechanism `d4-contest-farming`): mean
+> meetings/game 1.00 → 1.75 lifts the contest term `min(1,(n−1)/2)` with no
+> added deduction. **The carried exploit REPRODUCES above the bar — the
+> blocker stands: no 4p1i-scored selection before the routed D4 contest floor
+> lands.**
 
-**Where the gap actually opened:** not as a referee-score seam — as
-**decision-channel collapse**. Fit on the skip-majority corpus, the predictor
-casts SKIP on 86% of individual ballots and its sparse non-SKIP ballots never
-assemble a plurality past the 0.60 tally gate: 0 ejections in 104 held-out
-meetings (the 17.10 fidelity census; decision accuracy 51.9% = the always-SKIP
-constant). The 17.10 GO is earned by the RANKING channel (top-1 86.0% vs the
-82.0% honest ceiling); the decision channel is population-prior-shaped, not
-learned. This probe measures the consequence: the surrogate's behavioral
-divergence from the real economy is maximal exactly where the citation
-structure decides outcomes (eject vs skip: 0.000 vs 0.481), while its
-divergence from the fake provider is nil. **The citation-blind seam is real and
-now quantified — it just is not a seam an optimizer can push a champion
-through, because the composed referee re-scores candidates where the blindness
-fails floors (flags, conversion) and the validity gate fail-closes the
-substrate outright.**
+The substrate-independence claim of the 18.14 re-confirm held exactly: the
+baseline-6 floors change no `mean_score`, so the whole 4p1i sweep
+(`emergency` 1.38, `report` 0.70, `wait` 0.10/validity-FAIL, `kill` 0.55,
+`sabotage` 0.40) and the champion trace (`0.70 → 0.85 → … → 0.85`)
+reproduce the 17.15 rows to the digit.
 
----
+### The conviction-term delta per forced lever — TWO levers launder
 
-## Does the Phase-15 conclusion survive baseline 5?
+| Policy | `mean_score` (standing bar) | meetings | predicted supply (episode mean) | recorded flags (episode mean) | term (0.5 × supply) | term Δ vs FSM | predicted-supply gain | launders? |
+|---|---|---|---|---|---|---|---|---|
+| scripted FSM (anchor) | 0.85 | 8 | **0.0772** | **0.0000** | +0.0386 | — | — | — |
+| **`emergency`** | **1.38** | 14 | **0.2360** | **0.0000** | +0.1180 | **+0.0794** | **+205.6%** | **YES** |
+| `report` | 0.70 | 8 | −0.0875 | 0.0000 | −0.0437 | −0.0824 | −213.3% | no |
+| `wait` | 0.10 | 0 | 0.0000 | 0.0000 | 0.0000 | −0.0386 | −100% | no (validity FAIL) |
+| **`kill`** | 0.55 | 7 | **0.0971** | **0.0000** | +0.0485 | **+0.0099** | **+25.7%** | **YES** |
+| `sabotage` | 0.40 | 6 | 0.0253 | 0.0000 | +0.0127 | −0.0259 | −67.2% | no |
+| ES champion | 0.85 | 8 | 0.0772 | 0.0000 | +0.0386 | +0.0000 | +0.0% | no |
 
-**Yes at the measured scale, with its meaning narrowed and stated:** bounded
-divergence on every score channel the probe can reach (max lever delta +7.8%
-surrogate / +12.98% fake on 9p2i, both below the bar), no exploitable seam INTO
-champion selection (no gate-laundering genome on any path; supply floors +
-validity fail-close hold), and one NEW above-bar `mean_score` exploit on the
-4p1i reference roster (d4-contest-farming, fake path) routed to the PAUSE. The
-surrogate-side reading is deliberately weaker than Phase-15's wording: this
-HELD clears nothing on its own (the pause's §4 rule), and the substrate now
-under-ejects so the meeting-decided channels went unprobed — the honest
-statement is "no seam reachable at this scale on this substrate", re-earned,
-not "no seam".
-
----
-
-## Implication for 17.12 (the probe is an instrument, not a gate)
-
-The divergence reading BOUNDS how hard the bake-off's optimizers may lean on
-the surrogate: it is ranking-faithful but decision-degenerate, so any
-training-time signal routed through meeting OUTCOMES (ejections, post-meeting
-survival, meeting-driven floors) is flat or optimistic under it — an optimizer
-can learn meeting impunity the real path punishes. The max-uses budget already
-prices this lean (this entire re-run consumed 3,490 of the committed 62,491
-simulated meetings), and the bake-off protocol re-scores every reported number
-on a real meeting path with surrogate-vs-real divergence reported side by
-side, where this seam surfaces as data. That is the implication; the bake-off
-plan itself is 17.12's contract, not this report's.
+- **`conviction-supply-laundering[emergency,4p1i]`** — the materiality
+  arithmetic: predicted supply (episode mean) 0.0772 → 0.2360 (**+205.6%** vs
+  the 25% bar); recorded flags (episode mean) 0.0000 → 0.0000 (+0.0%); term
+  delta **+0.0794** inner-fitness units at the committed weight 0.5. The SAME
+  impostor-called-emergency corner that farms the D4 contest term farms the
+  conviction term: farmed meetings multiply prediction opportunities over
+  suspicion-bearing states, and the term pays for predicted flags the fake
+  meetings never mint. The carried exploit's conviction twin.
+- **`conviction-supply-laundering[kill,4p1i]`** — predicted supply 0.0772 →
+  0.0971 (**+25.7%**, just above the bar); recorded flags 0.0000 → 0.0000;
+  term delta +0.0099. Small in absolute fitness units (the short roster's
+  supply is thin) but above the stated bar by the stated convention, so it is
+  named, not silently waved off: kill-aggression mints real witnessed-kill
+  pins in the packet stream, the model honestly predicts flags from them, and
+  the substrate never delivers.
+- **Why 9p2i is immune where 4p1i is not — the same headroom asymmetry as the
+  D4 exploit:** the 9p2i baseline already saturates the evidence-supply
+  features (predicted 1.94/episode), so farming adds 5%; the 4p1i baseline
+  runs near the model's floor (0.0772), so the same behavioral corner is a
+  3× relative move. The exploit lives on the SHORT roster, exactly like the
+  carried one.
+- **The composed gate on 4p1i is clean but diagnostic-only:** the committed
+  pre-screen is pinned to the 9p2i baseline-6 floors (there is no other
+  committed pre-screen), which reject every 4p1i set's predicted supply — and
+  the recorded floors fail too, so neither laundering nor false-blocks. A
+  4p1i gate read probes the instrument as shipped, nothing more.
 
 ---
 
-## Standing obligations and routing
+## Blockers for the 18.24 protocol (named, never silent caveats)
 
-- The probe machinery's standing surrogate obligation is discharged **for
-  baseline 5 (9p2i)** by this run; it re-arises at the next re-grounding, per
-  the pause's locked re-grounding cadence.
-- The real-LLM path remains unprobed (pause audit §11) — both committed meeting
-  models are proxies, and they no longer bracket the real path.
-- Routed to the PAUSE: (a) the 4p1i `d4-contest-farming` floor recommendation
-  (above); (b) the still-open synthetic-provenance stamp / surrogate-path gate
-  mode, without which every surrogate probe run stays validity-fail-closed
-  diagnostics.
+1. **`d4-contest-farming[4p1i]`** (standing probe, carried from 17.15,
+   re-confirmed here): mean_score 0.85 → 1.38 (+61.8%, above the 25% bar).
+   No 4p1i-scored selection until the routed D4 contest floor lands
+   (`eval/watchability.py` is the PAUSE's to patch, never this probe's).
+2. **`conviction-supply-laundering[emergency,4p1i]`**: predicted supply
+   +205.6% with recorded flags 0.0000 → 0.0000; term delta +0.0794 at weight
+   0.5. 18.24 must not run conviction-weighted fitness on the 4p1i roster —
+   and on ANY roster must condition (or cap) the term's credit for
+   meeting-count-multiplying play on recorded-bytes confirmation before
+   selection leans on it.
+3. **`conviction-supply-laundering[kill,4p1i]`**: predicted supply +25.7%
+   (bar-clearing) with recorded flags 0.0000 → 0.0000; term delta +0.0099.
+   Same guard as (2); named separately because the mechanism differs
+   (real witnessed-kill pins honestly predicted, never substrate-delivered —
+   a prediction-vs-substrate gap, not feature farming).
+4. **`prescreen-substrate-divergence[fsm-baseline+emergency,9p2i]`**: the
+   committed pre-screen's predicted floors PASS (honest baseline included)
+   while the recorded floors FAIL on the fake substrate. A pre-screen PASS is
+   real-path spend advice ONLY — 18.24 must pair every gating use with a
+   recorded-bytes floor read and must never let the pre-screen verdict stand
+   in for the recorded referee on a flag-mintless substrate.
+
+What is NOT blocked, stated plainly: 9p2i champion selection through the
+composed recorded referee — the standing 9p2i verdict is HELD, reproduces the
+anchor, no genome clears the recorded gate (`referee_passed = False`
+everywhere), and no 9p2i lever moves the conviction term above the bar.
+
+---
+
+## What this re-probe does and does not clear
+
+- The forced-lever net and the ES ran on the fake-provider substrate; the
+  meeting-DECIDED terms and floors stay structurally unreachable there, so
+  every null on them is a scoping statement, not "referee safe" (the standing
+  15.15 obligation text travels in the report JSON unchanged).
+- The conviction model's OWN fidelity is not re-judged here (that is the
+  18.15 verdict's single pre-registered evaluation); this probe measures what
+  an adversarial TACTICAL policy can extract from the term and the gate as
+  committed. The real-LLM path remains unprobed (the pause audit §11
+  limitation stands).
+- The arms accept the probe's `meeting_runner_factory` seam, so the surrogate
+  leg of THIS composed probe can be discharged through the same entry point
+  when the standing surrogate cadence next binds; nothing here pre-discharges
+  it.
 
 ---
 
 ## Reproduce
 
 ```python
+from pathlib import Path
+
 from training.bakeoff.es import ESConfig
-from training.bakeoff.goodhart import run_goodhart_probe
+from training.bakeoff.goodhart import (
+    reread_carried_4p1i_exploit,
+    run_conviction_path_probe,
+)
+from training.conviction.model import (
+    ConvictionUseCounter,
+    load_conviction_staleness_cap,
+)
 
 cfg = ESConfig(generations=6, population=6, sigma=0.5, seed=0,
-               fitness_seeds=tuple(range(8)))
-# 9p2i fake provider (HELD — reproduces the 17.11 GOODHART_9P2I_BASELINE anchor).
-# baseline_id is pinned explicitly: run_goodhart_probe's default moved to
-# "baseline-6" at Task 18.14, so this baseline-5 report pins the id to reproduce
-# the documented floors/provenance rather than following the moved default.
-run_goodhart_probe(config=cfg, num_players=9, num_impostors=2,
-                   tasks_per_crewmate=2, materiality_bar=0.25,
-                   baseline_id="baseline-5")
-# 4p1i fake provider (EXPLOITS-FOUND):
-run_goodhart_probe(config=cfg, num_players=4, num_impostors=1,
-                   tasks_per_crewmate=1, materiality_bar=0.25,
-                   baseline_id="baseline-5")
+               fitness_seeds=tuple(range(8)), init_scale=0.5)
+# ONE shared counter across both rosters (the threading discipline).
+counter = ConvictionUseCounter(
+    load_conviction_staleness_cap(Path("training/artifacts/conviction"))
+)
+# 9p2i (standing HELD — reproduces GOODHART_9P2I_BASELINE — + the arms):
+r9 = run_conviction_path_probe(config=cfg, num_players=9, num_impostors=2,
+                               tasks_per_crewmate=2, materiality_bar=0.25,
+                               use_counter=counter)
+# 4p1i (EXPLOITS-FOUND + the carried re-read):
+r4 = run_conviction_path_probe(config=cfg, num_players=4, num_impostors=1,
+                               tasks_per_crewmate=1, materiality_bar=0.25,
+                               use_counter=counter)
+print(reread_carried_4p1i_exploit(r4).verdict)
 ```
 
-Surrogate path (the committed driver; prints the full probe report + meeting
-stats + the delta verdict):
-
-```
-uv run python -m training.bakeoff.harness goodhart-surrogate --budget committed
-```
-
-> **Superseded (Task 18.14).** Unlike the two fake-provider calls above — which
-> are substrate-independent and stay reproducible once pinned to `baseline-5` —
-> the surrogate leg of this baseline-5 report is **no longer byte-reproducible
-> from the current tree.** The `goodhart-surrogate` driver takes no baseline
-> flag: it calls `run_goodhart_surrogate_rerun(config=config)` with the default
-> `baseline_id=BAKEOFF_BASELINE_ID` (flipped to `baseline-6` at 18.14) and loads
-> the surrogate artifact under `training/artifacts/surrogate/`, which 18.14
-> re-ground baseline-5 → baseline-6 (this report's companion re-ground,
-> `report-ballot-surrogate.md`). So the command now reproduces the BASELINE-6
-> surrogate run, not the baseline-5 surrogate numbers/digest recorded below. The
-> baseline-5 surrogate digest is retained as a historical Task-17.15 record.
-
-Deterministic under `config.seed` (env + referee + surrogate are pure functions
-of the seed). ES-core digests: 9p2i fake
-`a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14` (matches the
-17.11 anchor pin); 4p1i fake
-`5351db5ee8d1b3625655fa68f818738a51d526fe1afdcddfdeb5e8651cceb630`; 9p2i
-surrogate (historical baseline-5, superseded per the note above)
-`2492db5244d504db4de97ee728d8accfbaa6fa202f8af7a9c209a0c4190017f0`.
+Deterministic under `config.seed` (env + referee + the frozen conviction
+weights are pure functions of the seed). ES-core digests at this tree: 9p2i
+`a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14` (= the
+pinned anchor), 4p1i
+`5351db5ee8d1b3625655fa68f818738a51d526fe1afdcddfdeb5e8651cceb630` (= the
+17.15 record); the six `GOODHART_9P2I_BASELINE` values and both sweeps
+reproduce row-for-row (the digests are exact-float genome hashes and carry
+the documented origin-platform ULP caveat). Conviction artifact
+`4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47`, verdict
+GO, weight 0.5, threshold 0.5; counter total after both rosters: 452 of
+52,481.

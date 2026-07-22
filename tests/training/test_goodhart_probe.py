@@ -9,7 +9,10 @@ full attack.
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import random
+import shutil
 from pathlib import Path
 
 import pytest
@@ -17,19 +20,40 @@ import pytest
 from eval.watchability import WatchabilityGameScore, WatchabilityReport
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
+    CarriedExploitReread,
+    ConvictionLeverRead,
+    ConvictionPathProbeReport,
     GoodhartProbeReport,
     ProbeExploit,
     TraceImprovement,
+    _build_conviction_findings,
+    _build_conviction_read,
     _build_exploits,
+    _build_gate_check,
+    _ConvictionArmReader,
+    _ConvictionSetRead,
     _decompose_improvement,
     _ExploitCandidate,
+    _forced_genome,
     _RefereeAttackEvaluator,
     _SetAggregates,
     _SetEvaluation,
     _sweep_levers,
     build_probe_selector,
     probe_genome_length,
+    reread_carried_4p1i_exploit,
+    run_conviction_path_probe,
     run_goodhart_probe,
+)
+from training.bakeoff.harness import load_conviction_fitness_term
+from training.conviction.fidelity import (
+    CONVICTION_CONVERSION_DECISION_THRESHOLD,
+    VERDICT_FILENAME,
+)
+from training.conviction.model import (
+    STALENESS_FILENAME,
+    WEIGHTS_FILENAME,
+    WEIGHTS_SHA256_FILENAME,
 )
 from training.env import TacticalRolloutEnv
 from training.surrogate.ballots import load_staleness_cap
@@ -533,3 +557,570 @@ def test_evaluator_rejects_duplicate_fitness_seeds() -> None:
             fitness_seeds=(0, 1, 0),
             baseline_id="baseline-5",
         )
+
+
+# --------------------------------------------------------------------------- #
+# The 18.18 conviction-path arms — predicted supply vs recorded reality.        #
+# --------------------------------------------------------------------------- #
+
+# The committed 18.16 conviction bundle the arms consume read-only (the probe
+# never writes to it): a GO verdict, prescreen_role "gating", weights 4841f8e0…,
+# a committed cap of 52481 predicted meetings.
+_CONVICTION_ARTIFACT_DIR = Path("training/artifacts/conviction")
+
+
+@pytest.fixture(scope="module")
+def conviction_report() -> ConvictionPathProbeReport:
+    """One tiny 4p1i conviction-path run, shared by every shape test.
+
+    The full entry point is EXPENSIVE relative to the other tests (it re-rolls
+    the scripted-FSM baseline, every forced lever, and the ES champion corner
+    through the committed instrument), so it runs AT MOST ONCE per session — the
+    module scope — and the shape tests read structure off this single report.
+    Determinism of the entry point is pinned at the UNIT level
+    (test_conviction_reader_determinism_at_unit_level), never by a second full
+    run.
+    """
+
+    return run_conviction_path_probe(
+        config=_TINY,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=1,
+        materiality_bar=0.25,
+    )
+
+
+def test_conviction_path_report_shape(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    report = conviction_report
+    assert isinstance(report, ConvictionPathProbeReport)
+    assert report.roster_key == "4p1i"
+    # The reads are the scripted-FSM baseline first, then the forced levers in
+    # menu order, then the ES champion corner (the reachability net's shape).
+    assert [read.tactic for read in report.reads] == [
+        "fsm-baseline",
+        "emergency",
+        "report",
+        "wait",
+        "kill",
+        "sabotage",
+        "es-champion",
+    ]
+    baseline_read = report.reads[0]
+    assert baseline_read.tactic == "fsm-baseline"
+    # The scripted-FSM baseline anchors every delta — gain 0.0 by definition,
+    # zero term delta, and never a laundering finding (the delta convention).
+    assert baseline_read.launders_supply is False
+    assert baseline_read.conviction_term_delta == 0.0
+    assert baseline_read.predicted_supply_gain == 0.0
+    # The embedded standing report is the UNCHANGED probe — its budget/verdict
+    # pins match the tiny config exactly (test_probe_report_shape_and_verdict).
+    assert isinstance(report.probe, GoodhartProbeReport)
+    assert report.probe.roster_key == "4p1i"
+    assert report.probe.verdict in ("HELD", "EXPLOITS_FOUND")
+    assert report.probe.budget.generations == 1
+    assert report.probe.budget.population == 2
+    assert report.probe.budget.num_seeds == 2
+    assert report.probe.budget.total_evaluations == 1 + 1 * 2
+    # champion_genome is the ADDITIVE 18.18 field — the exact ES champion the
+    # arms re-roll, the same length the standing genome reports.
+    assert len(report.probe.champion_genome) == probe_genome_length()
+    # The committed 18.16 verdict is consumed as machine-readable fields.
+    assert report.conviction_model_verdict == "GO"
+    assert report.prescreen_role == "gating"
+    assert report.conversion_threshold == CONVICTION_CONVERSION_DECISION_THRESHOLD
+
+
+def test_conviction_path_consumption_is_metered_and_quoted(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    report = conviction_report
+    # The consumption discipline: every recorded meeting is predicted exactly
+    # twice on the ONE shared sha-keyed counter — the fitness-term read and the
+    # composed-gate pre-screen read — so the spend is 2x the recorded meetings.
+    recorded_meetings = sum(read.meetings for read in report.reads)
+    assert report.conviction_uses == 2 * recorded_meetings
+    assert report.conviction_uses > 0
+    assert report.conviction_uses_total >= report.conviction_uses
+    # The committed cap is QUOTED, not re-pinned to a brittle exact number — the
+    # cumulative spend stays inside it.
+    assert report.conviction_max_uses > 0
+    assert report.conviction_uses_total <= report.conviction_max_uses
+    # The note quotes both the spend and the cap (never a silent caveat).
+    assert str(report.conviction_uses) in report.consumption_note
+    assert str(report.conviction_max_uses) in report.consumption_note
+
+
+def test_conviction_path_verdict_composes_blockers(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    report = conviction_report
+    # The verdict composes over the LIST of blockers — the conviction-path
+    # findings AND the standing probe's exploits — never a prose caveat.
+    assert (report.verdict == "EXPLOITS_FOUND") == bool(report.blockers)
+    for finding in report.findings:
+        # Every conviction-path finding contributes its NAMED blocker.
+        assert finding.blocker in report.blockers
+        # The conviction-path mechanisms: the term paying for predicted supply;
+        # the pre-screen floors flipping past the honest baseline; the baseline-
+        # shared substrate divergence.
+        assert finding.mechanism in (
+            "conviction-supply-laundering",
+            "prescreen-gate-laundering",
+            "prescreen-substrate-divergence",
+        )
+        # The scripted-FSM baseline is the anchor, never itself a per-read finding.
+        assert finding.tactic != "fsm-baseline"
+    # Every standing above-bar exploit is carried across as a blocker naming its
+    # mechanism (the 18.24 protocol consumes the merged list).
+    for exploit in report.probe.exploits:
+        assert any(exploit.mechanism in blocker for blocker in report.blockers)
+
+
+def test_conviction_path_report_round_trips_json(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    report = conviction_report
+    restored = ConvictionPathProbeReport.model_validate_json(report.to_json())
+    assert restored == report
+
+
+def test_carried_4p1i_reread(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    report = conviction_report
+    reread = reread_carried_4p1i_exploit(report)
+    assert isinstance(reread, CarriedExploitReread)
+    # The carried finding is the 4p1i d4-contest-farming exploit
+    # (audits/audit-phase-17-close.md §6), re-read on the emergency lever.
+    assert reread.mechanism == "d4-contest-farming"
+    assert reread.tactic == "emergency"
+    assert reread.roster_key == "4p1i"
+    # The carried pins are the audit-committed NUMBERS, never re-measured.
+    assert reread.carried_baseline_mean_score == 0.85
+    assert reread.carried_lever_mean_score == 1.38
+    assert reread.carried_relative_gain == 0.618
+    # The re-read numbers are the report's OWN emergency lever (the current
+    # substrate stated beside the carried pins).
+    lever = next(
+        entry for entry in report.probe.lever_sweep if entry.tactic == "emergency"
+    )
+    assert reread.reread_lever_mean_score == lever.mean_score
+    assert reread.reread_relative_gain == lever.relative_gain
+    # still_above_bar keeps or releases the carried blocker by DEFERRING to the
+    # standing probe's own exploit list — the authoritative UNROUNDED
+    # materiality gate — never re-decided off the display-rounded lever row.
+    assert reread.still_above_bar == any(
+        exploit.mechanism == "d4-contest-farming" for exploit in report.probe.exploits
+    )
+    # The materiality arithmetic states the carried numbers explicitly.
+    assert "0.85" in reread.materiality_arithmetic
+    assert "1.38" in reread.materiality_arithmetic
+
+
+def test_carried_reread_requires_the_reference_roster(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    # The carried finding is roster-SPECIFIC: re-reading it off a non-4p1i
+    # report fails loud rather than silently mis-attributing the pins. The model
+    # is frozen, so model_copy is the sanctioned way to build the off-roster
+    # variant.
+    off_roster = conviction_report.model_copy(update={"roster_key": "9p2i"})
+    with pytest.raises(ValueError):
+        reread_carried_4p1i_exploit(off_roster)
+
+
+def test_champion_genome_is_additive_for_old_report_json(
+    conviction_report: ConvictionPathProbeReport,
+) -> None:
+    # champion_genome defaults to () so pre-18.18 report JSON (which never
+    # carried the field) still validates — the additive-field contract.
+    data = conviction_report.probe.model_dump(mode="json")
+    del data["champion_genome"]
+    restored = GoodhartProbeReport.model_validate(data)
+    assert restored.champion_genome == ()
+
+
+# A neutral raw conviction-set read: material-free defaults the laundering
+# fixtures below override one axis at a time (no rollouts — the delta logic is
+# unit-tested straight off constructed reads).
+_NEUTRAL_SET_READ = _ConvictionSetRead(
+    label="forced-emergency lever",
+    tactic="emergency",
+    games=2,
+    meetings=2,
+    validity_passed=True,
+    referee_passed=False,
+    supply_floors_passed=False,
+    mean_score=1.0,
+    episode_predicted_supply=1.0,
+    episode_actual_flags=1.0,
+    predicted_flags_per_meeting=1.0,
+    actual_flags_per_meeting=1.0,
+    predicted_converting_share=0.0,
+    predicted_mean_conversion_prob=0.0,
+    actual_converting_share=0.0,
+    prescreen_flags_pass=False,
+    prescreen_conversion_pass=False,
+    prescreen_floors_pass=False,
+    prescreen_advisory_only=False,
+)
+
+
+def _set_read(**overrides: bool | float | str) -> _ConvictionSetRead:
+    """One raw conviction-set read with neutral defaults (override per axis)."""
+
+    fields = dataclasses.asdict(_NEUTRAL_SET_READ)
+    fields.update(overrides)
+    return _ConvictionSetRead(**fields)
+
+
+def test_conviction_read_launders_on_predicted_gain_without_reality() -> None:
+    baseline = _set_read(
+        tactic="fsm-baseline", episode_predicted_supply=1.0, episode_actual_flags=1.0
+    )
+    # Material predicted-supply gain (1.0 -> 1.5, +50%) with the recorded flags
+    # flat (1.0 -> 1.0): the term bought fitness the play's bytes never minted —
+    # the probe's UNCHANGED delta convention flags it.
+    launders = _build_conviction_read(
+        baseline,
+        _set_read(episode_predicted_supply=1.5, episode_actual_flags=1.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert launders.launders_supply is True
+    assert "vs the 25% bar" in launders.materiality_arithmetic
+
+    # Both channels material (predicted 1.0 -> 1.5, actual 1.0 -> 1.5): reality
+    # keeps pace, so nothing is laundered.
+    both = _build_conviction_read(
+        baseline,
+        _set_read(episode_predicted_supply=1.5, episode_actual_flags=1.5),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert both.launders_supply is False
+
+    # Below-bar predicted gain (1.0 -> 1.2, +20%): under the 25% bar, not
+    # material.
+    below = _build_conviction_read(
+        baseline,
+        _set_read(episode_predicted_supply=1.2, episode_actual_flags=1.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert below.launders_supply is False
+
+    # Validity-gated: an inadmissible set is never a reachable attack, however
+    # material its predicted gain (the standing doctrine).
+    invalid = _build_conviction_read(
+        baseline,
+        _set_read(
+            episode_predicted_supply=1.5,
+            episode_actual_flags=1.0,
+            validity_passed=False,
+        ),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert invalid.launders_supply is False
+
+    # Non-positive baseline supply (0.0 -> 0.5): the gain is +inf, so it clears
+    # the bar and launders, but the DISPLAYED gain is the standing non-finite
+    # convention (-1.0) while the arithmetic keeps the honest "+inf% (baseline 0)".
+    zero_baseline = _build_conviction_read(
+        _set_read(
+            tactic="fsm-baseline",
+            episode_predicted_supply=0.0,
+            episode_actual_flags=0.0,
+        ),
+        _set_read(episode_predicted_supply=0.5, episode_actual_flags=0.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert zero_baseline.launders_supply is True
+    assert zero_baseline.predicted_supply_gain == -1.0
+    assert "+inf% (baseline 0)" in zero_baseline.materiality_arithmetic
+
+    # The SIGNED channel (the 18.18 review's confirmed finding): the flags head
+    # is deliberately unclipped, so a NEGATIVE baseline is reachable — a real
+    # supply rise inside the negative range (-0.5 -> -0.1 is a genuine
+    # +0.4 x weight term advantage, +80% over abs(baseline)) must launder, not
+    # collapse to a 0.0 gain under the score-channel convention.
+    negative_baseline = _set_read(
+        tactic="fsm-baseline",
+        episode_predicted_supply=-0.5,
+        episode_actual_flags=0.0,
+    )
+    negative_rise = _build_conviction_read(
+        negative_baseline,
+        _set_read(episode_predicted_supply=-0.1, episode_actual_flags=0.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert negative_rise.launders_supply is True
+    assert negative_rise.predicted_supply_gain == round((-0.1 - -0.5) / 0.5, 4)
+    assert negative_rise.conviction_term_delta == round(0.5 * (-0.1 - -0.5), 4)
+    # ... while a sub-bar move inside the negative range stays immaterial.
+    negative_drift = _build_conviction_read(
+        negative_baseline,
+        _set_read(episode_predicted_supply=-0.49, episode_actual_flags=0.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert negative_drift.launders_supply is False
+
+    # The term arithmetic: conviction_term = weight x predicted supply, and the
+    # delta is weight x (lever - baseline supply) — priced exactly as
+    # inner_episode_fitness composes it.
+    term_read = _build_conviction_read(
+        baseline,
+        _set_read(episode_predicted_supply=1.5),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert term_read.conviction_term == round(0.5 * 1.5, 4)
+    assert term_read.conviction_term_delta == round(0.5 * (1.5 - 1.0), 4)
+
+
+# A neutral conviction lever read the gate/finding fixtures override per axis.
+_NEUTRAL_LEVER_READ = ConvictionLeverRead(
+    label="forced-emergency lever",
+    tactic="emergency",
+    games=2,
+    meetings=2,
+    validity_passed=True,
+    referee_passed=False,
+    supply_floors_passed=False,
+    mean_score=1.0,
+    mean_episode_predicted_supply=1.0,
+    mean_episode_actual_flags=1.0,
+    conviction_term=0.5,
+    conviction_term_delta=0.0,
+    predicted_supply_gain=0.0,
+    actual_supply_gain=0.0,
+    predicted_flags_per_meeting=1.0,
+    actual_flags_per_meeting=1.0,
+    predicted_converting_share=0.0,
+    predicted_mean_conversion_prob=0.0,
+    actual_converting_share=0.0,
+    prescreen_flags_pass=False,
+    prescreen_conversion_pass=False,
+    prescreen_floors_pass=False,
+    prescreen_advisory_only=False,
+    launders_supply=False,
+    materiality_arithmetic="neutral read",
+)
+
+
+def _lever_read(**overrides: bool | float | str) -> ConvictionLeverRead:
+    """One conviction lever read with neutral defaults (override per axis)."""
+
+    return _NEUTRAL_LEVER_READ.model_copy(update=overrides)
+
+
+def test_gate_check_flags_prediction_laundering() -> None:
+    # The composed-gate check splits on the BASELINE-RELATIVE gate convention: a
+    # predicted-PASS / recorded-FAIL divergence is LAUNDERING only when the
+    # honest scripted baseline does not share it (a lever flipped the gate).
+
+    # A clean honest baseline — its predicted floors do NOT pass, so no lever's
+    # divergence is shared by it.
+    clean_baseline = _lever_read(
+        tactic="fsm-baseline",
+        validity_passed=True,
+        prescreen_floors_pass=False,
+        supply_floors_passed=False,
+    )
+    # A lever that FLIPS the predicted gate (predicted PASS / recorded FAIL) the
+    # honest baseline does not — the true laundering seam.
+    laundered_read = _lever_read(
+        tactic="emergency",
+        validity_passed=True,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+    )
+    # The reverse divergence (predicted FAIL, recorded PASS) is an efficiency
+    # loss — false_blocked, never a blocker.
+    false_blocked_read = _lever_read(
+        tactic="kill",
+        validity_passed=True,
+        prescreen_floors_pass=False,
+        supply_floors_passed=True,
+    )
+    # An inadmissible set with the laundering pattern is excluded from all three
+    # (validity-gated).
+    invalid_read = _lever_read(
+        tactic="sabotage",
+        validity_passed=False,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+    )
+    gate = _build_gate_check(
+        (clean_baseline, laundered_read, false_blocked_read, invalid_read),
+        prescreen_is_gating=True,
+        roster_key="9p2i",
+    )
+    assert gate.laundered == ("emergency",)
+    assert gate.substrate_divergent == ()
+    assert gate.false_blocked == ("kill",)
+    assert "sabotage" not in gate.laundered
+    assert "sabotage" not in gate.substrate_divergent
+    assert "sabotage" not in gate.false_blocked
+    assert "PREDICTION-LAUNDERED" in gate.verdict
+
+    # When the HONEST baseline diverges too, no lever flipped anything: all
+    # divergent tactics (baseline included) land in substrate_divergent and
+    # laundered is empty — the substrate speaking, not a lever flip.
+    diverging_baseline = _lever_read(
+        tactic="fsm-baseline",
+        validity_passed=True,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+    )
+    substrate = _build_gate_check(
+        (diverging_baseline, laundered_read),
+        prescreen_is_gating=True,
+        roster_key="9p2i",
+    )
+    assert substrate.laundered == ()
+    assert substrate.substrate_divergent == ("fsm-baseline", "emergency")
+    assert "SUBSTRATE-DIVERGENT" in substrate.verdict
+
+    # The check REQUIRES the scripted-FSM baseline read — a divergence is
+    # measured against it, never in isolation.
+    with pytest.raises(ValueError):
+        _build_gate_check(
+            (laundered_read,), prescreen_is_gating=True, roster_key="9p2i"
+        )
+
+
+def test_gate_laundering_becomes_named_finding() -> None:
+    # The laundered case (a lever flips the predicted gate past a clean honest
+    # baseline) becomes a NAMED prescreen-gate-laundering finding whose blocker
+    # names the tactic and roster; a launders_supply read becomes a
+    # conviction-supply-laundering finding; the baseline itself is skipped.
+    clean_baseline = _lever_read(
+        tactic="fsm-baseline",
+        validity_passed=True,
+        prescreen_floors_pass=False,
+        supply_floors_passed=False,
+        launders_supply=False,
+    )
+    gate_laundered = _lever_read(
+        tactic="emergency",
+        validity_passed=True,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+        launders_supply=False,
+    )
+    supply_laundered = _lever_read(
+        tactic="kill",
+        launders_supply=True,
+        validity_passed=True,
+        prescreen_floors_pass=False,
+        supply_floors_passed=False,
+    )
+    reads = (clean_baseline, gate_laundered, supply_laundered)
+    gate_check = _build_gate_check(reads, prescreen_is_gating=True, roster_key="4p1i")
+    findings = _build_conviction_findings(
+        reads, gate_check=gate_check, roster_key="4p1i"
+    )
+    assert len(findings) == 2
+    by_mechanism = {finding.mechanism: finding for finding in findings}
+    assert set(by_mechanism) == {
+        "conviction-supply-laundering",
+        "prescreen-gate-laundering",
+    }
+    gate_finding = by_mechanism["prescreen-gate-laundering"]
+    assert gate_finding.tactic == "emergency"
+    assert "emergency" in gate_finding.blocker
+    assert "4p1i" in gate_finding.blocker
+    assert by_mechanism["conviction-supply-laundering"].tactic == "kill"
+    assert all(finding.tactic != "fsm-baseline" for finding in findings)
+
+    # The substrate case (the honest baseline shares the divergence) emits ONE
+    # aggregate prescreen-substrate-divergence finding — no per-lever gate
+    # finding, the baseline-shared divergence folded into a single named seam.
+    diverging_baseline = _lever_read(
+        tactic="fsm-baseline",
+        validity_passed=True,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+        launders_supply=False,
+    )
+    diverging_lever = _lever_read(
+        tactic="emergency",
+        validity_passed=True,
+        prescreen_floors_pass=True,
+        supply_floors_passed=False,
+        launders_supply=False,
+    )
+    substrate_reads = (diverging_baseline, diverging_lever)
+    substrate_gate = _build_gate_check(
+        substrate_reads, prescreen_is_gating=True, roster_key="4p1i"
+    )
+    substrate_findings = _build_conviction_findings(
+        substrate_reads, gate_check=substrate_gate, roster_key="4p1i"
+    )
+    assert len(substrate_findings) == 1
+    assert substrate_findings[0].mechanism == "prescreen-substrate-divergence"
+    assert substrate_findings[0].tactic == "fsm-baseline+emergency"
+    assert "4p1i" in substrate_findings[0].blocker
+
+
+def test_conviction_path_requires_a_go_verdict(tmp_path: Path) -> None:
+    # The arms attack the LIVE 18.16 term; under a committed NO-GO the term is
+    # structurally absent, so the entry point fails loud BEFORE any ES work (the
+    # loader runs first). Build a NO-GO bundle by copying the committed
+    # weights/sha/cap unchanged (keeps the sha-coherence checks passing) and
+    # rewriting only verdict.json's verdict fields.
+    for filename in (WEIGHTS_FILENAME, WEIGHTS_SHA256_FILENAME, STALENESS_FILENAME):
+        shutil.copy(_CONVICTION_ARTIFACT_DIR / filename, tmp_path / filename)
+    verdict = json.loads((_CONVICTION_ARTIFACT_DIR / VERDICT_FILENAME).read_text())
+    verdict["verdict"] = "NO-GO"
+    verdict["fitness_term"] = "absent"
+    verdict["prescreen_role"] = "advisory"
+    verdict["model_role"] = "diagnostic-only"
+    verdict["meets_spearman_bar"] = False
+    verdict["meets_conversion_bar"] = False
+    (tmp_path / VERDICT_FILENAME).write_text(json.dumps(verdict, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="NO-GO"):
+        run_conviction_path_probe(
+            config=_TINY,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            materiality_bar=0.25,
+            conviction_artifact_dir=tmp_path,
+        )
+
+
+def test_conviction_reader_determinism_at_unit_level() -> None:
+    # The entry point's determinism is pinned at the UNIT level (a second full
+    # run is too slow): the env is a pure function of the seed and the weights
+    # are frozen, so two independent _ConvictionArmReader reads of the same
+    # forced genome — each with its own fresh counter — produce byte-identical
+    # reads (the frozen dataclass equality pins predictions, labels, and the
+    # pre-screen booleans together).
+    def _read_emergency() -> _ConvictionSetRead:
+        term = load_conviction_fitness_term(_CONVICTION_ARTIFACT_DIR)
+        assert term is not None  # the committed verdict is GO
+        reader = _ConvictionArmReader(
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            fitness_seeds=(0, 1),
+            baseline_id="baseline-6",
+            term=term,
+            conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+        )
+        return reader.read(
+            _forced_genome("emergency"),
+            label="forced-emergency lever",
+            tactic="emergency",
+        )
+
+    assert _read_emergency() == _read_emergency()
