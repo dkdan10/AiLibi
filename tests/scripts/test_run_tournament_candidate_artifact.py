@@ -56,6 +56,7 @@ from orchestrator.replay import (
     CrewTacticalPolicyStamp,
     TacticalPolicyStamp,
     read_crew_tactical_policy_stamp,
+    read_policy_stamps,
     read_tactical_policy_stamp,
 )
 
@@ -63,6 +64,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ARTIFACTS = _REPO_ROOT / "training" / "artifacts" / "impostor"
 _UTILITY_ES = _ARTIFACTS / "utility-es"
 _POLICY_ES = _ARTIFACTS / "policy-es"
+
+# The committed CREW artifact source (Task 18.19): the frozen training-side
+# ``crew-owned-tasks-es`` genome the ``--crew-artifact`` fixtures copy from. It
+# carries weights.json + its sidecar but NOT (yet) a stamp.json — 18.23's
+# recording session writes that — so the fixtures synthesize one (``_make_crew_artifact``).
+_CREW_OWNED_TASKS = (
+    _REPO_ROOT / "training" / "artifacts" / "crew" / "crew-owned-tasks-es"
+)
 
 # The committed CREW artifact (Task 18.7): the agents-side copy of the frozen
 # training-side ``crew-owned-tasks-es`` genome. Both sidecars record the SAME
@@ -102,6 +111,41 @@ def _copy_artifact(src: Path, dst: Path) -> Path:
 
     shutil.copytree(src, dst)
     return dst
+
+
+def _make_crew_artifact(tmp_path: Path) -> Path:
+    """Build a ``--crew-artifact`` fixture dir from the committed crew genome (18.19).
+
+    The committed ``training/artifacts/crew/crew-owned-tasks-es`` dir carries the
+    frozen 27-weight owned-task genome + its sidecar but NOT (yet) a ``stamp.json``
+    (18.23's recording session writes them), so the fixture copies it to a writable
+    tmp dir and synthesizes the five-field crew ``stamp.json`` — its
+    ``weights_sha256`` the HONEST committed sidecar digest (read at fixture time,
+    never echoed), its ``encoder_version`` the ``crew-option-features-v2`` owned-task
+    tag the genome rebuilds through.
+    """
+
+    dst = tmp_path / "crew-owned-tasks-es"
+    shutil.copytree(_CREW_OWNED_TASKS, dst)
+    digest = _sidecar_digest(dst)
+    stamp = {
+        "policy_id": "crew-owned-tasks-es",
+        "method": "crew-utility-scorer-es",
+        "encoder_version": "crew-option-features-v2",
+        "weights_sha256": digest,
+        "anchor_policy": "fsm-default",
+    }
+    (dst / "stamp.json").write_text(
+        json.dumps(stamp, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return dst
+
+
+def _crew_fixture_stamp(crew_dir: Path) -> CrewTacticalPolicyStamp:
+    """The five-field crew stamp read straight from a fixture's synthesized stamp.json."""
+
+    raw = (crew_dir / "stamp.json").read_text(encoding="utf-8")
+    return CrewTacticalPolicyStamp.model_validate_json(raw)
 
 
 def _install_factory_capturing_spy(
@@ -385,7 +429,15 @@ def test_resolve_candidate_masked_mlp_missing_hidden_fails_loud(
 def test_main_candidate_threads_factory_and_auto_stamp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``--candidate-artifact`` threads the bake-off factory + the artifact stamp."""
+    """``--candidate-artifact`` threads the bake-off factory + the artifact stamp.
+
+    Doubles as the Task-18.19 byte-identity pin for the candidate-only path: the
+    spy's keyword-only signature has NO ``crew_policy_stamp`` param, so if ``main``
+    threaded a crew stamp on a candidate-only run (it must not — that path is the
+    single-side impostor recorder, unchanged by the 18.19 dual arm) this call would
+    raise TypeError. Reaching rc == 0 is the proof the candidate-only path is
+    untouched.
+    """
 
     captured: dict[str, object] = {}
     _install_factory_capturing_spy(monkeypatch, captured)
@@ -820,3 +872,348 @@ def test_main_learned_crew_rejects_contradicting_explicit_stamp(
                 str(stamp_path),
             ]
         )
+
+
+# -- the dual-role co-evo arm (Task 18.19) ------------------------------------
+
+
+def test_parse_crew_artifact_defaults_none(tmp_path: Path) -> None:
+    """The flag omitted parses to ``None`` — the co-evo recorder is opt-in."""
+
+    args = rt._parse_args(["--output-dir", str(tmp_path)])
+    assert args.crew_artifact is None
+
+
+def test_parse_crew_artifact_accepts_path(tmp_path: Path) -> None:
+    """``--crew-artifact`` parses to a ``Path``."""
+
+    crew = _make_crew_artifact(tmp_path)
+    args = rt._parse_args(["--output-dir", str(tmp_path), "--crew-artifact", str(crew)])
+    assert args.crew_artifact == crew
+
+
+def test_load_crew_artifact_policy_builds_scorer_and_exact_stamp(
+    tmp_path: Path,
+) -> None:
+    """``_load_crew_artifact_policy`` returns a v2 crew scorer + its OWN five-field stamp.
+
+    The crew twin of :func:`test_resolve_candidate_builds_factory_and_exact_stamp`:
+    the genome rebuilds through ``build_crew_scorer`` with an ``OwnedTaskOptionBasis``
+    (the ``crew-option-features-v2`` 27-weight owned-task family), and the stamp
+    comes from the artifact's OWN ``stamp.json`` with ``weights_sha256`` equal to the
+    committed sidecar digest — the sha-verified provenance a co-evo recording reads
+    back.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    policy, stamp = rt._load_crew_artifact_policy(crew)
+
+    assert policy.encoder_version == "crew-option-features-v2"
+    assert stamp == _crew_fixture_stamp(crew)
+    assert stamp.weights_sha256 == _sidecar_digest(crew)
+    assert (
+        stamp.policy_id,
+        stamp.method,
+        stamp.encoder_version,
+        stamp.anchor_policy,
+    ) == (
+        "crew-owned-tasks-es",
+        "crew-utility-scorer-es",
+        "crew-option-features-v2",
+        "fsm-default",
+    )
+
+
+def test_load_crew_artifact_missing_stamp_fails_loud(tmp_path: Path) -> None:
+    """A crew artifact without a ``stamp.json`` fails loud (the committed-dir case).
+
+    The committed ``training/artifacts/crew`` dirs do NOT yet carry a ``stamp.json``,
+    so the arm fails loud on a raw committed copy until 18.23 writes one.
+    """
+
+    raw = _copy_artifact(_CREW_OWNED_TASKS, tmp_path / "crew-owned-tasks-es")
+
+    with pytest.raises(SystemExit, match="cannot read"):
+        rt._load_crew_artifact_policy(raw)
+
+
+def test_load_crew_artifact_sha_mismatch_fails_loud(tmp_path: Path) -> None:
+    """A crew sidecar digest that does not match ``weights.json`` fails loud on load.
+
+    The genome sha verification (the SAME shared ``load_candidate_weights`` the
+    impostor arm uses) trips BEFORE any policy is built or any game runs.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    (crew / "weights.json.sha256").write_text(f"{'0' * 64}  weights.json\n")
+
+    with pytest.raises(SystemExit, match="load/verify failed"):
+        rt._load_crew_artifact_policy(crew)
+
+
+def test_load_crew_artifact_stamp_sidecar_conflation_guard(tmp_path: Path) -> None:
+    """A crew ``stamp.json`` naming a different digest than the sidecar fails loud.
+
+    Weights + sidecar stay consistent (the genome loads), but the stamp's
+    ``weights_sha256`` no longer equals the sidecar — the recording would carry a
+    stamp that does not name the bytes it produced. The 18.19 conflation guard
+    rejects it before any spend.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    stamp = json.loads((crew / "stamp.json").read_text(encoding="utf-8"))
+    stamp["weights_sha256"] = "a" * 64
+    (crew / "stamp.json").write_text(json.dumps(stamp, indent=2, sort_keys=True))
+
+    with pytest.raises(SystemExit, match="conflation guard"):
+        rt._load_crew_artifact_policy(crew)
+
+
+def test_load_crew_artifact_impostor_dir_fails_loud() -> None:
+    """An IMPOSTOR artifact handed to ``--crew-artifact`` fails loud, naming the families.
+
+    The committed ``utility-es`` dir HAS a ``stamp.json`` — but its
+    ``impostor-option-features-v1`` encoder names no rebuildable CREW family, so it
+    fails HERE (before any game runs), pointing the operator at
+    ``--candidate-artifact``. This is the impostor-in-crew-slot pin (the crew twin of
+    the crew-in-impostor-slot guard below).
+    """
+
+    with pytest.raises(SystemExit, match="rebuildable crew family"):
+        rt._load_crew_artifact_policy(_UTILITY_ES)
+
+
+def test_resolve_candidate_rejects_crew_artifact(tmp_path: Path) -> None:
+    """A CREW artifact handed to ``--candidate-artifact`` fails loud (crew-in-impostor).
+
+    The vice-versa 18.19 guard: a crew ``stamp.json`` (its encoder in the ``crew-``
+    namespace) in the impostor slot fails loud on the namespace BEFORE any spend,
+    via ``_resolve_candidate_artifact`` / ``_resolve_agent_factory``, pointing the
+    operator at ``--crew-artifact``.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+
+    with pytest.raises(SystemExit, match="CREW policy"):
+        rt._resolve_agent_factory("fsm-default", candidate_artifact=crew)
+
+
+def test_main_crew_artifact_mutually_exclusive_with_learned_crew(
+    tmp_path: Path,
+) -> None:
+    """``--crew-artifact`` + ``--agent-factory learned-crew`` is rejected loudly.
+
+    The crew artifact selects the crew policy for a co-evo recording; the single-side
+    ``learned-crew`` arm selects the committed crew champion — combining them would
+    conflate two crew movers, so the arm rejects the pairing before any game runs.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+
+    with pytest.raises(SystemExit, match="mutually exclusive"):
+        rt.main(
+            [
+                "--num-games",
+                "1",
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--max-ticks",
+                "2",
+                "--crew-artifact",
+                str(crew),
+                "--agent-factory",
+                "learned-crew",
+            ]
+        )
+
+
+def test_main_crew_artifact_mutually_exclusive_with_learned_champion(
+    tmp_path: Path,
+) -> None:
+    """``--crew-artifact`` + ``--agent-factory learned-champion`` is rejected loudly.
+
+    The mutual-exclusion guard covers BOTH single-side ``--agent-factory`` arms: a
+    dual-role co-evo recording composes the impostor side through
+    ``--candidate-artifact``, never through ``--agent-factory``.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+
+    with pytest.raises(SystemExit, match="mutually exclusive"):
+        rt.main(
+            [
+                "--num-games",
+                "1",
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--max-ticks",
+                "2",
+                "--crew-artifact",
+                str(crew),
+                "--agent-factory",
+                "learned-champion",
+            ]
+        )
+
+
+def test_crew_artifact_cross_stamp_policy_id_collision_fails_loud(
+    tmp_path: Path,
+) -> None:
+    """A dual recording whose two identities share a ``policy_id`` fails loud.
+
+    The cross-stamp conflation guard: the crew fixture's ``stamp.json`` ``policy_id``
+    is rewritten to collide with the ``utility-es`` impostor stamp (the digest stays
+    HONEST so the loader still passes its own stamp/sidecar guard). Loaded on a dual
+    ``--crew-artifact`` + ``--candidate-artifact`` recording, the two identities
+    collide on ``policy_id`` and the guard rejects it before any game runs — the two
+    movers on one recording must be DISTINCT.
+
+    (The guard's ``weights_sha256`` arm is unreachable end-to-end with honest
+    artifacts: each side's ``weights_sha256`` is forced to equal its own sidecar
+    digest — which is the sha of its own weights bytes — so two distinct genomes can
+    never share a digest; the collision can only ever be a ``policy_id`` one.)
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    stamp = json.loads((crew / "stamp.json").read_text(encoding="utf-8"))
+    stamp["policy_id"] = "utility-es"
+    (crew / "stamp.json").write_text(json.dumps(stamp, indent=2, sort_keys=True))
+
+    with pytest.raises(SystemExit, match="conflation"):
+        rt._resolve_crew_artifact_arm(
+            crew_artifact=crew, candidate_artifact=_UTILITY_ES
+        )
+
+
+def test_main_crew_artifact_dual_threads_factory_and_both_stamps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dual co-evo run threads the coevo factory + BOTH stamps (the spy pin).
+
+    Both artifact flags: the crew spy's keyword-only ``crew_policy_stamp`` (no
+    default) makes a missing crew stamp fail loud, and ``main`` threads the impostor
+    ``tactical_policy_stamp`` (the ``utility-es`` artifact stamp) beside the crew
+    stamp (the fixture stamp) — the dual-stamp co-evo recording's two identities, in
+    distinct slots. Budget ``--num-games 1 --max-ticks 2``.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    captured: dict[str, object] = {}
+    _install_crew_factory_capturing_spy(monkeypatch, captured)
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--max-ticks",
+            "2",
+            "--crew-artifact",
+            str(crew),
+            "--candidate-artifact",
+            str(_UTILITY_ES),
+        ]
+    )
+
+    assert rc == 0
+    assert callable(captured["agent_factory"])
+    assert captured["tactical_policy_stamp"] == _artifact_stamp(_UTILITY_ES)
+    assert captured["crew_policy_stamp"] == _crew_fixture_stamp(crew)
+
+
+def test_main_crew_artifact_dual_stamps_replay_on_disk(tmp_path: Path) -> None:
+    """The DoD e2e: a real dual co-evo run stamps BOTH identities on disk (exact).
+
+    No spy — the production seam runs end-to-end at ``--max-ticks 200`` on the 4p/1i
+    ``--start-seed 0`` roster, which lands a ``game_over`` record (empirically pinned:
+    the committed ``utility-es`` impostor + the ``crew-owned-tasks-es`` crew pair
+    resolve to an IMPOSTORS win well under 200 ticks; seed 1004 truncates for this
+    pair, so seed 0 is chosen — the existing tests' "lands a game_over record"
+    idiom). ``read_policy_stamps`` recovers BOTH five-field stamps from the RECORDED
+    BYTES in DISTINCT typed slots; the two identities are DISTINCT on ``policy_id``
+    AND ``weights_sha256``, and each ``weights_sha256`` equals the respective sidecar
+    FILE read at test time (never an echoed constant). The fake provider comes from
+    the root conftest autouse fixture.
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    out_dir = tmp_path / "out"
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--start-seed",
+            "0",
+            "--output-dir",
+            str(out_dir),
+            "--max-ticks",
+            "200",
+            "--crew-artifact",
+            str(crew),
+            "--candidate-artifact",
+            str(_UTILITY_ES),
+        ]
+    )
+
+    assert rc == 0
+    replay = out_dir / "replay-seed-0.jsonl"
+    stamps = read_policy_stamps(replay)
+    tactical = stamps.tactical
+    crew_stamp = stamps.crew
+    assert tactical is not None
+    assert crew_stamp is not None
+
+    # Both identities read back exact, from the recorded bytes.
+    assert tactical == _artifact_stamp(_UTILITY_ES)
+    assert crew_stamp == _crew_fixture_stamp(crew)
+
+    # DISTINCT identities: the two movers on one recording can never be conflated.
+    assert tactical.policy_id != crew_stamp.policy_id
+    assert tactical.weights_sha256 != crew_stamp.weights_sha256
+
+    # Each weights_sha256 equals the respective sidecar FILE read at test time.
+    assert tactical.weights_sha256 == _sidecar_digest(_UTILITY_ES)
+    assert crew_stamp.weights_sha256 == _sidecar_digest(crew)
+
+    # The two sibling readers agree with the combined reader (same distinct slots).
+    assert read_tactical_policy_stamp(replay) == tactical
+    assert read_crew_tactical_policy_stamp(replay) == crew_stamp
+
+
+def test_main_crew_artifact_crew_only_stamps_replay_on_disk(tmp_path: Path) -> None:
+    """The DoD e2e: a crew-only ``--crew-artifact`` run stamps the crew side only.
+
+    ``--crew-artifact`` alone at the same ``--start-seed 0 --max-ticks 200`` budget:
+    the crew stamp is present in the recorded bytes (``read_policy_stamps`` /
+    ``read_crew_tactical_policy_stamp``), while the impostor side records the absent =
+    scripted-FSM default (``read_tactical_policy_stamp`` is ``None``).
+    """
+
+    crew = _make_crew_artifact(tmp_path)
+    out_dir = tmp_path / "out"
+
+    rc = rt.main(
+        [
+            "--num-games",
+            "1",
+            "--start-seed",
+            "0",
+            "--output-dir",
+            str(out_dir),
+            "--max-ticks",
+            "200",
+            "--crew-artifact",
+            str(crew),
+        ]
+    )
+
+    assert rc == 0
+    replay = out_dir / "replay-seed-0.jsonl"
+    stamps = read_policy_stamps(replay)
+    assert stamps.tactical is None
+    assert stamps.crew is not None
+    assert stamps.crew == _crew_fixture_stamp(crew)
+    assert read_tactical_policy_stamp(replay) is None
+    assert read_crew_tactical_policy_stamp(replay) == stamps.crew
