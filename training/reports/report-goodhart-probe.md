@@ -321,12 +321,17 @@ from training.bakeoff.goodhart import run_goodhart_probe
 
 cfg = ESConfig(generations=6, population=6, sigma=0.5, seed=0,
                fitness_seeds=tuple(range(8)))
-# 9p2i fake provider (HELD — reproduces the 17.11 GOODHART_9P2I_BASELINE anchor):
+# 9p2i fake provider (HELD — reproduces the 17.11 GOODHART_9P2I_BASELINE anchor).
+# baseline_id is pinned explicitly: run_goodhart_probe's default moved to
+# "baseline-6" at Task 18.14, so this baseline-5 report pins the id to reproduce
+# the documented floors/provenance rather than following the moved default.
 run_goodhart_probe(config=cfg, num_players=9, num_impostors=2,
-                   tasks_per_crewmate=2, materiality_bar=0.25)
+                   tasks_per_crewmate=2, materiality_bar=0.25,
+                   baseline_id="baseline-5")
 # 4p1i fake provider (EXPLOITS-FOUND):
 run_goodhart_probe(config=cfg, num_players=4, num_impostors=1,
-                   tasks_per_crewmate=1, materiality_bar=0.25)
+                   tasks_per_crewmate=1, materiality_bar=0.25,
+                   baseline_id="baseline-5")
 ```
 
 Surrogate path (the committed driver; prints the full probe report + meeting

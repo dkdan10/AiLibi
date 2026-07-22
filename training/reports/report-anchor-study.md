@@ -6,7 +6,7 @@
 > **Anchors:** training/bakeoff/harness.py `inner_episode_fitness` (:569-590,
 > the anchor penalty seam); training/bakeoff/utility_es.py:708-718 (the full
 > budget); replays/ml_corpus/9p2i/ (the filtered-BC source).
-> **Substrate:** baseline-6; substrate sha `1753867afa922a8e6330684e9c4ff7eb018d0f42b8458d431be356eccda8073e`
+> **Substrate:** baseline-6; substrate sha `9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4`
 > (every frozen artifact under `training/artifacts/anchor_study/` carries it —
 > the 18.24 stale-seed refusal reads it).
 > **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
@@ -14,8 +14,8 @@
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
 > **Command:** `uv run python -m training.anchor_study run --budget full`
-> (exit 0, 1197 s training + 70 s
-> scoring/walk = 1267 s wall-clock, CPU-only, $0).
+> (exit 0, 1693 s training + 97 s
+> scoring/walk = 1790 s wall-clock, CPU-only, $0).
 > **Report-only:** no champion ships from this study; the ES leg under the
 > refined anchor is deliberately NOT run here (the harness's anchor-CE is
 > computed against the FSM's own choice; the anchor-policy seam lands at
@@ -40,7 +40,7 @@
 - **Filtered-BC filter (stated):** a corpus game qualifies iff its recorded
   winner is CREWMATES (crew-winning: the games where the evidence economy
   actually convicted) OR its persisted contradiction rows per meeting reach
-  the `flags_per_meeting` supply floor 0.502793
+  the `flags_per_meeting` supply floor 1.090909
   (high-flag: the supply gauge the champion failed, read off the committed
   meeting rows — conservative vs the referee's set-level gauge, which
   additionally re-derives transcript flags). Games satisfying BOTH weigh
@@ -95,8 +95,8 @@
 - **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is `lambda-4.0`:** every other cell is weakly dominated — at this budget on the fake path a HEAVIER anchor did not cost shaped reward (λ=0.25 shaped 19.30 / CE 1.055 → λ=4.0 shaped 19.80 / CE 0.611). The fake path mints no convictions, so fitness and legibility are not yet in tension here — the tension the champion failed on lives in the referee gauges, and NO cell passes the supply floors (the flip bar stays open; this study only positions seeds).
 - **The refined anchor vs the committed champion, on the corpus stream:** the
   filtered-BC anchor matches the FSM's choice on
-  0.7969 of decisions (CE
-  0.4565); the committed champion matches on
+  0.7971 of decisions (CE
+  0.4568); the committed champion matches on
   0.4003 (CE
   1.0815) — the champion has
   drifted far from the legible anchor, which is the under-anchoring symptom
@@ -110,9 +110,9 @@
 
 **Filter census:** 150 games walked, every state hash and
 every re-derived FSM decision verified. Crew-winning 112,
-high-flag 130, both 99 →
-143 qualifying games, 6229 fit
-decisions (weight total 10081) of
+high-flag 83, both 66 →
+129 qualifying games, 5396 fit
+decisions (weight total 7781) of
 6663 total corpus decisions;
 0 FSM decisions were off the option menu
 (excluded from the fit, tallied here — never silently dropped).
@@ -121,9 +121,9 @@ decisions (weight total 10081) of
 
 | Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu | CE-clamped |
 |---|---:|---:|---:|---:|---:|
-| all corpus games | 6663 | 0.7969 | 0.4565 | 0 | 0 |
-| in-filter games | 6229 | 0.7953 | 0.4547 | 0 | 0 |
-| out-of-filter games | 434 | 0.8203 | 0.4818 | 0 | 0 |
+| all corpus games | 6663 | 0.7971 | 0.4568 | 0 | 0 |
+| in-filter games | 5396 | 0.7952 | 0.4571 | 0 | 0 |
+| out-of-filter games | 1267 | 0.8051 | 0.4556 | 0 | 0 |
 | committed utility-es champion | 6663 | 0.4003 | 1.0815 | 0 | 0 |
 
 ### 3.2 Where the anchor agrees, by FSM intent kind (all corpus games)
@@ -132,7 +132,7 @@ decisions (weight total 10081) of
 |---|---:|---:|---:|
 | do_task | 1101 | 1068 | 0.9700 |
 | kill | 640 | 634 | 0.9906 |
-| move | 3632 | 2724 | 0.7500 |
+| move | 3632 | 2725 | 0.7503 |
 | sabotage | 73 | 73 | 1.0000 |
 | vent | 818 | 630 | 0.7702 |
 | wait | 399 | 181 | 0.4536 |
@@ -141,7 +141,7 @@ decisions (weight total 10081) of
 
 | FSM chose | anchor chose | count |
 |---|---|---:|
-| move | move | 488 |
+| move | move | 487 |
 | move | kill | 309 |
 | vent | vent | 188 |
 | wait | move | 137 |
