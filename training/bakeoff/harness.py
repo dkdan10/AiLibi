@@ -37,10 +37,15 @@ sha-keyed-counter-metered term (the anchor-CE integration is its template) —
 that :func:`inner_episode_fitness` adds on both this side and, through the SAME
 object, the crew side (``training/crew/scorer.py``); under NO-GO the term is
 STRUCTURALLY ABSENT (the loader returns ``None``, callers pass
-``conviction=None`` — never a zero-weighted ghost). The per-meeting feature
-mappings are CALLER-SUPPLIED over ``CONVICTION_FEATURE_NAMES`` (the live
-kill/body serving seam lands with the campaign driver's serving path, not here);
-:func:`conviction_prescreen` is the machine-readable predicted-floors verdict the
+``conviction=None`` — never a zero-weighted ghost). Task 18.30 lands the live
+serving seam: :mod:`training.conviction.serving` assembles the per-meeting
+``CONVICTION_FEATURE_NAMES`` vector from ``run_meeting``-time state, and the eval
+passes now thread the loaded term through the meeting-runner factory (GO ⇒ served
+live and conviction-composed by default; NO-GO ⇒ structurally absent), so the
+row's ``inner_fitness_real`` carries the term under GO and the liveness columns
+say the loop served it. :func:`conviction_prescreen` still accepts a
+CALLER-SUPPLIED batch over ``CONVICTION_FEATURE_NAMES`` (the 18.30 assembler is
+what produces those mappings) — the machine-readable predicted-floors verdict the
 18.21 campaign driver consumes before spending real-path evals (advisory-only
 under NO-GO). The task also adds the additive anchor-policy seam on
 :class:`DecisionTrace` (default: the scripted FSM proposal, byte-identical when
@@ -104,6 +109,7 @@ from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     AgentFactory,
     HeadlessGame,
+    MeetingRunner,
     TacticalAgent,
     build_default_meeting_runner,
 )
@@ -126,6 +132,7 @@ from training.conviction.model import (
     load_conviction_model_artifact,
     load_conviction_staleness_cap,
 )
+from training.conviction.serving import ConvictionServingMeetingRunner
 from training.determinism import (
     PolicyDeterminismReport,
     PolicyFrame,
@@ -929,6 +936,46 @@ def inner_episode_fitness(
     return fitness
 
 
+def _conviction_serving_factory(
+    base_factory: MeetingRunnerFactory | None,
+    *,
+    term: ConvictionFitnessTerm,
+    record: Callable[[ConvictionPrediction], None],
+) -> MeetingRunnerFactory:
+    """Wrap a meeting-runner factory to serve the conviction term live (18.30).
+
+    Each produced runner is a
+    :class:`~training.conviction.serving.ConvictionServingMeetingRunner` around
+    the ``base_factory``'s runner — or, when ``base_factory`` is ``None``, the
+    SAME default fake-provider runner :func:`rollout_candidate` builds — binding
+    ``term.predict_meeting`` and the caller's per-episode ``record`` sink (the
+    episode trace's ``record_conviction_prediction``), so the pre-meeting
+    prediction lands in the trace the episode's fitness reads. The wrapper
+    OBSERVES only (assemble + predict + record BEFORE delegating) and never
+    mutates state, so a served rollout's trajectory is byte-identical to the
+    unwrapped one — the conviction addend is the only difference in the composed
+    fitness. Bind THIS episode's ``record`` (define the factory inside the seed
+    loop) so the prediction reaches the right trace.
+
+    Shared by the impostor eval passes and the crew loop, which imports it — one
+    helper, one serving semantics. No import cycle: serving binds the two
+    CALLBACKS (predict/record), never this module.
+    """
+
+    def factory() -> MeetingRunner:
+        if base_factory is not None:
+            inner = base_factory()
+        else:
+            inner = build_default_meeting_runner(
+                llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
+            )
+        return ConvictionServingMeetingRunner(
+            inner=inner, predict=term.predict_meeting, record=record
+        )
+
+    return factory
+
+
 # --------------------------------------------------------------------------- #
 # The referee pre-screen (Task 18.16) — the campaign driver's pre-spend gate.  #
 # --------------------------------------------------------------------------- #
@@ -1249,6 +1296,11 @@ class BakeoffResult(BaseModel):
     contract. Task 18.16 appends the conviction provenance triple: the weight is
     named under ``fitness_term == "ships"``; under ``"absent"`` the weight is
     None — the row says the term is structurally absent, never zero-weighted.
+    Task 18.30 appends the live-serving liveness pair
+    (:attr:`conviction_meetings_predicted` / :attr:`conviction_mean_predicted_supply`):
+    under GO the real pass serves the term live and these carry the meetings it
+    predicted and the mean supply the fitness composed; under NO-GO they are None
+    — "rows say so" that the loop served the term (not merely stamped a verdict).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1317,6 +1369,15 @@ class BakeoffResult(BaseModel):
     conviction_weight: float | None = None
     conviction_weights_sha256: str | None = None
 
+    # Task 18.30 live-serving liveness (real pass; None-default — pre-18.30 rows
+    # must still validate). Stamped from the real pass's set-level trace ONLY
+    # when the term is live (GO); under NO-GO the term is structurally absent and
+    # both stay None. ``conviction_meetings_predicted`` is how many meetings the
+    # term actually predicted; ``conviction_mean_predicted_supply`` is the mean
+    # predicted supply the ``inner_fitness_real`` composed the term from.
+    conviction_meetings_predicted: int | None = None
+    conviction_mean_predicted_supply: float | None = None
+
     def to_json_line(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True)
 
@@ -1332,11 +1393,13 @@ class BakeoffProtocolConfig:
 
     The 18.16 ``conviction_artifact_dir`` / ``conviction_weight`` fields stamp
     each row's conviction provenance metadata (which composition ships for
-    training). The eval protocol's fitness COLUMNS stay the anchor-composed
-    values — the eval path cannot serve the fenced per-meeting features until
-    the kill/body serving seam lands (report-conviction-model.md §2) — so the
-    row CARRIES the term's weight-under-GO metadata without re-scoring fitness
-    here.
+    training). Task 18.30 opens the live serving seam: :func:`evaluate_candidate`
+    resolves the term via :meth:`resolved_conviction_term` and threads it through
+    every eval pass (real, surrogate, repeat), so under the committed GO verdict
+    the eval fitness COLUMNS are conviction-composed (the per-meeting features are
+    now served live by :mod:`training.conviction.serving`) and the row's liveness
+    columns say the loop served the term; under NO-GO the term is structurally
+    absent and the fitness stays anchor-composed.
     """
 
     eval_seeds: tuple[int, ...]
@@ -1354,6 +1417,32 @@ class BakeoffProtocolConfig:
     max_ticks: int = DEFAULT_MAX_TICKS
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
     conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
+    conviction_term: ConvictionFitnessTerm | None = None
+    conviction_term_resolved: bool = False
+
+    def resolved_conviction_term(self) -> ConvictionFitnessTerm | None:
+        """The SHARED conviction term for this run (loaded lazily once).
+
+        Mirrors :meth:`resolved_surrogate_counter`: ONE
+        :class:`ConvictionFitnessTerm` — hence ONE :class:`ConvictionUseCounter`
+        — is loaded once and outlives every eval pass (the real, surrogate, and
+        repeat passes, and every entrant sharing this protocol), so the committed
+        staleness cap is cumulative. Under the committed NO-GO verdict the load
+        returns ``None`` and that STRUCTURAL ABSENCE is cached too: the
+        resolved-FLAG (not the None result) is the cache key, so a NO-GO run
+        caches the absence rather than re-reading the bundle each pass, and never
+        grows a zero-weighted ghost.
+        """
+
+        if not self.conviction_term_resolved:
+            term = load_conviction_fitness_term(
+                self.conviction_artifact_dir, weight=self.conviction_weight
+            )
+            # A frozen dataclass: stash via object.__setattr__ so every
+            # subsequent call shares the SAME term (never a per-call reload).
+            object.__setattr__(self, "conviction_term", term)
+            object.__setattr__(self, "conviction_term_resolved", True)
+        return self.conviction_term
 
     def resolved_surrogate_counter(self) -> SurrogateUseCounter | None:
         """The SHARED cumulative use counter for this run (built lazily once).
@@ -1457,6 +1546,7 @@ def _score_eval_pass(
     game_map: Map,
     output_dir: Path,
     meeting_runner_factory: MeetingRunnerFactory | None,
+    conviction: ConvictionFitnessTerm | None,
 ) -> _EvalPass:
     trace = DecisionTrace()
     fitnesses: list[float] = []
@@ -1468,6 +1558,17 @@ def _score_eval_pass(
     meetings_ejected = 0
     for seed in protocol.eval_seeds:
         episode_trace = DecisionTrace()
+        # Under GO wrap the base factory so the term serves this episode live,
+        # binding THIS episode's trace; under NO-GO (conviction is None) the base
+        # factory rides through unwrapped and the fitness composes anchor-only.
+        if conviction is not None:
+            episode_factory: MeetingRunnerFactory | None = _conviction_serving_factory(
+                meeting_runner_factory,
+                term=conviction,
+                record=episode_trace.record_conviction_prediction,
+            )
+        else:
+            episode_factory = meeting_runner_factory
         rollout = rollout_candidate(
             policy,
             seed,
@@ -1476,13 +1577,16 @@ def _score_eval_pass(
             num_players=protocol.num_players,
             num_impostors=protocol.num_impostors,
             tasks_per_crewmate=protocol.tasks_per_crewmate,
-            meeting_runner_factory=meeting_runner_factory,
+            meeting_runner_factory=episode_factory,
             max_ticks=protocol.max_ticks,
             trace=episode_trace,
         )
         fitnesses.append(
             inner_episode_fitness(
-                rollout, episode_trace, anchor_weight=protocol.anchor_penalty_weight
+                rollout,
+                episode_trace,
+                anchor_weight=protocol.anchor_penalty_weight,
+                conviction=conviction,
             )
         )
         if rollout.complete:
@@ -1570,13 +1674,19 @@ def evaluate_candidate(
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
     # The committed conviction verdict stamps the row's provenance metadata:
-    # WHICH composition ships for training (the fitness columns stay
-    # anchor-composed until the live serving seam lands — see the config).
-    # Drift-checked BEFORE any eval side effects: a stale/partially-updated
-    # bundle fails the run loud, never lands in a row.
+    # WHICH composition ships for training. Drift-checked BEFORE any eval side
+    # effects: a stale/partially-updated bundle fails the run loud, never lands
+    # in a row.
     conviction_verdict = load_conviction_row_provenance(
         protocol.conviction_artifact_dir
     )
+    # The ONE shared term for this run (Task 18.30): resolved once and threaded
+    # through the real, surrogate, and repeat passes so the single
+    # ConvictionUseCounter is cumulative. Under GO the eval passes serve it live
+    # (the row's inner_fitness_real is conviction-composed and the liveness
+    # columns say so); under NO-GO it is None — structural absence everywhere.
+    # Verdict-consistent with the stamp above: both read the same bundle loader.
+    conviction_term = protocol.resolved_conviction_term()
     entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
 
     with tempfile.TemporaryDirectory(prefix="ailibi-bakeoff-eval-") as tmp:
@@ -1594,6 +1704,7 @@ def evaluate_candidate(
             game_map=resolved_map,
             output_dir=real_dir,
             meeting_runner_factory=None,
+            conviction=conviction_term,
         )
         _drop_audit_sidecars(real_dir)
         watchability: WatchabilityReport = compute_watchability(
@@ -1619,6 +1730,7 @@ def evaluate_candidate(
                 game_map=resolved_map,
                 output_dir=Path(tmp),
                 meeting_runner_factory=surrogate_factory,
+                conviction=conviction_term,
             )
         surrogate_fitness = surrogate_pass.inner_fitness
         surrogate_truncated = surrogate_pass.truncated_episodes
@@ -1652,6 +1764,7 @@ def evaluate_candidate(
                     game_map=resolved_map,
                     output_dir=Path(tmp),
                     meeting_runner_factory=None,
+                    conviction=conviction_term,
                 )
             fitness_values.append(repeat_pass.inner_fitness)
             win_values.append(repeat_pass.win_rate)
@@ -1755,6 +1868,14 @@ def evaluate_candidate(
             else None
         ),
         conviction_weights_sha256=conviction_verdict.weights_sha256,
+        conviction_meetings_predicted=(
+            real_pass.trace.conviction_meetings if conviction_term is not None else None
+        ),
+        conviction_mean_predicted_supply=(
+            real_pass.trace.mean_predicted_supply()
+            if conviction_term is not None
+            else None
+        ),
     )
 
 

@@ -75,6 +75,17 @@ per run threaded through both); :class:`CrewDecisionTrace` grows the
 predicted-supply accumulators the impostor trace already carries. Under NO-GO
 the term is structurally absent (``conviction=None``), never zero-weighted, and
 :func:`evaluate_crew_candidate` stamps the same provenance triple onto the row.
+
+Task 18.30 lands the LIVE per-meeting serving that 18.16 left dormant: both the
+crew training loop (:meth:`CrewEsEntrant.train`, loading the term once per run
+from :attr:`CrewEsConfig.conviction_artifact_dir`) and the crew eval loop
+(:func:`evaluate_crew_candidate`, via :meth:`CrewProtocolConfig.
+resolved_conviction_term`) wrap each rollout's meeting-runner factory in
+:class:`~training.conviction.serving.ConvictionServingMeetingRunner` (the shared
+:func:`training.bakeoff.harness._conviction_serving_factory`), so under GO the
+term is served live from run_meeting-time state and the crew fitness is
+conviction-composed by default; under NO-GO the wrapper is absent and the
+fitness stays anchor-composed.
 """
 
 from __future__ import annotations
@@ -132,7 +143,9 @@ from training.bakeoff.harness import (
     MetricSpread,
     SupplyGaugeRow,
     TrainedCandidate,
+    _conviction_serving_factory,
     intent_key,
+    load_conviction_fitness_term,
     load_conviction_row_provenance,
     load_eval_seeds,
     load_train_seeds,
@@ -989,6 +1002,12 @@ class CrewEsConfig:
     degenerate play shape. The EVAL protocol (:class:`CrewProtocolConfig`)
     keeps the production ``DEFAULT_MAX_TICKS``, so every reported metric is
     measured under the uncapped budget.
+
+    ``conviction_artifact_dir`` (Task 18.30) is the committed conviction bundle
+    the training loop loads its ONE per-run term from
+    (:meth:`CrewEsEntrant.train`); it defaults to the committed GO dir, so
+    training serves the term live by default and falls to structural absence
+    under the committed NO-GO verdict.
     """
 
     es: ESConfig
@@ -997,6 +1016,7 @@ class CrewEsConfig:
     num_impostors: int = BAKEOFF_NUM_IMPOSTORS
     tasks_per_crewmate: int = BAKEOFF_TASKS_PER_CREWMATE
     max_ticks: int = DEFAULT_MAX_TICKS
+    conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
 
 
 def crew_es_budget(
@@ -1050,10 +1070,15 @@ class CrewEsEntrant:
     protocol drift. Satisfies the 15.15 ``BakeoffEntrant`` seam structurally
     (``name`` + ``train()``).
 
-    The 18.16 conviction term stays ``conviction=None`` in this training loop:
-    the campaign wires the live per-meeting serving path later — this task lands
-    the SEAM (:func:`crew_inner_episode_fitness`'s optional term), not the live
-    feature production.
+    Task 18.30 serves the conviction term LIVE in this training loop: every seed
+    rollout wraps its meeting-runner factory so the term predicts each meeting
+    from run_meeting-time state and :func:`crew_inner_episode_fitness` composes
+    the recorded mean supply. The ONE term (one
+    :class:`~training.conviction.model.ConvictionUseCounter`) is loaded once per
+    :meth:`train` run from :attr:`CrewEsConfig.conviction_artifact_dir` (the
+    one-counter-per-run doctrine); under the committed GO verdict it is served by
+    default, and under NO-GO it is ``None`` — structural absence, the training
+    loop composing anchor-only.
     """
 
     def __init__(
@@ -1068,6 +1093,11 @@ class CrewEsEntrant:
         # ``basis`` (Task 15.22) selects the widened option menu; the entrant
         # name, genome length, and reported encoder/feature-names all follow it.
         self._basis = basis
+        # The ONE per-run conviction term (Task 18.30) and its running meeting
+        # tally, both established at the top of :meth:`train` before ``evolve``
+        # calls :meth:`_seed_fitness`.
+        self._conviction_term: ConvictionFitnessTerm | None = None
+        self._conviction_meetings_train = 0
 
     @property
     def name(self) -> str:
@@ -1082,6 +1112,16 @@ class CrewEsEntrant:
             weights=genome, game_map=self._game_map, basis=self._basis
         )
         trace = CrewDecisionTrace()
+        # Under GO serve the term live this episode (binding THIS trace); under
+        # NO-GO the factory is None and the fitness composes anchor-only.
+        term = self._conviction_term
+        meeting_runner_factory = (
+            _conviction_serving_factory(
+                None, term=term, record=trace.record_conviction_prediction
+            )
+            if term is not None
+            else None
+        )
         with tempfile.TemporaryDirectory(prefix="ailibi-crew-es-") as tmp:
             rollout = rollout_crew_candidate(
                 policy,
@@ -1092,14 +1132,24 @@ class CrewEsEntrant:
                 num_impostors=self._config.num_impostors,
                 tasks_per_crewmate=self._config.tasks_per_crewmate,
                 max_ticks=self._config.max_ticks,
+                meeting_runner_factory=meeting_runner_factory,
                 trace=trace,
             )
+        self._conviction_meetings_train += trace.conviction_meetings
         return crew_inner_episode_fitness(
-            rollout, trace, anchor_weight=self._config.anchor_weight
+            rollout, trace, anchor_weight=self._config.anchor_weight, conviction=term
         )
 
     def train(self) -> TrainedCandidate:
         started = time.perf_counter()
+        # The ONE conviction term for this ES run (Task 18.30): loaded once, its
+        # single ConvictionUseCounter cumulative across every seed rollout
+        # ``evolve`` drives through :meth:`_seed_fitness`. Under the committed
+        # NO-GO verdict the load returns None and training composes anchor-only.
+        self._conviction_term = load_conviction_fitness_term(
+            self._config.conviction_artifact_dir
+        )
+        self._conviction_meetings_train = 0
         genome_length = (
             self._basis.genome_length()
             if self._basis is not None
@@ -1135,6 +1185,12 @@ class CrewEsEntrant:
                 "num_evaluations": result.num_evaluations,
                 "fitness_trace": [round(value, 4) for value in result.fitness_trace],
                 "champion_fitness": round(result.champion_fitness, 4),
+                # Task 18.30 liveness: whether the term shipped in this run and
+                # the total meetings it predicted across the whole ES search.
+                "conviction_fitness_term": (
+                    "ships" if self._conviction_term is not None else "absent"
+                ),
+                "conviction_meetings_predicted_train": self._conviction_meetings_train,
             },
         )
 
@@ -1179,8 +1235,13 @@ class CrewProtocolConfig:
 
     The 18.16 ``conviction_artifact_dir`` / ``conviction_weight`` fields stamp
     each row's conviction provenance metadata (mirroring the impostor
-    ``BakeoffProtocolConfig``); the crew fitness COLUMNS stay anchor-composed
-    until the live serving seam lands.
+    ``BakeoffProtocolConfig``). Task 18.30 opens the live serving seam:
+    :func:`evaluate_crew_candidate` resolves the term via
+    :meth:`resolved_conviction_term` and threads it through the real and repeat
+    passes, so under the committed GO verdict the crew eval fitness COLUMNS are
+    conviction-composed (served live from run_meeting-time state) and the row's
+    liveness columns say the loop served the term; under NO-GO the term is
+    structurally absent and the fitness stays anchor-composed.
     """
 
     eval_seeds: tuple[int, ...]
@@ -1196,6 +1257,32 @@ class CrewProtocolConfig:
     max_ticks: int = DEFAULT_MAX_TICKS
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
     conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
+    conviction_term: ConvictionFitnessTerm | None = None
+    conviction_term_resolved: bool = False
+
+    def resolved_conviction_term(self) -> ConvictionFitnessTerm | None:
+        """The SHARED conviction term for this eval run (loaded lazily once).
+
+        Mirrors the impostor
+        :meth:`~training.bakeoff.harness.BakeoffProtocolConfig.resolved_conviction_term`:
+        ONE :class:`~training.bakeoff.harness.ConvictionFitnessTerm` (one
+        :class:`~training.conviction.model.ConvictionUseCounter`) outlives the
+        real and repeat passes, so the committed staleness cap is cumulative.
+        Under the committed NO-GO verdict the load returns ``None`` and that
+        STRUCTURAL ABSENCE is cached (the resolved FLAG, not the None result, is
+        the cache key) — a NO-GO run never re-reads the bundle nor grows a
+        zero-weighted ghost.
+        """
+
+        if not self.conviction_term_resolved:
+            term = load_conviction_fitness_term(
+                self.conviction_artifact_dir, weight=self.conviction_weight
+            )
+            # A frozen dataclass: stash via object.__setattr__ so every
+            # subsequent call shares the SAME term (never a per-call reload).
+            object.__setattr__(self, "conviction_term", term)
+            object.__setattr__(self, "conviction_term_resolved", True)
+        return self.conviction_term
 
 
 def default_crew_protocol_config() -> CrewProtocolConfig:
@@ -1229,7 +1316,11 @@ class CrewTrackResult(BaseModel):
     (this track does not meter the 15.13 staleness cap). Task 18.16 appends the
     conviction provenance triple: the weight is named under
     ``fitness_term == "ships"``; under ``"absent"`` the weight is None — the row
-    says the term is structurally absent, never zero-weighted.
+    says the term is structurally absent, never zero-weighted. Task 18.30 appends
+    the live-serving liveness pair (``conviction_meetings_predicted`` /
+    ``conviction_mean_predicted_supply``): under GO the real pass serves the term
+    live and these carry the meetings it predicted and the mean supply the
+    fitness composed; under NO-GO they are None.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1309,6 +1400,12 @@ class CrewTrackResult(BaseModel):
     conviction_weight: float | None = None
     conviction_weights_sha256: str | None = None
 
+    # Task 18.30 live-serving liveness (real pass; None-default). Stamped from
+    # the real pass's set-level trace ONLY when the term is live (GO); under
+    # NO-GO the term is structurally absent and both stay None.
+    conviction_meetings_predicted: int | None = None
+    conviction_mean_predicted_supply: float | None = None
+
     def to_json_line(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True)
 
@@ -1342,6 +1439,7 @@ def _score_crew_eval_pass(
     protocol: CrewProtocolConfig,
     game_map: Map,
     output_dir: Path,
+    conviction: ConvictionFitnessTerm | None,
 ) -> _CrewEvalPass:
     trace = CrewDecisionTrace()
     diagnostic = CoverageCueDiagnostic()
@@ -1363,6 +1461,18 @@ def _score_crew_eval_pass(
     initial_crew = max(1, protocol.num_players - protocol.num_impostors)
     for seed in protocol.eval_seeds:
         episode_trace = CrewDecisionTrace()
+        # Under GO wrap the meeting-runner factory so the term serves this
+        # episode live (binding THIS trace); under NO-GO it is absent and the
+        # fitness composes anchor-only.
+        meeting_runner_factory = (
+            _conviction_serving_factory(
+                None,
+                term=conviction,
+                record=episode_trace.record_conviction_prediction,
+            )
+            if conviction is not None
+            else None
+        )
         rollout = rollout_crew_candidate(
             policy,
             seed,
@@ -1372,12 +1482,16 @@ def _score_crew_eval_pass(
             num_impostors=protocol.num_impostors,
             tasks_per_crewmate=protocol.tasks_per_crewmate,
             max_ticks=protocol.max_ticks,
+            meeting_runner_factory=meeting_runner_factory,
             trace=episode_trace,
             diagnostic=diagnostic,
         )
         fitnesses.append(
             crew_inner_episode_fitness(
-                rollout, episode_trace, anchor_weight=protocol.anchor_penalty_weight
+                rollout,
+                episode_trace,
+                anchor_weight=protocol.anchor_penalty_weight,
+                conviction=conviction,
             )
         )
         if rollout.complete:
@@ -1486,13 +1600,18 @@ def evaluate_crew_candidate(
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
     # The committed conviction verdict stamps the row's provenance metadata —
-    # the crew-side twin of the impostor row's stamp (the crew fitness columns
-    # stay anchor-composed until the live serving seam lands). Drift-checked
-    # via the harness's bundle loader BEFORE any eval side effects: a stale or
+    # the crew-side twin of the impostor row's stamp. Drift-checked via the
+    # harness's bundle loader BEFORE any eval side effects: a stale or
     # partially-updated bundle fails the run loud, never lands in a row.
     conviction_verdict = load_conviction_row_provenance(
         protocol.conviction_artifact_dir
     )
+    # The ONE shared term for this eval run (Task 18.30): resolved once and
+    # threaded through the real + repeat passes so the single
+    # ConvictionUseCounter is cumulative. Under GO the passes serve it live (the
+    # row's inner_fitness_real is conviction-composed and the liveness columns
+    # say so); under NO-GO it is None — structural absence everywhere.
+    conviction_term = protocol.resolved_conviction_term()
     entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
 
     policy = candidate.policy
@@ -1515,6 +1634,7 @@ def evaluate_crew_candidate(
             protocol=protocol,
             game_map=resolved_map,
             output_dir=real_dir,
+            conviction=conviction_term,
         )
         _drop_audit_sidecars(real_dir)
         watchability: WatchabilityReport = compute_watchability(
@@ -1546,6 +1666,7 @@ def evaluate_crew_candidate(
                     protocol=protocol,
                     game_map=resolved_map,
                     output_dir=Path(tmp),
+                    conviction=conviction_term,
                 )
             fitness_values.append(repeat_pass.inner_fitness)
             win_values.append(repeat_pass.win_rate)
@@ -1669,6 +1790,14 @@ def evaluate_crew_candidate(
             else None
         ),
         conviction_weights_sha256=conviction_verdict.weights_sha256,
+        conviction_meetings_predicted=(
+            real_pass.trace.conviction_meetings if conviction_term is not None else None
+        ),
+        conviction_mean_predicted_supply=(
+            real_pass.trace.mean_predicted_supply()
+            if conviction_term is not None
+            else None
+        ),
     )
 
 
