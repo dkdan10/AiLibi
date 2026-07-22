@@ -248,9 +248,7 @@ def assemble_live_conviction_features(
             entry = graph.get(candidate)
             # The RAW fold scalar (not the clamped ``entry.suspicion``); an
             # absent row is production's unseeded neutral prior.
-            suspicion = (
-                _raw_suspicion(entry) if entry is not None else _NEUTRAL_PRIOR
-            )
+            suspicion = _raw_suspicion(entry) if entry is not None else _NEUTRAL_PRIOR
             suspicions.append(suspicion)
             prior = per_candidate_max.get(candidate)
             if prior is None or suspicion > prior:
