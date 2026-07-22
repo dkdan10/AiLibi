@@ -258,7 +258,11 @@ None of the three overturns the GO — the pre-committed consequence stands
 with it: an adopting campaign consumes the composed pre-screen as spend advice
 only, pairs every gating use with a recorded-bytes read, treats
 composed-substrate probe reads as diagnostic-grade, and never lets a champion
-number be composed-runner-scored (the standing rule).
+number be composed-runner-scored (the standing rule). All three are ALSO
+committed machine-readably as `adoption_constraints` in
+`training/artifacts/composed/verdict.json` (Codex review on PR #310), so a
+driver that branches on the verdict alone still sees them — never only this
+report's prose.
 
 ### 6.4 Component consumption (metered and quoted)
 
@@ -287,6 +291,9 @@ report's prose:
   bar (`decision_accuracy_bar: 0.625`, `top1_bar: 0.6375`,
   `top1_ceiling: 0.85`, `top1_ceiling_ratio: 0.75`),
   `exact_outcome_match: 0.7917` informational.
+* `adoption_constraints`: the §6.3 named constraints, machine-readable beside
+  the consequence — they ride with adoption and never flip the pre-committed
+  GO/NO-GO mapping.
 
 `manifest.json` pins the component pair + the pinned thresholds
 (`decision_threshold: 0.5`, `skip_confidence_threshold: 0.6`) + the bar

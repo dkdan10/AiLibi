@@ -1,4 +1,9 @@
 {
+  "adoption_constraints": [
+    "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) \u2014 composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+    "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]: predicted floors PASS while the composed substrate mints 0 flags in bytes \u2014 a pre-screen PASS is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read",
+    "emergency-predicted-supply-above-bar[emergency,9p2i]: forced-emergency predicted-supply delta +29.5% >= the 25% materiality bar with recorded 0.0 \u2014 the laundering shape, validity-gated out of the machinery's findings"
+  ],
   "composed_role": "optional-campaign-configuration",
   "convicting_top1": 0.7666666666666667,
   "conviction_weights_sha256": "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47",

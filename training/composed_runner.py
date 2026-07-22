@@ -461,7 +461,10 @@ def _reanchor_ballots(
         # no target-ballot reaches the gate, raise the single best-mass
         # target-ballot's confidence to exactly the gate and re-tally (inclusive
         # at cutoff). Applied ONLY when it completes the ejection — reverted
-        # otherwise, so it never fires on a still-tied plurality.
+        # otherwise, so it never fires on a still-tied plurality. The bumped
+        # ballot is RE-STAMPED with the re-anchor marker (Codex review on PR
+        # #310): the composition changed it to land the ejection, so the audit
+        # trail must never claim it is the surrogate's untouched prediction.
         target_voters = [v for v in living if ballots[v].target == target]
         if not target_voters:
             return False
@@ -469,7 +472,9 @@ def _reanchor_ballots(
         saved = ballots[best]
         if saved.confidence >= threshold:
             return False
-        ballots[best] = saved.model_copy(update={"confidence": threshold})
+        ballots[best] = _rewrite_ballot(
+            saved, target=saved.target, confidence=threshold
+        )
         if real_tally_outcome() == ("EJECTED", target):
             return True
         ballots[best] = saved
@@ -913,6 +918,13 @@ class ComposedGoVerdict(BaseModel):
     bar). Exact-outcome match NEVER gates. Pre-committed consequence: GO ⇒ the
     runner is an OPTIONAL campaign configuration; NO-GO ⇒ diagnostic-only. Keyed
     to BOTH component shas.
+
+    ``adoption_constraints`` carries the composed-path Goodhart leg's NAMED
+    adoption constraints machine-readably (Codex review on PR #310): a driver
+    that branches on this verdict alone must still see them, never only the
+    report's prose. They ride WITH the pre-committed consequence — they never
+    flip the GO/NO-GO mapping (that would re-tune the pre-registered bar after
+    measurement) — and an adopting campaign carries every one in its meters.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -934,6 +946,9 @@ class ComposedGoVerdict(BaseModel):
     exact_outcome_match: float
     verdict: Literal["GO", "NO-GO"]
     composed_role: Literal["optional-campaign-configuration", "diagnostic-only"]
+    # The Goodhart leg's named adoption constraints, machine-readable beside the
+    # consequence (never flipping it).
+    adoption_constraints: tuple[str, ...] = ()
     conviction_weights_sha256: str = Field(min_length=64, max_length=64)
     surrogate_weights_sha256: str = Field(min_length=64, max_length=64)
 
@@ -943,6 +958,7 @@ def decide_composed_go(
     *,
     conviction_weights_sha256: str,
     surrogate_weights_sha256: str,
+    adoption_constraints: tuple[str, ...] = (),
 ) -> ComposedGoVerdict:
     """Apply the pre-registered bar to a held-out composed fidelity report.
 
@@ -950,7 +966,9 @@ def decide_composed_go(
     drift) so the verdict is keyed to exactly the artifacts the numbers were
     produced by. GO ⇔ the decision channel strictly beats always-eject AND the
     convicting top-1 clears the standing axis-1 bar; exact-outcome match never
-    flips the verdict.
+    flips the verdict. ``adoption_constraints`` (additive keyword) carries the
+    Goodhart leg's named adoption constraints into the machine-readable verdict
+    — they ride beside the consequence and never move the GO/NO-GO decision.
     """
 
     if conviction_weights_sha256 != report.conviction_weights_sha256:
@@ -988,6 +1006,7 @@ def decide_composed_go(
         composed_role=(
             "optional-campaign-configuration" if is_go else "diagnostic-only"
         ),
+        adoption_constraints=adoption_constraints,
         conviction_weights_sha256=conviction_weights_sha256,
         surrogate_weights_sha256=surrogate_weights_sha256,
     )

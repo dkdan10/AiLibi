@@ -52,7 +52,12 @@ from engine.entities import PlayerId, Role
 from engine.world import WorldState, load_canonical_map
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.manager import MeetingTrigger, SuspicionEntry
-from meetings.schemas import ObservationId, SightingRecord, VentWitnessRecord
+from meetings.schemas import (
+    ObservationId,
+    SightingRecord,
+    VentWitnessRecord,
+    VoteBallot,
+)
 from meetings.voting import tally_ballots
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
@@ -79,6 +84,7 @@ from training.composed_runner import (
     ComposedMeetingRunner,
     _COMPOSED_RATIONALE,  # noqa: PLC2701 - the audit-marker fence is under test
     _REANCHOR_RATIONALE,  # noqa: PLC2701 - the audit-marker fence is under test
+    _reanchor_ballots,  # noqa: PLC2701 - the anchor-stamp fence is under test
     build_composed_manifest,
     decide_composed_go,
     load_composed_components,
@@ -103,6 +109,7 @@ from training.conviction.model import (
 from training.conviction.serving import assemble_live_conviction_features
 from training.surrogate.ballots import (
     BallotPredictor,
+    PredictedBallot,
     SurrogateStalenessCap,
     VoterBallotView,
     load_ballot_predictor_artifact,
@@ -598,6 +605,73 @@ def test_convict_branch_reanchors_onto_the_ranked_target(
             sb = surrogate_ballots[ballot.voter]
             assert ballot.target == sb.target
             assert ballot.confidence == sb.confidence
+
+
+def test_confidence_only_anchor_stamps_the_reanchor_marker() -> None:
+    """A confidence-bumped ballot carries the re-anchor stamp (Codex, PR #310).
+
+    When the target already holds strict plurality from pass-through ballots but
+    no target ballot reaches the 0.6 gate, the anchor raises exactly one
+    confidence to the gate — a ballot the composition CHANGED, so it must never
+    keep the pass-through marker claiming it is the surrogate's untouched
+    prediction. Every ballot still carrying the pass-through marker afterwards
+    must be byte-identical to its original.
+    """
+
+    living: tuple[PlayerId, ...] = ("p-1", "p-2", "p-3", "p-4")
+    target: PlayerId = "p-1"
+
+    def passthrough(voter: PlayerId, ballot_target: str) -> VoteBallot:
+        return VoteBallot(
+            voter=voter,
+            target=ballot_target,
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=_COMPOSED_RATIONALE,
+        )
+
+    ballots = {
+        "p-1": passthrough("p-1", "SKIP"),
+        "p-2": passthrough("p-2", target),
+        "p-3": passthrough("p-3", target),
+        "p-4": passthrough("p-4", target),
+    }
+    originals = dict(ballots)
+    # p-3 carries the highest surrogate mass for the target, so the anchor must
+    # deterministically pick it.
+    masses = {"p-1": 0.0, "p-2": 0.2, "p-3": 0.6, "p-4": 0.4}
+    by_voter = {
+        voter: PredictedBallot(
+            target=ballots[voter].target,
+            confidence=0.5,
+            target_probs={target: masses[voter]} if voter != target else {},
+            skip_prob=0.5,
+        )
+        for voter in living
+    }
+
+    _reanchor_ballots(
+        ballots=ballots,
+        by_voter=by_voter,
+        predicted_confidence={voter: 0.5 for voter in living},
+        living=living,
+        impostor_ids=frozenset(),
+        target=target,
+        meeting_id="headless-seed-0:meeting-0",
+    )
+
+    assert tally_ballots(
+        [ballots[v] for v in living],
+        skip_confidence_threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    ) == ("EJECTED", target)
+    # The anchor bumped exactly the best-mass target ballot — and re-stamped it.
+    assert ballots["p-3"].confidence == DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+    assert ballots["p-3"].rationale_text == _REANCHOR_RATIONALE
+    # Every ballot still wearing the pass-through marker is genuinely untouched.
+    for voter in living:
+        if ballots[voter].rationale_text == _COMPOSED_RATIONALE:
+            assert ballots[voter] == originals[voter]
 
 
 # --------------------------------------------------------------------------- #
@@ -1310,10 +1384,20 @@ def test_committed_composed_verdict_is_rederivable(
     committed = load_composed_verdict(_COMPOSED_ARTIFACT_DIR)
     assert committed.replay_set_dir == "replays/ml_corpus/9p2i"
     assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
+    # ``adoption_constraints`` is the Goodhart leg's carried metadata (not
+    # derivable from the fidelity), so the identity splice covers it like the
+    # repo-relative path — and the three NAMED constraints are pinned below so a
+    # silently emptied list moves this committed test, not just report prose.
     assert committed.model_dump() == {
         **rederived.model_dump(),
         "replay_set_dir": committed.replay_set_dir,
+        "adoption_constraints": committed.adoption_constraints,
     }
+    assert [c.split(":", 1)[0] for c in committed.adoption_constraints] == [
+        "composed-provenance-validity[all-arms,9p2i]",
+        "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]",
+        "emergency-predicted-supply-above-bar[emergency,9p2i]",
+    ]
 
     # The first-evaluation numbers (baseline-6 corpus, committed split).
     assert committed.verdict == "GO"
