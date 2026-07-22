@@ -423,6 +423,73 @@ def test_resolve_candidate_masked_mlp_missing_hidden_fails_loud(
         rt._resolve_agent_factory("fsm-default", candidate_artifact=corrupt)
 
 
+def _make_v3_artifact(tmp_path: Path) -> Path:
+    """Synthesize a v3-family artifact dir (18.22 encoder v3 + per-target head).
+
+    No committed v3 artifact exists yet (18.24's campaign records them), so the
+    fixture writes the four artifact files by hand: a zero genome of the exact
+    v3 length as float-hex ``weights.json``, its HONEST sha256 sidecar, the
+    ``hidden`` width in ``config.json``, and a five-field ``stamp.json`` whose
+    ``encoder_version`` is ``"v3"`` and whose ``weights_sha256`` matches the
+    sidecar (the 17.14 conflation guard).
+    """
+
+    import hashlib
+
+    from agents.tactical.features import TacticalFeatureEncoderV3, weights_to_hex_json
+    from engine.world import load_canonical_map
+    from orchestrator.boundary import public_map_from_engine_map
+    from training.bakeoff.policy_es import TARGET_KILL_SLOTS, policy_genome_length
+
+    dst = tmp_path / "policy-es-v3"
+    dst.mkdir()
+    genome_length = policy_genome_length(
+        public_map_from_engine_map(load_canonical_map()),
+        hidden=8,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=TARGET_KILL_SLOTS,
+    )
+    raw = weights_to_hex_json((0.0,) * genome_length)
+    (dst / "weights.json").write_text(raw, encoding="utf-8")
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    (dst / "weights.json.sha256").write_text(digest + "\n", encoding="utf-8")
+    (dst / "config.json").write_text(
+        json.dumps({"hidden": 8}, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    stamp = {
+        "policy_id": "policy-es-v3",
+        "method": "policy-net-es",
+        "encoder_version": "v3",
+        "weights_sha256": digest,
+        "anchor_policy": "fsm-default",
+    }
+    (dst / "stamp.json").write_text(
+        json.dumps(stamp, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return dst
+
+
+def test_resolve_candidate_v3_artifact_rebuilds_v3_policy(tmp_path: Path) -> None:
+    """A v3-stamped artifact rebuilds through the encoder_version seam (18.22).
+
+    The Codex review gap on PR #308: the reload previously rebuilt every
+    masked-MLP artifact as v2, so a v3 genome failed its own length check and
+    no v3 champion could ever be run from its artifact. The stamp's
+    ``encoder_version`` now selects the family, and the existing rebuilt-vs-
+    declared post-check pins the identity.
+    """
+
+    artifact = _make_v3_artifact(tmp_path)
+    policy, stamp = rt._load_candidate_policy(artifact)
+    assert stamp.encoder_version == "v3"
+    assert policy.encoder_version == "v3"
+    factory, resolved_stamp = rt._resolve_agent_factory(
+        "fsm-default", candidate_artifact=artifact
+    )
+    assert callable(factory)
+    assert resolved_stamp is not None and resolved_stamp.encoder_version == "v3"
+
+
 # -- main() candidate path (opt-in factory + auto-stamp) -----------------------
 
 

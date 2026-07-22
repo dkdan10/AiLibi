@@ -49,6 +49,7 @@ from training.realpath import (
     RealPathRerankRow,
     RealPathSeedExhaustedError,
     RealPathStampError,
+    _build_agent_factory,
     _TimeoutMeetingRunner,
     candidates_from_champion_trace,
     run_realpath_rerank,
@@ -610,7 +611,7 @@ def test_unknown_baseline_or_roster_fails_before_recording(tmp_path: Path) -> No
 
 
 # --------------------------------------------------------------------------- #
-# 14. Unsupported encoder families fail loud at candidate construction.       #
+# 14. Encoder-family whitelist: v3 rebuilds; unknown families fail loud.       #
 # --------------------------------------------------------------------------- #
 
 
@@ -619,8 +620,38 @@ def test_unsupported_encoder_version_fails_loud() -> None:
         RealPathCandidate(
             label="future",
             genome=_util_weights(),
-            encoder_version="v3",
+            encoder_version="v9",
             hidden=8,
             policy_id="p",
             method="m",
         )
+
+
+def test_v3_candidate_validates_and_rebuilds() -> None:
+    # The 18.22 encoder-v3 + per-target-head family is whitelisted and rebuilds
+    # through build_masked_mlp_policy's encoder_version seam (the Codex PR #308
+    # review gap: a v3 candidate previously rebuilt as v2 and rejected its own
+    # wider genome). _build_agent_factory's internal post-check pins the rebuilt
+    # policy's encoder identity against the declared one, so constructing the
+    # factory IS the rebuild assertion.
+    from agents.tactical.features import TacticalFeatureEncoderV3
+    from training.bakeoff.policy_es import TARGET_KILL_SLOTS, policy_genome_length
+    from orchestrator.boundary import public_map_from_engine_map
+
+    game_map = load_canonical_map()
+    genome_length = policy_genome_length(
+        public_map_from_engine_map(game_map),
+        hidden=8,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=TARGET_KILL_SLOTS,
+    )
+    candidate = RealPathCandidate(
+        label="policy-es-v3",
+        genome=(0.0,) * genome_length,
+        encoder_version="v3",
+        hidden=8,
+        policy_id="policy-es-v3",
+        method="policy-net-es",
+    )
+    factory = _build_agent_factory(candidate, game_map=game_map)
+    assert callable(factory)
