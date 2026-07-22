@@ -23,10 +23,12 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Scenario legs (18.23) are deliberately NOT a
-prerequisite: the campaign starts without them, and if 18.23 merges mid-campaign a later
-swap MAY adopt scenario legs, recorded per-generation in the rows — the close (18.28)
-still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
+selects on has been re-probed (18.18). Scenario legs (18.23) and the composed
+meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
+without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
+runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
+component use-counters quoted in the campaign meters), recorded per-generation in the
+rows — the close (18.28) still waits on both either way. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):

@@ -12,7 +12,7 @@ Implement Task 18.28 — The mover record + the phase close (operator + owner, $
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-close`
-**Depends on:** 18.23, 18.27
+**Depends on:** 18.23, 18.27, 18.29
 **Section refs:** tasks/phase-17.md 17.17 + audits/audit-phase-17-close.md (the close shape, both paths); the 18.12 record audit (the canary pre-registration source); tasks/post-phase-14-plan.md (the roadmap spine this close annotates)
 **Complexity:** Integration
 
@@ -75,9 +75,7 @@ any new evidence so the owner's merge ratifies a reading, never a surprise.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
-- `uv run python -c "import agents.tactical.features"`
-- `uv run python -c "import training.coevo.factory"`
-- `uv run python -c "import training.coevo.rollout"`
+- `uv run python -c "import training.composed_runner"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
 - `uv run python -c "import training.conviction.dataset"`
@@ -91,6 +89,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import agents.tactical.features"`
+- `uv run python -c "import training.coevo.factory"`
+- `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`

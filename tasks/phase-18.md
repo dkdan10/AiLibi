@@ -24,6 +24,17 @@ Baseline-numbering block a CREW-ONLY ruling changes NO structure: 18.12–18.14 
 18.12's graduation flips cover the round, the exemption, the vent variant/widening, and the
 absence prior, while `impostor_roll_call` stays a default-OFF toggle.
 
+**AMENDMENT (owner-directed, 2026-07-22).** Task 18.29 (the composed meeting-outcome
+runner) is appended: the 18.14/18.15 verdict pair opened a composition the phase doc could
+not have pre-authored — the conviction model answers the meeting-outcome question the
+surrogate fails (will it convict: 0.938 accuracy) while the surrogate's ranking channel
+answers the one it retains (who: 0.7667 top-1). The composed runner gives training
+rollouts real conviction dynamics (rosters shrink, parity arises, crew can win by
+ejection) under its OWN pre-registered GO bar, with NO-GO pre-committed to
+diagnostic-only and the campaigns unaffected. 18.21 gains the optional runner-factory
+seam, 18.24 the swap-boundary adoption note, 18.28 the close edge. Locked decisions
+unchanged.
+
 ## Locked decisions (owner-ratified 2026-07-18)
 
 1. **Training signal: layered — conviction-economy proxy + real-path selection.** A
@@ -129,10 +140,12 @@ Wave 3 (co-evolution):
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
   18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
+  (18.16, 18.18) -> 18.29 composed meeting-outcome runner (amendment, 2026-07-22)
+
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
   (18.4, 18.18, 18.26) -> 18.27 THE FLIP + EMERGENCE READING [OWNER]
-  (18.23, 18.27) -> 18.28 mover record + phase close [OPERATOR + OWNER]
+  (18.23, 18.27, 18.29) -> 18.28 mover record + phase close [OPERATOR + OWNER]
   (18.5 reaches the close transitively through 18.24's entrant seeding)
 ```
 
@@ -1361,10 +1374,11 @@ anchor = cycling, monotone anchor = progress), a per-side short-horizon exploite
 small ES bred purely to beat the current champion; its found exploits join the hall of
 fame), and the anchor-CE term retained toward the FIXED scripted FSM on both sides (never
 toward the moving opponent). One side moves at a time, always — the barred simultaneous
-form is structurally unreachable. The driver additionally exposes an ADDITIVE
-scenario-leg seam: an optional per-swap scenario-provider callable, inert when unset
-(digest-identical), so 18.23's scenarios can be mixed into later campaign swaps without
-ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
+form is structurally unreachable. The driver additionally exposes TWO ADDITIVE
+seams, each inert when unset (digest-identical): a per-swap scenario-provider callable
+(18.23's scenarios) and an optional meeting-runner factory per campaign configuration
+(default: the fake provider) — the slot 18.29's composed runner (or any future GO-verdict
+runner) plugs into without ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
 **Files in scope:**
@@ -1534,10 +1548,12 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Scenario legs (18.23) are deliberately NOT a
-prerequisite: the campaign starts without them, and if 18.23 merges mid-campaign a later
-swap MAY adopt scenario legs, recorded per-generation in the rows — the close (18.28)
-still waits on 18.23 either way. Seed hygiene: every study-artifact entrant (the 18.5
+selects on has been re-probed (18.18). Scenario legs (18.23) and the composed
+meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
+without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
+runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
+component use-counters quoted in the campaign meters), recorded per-generation in the
+rows — the close (18.28) still waits on both either way. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
@@ -1754,7 +1770,7 @@ open on the held axis, the 17.14 PENDING pattern).
 
 ### Task 18.28 — The mover record + the phase close (operator + owner, $0)
 **Branch:** `phase-18-close`
-**Depends on:** 18.23, 18.27
+**Depends on:** 18.23, 18.27, 18.29
 **Section refs:** tasks/phase-17.md 17.17 + audits/audit-phase-17-close.md (the close shape, both paths); the 18.12 record audit (the canary pre-registration source); tasks/post-phase-14-plan.md (the roadmap spine this close annotates)
 **Complexity:** Integration
 
@@ -1815,3 +1831,94 @@ compression (the flip ruled at 18.27, the close ratified here) — keep the clos
 any new evidence so the owner's merge ratifies a reading, never a surprise.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-28-close.md`
+
+---
+
+## Amendment (2026-07-22) — the composed meeting-outcome runner
+
+### Task 18.29 — The composed meeting-outcome runner (conviction-gated ejections in training rollouts)
+**Branch:** `phase-18-composed-runner`
+**Depends on:** 18.16, 18.18
+**Section refs:** training/reports/report-conviction-model.md (the GO cells: decision accuracy 0.938, recall 45/47 on the 96-meeting held-out split; `training/artifacts/conviction/verdict.json`); training/reports/report-ballot-surrogate.md (the NO-GO diagnosis this composes around: ranking top-1 0.7667 retained, decision channel all-SKIP; `SurrogateMeetingRunner` in training/surrogate/runner.py); training/surrogate/runner.py:105-148 (the use-counter doctrine BOTH components meter through); training/env.py:614-628 (the runner-factory seam)
+**Complexity:** Integration
+
+The verdict pair's opening: training rollouts currently run fake meetings that convict
+nobody, while 65.2% of real baseline-6 meetings convict — so rosters never shrink, parity
+never arises, an impostor never loses a teammate, and crew never wins by ejection inside
+training. Compose the two committed instruments into a `MeetingRunner`: the conviction
+model decides WHETHER the meeting convicts (the question the surrogate fails at 0.375),
+and the surrogate's ranking channel decides WHO (the question it retains at 0.7667
+top-1); the predicted ballots are synthesized coherently with that outcome and the
+ejection actually happens in the rollout. No new weights — the composed artifact is a
+manifest pinning both component shas + the bar verdict. Its OWN pre-registered
+population-relative GO bar, stated here before any measurement, on the held-out corpus
+test split (96 meetings / 60 ejections): (1) meeting-level decision accuracy **> 0.625**
+(the strictest trivial constant on this split — always-eject); (2) among convicting
+meetings, ejected-target top-1 **≥ 0.6375** (= 0.75 × the 0.8500 honest ceiling, the
+standing axis-1 form); (3) exact-outcome match (ejected id or skip) REPORTED beside the
+verdict, informational never gating. Pre-committed: **NO-GO ⇒ diagnostic-only** — the
+campaigns run the standing plan (fake provider + conviction term) unchanged, and nothing
+downstream re-plans. GO ⇒ the runner becomes an OPTIONAL campaign configuration through
+18.21's runner-factory seam, adopted only at a swap boundary (the 18.24 note), with the
+standing rules untouched: final champion numbers are never composed-runner-scored, and
+both component staleness counters meter every composed meeting. The task also runs the
+composed-path Goodhart leg (the standing rule — the probe re-runs when the
+training-signal role grows; 18.18's conviction-path arms are the machinery this leg
+extends): no lever family may launder composed-outcome artifacts into fitness above the
+standing materiality bar, reported before any campaign adoption.
+
+**Files in scope:**
+- training/composed_runner.py (new)
+- training/artifacts/composed/ (new: the component-sha manifest + verdict.json)
+- training/reports/report-composed-runner.md (new)
+- tests/training/test_composed_runner.py (new)
+
+**Files NOT in scope:**
+- training/surrogate/*.py + training/conviction/*.py (composed via public seams, never edited)
+- training/bakeoff/harness.py + training/coevo/ (the driver seam is 18.21's; adoption is a campaign configuration, not a wiring change)
+- eval/ (the referee and instruments never move; the runner is training-side only)
+
+**Definition of done:**
+- [ ] The composed runner implements the `MeetingRunner` protocol end-to-end on the fake-path test harness: conviction-gated decision, surrogate-ranked target, ballots synthesized coherently with the outcome through the REAL tally semantics, both component artifacts sha-verified on load (fail-loud before any use), both use-counters metered per meeting.
+- [ ] The verdict is taken on the FIRST held-out evaluation against the pre-registered bar above, with every cell quoted beside its threshold, the exact-outcome match reported informationally, and the machine-readable consequence committed (`verdict.json`: GO ⇒ optional campaign configuration; NO-GO ⇒ diagnostic-only) — the honest diagnosis stated beside the verdict either way.
+- [ ] The composed-path Goodhart leg reports its delta per forced lever against the standing bars, with component-consumption metered and quoted; any above-bar finding is a named blocker for campaign adoption, never a silent caveat.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Compose, never re-fit: both components load through their committed loaders
+(`load_surrogate_runner_factory`'s fence semantics; the conviction model's sha-verified
+artifact) and the composed module holds NO learned parameters of its own. The decision
+gate reads the conviction model's committed P ≥ 0.5 threshold (the pinned fidelity
+operating point) — never a re-tuned one. Ballot synthesis must survive the downstream
+folds (the cross-meeting belief fold reads `result.ballots`): under a convict decision,
+the surrogate's predicted ballots are re-anchored so the plurality lands on the ranked
+target through the real `tally_ballots`; under skip, the surrogate's ballots pass through
+unchanged. The §7.12 teammate firewall semantics are inherited from the surrogate runner
+untouched. The fidelity evaluation mirrors `run_surrogate_fidelity`'s split discipline
+(fit-side never evaluated; first-eval verdict). For the Goodhart leg, reuse 18.18's
+conviction-path arm shapes over the composed runner as the meeting path.
+
+**Integration risk:**
+
+Compounding component errors laundering into training signal — a conviction-model false
+positive plus a wrong surrogate top-1 ejects an innocent the real path would not have,
+systematically, and an optimizer could learn to farm that seam. Three fences: the
+pre-registered bar (a composed channel worse than the strictest trivial constant never
+ships), the composed-path Goodhart leg (adoption blocks on above-bar findings), and the
+standing rule that no reported champion number is ever composed-runner-scored. The
+fallback is always live: NO-GO or a fired probe leaves the campaigns on the standing plan
+with nothing re-planned.
+
+**Public types introduced:**
+- `training.composed_runner.ComposedMeetingRunner`
+- `training.composed_runner.decide_composed_go`
+
+**Ready-to-paste prompt:** `agent_prompts/task-18-29-composed-runner.md`
+\n

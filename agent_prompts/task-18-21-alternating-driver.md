@@ -25,10 +25,11 @@ anchor = cycling, monotone anchor = progress), a per-side short-horizon exploite
 small ES bred purely to beat the current champion; its found exploits join the hall of
 fame), and the anchor-CE term retained toward the FIXED scripted FSM on both sides (never
 toward the moving opponent). One side moves at a time, always — the barred simultaneous
-form is structurally unreachable. The driver additionally exposes an ADDITIVE
-scenario-leg seam: an optional per-swap scenario-provider callable, inert when unset
-(digest-identical), so 18.23's scenarios can be mixed into later campaign swaps without
-ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
+form is structurally unreachable. The driver additionally exposes TWO ADDITIVE
+seams, each inert when unset (digest-identical): a per-swap scenario-provider callable
+(18.23's scenarios) and an optional meeting-runner factory per campaign configuration
+(default: the fake provider) — the slot 18.29's composed runner (or any future GO-verdict
+runner) plugs into without ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
 **Files in scope:**
