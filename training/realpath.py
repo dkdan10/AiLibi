@@ -119,8 +119,12 @@ DEFAULT_MEETING_TIMEOUT_SECONDS: Final[float] = 300.0
 # real-provider record used a staggered per-seed retry budget of at least 8).
 DEFAULT_MAX_ATTEMPTS: Final[int] = 8
 
-# The committed watchability floor block every training consumer pins.
-DEFAULT_BASELINE_ID: Final[str] = "baseline-5"
+# The committed watchability floor block every training consumer pins — the
+# adopted phase-18 substrate (baseline-6, Task 18.12's record), tracking the
+# bake-off selection bar (training.bakeoff.harness.BAKEOFF_BASELINE_ID) so a
+# default-config real-path re-rank scores on the same floors the bake-off selects
+# on. Re-pinned baseline-5 -> baseline-6 at Task 18.14 (the selection-bar flip).
+DEFAULT_BASELINE_ID: Final[str] = "baseline-6"
 
 # The 9p2i SELECTION roster (the canonical eval roster the referee floors are
 # pinned for), NOT the engine's 4p1i defaults (orchestrator/game.py:120-121):

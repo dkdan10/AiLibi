@@ -1,7 +1,7 @@
 """Definition-of-done tests for the real-path re-rank recorder (Task 18.17).
 
 These run on the deterministic FAKE provider over the cheap 4p1i roster (the
-committed baseline-5 floor block covers it, eval/watchability.py). Seeds 1 and 2
+committed baseline-6 floor block covers it, eval/watchability.py). Seeds 1 and 2
 each fire exactly one meeting through the committed utility-es and policy-es
 genomes on this roster and every game ends decisively (so its ``game_over``
 record carries a read-back-able stamp) — verified empirically while authoring.
