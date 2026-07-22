@@ -43,7 +43,17 @@ serving seam: :mod:`training.conviction.serving` assembles the per-meeting
 passes now thread the loaded term through the meeting-runner factory (GO ⇒ served
 live and conviction-composed by default; NO-GO ⇒ structurally absent), so the
 row's ``inner_fitness_real`` carries the term under GO and the liveness columns
-say the loop served it. :func:`conviction_prescreen` still accepts a
+say the loop served it. Deliberate 18.30 asymmetry: the impostor ES/QD TRAINING
+loops (``policy_es`` / ``utility_es`` / ``map_elites``) still optimize the
+anchor-composed objective — those modules are outside 18.30's file scope and the
+committed entrant firewall says the harness + the crew scorer OWN the conviction
+seam; the 18.24 campaign threads the SAME term into impostor training, after the
+18.18 Goodhart re-run with the term live (the standing rule for a grown
+training-signal role). Every row composes identically, so cross-entrant
+comparison is unaffected, and the liveness columns let a reader recover the
+anchor-only value (``inner_fitness_real`` −
+``conviction_weight × conviction_mean_predicted_supply``).
+:func:`conviction_prescreen` still accepts a
 CALLER-SUPPLIED batch over ``CONVICTION_FEATURE_NAMES`` (the 18.30 assembler is
 what produces those mappings) — the machine-readable predicted-floors verdict the
 18.21 campaign driver consumes before spending real-path evals (advisory-only
@@ -1405,7 +1415,11 @@ class BakeoffProtocolConfig:
     the eval fitness COLUMNS are conviction-composed (the per-meeting features are
     now served live by :mod:`training.conviction.serving`) and the row's liveness
     columns say the loop served the term; under NO-GO the term is structurally
-    absent and the fitness stays anchor-composed.
+    absent and the fitness stays anchor-composed. The impostor ES/QD TRAINING
+    loops deliberately stay anchor-composed until the 18.24 campaign threads the
+    same term (see the module docstring's asymmetry note) — every row composes
+    identically, so entrant ranking under this protocol is unaffected, and the
+    anchor-only value stays recoverable from the liveness columns.
     """
 
     eval_seeds: tuple[int, ...]
