@@ -1481,3 +1481,42 @@ def test_evaluate_candidate_rejects_drifted_conviction_bundle(tmp_path: Path) ->
     )
     with pytest.raises(ValueError, match="drifted"):
         evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
+
+
+def test_harness_surrogate_loads_always_wire_the_corpus_fingerprint_fence() -> None:
+    """Every harness-side surrogate load passes ``corpus_dir`` (the 18.14 fence).
+
+    The fit-corpus fingerprint check in
+    :func:`training.surrogate.runner.load_surrogate_runner_factory` is opt-in
+    by keyword; the held PR #303 review thread routed the once-per-run wiring
+    to the harness. This AST pin keeps it wired: a future call site that drops
+    the keyword re-opens the fence's weaker half silently, so it fails here
+    loudly instead.
+    """
+
+    import training.bakeoff.harness as harness_module
+
+    source = Path(harness_module.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    call_sites = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (
+            (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "load_surrogate_runner_factory"
+            )
+            or (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "load_surrogate_runner_factory"
+            )
+        )
+    ]
+    assert call_sites, "expected at least one harness surrogate load call site"
+    for node in call_sites:
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert "corpus_dir" in keywords, (
+            f"harness.py:{node.lineno} calls load_surrogate_runner_factory "
+            "without the corpus_dir fingerprint fence"
+        )

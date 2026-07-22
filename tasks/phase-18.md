@@ -81,7 +81,7 @@ unchanged.
 - **Watchability stays a gate, never a reward — and never a fitness term in disguise.** The
   conviction-economy proxy (18.15/18.16) predicts pre-meeting evidence supply from tactical
   facts; it must never read, wrap, or re-derive `eval/watchability.py` scores. The
-  gate/reward boundary line is `training/bakeoff/harness.py:586-590` (post-18.14 lines) and it does not move.
+  gate/reward boundary line is the NEVER-a-fitness-term boundary block inside `training/bakeoff/harness.py::inner_episode_fitness` (cited by construct — line anchors churned twice) and it does not move.
 - **The proxy is not the ballot surrogate.** `training/surrogate/` (the ballot predictor,
   its 6-feature fence, its GO bar, its staleness cap) is untouched by the conviction model;
   the two are independent artifacts with independent verdicts. The Goodhart probe re-runs
@@ -135,12 +135,13 @@ Wave 3 (co-evolution):
   (18.7, 18.16) -> 18.19 dual-role rollout + two-identity stamp
   (18.6, 18.19) -> 18.20 hall-of-fame + PFSP-lite sampler
   (18.17, 18.20) -> 18.21 alternating-freeze driver + stabilizers
-  18.19 -> 18.22 encoder v3 + within-kind target resolution
+  (18.19, 18.30) -> 18.22 encoder v3 + within-kind target resolution
   (18.16, 18.21, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
-  (18.4, 18.5, 18.17, 18.18, 18.21, 18.22) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
+  (18.4, 18.5, 18.17, 18.18, 18.21, 18.22, 18.30) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
   18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
   (18.16, 18.18) -> 18.29 composed meeting-outcome runner (amendment, 2026-07-22)
+  18.16 -> 18.30 the live conviction serving path (amendment, 2026-07-22)
 
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
@@ -1259,7 +1260,7 @@ levers, and by how much. Report predicted-vs-actual side by side per lever.
 ### Task 18.19 — Dual-role co-evo rollout + the two-identity stamp
 **Branch:** `phase-18-coevo-rollout`
 **Depends on:** 18.7, 18.16
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:434-435, 498-504; scorer.py:799-806); training/bakeoff/harness.py:288-319 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:564-565, 630-636; scorer.py:850-857); training/bakeoff/harness.py:357-388 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
 **Complexity:** Integration
 
 The seam co-evolution has never had: a role-dispatching rollout in which EACH side is
@@ -1315,7 +1316,7 @@ forking a second guard suite.
 ### Task 18.20 — The hall of fame + PFSP-lite opponent sampler
 **Branch:** `phase-18-hall-of-fame`
 **Depends on:** 18.6, 18.19
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:851-876 (the artifact layout); training/surrogate/runner.py:105-148 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:1392-1417 (the artifact layout); training/surrogate/runner.py:105-148 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
 **Complexity:** Medium
 
 The frozen opponent pool: a `hall_of_fame.json`-indexed artifact store
@@ -1422,7 +1423,7 @@ explicit override flag — no accidental week-long runs.
 
 ### Task 18.22 — Encoder v3 + within-kind target resolution (free-policy family)
 **Branch:** `phase-18-encoder-v3`
-**Depends on:** 18.19
+**Depends on:** 18.19, 18.30
 **Section refs:** audits/audit-phase-18-planning.md §4 (#14) + the dive findings (the PR #242 lexical-tie limit at policy_es.py:214-221; encoder gaps: witness-awareness, meeting-history, claimed-location); agents/tactical/features.py:88, 125-143, 176-187 (the versioned layout + golden pins); training/bakeoff/policy_es.py:97-106 (input-dim auto-resize)
 **Complexity:** Medium
 
@@ -1537,7 +1538,7 @@ meeting suppression — the FO-2 lesson).
 
 ### Task 18.24 — THE IMPOSTOR CAMPAIGN (operator, multi-session)
 **Branch:** `phase-18-impostor-campaign`
-**Depends on:** 18.4, 18.5, 18.17, 18.18, 18.21, 18.22
+**Depends on:** 18.4, 18.5, 18.17, 18.18, 18.21, 18.22, 18.30
 **Section refs:** audits/audit-phase-18-planning.md §7 (the campaign shape); the 18.21 driver + 18.20 hall of fame + 18.16 fitness stack + 18.17 real-path re-rank + 18.5 anchor-study candidates; audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at)
 **Complexity:** Integration
 
@@ -1921,4 +1922,62 @@ with nothing re-planned.
 - `training.composed_runner.decide_composed_go`
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-29-composed-runner.md`
-\n
+
+### Task 18.30 — The live conviction serving path (kill/body accessors + the in-loop term wiring)
+**Branch:** `phase-18-conviction-serving`
+**Depends on:** 18.16
+**Section refs:** training/reports/report-conviction-model.md §10 (the routed serving seam — the four kill/body features have no live accessor); orchestrator/game.py:2548 + :2584 (the vent-witness and sighting `*_for_meeting` accessor patterns to mirror); training/bakeoff/harness.py:892-929 (`inner_episode_fitness` + `ConvictionFitnessTerm` — the wired-but-dormant seam every in-repo loop passes `conviction=None` into); training/crew/scorer.py:933-975 (the crew twin); training/conviction/model.py (`CONVICTION_FEATURE_NAMES` + the provenance map the live path must satisfy feature-for-feature)
+**Complexity:** Medium
+
+The 18.16 verification's finding, given an owner: the conviction gradient is wired and
+pinned at the seam but DORMANT — no live accessor serves the four kill/body features, so
+every training loop passes `conviction=None` and the pre-screen accepts only caller-built
+vectors. Land the serving path: (1) the kill-witness and body-proximity `*_for_meeting`
+accessor pair on the same surface as the vent-witness accessor, mirroring its pattern
+verbatim (orchestrator-side engine reads — the firewall binds agents, not the trainer);
+(2) a live feature assembler (`training/conviction/serving.py`) producing the exact
+`CONVICTION_FEATURE_NAMES` vector from `run_meeting`-time state; (3) the term threaded
+live through the entrant loops and the crew ES loop via `load_conviction_fitness_term()`
+(GO ⇒ on by default; NO-GO structural absence preserved); (4) the pre-screen consuming
+live-assembled vectors. The contract's heart is the parity pin: over the committed corpus
+test split, the live-assembled vector equals the offline table's row feature-for-feature
+— the live/offline semantics gap closes by measurement, not assertion.
+
+**Files in scope:**
+- training/conviction/serving.py (new: the live assembler)
+- orchestrator/game.py; (the kill/body `*_for_meeting` accessor pair ONLY — mirror the :2548/:2584 pattern)
+- training/bakeoff/harness.py; (the entrant-loop conviction threading ONLY)
+- training/crew/scorer.py; (the crew-loop threading ONLY)
+- tests/training/test_conviction_serving.py (new: the live/offline parity pin + accessor fixtures)
+- tests/training/test_bakeoff_harness.py; (the loops-serve-live pins ONLY)
+
+**Files NOT in scope:**
+- training/conviction/{dataset,model,fidelity}.py (the fence and verdict are frozen; serving consumes them)
+- agents/ (the accessors are orchestrator-side; nothing crosses the firewall)
+- eval/ (untouched)
+
+**Definition of done:**
+- [ ] The accessor pair mirrors the vent-witness pattern (surface, naming, leak discipline) and is fixture-pinned; over the committed corpus test split the live-assembled feature vector equals the offline table row feature-for-feature (the parity pin, every `CONVICTION_FEATURE_NAMES` entry asserted).
+- [ ] With the committed GO verdict the entrant and crew loops carry a non-None conviction term by default (rows say so), NO-GO structural absence is preserved (fixture), and the pre-screen accepts live-assembled vectors end-to-end on the fake-path harness.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Mirror the vent accessor verbatim — same wrapper surface, same record-snapshot semantics,
+same teammate-firewall inheritance. The parity pin is the whole game: build it FIRST
+against the offline table (`build_conviction_table` honors `splits.json`), then implement
+until it passes; any feature that cannot be made live-equal is a stop-and-report, never an
+approximation. Threading defaults follow the verdict bytes (`load_conviction_fitness_term`
+already encodes GO/NO-GO); the loops' change is passing the loaded term, not new logic.
+
+**Public types introduced:**
+- `training.conviction.serving.assemble_live_conviction_features`
+- `training.conviction.serving.LiveConvictionFeatureError`
+
+**Ready-to-paste prompt:** `agent_prompts/task-18-30-conviction-serving.md`

@@ -1608,7 +1608,9 @@ def evaluate_candidate(
     if counter is not None and protocol.surrogate_artifact_dir is not None:
         uses_before = counter.uses
         surrogate_factory = load_surrogate_runner_factory(
-            protocol.surrogate_artifact_dir, use_counter=counter
+            protocol.surrogate_artifact_dir,
+            use_counter=counter,
+            corpus_dir=CORPUS_SPLITS_PATH.parent,
         )
         with tempfile.TemporaryDirectory(prefix="ailibi-bakeoff-surr-") as tmp:
             surrogate_pass = _score_eval_pass(
@@ -1909,7 +1911,9 @@ def run_goodhart_surrogate_rerun(
     )
     uses_before = counter.uses
     surrogate_factory = load_surrogate_runner_factory(
-        surrogate_artifact_dir, use_counter=counter
+        surrogate_artifact_dir,
+        use_counter=counter,
+        corpus_dir=CORPUS_SPLITS_PATH.parent,
     )
     probe = run_goodhart_probe(
         config=config,

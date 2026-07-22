@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 18.19 — Dual-role co-evo rollout + the two-identity stamp, anchored to audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:434-435, 498-504; scorer.py:799-806); training/bakeoff/harness.py:288-319 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends). Do not implement work outside these references.
+Implement Task 18.19 — Dual-role co-evo rollout + the two-identity stamp, anchored to audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:564-565, 630-636; scorer.py:850-857); training/bakeoff/harness.py:357-388 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-coevo-rollout`
 **Depends on:** 18.7, 18.16
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:434-435, 498-504; scorer.py:799-806); training/bakeoff/harness.py:288-319 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:564-565, 630-636; scorer.py:850-857); training/bakeoff/harness.py:357-388 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
 **Complexity:** Integration
 
 The seam co-evolution has never had: a role-dispatching rollout in which EACH side is
@@ -105,4 +105,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-18-coevo-rollout` with a title like `task 18.19: dual-role co-evo rollout + the two-identity stamp`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:434-435, 498-504; scorer.py:799-806); training/bakeoff/harness.py:288-319 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:564-565, 630-636; scorer.py:850-857); training/bakeoff/harness.py:357-388 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

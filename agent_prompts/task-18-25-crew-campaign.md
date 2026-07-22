@@ -64,9 +64,7 @@ until routed.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
-- `uv run python -c "import agents.tactical.features"`
-- `uv run python -c "import training.coevo.factory"`
-- `uv run python -c "import training.coevo.rollout"`
+- `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
 - `uv run python -c "import training.conviction.dataset"`
@@ -80,6 +78,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import agents.tactical.features"`
+- `uv run python -c "import training.coevo.factory"`
+- `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
 - `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`

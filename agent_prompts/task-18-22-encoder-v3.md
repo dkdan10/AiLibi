@@ -12,7 +12,7 @@ Implement Task 18.22 — Encoder v3 + within-kind target resolution (free-policy
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-encoder-v3`
-**Depends on:** 18.19
+**Depends on:** 18.19, 18.30
 **Section refs:** audits/audit-phase-18-planning.md §4 (#14) + the dive findings (the PR #242 lexical-tie limit at policy_es.py:214-221; encoder gaps: witness-awareness, meeting-history, claimed-location); agents/tactical/features.py:88, 125-143, 176-187 (the versioned layout + golden pins); training/bakeoff/policy_es.py:97-106 (input-dim auto-resize)
 **Complexity:** Medium
 
@@ -67,8 +67,7 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
-- `uv run python -c "import training.coevo.factory"`
-- `uv run python -c "import training.coevo.rollout"`
+- `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
 - `uv run python -c "import training.conviction.dataset"`
@@ -82,6 +81,8 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import training.coevo.factory"`
+- `uv run python -c "import training.coevo.rollout"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
