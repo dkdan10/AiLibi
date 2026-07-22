@@ -1,0 +1,20 @@
+{
+  "conversion_bar": 0.6375,
+  "conversion_ceiling": 0.85,
+  "conversion_ceiling_ratio": 0.75,
+  "conversion_recall": 0.9574468085106383,
+  "conversions_test": 47,
+  "fitness_term": "ships",
+  "flag_spearman": 0.5781584982719424,
+  "meets_conversion_bar": true,
+  "meets_spearman_bar": true,
+  "model_role": "training-signal",
+  "prescreen_role": "gating",
+  "replay_set_dir": "replays/ml_corpus/9p2i",
+  "spearman_bar": 0.5,
+  "test_ejections": 60,
+  "test_meetings": 96,
+  "verdict": "GO",
+  "voice_driven_share": 0.15000000000000002,
+  "weights_sha256": "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47"
+}
