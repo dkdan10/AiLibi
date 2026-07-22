@@ -35,11 +35,16 @@ provider env is needed (the root autouse fixture pins it anyway).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from agents.memory.store import AgentMemory
+from observation.action_intent import ActionIntent
+from observation.packet import ObservationPacket
+from observation.public_map import PublicMapView
 from orchestrator.replay import (
     CrewTacticalPolicyStamp,
     PolicyStamps,
@@ -53,9 +58,11 @@ from training.bakeoff.harness import (
     BakeoffPolicy,
     DecisionTrace,
     inner_episode_fitness,
+    intent_key,
     load_candidate_weights,
     rollout_candidate,
 )
+from training.determinism import PolicyFrame
 from training.bakeoff.utility_es import build_utility_scorer_policy
 from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX, build_coevo_factory
 from training.coevo.rollout import CoevoRolloutResult, rollout_coevo
@@ -264,6 +271,131 @@ def test_anchor_weight_seam_is_exact_arithmetic(
     assert first.crew_fitness == (
         crew_shaped - DEFAULT_ANCHOR_PENALTY_WEIGHT * first.crew_trace.mean_anchor_ce()
     )
+
+
+class _FsmDelegateAnchor:
+    """An anchor policy that IS the scripted FSM proposal (evaluate → fsm_intent).
+
+    The ``test_bakeoff_harness`` anchor-seam double: setting it as
+    ``DecisionTrace.anchor_policy`` is provably byte-identical to the default
+    ``anchor_policy=None`` path (pinned by
+    ``test_anchor_seam_fsm_delegate_is_byte_identical``), so the accumulator test
+    below can assert the configured anchor THREADS into the episode-local trace
+    while the fitness stays equal to the fresh-trace run.
+    """
+
+    encoder_version: str = "impostor-option-features-v1"
+
+    def evaluate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> PolicyFrame:
+        return PolicyFrame(
+            agent_id=packet.agent_id,
+            tick=packet.tick,
+            features=(),
+            logits=(),
+            intent=fsm_intent,
+        )
+
+    def choice_distribution(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> Mapping[str, float]:
+        return {intent_key(fsm_intent): 1.0}
+
+
+def test_caller_accumulators_fold_after_scoring_never_contaminate(
+    dual_pair: tuple[CoevoRolloutResult, CoevoRolloutResult, Path],
+    impostor_policy: BakeoffPolicy,
+    crew_policy: CrewTrackPolicy,
+    tmp_path: Path,
+) -> None:
+    """Caller-supplied traces are SET-LEVEL accumulators, never the scoring input.
+
+    The Codex-review regression pin (the ``_score_eval_pass`` discipline,
+    harness.py:1469-1510): pre-populated accumulators — as a driver folding across
+    earlier seeds would hold — must NOT contaminate this episode's fitness (the
+    anchor-CE/conviction means are per-episode), the result must ride EPISODE-LOCAL
+    traces, the accumulators must carry their prior content PLUS exactly this
+    episode afterward, and the accumulator's configured ``anchor_policy`` must
+    thread into the episode trace (config, not an accumulator — the FSM-delegate
+    anchor keeps the fitness byte-identical to the fresh-trace run at the same
+    seed).
+    """
+
+    first, _, _ = dual_pair
+    anchor = _FsmDelegateAnchor()
+    imp_accum = DecisionTrace(
+        impostor_decisions=7,
+        scored_decisions=5,
+        anchor_ce_sum=123.0,
+        offmenu_decisions=2,
+        agreement_hits=3,
+        opportunities=4,
+        kills_taken=1,
+        conviction_supply_sum=9.0,
+        conviction_meetings=3,
+        anchor_policy=anchor,
+    )
+    crew_accum = CrewDecisionTrace(
+        crew_decisions=11,
+        scored_decisions=6,
+        anchor_ce_sum=456.0,
+        offmenu_decisions=1,
+        agreement_hits=2,
+        conviction_supply_sum=8.0,
+        conviction_meetings=2,
+    )
+
+    result = rollout_coevo(
+        impostor_policy,
+        crew_policy,
+        _SEED,
+        output_dir=tmp_path,
+        impostor_trace=imp_accum,
+        crew_trace=crew_accum,
+    )
+
+    # Per-episode fitness: equal to the fresh-trace dual run at the same seed —
+    # the pre-existing accumulator content never reaches the fitness means.
+    assert result.impostor_fitness == first.impostor_fitness
+    assert result.crew_fitness == first.crew_fitness
+
+    # The result rides EPISODE-LOCAL traces (this game's decisions only), with
+    # the accumulator's configured anchor threaded through.
+    assert result.impostor_trace is not imp_accum
+    assert result.crew_trace is not crew_accum
+    assert result.impostor_trace.anchor_policy is anchor
+    assert (
+        result.impostor_trace.impostor_decisions
+        == first.impostor_trace.impostor_decisions
+    )
+    assert result.impostor_trace.anchor_ce_sum == first.impostor_trace.anchor_ce_sum
+    assert result.crew_trace.crew_decisions == first.crew_trace.crew_decisions
+    assert result.crew_trace.anchor_ce_sum == first.crew_trace.anchor_ce_sum
+
+    # The accumulators carry their prior content + exactly this episode (the
+    # after-scoring fold: _fold_impostor_trace / CrewDecisionTrace.fold).
+    assert imp_accum.impostor_decisions == 7 + result.impostor_trace.impostor_decisions
+    assert imp_accum.scored_decisions == 5 + result.impostor_trace.scored_decisions
+    assert imp_accum.anchor_ce_sum == 123.0 + result.impostor_trace.anchor_ce_sum
+    assert imp_accum.offmenu_decisions == 2 + result.impostor_trace.offmenu_decisions
+    assert imp_accum.agreement_hits == 3 + result.impostor_trace.agreement_hits
+    assert imp_accum.opportunities == 4 + result.impostor_trace.opportunities
+    assert imp_accum.kills_taken == 1 + result.impostor_trace.kills_taken
+    assert crew_accum.crew_decisions == 11 + result.crew_trace.crew_decisions
+    assert crew_accum.scored_decisions == 6 + result.crew_trace.scored_decisions
+    assert crew_accum.anchor_ce_sum == 456.0 + result.crew_trace.anchor_ce_sum
+    assert crew_accum.agreement_hits == 2 + result.crew_trace.agreement_hits
 
 
 # A distinct impostor + crew stamp pair (all ten fields non-default, disjoint

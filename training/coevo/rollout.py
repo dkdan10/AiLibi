@@ -70,7 +70,8 @@ class CoevoRolloutResult:
     """The scored artifacts of one dual-role co-evo game (Task 18.19).
 
     Rides the ONE reconstructed episode alongside BOTH sides' inner fitness and
-    BOTH trace accumulators, so a caller (18.20's hall of fame, 18.21's
+    BOTH EPISODE-LOCAL traces (this game's decisions only — never a caller's
+    cross-seed accumulator), so a caller (18.20's hall of fame, 18.21's
     alternating-freeze driver) reads impostor and crew fitness from a single
     rollout without re-running the game. The two identities stay in DISTINCT
     fields/types — an impostor ``DecisionTrace`` and a crew
@@ -85,6 +86,27 @@ class CoevoRolloutResult:
     crew_fitness: float
     impostor_trace: DecisionTrace
     crew_trace: CrewDecisionTrace
+
+
+def _fold_impostor_trace(into: DecisionTrace, episode: DecisionTrace) -> None:
+    """Fold one episode's impostor trace into a set-level accumulator.
+
+    The nine numeric accumulator fields, byte-for-byte the fold
+    ``training.bakeoff.harness._score_eval_pass`` performs on the impostor side
+    (harness.py:1501-1510 — the impostor ``DecisionTrace`` has no ``fold``
+    method, unlike :meth:`~training.crew.scorer.CrewDecisionTrace.fold`).
+    ``anchor_policy`` is CONFIG, not an accumulator, and never folds.
+    """
+
+    into.impostor_decisions += episode.impostor_decisions
+    into.scored_decisions += episode.scored_decisions
+    into.anchor_ce_sum += episode.anchor_ce_sum
+    into.offmenu_decisions += episode.offmenu_decisions
+    into.agreement_hits += episode.agreement_hits
+    into.opportunities += episode.opportunities
+    into.kills_taken += episode.kills_taken
+    into.conviction_supply_sum += episode.conviction_supply_sum
+    into.conviction_meetings += episode.conviction_meetings
 
 
 def rollout_coevo(
@@ -115,10 +137,19 @@ def rollout_coevo(
     ``force=True``, and returns the state-hash-verified typed episode alongside
     both fitnesses and both traces.
 
-    Traces: the SAME accumulator objects thread into the factory (where the
-    wrappers write per-decision) AND into the fitness calls AND ride the result.
-    Caller-supplied accumulators are used when given (so a driver can fold across
-    seeds); otherwise fresh ones are constructed.
+    Traces: scoring is ALWAYS per-episode — fresh EPISODE-LOCAL trace objects
+    thread into the factory (where the wrappers write per-decision) AND into the
+    fitness calls AND ride the result. A caller-supplied ``impostor_trace`` /
+    ``crew_trace`` is a SET-LEVEL accumulator, never the scoring input: the
+    episode's numbers FOLD INTO it after scoring (the
+    ``training.bakeoff.harness._score_eval_pass`` idiom, harness.py:1469-1510 —
+    :func:`_fold_impostor_trace` on the impostor side,
+    :meth:`~training.crew.scorer.CrewDecisionTrace.fold` on the crew side), so a
+    driver can accumulate across seeds while each seed's fitness stays
+    uncontaminated by earlier games' anchor-CE/conviction means. The impostor
+    episode trace INHERITS the accumulator's configured ``anchor_policy`` (the
+    18.16 anchor seam is CONFIG, not an accumulator — dropping it would silently
+    re-anchor the CE back onto the scripted FSM).
 
     Both sides' fitness come from the ONE rollout:
     ``inner_episode_fitness(rollout, impostor_trace, anchor_weight=impostor_anchor_weight,
@@ -135,18 +166,24 @@ def rollout_coevo(
     """
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
-    resolved_impostor_trace = (
-        impostor_trace if impostor_trace is not None else DecisionTrace()
+    # Episode-LOCAL traces score this rollout; a caller-supplied trace is a
+    # set-level accumulator folded into AFTER scoring (see the docstring). The
+    # impostor episode trace inherits the accumulator's configured anchor_policy
+    # so an alternative-anchor driver keys this episode's CE on its own anchor.
+    episode_impostor_trace = DecisionTrace(
+        anchor_policy=(
+            impostor_trace.anchor_policy if impostor_trace is not None else None
+        )
     )
-    resolved_crew_trace = crew_trace if crew_trace is not None else CrewDecisionTrace()
+    episode_crew_trace = CrewDecisionTrace()
     output_dir.mkdir(parents=True, exist_ok=True)
     replay_path = output_dir / f"replay-seed-{seed}.jsonl"
     factory = build_coevo_factory(
         impostor_policy,
         crew_policy,
         game_map=resolved_map,
-        impostor_trace=resolved_impostor_trace,
-        crew_trace=resolved_crew_trace,
+        impostor_trace=episode_impostor_trace,
+        crew_trace=episode_crew_trace,
     )
     if meeting_runner_factory is not None:
         meeting_runner = meeting_runner_factory()
@@ -178,20 +215,27 @@ def rollout_coevo(
     )
     impostor_fitness = inner_episode_fitness(
         rollout,
-        resolved_impostor_trace,
+        episode_impostor_trace,
         anchor_weight=impostor_anchor_weight,
         conviction=conviction,
     )
     crew_fitness = crew_inner_episode_fitness(
         rollout,
-        resolved_crew_trace,
+        episode_crew_trace,
         anchor_weight=crew_anchor_weight,
         conviction=conviction,
     )
+    # Fold this episode into the caller's set-level accumulators AFTER scoring
+    # (the _score_eval_pass discipline), so per-seed fitness never reads earlier
+    # games' means while a driver still accumulates across seeds.
+    if impostor_trace is not None:
+        _fold_impostor_trace(impostor_trace, episode_impostor_trace)
+    if crew_trace is not None:
+        crew_trace.fold(episode_crew_trace)
     return CoevoRolloutResult(
         rollout=rollout,
         impostor_fitness=impostor_fitness,
         crew_fitness=crew_fitness,
-        impostor_trace=resolved_impostor_trace,
-        crew_trace=resolved_crew_trace,
+        impostor_trace=episode_impostor_trace,
+        crew_trace=episode_crew_trace,
     )
