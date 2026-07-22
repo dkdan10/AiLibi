@@ -1370,11 +1370,17 @@ class BakeoffResult(BaseModel):
     conviction_weights_sha256: str | None = None
 
     # Task 18.30 live-serving liveness (real pass; None-default — pre-18.30 rows
-    # must still validate). Stamped from the real pass's set-level trace ONLY
-    # when the term is live (GO); under NO-GO the term is structurally absent and
-    # both stay None. ``conviction_meetings_predicted`` is how many meetings the
-    # term actually predicted; ``conviction_mean_predicted_supply`` is the mean
-    # predicted supply the ``inner_fitness_real`` composed the term from.
+    # must still validate). Both are None under NO-GO (structural absence).
+    # ``conviction_meetings_predicted`` is the METERED count: every meeting the
+    # term predicted in the real pass, truncated episodes included (their
+    # predictions were delivered and charged against the cap even though the
+    # sentinel fitness composes no addend). ``conviction_mean_predicted_supply``
+    # is the mean predicted supply ``inner_fitness_real`` actually COMPOSED: the
+    # per-episode means of COMPLETE episodes averaged over the game count — NOT
+    # the pooled meeting-weighted mean, which diverges whenever games run
+    # unequal meeting counts — so ``inner_fitness_real == anchor-composed +
+    # conviction_weight * conviction_mean_predicted_supply`` holds exactly on
+    # any seed count (the committed multi-seed pin asserts it).
     conviction_meetings_predicted: int | None = None
     conviction_mean_predicted_supply: float | None = None
 
@@ -1527,7 +1533,19 @@ def load_candidate_weights(entrant_dir: Path) -> tuple[float, ...]:
 
 @dataclass(frozen=True)
 class _EvalPass:
-    """One scoring pass of a candidate over the eval seed set."""
+    """One scoring pass of a candidate over the eval seed set.
+
+    ``conviction_mean_composed`` is the mean predicted supply the pass's
+    ``inner_fitness`` actually COMPOSED the conviction term from — the
+    episode-averaged mean of per-episode ``mean_predicted_supply()`` over
+    COMPLETE episodes, divided by the game count (a truncated episode scores
+    the sentinel with no conviction addend, so it contributes 0 to the
+    numerator exactly as it contributes no addend to the fitness). This is
+    deliberately NOT the set-level trace's pooled meeting-weighted mean: the
+    two diverge whenever games run unequal meeting counts (the review-confirmed
+    finding), and the row's liveness column must state the number the fitness
+    composed. ``None`` when the term is structurally absent.
+    """
 
     inner_fitness: float
     mean_shaped_reward: float | None
@@ -1537,6 +1555,7 @@ class _EvalPass:
     descriptor_mean: dict[str, float]
     meetings_total: int
     meetings_ejected: int
+    conviction_mean_composed: float | None
 
 
 def _score_eval_pass(
@@ -1551,6 +1570,10 @@ def _score_eval_pass(
     trace = DecisionTrace()
     fitnesses: list[float] = []
     shaped_totals: list[float] = []
+    # Per-episode conviction means over COMPLETE episodes — the exact addends
+    # ``inner_episode_fitness`` composed, so the episode-averaged mean below is
+    # the number the fitness carried (see the _EvalPass docstring).
+    composed_supply_means: list[float] = []
     truncated = 0
     wins = 0
     descriptor_sums = [0.0] * len(DESCRIPTOR_VECTOR_FIELDS)
@@ -1591,6 +1614,8 @@ def _score_eval_pass(
         )
         if rollout.complete:
             shaped_totals.append(compute_shaped_reward(rollout, "IMPOSTOR").total())
+            if conviction is not None:
+                composed_supply_means.append(episode_trace.mean_predicted_supply())
         else:
             truncated += 1
         if rollout.winner == "IMPOSTORS":
@@ -1628,6 +1653,9 @@ def _score_eval_pass(
         descriptor_mean=descriptor_mean,
         meetings_total=meetings_total,
         meetings_ejected=meetings_ejected,
+        conviction_mean_composed=(
+            math.fsum(composed_supply_means) / games if conviction is not None else None
+        ),
     )
 
 
@@ -1871,11 +1899,7 @@ def evaluate_candidate(
         conviction_meetings_predicted=(
             real_pass.trace.conviction_meetings if conviction_term is not None else None
         ),
-        conviction_mean_predicted_supply=(
-            real_pass.trace.mean_predicted_supply()
-            if conviction_term is not None
-            else None
-        ),
+        conviction_mean_predicted_supply=real_pass.conviction_mean_composed,
     )
 
 

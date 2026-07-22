@@ -1558,6 +1558,64 @@ def test_evaluate_candidate_go_serves_the_term_live(tmp_path: Path) -> None:
     )
 
 
+def test_evaluate_candidate_multi_seed_stamps_the_composed_mean(
+    tmp_path: Path,
+) -> None:
+    """The stamped mean is the episode-averaged mean the fitness COMPOSED.
+
+    Under a multi-seed protocol with unequal per-game meeting counts the pooled
+    meeting-weighted mean diverges from the episode-averaged mean-of-means the
+    fitness actually composes (the review-confirmed finding) — stamping the
+    pooled value breaks the composition identity at the 1e-2 scale, so this pin
+    asserts the identity at 1e-12 relative tolerance (exact in reals; float
+    rounding across per-episode compositions makes bit-exactness a single-seed
+    property, pinned separately above).
+    """
+
+    genome = _forced_kill_genome()
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8)
+    candidate = TrainedCandidate(
+        entrant="live-go-multiseed-probe",
+        policy=policy,
+        weights=genome,
+        config={
+            "entrant": "live-go-multiseed-probe",
+            "hidden": 8,
+            "encoder_version": policy.encoder_version,
+        },
+    )
+    go_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004, 1009),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+    )
+    go_row = evaluate_candidate(candidate, go_protocol, artifact_root=tmp_path / "go")
+
+    nogo_dir = tmp_path / "conviction-nogo"
+    _write_conviction_fixture(nogo_dir, go=False)
+    nogo_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004, 1009),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=nogo_dir,
+    )
+    nogo_row = evaluate_candidate(
+        candidate, nogo_protocol, artifact_root=tmp_path / "nogo"
+    )
+
+    assert go_row.conviction_meetings_predicted is not None
+    assert go_row.conviction_meetings_predicted > 0
+    assert go_row.conviction_mean_predicted_supply is not None
+    # The served rollouts are byte-identical to the unwrapped ones, so the
+    # conviction addend is the only difference — and the stamped mean is the
+    # exact per-episode quantity it was composed from.
+    assert go_row.inner_fitness_real == pytest.approx(
+        nogo_row.inner_fitness_real
+        + DEFAULT_CONVICTION_WEIGHT * go_row.conviction_mean_predicted_supply,
+        rel=1e-12,
+    )
+
+
 def test_evaluate_candidate_nogo_is_structural_absence(tmp_path: Path) -> None:
     """Under a NO-GO fixture the eval fitness is the pre-threading anchor value.
 

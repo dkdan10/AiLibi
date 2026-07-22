@@ -1400,9 +1400,15 @@ class CrewTrackResult(BaseModel):
     conviction_weight: float | None = None
     conviction_weights_sha256: str | None = None
 
-    # Task 18.30 live-serving liveness (real pass; None-default). Stamped from
-    # the real pass's set-level trace ONLY when the term is live (GO); under
-    # NO-GO the term is structurally absent and both stay None.
+    # Task 18.30 live-serving liveness (real pass; None-default; both None under
+    # NO-GO — structural absence). ``conviction_meetings_predicted`` is the
+    # METERED count (every meeting the term predicted, truncated episodes
+    # included — their predictions were charged against the cap even though the
+    # sentinel fitness composes no addend). ``conviction_mean_predicted_supply``
+    # is the mean predicted supply ``inner_fitness_real`` actually COMPOSED
+    # (complete episodes' per-episode means averaged over the game count — NOT
+    # the pooled meeting-weighted mean, which diverges under unequal per-game
+    # meeting counts).
     conviction_meetings_predicted: int | None = None
     conviction_mean_predicted_supply: float | None = None
 
@@ -1412,7 +1418,16 @@ class CrewTrackResult(BaseModel):
 
 @dataclass(frozen=True)
 class _CrewEvalPass:
-    """One scoring pass of a crew candidate over the eval seed set."""
+    """One scoring pass of a crew candidate over the eval seed set.
+
+    ``conviction_mean_composed`` mirrors the impostor ``_EvalPass``: the mean
+    predicted supply the pass's ``inner_fitness`` actually COMPOSED — the
+    per-episode ``mean_predicted_supply()`` of COMPLETE episodes averaged over
+    the game count (a truncated episode scores the sentinel with no conviction
+    addend), NOT the set-level trace's pooled meeting-weighted mean, which
+    diverges whenever games run unequal meeting counts. ``None`` when the term
+    is structurally absent.
+    """
 
     inner_fitness: float
     mean_shaped_reward: float | None
@@ -1431,6 +1446,7 @@ class _CrewEvalPass:
     trace: CrewDecisionTrace
     diagnostic: CoverageCueDiagnostic
     descriptor_mean: dict[str, float]
+    conviction_mean_composed: float | None
 
 
 def _score_crew_eval_pass(
@@ -1445,6 +1461,9 @@ def _score_crew_eval_pass(
     diagnostic = CoverageCueDiagnostic()
     fitnesses: list[float] = []
     shaped_totals: list[float] = []
+    # Per-episode conviction means over COMPLETE episodes — the exact addends
+    # ``crew_inner_episode_fitness`` composed (see the _CrewEvalPass docstring).
+    composed_supply_means: list[float] = []
     truncated = 0
     wins = 0
     survival_sum = 0.0
@@ -1496,6 +1515,8 @@ def _score_crew_eval_pass(
         )
         if rollout.complete:
             shaped_totals.append(compute_shaped_reward(rollout, "CREWMATE").total())
+            if conviction is not None:
+                composed_supply_means.append(episode_trace.mean_predicted_supply())
         else:
             truncated += 1
         if rollout.winner == "CREWMATES":
@@ -1550,6 +1571,9 @@ def _score_crew_eval_pass(
         trace=trace,
         diagnostic=diagnostic,
         descriptor_mean=descriptor_mean,
+        conviction_mean_composed=(
+            math.fsum(composed_supply_means) / games if conviction is not None else None
+        ),
     )
 
 
@@ -1793,11 +1817,7 @@ def evaluate_crew_candidate(
         conviction_meetings_predicted=(
             real_pass.trace.conviction_meetings if conviction_term is not None else None
         ),
-        conviction_mean_predicted_supply=(
-            real_pass.trace.mean_predicted_supply()
-            if conviction_term is not None
-            else None
-        ),
+        conviction_mean_predicted_supply=real_pass.conviction_mean_composed,
     )
 
 
