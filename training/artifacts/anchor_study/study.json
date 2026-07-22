@@ -1,5 +1,5 @@
 {
-  "baseline_id": "baseline-5",
+  "baseline_id": "baseline-6",
   "corpus_set": "9p2i",
   "determinism_cross_check": {
     "byte_identical": true,
@@ -42,44 +42,44 @@
   "filtered_bc": {
     "artifact_path": "training/artifacts/anchor_study/filtered-bc-anchor",
     "committed_champion_overall": {
-      "agreement": 0.41310282074613286,
-      "agreement_hits": 3178,
+      "agreement": 0.40027014858171994,
+      "agreement_hits": 2667,
       "ce_clamped_decisions": 0,
-      "decisions": 7693,
+      "decisions": 6663,
       "divergence": [
         {
           "anchor_intent_kind": "wait",
-          "count": 1441,
+          "count": 1194,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "wait",
-          "count": 1141,
+          "count": 1067,
           "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 800,
+          "count": 728,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 474,
+          "count": 455,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 225,
+          "count": 209,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 196,
+          "count": 158,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 62,
+          "count": 50,
           "fsm_intent_kind": "wait"
         },
         {
@@ -89,27 +89,27 @@
         },
         {
           "anchor_intent_kind": "move",
-          "count": 37,
-          "fsm_intent_kind": "sabotage"
-        },
-        {
-          "anchor_intent_kind": "kill",
-          "count": 31,
+          "count": 24,
           "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 31,
+          "count": 21,
+          "fsm_intent_kind": "sabotage"
+        },
+        {
+          "anchor_intent_kind": "move",
+          "count": 19,
           "fsm_intent_kind": "sabotage"
         },
         {
           "anchor_intent_kind": "sabotage",
-          "count": 16,
+          "count": 11,
           "fsm_intent_kind": "vent"
         },
         {
-          "anchor_intent_kind": "move",
-          "count": 11,
+          "anchor_intent_kind": "kill",
+          "count": 10,
           "fsm_intent_kind": "do_task"
         },
         {
@@ -120,47 +120,47 @@
       ],
       "fsm_offmenu_decisions": 0,
       "label": "committed utility-es champion",
-      "mean_anchor_ce": 1.0800190834499102,
+      "mean_anchor_ce": 1.0814997875252617,
       "per_kind_agreement": {
         "do_task": [
-          1183,
+          1101,
           0
         ],
         "kill": [
-          746,
-          746
+          640,
+          640
         ],
         "move": [
-          4221,
-          1505
+          3632,
+          1254
         ],
         "sabotage": [
-          114,
-          46
+          73,
+          33
         ],
         "vent": [
-          957,
-          667
+          818,
+          549
         ],
         "wait": [
-          472,
-          214
+          399,
+          191
         ]
       }
     },
     "entrant": "filtered-bc-anchor",
     "epochs": 300,
     "filter_summary": {
-      "both_criteria_games": 70,
+      "both_criteria_games": 66,
       "both_criteria_weight": 2.0,
-      "crew_winning_games": 101,
-      "fit_decisions": 5573,
-      "fit_weight_total": 8439.0,
+      "crew_winning_games": 112,
+      "fit_decisions": 5396,
+      "fit_weight_total": 7781.0,
       "fsm_offmenu_decisions": 0,
       "games_walked": 150,
-      "high_flag_floor": 0.5027932960893855,
-      "high_flag_games": 86,
-      "qualifying_games": 117,
+      "high_flag_floor": 1.0909090909090908,
+      "high_flag_games": 83,
+      "qualifying_games": 129,
       "qualifying_seeds": [
         1000,
         1001,
@@ -170,36 +170,40 @@
         1005,
         1006,
         1007,
-        1008,
         1009,
-        1010,
         1011,
         1012,
+        1013,
         1014,
         1015,
         1017,
-        1018,
         1019,
         1020,
         1021,
+        1022,
         1023,
         1024,
         1025,
         1026,
         1028,
-        1029,
         1030,
         1031,
+        1033,
         1034,
+        1035,
         1036,
         1037,
         1038,
         1039,
+        1040,
         1041,
         1042,
         1043,
-        1044,
+        1045,
+        1046,
         1047,
+        1048,
+        1049,
         1050,
         1051,
         1052,
@@ -209,17 +213,23 @@
         1056,
         1057,
         1058,
+        1059,
         1060,
+        1061,
         1062,
         1063,
         1064,
+        1065,
         1066,
         1067,
+        1068,
+        1069,
         1070,
         1071,
         1072,
         1074,
         1075,
+        1077,
         1078,
         1079,
         1080,
@@ -232,16 +242,19 @@
         1090,
         1091,
         1092,
+        1093,
         1094,
         1095,
         1096,
         1097,
         1098,
+        1099,
         1100,
         1101,
         1103,
         1104,
         1105,
+        1106,
         1107,
         1108,
         1109,
@@ -249,13 +262,13 @@
         1111,
         1112,
         1113,
+        1114,
         1115,
         1117,
         1118,
         1119,
         1120,
         1121,
-        1122,
         1123,
         1124,
         1125,
@@ -263,70 +276,64 @@
         1127,
         1128,
         1129,
+        1130,
         1131,
         1132,
         1133,
         1134,
         1136,
-        1138,
-        1140,
+        1139,
         1141,
         1142,
         1143,
         1144,
         1145,
         1146,
-        1147,
         1148,
         1149
       ],
-      "total_decisions": 7693
+      "total_decisions": 6663
     },
     "in_filter": {
-      "agreement": 0.7936479454512829,
-      "agreement_hits": 4423,
+      "agreement": 0.7952186805040771,
+      "agreement_hits": 4291,
       "ce_clamped_decisions": 0,
-      "decisions": 5573,
+      "decisions": 5396,
       "divergence": [
         {
           "anchor_intent_kind": "move",
-          "count": 389,
+          "count": 388,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 238,
+          "count": 260,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 177,
+          "count": 162,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 143,
+          "count": 111,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 98,
+          "count": 93,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 63,
+          "count": 58,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 15,
+          "count": 17,
           "fsm_intent_kind": "do_task"
-        },
-        {
-          "anchor_intent_kind": "sabotage",
-          "count": 11,
-          "fsm_intent_kind": "kill"
         },
         {
           "anchor_intent_kind": "kill",
@@ -335,183 +342,203 @@
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 6,
+          "count": 3,
           "fsm_intent_kind": "do_task"
         },
         {
+          "anchor_intent_kind": "sabotage",
+          "count": 3,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 1,
+          "fsm_intent_kind": "move"
+        },
+        {
           "anchor_intent_kind": "wait",
-          "count": 2,
+          "count": 1,
           "fsm_intent_kind": "move"
         }
       ],
       "fsm_offmenu_decisions": 0,
       "label": "in-filter games",
-      "mean_anchor_ce": 0.46851806242064153,
+      "mean_anchor_ce": 0.45705151922125276,
       "per_kind_agreement": {
         "do_task": [
-          858,
-          837
+          903,
+          883
         ],
         "kill": [
-          524,
-          513
+          514,
+          511
         ],
         "move": [
-          3026,
-          2299
+          2910,
+          2167
         ],
         "sabotage": [
-          86,
-          86
+          59,
+          59
         ],
         "vent": [
-          727,
-          550
+          692,
+          530
         ],
         "wait": [
-          352,
-          138
+          318,
+          141
         ]
       }
     },
     "learning_rate": 0.3,
     "out_of_filter": {
-      "agreement": 0.8056603773584906,
-      "agreement_hits": 1708,
+      "agreement": 0.8050513022888713,
+      "agreement_hits": 1020,
       "ce_clamped_decisions": 0,
-      "decisions": 2120,
+      "decisions": 1267,
       "divergence": [
         {
           "anchor_intent_kind": "move",
-          "count": 144,
+          "count": 99,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 91,
+          "count": 49,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 66,
+          "count": 26,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 39,
+          "count": 26,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 28,
+          "count": 15,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 25,
+          "count": 14,
           "fsm_intent_kind": "move"
         },
         {
-          "anchor_intent_kind": "kill",
-          "count": 10,
-          "fsm_intent_kind": "do_task"
-        },
-        {
           "anchor_intent_kind": "move",
-          "count": 5,
+          "count": 13,
           "fsm_intent_kind": "do_task"
         },
         {
           "anchor_intent_kind": "sabotage",
-          "count": 4,
+          "count": 3,
           "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 1,
+          "fsm_intent_kind": "move"
+        },
+        {
+          "anchor_intent_kind": "wait",
+          "count": 1,
+          "fsm_intent_kind": "move"
         }
       ],
       "fsm_offmenu_decisions": 0,
       "label": "out-of-filter games",
-      "mean_anchor_ce": 0.43369338010088804,
+      "mean_anchor_ce": 0.4555984845322432,
       "per_kind_agreement": {
         "do_task": [
-          325,
-          310
+          198,
+          185
         ],
         "kill": [
-          222,
-          218
+          126,
+          123
         ],
         "move": [
-          1195,
-          935
+          722,
+          558
         ],
         "sabotage": [
-          28,
-          28
+          14,
+          14
         ],
         "vent": [
-          230,
-          164
+          126,
+          100
         ],
         "wait": [
-          120,
-          53
+          81,
+          40
         ]
       }
     },
     "overall": {
-      "agreement": 0.796958273755362,
-      "agreement_hits": 6131,
+      "agreement": 0.7970883986192406,
+      "agreement_hits": 5311,
       "ce_clamped_decisions": 0,
-      "decisions": 7693,
+      "decisions": 6663,
       "divergence": [
         {
           "anchor_intent_kind": "move",
-          "count": 533,
+          "count": 487,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "kill",
-          "count": 329,
+          "count": 309,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "vent",
-          "count": 243,
+          "count": 188,
           "fsm_intent_kind": "vent"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 182,
+          "count": 137,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 123,
+          "count": 107,
           "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "do_task",
-          "count": 91,
+          "count": 73,
           "fsm_intent_kind": "wait"
         },
         {
           "anchor_intent_kind": "move",
-          "count": 20,
+          "count": 30,
           "fsm_intent_kind": "do_task"
-        },
-        {
-          "anchor_intent_kind": "kill",
-          "count": 16,
-          "fsm_intent_kind": "do_task"
-        },
-        {
-          "anchor_intent_kind": "sabotage",
-          "count": 15,
-          "fsm_intent_kind": "kill"
         },
         {
           "anchor_intent_kind": "kill",
           "count": 8,
           "fsm_intent_kind": "wait"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 6,
+          "fsm_intent_kind": "kill"
+        },
+        {
+          "anchor_intent_kind": "kill",
+          "count": 3,
+          "fsm_intent_kind": "do_task"
+        },
+        {
+          "anchor_intent_kind": "sabotage",
+          "count": 2,
+          "fsm_intent_kind": "move"
         },
         {
           "anchor_intent_kind": "wait",
@@ -521,35 +548,35 @@
       ],
       "fsm_offmenu_decisions": 0,
       "label": "all corpus games",
-      "mean_anchor_ce": 0.45892124368700293,
+      "mean_anchor_ce": 0.45677521801294346,
       "per_kind_agreement": {
         "do_task": [
-          1183,
-          1147
+          1101,
+          1068
         ],
         "kill": [
-          746,
-          731
+          640,
+          634
         ],
         "move": [
-          4221,
-          3234
+          3632,
+          2725
         ],
         "sabotage": [
-          114,
-          114
+          73,
+          73
         ],
         "vent": [
-          957,
-          714
+          818,
+          630
         ],
         "wait": [
-          472,
-          191
+          399,
+          181
         ]
       }
     },
-    "weights_sha256": "396c863a4bde0ec1159daabecce845e861bcc3ecee39bff8c23ac15d109c8f8c"
+    "weights_sha256": "23632a85dcb5696300cf0345394fb72aaed1a5c95844e25315b1d81991edc288"
   },
   "lambda_grid": [
     0.25,
@@ -562,7 +589,7 @@
     "lambda-4.0",
     "filtered-bc-anchor"
   ],
-  "substrate_sha": "8b08fd1031744d770c7e863bcbe27dfe3d964d8909a005976f47877380db725f",
+  "substrate_sha": "9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4",
   "sweep_rows": [
     {
       "anchor_ce_flagged": false,
@@ -655,7 +682,7 @@
       "fsm_intent_agreement": 0.39724310776942356,
       "impostor_win_rate": 1.0,
       "inner_fitness_real": 18.67066179678415,
-      "inner_fitness_surrogate": 18.8023610659817,
+      "inner_fitness_surrogate": 18.883974201991133,
       "lambda_value": 1.0,
       "leak_test_passed": true,
       "mean_shaped_reward_real": 19.666666666666668,
@@ -690,7 +717,7 @@
       "fsm_intent_agreement": 0.39724310776942356,
       "impostor_win_rate": 1.0,
       "inner_fitness_real": 18.67066179678415,
-      "inner_fitness_surrogate": 18.8023610659817,
+      "inner_fitness_surrogate": 18.883974201991133,
       "lambda_value": 2.0,
       "leak_test_passed": true,
       "mean_shaped_reward_real": 19.666666666666668,
@@ -725,7 +752,7 @@
       "fsm_intent_agreement": 0.7743097238895558,
       "impostor_win_rate": 1.0,
       "inner_fitness_real": 19.218116373117702,
-      "inner_fitness_surrogate": 18.777622773019168,
+      "inner_fitness_surrogate": 18.607576785282692,
       "lambda_value": 4.0,
       "leak_test_passed": true,
       "mean_shaped_reward_real": 19.8,

@@ -119,12 +119,12 @@ EVAL_SPLIT_REMAINDER: Final[int] = 4
 
 # The bake-off roster — the canonical 9p2i eval roster the corpus was recorded
 # on and the referee floors the bake-off selects on are pinned for: the
-# baseline-5 (phase-close) floors since Task 17.11's re-selection under the
-# close-substrate referee.
+# baseline-6 (adopted Phase-18) floors since the Task-18.13 corpus re-record
+# (Task 18.14 flips the id; the floors themselves are pinned at Task 18.12).
 BAKEOFF_NUM_PLAYERS: Final[int] = 9
 BAKEOFF_NUM_IMPOSTORS: Final[int] = 2
 BAKEOFF_TASKS_PER_CREWMATE: Final[int] = 2
-BAKEOFF_BASELINE_ID: Final[str] = "baseline-5"
+BAKEOFF_BASELINE_ID: Final[str] = "baseline-6"
 
 # The pre-stated BC bar (task contract): held-out top-1 intent agreement with
 # the FSM oracle. Stated here, before training, per the definition of done.
@@ -162,15 +162,23 @@ TRUNCATED_EPISODE_FITNESS: Final[float] = -10.0
 SURROGATE_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/surrogate")
 
 # The fake-provider probe baseline the surrogate re-run's delta is stated
-# against, RE-MEASURED at the phase-17 tree (Task 17.11) under the baseline-5
+# against, RE-CONFIRMED at the baseline-6 tree (Task 18.14) under the baseline-6
 # floors through the probe's own entry point —
 # ``run_goodhart_probe(config=ESConfig(generations=6, population=6, sigma=0.5,
 # seed=0, fitness_seeds=tuple(range(8))), num_players=9, num_impostors=2,
 # tasks_per_crewmate=2, materiality_bar=0.25)`` with the fake provider ($0,
-# offline) — never hand-copied. ES-core digest of the pinned run:
-# a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14. The ES
-# champion and the forced-report lever tie at the strongest reachable score
-# (the ES converged to the same corner), so the tactic names the lever.
+# offline) — never hand-copied. The fake-provider probe is SUBSTRATE-INDEPENDENT:
+# under fake meetings the referee gate is always False (no contradiction flags,
+# no observation-backed accusations), so the ES fitness is ``mean_score`` for
+# both baselines and all six values below reproduce unchanged from baseline 5 —
+# ``baseline_id`` selects only the supply floors, which don't feed ``mean_score``
+# and are False either way. ES-core digest of the origin-platform run:
+# a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14 (the six
+# rounded values are platform-stable; the digest is the exact-float genome hash
+# and is origin-platform-specific — the same ES trajectory ULP-sensitivity the
+# map-elites/anchor byte-identity pins carry). The ES champion and the
+# forced-report lever tie at the strongest reachable score (the ES converged to
+# the same corner), so the tactic names the lever.
 GOODHART_9P2I_BASELINE: Final[Mapping[str, float | str]] = {
     "baseline_mean_score": 3.28,
     "champion_mean_score": 3.7,

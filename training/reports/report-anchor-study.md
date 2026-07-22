@@ -6,7 +6,7 @@
 > **Anchors:** training/bakeoff/harness.py `inner_episode_fitness` (:569-590,
 > the anchor penalty seam); training/bakeoff/utility_es.py:708-718 (the full
 > budget); replays/ml_corpus/9p2i/ (the filtered-BC source).
-> **Substrate:** baseline-5; substrate sha `8b08fd1031744d770c7e863bcbe27dfe3d964d8909a005976f47877380db725f`
+> **Substrate:** baseline-6; substrate sha `9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4`
 > (every frozen artifact under `training/artifacts/anchor_study/` carries it —
 > the 18.24 stale-seed refusal reads it).
 > **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
@@ -14,8 +14,8 @@
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
 > **Command:** `uv run python -m training.anchor_study run --budget full`
-> (exit 0, 1479 s training + 90 s
-> scoring/walk = 1569 s wall-clock, CPU-only, $0).
+> (exit 0, 1693 s training + 97 s
+> scoring/walk = 1790 s wall-clock, CPU-only, $0).
 > **Report-only:** no champion ships from this study; the ES leg under the
 > refined anchor is deliberately NOT run here (the harness's anchor-CE is
 > computed against the FSM's own choice; the anchor-policy seam lands at
@@ -40,7 +40,7 @@
 - **Filtered-BC filter (stated):** a corpus game qualifies iff its recorded
   winner is CREWMATES (crew-winning: the games where the evidence economy
   actually convicted) OR its persisted contradiction rows per meeting reach
-  the `flags_per_meeting` supply floor 0.502793
+  the `flags_per_meeting` supply floor 1.090909
   (high-flag: the supply gauge the champion failed, read off the committed
   meeting rows — conservative vs the referee's set-level gauge, which
   additionally re-derives transcript flags). Games satisfying BOTH weigh
@@ -95,10 +95,10 @@
 - **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is `lambda-4.0`:** every other cell is weakly dominated — at this budget on the fake path a HEAVIER anchor did not cost shaped reward (λ=0.25 shaped 19.30 / CE 1.055 → λ=4.0 shaped 19.80 / CE 0.611). The fake path mints no convictions, so fitness and legibility are not yet in tension here — the tension the champion failed on lives in the referee gauges, and NO cell passes the supply floors (the flip bar stays open; this study only positions seeds).
 - **The refined anchor vs the committed champion, on the corpus stream:** the
   filtered-BC anchor matches the FSM's choice on
-  0.7970 of decisions (CE
-  0.4589); the committed champion matches on
-  0.4131 (CE
-  1.0800) — the champion has
+  0.7971 of decisions (CE
+  0.4568); the committed champion matches on
+  0.4003 (CE
+  1.0815) — the champion has
   drifted far from the legible anchor, which is the under-anchoring symptom
   the §2.4 reading predicts.
 - **Structurally-zero anchor weights are expected:** a conditional logit over
@@ -109,11 +109,11 @@
 ## 3. The filtered-BC anchor
 
 **Filter census:** 150 games walked, every state hash and
-every re-derived FSM decision verified. Crew-winning 101,
-high-flag 86, both 70 →
-117 qualifying games, 5573 fit
-decisions (weight total 8439) of
-7693 total corpus decisions;
+every re-derived FSM decision verified. Crew-winning 112,
+high-flag 83, both 66 →
+129 qualifying games, 5396 fit
+decisions (weight total 7781) of
+6663 total corpus decisions;
 0 FSM decisions were off the option menu
 (excluded from the fit, tallied here — never silently dropped).
 
@@ -121,36 +121,37 @@ decisions (weight total 8439) of
 
 | Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu | CE-clamped |
 |---|---:|---:|---:|---:|---:|
-| all corpus games | 7693 | 0.7970 | 0.4589 | 0 | 0 |
-| in-filter games | 5573 | 0.7936 | 0.4685 | 0 | 0 |
-| out-of-filter games | 2120 | 0.8057 | 0.4337 | 0 | 0 |
-| committed utility-es champion | 7693 | 0.4131 | 1.0800 | 0 | 0 |
+| all corpus games | 6663 | 0.7971 | 0.4568 | 0 | 0 |
+| in-filter games | 5396 | 0.7952 | 0.4571 | 0 | 0 |
+| out-of-filter games | 1267 | 0.8051 | 0.4556 | 0 | 0 |
+| committed utility-es champion | 6663 | 0.4003 | 1.0815 | 0 | 0 |
 
 ### 3.2 Where the anchor agrees, by FSM intent kind (all corpus games)
 
 | FSM intent kind | decisions | anchor hits | agreement |
 |---|---:|---:|---:|
-| do_task | 1183 | 1147 | 0.9696 |
-| kill | 746 | 731 | 0.9799 |
-| move | 4221 | 3234 | 0.7662 |
-| sabotage | 114 | 114 | 1.0000 |
-| vent | 957 | 714 | 0.7461 |
-| wait | 472 | 191 | 0.4047 |
+| do_task | 1101 | 1068 | 0.9700 |
+| kill | 640 | 634 | 0.9906 |
+| move | 3632 | 2725 | 0.7503 |
+| sabotage | 73 | 73 | 1.0000 |
+| vent | 818 | 630 | 0.7702 |
+| wait | 399 | 181 | 0.4536 |
 
 ### 3.3 Where it diverges and toward what (top cells, all corpus games)
 
 | FSM chose | anchor chose | count |
 |---|---|---:|
-| move | move | 533 |
-| move | kill | 329 |
-| vent | vent | 243 |
-| wait | move | 182 |
-| move | do_task | 123 |
-| wait | do_task | 91 |
-| do_task | move | 20 |
-| do_task | kill | 16 |
-| kill | sabotage | 15 |
+| move | move | 487 |
+| move | kill | 309 |
+| vent | vent | 188 |
+| wait | move | 137 |
+| move | do_task | 107 |
+| wait | do_task | 73 |
+| do_task | move | 30 |
 | wait | kill | 8 |
+| kill | sabotage | 6 |
+| do_task | kill | 3 |
+| move | sabotage | 2 |
 | move | wait | 2 |
 
 ## 4. Which candidates 18.24 should seed with

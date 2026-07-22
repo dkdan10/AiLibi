@@ -41,9 +41,12 @@ Public surface (stable — downstream tasks import these):
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from agents.base import AgentInterface
 from engine.entities import PlayerId
@@ -72,6 +75,20 @@ _MEETING_ID_SEPARATOR: Final[str] = ":meeting-"
 _SURROGATE_RATIONALE: Final[str] = (
     "surrogate-predicted ballot (no transcript; Task 15.13 ballot predictor)"
 )
+
+# The committed fit-corpus provenance sidecar (Task 18.14). ``SurrogateStalenessCap``
+# keys only on ``weights_sha256``, so the load path fails loud on WEIGHTS drift but
+# is BLIND to SUBSTRATE drift — a bake-off could load weights fitted on one corpus
+# against a re-recorded (baseline-N+1) corpus while nothing raised. This sidecar
+# records the fit corpus's identity beside the weights so the loader can catch it.
+FIT_CORPUS_FILENAME: Final[str] = "fit-corpus.json"
+
+# The repo-relative root under which the canonical corpora live (``9p2i`` / ``4p1i``).
+# ``load_surrogate_runner_factory`` uses ``_DEFAULT_CORPUS_ROOT / corpus_set`` only as
+# the documentation of where the fit corpus lives; the corpus-identity check itself is
+# opt-in via the ``corpus_dir`` argument (recomputing the fingerprint reads every
+# replay byte, too costly to run on every per-candidate load).
+_DEFAULT_CORPUS_ROOT: Final[Path] = Path("replays/ml_corpus")
 
 
 class SurrogateStalenessExceededError(RuntimeError):
@@ -296,16 +313,85 @@ class SurrogateMeetingRunner:
         return MeetingArtifacts(result=result, llm_calls=(), prompt_versions={})
 
 
+class SurrogateFitCorpus(BaseModel):
+    """The committed fit-corpus provenance beside the weights (Task 18.14).
+
+    Records the identity of the corpus the surrogate weights were FIT on so the
+    load path can catch SUBSTRATE drift, the blind spot
+    :class:`~training.surrogate.ballots.SurrogateStalenessCap` leaves: the cap
+    keys only on ``weights_sha256``, so a bake-off that loaded these weights
+    against a re-recorded (baseline-N+1) corpus would raise on WEIGHTS drift but
+    silently optimize a policy against a model fitted on different games. The
+    §8 re-grounding recipe re-records the corpus and re-fits the weights
+    TOGETHER, so this record is written in the same commit; ``weights_sha256``
+    keys it to those exact weights (the loader refuses a record that drifted
+    from the artifact).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    corpus_set: str = Field(min_length=1)
+    corpus_sha256: str = Field(min_length=64, max_length=64)
+    fit_side_meetings: int = Field(gt=0)
+    weights_sha256: str = Field(min_length=64, max_length=64)
+
+
+def fit_corpus_fingerprint(corpus_dir: Path) -> str:
+    """One digest of a fit corpus's identity (replay bytes + split + provenance).
+
+    Folds the per-replay sha256 digests (in sorted-filename order), then the
+    committed ``splits.json`` and ``MANIFEST.md`` bytes, into a single sha256 —
+    the same "hash the recorded bytes, not just the metadata" idiom
+    :func:`training.anchor_study._corpus_replays_sha256` uses, so the
+    fingerprint moves when ANY recorded game byte, the by-game split, or the
+    recording provenance moves. This is the corpus-identity the committed
+    :class:`SurrogateFitCorpus` records; recomputing it reads every replay, so
+    the loader verifies it only when a caller opts in (``corpus_dir``).
+    """
+
+    digest = hashlib.sha256()
+    for path in sorted(corpus_dir.glob("replay-seed-*.jsonl")):
+        digest.update(path.name.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(hashlib.sha256(path.read_bytes()).hexdigest().encode("utf-8"))
+        digest.update(b"\n")
+    for meta_name in ("splits.json", "MANIFEST.md"):
+        meta_path = corpus_dir / meta_name
+        digest.update(meta_name.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(
+            hashlib.sha256(meta_path.read_bytes()).hexdigest().encode("utf-8")
+        )
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def load_fit_corpus_record(artifact_dir: Path) -> SurrogateFitCorpus:
+    """Read the committed fit-corpus provenance beside the weights (fail loud)."""
+
+    path = artifact_dir / FIT_CORPUS_FILENAME
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"no committed fit-corpus provenance at {path}; the surrogate must "
+            "record the corpus it was fitted on so the load path can catch "
+            "substrate drift (Task 18.14 — training/reports/"
+            "report-ballot-surrogate.md §7)"
+        )
+    return SurrogateFitCorpus.model_validate_json(path.read_text())
+
+
 def load_surrogate_runner_factory(
     artifact_dir: Path,
     *,
     use_counter: SurrogateUseCounter | None = None,
+    corpus_dir: Path | None = None,
 ) -> Callable[[], SurrogateMeetingRunner]:
     """Build a per-game runner factory over the COMMITTED weights artifact.
 
     Loads the weights (sha256 sidecar verified), loads the committed staleness
-    cap, cross-checks the cap is keyed on exactly those weights, and returns a
-    zero-arg factory suitable for
+    cap, cross-checks the cap is keyed on exactly those weights, loads the
+    committed fit-corpus provenance and cross-checks IT is keyed on those
+    weights too, and returns a zero-arg factory suitable for
     :func:`eval.balance_eval.run_tournament_eval`'s
     ``meeting_runner_factory`` keyword and the training env's
     ``meeting_runner_factory`` seam. Every runner the factory constructs shares
@@ -318,6 +404,19 @@ def load_surrogate_runner_factory(
     must be no LOOSER than the committed ``max_uses`` — a shared counter may
     tighten the committed cap (the cumulative-metering tests do), never loosen
     it, or the doctrine this factory enforces would be silently bypassable.
+
+    **The substrate fence (Task 18.14).** ``SurrogateStalenessCap`` is blind to
+    substrate drift — it keys on the weights, not the corpus they were fitted
+    on — so the load path caught WEIGHTS drift but not a re-recorded corpus
+    (the §8 hazard: optimizing against a model fitted on different games). The
+    committed :class:`SurrogateFitCorpus` closes that gap: its ``weights_sha256``
+    is cross-checked here UNCONDITIONALLY (a botched re-fit that moved the
+    weights but not the corpus record fails loud). Pass ``corpus_dir`` to verify
+    the fit-corpus fingerprint against a live corpus as well — recomputing it
+    reads every replay byte (too costly to run on every per-candidate load, so
+    it is opt-in); ``replays/ml_corpus/<corpus_set>`` is where the recorded
+    ``corpus_set`` lives. A mismatch fails loud rather than scoring a bake-off
+    against a stale surrogate.
     """
 
     predictor, weights_sha256 = load_ballot_predictor_artifact(artifact_dir)
@@ -328,6 +427,25 @@ def load_surrogate_runner_factory(
             f"{cap.weights_sha256!r} but the committed weights hash to "
             f"{weights_sha256!r} — the cap and the artifact drifted apart"
         )
+    fit_corpus = load_fit_corpus_record(artifact_dir)
+    if fit_corpus.weights_sha256 != weights_sha256:
+        raise ValueError(
+            f"fit-corpus provenance under {artifact_dir} is keyed on weights "
+            f"{fit_corpus.weights_sha256!r} but the committed weights hash to "
+            f"{weights_sha256!r} — the fit-corpus record and the artifact "
+            "drifted apart (a re-fit must re-write both together, §8)"
+        )
+    if corpus_dir is not None:
+        live_fingerprint = fit_corpus_fingerprint(corpus_dir)
+        if live_fingerprint != fit_corpus.corpus_sha256:
+            raise ValueError(
+                f"the surrogate under {artifact_dir} was fitted on corpus "
+                f"{fit_corpus.corpus_set!r} (fingerprint "
+                f"{fit_corpus.corpus_sha256[:12]}…) but {corpus_dir} fingerprints "
+                f"to {live_fingerprint[:12]}… — the substrate drifted; re-ground "
+                "before scoring against this corpus "
+                "(training/reports/report-ballot-surrogate.md §8)"
+            )
     if use_counter is not None:
         if use_counter.cap.weights_sha256 != weights_sha256:
             raise ValueError(
@@ -355,8 +473,12 @@ def load_surrogate_runner_factory(
 
 
 __all__ = [
+    "FIT_CORPUS_FILENAME",
+    "SurrogateFitCorpus",
     "SurrogateMeetingRunner",
     "SurrogateStalenessExceededError",
     "SurrogateUseCounter",
+    "fit_corpus_fingerprint",
+    "load_fit_corpus_record",
     "load_surrogate_runner_factory",
 ]

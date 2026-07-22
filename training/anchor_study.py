@@ -151,15 +151,18 @@ REPORT_PATH: Final[Path] = Path("training/reports/report-anchor-study.md")
 # The committed λ=1.0 champion the determinism cross-check reproduces.
 COMMITTED_CHAMPION_DIR: Final[Path] = Path("training/artifacts/impostor/utility-es")
 
-# The high-flag game filter threshold: the baseline-5 9p2i ``flags_per_meeting``
-# supply floor, 90/179 (eval/watchability.py, the Task-16.17 close record; the
-# §1.3 flip bar's supply gauge — the exact gauge the champion failed at
-# 0.4255). Pinned as the committed ratio per the standing test idiom
-# (tests/training/test_bakeoff_harness.py::_FLAGS_PER_MEETING_FLOOR) rather
-# than importing ``eval.watchability`` into a training module: the bake-off
-# entrant firewall keeps training-side modules eval-free, and this study
-# consumes the floor as a NUMBER, not the gauge.
-HIGH_FLAG_FLOOR: Final[float] = 90 / 179
+# The high-flag game filter threshold: the baseline-6 9p2i ``flags_per_meeting``
+# supply floor, 180/165 = 12/11 (eval/watchability.py, the Task-18.12 adopting
+# record; the §1.3 flip bar's supply gauge — the exact gauge the champion
+# failed). Re-pinned baseline-5 (90/179 = 0.5028) -> baseline-6 (180/165 =
+# 1.0909) at Task 18.14 alongside BAKEOFF_BASELINE_ID, so a default-substrate
+# re-run filters against the ADOPTED supply bar (the vent-widening re-record
+# raised it) rather than the prior substrate's — otherwise the artifact stamps
+# baseline-6 while filtering on the baseline-5 gauge (Codex review on PR #303).
+# Pinned as the committed ratio rather than importing ``eval.watchability`` into
+# a training module: the bake-off entrant firewall keeps training-side modules
+# eval-free, and this study consumes the floor as a NUMBER, not the gauge.
+HIGH_FLAG_FLOOR: Final[float] = 180 / 165
 
 # The filtered-BC fit hyperparameters — the Fo6Logistic / BallotPredictor
 # deterministic recipe verbatim (training/surrogate/fidelity.py:316,
@@ -226,7 +229,7 @@ def compute_substrate_sha(
       wrongly left untouched), and
     * the ``flags_per_meeting`` floor value this study filters against — the
       floor ACTUALLY USED (``high_flag_floor``, defaulting to the committed
-      baseline-5 pin): a re-fit at an adopted baseline passes the re-pinned
+      baseline-6 pin): a re-fit at an adopted baseline passes the re-pinned
       floor alongside its ``baseline_id`` and the sha moves with both (Codex
       review on PR #292).
 
@@ -340,7 +343,7 @@ class CorpusGameFacts:
     identity is pinned instead by the substrate sha's replay-bytes digest —
     a drifted/forged row moves :func:`compute_substrate_sha` and the 18.24
     stale-seed refusal fires. ``high_flag`` compares against the
-    ``high_flag_floor`` the walk was given (default: the committed baseline-5
+    ``high_flag_floor`` the walk was given (default: the committed baseline-6
     pin :data:`HIGH_FLAG_FLOOR`); ``crew_winning`` reads the recorded winner.
     """
 

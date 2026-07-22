@@ -221,7 +221,7 @@ def test_probe_reruns_end_to_end_on_the_regrounded_surrogate() -> None:
         meeting_runner_factory=factory,
     )
     assert isinstance(report, GoodhartProbeReport)
-    assert report.baseline_id == "baseline-5"
+    assert report.baseline_id == "baseline-6"
     assert report.verdict in ("HELD", "EXPLOITS_FOUND")
     # The surrogate meeting path was actually exercised and metered.
     assert counter.uses > 0

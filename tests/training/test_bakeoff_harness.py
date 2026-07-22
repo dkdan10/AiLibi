@@ -91,15 +91,19 @@ def test_eval_seeds_are_the_frozen_corpus_test_split() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 1b. The selection-bar pin (Task 17.11): baseline-5 + goodhart default.       #
+# 1b. The selection-bar pin (Task 18.14): baseline-6 + goodhart default.       #
 # --------------------------------------------------------------------------- #
 
 
-def test_selection_bar_pins_the_baseline_5_floors() -> None:
-    """Pin Task 17.11: the bake-off selects on the baseline-5 (phase-close)
-    floors and the goodhart probe default tracks the same literal."""
+def test_selection_bar_pins_the_baseline_6_floors() -> None:
+    """Pin Task 18.14: the bake-off selects on the baseline-6 (adopted Phase-18)
+    floors and the goodhart probe default tracks the same literal.
 
-    assert BAKEOFF_BASELINE_ID == "baseline-5"
+    The flip is coupled: moving ``BAKEOFF_BASELINE_ID`` to ``baseline-6`` requires
+    ``run_goodhart_probe``'s default ``baseline_id`` to move with it, so the probe
+    keeps measuring against the same floors the bake-off selects on."""
+
+    assert BAKEOFF_BASELINE_ID == "baseline-6"
     signature = inspect.signature(run_goodhart_probe)
     probe_default = signature.parameters["baseline_id"].default
     assert probe_default == BAKEOFF_BASELINE_ID

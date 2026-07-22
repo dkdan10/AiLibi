@@ -321,12 +321,17 @@ from training.bakeoff.goodhart import run_goodhart_probe
 
 cfg = ESConfig(generations=6, population=6, sigma=0.5, seed=0,
                fitness_seeds=tuple(range(8)))
-# 9p2i fake provider (HELD — reproduces the 17.11 GOODHART_9P2I_BASELINE anchor):
+# 9p2i fake provider (HELD — reproduces the 17.11 GOODHART_9P2I_BASELINE anchor).
+# baseline_id is pinned explicitly: run_goodhart_probe's default moved to
+# "baseline-6" at Task 18.14, so this baseline-5 report pins the id to reproduce
+# the documented floors/provenance rather than following the moved default.
 run_goodhart_probe(config=cfg, num_players=9, num_impostors=2,
-                   tasks_per_crewmate=2, materiality_bar=0.25)
+                   tasks_per_crewmate=2, materiality_bar=0.25,
+                   baseline_id="baseline-5")
 # 4p1i fake provider (EXPLOITS-FOUND):
 run_goodhart_probe(config=cfg, num_players=4, num_impostors=1,
-                   tasks_per_crewmate=1, materiality_bar=0.25)
+                   tasks_per_crewmate=1, materiality_bar=0.25,
+                   baseline_id="baseline-5")
 ```
 
 Surrogate path (the committed driver; prints the full probe report + meeting
@@ -336,10 +341,22 @@ stats + the delta verdict):
 uv run python -m training.bakeoff.harness goodhart-surrogate --budget committed
 ```
 
+> **Superseded (Task 18.14).** Unlike the two fake-provider calls above — which
+> are substrate-independent and stay reproducible once pinned to `baseline-5` —
+> the surrogate leg of this baseline-5 report is **no longer byte-reproducible
+> from the current tree.** The `goodhart-surrogate` driver takes no baseline
+> flag: it calls `run_goodhart_surrogate_rerun(config=config)` with the default
+> `baseline_id=BAKEOFF_BASELINE_ID` (flipped to `baseline-6` at 18.14) and loads
+> the surrogate artifact under `training/artifacts/surrogate/`, which 18.14
+> re-ground baseline-5 → baseline-6 (this report's companion re-ground,
+> `report-ballot-surrogate.md`). So the command now reproduces the BASELINE-6
+> surrogate run, not the baseline-5 surrogate numbers/digest recorded below. The
+> baseline-5 surrogate digest is retained as a historical Task-17.15 record.
+
 Deterministic under `config.seed` (env + referee + surrogate are pure functions
 of the seed). ES-core digests: 9p2i fake
 `a7c5ea590233f0735571cf6960fbdf1567bdbb2575e0d27bfba995f08d235c14` (matches the
 17.11 anchor pin); 4p1i fake
 `5351db5ee8d1b3625655fa68f818738a51d526fe1afdcddfdeb5e8651cceb630`; 9p2i
-surrogate
+surrogate (historical baseline-5, superseded per the note above)
 `2492db5244d504db4de97ee728d8accfbaa6fa202f8af7a9c209a0c4190017f0`.

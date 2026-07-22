@@ -803,7 +803,7 @@ def run_goodhart_probe(
     num_players: int,
     num_impostors: int,
     tasks_per_crewmate: int,
-    baseline_id: str = "baseline-5",
+    baseline_id: str = "baseline-6",
     materiality_bar: float = 0.25,
     meeting_runner_factory: MeetingRunnerFactory | None = None,
 ) -> GoodhartProbeReport:
