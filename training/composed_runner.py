@@ -145,12 +145,15 @@ _MEETING_ID_SEPARATOR: Final[str] = ":meeting-"
 _NEUTRAL_PRIOR: Final[float] = 0.5
 
 # Distinct audit-marker rationales. A pass-through ballot is the surrogate's own
-# prediction; a re-anchored ballot is one the composition rewrote to land the
-# conviction decision through the real tally (a distinct string so the fold and
-# any auditor can tell them apart).
+# prediction, carried unchanged; a re-anchored ballot is one the composition
+# rewrote to land the conviction decision through the real tally (a distinct
+# string so the fold and any auditor can tell them apart). The gate's DECISION
+# is recorded by the outcome, never by the rationale: a convicting meeting whose
+# pass-through ballots already eject the ranked target re-anchors nothing, so
+# its ballots honestly stay pass-through-stamped.
 _COMPOSED_RATIONALE: Final[str] = (
-    "composed-runner pass-through ballot (surrogate-predicted; conviction did "
-    "not convict; Task 18.29)"
+    "composed-runner pass-through ballot (surrogate-predicted, not re-anchored; "
+    "Task 18.29)"
 )
 _REANCHOR_RATIONALE: Final[str] = (
     "composed-runner re-anchored ballot (conviction convicts; surrogate-ranked "

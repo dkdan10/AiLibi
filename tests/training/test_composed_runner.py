@@ -31,8 +31,9 @@ committed 9p2i corpus:
   with the component consumption metered on the shared sha-keyed counters.
 
 Two committed-artifact PIN tests at the end load ``training/artifacts/composed/``
-directly (the reproduce identity). They FAIL until the orchestrator commits the
-composed artifacts in a later phase — that is expected in this phase.
+directly — the manifest + verdict THIS task commits (the first held-out
+evaluation's bytes) — and pin the reproduce identity: re-deciding the fidelity
+must reproduce the committed verdict field-for-field.
 """
 
 from __future__ import annotations
@@ -1279,6 +1280,12 @@ def test_committed_composed_verdict_round_trips_and_pins_the_shas(
     assert manifest.conviction_weights_sha256 == conviction_sha
     assert manifest.surrogate_weights_sha256 == surrogate_sha
     assert manifest.composed_verdict == verdict.verdict
+    # The committed manifest pins the operating point quoted from the imported
+    # constants — a drifted manifest byte must move this test, not just prose.
+    assert manifest.decision_threshold == CONVICTION_CONVERSION_DECISION_THRESHOLD
+    assert manifest.skip_confidence_threshold == DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+    assert manifest.corpus_set == "9p2i"
+    assert manifest.replay_set_dir == "replays/ml_corpus/9p2i"
 
 
 def test_committed_composed_verdict_is_rederivable(
