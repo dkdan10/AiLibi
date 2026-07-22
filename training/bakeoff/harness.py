@@ -816,19 +816,22 @@ class ConvictionFitnessTerm:
             )
 
     def predict_meeting(self, features: Mapping[str, float]) -> ConvictionPrediction:
-        """Meter ONE use, THEN predict one meeting's supply (the cap's unit).
+        """Predict one meeting's supply, metering ONE use on delivery.
 
-        Records the use against the SHARED per-run
-        :class:`ConvictionUseCounter` FIRST (one predicted meeting is one use —
-        the 18.15 cap unit; the counter raises once the committed cap is spent),
-        then scores the caller-supplied per-meeting feature mapping. The model
-        itself fail-louds on a feature key set that does not match
-        ``CONVICTION_FEATURE_NAMES``. The counter is the SAME object threaded
-        through both fitness sides and :func:`conviction_prescreen`.
+        The cap's pinned unit is a PREDICTED meeting (one delivered
+        :meth:`~training.conviction.model.ConvictionEconomyModel.predict` is
+        one use), so the use is charged only for a prediction that is actually
+        delivered: a malformed feature mapping fail-louds out of the model
+        BEFORE any charge — the cap never burns quota on failures or retries —
+        and at the spent cap the counter still raises with the internal
+        computation discarded unreturned, so no training signal escapes the
+        meter in either order. The counter is the SAME sha-keyed object
+        threaded through both fitness sides and :func:`conviction_prescreen`.
         """
 
+        prediction = self.model.predict(features)
         self.use_counter.record_use(weights_sha256=self.weights_sha256)
-        return self.model.predict(features)
+        return prediction
 
 
 def load_conviction_fitness_term(
@@ -865,6 +868,25 @@ def load_conviction_fitness_term(
         use_counter=counter,
         weight=weight,
     )
+
+
+def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
+    """The drift-checked verdict the result rows stamp their provenance from.
+
+    Row provenance must describe a bundle a trainer could actually LOAD:
+    trusting ``verdict.json`` alone would let a partially updated artifact dir
+    (weights re-fit, verdict or cap stale) stamp rows describing an instrument
+    no consumer can construct (Codex review on PR #304). This runs the SAME
+    sha-coherence checks as the term loader and the pre-screen
+    (:func:`_load_conviction_bundle`: the weights bytes' hash == the cap's key
+    == the verdict's key, fail loud on any drift) and returns the verdict —
+    used by :func:`evaluate_candidate` and the crew twin
+    (``training/crew/scorer.py::evaluate_crew_candidate``) BEFORE any eval
+    side effects, so a stale bundle fails the run, never a row.
+    """
+
+    _, _, _, verdict = _load_conviction_bundle(artifact_dir, None)
+    return verdict
 
 
 def inner_episode_fitness(
@@ -1054,8 +1076,12 @@ def conviction_prescreen(
     conversion_probs: list[float] = []
     converting = 0
     for features in meeting_features:
-        counter.record_use(weights_sha256=sha)
+        # Predict-then-meter: a use is charged only for a DELIVERED prediction
+        # (the cap's pinned unit — see ConvictionFitnessTerm.predict_meeting),
+        # so a malformed mapping mid-batch raises without burning this
+        # meeting's quota; the completed predictions before it stay charged.
         prediction = model.predict(features)
+        counter.record_use(weights_sha256=sha)
         flags.append(prediction.expected_flags)
         conversion_probs.append(prediction.conversion_prob)
         if prediction.conversion_prob >= CONVICTION_CONVERSION_DECISION_THRESHOLD:
@@ -1543,11 +1569,15 @@ def evaluate_candidate(
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
-    entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
     # The committed conviction verdict stamps the row's provenance metadata:
     # WHICH composition ships for training (the fitness columns stay
     # anchor-composed until the live serving seam lands — see the config).
-    conviction_verdict = load_conviction_verdict(protocol.conviction_artifact_dir)
+    # Drift-checked BEFORE any eval side effects: a stale/partially-updated
+    # bundle fails the run loud, never lands in a row.
+    conviction_verdict = load_conviction_row_provenance(
+        protocol.conviction_artifact_dir
+    )
+    entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
 
     with tempfile.TemporaryDirectory(prefix="ailibi-bakeoff-eval-") as tmp:
         real_dir = Path(tmp) / "real"
@@ -2090,6 +2120,7 @@ __all__ = [
     "intent_key",
     "load_candidate_weights",
     "load_conviction_fitness_term",
+    "load_conviction_row_provenance",
     "load_eval_seeds",
     "load_train_seeds",
     "load_val_seeds",

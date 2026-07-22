@@ -82,6 +82,7 @@ from training.conviction.dataset import (
 )
 from training.conviction.fidelity import (
     ConvictionGoVerdict,
+    load_conviction_verdict,
     write_conviction_verdict_artifact,
 )
 from training.conviction.model import (
@@ -850,6 +851,31 @@ def test_evaluate_crew_candidate_no_go_row(tmp_path: Path) -> None:
     assert result.conviction_fitness_term == "absent"
     assert result.conviction_weight is None
     assert result.conviction_weights_sha256 == sha
+
+
+def test_evaluate_crew_candidate_rejects_drifted_conviction_bundle(
+    tmp_path: Path,
+) -> None:
+    # The crew twin of the impostor row's drift refusal (PR #304 review): a
+    # partially-updated conviction dir (verdict re-keyed off the weights)
+    # fails the crew eval BEFORE any side effects instead of stamping stale
+    # row provenance.
+    conviction_dir = tmp_path / "conviction-drifted"
+    _write_conviction_fixture(conviction_dir, go=True)
+    drifted = load_conviction_verdict(conviction_dir).model_copy(
+        update={"weights_sha256": "0" * 64}
+    )
+    write_conviction_verdict_artifact(drifted, conviction_dir)
+    protocol = CrewProtocolConfig(
+        eval_seeds=(1000,),
+        determinism_seeds=(1000,),
+        repeat_n=2,
+        conviction_artifact_dir=conviction_dir,
+    )
+    with pytest.raises(ValueError, match="drifted"):
+        evaluate_crew_candidate(
+            fsm_baseline_candidate(), protocol, artifact_root=tmp_path / "artifacts"
+        )
 
 
 def test_body_saw_event_constant_is_pinned() -> None:

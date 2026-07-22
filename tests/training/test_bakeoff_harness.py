@@ -1423,3 +1423,61 @@ def test_evaluate_candidate_row_says_absent_under_nogo(tmp_path: Path) -> None:
     assert result.conviction_fitness_term == "absent"
     assert result.conviction_weight is None
     assert result.conviction_weights_sha256 == sha
+
+
+# --------------------------------------------------------------------------- #
+# 10.8 Review hardening: delivered-use metering + drift-checked row stamping.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_conviction_uses_charge_only_delivered_predictions(tmp_path: Path) -> None:
+    # The cap's pinned unit is a DELIVERED prediction (PR #304 review): a
+    # malformed feature mapping fail-louds out of the model without burning
+    # quota, on both the term path and the pre-screen path.
+    _write_conviction_fixture(tmp_path, go=True)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    term = load_conviction_fitness_term(tmp_path, use_counter=counter)
+    assert term is not None
+
+    malformed = dict(_MEETING_A)
+    del malformed["alive_count"]
+    with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
+        term.predict_meeting(malformed)
+    assert counter.uses == 0  # the failed prediction charged nothing
+
+    term.predict_meeting(_MEETING_A)
+    assert counter.uses == 1  # the delivered prediction charged exactly one
+
+    # Mid-batch pre-screen failure: the completed prediction stays charged,
+    # the malformed one does not, and no verdict is emitted.
+    with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
+        conviction_prescreen(
+            [_MEETING_B, malformed], artifact_dir=tmp_path, use_counter=counter
+        )
+    assert counter.uses == 2
+
+
+def test_evaluate_candidate_rejects_drifted_conviction_bundle(tmp_path: Path) -> None:
+    # Row provenance must describe a bundle a trainer could actually LOAD: a
+    # partially-updated artifact dir (verdict re-keyed off the weights) fails
+    # the eval BEFORE any side effects instead of stamping stale rows.
+    conviction_dir = tmp_path / "conviction-drifted"
+    _write_conviction_fixture(conviction_dir, go=True)
+    drifted = load_conviction_verdict(conviction_dir).model_copy(
+        update={"weights_sha256": "0" * 64}
+    )
+    write_conviction_verdict_artifact(drifted, conviction_dir)
+    candidate = TrainedCandidate(
+        entrant="drift-row-probe",
+        policy=_FsmDelegateAnchor(),
+        weights=(0.0,),
+        config={"entrant": "drift-row-probe"},
+    )
+    protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=conviction_dir,
+    )
+    with pytest.raises(ValueError, match="drifted"):
+        evaluate_candidate(candidate, protocol, artifact_root=tmp_path)

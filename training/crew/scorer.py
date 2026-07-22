@@ -133,11 +133,11 @@ from training.bakeoff.harness import (
     SupplyGaugeRow,
     TrainedCandidate,
     intent_key,
+    load_conviction_row_provenance,
     load_eval_seeds,
     load_train_seeds,
     write_candidate_artifact,
 )
-from training.conviction.fidelity import load_conviction_verdict
 from training.conviction.model import ConvictionPrediction
 from training.crew.options import (
     _NEUTRAL_SUSPICION_QUANTUM,
@@ -1485,11 +1485,15 @@ def evaluate_crew_candidate(
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
-    entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
     # The committed conviction verdict stamps the row's provenance metadata —
     # the crew-side twin of the impostor row's stamp (the crew fitness columns
-    # stay anchor-composed until the live serving seam lands).
-    conviction_verdict = load_conviction_verdict(protocol.conviction_artifact_dir)
+    # stay anchor-composed until the live serving seam lands). Drift-checked
+    # via the harness's bundle loader BEFORE any eval side effects: a stale or
+    # partially-updated bundle fails the run loud, never lands in a row.
+    conviction_verdict = load_conviction_row_provenance(
+        protocol.conviction_artifact_dir
+    )
+    entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
 
     policy = candidate.policy
     if not isinstance(policy, (CrewOptionScorer, FsmCrewBaseline)):
