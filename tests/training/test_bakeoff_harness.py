@@ -1313,14 +1313,19 @@ def test_conviction_prescreen_under_go(tmp_path: Path) -> None:
     expected_flags = [unmetered.predict(f).expected_flags for f in features]
     assert verdict.predicted_flags_per_meeting == math.fsum(expected_flags) / 3
 
-    # The floors are the committed baseline-6 pins consumed as NUMBERS.
+    # The floors are the committed baseline-6 pins consumed as NUMBERS. The
+    # conversion anchor is the PER-MEETING unit (the model's native label unit;
+    # the referee's converted/attempted pair gauge is structurally not
+    # predictable): the pair pin's numerator (78 converted backed accusations —
+    # one ejection per meeting, so 78 converting meetings) over the same
+    # committed 165-meeting census the flags floor reads.
     assert verdict.flags_floor == PRESCREEN_FLAGS_PER_MEETING_FLOOR == 180 / 165
-    assert verdict.conversion_pin == PRESCREEN_CONVERSION_PIN == 78 / 136
+    assert verdict.conversion_pin == PRESCREEN_CONVERSION_PIN == 78 / 165
 
     # The conversion floor derives population-relative from the PREDICTED flags
     # density via the public eval.watchability derivation.
     assert verdict.conversion_floor == population_relative_conversion_floor(
-        pinned_conversion=78 / 136,
+        pinned_conversion=78 / 165,
         pinned_flags_per_meeting=180 / 165,
         measured_flags_per_meeting=verdict.predicted_flags_per_meeting,
     )

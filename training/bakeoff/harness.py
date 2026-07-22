@@ -244,10 +244,18 @@ CONVICTION_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/conviction")
 # ``training/anchor_study.py::HIGH_FLAG_FLOOR`` (lines 154-165); neither is
 # re-measured here.
 PRESCREEN_FLAGS_PER_MEETING_FLOOR: Final[float] = 180 / 165
-# The baseline-6 9p2i ``testimony_backed_conversion`` anchor; the evaluated floor
+# The baseline-6 9p2i conversion anchor in the PER-MEETING unit. The referee's
+# own pin is the PAIR gauge (78/136 converted/attempted backed accusations),
+# which the model structurally cannot predict — its fitted label
+# (``testimony_backed_conversion``) is per-MEETING and it has no "attempted"
+# head — so the pre-screen anchors on the baseline's own converting-MEETING
+# share instead: the SAME committed numerator (78 converted backed accusations;
+# a meeting ejects at most once, so 78 converting meetings) over the SAME
+# committed 165-meeting census the flags floor reads (eval/watchability.py
+# baseline-6 9p2i comments). Like units on both sides; the evaluated floor
 # derives population-relative from the PREDICTED flags density via the public
 # ``eval.watchability.population_relative_conversion_floor`` derivation.
-PRESCREEN_CONVERSION_PIN: Final[float] = 78 / 136
+PRESCREEN_CONVERSION_PIN: Final[float] = 78 / 165
 
 _ROSTER_FILENAME: Final[str] = "roster.json"
 _WEIGHTS_FILENAME: Final[str] = "weights.json"
@@ -917,9 +925,19 @@ class ConvictionPrescreenVerdict(BaseModel):
     diagnostic.
 
     ``predicted_converting_share`` is the per-meeting SHARE of meetings the
-    conversion head calls at the pinned threshold — a LOWER-BOUND proxy for the
-    referee's converted/attempted gauge (converted/meetings <=
-    converted/attempted), so a predicted PASS is the conservative direction.
+    conversion head calls at the pinned threshold — the model's NATIVE unit:
+    its fitted ``testimony_backed_conversion`` label is per-meeting and it has
+    no "attempted" head, so the referee's converted/attempted PAIR gauge is
+    structurally not predictable (a meeting with two backed accusations and one
+    ejection reads 1/2 in pairs but 1/1 per meeting — the units genuinely
+    diverge). The channel therefore compares LIKE UNITS: ``conversion_pin`` is
+    the baseline's own converting-MEETING share (78/165 — the pair pin's
+    numerator over the same committed meeting census the flags floor reads),
+    density-adjusted by the same public derivation the referee uses, so the
+    baseline demands exactly its own per-meeting share at its own density. The
+    real referee (the pair gauge, measured on recorded bytes) remains the
+    SELECTION gate — a pre-screen pass only spends a real eval, never selects a
+    champion.
     ``predicted_mean_conversion_prob`` is the mean conversion probability — the
     model's EXPECTED converting-meeting share, carrying the sub-threshold mass a
     hard call discards. It is REPORTED beside the thresholded channel, never
@@ -982,9 +1000,13 @@ def conviction_prescreen(
     with the fitness sides when the SAME counter is threaded in.
 
     The floors are the committed baseline-6 9p2i pins consumed as NUMBERS (the
-    ``training/anchor_study.py::HIGH_FLAG_FLOOR`` precedent); the conversion
-    floor derives population-relative from the PREDICTED flags density via the
-    public ``eval.watchability`` derivation (the harness is the one bake-off
+    ``training/anchor_study.py::HIGH_FLAG_FLOOR`` precedent) — the conversion
+    anchor in the model's native PER-MEETING unit (see
+    :data:`PRESCREEN_CONVERSION_PIN` and the verdict docstring: the referee's
+    pair gauge is structurally not predictable, so the channel compares like
+    units) — and the conversion floor derives population-relative from the
+    PREDICTED flags density via the public ``eval.watchability`` derivation
+    (the harness is the one bake-off
     module allowed to import ``eval``). ADVISORY-ONLY doctrine: under NO-GO the
     ``prescreen_role`` is ``"advisory"`` and ``advisory_only`` is set — a driver
     must never gate real-path spend on it.
