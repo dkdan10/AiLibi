@@ -111,13 +111,12 @@ def seed_1000_walk() -> tuple[CorpusGameFacts, tuple[CorpusDecision, ...]]:
 
 # Task 18.13 (the baseline-6 ML-corpus re-record) moved both the corpus replay
 # bytes and the corpus MANIFEST/splits digests that compute_substrate_sha() folds
-# in. The seed-1000 harvest pins are CORPUS-derived, so they are re-pinned LIVE
-# below. The committed study ARTIFACT's substrate fence needs a re-run that is out
-# of 18.13's scope (this file belongs to Task 18.5, CLOSED); rather than xfail it —
-# which would hide the baseline-5-artifact / baseline-6-corpus hybrid — it is a
-# live, self-clearing TRIPWIRE further down. See the PR's Questions section: the
-# recommendation is to fold the re-run into 18.14, the task that flips
-# BAKEOFF_BASELINE_ID, so both stale inputs to the substrate identity move at once.
+# in; Task 18.14 then re-ran the study on the baseline-6 substrate (the re-run
+# 18.13 deferred, folded into the BAKEOFF_BASELINE_ID flip so both stale inputs to
+# the substrate identity moved at once). The seed-1000 harvest pins are
+# CORPUS-derived and re-pinned LIVE below; the committed study ARTIFACT is now the
+# baseline-6 re-run, so its recorded substrate_sha MATCHES the live substrate — the
+# positive pin further down, which replaced 18.13's self-clearing hybrid tripwire.
 
 
 def test_walk_corpus_game_verifies_and_harvests(
@@ -128,9 +127,10 @@ def test_walk_corpus_game_verifies_and_harvests(
     # recorded winner CREWMATES) — a drift in any of these means the corpus
     # bytes or the walk changed. Re-pinned at Task 18.13's baseline-6 re-record
     # (was 5 meetings / 2 flags at baseline 5). These are CORPUS-derived, so they
-    # are re-derivable from the new bytes and stay LIVE — only the committed
-    # STUDY ARTIFACT's substrate fence below needs an owned re-run (PR #301
-    # review: don't xfail what you can honestly re-pin).
+    # are re-derivable from the new bytes and stay LIVE, and the committed STUDY
+    # ARTIFACT is now the baseline-6 re-run (Task 18.14), so its substrate fence
+    # below matches the live substrate (PR #301 review: don't xfail what you can
+    # honestly re-pin).
     assert facts.winner == "CREWMATES"
     assert facts.crew_winning is True
     assert facts.meetings == 2
@@ -654,50 +654,30 @@ def test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte() -> 
     assert sweep == committed
 
 
-# The baseline-5 substrate sha the committed anchor-study artifacts still carry.
-# compute_substrate_sha() folds in the corpus MANIFEST digest, so the Task-18.13
-# baseline-6 re-record moved the LIVE value; the committed artifact was NOT
-# regenerated (its re-run is out of 18.13's scope). This literal is the recorded
-# stale value — when 18.14 (or an owned follow-up) re-runs the study on baseline 6,
-# it changes and the tripwire below fails, forcing this pin + the marker's deletion.
-_COMMITTED_BASELINE5_STUDY_SUBSTRATE_SHA = (
-    "8b08fd1031744d770c7e863bcbe27dfe3d964d8909a005976f47877380db725f"
-)
+def test_committed_study_artifacts_are_the_baseline6_fit() -> None:
+    """The committed anchor-study artifacts ARE the baseline-6 re-run (Task 18.14).
 
-
-def test_committed_study_artifacts_are_the_known_stale_baseline5_fit() -> None:
-    """TRIPWIRE for the baseline-5-artifact / baseline-6-corpus hybrid (PR #301).
-
-    Was an ``xfail`` on ``== compute_substrate_sha()``. The reviewer's objection is
-    correct: an expected failure makes the hybrid INVISIBLE — a downstream run
-    could consume the stale anchor-study artifacts as if their provenance matched
-    the live substrate while CI stays green. So assert the hybrid EXPLICITLY and
-    LIVE instead, and self-clear: the moment the study artifact is re-run on
-    baseline 6 its recorded ``substrate_sha`` moves off the literal below, this
-    FAILS, and that is the signal to delete this test, the literal, and the
-    together. A green suite means "the
-    hybrid is present and tracked", never "the artifact is current".
-
-    Re-running the study is out of 18.13's scope (this file belongs to Task 18.5,
-    CLOSED; ``training/anchor_study.py`` and ``training/artifacts/anchor_study/``
-    are named in no 18.13 in-scope list) — see the PR's Questions section, which
-    asks the owner to fold the re-run into 18.14.
+    The inverse of the PR #301 tripwire this replaces. Where that asserted the
+    baseline-5-artifact / baseline-6-corpus HYBRID (a re-run deferred to this task),
+    the re-ground makes the committed artifact current. The utility-es λ sweep is
+    SUBSTRATE-INDEPENDENT (deterministic fake-provider rollouts off ``seed`` + the
+    canonical map, no corpus read), so the λ cell genomes — and the
+    λ=1.0-vs-committed-champion byte identity pinned above — reproduce unchanged;
+    only the corpus-derived filtered-BC anchor is re-fit on the baseline-6 replay
+    bytes, and every cell's ``config.json`` substrate sha plus the study index's
+    ``substrate_sha`` are re-stamped to the live substrate. So the committed
+    artifact's recorded substrate now MATCHES ``compute_substrate_sha()`` and reads
+    ``baseline-6`` — the hybrid the tripwire tracked has resolved.
     """
 
     index = json.loads((ANCHOR_STUDY_ARTIFACT_ROOT / "study.json").read_text())
     report = AnchorStudyReport.model_validate(index)
-    # The committed artifact still carries the baseline-5 substrate sha ...
-    assert report.substrate_sha == _COMMITTED_BASELINE5_STUDY_SUBSTRATE_SHA, (
-        "the anchor-study substrate sha moved — if the study was re-run on "
-        "baseline 6, delete this tripwire and the literal"
-    )
-    # ... and the LIVE substrate is NOT it: the hybrid this tripwire tracks.
-    assert report.substrate_sha != compute_substrate_sha(), (
-        "the live substrate now matches the committed anchor-study artifact — the "
-        "hybrid has resolved; delete this tripwire and the marker"
-    )
-    # The substrate-INDEPENDENT structure of the committed artifact still holds and
-    # stays live (these are not what the re-record moved).
+    # Re-grounded: the recorded substrate now MATCHES the live substrate and reads
+    # the adopted baseline id (the tripwire's two hybrid assertions, inverted).
+    assert report.substrate_sha == compute_substrate_sha()
+    assert report.baseline_id == "baseline-6"
+    # The substrate-independent structure holds (not what the re-ground moved): the
+    # full λ grid and the λ=1.0 champion byte-identity cross-check.
     assert report.lambda_grid == LAMBDA_GRID
     check = report.determinism_cross_check
     assert check is not None and check.byte_identical is True
@@ -709,8 +689,7 @@ def test_committed_study_artifacts_are_the_known_stale_baseline5_fit() -> None:
         weights = load_candidate_weights(entrant_dir)  # sha-verified reload
         assert len(weights) == utility_genome_length()
         config = json.loads((entrant_dir / "config.json").read_text())
-        # Every cell agrees with the study index's (stale) substrate sha — internal
-        # consistency of the committed artifact, independent of the live substrate.
+        # Every cell agrees with the study index's (now-live) substrate sha.
         assert config["substrate_sha"] == report.substrate_sha
         assert config["entrant"] == entrant
         if entrant != FILTERED_BC_ENTRANT:
