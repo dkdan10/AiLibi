@@ -1,0 +1,10 @@
+{
+  "composed_verdict": "GO",
+  "conviction_verdict": "GO",
+  "conviction_weights_sha256": "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47",
+  "corpus_set": "9p2i",
+  "decision_threshold": 0.5,
+  "replay_set_dir": "replays/ml_corpus/9p2i",
+  "skip_confidence_threshold": 0.6,
+  "surrogate_weights_sha256": "611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5"
+}
