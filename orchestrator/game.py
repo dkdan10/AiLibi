@@ -28,6 +28,7 @@ from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkab
 
 from agents.base import AgentInterface
 from agents.memory.beliefs import (
+    BODY_PROXIMITY_WINDOW_TICKS,
     OBSERVED_KILL_ACTION,
     OBSERVED_VENT_ACTION,
     hard_evidence_gate_enabled,
@@ -40,7 +41,13 @@ from agents.memory.store import (
     absorb_reported_testimony,
     render_for_prompt,
 )
-from agents.perception import EVENT_SAW_PLAYER, PROVENANCE_OBSERVED, ingest_packet
+from agents.perception import (
+    EVENT_SAW_BODY,
+    EVENT_SAW_PLAYER,
+    EVENT_SELF_STATE,
+    PROVENANCE_OBSERVED,
+    ingest_packet,
+)
 from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
     build_prompt_renderers,
@@ -50,7 +57,7 @@ from agents.strategic.prompts.loader import impostor_roll_call_enabled
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.actions import Action
-from engine.entities import BodyId, PlayerId, PlayerState, Role
+from engine.entities import BodyId, PlayerId, PlayerState, Role, RoomId
 from engine.events import (
     EngineEvent,
     GameOverEvent,
@@ -2358,6 +2365,52 @@ def _drive_async(coro: Coroutine[object, object, _T]) -> _T:
 
 
 # ---------------------------------------------------------------------------
+# Typed episodic records the tactical agent projects at meeting-open.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class KillWitnessRecord:
+    """One first-hand witnessed-kill episodic record, typed (Task 18.30).
+
+    The kill twin of :class:`~meetings.schemas.VentWitnessRecord`: the
+    ``subject`` is the WITNESSED KILLER named at ``room``/``tick`` in a
+    first-hand ``saw_player`` row whose action stamp is ``"kill"``. Emitted by
+    :meth:`TacticalAgent.kill_witness_records_for_meeting` and consumed only by
+    the training-side conviction assembler
+    (:mod:`training.conviction.serving`) — never by the meeting layer, so it is
+    NOT part of the :class:`MeetingAwareAgent` protocol. Defined in ``game.py``
+    (not ``meetings/schemas.py``, which the 18.30 scope freezes) beside the
+    other game-local frozen records (:class:`MeetingArtifacts`), and a plain
+    dataclass rather than a pydantic schema because it never flows through
+    LLM structured output.
+    """
+
+    subject: PlayerId
+    room: RoomId
+    tick: int
+
+
+@dataclass(frozen=True)
+class BodyProximityRecord:
+    """One §6.3 Rule-1 body-proximity pin, typed (Task 18.30).
+
+    The ``subject`` is a player the agent saw co-present in ``room`` shortly
+    before it FIRST discovered a body there, the candidate the DESIGN.md §6.3
+    Rule 1 body-proximity rule pins; ``tick`` is that discovery tick (the
+    first ``saw_body`` sighting). Emitted by
+    :meth:`TacticalAgent.body_proximity_records_for_meeting` and consumed only
+    by the training-side conviction assembler
+    (:mod:`training.conviction.serving`); like :class:`KillWitnessRecord` it is
+    game-local, frozen, and off the :class:`MeetingAwareAgent` protocol.
+    """
+
+    subject: PlayerId
+    room: RoomId
+    tick: int
+
+
+# ---------------------------------------------------------------------------
 # Tactical agent — composite memory + tactical policy.
 # ---------------------------------------------------------------------------
 
@@ -2662,6 +2715,176 @@ class TacticalAgent:
             for player_id, room, tick in sightings
         )
 
+    def _fellow_impostor_ids_from_store(self) -> frozenset[str]:
+        """The agent's OWN fellow-impostor set, read from its ``self_state`` log.
+
+        The §4.7 teammate firewall's input, read the SAME way
+        ``agents.memory.store._latest_self_guard_fields`` reads it: the latest
+        first-hand (``provenance == "observed"``) ``self_state`` row's
+        ``fellow_impostor_ids`` payload wins (a defensive ``.get`` +
+        ``isinstance`` read — a malformed payload contributes nothing). It is
+        ``()`` for every crewmate and a sole impostor, so the crew read path is
+        an empty set and filters nothing. Used only by the kill/body accessors
+        below to inherit the production belief rules' teammate guard; never
+        leaves this agent's own log, so the firewall is preserved.
+        """
+
+        fellows: tuple[str, ...] = ()
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SELF_STATE:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            raw = event.payload.get("fellow_impostor_ids")
+            if isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
+                fellows = tuple(raw)
+        return frozenset(fellows)
+
+    def kill_witness_records_for_meeting(self) -> tuple[KillWitnessRecord, ...]:
+        """The agent's OWN witnessed-kill episodic records, typed (Task 18.30).
+
+        The kill twin of :meth:`vent_witness_records_for_meeting`: first-hand
+        (``provenance == "observed"``) ``saw_player`` rows whose witness-gated
+        action stamp is ``"kill"``, projected into :class:`KillWitnessRecord`
+        rows naming the witnessed killer. Consumed by the training-side
+        conviction assembler (:mod:`training.conviction.serving`) — the game-long
+        ``kill_pin_pairs`` / ``kill_pinned_candidates`` features — NOT by the
+        meeting layer, so it is deliberately off the :class:`MeetingAwareAgent`
+        protocol.
+
+        Unlike the vent accessor's passive firewall inheritance, this accessor
+        ACTIVELY applies the DESIGN.md §4.7 teammate guard. The episodic
+        ``saw_player`` action-``kill`` row exists for EVERY witness of a kill,
+        crew AND impostor teammate alike — the write path stamps it for every
+        ``agent_id in event.witnesses`` with no teammate filter
+        (``observation/service.py`` ``_observed_actions_for_agent``). But the
+        production witnessed-kill belief PIN carries the guard ``player.id not
+        in fellow_impostor_ids`` (``agents/memory/beliefs.py`` Rule 4 kill
+        branch), and the offline conviction target restricts the pin to
+        crew witnesses only (``training/surrogate/dataset.py::_WindowStats``).
+        Since every impostor shares one team, an impostor's killer is always a
+        fellow impostor, so ``subject in fellows`` is exactly the crew-only
+        restriction. Omitting the guard would surface an impostor's
+        teammate-kill row the offline table excludes and break the parity pin on
+        any meeting where an impostor co-located with a teammate's kill (the
+        routine case). The fellow set is this agent's own
+        (:meth:`_fellow_impostor_ids_from_store`).
+
+        Firewall-clean: every row was witness-gated by the engine before it
+        reached this agent's packet (``eval/leak_test.py``), and the accessor
+        reports only this agent's own log; the teammate guard reads only this
+        agent's own ``self_state``. Payload reads are defensive per the store
+        convention — a malformed row contributes nothing. Append order is
+        non-decreasing in tick (the episodic-store invariant), so the returned
+        tuple is deterministic and tick-sorted.
+        """
+
+        fellows = self._fellow_impostor_ids_from_store()
+        records: list[KillWitnessRecord] = []
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            if event.payload.get("action") != OBSERVED_KILL_ACTION:
+                continue
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("room")
+            if not isinstance(player_id, str) or not isinstance(room, str):
+                continue
+            if player_id in fellows:
+                # §4.7: a witnessed TEAMMATE kill never pins — the production
+                # belief rule's ``player.id not in fellow_impostor_ids`` guard,
+                # equivalently the offline pin's crew-witnesses-only restriction.
+                continue
+            records.append(
+                KillWitnessRecord(subject=player_id, room=room, tick=event.tick)
+            )
+        return tuple(records)
+
+    def body_proximity_records_for_meeting(self) -> tuple[BodyProximityRecord, ...]:
+        """The agent's OWN §6.3 Rule-1 body-proximity pins, typed (Task 18.30).
+
+        The game-long body-proximity substrate the conviction assembler
+        (:mod:`training.conviction.serving`) reads for the
+        ``body_proximity_pairs`` / ``body_proximity_candidates`` features. This
+        is NOT a straight episodic filter like the vent/kill accessors: it
+        REDERIVES the DESIGN.md §6.3 Rule 1 join over this agent's own episodic
+        log, mirroring ``agents/memory/beliefs.py`` ``apply_observation_rules``'
+        body loop together with ``agents/perception.py``'s
+        ``_previously_seen_body_ids`` (first-sighting-only) and
+        ``_recent_co_presence`` (the strictly-before proximity window). The
+        offline twin is ``training/surrogate/dataset.py::_absorb_body_proximity``.
+        The ``SuspicionEntry.body_proximity`` provenance channel is NOT a valid
+        source: it carries only the current window's pins — older ones roll into
+        the undifferentiated ``carried_hard`` bucket at the meeting boundary — so
+        the honest game-long source is the episodic store.
+
+        For each ``saw_body`` row on its FIRST sighting of that ``body_id``, the
+        pin set is every player this agent saw in the body's room within
+        ``BODY_PROXIMITY_WINDOW_TICKS`` ticks strictly before the discovery,
+        excluding the victim (a corpse seen alive is not a suspect) and, by the
+        §4.7 teammate firewall, excluding this agent's fellow impostors (so a
+        witnessed teammate kill never manufactures evidence against the team in
+        the witness's own graph). Co-presence reads ALL observed ``saw_player``
+        rows including kill/vent-stamped ones — the production ``_recent_co_
+        presence`` applies no action filter, and a venting actor hidden in the
+        vent still lands a row — so this accessor does not filter on action.
+        Append order is non-decreasing in tick, so same-tick ``saw_player`` rows
+        precede the ``saw_body`` row in the scan and are excluded by the strict
+        ``tick < discovery_tick`` window, exactly the current-tick exclusion
+        production applies.
+
+        Firewall-clean: every row was witness-gated by the engine before it
+        reached this agent's packet (``eval/leak_test.py``), and the accessor
+        reports only this agent's own log; the teammate guard reads only this
+        agent's own ``self_state``. Payload reads are defensive per the store
+        convention — a malformed row contributes nothing. The returned tuple is
+        deterministic: chronological discovery order, with the pinned subjects
+        of each discovery emitted in sorted order.
+        """
+
+        fellows = self._fellow_impostor_ids_from_store()
+        seen_bodies: set[str] = set()
+        sightings: list[tuple[int, str, str]] = []  # (tick, room, player_id)
+        records: list[BodyProximityRecord] = []
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            if event.type == EVENT_SAW_PLAYER:
+                player_id = event.payload.get("player_id")
+                room = event.payload.get("room")
+                if isinstance(player_id, str) and isinstance(room, str):
+                    sightings.append((event.tick, room, player_id))
+            elif event.type == EVENT_SAW_BODY:
+                body_id = event.payload.get("body_id")
+                room = event.payload.get("room")
+                victim = event.payload.get("victim_id")
+                if not (
+                    isinstance(body_id, str)
+                    and isinstance(room, str)
+                    and isinstance(victim, str)
+                ):
+                    continue
+                if body_id in seen_bodies:
+                    # Rule 1 fires on a body's FIRST sighting only.
+                    continue
+                seen_bodies.add(body_id)
+                co_present = {
+                    pid
+                    for tick, sroom, pid in sightings
+                    if sroom == room
+                    and 0 <= event.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
+                    and tick < event.tick
+                    and pid != victim
+                    and pid not in fellows
+                }
+                for pid in sorted(co_present):
+                    records.append(
+                        BodyProximityRecord(subject=pid, room=room, tick=event.tick)
+                    )
+        return tuple(records)
+
     def observation_ids_for_meeting(self) -> tuple[ObservationId, ...]:
         """The agent's OWN stable episodic observation-id set (Task 16.5, C8).
 
@@ -2787,6 +3010,7 @@ def build_default_agent_factory() -> AgentFactory:
 __all__ = [
     "AgentFactory",
     "BeliefPersistingAgent",
+    "BodyProximityRecord",
     "DEFAULT_MAX_TICKS",
     "DEFAULT_NUM_IMPOSTORS",
     "DEFAULT_NUM_PLAYERS",
@@ -2797,6 +3021,7 @@ __all__ = [
     "HeadlessGame",
     "HeadlessGameResult",
     "IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS",
+    "KillWitnessRecord",
     "MeetingArtifacts",
     "MeetingAwareAgent",
     "MeetingPacingAgent",

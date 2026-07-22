@@ -44,6 +44,7 @@ from agents.tactical.features import (
 )
 from engine.world import load_canonical_map
 from eval.watchability import population_relative_conversion_floor
+from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
@@ -64,6 +65,7 @@ from observation.packet import (
 )
 from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
+from orchestrator.game import MeetingRunner, build_default_meeting_runner
 from training.bakeoff import policy_es
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import run_goodhart_probe
@@ -106,6 +108,7 @@ from training.conviction.model import (
     load_conviction_staleness_cap,
     write_conviction_model_artifact,
 )
+from training.conviction.serving import ConvictionServingMeetingRunner
 from training.determinism import PolicyFrame
 from training.rewards import compute_shaped_reward
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
@@ -1481,6 +1484,241 @@ def test_evaluate_candidate_rejects_drifted_conviction_bundle(tmp_path: Path) ->
     )
     with pytest.raises(ValueError, match="drifted"):
         evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# 10.9 The eval loops serve the term LIVE (Task 18.30).                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_evaluate_candidate_go_serves_the_term_live(tmp_path: Path) -> None:
+    """Under the committed GO verdict the eval pass serves the term live.
+
+    The default protocol reads the committed conviction dir, so the row stamps a
+    non-None predicted-meeting count and a composed mean supply (rows say so),
+    and ``inner_fitness_real`` differs from the same candidate's NO-GO run by
+    EXACTLY the weighted mean supply — the served rollout observes only, so the
+    two trajectories are byte-identical and the conviction addend is the only
+    difference (single seed ⇒ set-level fitness == the episode fitness).
+    """
+
+    genome = _forced_kill_genome()
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8)
+    candidate = TrainedCandidate(
+        entrant="live-go-probe",
+        policy=policy,
+        weights=genome,
+        config={
+            "entrant": "live-go-probe",
+            "hidden": 8,
+            "encoder_version": policy.encoder_version,
+        },
+    )
+    # GO: the committed conviction dir is the default — the loop serves it live.
+    go_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+    )
+    go_row = evaluate_candidate(candidate, go_protocol, artifact_root=tmp_path / "go")
+
+    # NO-GO: a fixture dir keyed into the protocol — structural absence, no
+    # wrapper, no fitness addend.
+    nogo_dir = tmp_path / "conviction-nogo"
+    _write_conviction_fixture(nogo_dir, go=False)
+    nogo_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=nogo_dir,
+    )
+    nogo_row = evaluate_candidate(
+        candidate, nogo_protocol, artifact_root=tmp_path / "nogo"
+    )
+
+    # Rows say so: GO carries the live term, a real predicted-meeting count, and
+    # the composed mean supply; NO-GO leaves all three structurally absent.
+    assert go_row.conviction_fitness_term == "ships"
+    assert go_row.conviction_weight == DEFAULT_CONVICTION_WEIGHT
+    assert go_row.conviction_meetings_predicted is not None
+    assert go_row.conviction_meetings_predicted > 0
+    assert go_row.conviction_mean_predicted_supply is not None
+
+    assert nogo_row.conviction_fitness_term == "absent"
+    assert nogo_row.conviction_weight is None
+    assert nogo_row.conviction_meetings_predicted is None
+    assert nogo_row.conviction_mean_predicted_supply is None
+
+    # The honest composition: the ONLY difference between the GO and NO-GO eval
+    # fitness is the weighted mean predicted supply (exact ==, not approx — the
+    # wrapper never mutates state, so the trajectories are byte-identical).
+    assert go_row.inner_fitness_real == (
+        nogo_row.inner_fitness_real
+        + DEFAULT_CONVICTION_WEIGHT * go_row.conviction_mean_predicted_supply
+    )
+
+
+def test_evaluate_candidate_multi_seed_stamps_the_composed_mean(
+    tmp_path: Path,
+) -> None:
+    """The stamped mean is the episode-averaged mean the fitness COMPOSED.
+
+    Under a multi-seed protocol with unequal per-game meeting counts the pooled
+    meeting-weighted mean diverges from the episode-averaged mean-of-means the
+    fitness actually composes (the review-confirmed finding) — stamping the
+    pooled value breaks the composition identity at the 1e-2 scale, so this pin
+    asserts the identity at 1e-12 relative tolerance (exact in reals; float
+    rounding across per-episode compositions makes bit-exactness a single-seed
+    property, pinned separately above).
+    """
+
+    genome = _forced_kill_genome()
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8)
+    candidate = TrainedCandidate(
+        entrant="live-go-multiseed-probe",
+        policy=policy,
+        weights=genome,
+        config={
+            "entrant": "live-go-multiseed-probe",
+            "hidden": 8,
+            "encoder_version": policy.encoder_version,
+        },
+    )
+    go_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004, 1009),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+    )
+    go_row = evaluate_candidate(candidate, go_protocol, artifact_root=tmp_path / "go")
+
+    nogo_dir = tmp_path / "conviction-nogo"
+    _write_conviction_fixture(nogo_dir, go=False)
+    nogo_protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004, 1009),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=nogo_dir,
+    )
+    nogo_row = evaluate_candidate(
+        candidate, nogo_protocol, artifact_root=tmp_path / "nogo"
+    )
+
+    assert go_row.conviction_meetings_predicted is not None
+    assert go_row.conviction_meetings_predicted > 0
+    assert go_row.conviction_mean_predicted_supply is not None
+    # The served rollouts are byte-identical to the unwrapped ones, so the
+    # conviction addend is the only difference — and the stamped mean is the
+    # exact per-episode quantity it was composed from.
+    assert go_row.inner_fitness_real == pytest.approx(
+        nogo_row.inner_fitness_real
+        + DEFAULT_CONVICTION_WEIGHT * go_row.conviction_mean_predicted_supply,
+        rel=1e-12,
+    )
+
+
+def test_evaluate_candidate_nogo_is_structural_absence(tmp_path: Path) -> None:
+    """Under a NO-GO fixture the eval fitness is the pre-threading anchor value.
+
+    The term is None everywhere: the row says absent, both liveness columns stay
+    None (no zero-weighted ghost), and ``inner_fitness_real`` equals the
+    anchor-composed value recomputed from an independent unwrapped rollout of the
+    same seed.
+    """
+
+    genome = _forced_kill_genome()
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8)
+    candidate = TrainedCandidate(
+        entrant="live-nogo-probe",
+        policy=policy,
+        weights=genome,
+        config={
+            "entrant": "live-nogo-probe",
+            "hidden": 8,
+            "encoder_version": policy.encoder_version,
+        },
+    )
+    nogo_dir = tmp_path / "conviction-nogo"
+    _write_conviction_fixture(nogo_dir, go=False)
+    protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=nogo_dir,
+    )
+    row = evaluate_candidate(candidate, protocol, artifact_root=tmp_path / "eval")
+
+    assert row.conviction_fitness_term == "absent"
+    assert row.conviction_weight is None
+    assert row.conviction_meetings_predicted is None
+    assert row.conviction_mean_predicted_supply is None
+
+    # The NO-GO eval fitness is exactly the pre-threading anchor-composed value:
+    # recompute it from an independent, unwrapped rollout of the same seed/roster.
+    trace = DecisionTrace()
+    rollout = rollout_candidate(
+        policy, 1004, output_dir=tmp_path / "recompute", trace=trace
+    )
+    assert row.inner_fitness_real == inner_episode_fitness(rollout, trace)
+
+
+def test_prescreen_accepts_live_assembled_vectors_end_to_end(tmp_path: Path) -> None:
+    """The pre-screen consumes live-assembled vectors end-to-end (the DoD).
+
+    One fake-path rollout is wrapped in a
+    :class:`ConvictionServingMeetingRunner` that both meters the term and
+    collects each assembled feature mapping; the pre-screen then scores those
+    live vectors, metering the SAME cumulative counter — one delivered use per
+    meeting.
+    """
+
+    go_dir = tmp_path / "conviction-go"
+    sha = _write_conviction_fixture(go_dir, go=True, max_uses=500)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(go_dir))
+    term = load_conviction_fitness_term(go_dir, use_counter=counter)
+    assert term is not None
+
+    collected: list[Mapping[str, float]] = []
+    trace = DecisionTrace()
+
+    def factory() -> MeetingRunner:
+        inner = build_default_meeting_runner(
+            llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
+        )
+        return ConvictionServingMeetingRunner(
+            inner=inner,
+            predict=term.predict_meeting,
+            record=trace.record_conviction_prediction,
+            on_features=collected.append,
+        )
+
+    policy = policy_es.build_masked_mlp_policy(_forced_kill_genome(), hidden=8)
+    rollout_candidate(
+        policy,
+        1004,
+        output_dir=tmp_path / "rollout",
+        meeting_runner_factory=factory,
+        trace=trace,
+    )
+
+    # The serving wrapper assembled one live vector per meeting and metered one
+    # use each; every vector carries exactly the fenced feature set.
+    assert len(collected) > 0
+    assert trace.conviction_meetings == len(collected)
+    assert counter.uses == len(collected)
+    for features in collected:
+        assert set(features) == set(CONVICTION_FEATURE_NAMES)
+
+    # The pre-screen consumes the live-assembled vectors end-to-end, metering the
+    # SAME cumulative counter (one delivered use per meeting scored).
+    uses_before = counter.uses
+    verdict = conviction_prescreen(collected, artifact_dir=go_dir, use_counter=counter)
+    assert verdict.meetings_scored == len(collected)
+    assert verdict.conviction_uses == len(collected)
+    assert counter.uses == uses_before + len(collected)
+    assert verdict.weights_sha256 == sha
+    assert verdict.model_verdict == "GO"
+    assert verdict.prescreen_role == "gating"
+    assert verdict.predicted_flags_per_meeting >= 0.0
 
 
 def test_harness_surrogate_loads_always_wire_the_corpus_fingerprint_fence() -> None:
