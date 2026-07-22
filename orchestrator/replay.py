@@ -61,7 +61,10 @@ CREW-side stamp (:attr:`GameEndReplayEntry.crew_tactical_policy`, a
 :class:`CrewTacticalPolicyStamp`) in its own DISTINCT record class so a learned-crew
 recording can never wear the impostor champion's stamp — ADDITIVE and OPTIONAL, an
 absent crew stamp meaning the scripted :class:`agents.tactical.crewmate_policy.CrewmatePolicy`
-default.
+default. Task 18.19 recordings carry BOTH stamps on one ``game_over`` row (a
+dual-role co-evo game); :func:`read_policy_stamps` reads the pair back in one walk
+into a :class:`PolicyStamps` named-slot tuple, each identity in its own typed slot
+so the two can never be positionally conflated.
 """
 
 from __future__ import annotations
@@ -72,7 +75,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
+from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -1053,6 +1056,55 @@ def read_crew_tactical_policy_stamp(path: Path) -> CrewTacticalPolicyStamp | Non
     return stamp
 
 
+class PolicyStamps(NamedTuple):
+    """The two-identity provenance pair read off one recording (Task 18.19).
+
+    The dual-stamp read-back the 18.19 co-evo recordings need: an impostor
+    :class:`TacticalPolicyStamp` and a crew :class:`CrewTacticalPolicyStamp`,
+    returned in DISTINCT named slots of DISTINCT types so the two identities can
+    NEVER be positionally conflated (the recorder-side conflation guard's
+    read-side twin). Either slot is ``None`` when that side carries no stamp —
+    the respective scripted default (:func:`read_tactical_policy_stamp` treats an
+    absent impostor stamp as the scripted FSM; :func:`read_crew_tactical_policy_stamp`
+    treats an absent crew stamp as the scripted
+    :class:`agents.tactical.crewmate_policy.CrewmatePolicy`). A dual-stamp
+    recording returns both non-``None``; a single-side recording returns exactly
+    one; a legacy / FSM-default recording returns ``(None, None)``.
+    """
+
+    tactical: TacticalPolicyStamp | None
+    crew: CrewTacticalPolicyStamp | None
+
+
+def read_policy_stamps(path: Path) -> PolicyStamps:
+    """Read BOTH policy stamps off a replay in one walk (Task 18.19).
+
+    The dual-stamp read-back for the 18.19 co-evo recordings: reads the impostor
+    ``tactical_policy`` block and the crew ``crew_tactical_policy`` block off the
+    game's single ``game_over`` record in ONE pass over
+    :func:`read_all_entries` (which already rejects a doubled-write file carrying
+    more than one ``game_over`` row), last-``game_over``-wins for each block
+    exactly as the two sibling readers do
+    (:func:`read_tactical_policy_stamp` / :func:`read_crew_tactical_policy_stamp`).
+    The two identities return in the DISTINCT named slots of :class:`PolicyStamps`
+    so they can never be positionally conflated. A zero-stamp (legacy /
+    FSM-default) game reads back ``PolicyStamps(tactical=None, crew=None)``; an
+    impostor-only or crew-only game reads back exactly one populated slot; a
+    dual-stamp co-evo recording reads back both — each the respective scripted
+    default when absent.
+    """
+
+    tactical: TacticalPolicyStamp | None = None
+    crew: CrewTacticalPolicyStamp | None = None
+    for entry in read_all_entries(path):
+        if isinstance(entry, GameEndReplayEntry):
+            if entry.tactical_policy is not None:
+                tactical = entry.tactical_policy
+            if entry.crew_tactical_policy is not None:
+                crew = entry.crew_tactical_policy
+    return PolicyStamps(tactical=tactical, crew=crew)
+
+
 def compute_cost_usd(path: Path) -> float:
     """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
 
@@ -1218,6 +1270,7 @@ __all__ = [
     "GameEndReplayEntry",
     "LLMCallRecord",
     "MeetingReplayEntry",
+    "PolicyStamps",
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
@@ -1230,6 +1283,7 @@ __all__ = [
     "read_failed_call_entries",
     "read_game_outcome",
     "read_meeting_entries",
+    "read_policy_stamps",
     "read_replay_entries",
     "read_substrate_flags",
     "read_tactical_policy_stamp",

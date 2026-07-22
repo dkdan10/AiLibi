@@ -72,6 +72,37 @@ byte-identical to before Task 18.7. The 18.7 conflation guard is enforced in the
 arm itself: the crew stamp's ``policy_id`` / ``weights_sha256`` are asserted
 disjoint from the impostor champion's, so the two learned surfaces can never
 share one recording's label.
+
+The dual-role co-evolution recorder is the ``--crew-artifact`` arm (Task 18.19;
+audits/audit-phase-18-planning.md §4 #7) — the crew analog of
+``--candidate-artifact`` and the seam that stamps BOTH identities on one game.
+``--crew-artifact training/artifacts/crew/<entrant>`` records with an ARBITRARY
+committed CREW artifact loaded by path: the genome is sha-verified against the
+artifact's ``weights.json.sha256`` sidecar (a mismatch fails loud BEFORE any
+spend, REUSING ``training.bakeoff.harness.load_candidate_weights`` — the SAME
+shared loader the impostor arm uses, since crew artifacts share the
+``weights.json`` + sidecar layout — rather than a second loader), rebuilt through
+``training.crew.scorer.build_crew_scorer`` (with an ``OwnedTaskOptionBasis`` for
+the ``crew-option-features-v2`` 27-weight owned-task family, bare for the
+``crew-option-features-v1`` 22-weight family) selected by its ``stamp.json``
+``encoder_version``, wrapped by ``training.coevo.factory.build_coevo_factory``
+(the dual-role ROLE BRANCH: crew agents score against the loaded crew policy,
+impostors stay the scripted FSM unless a ``--candidate-artifact`` supplies the
+impostor side too), and AUTO-STAMPED from the artifact's OWN five-field
+``stamp.json`` into a :class:`~orchestrator.replay.CrewTacticalPolicyStamp`.
+Combined with ``--candidate-artifact`` it produces a DUAL-stamp co-evo recording
+carrying an impostor :class:`~orchestrator.replay.TacticalPolicyStamp` AND a crew
+stamp in DISTINCT schema slots; a CROSS-STAMP conflation guard rejects a
+recording whose two identities share a ``policy_id`` or ``weights_sha256`` (the
+two movers on one recording must be distinct). ``--crew-artifact`` is mutually
+exclusive with the two single-side ``--agent-factory`` arms
+(``learned-champion`` / ``learned-crew``), and an impostor artifact handed to
+``--crew-artifact`` — or a crew artifact handed to ``--candidate-artifact`` —
+fails loud on the encoder NAMESPACE (``crew-`` vs impostor) BEFORE any game runs.
+NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet carry a
+``stamp.json`` (18.23's recording session writes them), so the arm fails loud on
+them until one is added; the tests build fixture dirs. An unflagged run threads
+neither factory nor stamp, byte-identical to before Task 18.19.
 """
 
 from __future__ import annotations
@@ -80,7 +111,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 # Allow `uv run python scripts/run_tournament.py ...` to find top-level packages.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -116,6 +147,15 @@ from orchestrator.replay import (  # noqa: E402
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
 )
+
+if TYPE_CHECKING:
+    # Type-only imports for the artifact-arm resolvers' policy annotations. Kept
+    # under TYPE_CHECKING so the default ``fsm-default`` path's runtime module
+    # graph stays byte-identical (the two policy Protocols live in training/ and
+    # are imported lazily inside the arm resolvers, mirroring
+    # ``_resolve_candidate_artifact``); mypy resolves the names at check time.
+    from training.bakeoff.harness import BakeoffPolicy
+    from training.crew.scorer import CrewTrackPolicy
 
 _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
 
@@ -271,6 +311,29 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "committed champion's constants. Mutually exclusive with "
             "--agent-factory learned-champion; an explicit --tactical-policy-stamp "
             "must match the artifact stamp field-for-field."
+        ),
+    )
+    parser.add_argument(
+        "--crew-artifact",
+        type=Path,
+        default=None,
+        metavar="ARTIFACT_DIR",
+        help=(
+            "record with an arbitrary committed CREW artifact loaded by path "
+            "(Task 18.19, the dual-role co-evo recorder's crew arm, mirroring "
+            "--candidate-artifact). ARTIFACT_DIR is a training/artifacts/crew/"
+            "<entrant> dir carrying weights.json + its .sha256 sidecar + a "
+            "five-field stamp.json (CrewTacticalPolicyStamp). The genome is "
+            "sha-verified against the sidecar (a mismatch fails loud BEFORE any "
+            "spend), rebuilt through the committed crew builder its encoder_version "
+            "selects (build_crew_scorer, with an OwnedTaskOptionBasis for the "
+            "crew-option-features-v2 family), wrapped by "
+            "training.coevo.factory.build_coevo_factory, and AUTO-STAMPED from the "
+            "artifact's own stamp.json. Combinable with --candidate-artifact for a "
+            "DUAL-stamp co-evo recording (a cross-stamp guard rejects colliding "
+            "identities); mutually exclusive with --agent-factory learned-champion "
+            "/ learned-crew. NOTE: the committed crew dirs do not yet carry "
+            "stamp.json, so the arm fails loud on them until one is added."
         ),
     )
     return parser.parse_args(argv)
@@ -493,33 +556,34 @@ def _read_candidate_hidden(artifact_dir: Path) -> int:
     return hidden
 
 
-def _resolve_candidate_artifact(
+def _load_candidate_policy(
     artifact_dir: Path,
-) -> tuple[AgentFactory, TacticalPolicyStamp]:
-    """Load an arbitrary finalist artifact by path into a factory + stamp (Task 17.14).
+) -> tuple[BakeoffPolicy, TacticalPolicyStamp]:
+    """Load a finalist artifact by path into an inference policy + stamp (Task 17.14).
 
-    Productizes the pause's uncommitted per-finalist driver
-    (audits/audit-phase-15-pause.md:145-184) by REUSING the committed loaders
-    rather than writing a second one (the implementation hint): the genome is
-    read + sha-verified against the artifact's sidecar via
+    The policy-building core of :func:`_resolve_candidate_artifact`, extracted
+    (Task 18.19) so the dual-role co-evo arm (:func:`_resolve_crew_artifact_arm`)
+    can reuse the IMPOSTOR side without the single-side
+    :func:`training.bakeoff.harness.build_candidate_factory` wrap. REUSES the
+    committed loaders rather than writing a second one (the 17.14 hint): the genome
+    is read + sha-verified against the artifact's sidecar via
     :func:`training.bakeoff.harness.load_candidate_weights` (fail loud on drift,
-    BEFORE any spend), the inference policy is rebuilt through the committed
-    builder its ``encoder_version`` selects, and the factory is
-    :func:`training.bakeoff.harness.build_candidate_factory` — the exact reload
-    seam the bake-off froze the artifact with. The stamp comes from the
-    candidate's OWN ``stamp.json`` and its ``weights_sha256`` MUST equal the
-    sidecar digest (the 17.14 conflation guard: one candidate per invocation, the
-    stamp names it, no ambient state leaks between runs). Imports live inside this
-    function so the default ``fsm-default`` path's module graph stays byte-identical.
+    BEFORE any spend), the inference policy is rebuilt through the committed builder
+    its ``encoder_version`` selects, and the stamp comes from the candidate's OWN
+    ``stamp.json`` — its ``weights_sha256`` MUST equal the sidecar digest (the 17.14
+    conflation guard: one candidate per invocation, the stamp names it, no ambient
+    state leaks between runs). A CREW artifact (``encoder_version`` in the
+    ``crew-`` namespace) handed to the impostor slot fails loud HERE (the 18.19
+    vice-versa guard) — the impostor slot rebuilds through the bake-off impostor
+    builders, never the crew scorer; the operator is pointed at ``--crew-artifact``.
+    Imports live inside this function so the default ``fsm-default`` path's module
+    graph stays byte-identical.
     """
 
     from engine.world import load_canonical_map
     from training.bakeoff import policy_es, utility_es
-    from training.bakeoff.harness import (
-        BakeoffPolicy,
-        build_candidate_factory,
-        load_candidate_weights,
-    )
+    from training.bakeoff.harness import load_candidate_weights
+    from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX
 
     if not artifact_dir.is_dir():
         raise SystemExit(
@@ -529,6 +593,20 @@ def _resolve_candidate_artifact(
         )
 
     stamp = _read_candidate_stamp(artifact_dir)
+
+    # Vice-versa conflation guard (Task 18.19): a crew artifact (its encoder tag in
+    # the ``crew-`` namespace) in the impostor slot fails loud BEFORE any spend —
+    # the impostor slot rebuilds through the bake-off impostor builders, not the
+    # crew scorer. CREW_ENCODER_NAMESPACE_PREFIX is training.coevo.factory's single
+    # source of truth for the crew-tag convention (imported here, not re-literaled).
+    if stamp.encoder_version.startswith(CREW_ENCODER_NAMESPACE_PREFIX):
+        raise SystemExit(
+            f"--candidate-artifact: {artifact_dir}'s stamp names a CREW policy "
+            f"(encoder_version={stamp.encoder_version!r}, in the "
+            f"{CREW_ENCODER_NAMESPACE_PREFIX!r} namespace); the impostor slot "
+            "rebuilds through the bake-off impostor builders, not the crew scorer. "
+            "Pass it as --crew-artifact instead (the 18.19 conflation guard)."
+        )
 
     # sha verification against the artifact sidecar — fail loud BEFORE any spend.
     try:
@@ -577,8 +655,28 @@ def _resolve_candidate_artifact(
             f"{stamp.encoder_version!r} for {artifact_dir} (unknown encoder / "
             "artifact-stamp mismatch)."
         )
+    return policy, stamp
 
-    factory = build_candidate_factory(policy, game_map=game_map)
+
+def _resolve_candidate_artifact(
+    artifact_dir: Path,
+) -> tuple[AgentFactory, TacticalPolicyStamp]:
+    """Load an arbitrary finalist artifact by path into a factory + stamp (Task 17.14).
+
+    Productizes the pause's uncommitted per-finalist driver
+    (audits/audit-phase-15-pause.md:145-184): the policy + stamp come from the
+    extracted :func:`_load_candidate_policy` (Task 18.19), then the factory is
+    :func:`training.bakeoff.harness.build_candidate_factory` — the exact reload seam
+    the bake-off froze the artifact with. Behavior is byte-identical to the Task
+    17.14 single-side ``--candidate-artifact`` recorder. Imports live inside this
+    function so the default ``fsm-default`` path's module graph stays byte-identical.
+    """
+
+    from engine.world import load_canonical_map
+    from training.bakeoff.harness import build_candidate_factory
+
+    policy, stamp = _load_candidate_policy(artifact_dir)
+    factory = build_candidate_factory(policy, game_map=load_canonical_map())
     return factory, stamp
 
 
@@ -629,6 +727,200 @@ def _resolve_agent_factory(
         anchor_policy=fields.anchor_policy,
     )
     return factory, stamp
+
+
+def _read_crew_artifact_stamp(artifact_dir: Path) -> CrewTacticalPolicyStamp:
+    """Load a crew artifact's five-field crew stamp from its ``stamp.json`` (Task 18.19).
+
+    The crew twin of :func:`_read_candidate_stamp`: the stamp fields come from the
+    crew artifact's OWN ``stamp.json`` (a
+    :class:`~orchestrator.replay.CrewTacticalPolicyStamp`), never the committed crew
+    surface's constants. A missing file, unreadable JSON, or a schema mismatch
+    (including a blank / pipe-bearing field the validator rejects) is fail-loud
+    (``SystemExit``) rather than a silent fallback (AGENTS.md "no silent
+    fallbacks"). NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet
+    carry a ``stamp.json`` (18.23's recording session writes them), so the arm
+    fails loud on them until one is added; the tests build fixture dirs.
+    """
+
+    stamp_path = artifact_dir / _CANDIDATE_STAMP_FILENAME
+    try:
+        raw = stamp_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(
+            f"--crew-artifact: cannot read {str(stamp_path)!r}: {exc}. The crew "
+            "artifact dir must carry a five-field stamp.json (policy_id, method, "
+            "encoder_version, weights_sha256, anchor_policy)."
+        ) from exc
+    try:
+        return CrewTacticalPolicyStamp.model_validate_json(raw)
+    except ValueError as exc:
+        raise SystemExit(
+            f"--crew-artifact: {stamp_path} is not a valid CrewTacticalPolicyStamp "
+            f"(need the five string fields policy_id/method/encoder_version/"
+            f"weights_sha256/anchor_policy): {exc}"
+        ) from exc
+
+
+def _load_crew_artifact_policy(
+    artifact_dir: Path,
+) -> tuple[CrewTrackPolicy, CrewTacticalPolicyStamp]:
+    """Load a crew artifact by path into a crew policy + crew stamp (Task 18.19).
+
+    The crew twin of :func:`_load_candidate_policy`, mirroring its steps
+    field-for-field: verify the dir; read the crew ``stamp.json`` via
+    :func:`_read_crew_artifact_stamp`; sha-verify the genome against the sidecar via
+    the SAME shared :func:`training.bakeoff.harness.load_candidate_weights` (crew
+    artifacts share the ``weights.json`` + sidecar layout) — fail loud on drift,
+    BEFORE any spend; assert the stamp's ``weights_sha256`` equals the sidecar
+    digest (the 18.19 conflation guard: the stamp must name THIS artifact); then
+    DISPATCH on the stamp's ``encoder_version`` through the committed crew builder
+    :func:`training.crew.scorer.build_crew_scorer` — the ``crew-option-features-v1``
+    22-weight menu (no basis) or the ``crew-option-features-v2`` 27-weight
+    owned-task menu (:class:`~training.crew.options.OwnedTaskOptionBasis`). ANY
+    other ``encoder_version`` names no rebuildable crew family and fails loud — an
+    IMPOSTOR artifact (``impostor-option-features-*``) in the crew slot fails HERE,
+    before any game runs. A genome-length drift raises ``ValueError`` from the
+    builder, re-raised as ``SystemExit``; a rebuilt policy whose ``encoder_version``
+    disagrees with the stamp is a fail-loud artifact-stamp mismatch (mirrors 17.14).
+    Imports live inside this function so the default path's module graph stays
+    byte-identical.
+    """
+
+    from engine.world import load_canonical_map
+    from training.bakeoff.harness import load_candidate_weights
+    from training.crew.options import OwnedTaskOptionBasis
+    from training.crew.scorer import (
+        ENCODER_VERSION as CREW_V1_ENCODER_VERSION,
+    )
+    from training.crew.scorer import (
+        OWNED_TASK_ENCODER_VERSION,
+        build_crew_scorer,
+    )
+
+    if not artifact_dir.is_dir():
+        raise SystemExit(
+            f"--crew-artifact: {str(artifact_dir)!r} is not a directory; pass a "
+            "committed crew artifact dir (e.g. "
+            "training/artifacts/crew/crew-owned-tasks-es) carrying weights.json + "
+            "its .sha256 sidecar + a five-field stamp.json."
+        )
+
+    stamp = _read_crew_artifact_stamp(artifact_dir)
+
+    # sha verification against the artifact sidecar — fail loud BEFORE any spend.
+    try:
+        weights = load_candidate_weights(artifact_dir)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"--crew-artifact: weights load/verify failed for {artifact_dir}: {exc}"
+        ) from exc
+
+    sidecar_digest = (
+        (artifact_dir / _CANDIDATE_SIDECAR_FILENAME)
+        .read_text(encoding="utf-8")
+        .split()[0]
+    )
+    if stamp.weights_sha256 != sidecar_digest:
+        raise SystemExit(
+            f"--crew-artifact: stamp.json weights_sha256 {stamp.weights_sha256!r} "
+            f"!= sidecar digest {sidecar_digest!r} for {artifact_dir}; the stamp "
+            "must name THIS artifact (the 18.19 conflation guard — a crew recording "
+            "must carry the provenance of the bytes it produced)."
+        )
+
+    # Dispatch the crew reload seam on the stamp's encoder_version. An impostor
+    # artifact (impostor-option-features-*) in the crew slot names no rebuildable
+    # crew family and fails HERE, before any game runs.
+    game_map = load_canonical_map()
+    policy: CrewTrackPolicy
+    try:
+        if stamp.encoder_version == CREW_V1_ENCODER_VERSION:
+            policy = build_crew_scorer(weights, game_map=game_map)
+        elif stamp.encoder_version == OWNED_TASK_ENCODER_VERSION:
+            policy = build_crew_scorer(
+                weights, game_map=game_map, basis=OwnedTaskOptionBasis()
+            )
+        else:
+            raise SystemExit(
+                f"--crew-artifact: stamp encoder_version {stamp.encoder_version!r} "
+                f"for {artifact_dir} names no rebuildable crew family — only "
+                f"{CREW_V1_ENCODER_VERSION!r} (build_crew_scorer, the 22-weight v1 "
+                f"menu) and {OWNED_TASK_ENCODER_VERSION!r} (build_crew_scorer with "
+                "an OwnedTaskOptionBasis, the 27-weight owned-task menu) rebuild "
+                "here. An impostor artifact (impostor-option-features-*) in the "
+                "crew slot fails HERE — pass it as --candidate-artifact."
+            )
+    except ValueError as exc:
+        raise SystemExit(
+            f"--crew-artifact: could not rebuild the crew scorer for "
+            f"{artifact_dir}: {exc}"
+        ) from exc
+    if policy.encoder_version != stamp.encoder_version:
+        raise SystemExit(
+            f"--crew-artifact: rebuilt crew policy encoder "
+            f"{policy.encoder_version!r} != stamp encoder_version "
+            f"{stamp.encoder_version!r} for {artifact_dir} (artifact-stamp "
+            "mismatch)."
+        )
+    return policy, stamp
+
+
+def _resolve_crew_artifact_arm(
+    *,
+    crew_artifact: Path,
+    candidate_artifact: Path | None,
+) -> tuple[AgentFactory, TacticalPolicyStamp | None, CrewTacticalPolicyStamp]:
+    """Resolve ``--crew-artifact`` into a co-evo factory + BOTH auto-stamps (Task 18.19).
+
+    The dual-role co-evo recorder's resolver (the crew analog of
+    :func:`_resolve_candidate_artifact`, composing the impostor side when
+    ``--candidate-artifact`` rides along). Loads the crew policy + its own
+    ``stamp.json`` :class:`~orchestrator.replay.CrewTacticalPolicyStamp` via
+    :func:`_load_crew_artifact_policy` (sha-verified, fail loud BEFORE any spend).
+    When ``candidate_artifact`` is given the IMPOSTOR side loads through the EXISTING
+    :func:`_load_candidate_policy` and both identities ride one recording — a
+    CROSS-STAMP conflation guard then rejects a recording whose two identities share
+    a ``policy_id`` or ``weights_sha256`` (the two movers on one recording MUST be
+    distinct, so neither side's provenance can be re-read as the other's). Crew-only,
+    the impostor side is ``None`` (the scripted FSM) and its auto-stamp is ``None``.
+    The factory is :func:`training.coevo.factory.build_coevo_factory` — the ROLE
+    BRANCH wrapping crew agents with the loaded crew scorer and impostor agents with
+    the loaded impostor policy (or the frozen FSM when absent). Imports live inside
+    this function so the default path's module graph stays byte-identical.
+    """
+
+    from engine.world import load_canonical_map
+    from training.coevo.factory import build_coevo_factory
+
+    crew_policy, crew_stamp = _load_crew_artifact_policy(crew_artifact)
+
+    impostor_policy: BakeoffPolicy | None
+    impostor_stamp: TacticalPolicyStamp | None
+    if candidate_artifact is not None:
+        impostor_policy, impostor_stamp = _load_candidate_policy(candidate_artifact)
+        if (
+            crew_stamp.policy_id == impostor_stamp.policy_id
+            or crew_stamp.weights_sha256 == impostor_stamp.weights_sha256
+        ):
+            raise SystemExit(
+                "the dual-role co-evo recorder produced a crew stamp and an "
+                "impostor stamp that collide (the 18.19 cross-stamp conflation "
+                f"guard): crew (policy_id={crew_stamp.policy_id!r}, "
+                f"weights_sha256={crew_stamp.weights_sha256!r}) vs impostor "
+                f"(policy_id={impostor_stamp.policy_id!r}, "
+                f"weights_sha256={impostor_stamp.weights_sha256!r}). The two "
+                "identities on one recording must be DISTINCT so neither side's "
+                "provenance can be re-read as the other's."
+            )
+    else:
+        impostor_policy = None
+        impostor_stamp = None
+
+    factory = build_coevo_factory(
+        impostor_policy, crew_policy, game_map=load_canonical_map()
+    )
+    return factory, impostor_stamp, crew_stamp
 
 
 def _resolve_recorded_stamp(
@@ -807,19 +1099,37 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
+    # Arm selection (Task 18.19 puts the dual-role co-evo arm FIRST, leaving the
+    # two Task-18.7/15.21 branches verbatim). --crew-artifact records with an
+    # arbitrary committed CREW artifact and, combined with --candidate-artifact,
+    # produces a DUAL-stamp co-evo recording (both a crew AND an impostor stamp on
+    # one game); it is mutually exclusive with the two single-side --agent-factory
+    # arms (learned-champion / learned-crew), which each select a single mover.
     # The learned-crew arm (Task 18.7) resolves its own factory + CREW auto-stamp
     # and leaves the impostor tactical auto_stamp ABSENT (impostors stay the
-    # scripted FSM); every other arm keeps crew_auto_stamp None. --candidate-artifact
-    # records an impostor policy, so combining it with the crew arm conflates two
-    # movers in one recording — reject it loudly, mirroring the existing
-    # champion-vs-artifact mutual-exclusion. The three resolution outputs are
-    # declared up front so the crew branch (which alone yields a non-None factory
-    # here) does not narrow ``agent_factory`` below the ``| None`` the
-    # ``fsm-default`` path needs.
+    # scripted FSM); it still rejects a combined --candidate-artifact (an impostor
+    # mover) because it is single-side. Every other arm keeps crew_auto_stamp None.
+    # The three resolution outputs are declared up front so the crew branches
+    # (which alone yield a non-None factory here) do not narrow ``agent_factory``
+    # below the ``| None`` the ``fsm-default`` path needs.
     agent_factory: AgentFactory | None
     auto_stamp: TacticalPolicyStamp | None
     crew_auto_stamp: CrewTacticalPolicyStamp | None
-    if args.agent_factory == LEARNED_CREW_FACTORY_ID:
+    if args.crew_artifact is not None:
+        if args.agent_factory != FSM_DEFAULT_POLICY_ID:
+            raise SystemExit(
+                f"--crew-artifact is mutually exclusive with --agent-factory "
+                f"{args.agent_factory!r}: the crew artifact selects the crew policy "
+                "(and --candidate-artifact the impostor side) for a dual-role "
+                "co-evo recording, while the single-side --agent-factory arms each "
+                f"select one mover. Drop --agent-factory (it defaults to "
+                f"{FSM_DEFAULT_POLICY_ID!r})."
+            )
+        agent_factory, auto_stamp, crew_auto_stamp = _resolve_crew_artifact_arm(
+            crew_artifact=args.crew_artifact,
+            candidate_artifact=args.candidate_artifact,
+        )
+    elif args.agent_factory == LEARNED_CREW_FACTORY_ID:
         if args.candidate_artifact is not None:
             raise SystemExit(
                 f"--candidate-artifact is mutually exclusive with --agent-factory "
@@ -836,9 +1146,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         crew_auto_stamp = None
     # The IMPOSTOR-side stamp reconciliation is unchanged (Task 15.21): on the
-    # crew arm auto_stamp is None, so the reference is the FSM default and an
-    # explicit champion --tactical-policy-stamp already contradicts it and exits
-    # here — the crew arm records the impostor side as the scripted FSM.
+    # learned-crew arm and the crew-only --crew-artifact arm auto_stamp is None, so
+    # the reference is the FSM default and an explicit champion
+    # --tactical-policy-stamp contradicts it and exits here; on a dual-role
+    # --crew-artifact + --candidate-artifact recording auto_stamp is the impostor
+    # artifact's OWN stamp, so an explicit stamp must restate it field-for-field
+    # (the same two-direction guard the single-side candidate arm uses).
     tactical_policy_stamp = _resolve_recorded_stamp(
         auto_stamp=auto_stamp,
         explicit_stamp=explicit_stamp,
@@ -851,15 +1164,18 @@ def main(argv: list[str] | None = None) -> int:
     # without --force, the first existing file raises and exits non-zero
     # (DESIGN.md §11.4; Task 4.16).
     #
-    # Three-branch call (Task 18.7, extending the Task-15.21 two-branch seam):
+    # Three-branch call (Task 18.7, extending the Task-15.21 two-branch seam;
+    # Task 18.19 reuses the crew_auto_stamp branch for dual-role recordings):
     # the two pre-18.7 call sites stay BYTE-IDENTICAL for their spies — the
     # fsm-default path passes NO agent_factory kwarg (run_tournament_eval's
     # omitted-kwarg default already is build_default_agent_factory(), so any
     # 15.9/15.21/17.14-era caller/spy of this seam keeps pinning it) and the
     # learned-champion / candidate path threads the opt-in factory unchanged.
-    # Only the crew arm threads the additive crew_policy_stamp beside the
-    # (absent) impostor tactical stamp; crew_auto_stamp is None on every other
-    # path, so they fall through to the unchanged branches.
+    # The crew_auto_stamp branch threads the additive crew_policy_stamp beside the
+    # impostor tactical stamp — absent (scripted FSM) on the learned-crew and
+    # crew-only --crew-artifact arms, present on a dual-role co-evo recording;
+    # crew_auto_stamp is None on every other path, so they fall through to the
+    # unchanged branches.
     if crew_auto_stamp is not None:
         report = run_tournament_eval(
             seeds=seeds,
