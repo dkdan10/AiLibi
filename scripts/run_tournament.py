@@ -100,7 +100,7 @@ exclusive with the two single-side ``--agent-factory`` arms
 ``--crew-artifact`` — or a crew artifact handed to ``--candidate-artifact`` —
 fails loud on the encoder NAMESPACE (``crew-`` vs impostor) BEFORE any game runs.
 NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet carry a
-``stamp.json`` (18.23's recording session writes them), so the arm fails loud on
+``stamp.json`` (the 18.25 crew campaign's recording legs (the first dual-stamped crew recordings) writes them), so the arm fails loud on
 them until one is added; the tests build fixture dirs. An unflagged run threads
 neither factory nor stamp, byte-identical to before Task 18.19.
 """
@@ -739,7 +739,7 @@ def _read_crew_artifact_stamp(artifact_dir: Path) -> CrewTacticalPolicyStamp:
     (including a blank / pipe-bearing field the validator rejects) is fail-loud
     (``SystemExit``) rather than a silent fallback (AGENTS.md "no silent
     fallbacks"). NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet
-    carry a ``stamp.json`` (18.23's recording session writes them), so the arm
+    carry a ``stamp.json`` (the 18.25 crew campaign's recording legs (the first dual-stamped crew recordings) writes them), so the arm
     fails loud on them until one is added; the tests build fixture dirs.
     """
 

@@ -53,7 +53,11 @@ sessions, checkpoint-push per generation.
 
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
-answer it with the campaign's real re-rank data and say so explicitly either way.
+answer it with the campaign's real re-rank data and say so explicitly either way. Stamp
+obligation (routed by the 18.19 verification): the committed measurement-tier
+`training/artifacts/crew/` dirs carry NO `stamp.json`, so the `--crew-artifact` arm fails
+loud on them BY DESIGN — every crew artifact this campaign freezes carries the five-field
+stamp, and the first dual-stamped crew recordings are this campaign's re-rank legs.
 
 ## Integration risk
 

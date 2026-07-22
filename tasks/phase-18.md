@@ -1316,7 +1316,7 @@ forking a second guard suite.
 ### Task 18.20 — The hall of fame + PFSP-lite opponent sampler
 **Branch:** `phase-18-hall-of-fame`
 **Depends on:** 18.6, 18.19
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:1392-1417 (the artifact layout); training/surrogate/runner.py:105-148 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:1501-1526 (the artifact layout); training/surrogate/runner.py:105-148 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
 **Complexity:** Medium
 
 The frozen opponent pool: a `hall_of_fame.json`-indexed artifact store
@@ -1404,8 +1404,12 @@ machine-readable campaign rows.
 **Implementation hint:**
 
 The driver owns ALL the meters (surrogate + conviction use counters threaded once,
-cumulative) — a campaign that exhausts a cap must stop loudly at a swap boundary, which is
-the natural re-grounding point. The exploiter probe is the standing ES at a tiny budget
+cumulative — the harness's one-term/one-counter `resolved_conviction_term()` pattern) — a
+campaign that exhausts a cap must stop loudly at a swap boundary, which is the natural
+re-grounding point. Consume `CoevoRolloutResult`'s episode-local traces under the 18.19
+fold-after-scoring discipline (fresh per-episode traces, fold into accumulators AFTER
+scoring, `anchor_policy` inherited from config never from accumulators — the #306 P2 fix
+constrains cross-seed accumulation). The exploiter probe is the standing ES at a tiny budget
 (e.g. 5×6) with fitness = beat-the-champion only.
 
 **Integration risk:**
@@ -1478,7 +1482,7 @@ by construction) and quantize everything through the established integer-grid he
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
 **Depends on:** 18.16, 18.21, 18.22
-**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1558-1564, 1620 (post-18.10 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
+**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1565-1571, 1627 (post-18.30 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
 The training-grounds instrument: an `initial_state` injection seam on the headless game
@@ -1549,7 +1553,18 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Scenario legs (18.23) and the composed
+selects on has been re-probed (18.18). THE PROBE'S FOUR NAMED BLOCKERS BIND THIS CAMPAIGN
+(report-goodhart-probe.md "Blockers", folded verbatim): (1) `d4-contest-farming[4p1i]` —
+no 4p1i-scored selection until the routed D4 contest floor lands; (2)+(3)
+`conviction-supply-laundering[emergency|kill,4p1i]` — no conviction-weighted fitness on
+the 4p1i roster, and on ANY roster the term's credit for meeting-count-multiplying play is
+conditioned/capped on recorded-bytes confirmation; (4)
+`prescreen-substrate-divergence[9p2i]` — a pre-screen PASS is real-path spend advice ONLY;
+every gating use pairs with a recorded-bytes floor read on flag-mintless substrates. One
+asymmetry this campaign owns (the 18.30 hand-off): the harness/crew eval passes serve the
+term live, but the impostor TRAINING loops are deliberately still anchor-composed — 
+threading the term into impostor training is THIS campaign's protocol decision, made under
+blocker (2)'s guard and recorded in the report. Scenario legs (18.23) and the composed
 meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
@@ -1652,7 +1667,11 @@ sessions, checkpoint-push per generation.
 
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
-answer it with the campaign's real re-rank data and say so explicitly either way.
+answer it with the campaign's real re-rank data and say so explicitly either way. Stamp
+obligation (routed by the 18.19 verification): the committed measurement-tier
+`training/artifacts/crew/` dirs carry NO `stamp.json`, so the `--crew-artifact` arm fails
+loud on them BY DESIGN — every crew artifact this campaign freezes carries the five-field
+stamp, and the first dual-stamped crew recordings are this campaign's re-rank legs.
 
 **Integration risk:**
 
@@ -1904,7 +1923,12 @@ target through the real `tally_ballots`; under skip, the surrogate's ballots pas
 unchanged. The §7.12 teammate firewall semantics are inherited from the surrogate runner
 untouched. The fidelity evaluation mirrors `run_surrogate_fidelity`'s split discipline
 (fit-side never evaluated; first-eval verdict). For the Goodhart leg, reuse 18.18's
-conviction-path arm shapes over the composed runner as the meeting path.
+concrete machinery over the composed runner as the meeting path:
+`run_conviction_path_probe`'s arm shapes, the baseline-relative gate split, the
+`_signed_relative_gain` laundering convention, and the one-shared-counter discipline —
+and note the probe's recorded caveat that `prescreen-substrate-divergence` applies to any
+decision-degenerate meeting model equally: the composed runner's own substrate read must
+carry the same recorded-bytes pairing rule.
 
 **Integration risk:**
 

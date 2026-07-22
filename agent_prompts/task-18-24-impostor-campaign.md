@@ -23,7 +23,18 @@ free-policy family) 18.22's v3 features — inner fitness on the fake/surrogate 
 conviction term, per-generation real-path top-K re-ranks (18.17, ~2 h/gen), pre-screen
 before every real spend, all meters quoted. The dep edges are load-bearing: no campaign
 records before the emergence bars are ratified (18.4) or before the conviction signal it
-selects on has been re-probed (18.18). Scenario legs (18.23) and the composed
+selects on has been re-probed (18.18). THE PROBE'S FOUR NAMED BLOCKERS BIND THIS CAMPAIGN
+(report-goodhart-probe.md "Blockers", folded verbatim): (1) `d4-contest-farming[4p1i]` —
+no 4p1i-scored selection until the routed D4 contest floor lands; (2)+(3)
+`conviction-supply-laundering[emergency|kill,4p1i]` — no conviction-weighted fitness on
+the 4p1i roster, and on ANY roster the term's credit for meeting-count-multiplying play is
+conditioned/capped on recorded-bytes confirmation; (4)
+`prescreen-substrate-divergence[9p2i]` — a pre-screen PASS is real-path spend advice ONLY;
+every gating use pairs with a recorded-bytes floor read on flag-mintless substrates. One
+asymmetry this campaign owns (the 18.30 hand-off): the harness/crew eval passes serve the
+term live, but the impostor TRAINING loops are deliberately still anchor-composed — 
+threading the term into impostor training is THIS campaign's protocol decision, made under
+blocker (2)'s guard and recorded in the report. Scenario legs (18.23) and the composed
 meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both

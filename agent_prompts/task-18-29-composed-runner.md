@@ -77,7 +77,12 @@ target through the real `tally_ballots`; under skip, the surrogate's ballots pas
 unchanged. The §7.12 teammate firewall semantics are inherited from the surrogate runner
 untouched. The fidelity evaluation mirrors `run_surrogate_fidelity`'s split discipline
 (fit-side never evaluated; first-eval verdict). For the Goodhart leg, reuse 18.18's
-conviction-path arm shapes over the composed runner as the meeting path.
+concrete machinery over the composed runner as the meeting path:
+`run_conviction_path_probe`'s arm shapes, the baseline-relative gate split, the
+`_signed_relative_gain` laundering convention, and the one-shared-counter discipline —
+and note the probe's recorded caveat that `prescreen-substrate-divergence` applies to any
+decision-degenerate meeting model equally: the composed runner's own substrate read must
+carry the same recorded-bytes pairing rule.
 
 ## Public types this task introduces
 - `training.composed_runner.ComposedMeetingRunner`

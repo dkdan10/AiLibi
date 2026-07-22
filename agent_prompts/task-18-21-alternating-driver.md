@@ -54,8 +54,12 @@ machine-readable campaign rows.
 ## Implementation hint
 
 The driver owns ALL the meters (surrogate + conviction use counters threaded once,
-cumulative) — a campaign that exhausts a cap must stop loudly at a swap boundary, which is
-the natural re-grounding point. The exploiter probe is the standing ES at a tiny budget
+cumulative — the harness's one-term/one-counter `resolved_conviction_term()` pattern) — a
+campaign that exhausts a cap must stop loudly at a swap boundary, which is the natural
+re-grounding point. Consume `CoevoRolloutResult`'s episode-local traces under the 18.19
+fold-after-scoring discipline (fresh per-episode traces, fold into accumulators AFTER
+scoring, `anchor_policy` inherited from config never from accumulators — the #306 P2 fix
+constrains cross-seed accumulation). The exploiter probe is the standing ES at a tiny budget
 (e.g. 5×6) with fitness = beat-the-champion only.
 
 ## Public types this task introduces
