@@ -27,7 +27,7 @@ seed loudly instead of stalling the loop (headless meetings are deadline-free to
 Recordings are working artifacts outside the tree; the committed truth is the ranking jsonl.
 
 **Files in scope:**
-- training/realpath.py (new)
+- training/realpath.py
 - tests/training/test_realpath.py (fake-provider protocol tests: ranking rows, stamp read-back, timeout fail-loud, retry budget)
 
 **Files NOT in scope:**

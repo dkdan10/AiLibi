@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 18.16 — Fitness-term + referee pre-screen integration, anchored to training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live). Do not implement work outside these references.
+Implement Task 18.16 — Fitness-term + referee pre-screen integration, anchored to training/bakeoff/harness.py:577-598 (`inner_episode_fitness` + the gate/reward boundary comment at :586-590); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-conviction-integration`
 **Depends on:** 18.14, 18.15
-**Section refs:** training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
+**Section refs:** training/bakeoff/harness.py:577-598 (`inner_episode_fitness` + the gate/reward boundary comment at :586-590); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
 **Complexity:** Medium
 
 Wire the conviction model into BOTH sides' fitness under the GO verdict: an additive
@@ -102,4 +102,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-18-conviction-integration` with a title like `task 18.16: fitness-term + referee pre-screen integration`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing training/bakeoff/harness.py:577-598 (`inner_episode_fitness` + the gate/reward boundary comment at :586-590); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

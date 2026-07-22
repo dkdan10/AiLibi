@@ -70,7 +70,7 @@ absence prior, while `impostor_roll_call` stays a default-OFF toggle.
 - **Watchability stays a gate, never a reward — and never a fitness term in disguise.** The
   conviction-economy proxy (18.15/18.16) predicts pre-meeting evidence supply from tactical
   facts; it must never read, wrap, or re-derive `eval/watchability.py` scores. The
-  gate/reward boundary line is `training/bakeoff/harness.py:582-585` and it does not move.
+  gate/reward boundary line is `training/bakeoff/harness.py:586-590` (post-18.14 lines) and it does not move.
 - **The proxy is not the ballot surrogate.** `training/surrogate/` (the ballot predictor,
   its 6-feature fence, its GO bar, its staleness cap) is untouched by the conviction model;
   the two are independent artifacts with independent verdicts. The Goodhart probe re-runs
@@ -1098,7 +1098,7 @@ Goodhart probe with the conviction term live before any campaign selection leans
 ### Task 18.16 — Fitness-term + referee pre-screen integration
 **Branch:** `phase-18-conviction-integration`
 **Depends on:** 18.14, 18.15
-**Section refs:** training/bakeoff/harness.py:569-590 (`inner_episode_fitness` + the gate/reward boundary comment at :582-585); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
+**Section refs:** training/bakeoff/harness.py:577-598 (`inner_episode_fitness` + the gate/reward boundary comment at :586-590); audits/audit-phase-18-planning.md §2.3 (the two consumption modes); the 18.15 verdict (which modes are live)
 **Complexity:** Medium
 
 Wire the conviction model into BOTH sides' fitness under the GO verdict: an additive
@@ -1166,7 +1166,7 @@ seed loudly instead of stalling the loop (headless meetings are deadline-free to
 Recordings are working artifacts outside the tree; the committed truth is the ranking jsonl.
 
 **Files in scope:**
-- training/realpath.py (new)
+- training/realpath.py
 - tests/training/test_realpath.py (fake-provider protocol tests: ranking rows, stamp read-back, timeout fail-loud, retry budget)
 
 **Files NOT in scope:**
@@ -1246,7 +1246,7 @@ levers, and by how much. Report predicted-vs-actual side by side per lever.
 ### Task 18.19 — Dual-role co-evo rollout + the two-identity stamp
 **Branch:** `phase-18-coevo-rollout`
 **Depends on:** 18.7, 18.16
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:426-427, 490-496; scorer.py:799-806); training/bakeoff/harness.py:280-311 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + the dive finding it cites (`rollout_candidate` hardwires the opposing side to the scripted FSM — harness.py:434-435, 498-504; scorer.py:799-806); training/bakeoff/harness.py:288-319 (`BakeoffPolicy`, the shared shape); orchestrator/replay.py (the stamp schema the crew stamp extends)
 **Complexity:** Integration
 
 The seam co-evolution has never had: a role-dispatching rollout in which EACH side is
@@ -1302,7 +1302,7 @@ forking a second guard suite.
 ### Task 18.20 — The hall of fame + PFSP-lite opponent sampler
 **Branch:** `phase-18-hall-of-fame`
 **Depends on:** 18.6, 18.19
-**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:843-868 (the artifact layout); training/surrogate/runner.py:88-131 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
+**Section refs:** audits/audit-phase-18-planning.md §4 (#8) + §6 (the AlphaStar/PSRO transfer: frozen pool + hardness-weighted sampling); training/bakeoff/harness.py:851-876 (the artifact layout); training/surrogate/runner.py:105-148 (the sha-keyed use-counter doctrine the opponent bookkeeping mirrors); the 18.6 cell artifacts (a seed source)
 **Complexity:** Medium
 
 The frozen opponent pool: a `hall_of_fame.json`-indexed artifact store
@@ -1805,7 +1805,8 @@ matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit shou
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
 and the un-unit-tested deadline_default freeze-guard branch, the unassigned validity-gate
-deadline_default blindness) as review inputs, not as contracts.
+deadline_default blindness, the platform-sensitive `test_es` hash pin that fails on
+non-Linux interpreters) as review inputs, not as contracts.
 
 **Integration risk:**
 
