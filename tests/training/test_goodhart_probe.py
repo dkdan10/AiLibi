@@ -709,10 +709,11 @@ def test_carried_4p1i_reread(
     )
     assert reread.reread_lever_mean_score == lever.mean_score
     assert reread.reread_relative_gain == lever.relative_gain
-    # still_above_bar keeps or releases the carried blocker on the honest
-    # validity-gated relative gain.
-    assert reread.still_above_bar == (
-        lever.validity_passed and lever.relative_gain >= report.materiality_bar
+    # still_above_bar keeps or releases the carried blocker by DEFERRING to the
+    # standing probe's own exploit list — the authoritative UNROUNDED
+    # materiality gate — never re-decided off the display-rounded lever row.
+    assert reread.still_above_bar == any(
+        exploit.mechanism == "d4-contest-farming" for exploit in report.probe.exploits
     )
     # The materiality arithmetic states the carried numbers explicitly.
     assert "0.85" in reread.materiality_arithmetic
@@ -843,6 +844,34 @@ def test_conviction_read_launders_on_predicted_gain_without_reality() -> None:
     assert zero_baseline.predicted_supply_gain == -1.0
     assert "+inf% (baseline 0)" in zero_baseline.materiality_arithmetic
 
+    # The SIGNED channel (the 18.18 review's confirmed finding): the flags head
+    # is deliberately unclipped, so a NEGATIVE baseline is reachable — a real
+    # supply rise inside the negative range (-0.5 -> -0.1 is a genuine
+    # +0.4 x weight term advantage, +80% over abs(baseline)) must launder, not
+    # collapse to a 0.0 gain under the score-channel convention.
+    negative_baseline = _set_read(
+        tactic="fsm-baseline",
+        episode_predicted_supply=-0.5,
+        episode_actual_flags=0.0,
+    )
+    negative_rise = _build_conviction_read(
+        negative_baseline,
+        _set_read(episode_predicted_supply=-0.1, episode_actual_flags=0.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert negative_rise.launders_supply is True
+    assert negative_rise.predicted_supply_gain == round((-0.1 - -0.5) / 0.5, 4)
+    assert negative_rise.conviction_term_delta == round(0.5 * (-0.1 - -0.5), 4)
+    # ... while a sub-bar move inside the negative range stays immaterial.
+    negative_drift = _build_conviction_read(
+        negative_baseline,
+        _set_read(episode_predicted_supply=-0.49, episode_actual_flags=0.0),
+        weight=0.5,
+        materiality_bar=0.25,
+    )
+    assert negative_drift.launders_supply is False
+
     # The term arithmetic: conviction_term = weight x predicted supply, and the
     # delta is weight x (lever - baseline supply) — priced exactly as
     # inner_episode_fitness composes it.
@@ -932,6 +961,7 @@ def test_gate_check_flags_prediction_laundering() -> None:
     gate = _build_gate_check(
         (clean_baseline, laundered_read, false_blocked_read, invalid_read),
         prescreen_is_gating=True,
+        roster_key="9p2i",
     )
     assert gate.laundered == ("emergency",)
     assert gate.substrate_divergent == ()
@@ -951,7 +981,9 @@ def test_gate_check_flags_prediction_laundering() -> None:
         supply_floors_passed=False,
     )
     substrate = _build_gate_check(
-        (diverging_baseline, laundered_read), prescreen_is_gating=True
+        (diverging_baseline, laundered_read),
+        prescreen_is_gating=True,
+        roster_key="9p2i",
     )
     assert substrate.laundered == ()
     assert substrate.substrate_divergent == ("fsm-baseline", "emergency")
@@ -960,7 +992,9 @@ def test_gate_check_flags_prediction_laundering() -> None:
     # The check REQUIRES the scripted-FSM baseline read — a divergence is
     # measured against it, never in isolation.
     with pytest.raises(ValueError):
-        _build_gate_check((laundered_read,), prescreen_is_gating=True)
+        _build_gate_check(
+            (laundered_read,), prescreen_is_gating=True, roster_key="9p2i"
+        )
 
 
 def test_gate_laundering_becomes_named_finding() -> None:
@@ -990,7 +1024,7 @@ def test_gate_laundering_becomes_named_finding() -> None:
         supply_floors_passed=False,
     )
     reads = (clean_baseline, gate_laundered, supply_laundered)
-    gate_check = _build_gate_check(reads, prescreen_is_gating=True)
+    gate_check = _build_gate_check(reads, prescreen_is_gating=True, roster_key="4p1i")
     findings = _build_conviction_findings(
         reads, gate_check=gate_check, roster_key="4p1i"
     )
@@ -1025,7 +1059,9 @@ def test_gate_laundering_becomes_named_finding() -> None:
         launders_supply=False,
     )
     substrate_reads = (diverging_baseline, diverging_lever)
-    substrate_gate = _build_gate_check(substrate_reads, prescreen_is_gating=True)
+    substrate_gate = _build_gate_check(
+        substrate_reads, prescreen_is_gating=True, roster_key="4p1i"
+    )
     substrate_findings = _build_conviction_findings(
         substrate_reads, gate_check=substrate_gate, roster_key="4p1i"
     )

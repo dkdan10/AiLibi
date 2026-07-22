@@ -1277,6 +1277,12 @@ _CARRIED_RELATIVE_GAIN: Final[float] = 0.618
 _BASELINE_TACTIC: Final[str] = "fsm-baseline"
 _CHAMPION_TACTIC: Final[str] = "es-champion"
 
+# The roster the committed pre-screen's floors are pinned for (the harness's
+# PRESCREEN_* constants are the baseline-6 9p2i pins; there is no other
+# committed pre-screen). A gate read on any other roster is diagnostic and the
+# gate verdict says so.
+_PRESCREEN_PINS_ROSTER: Final[str] = "9p2i"
+
 
 class ConvictionLeverRead(BaseModel):
     """One policy's predicted-supply vs recorded-reality read (Task 18.18).
@@ -1302,9 +1308,11 @@ class ConvictionLeverRead(BaseModel):
     UNCHANGED delta convention applied to the new term: a lever launders when
     (validity-gated) its predicted-supply gain clears the materiality bar while
     the recorded-flags gain does NOT — predicted supply bought fitness the
-    play's bytes never minted. Gains follow :func:`_relative_gain` (a
-    non-positive baseline reads ``inf`` when the lever is positive, else 0.0),
-    are compared UNROUNDED, and are DISPLAYED via the standing convention
+    play's bytes never minted. Gains follow :func:`_signed_relative_gain` (the
+    flags head is unclipped, so the channel is signed: the denominator is
+    ``abs(baseline)``; a zero baseline reads ``inf`` when the lever is
+    positive, else 0.0), are compared UNROUNDED, and are DISPLAYED via the
+    standing convention
     (4 decimals; non-finite stored as -1.0 — ``materiality_arithmetic``
     carries the honest wording either way). The pre-screen booleans are the
     COMMITTED 18.16 instrument's own verdict over this set's meetings — its
@@ -1652,6 +1660,27 @@ def _format_gain(gain: float) -> str:
     return f"{gain:+.1%}"
 
 
+def _signed_relative_gain(baseline: float, value: float) -> float:
+    """The delta convention generalized to a SIGNED channel (Task 18.18).
+
+    :func:`_relative_gain` was written for the geomean SCORE channel, which is
+    never negative; the conviction flags head is DELIBERATELY UNCLIPPED (a
+    negative supply score is a legitimate bottom rank — ``ConvictionPrediction``),
+    so a non-positive baseline episode mean is reachable and the score-channel
+    convention would silently collapse a real supply rise (e.g. -0.5 -> -0.1,
+    a genuine +0.4 x weight term advantage) to a 0.0 gain — a false HELD in
+    the dangerous direction (the 18.18 review's confirmed finding). The signed
+    generalization divides by ``abs(baseline)`` — identical to the standing
+    convention wherever the baseline is positive, honest on the negative
+    branch, and keeping the documented zero-baseline branches (``inf`` on a
+    rise from 0, 0.0 otherwise).
+    """
+
+    if baseline != 0.0:
+        return (value - baseline) / abs(baseline)
+    return math.inf if value > 0 else 0.0
+
+
 def _build_conviction_read(
     baseline: _ConvictionSetRead,
     read: _ConvictionSetRead,
@@ -1664,7 +1693,8 @@ def _build_conviction_read(
     The laundering verdict is the probe's UNCHANGED delta convention applied to
     the term: validity-gated, the predicted-supply gain clears the bar while
     the recorded-flags gain does not. Compared UNROUNDED; displayed via the
-    standing convention.
+    standing convention. Gains ride :func:`_signed_relative_gain` — the flags
+    head is unclipped, so the supply channel is signed.
     """
 
     term_value = weight * read.episode_predicted_supply
@@ -1678,10 +1708,10 @@ def _build_conviction_read(
             f"definition); conviction term {weight} x supply = {term_value:.4f}"
         )
     else:
-        predicted_gain = _relative_gain(
+        predicted_gain = _signed_relative_gain(
             baseline.episode_predicted_supply, read.episode_predicted_supply
         )
-        actual_gain = _relative_gain(
+        actual_gain = _signed_relative_gain(
             baseline.episode_actual_flags, read.episode_actual_flags
         )
         launders = (
@@ -1729,7 +1759,10 @@ def _build_conviction_read(
 
 
 def _build_gate_check(
-    reads: Sequence[ConvictionLeverRead], *, prescreen_is_gating: bool
+    reads: Sequence[ConvictionLeverRead],
+    *,
+    prescreen_is_gating: bool,
+    roster_key: str,
 ) -> ConvictionGateCheck:
     """The composed-gate laundering check over every probed policy.
 
@@ -1738,7 +1771,11 @@ def _build_gate_check(
     baseline does not share it — a divergence the baseline shows too is the
     substrate speaking (the model predicts real-path supply; this substrate
     mints none), named as ``substrate_divergent``, never dressed up as a
-    lever flip.
+    lever flip. On a non-9p2i ``roster_key`` the verdict carries the
+    diagnostic caveat the read docstring promises: the committed pre-screen's
+    pins are the baseline-6 9p2i floors as shipped (there is no other
+    committed pre-screen), so its side of the comparison is a 9p2i-pinned
+    prediction against this roster's recorded floors.
     """
 
     baseline = next((read for read in reads if read.tactic == _BASELINE_TACTIC), None)
@@ -1794,6 +1831,14 @@ def _build_gate_check(
             "where the recorded floors fail — the committed pre-screen cannot "
             "spend a real eval the recorded referee would refuse, on this "
             "substrate at this scale"
+        )
+    if roster_key != _PRESCREEN_PINS_ROSTER:
+        verdict += (
+            f" [diagnostic on {roster_key}: the committed pre-screen's pins "
+            f"are the baseline-6 {_PRESCREEN_PINS_ROSTER} floors as shipped — "
+            "there is no other committed pre-screen — so this gate read "
+            f"compares a {_PRESCREEN_PINS_ROSTER}-pinned prediction against "
+            f"{roster_key}-recorded floors]"
         )
     return ConvictionGateCheck(
         prescreen_is_gating=prescreen_is_gating,
@@ -2039,7 +2084,9 @@ def run_conviction_path_probe(
         for raw in raws
     )
     gate_check = _build_gate_check(
-        reads, prescreen_is_gating=term.verdict.prescreen_role == "gating"
+        reads,
+        prescreen_is_gating=term.verdict.prescreen_role == "gating",
+        roster_key=probe.roster_key,
     )
     findings = _build_conviction_findings(
         reads, gate_check=gate_check, roster_key=probe.roster_key
@@ -2094,8 +2141,14 @@ def reread_carried_4p1i_exploit(
     re-probe BEFORE any 4p1i-scored selection: this reads the
     forced-``emergency`` lever out of a 4p1i conviction-path report and states
     the carried numbers beside the fresh ones with the materiality arithmetic.
-    Raises on a non-4p1i report (the finding is roster-specific) and on a
-    sweep missing the lever (the net must never silently shrink).
+    ``still_above_bar`` DEFERS to the standing probe's own exploit list (the
+    authoritative UNROUNDED materiality gate — ``_build_exploits`` thresholds
+    on exact per-game set means): the carried mechanism is above the bar iff
+    the standing report still names it, never re-decided off the
+    display-rounded ``LeverResult`` fields (a 4-decimal boundary could
+    disagree with the unrounded gate). Raises on a non-4p1i report (the
+    finding is roster-specific) and on a sweep missing the lever (the net
+    must never silently shrink).
     """
 
     if report.roster_key != _CARRIED_ROSTER:
@@ -2125,8 +2178,12 @@ def reread_carried_4p1i_exploit(
             f"the conviction arms carry no forced-{_CARRIED_TACTIC} read — "
             "the re-probe did not cover the carried lever"
         )
-    still_above = (
-        lever.validity_passed and lever.relative_gain >= report.materiality_bar
+    # The authoritative call: the standing probe already ran the UNROUNDED
+    # materiality gate and named the mechanism iff it cleared (validity-gated,
+    # deduped by mechanism) — defer to it rather than re-deciding off the
+    # display-rounded lever row.
+    still_above = any(
+        exploit.mechanism == _CARRIED_MECHANISM for exploit in report.probe.exploits
     )
     arithmetic = (
         f"carried (17.15, baseline-5 floors): mean_score "
