@@ -66,8 +66,11 @@ surface:
   engine-private or other-agent state crosses in (the same public footing as a
   meeting's ``dead_ids``; see :func:`agents.memory.store.record_meeting_outcome`).
 * **witness slots** are computed from the agent's OWN ``packet.visible_players``
-  only — who the agent can see, and how many co-located players would witness a
-  kill — never another agent's vision.
+  plus its OWN ``self_state.fellow_impostor_ids`` (the identical privileged self
+  channel the post-meeting belief fold already reads) — who the agent can see,
+  and how many co-located NON-teammate players would witness a kill (a fellow
+  impostor poses no report risk, the FSM ``co_present`` semantics) — never
+  another agent's vision.
 * **last-seen recency slots** re-read the SAME ``_combined_last_seen`` merge the
   v2 last-seen slots use (own episodic sightings + own render cache), only at a
   short horizon the v2 50-tick normalizer cannot resolve.
@@ -700,8 +703,12 @@ class TacticalFeatureEncoderV3(TacticalFeatureEncoder):
         From the agent's OWN packet only. A slot player is ``visible`` when it is
         in ``packet.visible_players``; ``co_located`` when its room is the agent's
         own room; ``witnesses`` is the count of OTHER visible players in that same
-        room (the players who would witness a kill of the slot player — self is
-        never in ``visible_players``), normalized by :data:`_COUNT_NORM` and
+        room who would witness a kill of the slot player — self is never in
+        ``visible_players``, and the agent's own fellow impostors are excluded
+        (``packet.self_state.fellow_impostor_ids``, the identical privileged
+        self channel the post-meeting belief fold reads: a teammate poses no
+        report/testimony risk, matching the FSM ``co_present`` kill-gate
+        semantics the head refines) — normalized by :data:`_COUNT_NORM` and
         quantized onto the grid. A slot player the agent cannot see, and every
         slot past the roster, zero-fills ``(0.0, 0.0, 0.0)``.
         """
@@ -713,6 +720,7 @@ class TacticalFeatureEncoderV3(TacticalFeatureEncoder):
             if view.id not in visible_room:
                 visible_room[view.id] = view.room
         self_room = packet.self_state.room
+        fellows = frozenset(packet.self_state.fellow_impostor_ids)
 
         slots: list[float] = []
         for slot in range(self._roster_slots):
@@ -726,7 +734,9 @@ class TacticalFeatureEncoderV3(TacticalFeatureEncoder):
                     witnesses = sum(
                         1
                         for view in packet.visible_players
-                        if view.room == room and view.id != player_id
+                        if view.room == room
+                        and view.id != player_id
+                        and view.id not in fellows
                     )
                     witnesses_norm = (
                         quantize_unit_interval(witnesses / _COUNT_NORM)

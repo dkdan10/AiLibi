@@ -1933,6 +1933,68 @@ def test_v3_golden_vector_pins_values() -> None:
     assert vector[:111] == v2_vector
 
 
+def test_v3_witness_slots_exclude_fellow_impostors() -> None:
+    # The witness count is the FSM co_present analog: co-located players who
+    # could REPORT a kill of the slot player. A fellow impostor poses no
+    # report/testimony risk, so it never counts — excluded via the agent's OWN
+    # privileged self channel (``self_state.fellow_impostor_ids``), the same
+    # channel the post-meeting belief fold consumes.
+    public_map = _canonical_public_map()
+    rooms = sorted(public_map.room_ids)
+    r0 = rooms[0]
+    packet = ObservationPacket(
+        tick=6,
+        agent_id="p-1",
+        self_state=SelfView(
+            room=r0,
+            role="IMPOSTOR",
+            pending_task_id=None,
+            fellow_impostor_ids=("p-9",),
+        ),
+        visible_players=(
+            PlayerView(id="p-2", room=r0, action=None),
+            PlayerView(id="p-3", room=r0, action=None),
+            PlayerView(id="p-9", room=r0, action=None),
+        ),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=14,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=0,
+    )
+    memory = AgentMemory()
+    for player_id in ("p-2", "p-3", "p-9"):
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=5,
+                type="saw_player",
+                payload={"player_id": player_id, "room": r0},
+                provenance="observed",
+            )
+        )
+    roster = slot_roster(packet, memory)
+    assert roster == ("p-2", "p-3", "p-9")
+
+    vector = TacticalFeatureEncoderV3().encode(packet, public_map, memory)
+    v2_dim = TacticalFeatureEncoder().feature_dimension(public_map)
+    witness_base = v2_dim + 3  # the witness block follows the meeting scalars
+
+    def witnesses_norm(slot: int) -> float:
+        return vector[witness_base + slot * 3 + 2]
+
+    # p-2's witnesses: p-3 only — the co-located fellow p-9 never counts
+    # (1/8 on the quantized grid; counting the fellow would read 0.25).
+    assert witnesses_norm(roster.index("p-2")) == 0.125
+    # Symmetric for p-3; the FELLOW's own slot counts both non-teammates.
+    assert witnesses_norm(roster.index("p-3")) == 0.125
+    assert witnesses_norm(roster.index("p-9")) == 0.25
+
+
 def test_v3_mutating_meeting_history_moves_only_the_suffix() -> None:
     # Leak-style provenance: the meeting-history channel is a v3-only signal, so
     # mutating ONLY it changes ONLY the appended v3 suffix — the v2 prefix [:111]
