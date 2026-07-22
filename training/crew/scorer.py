@@ -63,6 +63,18 @@ the engine-fed ``pending_task_id`` — pre-15.22 the packet carried no owned set
 while the engine accepts a ``do_task`` for ANY owned unfinished task in the
 actor's room, so the wrapper carries the mask-invisible mirror (the
 emergency-uses tracker precedent for wrapper-carried legality inputs).
+
+Task 18.16 wires the GO-gated conviction term into the crew inner fitness. The
+seam exists HERE because crew fitness does NOT route through
+``training/bakeoff/harness.py`` — without :func:`crew_inner_episode_fitness`
+carrying its own optional ``conviction`` term the crew campaign would train
+without that gradient. The term is the SAME frozen 18.15 artifact and the SAME
+shared :class:`~training.bakeoff.harness.ConvictionFitnessTerm` object the
+impostor side takes (one :class:`~training.conviction.model.ConvictionUseCounter`
+per run threaded through both); :class:`CrewDecisionTrace` grows the
+predicted-supply accumulators the impostor trace already carries. Under NO-GO
+the term is structurally absent (``conviction=None``), never zero-weighted, and
+:func:`evaluate_crew_candidate` stamps the same provenance triple onto the row.
 """
 
 from __future__ import annotations
@@ -111,8 +123,11 @@ from training.bakeoff.harness import (
     BAKEOFF_NUM_IMPOSTORS,
     BAKEOFF_NUM_PLAYERS,
     BAKEOFF_TASKS_PER_CREWMATE,
+    CONVICTION_ARTIFACT_DIR,
     DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    DEFAULT_CONVICTION_WEIGHT,
     TRUNCATED_EPISODE_FITNESS,
+    ConvictionFitnessTerm,
     DeterminismRow,
     MetricSpread,
     SupplyGaugeRow,
@@ -122,6 +137,8 @@ from training.bakeoff.harness import (
     load_train_seeds,
     write_candidate_artifact,
 )
+from training.conviction.fidelity import load_conviction_verdict
+from training.conviction.model import ConvictionPrediction
 from training.crew.options import (
     _NEUTRAL_SUSPICION_QUANTUM,
     _SUSPICION_GATE_QUANTUM,
@@ -490,6 +507,12 @@ class CrewDecisionTrace:
     deliberately absent; the crew-side outcome metrics (meeting-trigger
     quality, correct-report rate, survival, task pace) are episode-level facts
     read from the typed rollout record, not per-decision tallies.
+
+    ``conviction_supply_sum`` / ``conviction_meetings`` (Task 18.16) accumulate
+    the conviction term's predicted-supply signal exactly as the impostor
+    :class:`~training.bakeoff.harness.DecisionTrace` does, so
+    :func:`crew_inner_episode_fitness` can add the GO-gated term on the crew
+    side too.
     """
 
     crew_decisions: int = 0
@@ -497,6 +520,8 @@ class CrewDecisionTrace:
     anchor_ce_sum: float = 0.0
     offmenu_decisions: int = 0
     agreement_hits: int = 0
+    conviction_supply_sum: float = 0.0
+    conviction_meetings: int = 0
 
     def record(
         self,
@@ -525,6 +550,8 @@ class CrewDecisionTrace:
         self.anchor_ce_sum += other.anchor_ce_sum
         self.offmenu_decisions += other.offmenu_decisions
         self.agreement_hits += other.agreement_hits
+        self.conviction_supply_sum += other.conviction_supply_sum
+        self.conviction_meetings += other.conviction_meetings
 
     def mean_anchor_ce(self) -> float:
         """Mean per-decision anchor cross-entropy (0.0 when nothing was scored)."""
@@ -532,6 +559,30 @@ class CrewDecisionTrace:
         if self.scored_decisions == 0:
             return 0.0
         return self.anchor_ce_sum / self.scored_decisions
+
+    def record_conviction_prediction(self, prediction: ConvictionPrediction) -> None:
+        """Accumulate one predicted meeting's supply score (Task 18.16).
+
+        Same semantics as the impostor
+        :meth:`~training.bakeoff.harness.DecisionTrace.record_conviction_prediction`:
+        ``expected_flags`` is the flags head's real-valued SUPPLY score. One
+        call per model-predicted meeting; the metering is the caller's (via the
+        shared :class:`~training.bakeoff.harness.ConvictionFitnessTerm`).
+        """
+
+        self.conviction_supply_sum += prediction.expected_flags
+        self.conviction_meetings += 1
+
+    def mean_predicted_supply(self) -> float:
+        """Mean predicted supply over recorded meetings (0.0 when none).
+
+        A no-meeting episode carries no supply signal, so the term contributes
+        exactly 0.0 — documented, never a silent NaN from a zero divide.
+        """
+
+        if self.conviction_meetings == 0:
+            return 0.0
+        return self.conviction_supply_sum / self.conviction_meetings
 
 
 @dataclass
@@ -884,6 +935,7 @@ def crew_inner_episode_fitness(
     trace: CrewDecisionTrace,
     *,
     anchor_weight: float = DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    conviction: ConvictionFitnessTerm | None = None,
 ) -> float:
     """The per-episode crew inner fitness the ES entrant optimizes (15.16).
 
@@ -893,16 +945,33 @@ def crew_inner_episode_fitness(
     ``patrol_coverage`` proxy, the terminal win), MINUS the anchor penalty
     toward the frozen crew FSM (``anchor_weight`` × the episode's mean anchor
     cross-entropy) — the same shape as 15.15's ``inner_episode_fitness`` with
-    the side flipped. The validity gate and the referee are NEVER terms here —
-    they are selection filters :func:`evaluate_crew_candidate` applies after
-    training. A truncated episode scores the documented
+    the side flipped — PLUS, under a GO verdict only, the 18.16 conviction term
+    (``conviction.weight`` × the episode's mean predicted supply).
+
+    The validity gate and the referee are NEVER terms here — they are selection
+    filters :func:`evaluate_crew_candidate` applies after training. The
+    conviction term IS a term, and a legitimate one: it is a REWARD-side
+    prediction from FENCED pre-meeting tactical facts (the frozen Task-18.15
+    artifact, sha-keyed, metered by its own
+    :class:`~training.conviction.model.ConvictionUseCounter`, shipped ONLY under
+    the committed GO verdict); it never reads, wraps, or re-derives
+    ``eval/watchability.py`` scores (the designer ruling in
+    tasks/phase-18.md:81-84), and under NO-GO it is STRUCTURALLY ABSENT
+    (``conviction=None``; no zero-weighted ghost). It is the SAME frozen artifact
+    and the SAME shared
+    :class:`~training.bakeoff.harness.ConvictionFitnessTerm` object used on the
+    impostor side — pass the SAME object to both sides. A truncated episode
+    scores the documented
     :data:`~training.bakeoff.harness.TRUNCATED_EPISODE_FITNESS`.
     """
 
     if not rollout.complete:
         return TRUNCATED_EPISODE_FITNESS
     shaped = compute_shaped_reward(rollout, "CREWMATE").total()
-    return shaped - anchor_weight * trace.mean_anchor_ce()
+    fitness = shaped - anchor_weight * trace.mean_anchor_ce()
+    if conviction is not None:
+        fitness += conviction.weight * trace.mean_predicted_supply()
+    return fitness
 
 
 @dataclass(frozen=True)
@@ -980,6 +1049,11 @@ class CrewEsEntrant:
     through :func:`rollout_crew_candidate` — one runner, one fitness, no
     protocol drift. Satisfies the 15.15 ``BakeoffEntrant`` seam structurally
     (``name`` + ``train()``).
+
+    The 18.16 conviction term stays ``conviction=None`` in this training loop:
+    the campaign wires the live per-meeting serving path later — this task lands
+    the SEAM (:func:`crew_inner_episode_fitness`'s optional term), not the live
+    feature production.
     """
 
     def __init__(
@@ -1102,6 +1176,11 @@ class CrewProtocolConfig:
     this track (the committed staleness cap budgets the impostor bake-off +
     the Goodhart re-run); the row's surrogate columns are ``None`` for shape
     parity, never a silently-zero measurement.
+
+    The 18.16 ``conviction_artifact_dir`` / ``conviction_weight`` fields stamp
+    each row's conviction provenance metadata (mirroring the impostor
+    ``BakeoffProtocolConfig``); the crew fitness COLUMNS stay anchor-composed
+    until the live serving seam lands.
     """
 
     eval_seeds: tuple[int, ...]
@@ -1115,6 +1194,8 @@ class CrewProtocolConfig:
     leak_seeds: tuple[int, ...] = (0, 1)
     repeat_n: int = 3
     max_ticks: int = DEFAULT_MAX_TICKS
+    conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
+    conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
 
 
 def default_crew_protocol_config() -> CrewProtocolConfig:
@@ -1145,7 +1226,10 @@ class CrewTrackResult(BaseModel):
     survival, task-completion pace, and the mis-eject-relevant meeting
     metrics (meeting-trigger quality, correct-report rate, mis-eject rate),
     plus the Q6 coverage-cue diagnostic column. Surrogate columns are ``None``
-    (this track does not meter the 15.13 staleness cap).
+    (this track does not meter the 15.13 staleness cap). Task 18.16 appends the
+    conviction provenance triple: the weight is named under
+    ``fitness_term == "ships"``; under ``"absent"`` the weight is None — the row
+    says the term is structurally absent, never zero-weighted.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1216,6 +1300,14 @@ class CrewTrackResult(BaseModel):
 
     descriptor_footprint: Mapping[str, float]
     train_metadata: Mapping[str, object]
+
+    # Task 18.16 conviction provenance (OPTIONAL, None-default — pre-18.16
+    # serialized rows must still validate). ``conviction_weight`` is named only
+    # under "ships"; under "absent" it is None — the row says the term is
+    # structurally absent, never zero-weighted.
+    conviction_fitness_term: Literal["ships", "absent"] | None = None
+    conviction_weight: float | None = None
+    conviction_weights_sha256: str | None = None
 
     def to_json_line(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True)
@@ -1394,6 +1486,10 @@ def evaluate_crew_candidate(
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
     entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
+    # The committed conviction verdict stamps the row's provenance metadata —
+    # the crew-side twin of the impostor row's stamp (the crew fitness columns
+    # stay anchor-composed until the live serving seam lands).
+    conviction_verdict = load_conviction_verdict(protocol.conviction_artifact_dir)
 
     policy = candidate.policy
     if not isinstance(policy, (CrewOptionScorer, FsmCrewBaseline)):
@@ -1562,6 +1658,13 @@ def evaluate_crew_candidate(
         wall_clock_eval_s=time.perf_counter() - started,
         descriptor_footprint=real_pass.descriptor_mean,
         train_metadata=candidate.train_metadata,
+        conviction_fitness_term=conviction_verdict.fitness_term,
+        conviction_weight=(
+            protocol.conviction_weight
+            if conviction_verdict.fitness_term == "ships"
+            else None
+        ),
+        conviction_weights_sha256=conviction_verdict.weights_sha256,
     )
 
 
