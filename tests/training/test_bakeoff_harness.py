@@ -27,6 +27,8 @@ NO-GO).
 from __future__ import annotations
 
 import ast
+import dataclasses
+import hashlib
 import inspect
 import json
 import math
@@ -36,11 +38,19 @@ from typing import Any
 
 import pytest
 
-from agents.memory.store import AgentMemory
+from agents.memory.beliefs import BeliefState
+from agents.memory.store import AgentMemory, EpisodicEvent, MemoryStore
+from agents.memory.working import WorkingMemory
 from agents.tactical.features import (
+    DEFAULT_ROSTER_SLOTS,
     ENCODER_VERSION,
+    ENCODER_VERSION_V3,
+    FeatureSegment,
     TacticalFeatureEncoder,
+    TacticalFeatureEncoderV3,
+    encode_features_v3,
     mlp_genome_length,
+    slot_roster,
 )
 from engine.world import load_canonical_map
 from eval.watchability import population_relative_conversion_floor
@@ -58,7 +68,10 @@ from observation.action_intent import (
     WaitIntent,
 )
 from observation.packet import (
+    AudibleEvent,
+    BodyView,
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     PlayerView,
     SelfView,
@@ -110,6 +123,7 @@ from training.conviction.model import (
 )
 from training.conviction.serving import ConvictionServingMeetingRunner
 from training.determinism import PolicyFrame
+from training.env import build_action_mask
 from training.rewards import compute_shaped_reward
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
 
@@ -1758,3 +1772,403 @@ def test_harness_surrogate_loads_always_wire_the_corpus_fingerprint_fence() -> N
             f"harness.py:{node.lineno} calls load_surrogate_runner_factory "
             "without the corpus_dir fingerprint fence"
         )
+
+
+# --------------------------------------------------------------------------- #
+# 11. Encoder v3 + the per-target KILL head (Task 18.22).                       #
+#                                                                              #
+# The additive v3 family: the encoder-v3 vector (v2 prefix byte-identical + the #
+# meeting-history / witness / recency blocks) and the per-target KILL head that #
+# learns the within-kind tie PR #242 flagged. Golden layout + vector pins, the  #
+# leak-style suffix-only provenance, the widened genome/head shapes, the        #
+# encoder-family seam, the learned vs exact-tie target resolution under the     #
+# mask, and a miniature end-to-end v3 train on the CI budget.                   #
+# --------------------------------------------------------------------------- #
+
+# The v3 golden layout: the v2 seven-segment tuple (canonical map, 10 rooms, 9
+# roster slots) plus the three appended v3 segments. Any change here means the
+# v3 layout moved — legal ONLY via an ENCODER_VERSION_V3 bump.
+_V3_GOLDEN_DIMENSION = 150
+_V3_GOLDEN_LAYOUT: tuple[tuple[str, int], ...] = (
+    ("self_room_onehot", 10),
+    ("visible_players_by_room", 10),
+    ("visible_bodies_by_room", 10),
+    ("lastseen_occupancy_by_room", 10),
+    ("scalars", 17),
+    ("belief_slots", 36),
+    ("lastseen_slots", 18),
+    ("meeting_history_scalars", 3),
+    ("witness_slots", 27),
+    ("lastseen_recency_slots", 9),
+)
+# sha256 over the v3 golden fixture's encoded vector (float-hex serialized), the
+# _vector_sha256 idiom. Pins the VALUES, not just the shape — a change in any v3
+# feature computation trips this. golden pin: regenerate only on an intended
+# ENCODER_VERSION_V3 layout/value bump.
+_V3_GOLDEN_VECTOR_SHA256 = (
+    "527c3766285ddbc8f440ad67612f4c4676de085b1d953f884eb94fdd1592a682"
+)
+
+
+def _canonical_public_map() -> PublicMapView:
+    return public_map_from_engine_map(load_canonical_map())
+
+
+def _vector_sha256(vector: tuple[float, ...]) -> str:
+    payload = json.dumps([float(value).hex() for value in vector])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _v3_golden_fixture(
+    public_map: PublicMapView,
+) -> tuple[ObservationPacket, AgentMemory]:
+    """A deterministic, feature-rich v3 packet + memory (the _golden_fixture style).
+
+    Exercises every v3 block: co-located visible players (so the witness slots
+    carry non-zero co-location + witness counts), beliefs above/below the gate,
+    episodic + working-memory sightings (so the recency slots fire), and a
+    populated meeting_history with one ejection AND one skip row.
+    """
+
+    rooms = sorted(public_map.room_ids)
+    r0, r1, r2 = rooms[0], rooms[1], rooms[2]
+
+    packet = ObservationPacket(
+        tick=12,
+        agent_id="p-1",
+        self_state=SelfView(
+            room=r0,
+            role="IMPOSTOR",
+            pending_task_id=None,
+            fellow_impostor_ids=("p-9",),
+            in_vent=False,
+        ),
+        visible_players=(
+            # p-2 and p-3 co-located with self in r0 → each witnesses the other.
+            PlayerView(id="p-2", room=r0, action=None),
+            PlayerView(id="p-3", room=r0, action="task"),
+            PlayerView(id="p-8", room=r1, action=None),
+        ),
+        visible_bodies=(BodyView(id="body-p-4-8", room=r1, victim_id="p-4"),),
+        audible_events=(
+            AudibleEvent(kind="vent_use_heard", room=r2),
+            AudibleEvent(kind="sabotage_alarm", room=None),
+        ),
+        global_state=GlobalView(
+            tasks_completed=3,
+            tasks_total=14,
+            task_completion_percent=0.2142857,
+            sabotage_active=True,
+            sabotage_kind="reactor",
+            sabotage_repair_rooms=(r2,),
+            sabotage_is_gating=True,
+        ),
+        cooldown=2,
+        moved_players=(MovedPlayerView(id="p-6", from_room=r0, to_room=r2),),
+    )
+
+    beliefs = BeliefState()
+    beliefs.seed_player("p-2", suspicion=0.5 + 0.05 + 0.05, trust=0.4)
+    beliefs.seed_player("p-3", suspicion=0.55, trust=0.5)
+    beliefs.seed_player("p-5", suspicion=0.1, trust=0.9)
+    working = WorkingMemory()
+    working.record_sighting(player_id="p-2", room=r1, tick=10)
+    working.record_sighting(player_id="p-3", room=r0, tick=4)
+    episodic = MemoryStore()
+    for tick in (8, 10, 12):
+        episodic.append(
+            EpisodicEvent(
+                tick=tick,
+                type="saw_player",
+                payload={"player_id": "p-2", "room": r0},
+                provenance="observed",
+            )
+        )
+    episodic.append(
+        EpisodicEvent(
+            tick=12,
+            type="saw_player_move",
+            payload={"player_id": "p-6", "from_room": r0, "to_room": r2},
+            provenance="observed",
+        )
+    )
+    memory = AgentMemory(episodic=episodic, working=working, beliefs=beliefs)
+    # One ejection + one skip row — the meeting-history channel the v3 scalars read.
+    memory.meeting_history.record(end_tick=6, ejected_id="p-4")
+    memory.meeting_history.record(end_tick=11, ejected_id=None)
+    return packet, memory
+
+
+def test_v3_golden_layout_and_dimension() -> None:
+    assert ENCODER_VERSION_V3 == "v3"
+    encoder = TacticalFeatureEncoderV3()
+    assert encoder.version == "v3"
+
+    public_map = _canonical_public_map()
+    layout = encoder.feature_layout(public_map)
+    assert layout == tuple(
+        FeatureSegment(name, size) for name, size in _V3_GOLDEN_LAYOUT
+    )
+    assert encoder.feature_dimension(public_map) == _V3_GOLDEN_DIMENSION
+    assert sum(size for _, size in _V3_GOLDEN_LAYOUT) == _V3_GOLDEN_DIMENSION
+
+    # The public function constructs the v3 encoder and returns the same length.
+    packet, memory = _v3_golden_fixture(public_map)
+    assert len(encode_features_v3(packet, public_map, memory)) == _V3_GOLDEN_DIMENSION
+
+
+def test_v3_golden_vector_pins_values() -> None:
+    public_map = _canonical_public_map()
+    packet, memory = _v3_golden_fixture(public_map)
+    vector = TacticalFeatureEncoderV3().encode(packet, public_map, memory)
+
+    assert len(vector) == _V3_GOLDEN_DIMENSION
+    assert all(0.0 <= value <= 1.0 for value in vector)
+    assert _vector_sha256(vector) == _V3_GOLDEN_VECTOR_SHA256
+
+    # The additive strict-prefix guarantee: the first 111 v3 values ARE the v2
+    # vector byte-for-byte on the same inputs.
+    v2_vector = TacticalFeatureEncoder().encode(packet, public_map, memory)
+    assert len(v2_vector) == 111
+    assert vector[:111] == v2_vector
+
+
+def test_v3_mutating_meeting_history_moves_only_the_suffix() -> None:
+    # Leak-style provenance: the meeting-history channel is a v3-only signal, so
+    # mutating ONLY it changes ONLY the appended v3 suffix — the v2 prefix [:111]
+    # stays byte-identical.
+    public_map = _canonical_public_map()
+    packet, memory = _v3_golden_fixture(public_map)
+    encoder = TacticalFeatureEncoderV3()
+    before = encoder.encode(packet, public_map, memory)
+
+    memory.meeting_history.record(end_tick=15, ejected_id="p-7")
+    after = encoder.encode(packet, public_map, memory)
+
+    assert after != before  # the suffix moved
+    assert after[:111] == before[:111]  # the v2 prefix is byte-identical
+
+
+def test_v3_encode_is_deterministic_on_repeat() -> None:
+    public_map = _canonical_public_map()
+    packet, memory = _v3_golden_fixture(public_map)
+    encoder = TacticalFeatureEncoderV3()
+    assert encoder.encode(packet, public_map, memory) == encoder.encode(
+        packet, public_map, memory
+    )
+
+
+def test_v3_genome_and_head_shapes() -> None:
+    public_map = _canonical_public_map()
+
+    # The v3 family widens the head by TARGET_KILL_SLOTS and the genome with it;
+    # the v2 default is byte-identical to the committed champion's shape.
+    v3_length = policy_es.policy_genome_length(
+        public_map,
+        hidden=8,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=policy_es.TARGET_KILL_SLOTS,
+    )
+    v2_length = policy_es.policy_genome_length(
+        public_map, hidden=8, encoder=TacticalFeatureEncoder()
+    )
+    assert v3_length == 1442
+    assert v2_length == 1049
+
+    # head_size default is unchanged; the widened head adds the target slots.
+    assert policy_es.head_size(public_map) == 17
+    assert policy_es.head_size(public_map, target_slots=9) == 26
+    assert policy_es.TARGET_KILL_SLOTS == DEFAULT_ROSTER_SLOTS == 9
+
+
+def test_encoder_for_version_resolves_families() -> None:
+    v2_encoder, v2_slots = policy_es._encoder_for_version("v2")
+    assert isinstance(v2_encoder, TacticalFeatureEncoder)
+    assert not isinstance(v2_encoder, TacticalFeatureEncoderV3)
+    assert v2_slots == 0
+
+    v3_encoder, v3_slots = policy_es._encoder_for_version("v3")
+    assert isinstance(v3_encoder, TacticalFeatureEncoderV3)
+    assert v3_slots == 9
+
+    with pytest.raises(ValueError, match="unknown encoder_version"):
+        policy_es._encoder_for_version("v4")
+
+
+def _target_tie_packet(*, cooldown: int | None) -> ObservationPacket:
+    """An IMPOSTOR packet with TWO co-located non-teammate visible crew (p-2, p-3).
+
+    Both are in the actor's own room, so both KILLs are engine-legal when the
+    cooldown is 0 — the within-kind tie the per-target head must resolve.
+    """
+
+    rooms = sorted(_canonical_public_map().room_ids)
+    r0 = rooms[0]
+    return ObservationPacket(
+        tick=6,
+        agent_id="p-1",
+        self_state=SelfView(
+            room=r0,
+            role="IMPOSTOR",
+            pending_task_id=None,
+            fellow_impostor_ids=("p-9",),
+        ),
+        visible_players=(
+            PlayerView(id="p-2", room=r0, action=None),
+            PlayerView(id="p-3", room=r0, action=None),
+        ),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=14,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=cooldown,
+    )
+
+
+def _target_tie_memory() -> AgentMemory:
+    """Memory whose episodic log has SEEN both p-2 and p-3, so slot_roster covers
+    them (the belief-known ∪ episodic-seen roster the per-target head keys on)."""
+
+    rooms = sorted(_canonical_public_map().room_ids)
+    r0 = rooms[0]
+    memory = AgentMemory()
+    for player_id in ("p-2", "p-3"):
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=5,
+                type="saw_player",
+                payload={"player_id": player_id, "room": r0},
+                provenance="observed",
+            )
+        )
+    return memory
+
+
+def _v3_forced_kill_genome(
+    public_map: PublicMapView, *, target_output_slot: int | None
+) -> tuple[float, ...]:
+    """A v3-shaped zero genome with output-bias (b2) genes only.
+
+    The kill KIND slot bias is large (50.0) so KILL wins the kind race; when
+    ``target_output_slot`` is given a +1.0 per-target bias lands on that head
+    slot. With a zero W1/b1/W2 the tanh hidden layer is all-zero, so the logits
+    ARE the b2 biases — the _forced_kill_genome idiom lifted to the v3 head.
+    """
+
+    encoder = TacticalFeatureEncoderV3()
+    input_dim = encoder.feature_dimension(public_map)
+    rooms = sorted(public_map.room_ids)
+    output = len(rooms) + len(policy_es.KIND_SLOTS) + policy_es.TARGET_KILL_SLOTS
+    genome_length = mlp_genome_length(input_dim=input_dim, hidden=8, output=output)
+    kill_slot = len(rooms) + policy_es.KIND_SLOTS.index("kill")
+    genome = [0.0] * genome_length
+    genome[genome_length - output + kill_slot] = 50.0
+    if target_output_slot is not None:
+        genome[genome_length - output + target_output_slot] = 1.0
+    return tuple(genome)
+
+
+def _target_output_slot(public_map: PublicMapView, roster_index: int) -> int:
+    rooms = sorted(public_map.room_ids)
+    return len(rooms) + len(policy_es.KIND_SLOTS) + roster_index
+
+
+def test_v3_learned_within_kind_tie_resolution() -> None:
+    public_map = _canonical_public_map()
+    packet = _target_tie_packet(cooldown=0)
+    memory = _target_tie_memory()
+
+    roster = slot_roster(packet, memory)
+    assert roster == ("p-2", "p-3")
+    # Bias the LEXICALLY-LATER target's slot (p-3, roster index 1): the learned
+    # per-target score must beat the lexical intent-key tie (which favors p-2).
+    genome = _v3_forced_kill_genome(
+        public_map,
+        target_output_slot=_target_output_slot(public_map, roster.index("p-3")),
+    )
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8, encoder_version="v3")
+    frame = policy.evaluate(
+        packet, public_map, memory, fsm_intent=WaitIntent(actor="p-1", type="wait")
+    )
+    assert isinstance(frame.intent, KillIntent)
+    assert frame.intent.payload.target == "p-3"
+
+
+def test_v3_exact_tie_falls_back_to_lexical_first() -> None:
+    public_map = _canonical_public_map()
+    packet = _target_tie_packet(cooldown=0)
+    memory = _target_tie_memory()
+
+    # No per-target bias → both KILLs score identically; the EXACT score tie
+    # breaks on the canonical intent key, choosing the lexically-FIRST target.
+    genome = _v3_forced_kill_genome(public_map, target_output_slot=None)
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8, encoder_version="v3")
+    frame = policy.evaluate(
+        packet, public_map, memory, fsm_intent=WaitIntent(actor="p-1", type="wait")
+    )
+    assert isinstance(frame.intent, KillIntent)
+    assert frame.intent.payload.target == "p-2"
+
+
+def test_v3_chosen_intent_obeys_the_mask() -> None:
+    public_map = _canonical_public_map()
+    memory = _target_tie_memory()
+    sabotage_kinds = tuple(sorted(load_canonical_map().sabotages))
+    roster = slot_roster(_target_tie_packet(cooldown=0), memory)
+    genome = _v3_forced_kill_genome(
+        public_map,
+        target_output_slot=_target_output_slot(public_map, roster.index("p-3")),
+    )
+    policy = policy_es.build_masked_mlp_policy(genome, hidden=8, encoder_version="v3")
+    wait = WaitIntent(actor="p-1", type="wait")
+
+    # The learned KILL is submission-legal under the same agent-side mask the
+    # training env enforces (cooldown 0 ⇒ the kill is on-menu).
+    kill_packet = _target_tie_packet(cooldown=0)
+    kill_frame = policy.evaluate(kill_packet, public_map, memory, fsm_intent=wait)
+    kill_mask = build_action_mask(
+        kill_packet,
+        public_map,
+        sabotage_kinds=sabotage_kinds,
+        emergency_uses_remaining=0,
+    )
+    assert kill_mask.is_submission_legal(kill_frame.intent)
+
+    # With a non-zero cooldown the KILL leaves the menu: the mask governs, so the
+    # SAME policy never emits a KillIntent, and whatever it picks stays legal.
+    no_kill_packet = _target_tie_packet(cooldown=4)
+    no_kill_frame = policy.evaluate(no_kill_packet, public_map, memory, fsm_intent=wait)
+    assert not isinstance(no_kill_frame.intent, KillIntent)
+    no_kill_mask = build_action_mask(
+        no_kill_packet,
+        public_map,
+        sabotage_kinds=sabotage_kinds,
+        emergency_uses_remaining=0,
+    )
+    assert no_kill_mask.is_submission_legal(no_kill_frame.intent)
+
+
+def test_v3_policy_es_trains_end_to_end_on_ci_budget() -> None:
+    # The DoD's "v3-featured policy-es trains end-to-end on the miniature budget":
+    # a couple of seconds-scale fake-provider rollouts, the intended CI budget.
+    assert (
+        policy_es.policy_es_budget("ci", encoder_version="v3").encoder_version == "v3"
+    )
+
+    config = dataclasses.replace(policy_es.policy_es_budget("ci"), encoder_version="v3")
+    candidate = policy_es.PolicyEsEntrant(config=config).train()
+
+    assert candidate.policy.encoder_version == "v3"
+    assert len(candidate.weights) == 1442
+    assert candidate.config["encoder_version"] == "v3"
+    head = candidate.config["head"]
+    assert isinstance(head, dict)
+    assert head["target_slots"] == 9
+    es_digest = candidate.train_metadata["es_digest"]
+    assert isinstance(es_digest, str)
+    assert es_digest
