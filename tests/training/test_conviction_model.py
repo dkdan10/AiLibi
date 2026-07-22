@@ -55,6 +55,7 @@ from training.conviction.dataset import (
     _observation_backed_impostor_subjects,
     build_conviction_table,
     require_clean_walk,
+    validate_conviction_split,
 )
 from training.conviction.fidelity import (
     CONVICTION_CONVERSION_CEILING_RATIO,
@@ -80,6 +81,7 @@ from training.surrogate.dataset import (
     BeliefRenderParity,
     CandidateFeatures,
     MeetingTableRow,
+    SurrogateSplits,
     build_meeting_table,
 )
 
@@ -500,10 +502,30 @@ def test_unfitted_predict_and_drifted_keys_fail_loud(
     with pytest.raises(RuntimeError, match="before fit"):
         model.predict(nine_conviction.rows[0].features)
     model.fit(_fit_rows(nine_conviction))
-    with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
+    with pytest.raises(ValueError, match="missing"):
         model.predict({"alive_count": 4.0})
+    with pytest.raises(ValueError, match="unexpected"):
+        model.predict({**dict(nine_conviction.rows[0].features), "not_a_feature": 1.0})
     with pytest.raises(ValueError, match="refusing to install"):
         ConvictionEconomyModel().fit([])
+
+
+def test_predict_accepts_any_feature_insertion_order(
+    nine_conviction: ConvictionTable,
+) -> None:
+    """Insertion order is not part of the public seam (Codex review, PR #302).
+
+    The vector is always assembled by indexing the canonical name order, so a
+    live consumer may build the mapping in any order; only the KEY SET is the
+    contract.
+    """
+
+    model = ConvictionEconomyModel()
+    model.fit(_fit_rows(nine_conviction))
+    features = nine_conviction.rows[0].features
+    reversed_order = dict(reversed(list(features.items())))
+    assert tuple(reversed_order) != tuple(features)
+    assert model.predict(reversed_order) == model.predict(features)
 
 
 def test_staleness_machinery_follows_the_143x_rule() -> None:
@@ -577,6 +599,53 @@ def test_fit_corpus_entry_requires_a_committed_split() -> None:
 
     with pytest.raises(ValueError, match="no committed splits.json"):
         fit_corpus_conviction_model(_FOUR)
+
+
+def _with_splits(
+    table: ConvictionTable,
+    *,
+    train: tuple[int, ...],
+    val: tuple[int, ...],
+    test: tuple[int, ...],
+) -> ConvictionTable:
+    return table.model_copy(
+        update={"splits": SurrogateSplits(train=train, val=val, test=test)}
+    )
+
+
+def test_fidelity_rejects_a_leaky_or_partial_split(
+    four_conviction: ConvictionTable,
+) -> None:
+    """The committed split must PARTITION the games before any row selection
+    (Codex review, PR #302 — the surrogate's ``_game_folds`` discipline).
+
+    An overlapping seed would fit on a held-out game (the leak the single
+    pre-registered evaluation must fail closed on); an omitted or unknown
+    seed means the split does not describe this table.
+    """
+
+    seeds = four_conviction.seeds
+    with pytest.raises(ValueError, match="leaks games across the fit/test"):
+        run_conviction_fidelity(
+            _with_splits(
+                four_conviction, train=seeds[:-1], val=(), test=(seeds[-2], seeds[-1])
+            )
+        )
+    with pytest.raises(ValueError, match="omits table games"):
+        run_conviction_fidelity(
+            _with_splits(four_conviction, train=seeds[:-2], val=(), test=(seeds[-1],))
+        )
+    with pytest.raises(ValueError, match="seeds absent from the table"):
+        run_conviction_fidelity(
+            _with_splits(
+                four_conviction, train=seeds[:-1], val=(), test=(seeds[-1], 999_999)
+            )
+        )
+    # The same gate guards the corpus fit entry's fit-side selection.
+    with pytest.raises(ValueError, match="leaks games across the fit/test"):
+        validate_conviction_split(
+            _with_splits(four_conviction, train=seeds, val=(), test=(seeds[0],))
+        )
 
 
 def test_spearman_is_tie_aware_and_fails_loud_on_degenerate_input() -> None:

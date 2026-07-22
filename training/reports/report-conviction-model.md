@@ -108,7 +108,12 @@ Excluded BY DESIGN (the fence's other half, proven by the committed poison
 test): the contradiction-flag structure and `contradiction_lift` (THIS
 meeting's transcript — the LABEL side), the omniscient window stats
 (`witnessed` / `isolation` / `seen_at_kill` / `task_submissions` /
-`move_count` — inter-meeting event history the runner never sees), all ballot
+`move_count` — inter-meeting event history the runner never sees; the
+contract's "seen-at-kill" CHANNEL is not the omniscient `seen_at_kill`
+column — audit §2.3 scopes the channel "from episodic memory", whose episodic
+form is the voter-local witnessed-kill pin served as `kill_pin_pairs` /
+`kill_pinned_candidates`, while the table column is a global room-occupancy
+fact that lives in no agent's store), all ballot
 and role/outcome columns (labels), and raw sighting-record supply — though
 live-servable via `sighting_records_for_meeting()`, it has no verified offline
 mirror in the 15.11 table (the table's co-presence counts are omniscient, not

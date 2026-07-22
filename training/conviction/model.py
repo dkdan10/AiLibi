@@ -69,6 +69,7 @@ from training.conviction.dataset import (
     ConvictionTable,
     build_conviction_table,
     require_clean_walk,
+    validate_conviction_split,
 )
 from training.surrogate.dataset import (
     BeliefRenderParity,
@@ -226,11 +227,22 @@ class ConvictionEconomyModel:
 
     @staticmethod
     def _vector(features: Mapping[str, float]) -> NDArray[np.float64]:
-        keys = tuple(features)
-        if keys != CONVICTION_FEATURE_NAMES:
+        """Canonicalize a feature mapping into the artifact's vector layout.
+
+        The KEY SET must match :data:`CONVICTION_FEATURE_NAMES` exactly (a
+        missing or unexpected key fails loud, both named); insertion order is
+        deliberately NOT part of the public contract — the vector is always
+        assembled by indexing the canonical name order, so a live consumer
+        may build its mapping in any order (Codex review, PR #302).
+        """
+
+        keys = frozenset(features)
+        expected = frozenset(CONVICTION_FEATURE_NAMES)
+        if keys != expected:
             raise ValueError(
-                f"feature keys {keys} != CONVICTION_FEATURE_NAMES "
-                f"{CONVICTION_FEATURE_NAMES} — a drifted layout must never "
+                "feature mapping does not match CONVICTION_FEATURE_NAMES: "
+                f"missing {sorted(expected - keys)}, unexpected "
+                f"{sorted(keys - expected)} — a drifted layout must never "
                 "silently mis-multiply"
             )
         return np.asarray(
@@ -496,14 +508,10 @@ def fit_corpus_conviction_model(
 
     parity = require_clean_walk(measure_belief_render_parity(sample_dir))
     table = build_conviction_table(sample_dir)
-    if table.splits is None:
-        raise ValueError(
-            f"{table.replay_set_dir} ships no committed splits.json; the "
-            "corpus training entry fits on the committed fit side "
-            "(train ∪ val) only — use the 15.12 corpus, not a baseline "
-            "sample set"
-        )
-    fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
+    # The committed split must partition the games (disjoint fit/test, full
+    # coverage, no unknown seeds) BEFORE the fit-side rows are selected — the
+    # same fail-loud gate the held-out evaluation runs.
+    fit_seeds, _ = validate_conviction_split(table)
     rows = [row for row in table.rows if row.seed in fit_seeds]
     model = ConvictionEconomyModel(epochs=epochs, lr=lr)
     model.fit(rows)

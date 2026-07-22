@@ -52,7 +52,14 @@ Columns a live runner CANNOT reconstruct are excluded BY DESIGN, not oversight:
 the contradiction-flag structure and ``contradiction_lift`` need THIS meeting's
 transcript (they are the LABEL side here, never features); the omniscient window
 stats (``witnessed`` / ``isolation`` / ``seen_at_kill`` / ``task_submissions`` /
-``move_count``) need the inter-meeting event history the runner never sees; and
+``move_count``) need the inter-meeting event history the runner never sees —
+note the contract's "seen-at-kill" CHANNEL is not this omniscient column: audit
+§2.3 scopes the channel "from episodic memory", and its episodic form is the
+voter-local witnessed-kill pin (the kill-stamped ``saw_player`` row in the
+witness's own store) served here as ``kill_pin_pairs`` /
+``kill_pinned_candidates``, while the table's ``seen_at_kill`` column is a
+GLOBAL room-occupancy fact (anyone in the kill room within the window, seen or
+not) that lives in no agent's store and is therefore fenced; and
 raw first-hand sighting-record supply, though live-servable via
 ``sighting_records_for_meeting()``, has no verified offline mirror in the 15.11
 table (the table's co-presence counts are omniscient, not per-voter episodic),
@@ -340,6 +347,60 @@ class ConvictionTable(BaseModel):
     seeds: tuple[int, ...]
     splits: SurrogateSplits | None
     rows: tuple[ConvictionMeetingRow, ...]
+
+
+def validate_conviction_split(
+    table: ConvictionTable,
+) -> tuple[frozenset[int], frozenset[int]]:
+    """Validate that the committed split PARTITIONS the table's games (fail loud).
+
+    The surrogate harness's committed-split discipline
+    (``training/surrogate/fidelity.py::_game_folds``), applied BEFORE any
+    fit/test row selection: the fit side (``train ∪ val``) and the test side
+    must be disjoint, together cover every recorded game (no-meeting games
+    included — they are still games), and reference no seed absent from the
+    table. A leaked seed would let the single pre-registered held-out
+    evaluation fit on a test game — exactly the cross-meeting leak by-game
+    splitting exists to prevent — so every violation raises instead of
+    silently biasing the verdict (Codex review, PR #302). Returns
+    ``(fit_seeds, test_seeds)``.
+    """
+
+    if table.splits is None:
+        raise ValueError(
+            f"{table.replay_set_dir} ships no committed splits.json; the "
+            "conviction verdict is a single pre-registered held-out "
+            "evaluation — use the corpus, not a baseline sample set"
+        )
+    universe = frozenset(table.seeds)
+    fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
+    test_seeds = frozenset(table.splits.test)
+    unknown = (fit_seeds | test_seeds) - universe
+    if unknown:
+        raise ValueError(
+            f"splits.json references seeds absent from the table: {sorted(unknown)}"
+        )
+    omitted = universe - (fit_seeds | test_seeds)
+    if omitted:
+        raise ValueError(
+            f"splits.json omits table games {sorted(omitted)}: they would be in "
+            "neither the fit nor the test side — the split must partition "
+            "every recorded game"
+        )
+    overlap = fit_seeds & test_seeds
+    if overlap:
+        raise ValueError(
+            "splits.json leaks games across the fit/test boundary: seeds "
+            f"{sorted(overlap)} are in both (train ∪ val) and test — the same "
+            "game's meetings would be fitted on and judged"
+        )
+    if not test_seeds:
+        raise ValueError("splits.json test set is empty; nothing to judge")
+    if not fit_seeds:
+        raise ValueError(
+            "splits.json fit set (train ∪ val) is empty; nothing to fit on"
+        )
+    return fit_seeds, test_seeds
 
 
 def _roles_for_seed(
@@ -648,4 +709,5 @@ __all__ = [
     "ConvictionWalkGateError",
     "build_conviction_table",
     "require_clean_walk",
+    "validate_conviction_split",
 ]

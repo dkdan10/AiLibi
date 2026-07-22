@@ -42,6 +42,7 @@ from training.conviction.dataset import (
     ConvictionTable,
     build_conviction_table,
     require_clean_walk,
+    validate_conviction_split,
 )
 from training.conviction.fidelity import (
     ConvictionFidelityReport,
@@ -79,4 +80,5 @@ __all__ = [
     "load_conviction_verdict",
     "require_clean_walk",
     "run_conviction_fidelity",
+    "validate_conviction_split",
 ]

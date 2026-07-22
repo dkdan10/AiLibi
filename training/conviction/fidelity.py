@@ -55,7 +55,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 
-from training.conviction.dataset import ConvictionTable
+from training.conviction.dataset import ConvictionTable, validate_conviction_split
 from training.conviction.model import (
     DEFAULT_EPOCHS,
     DEFAULT_LEARNING_RATE,
@@ -198,14 +198,10 @@ def run_conviction_fidelity(
     honest.
     """
 
-    if table.splits is None:
-        raise ValueError(
-            f"{table.replay_set_dir} ships no committed splits.json; the "
-            "conviction verdict is a single pre-registered held-out "
-            "evaluation — use the corpus, not a baseline sample set"
-        )
-    fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
-    test_seeds = frozenset(table.splits.test)
+    # The committed split must PARTITION the table's games (disjoint, full
+    # coverage, no unknown seeds) before any row selection — a leaked seed
+    # would fit on a test game and silently bias the verdict.
+    fit_seeds, test_seeds = validate_conviction_split(table)
     fit_rows = [row for row in table.rows if row.seed in fit_seeds]
     test_rows = [row for row in table.rows if row.seed in test_seeds]
     if not fit_rows:
