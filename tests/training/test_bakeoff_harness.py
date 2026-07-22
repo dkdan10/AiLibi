@@ -8,6 +8,20 @@ triggers (the 15.17 torch seam), the artifact freeze/reload round trip, and the
 15.14 Goodhart surrogate re-run obligation. Every game runs at a tiny CI budget
 (a handful of 9p2i fake-provider rollouts through :func:`rollout_candidate`), not
 the operator-executed full protocol.
+
+Task 18.16 adds the conviction-integration pins: the entrant firewall now also
+scans for a private ``training.conviction`` loop; the GO-gated
+:class:`ConvictionFitnessTerm` loads under a fixture GO verdict and is
+STRUCTURALLY absent (``None``) under NO-GO; the term composes additively into
+:func:`inner_episode_fitness` with the conservative
+``DEFAULT_CONVICTION_WEIGHT <= DEFAULT_ANCHOR_PENALTY_WEIGHT`` weight; ONE
+sha-keyed :class:`ConvictionUseCounter` threads through both the term and
+:func:`conviction_prescreen` under the cumulative staleness cap; the additive
+anchor-policy seam on :class:`DecisionTrace` is byte-identical to the scripted
+FSM when a delegate anchor is supplied and re-anchors the CE (never the
+FSM-keyed agreement) under an alternative; and the committed row stamps the
+conviction provenance triple ("ships"/weight under GO, "absent"/None under
+NO-GO).
 """
 
 from __future__ import annotations
@@ -15,7 +29,8 @@ from __future__ import annotations
 import ast
 import inspect
 import json
-from collections.abc import Mapping
+import math
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +43,7 @@ from agents.tactical.features import (
     mlp_genome_length,
 )
 from engine.world import load_canonical_map
+from eval.watchability import population_relative_conversion_floor
 from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
@@ -40,7 +56,12 @@ from observation.action_intent import (
     VentIntent,
     WaitIntent,
 )
-from observation.packet import ObservationPacket
+from observation.packet import (
+    GlobalView,
+    ObservationPacket,
+    PlayerView,
+    SelfView,
+)
 from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
 from training.bakeoff import policy_es
@@ -52,17 +73,41 @@ from training.bakeoff.harness import (
     BakeoffPolicy,
     BakeoffProtocolConfig,
     BakeoffResult,
+    ConvictionFitnessTerm,
+    DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    DEFAULT_CONVICTION_WEIGHT,
     DecisionTrace,
+    PRESCREEN_CONVERSION_PIN,
+    PRESCREEN_FLAGS_PER_MEETING_FLOOR,
     TrainedCandidate,
+    conviction_prescreen,
     evaluate_candidate,
+    inner_episode_fitness,
     intent_key,
     load_candidate_weights,
+    load_conviction_fitness_term,
     load_eval_seeds,
     rollout_candidate,
     run_goodhart_surrogate_rerun,
     write_candidate_artifact,
 )
+from training.conviction.dataset import CONVICTION_FEATURE_NAMES, ConvictionMeetingRow
+from training.conviction.fidelity import (
+    ConvictionGoVerdict,
+    load_conviction_verdict,
+    write_conviction_verdict_artifact,
+)
+from training.conviction.model import (
+    ConvictionEconomyModel,
+    ConvictionStalenessCap,
+    ConvictionStalenessExceededError,
+    ConvictionUseCounter,
+    load_conviction_model_artifact,
+    load_conviction_staleness_cap,
+    write_conviction_model_artifact,
+)
 from training.determinism import PolicyFrame
+from training.rewards import compute_shaped_reward
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
 
 # The four entrant modules the firewall test AST-scans (the committed forbidden
@@ -138,6 +183,45 @@ def test_entrant_modules_do_not_import_eval() -> None:
     assert offenders == [], (
         "entrant modules must not import eval.* (the harness computes every "
         f"reported metric); offenders: {offenders!r}"
+    )
+
+
+def _forbidden_conviction_imports(path: Path) -> list[tuple[str, int, str]]:
+    """Every ``training.conviction`` / ``training.conviction.*`` import in ``path``.
+
+    The 18.16 twin of :func:`_forbidden_eval_imports`: the harness + the crew
+    scorer OWN the conviction seam (they load the frozen artifact, meter the one
+    shared counter, and compose the GO-gated term), so no ENTRANT may grow a
+    private conviction loop against the frozen instrument.
+    """
+
+    tree = ast.parse(path.read_text(), filename=str(path))
+    offenders: list[tuple[str, int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "training.conviction" or alias.name.startswith(
+                    "training.conviction."
+                ):
+                    offenders.append((str(path), node.lineno, alias.name))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if module is not None and (
+                module == "training.conviction"
+                or module.startswith("training.conviction.")
+            ):
+                offenders.append((str(path), node.lineno, module))
+    return offenders
+
+
+def test_entrant_modules_do_not_import_conviction() -> None:
+    offenders: list[tuple[str, int, str]] = []
+    for module_path in _ENTRANT_MODULES:
+        offenders.extend(_forbidden_conviction_imports(module_path))
+    assert offenders == [], (
+        "entrant modules must not import training.conviction.* (the harness + "
+        "the crew scorer own the GO-gated conviction seam — no entrant grows a "
+        f"private conviction loop); offenders: {offenders!r}"
     )
 
 
@@ -298,6 +382,13 @@ def test_evaluate_candidate_full_row(tmp_path: Path) -> None:
 
     # The descriptor footprint carries every named 15.8 descriptor axis.
     assert set(result.descriptor_footprint.keys()) == set(DESCRIPTOR_VECTOR_FIELDS)
+
+    # Task 18.16: the default protocol reads the COMMITTED conviction artifact
+    # dir (a GO verdict), so the row stamps the provenance triple — the term
+    # ships, the weight is named, and the sha keys to the committed instrument.
+    assert result.conviction_fitness_term == "ships"
+    assert result.conviction_weight == DEFAULT_CONVICTION_WEIGHT
+    assert result.conviction_weights_sha256 == _COMMITTED_CONVICTION_SHA256
 
     # The row round-trips through its own jsonl serialization.
     restored = BakeoffResult.model_validate(json.loads(result.to_json_line()))
@@ -682,3 +773,711 @@ def test_rerun_artifacts_carry_the_15_9_provenance_stamp() -> None:
     assert utility_stamp["policy_id"] == CHAMPION_POLICY_ID
     assert utility_stamp["method"] == CHAMPION_METHOD
     assert utility_stamp["anchor_policy"] == CHAMPION_ANCHOR_POLICY
+
+
+# --------------------------------------------------------------------------- #
+# 10. The 18.16 conviction integration + anchor-policy seam.                   #
+#                                                                              #
+# The GO-gated additive conviction term, the referee pre-screen, and the      #
+# additive anchor-policy seam. Fixture-pinned (a synthetic 3-row GO/NO-GO      #
+# artifact under tmp_path) except where the DEFAULT protocol reads the         #
+# committed artifact dir — those pin the committed GO sha literal below.       #
+# --------------------------------------------------------------------------- #
+
+# The committed conviction artifact sha (training/artifacts/conviction/), pinned
+# as a literal so a re-ground that moves the weights trips the default-protocol
+# row-stamp pins HERE (the committed GO verdict is keyed to exactly this).
+_COMMITTED_CONVICTION_SHA256: str = (
+    "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47"
+)
+
+
+def _fixture_features(values: Sequence[float]) -> dict[str, float]:
+    """A per-meeting feature mapping over ``CONVICTION_FEATURE_NAMES`` (order set)."""
+
+    return dict(zip(CONVICTION_FEATURE_NAMES, values, strict=True))
+
+
+def _write_conviction_fixture(
+    artifact_dir: Path, *, go: bool, max_uses: int = 50
+) -> str:
+    """Commit a synthetic 3-row conviction artifact + GO/NO-GO verdict; return sha.
+
+    Three ``ConvictionMeetingRow`` rows (features keyed in
+    ``CONVICTION_FEATURE_NAMES`` order — the validator checks it), fit and frozen
+    exactly as the 18.15 corpus path does, then a directly-constructed
+    :class:`ConvictionGoVerdict` keyed to the frozen sha — GO ⇒ ``fitness_term``
+    "ships" / ``prescreen_role`` "gating"; NO-GO ⇒ "absent" / "advisory". The
+    numbers below are synthetic (this fixture pins the INTEGRATION plumbing, not
+    the model's held-out fidelity — that is ``training/conviction/``'s own suite).
+    """
+
+    rows = [
+        ConvictionMeetingRow(
+            seed=1,
+            game_id="g1",
+            meeting_id="m-1",
+            meeting_index=1,
+            tick=10,
+            features=_fixture_features([3, 0, 0.1, 0.2, 0.0, 0, 0, 0, 0, 0, 0, 0]),
+            flags_minted=0,
+            rederived_flags=0,
+            persisted_vent_flags=0,
+            conversion_attempted=0,
+            conversion_converted=0,
+            testimony_backed_conversion=False,
+            is_ejection=False,
+            ceiling_reachable=False,
+        ),
+        ConvictionMeetingRow(
+            seed=2,
+            game_id="g2",
+            meeting_id="m-2",
+            meeting_index=2,
+            tick=20,
+            features=_fixture_features([5, 1, 0.8, 0.4, 0.3, 2, 1, 1, 0, 0, 1, 1]),
+            flags_minted=2,
+            rederived_flags=2,
+            persisted_vent_flags=0,
+            conversion_attempted=1,
+            conversion_converted=1,
+            testimony_backed_conversion=True,
+            is_ejection=True,
+            ceiling_reachable=True,
+        ),
+        ConvictionMeetingRow(
+            seed=3,
+            game_id="g3",
+            meeting_id="m-3",
+            meeting_index=3,
+            tick=30,
+            features=_fixture_features([7, 2, 0.6, 0.5, 0.1, 3, 0, 0, 2, 1, 0, 0]),
+            flags_minted=5,
+            rederived_flags=3,
+            persisted_vent_flags=2,
+            conversion_attempted=2,
+            conversion_converted=0,
+            testimony_backed_conversion=False,
+            is_ejection=True,
+            ceiling_reachable=False,
+        ),
+    ]
+    model = ConvictionEconomyModel()
+    model.fit(rows)
+    sha = write_conviction_model_artifact(model, artifact_dir, max_uses=max_uses)
+    verdict = ConvictionGoVerdict(
+        replay_set_dir="tests/synthetic",
+        weights_sha256=sha,
+        test_meetings=3,
+        test_ejections=2,
+        conversions_test=1,
+        flag_spearman=0.9 if go else 0.1,
+        spearman_bar=0.5,
+        meets_spearman_bar=go,
+        conversion_recall=0.9 if go else 0.1,
+        voice_driven_share=0.2,
+        conversion_ceiling=0.8,
+        conversion_ceiling_ratio=0.75,
+        conversion_bar=0.6,
+        meets_conversion_bar=go,
+        verdict="GO" if go else "NO-GO",
+        fitness_term="ships" if go else "absent",
+        prescreen_role="gating" if go else "advisory",
+        model_role="training-signal" if go else "diagnostic-only",
+    )
+    write_conviction_verdict_artifact(verdict, artifact_dir)
+    return sha
+
+
+# The two feature mappings the term-in-fitness + pre-screen tests score.
+_MEETING_A: dict[str, float] = _fixture_features(
+    [4, 1, 0.5, 0.3, 0.2, 1, 0, 0, 1, 1, 0, 0]
+)
+_MEETING_B: dict[str, float] = _fixture_features(
+    [6, 2, 0.7, 0.4, 0.1, 2, 1, 1, 0, 0, 1, 1]
+)
+_MEETING_C: dict[str, float] = _fixture_features(
+    [2, 0, 0.1, 0.1, 0.0, 0, 0, 0, 0, 0, 0, 0]
+)
+
+
+# --------------------------------------------------------------------------- #
+# The anchor-policy seam stubs (module-level; each a full BakeoffPolicy).       #
+# --------------------------------------------------------------------------- #
+
+
+class _DelegatingDistributionPolicy:
+    """A candidate that DELEGATES to the FSM but reports a non-delta distribution.
+
+    ``evaluate`` returns the FSM's own intent (so the game trajectory is the FSM
+    delegate's, byte-identical to ``policy=None``), while ``choice_distribution``
+    splits mass ``{fsm_key: 0.25, "wait": 0.75}`` — collapsing to ``{"wait":
+    0.75}`` when the FSM's own key IS ``"wait"``. ``wait_tally`` counts the
+    scored decisions whose FSM proposal was ``wait`` (the alternative-anchor test
+    reads it to prove some FSM decisions were non-wait).
+    """
+
+    encoder_version: str = ENCODER_VERSION
+
+    def __init__(self) -> None:
+        self.wait_tally = 0
+
+    def evaluate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> PolicyFrame:
+        return PolicyFrame(
+            agent_id=packet.agent_id,
+            tick=packet.tick,
+            features=(0.0,),
+            logits=(0.0,),
+            intent=fsm_intent,
+        )
+
+    def choice_distribution(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> Mapping[str, float]:
+        key = intent_key(fsm_intent)
+        if key == "wait":
+            self.wait_tally += 1
+        return {key: 0.25, "wait": 0.75}
+
+
+class _FsmDelegateAnchor:
+    """An anchor policy that IS the scripted FSM proposal (evaluate → fsm_intent).
+
+    Setting this as ``DecisionTrace.anchor_policy`` must be provably byte-
+    identical to the default ``anchor_policy=None`` path (the seam defaults to
+    the scripted FSM). Also serves as a deterministic FSM-delegate CANDIDATE.
+    """
+
+    encoder_version: str = ENCODER_VERSION
+
+    def evaluate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> PolicyFrame:
+        return PolicyFrame(
+            agent_id=packet.agent_id,
+            tick=packet.tick,
+            features=(),
+            logits=(),
+            intent=fsm_intent,
+        )
+
+    def choice_distribution(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> Mapping[str, float]:
+        return {intent_key(fsm_intent): 1.0}
+
+
+class _AlwaysWaitAnchor:
+    """An alternative anchor that always proposes ``wait`` (re-anchors the CE)."""
+
+    encoder_version: str = ENCODER_VERSION
+
+    def evaluate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> PolicyFrame:
+        return PolicyFrame(
+            agent_id=packet.agent_id,
+            tick=packet.tick,
+            features=(),
+            logits=(),
+            intent=WaitIntent(actor=packet.agent_id, type="wait"),
+        )
+
+    def choice_distribution(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> Mapping[str, float]:
+        return {intent_key(fsm_intent): 1.0}
+
+
+def _impostor_packet() -> ObservationPacket:
+    """A minimal synthetic IMPOSTOR packet for the direct-record fail-loud test."""
+
+    return ObservationPacket(
+        tick=5,
+        agent_id="p-1",
+        self_state=SelfView(
+            room="CAFETERIA",
+            role="IMPOSTOR",
+            pending_task_id=None,
+            fellow_impostor_ids=("p-2",),
+        ),
+        visible_players=(PlayerView(id="p-3", room="CAFETERIA", action=None),),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=14,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=0,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 10.2 GO/NO-GO term loading (fixture-pinned).                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_conviction_weight_is_conservative() -> None:
+    # The task-hint conservatism pin: the conviction term ships at a weight at or
+    # below the anchor penalty — the lambda tuning belongs to the campaign, not
+    # this integration.
+    assert DEFAULT_CONVICTION_WEIGHT <= DEFAULT_ANCHOR_PENALTY_WEIGHT
+
+
+def test_load_conviction_term_under_go(tmp_path: Path) -> None:
+    sha = _write_conviction_fixture(tmp_path, go=True)
+    term = load_conviction_fitness_term(tmp_path)
+    assert term is not None
+    assert term.weight == DEFAULT_CONVICTION_WEIGHT
+    assert term.weights_sha256 == sha
+    # The counter the term will meter is keyed to the exact frozen artifact.
+    assert term.use_counter.cap.weights_sha256 == sha
+    assert term.verdict.fitness_term == "ships"
+
+
+def test_load_conviction_term_under_nogo_is_structurally_absent(
+    tmp_path: Path,
+) -> None:
+    _write_conviction_fixture(tmp_path, go=False)
+    # STRUCTURAL absence: the loader returns None (no zero-weighted ghost).
+    assert load_conviction_fitness_term(tmp_path) is None
+
+
+def test_conviction_term_rejects_nogo_verdict(tmp_path: Path) -> None:
+    sha = _write_conviction_fixture(tmp_path, go=False)
+    model, loaded_sha = load_conviction_model_artifact(tmp_path)
+    assert loaded_sha == sha
+    verdict = load_conviction_verdict(tmp_path)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    # Direct construction with a NO-GO verdict can never build the term.
+    with pytest.raises(ValueError, match="GO verdict"):
+        ConvictionFitnessTerm(
+            model=model,
+            weights_sha256=sha,
+            verdict=verdict,
+            use_counter=counter,
+        )
+
+
+def test_conviction_bundle_drift_fails_loud(tmp_path: Path) -> None:
+    _write_conviction_fixture(tmp_path, go=True)
+    # Re-key the committed verdict to a DIFFERENT 64-hex sha: the loader's
+    # bundle drift-check must fail loud (the verdict and weights drifted).
+    drifted = load_conviction_verdict(tmp_path).model_copy(
+        update={"weights_sha256": "0" * 64}
+    )
+    write_conviction_verdict_artifact(drifted, tmp_path)
+    with pytest.raises(ValueError, match="drifted"):
+        load_conviction_fitness_term(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# 10.3 The term composes additively into the inner fitness (fixture-pinned).    #
+# --------------------------------------------------------------------------- #
+
+
+def test_conviction_term_in_inner_fitness(tmp_path: Path) -> None:
+    _write_conviction_fixture(tmp_path, go=True)
+    rollout_dir = tmp_path / "rollout"
+    trace = DecisionTrace()
+    rollout = rollout_candidate(None, 1004, output_dir=rollout_dir, trace=trace)
+    assert rollout.complete  # the additive-composition identity needs a full game
+    base = inner_episode_fitness(rollout, trace)
+
+    term = load_conviction_fitness_term(tmp_path)
+    assert term is not None
+    uses_before = term.use_counter.uses
+    for features in (_MEETING_A, _MEETING_B):
+        trace.record_conviction_prediction(term.predict_meeting(features))
+
+    # The counter advanced by exactly one use per predicted meeting.
+    assert term.use_counter.uses - uses_before == 2
+
+    # The composition is additive and EXACT: base (anchor-composed, conviction
+    # absent) plus the weighted mean predicted supply.
+    assert inner_episode_fitness(rollout, trace, conviction=term) == (
+        base + term.weight * trace.mean_predicted_supply()
+    )
+
+    # The mean predicted supply is the flags head's supply score, recomputed via
+    # a SECOND, unmetered model load (predict does not meter — the term does).
+    unmetered, _ = load_conviction_model_artifact(tmp_path)
+    expected = [
+        unmetered.predict(features).expected_flags
+        for features in (_MEETING_A, _MEETING_B)
+    ]
+    assert trace.mean_predicted_supply() == math.fsum(expected) / 2
+
+
+def test_inner_fitness_has_no_ghost_term_when_conviction_none(tmp_path: Path) -> None:
+    # Under NO-GO the ONLY possibility is conviction=None; the fitness is exactly
+    # the inline anchor formula with no ghost conviction addend.
+    rollout_dir = tmp_path / "rollout"
+    policy = _DelegatingDistributionPolicy()
+    trace = DecisionTrace()
+    rollout = rollout_candidate(policy, 1004, output_dir=rollout_dir, trace=trace)
+    assert rollout.complete
+    expected = (
+        compute_shaped_reward(rollout, "IMPOSTOR").total()
+        - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
+    )
+    assert inner_episode_fitness(rollout, trace) == expected
+
+
+# --------------------------------------------------------------------------- #
+# 10.4 One shared counter threads the cumulative staleness cap.                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_shared_counter_threads_the_cumulative_cap(tmp_path: Path) -> None:
+    _write_conviction_fixture(tmp_path, go=True, max_uses=3)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    term = load_conviction_fitness_term(tmp_path, use_counter=counter)
+    assert term is not None
+
+    # Two predicted meetings through the term, then the third use through the
+    # pre-screen — the SAME counter, cumulative against the committed cap.
+    term.predict_meeting(_MEETING_A)
+    term.predict_meeting(_MEETING_B)
+    conviction_prescreen([_MEETING_C], artifact_dir=tmp_path, use_counter=counter)
+    assert counter.uses == 3
+
+    # A fourth use — either path — trips the staleness cap.
+    with pytest.raises(ConvictionStalenessExceededError):
+        term.predict_meeting(_MEETING_A)
+
+
+def test_shared_counter_rejects_wrong_sha_and_looser_cap(tmp_path: Path) -> None:
+    sha = _write_conviction_fixture(tmp_path, go=True, max_uses=3)
+
+    # A counter keyed on a DIFFERENT sha never meters this artifact.
+    wrong_sha = ConvictionUseCounter(
+        ConvictionStalenessCap(weights_sha256="0" * 64, max_uses=3, unit="meetings")
+    )
+    with pytest.raises(ValueError, match="never meters two artifacts"):
+        load_conviction_fitness_term(tmp_path, use_counter=wrong_sha)
+
+    # A supplied counter may TIGHTEN the committed cap, never LOOSEN it.
+    looser = ConvictionUseCounter(
+        ConvictionStalenessCap(weights_sha256=sha, max_uses=4, unit="meetings")
+    )
+    with pytest.raises(ValueError, match="never loosen"):
+        load_conviction_fitness_term(tmp_path, use_counter=looser)
+
+
+# --------------------------------------------------------------------------- #
+# 10.5 The additive anchor-policy seam.                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_anchor_seam_fsm_delegate_is_byte_identical(tmp_path: Path) -> None:
+    default_trace = DecisionTrace()
+    default_rollout = rollout_candidate(
+        _DelegatingDistributionPolicy(),
+        1004,
+        output_dir=tmp_path / "default",
+        trace=default_trace,
+    )
+    fsm_trace = DecisionTrace(anchor_policy=_FsmDelegateAnchor())
+    fsm_rollout = rollout_candidate(
+        _DelegatingDistributionPolicy(),
+        1004,
+        output_dir=tmp_path / "fsm",
+        trace=fsm_trace,
+    )
+
+    # The seam defaults to the scripted FSM: an explicit FSM-delegate anchor is
+    # provably byte-identical (==) to anchor_policy=None on every scored number.
+    assert default_trace.anchor_ce_sum == fsm_trace.anchor_ce_sum
+    assert default_trace.offmenu_decisions == fsm_trace.offmenu_decisions
+    assert default_trace.agreement_hits == fsm_trace.agreement_hits
+    assert inner_episode_fitness(default_rollout, default_trace) == (
+        inner_episode_fitness(fsm_rollout, fsm_trace)
+    )
+
+
+def test_anchor_seam_alternative_anchor_rekeys_ce_not_agreement(
+    tmp_path: Path,
+) -> None:
+    fsm_trace = DecisionTrace(anchor_policy=_FsmDelegateAnchor())
+    rollout_candidate(
+        _DelegatingDistributionPolicy(),
+        1004,
+        output_dir=tmp_path / "fsm",
+        trace=fsm_trace,
+    )
+    wait_candidate = _DelegatingDistributionPolicy()
+    wait_trace = DecisionTrace(anchor_policy=_AlwaysWaitAnchor())
+    wait_rollout = rollout_candidate(
+        wait_candidate,
+        1004,
+        output_dir=tmp_path / "wait",
+        trace=wait_trace,
+    )
+    assert wait_rollout.complete
+    assert wait_trace.scored_decisions > 0
+
+    # Under the always-wait anchor every scored decision keys on the "wait" mass
+    # (0.75, merged or not), so the CE is scored_decisions × -log(0.75) EXACTLY
+    # (reproduced by summing the identical addend in a loop).
+    reproduced = 0.0
+    for _ in range(wait_trace.scored_decisions):
+        reproduced += -math.log(0.75)
+    assert wait_trace.anchor_ce_sum == reproduced
+    assert wait_trace.offmenu_decisions == 0
+
+    # Some FSM decisions were non-wait (scored > the wait tally), so the re-keyed
+    # CE genuinely DIFFERS from the FSM-anchored run's.
+    assert wait_trace.scored_decisions > wait_candidate.wait_tally
+    assert wait_trace.anchor_ce_sum != fsm_trace.anchor_ce_sum
+
+    # Agreement stays FSM-keyed regardless of the anchor policy — it must not
+    # silently re-anchor onto the alternative.
+    assert wait_trace.agreement_hits == fsm_trace.agreement_hits
+
+    # The fitness delta is exactly the anchor-penalty term's re-keyed difference
+    # (same rollout ⇒ the shaped reward cancels bit-for-bit).
+    assert inner_episode_fitness(wait_rollout, wait_trace) - inner_episode_fitness(
+        wait_rollout, fsm_trace
+    ) == -DEFAULT_ANCHOR_PENALTY_WEIGHT * (
+        wait_trace.mean_anchor_ce() - fsm_trace.mean_anchor_ce()
+    )
+
+
+def test_anchor_seam_requires_public_map_and_memory() -> None:
+    # An alternative anchor policy needs the map + memory to evaluate; record()
+    # fails loud when they are omitted (never a silent skip of the re-anchor).
+    trace = DecisionTrace(anchor_policy=_AlwaysWaitAnchor())
+    wait = WaitIntent(actor="p-1", type="wait")
+    with pytest.raises(ValueError, match="anchor_policy"):
+        trace.record(
+            _impostor_packet(),
+            fsm_intent=wait,
+            chosen=wait,
+            distribution=None,
+        )
+
+
+# --------------------------------------------------------------------------- #
+# 10.6 The referee pre-screen (fixture-pinned).                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_conviction_prescreen_under_go(tmp_path: Path) -> None:
+    sha = _write_conviction_fixture(tmp_path, go=True)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    features = [_MEETING_A, _MEETING_B, _MEETING_C]
+    verdict = conviction_prescreen(features, artifact_dir=tmp_path, use_counter=counter)
+
+    assert verdict.weights_sha256 == sha
+    assert verdict.meetings_scored == 3
+    assert verdict.conviction_uses == 3
+
+    # The predicted flags density is the unmetered recompute's fsum mean (exact).
+    unmetered, _ = load_conviction_model_artifact(tmp_path)
+    expected_flags = [unmetered.predict(f).expected_flags for f in features]
+    assert verdict.predicted_flags_per_meeting == math.fsum(expected_flags) / 3
+
+    # The floors are the committed baseline-6 pins consumed as NUMBERS. The
+    # conversion anchor is the PER-MEETING unit (the model's native label unit;
+    # the referee's converted/attempted pair gauge is structurally not
+    # predictable): the pair pin's numerator (78 converted backed accusations —
+    # one ejection per meeting, so 78 converting meetings) over the same
+    # committed 165-meeting census the flags floor reads.
+    assert verdict.flags_floor == PRESCREEN_FLAGS_PER_MEETING_FLOOR == 180 / 165
+    assert verdict.conversion_pin == PRESCREEN_CONVERSION_PIN == 78 / 165
+
+    # The conversion floor derives population-relative from the PREDICTED flags
+    # density via the public eval.watchability derivation.
+    assert verdict.conversion_floor == population_relative_conversion_floor(
+        pinned_conversion=78 / 165,
+        pinned_flags_per_meeting=180 / 165,
+        measured_flags_per_meeting=verdict.predicted_flags_per_meeting,
+    )
+
+    # The expected converting share (mean conversion probability) is REPORTED
+    # beside the thresholded channel — the exact unmetered-recompute mean —
+    # and is never a pass input (the pass bits below read only the thresholded
+    # share): the gated channel stays the pinned-threshold call, the model's
+    # only verdict-validated operating point.
+    conversion_probs = [unmetered.predict(f).conversion_prob for f in features]
+    assert verdict.predicted_mean_conversion_prob == math.fsum(conversion_probs) / 3
+
+    # The pass bits are the literal comparisons and the verdict is their AND.
+    assert verdict.predicted_flags_pass == (
+        verdict.predicted_flags_per_meeting >= verdict.flags_floor
+    )
+    assert verdict.predicted_conversion_pass == (
+        verdict.predicted_converting_share >= verdict.conversion_floor
+    )
+    assert verdict.predicted_floors_pass == (
+        verdict.predicted_flags_pass and verdict.predicted_conversion_pass
+    )
+
+    # Under GO the pre-screen GATES (advisory_only is False).
+    assert verdict.model_verdict == "GO"
+    assert verdict.prescreen_role == "gating"
+    assert verdict.advisory_only is False
+
+
+def test_conviction_prescreen_under_nogo_is_advisory_only(tmp_path: Path) -> None:
+    _write_conviction_fixture(tmp_path, go=False)
+    verdict = conviction_prescreen([_MEETING_A], artifact_dir=tmp_path)
+    # Advisory-only doctrine: a driver must never gate real-path spend on it.
+    assert verdict.model_verdict == "NO-GO"
+    assert verdict.prescreen_role == "advisory"
+    assert verdict.advisory_only is True
+
+
+def test_conviction_prescreen_empty_batch_is_the_starvation_fail(
+    tmp_path: Path,
+) -> None:
+    # An empty batch is the evidence-STARVATION verdict, not an exception (the
+    # referee's own doctrine: starvation is not a pass —
+    # eval/watchability.py::evaluate_supply_floors): the driver gets a
+    # machine-readable FAILING verdict it can cheaply reject on.
+    sha = _write_conviction_fixture(tmp_path, go=True)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    verdict = conviction_prescreen([], artifact_dir=tmp_path, use_counter=counter)
+
+    assert verdict.weights_sha256 == sha
+    assert verdict.meetings_scored == 0
+    # Nothing was predicted, so nothing was metered.
+    assert verdict.conviction_uses == 0
+    assert counter.uses == 0
+    # Every predicted channel reads 0.0 and the derived conversion demand is
+    # the maximal 1.0 (the population_relative_conversion_floor starvation
+    # shape); both floors FAIL unconditionally.
+    assert verdict.predicted_flags_per_meeting == 0.0
+    assert verdict.predicted_converting_share == 0.0
+    assert verdict.predicted_mean_conversion_prob == 0.0
+    assert verdict.conversion_floor == 1.0
+    assert verdict.predicted_flags_pass is False
+    assert verdict.predicted_conversion_pass is False
+    assert verdict.predicted_floors_pass is False
+    # The role fields still ride the committed verdict (GO fixture: gating).
+    assert verdict.prescreen_role == "gating"
+    assert verdict.advisory_only is False
+
+
+# --------------------------------------------------------------------------- #
+# 10.7 The row stamps the conviction provenance triple.                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_evaluate_candidate_row_says_absent_under_nogo(tmp_path: Path) -> None:
+    conviction_dir = tmp_path / "conviction-nogo"
+    sha = _write_conviction_fixture(conviction_dir, go=False)
+    candidate = TrainedCandidate(
+        entrant="nogo-row-probe",
+        policy=_FsmDelegateAnchor(),
+        weights=(0.0,),
+        config={"entrant": "nogo-row-probe"},
+    )
+    protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        repeat_n=2,
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=conviction_dir,
+    )
+    result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
+
+    # The row says the term is STRUCTURALLY absent: "absent", weight None, and
+    # the sha still keys to the (diagnostic-only) instrument the rows describe.
+    assert result.conviction_fitness_term == "absent"
+    assert result.conviction_weight is None
+    assert result.conviction_weights_sha256 == sha
+
+
+# --------------------------------------------------------------------------- #
+# 10.8 Review hardening: delivered-use metering + drift-checked row stamping.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_conviction_uses_charge_only_delivered_predictions(tmp_path: Path) -> None:
+    # The cap's pinned unit is a DELIVERED prediction (PR #304 review): a
+    # malformed feature mapping fail-louds out of the model without burning
+    # quota, on both the term path and the pre-screen path.
+    _write_conviction_fixture(tmp_path, go=True)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    term = load_conviction_fitness_term(tmp_path, use_counter=counter)
+    assert term is not None
+
+    malformed = dict(_MEETING_A)
+    del malformed["alive_count"]
+    with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
+        term.predict_meeting(malformed)
+    assert counter.uses == 0  # the failed prediction charged nothing
+
+    term.predict_meeting(_MEETING_A)
+    assert counter.uses == 1  # the delivered prediction charged exactly one
+
+    # Mid-batch pre-screen failure: the completed prediction stays charged,
+    # the malformed one does not, and no verdict is emitted.
+    with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
+        conviction_prescreen(
+            [_MEETING_B, malformed], artifact_dir=tmp_path, use_counter=counter
+        )
+    assert counter.uses == 2
+
+
+def test_evaluate_candidate_rejects_drifted_conviction_bundle(tmp_path: Path) -> None:
+    # Row provenance must describe a bundle a trainer could actually LOAD: a
+    # partially-updated artifact dir (verdict re-keyed off the weights) fails
+    # the eval BEFORE any side effects instead of stamping stale rows.
+    conviction_dir = tmp_path / "conviction-drifted"
+    _write_conviction_fixture(conviction_dir, go=True)
+    drifted = load_conviction_verdict(conviction_dir).model_copy(
+        update={"weights_sha256": "0" * 64}
+    )
+    write_conviction_verdict_artifact(drifted, conviction_dir)
+    candidate = TrainedCandidate(
+        entrant="drift-row-probe",
+        policy=_FsmDelegateAnchor(),
+        weights=(0.0,),
+        config={"entrant": "drift-row-probe"},
+    )
+    protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,),
+        determinism_seeds=(1004,),
+        surrogate_artifact_dir=None,
+        conviction_artifact_dir=conviction_dir,
+    )
+    with pytest.raises(ValueError, match="drifted"):
+        evaluate_candidate(candidate, protocol, artifact_root=tmp_path)

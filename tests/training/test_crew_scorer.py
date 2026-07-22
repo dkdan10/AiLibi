@@ -19,7 +19,12 @@ Pins the definition-of-done contract for :mod:`training.crew.scorer`:
   the leak-test factory mode the observable-only DoD names;
 * the entrant-side menu module keeps the 15.15 import firewall: no ``eval.*``
   import may appear in :mod:`training.crew.options` (the harness-twin in
-  ``scorer.py`` is the one module that computes reported metrics).
+  ``scorer.py`` is the one module that computes reported metrics);
+* the Task 18.16 conviction seam threads the SAME shared
+  :class:`~training.bakeoff.harness.ConvictionFitnessTerm` object into the crew
+  inner fitness (one counter, both sides): GO adds the term additively, NO-GO
+  leaves it structurally absent (``conviction=None``, never zero-weighted), and
+  the eval row stamps the conviction provenance triple.
 """
 
 from __future__ import annotations
@@ -60,12 +65,29 @@ from observation.packet import (
 from observation.public_map import PublicMapView, RoomId
 from orchestrator.game import TacticalAgent
 from training.bakeoff.harness import (
+    DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    DEFAULT_CONVICTION_WEIGHT,
     TRUNCATED_EPISODE_FITNESS,
     BakeoffPolicy,
     TrainedCandidate,
     intent_key,
     load_candidate_weights,
+    load_conviction_fitness_term,
+    load_train_seeds,
     write_candidate_artifact,
+)
+from training.conviction.dataset import (
+    CONVICTION_FEATURE_NAMES,
+    ConvictionMeetingRow,
+)
+from training.conviction.fidelity import (
+    ConvictionGoVerdict,
+    load_conviction_verdict,
+    write_conviction_verdict_artifact,
+)
+from training.conviction.model import (
+    ConvictionEconomyModel,
+    write_conviction_model_artifact,
 )
 from training.crew.options import (
     CREW_OPTION_KINDS,
@@ -90,6 +112,7 @@ from training.crew.scorer import (
 )
 from training.determinism import FramePolicy
 from training.env import TacticalRolloutEnv
+from training.rewards import compute_shaped_reward
 
 _STAR_MAP = PublicMapView(
     map_id="test_map",
@@ -165,6 +188,100 @@ def _self_state_event(
         payload={"room": room, "pending_task_id": pending_task_id},
         provenance=PROVENANCE_OBSERVED,
     )
+
+
+# The Task 18.16 fixture-row feature vectors (12 columns, in
+# CONVICTION_FEATURE_NAMES order — the row validator checks key ORDER). Varied
+# across rows so both fitted heads see non-degenerate columns.
+_CONVICTION_FIXTURE_FEATURE_VALUES: tuple[tuple[float, ...], ...] = (
+    (7.0, 0.0, 0.30, 0.20, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+    (6.0, 1.0, 0.60, 0.40, 0.15, 2.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+    (5.0, 2.0, 0.90, 0.55, 0.25, 3.0, 2.0, 1.0, 2.0, 1.0, 1.0, 1.0),
+)
+# One in-vocabulary feature mapping to score at predict time.
+_CONVICTION_PREDICT_FEATURES: dict[str, float] = dict(
+    zip(
+        CONVICTION_FEATURE_NAMES,
+        (6.0, 1.0, 0.5, 0.35, 0.1, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0),
+        strict=True,
+    )
+)
+
+
+def _write_conviction_fixture(
+    artifact_dir: Path, *, go: bool, max_uses: int = 50
+) -> str:
+    """Write a committed conviction bundle (weights + cap + verdict) — GO or NO-GO.
+
+    Three synthetic :class:`ConvictionMeetingRow` rows fit a real
+    :class:`ConvictionEconomyModel`, sha-keyed to a directly-constructed
+    :class:`ConvictionGoVerdict` whose consequence triple follows ``go``. Returns
+    the committed weights sha256 so the caller can pin the row's provenance.
+    """
+
+    rows: list[ConvictionMeetingRow] = [
+        ConvictionMeetingRow(
+            seed=9000 + index,
+            game_id=f"synthetic-{index}",
+            meeting_id=f"seed9000-meeting-{index}",
+            meeting_index=index,
+            tick=10 + index,
+            features=dict(zip(CONVICTION_FEATURE_NAMES, values, strict=True)),
+            flags_minted=rederived + persisted_vent,
+            rederived_flags=rederived,
+            persisted_vent_flags=persisted_vent,
+            conversion_attempted=attempted,
+            conversion_converted=converted,
+            testimony_backed_conversion=converted > 0,
+            is_ejection=is_ejection,
+            ceiling_reachable=ceiling_reachable,
+        )
+        for index, (
+            values,
+            rederived,
+            persisted_vent,
+            attempted,
+            converted,
+            is_ejection,
+            ceiling_reachable,
+        ) in enumerate(
+            zip(
+                _CONVICTION_FIXTURE_FEATURE_VALUES,
+                (0, 2, 3),  # rederived_flags
+                (0, 0, 2),  # persisted_vent_flags
+                (0, 1, 2),  # conversion_attempted
+                (0, 1, 0),  # conversion_converted
+                (False, True, True),  # is_ejection
+                (False, True, False),  # ceiling_reachable
+                strict=True,
+            )
+        )
+    ]
+    model = ConvictionEconomyModel()
+    model.fit(rows)
+    sha = write_conviction_model_artifact(model, artifact_dir, max_uses=max_uses)
+    verdict = ConvictionGoVerdict(
+        replay_set_dir="tests/synthetic",
+        weights_sha256=sha,
+        test_meetings=3,
+        test_ejections=2,
+        conversions_test=1,
+        flag_spearman=0.9 if go else 0.1,
+        spearman_bar=0.5,
+        meets_spearman_bar=go,
+        conversion_recall=0.9 if go else 0.1,
+        voice_driven_share=0.2,
+        conversion_ceiling=0.8,
+        conversion_ceiling_ratio=0.75,
+        conversion_bar=0.6,
+        meets_conversion_bar=go,
+        verdict="GO" if go else "NO-GO",
+        fitness_term="ships" if go else "absent",
+        prescreen_role="gating" if go else "advisory",
+        model_role="training-signal" if go else "diagnostic-only",
+    )
+    write_conviction_verdict_artifact(verdict, artifact_dir)
+    return sha
 
 
 # --------------------------------------------------------------------------- #
@@ -583,6 +700,15 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     assert reloaded == candidate.weights
     assert len(result.weights_sha256) == 64
 
+    # Task 18.16: the committed GO verdict stamps the conviction provenance
+    # triple — the term ships, the named weight, and the committed sha.
+    assert result.conviction_fitness_term == "ships"
+    assert result.conviction_weight == DEFAULT_CONVICTION_WEIGHT
+    assert (
+        result.conviction_weights_sha256
+        == "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47"
+    )
+
     # The row serializes to one jsonl line and round-trips.
     line = result.to_json_line()
     parsed = json.loads(line)
@@ -607,6 +733,149 @@ def test_evaluate_crew_candidate_rejects_foreign_policy(tmp_path: Path) -> None:
     protocol = CrewProtocolConfig(eval_seeds=(1000,))
     with pytest.raises(ValueError, match="crew-track policy"):
         evaluate_crew_candidate(candidate, protocol, artifact_root=tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# 7. The Task 18.16 GO-gated conviction term on the crew inner fitness.         #
+# --------------------------------------------------------------------------- #
+
+
+def test_crew_conviction_term_threads_the_shared_object(tmp_path: Path) -> None:
+    """A GO term adds ``weight × mean predicted supply`` to the crew fitness.
+
+    The SAME shared :class:`ConvictionFitnessTerm` type both fitness sides take:
+    metering ``predict_meeting`` advances the one counter, and composing the
+    crew fitness with ``conviction=term`` adds exactly the recorded mean supply.
+    """
+
+    fixture_dir = tmp_path / "conviction"
+    _write_conviction_fixture(fixture_dir, go=True)
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        None, load_train_seeds()[0], output_dir=tmp_path / "roll", trace=trace
+    )
+    assert rollout.complete
+    base = crew_inner_episode_fitness(rollout, trace)
+
+    term = load_conviction_fitness_term(fixture_dir)
+    assert term is not None
+    start_uses = term.use_counter.uses
+    for _ in range(2):
+        trace.record_conviction_prediction(
+            term.predict_meeting(_CONVICTION_PREDICT_FEATURES)
+        )
+    # The one shared counter advanced by exactly the two metered meetings.
+    assert term.use_counter.uses == start_uses + 2
+    assert trace.conviction_meetings == 2
+
+    combined = crew_inner_episode_fitness(rollout, trace, conviction=term)
+    assert combined == base + term.weight * trace.mean_predicted_supply()
+
+
+def test_crew_conviction_term_absent_under_no_go(tmp_path: Path) -> None:
+    """NO-GO: the loader returns None and the fitness is the inline anchor form.
+
+    Structural absence, not a zero-weighted ghost — ``conviction=None`` is
+    byte-identical to the bare two-term formula.
+    """
+
+    fixture_dir = tmp_path / "conviction"
+    _write_conviction_fixture(fixture_dir, go=False)
+    assert load_conviction_fitness_term(fixture_dir) is None
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        None, load_train_seeds()[0], output_dir=tmp_path / "roll", trace=trace
+    )
+    assert rollout.complete
+    expected = (
+        compute_shaped_reward(rollout, "CREWMATE").total()
+        - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
+    )
+    assert crew_inner_episode_fitness(rollout, trace, conviction=None) == expected
+    assert crew_inner_episode_fitness(rollout, trace) == expected
+
+
+def test_crew_trace_fold_includes_conviction_accumulators(tmp_path: Path) -> None:
+    """``CrewDecisionTrace.fold`` sums the conviction supply + meeting counters."""
+
+    fixture_dir = tmp_path / "conviction"
+    _write_conviction_fixture(fixture_dir, go=True)
+    term = load_conviction_fitness_term(fixture_dir)
+    assert term is not None
+
+    trace_a = CrewDecisionTrace()
+    trace_a.record_conviction_prediction(
+        term.predict_meeting(_CONVICTION_PREDICT_FEATURES)
+    )
+    trace_b = CrewDecisionTrace()
+    for _ in range(2):
+        trace_b.record_conviction_prediction(
+            term.predict_meeting(_CONVICTION_PREDICT_FEATURES)
+        )
+
+    folded = CrewDecisionTrace()
+    folded.fold(trace_a)
+    folded.fold(trace_b)
+    assert folded.conviction_meetings == 3
+    assert (
+        folded.conviction_supply_sum
+        == trace_a.conviction_supply_sum + trace_b.conviction_supply_sum
+    )
+
+
+def test_evaluate_crew_candidate_no_go_row(tmp_path: Path) -> None:
+    """A NO-GO fixture stamps ``absent`` / None weight / the fixture sha.
+
+    The cheap mirror of :func:`test_evaluate_crew_candidate_full_row`'s
+    conviction pins: the FSM baseline over the smallest viable protocol, keyed
+    to a tmp_path NO-GO bundle.
+    """
+
+    game_map = load_canonical_map()
+    fixture_dir = tmp_path / "conviction"
+    sha = _write_conviction_fixture(fixture_dir, go=False)
+    protocol = CrewProtocolConfig(
+        eval_seeds=(1000,),
+        determinism_seeds=(1000,),
+        repeat_n=2,
+        conviction_artifact_dir=fixture_dir,
+    )
+    result = evaluate_crew_candidate(
+        fsm_baseline_candidate(),
+        protocol,
+        artifact_root=tmp_path / "artifacts",
+        game_map=game_map,
+    )
+    assert result.conviction_fitness_term == "absent"
+    assert result.conviction_weight is None
+    assert result.conviction_weights_sha256 == sha
+
+
+def test_evaluate_crew_candidate_rejects_drifted_conviction_bundle(
+    tmp_path: Path,
+) -> None:
+    # The crew twin of the impostor row's drift refusal (PR #304 review): a
+    # partially-updated conviction dir (verdict re-keyed off the weights)
+    # fails the crew eval BEFORE any side effects instead of stamping stale
+    # row provenance.
+    conviction_dir = tmp_path / "conviction-drifted"
+    _write_conviction_fixture(conviction_dir, go=True)
+    drifted = load_conviction_verdict(conviction_dir).model_copy(
+        update={"weights_sha256": "0" * 64}
+    )
+    write_conviction_verdict_artifact(drifted, conviction_dir)
+    protocol = CrewProtocolConfig(
+        eval_seeds=(1000,),
+        determinism_seeds=(1000,),
+        repeat_n=2,
+        conviction_artifact_dir=conviction_dir,
+    )
+    with pytest.raises(ValueError, match="drifted"):
+        evaluate_crew_candidate(
+            fsm_baseline_candidate(), protocol, artifact_root=tmp_path / "artifacts"
+        )
 
 
 def test_body_saw_event_constant_is_pinned() -> None:

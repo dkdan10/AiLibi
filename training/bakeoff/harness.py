@@ -29,6 +29,25 @@ entrant modules own nothing that is reported:
    rows 15.18 consumes); candidate weights freeze under
    ``training/artifacts/impostor/`` as float-hex JSON + sha256 sidecars.
 
+Task 18.16 wires the frozen conviction-economy model (Task 18.15) into this
+harness as a GO-gated additive fitness term. Under the committed GO verdict
+(``training/artifacts/conviction/verdict.json``) :func:`load_conviction_fitness_term`
+returns a :class:`ConvictionFitnessTerm` — a named, weighted,
+sha-keyed-counter-metered term (the anchor-CE integration is its template) —
+that :func:`inner_episode_fitness` adds on both this side and, through the SAME
+object, the crew side (``training/crew/scorer.py``); under NO-GO the term is
+STRUCTURALLY ABSENT (the loader returns ``None``, callers pass
+``conviction=None`` — never a zero-weighted ghost). The per-meeting feature
+mappings are CALLER-SUPPLIED over ``CONVICTION_FEATURE_NAMES`` (the live
+kill/body serving seam lands with the campaign driver's serving path, not here);
+:func:`conviction_prescreen` is the machine-readable predicted-floors verdict the
+18.21 campaign driver consumes before spending real-path evals (advisory-only
+under NO-GO). The task also adds the additive anchor-policy seam on
+:class:`DecisionTrace` (default: the scripted FSM proposal, byte-identical when
+unset; the 18.5 filtered-BC artifact is the intended alternative). ONE
+:class:`ConvictionUseCounter` per run threads through both fitness sides and the
+pre-screen, so the committed staleness cap is cumulative.
+
 A determinism-harness FAIL never drops a row: the row is marked
 ``tier="experiment"`` and carries the full
 :class:`~training.determinism.PolicyDeterminismReport` plus an N-repeat metric
@@ -72,7 +91,11 @@ from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
 from eval.leak_test import scan_factory_packets
 from eval.validity import run_validity_gate
-from eval.watchability import WatchabilityReport, compute_watchability
+from eval.watchability import (
+    WatchabilityReport,
+    compute_watchability,
+    population_relative_conversion_floor,
+)
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.action_intent import ActionIntent, KillIntent
 from observation.packet import ObservationPacket
@@ -90,6 +113,18 @@ from training.bakeoff.goodhart import (
     GoodhartProbeReport,
     MeetingRunnerFactory,
     run_goodhart_probe,
+)
+from training.conviction.fidelity import (
+    CONVICTION_CONVERSION_DECISION_THRESHOLD,
+    ConvictionGoVerdict,
+    load_conviction_verdict,
+)
+from training.conviction.model import (
+    ConvictionEconomyModel,
+    ConvictionPrediction,
+    ConvictionUseCounter,
+    load_conviction_model_artifact,
+    load_conviction_staleness_cap,
 )
 from training.determinism import (
     PolicyDeterminismReport,
@@ -187,6 +222,40 @@ GOODHART_9P2I_BASELINE: Final[Mapping[str, float | str]] = {
     "strongest_reachable_tactic": "report",
     "verdict": "HELD",
 }
+
+# --------------------------------------------------------------------------- #
+# The 18.16 conviction integration constants (GO-gated; stated before any run). #
+# --------------------------------------------------------------------------- #
+
+# The conservative default weight of the conviction supply term in the SHARED
+# inner fitness — <= DEFAULT_ANCHOR_PENALTY_WEIGHT (1.0) by design; the lambda/
+# weight tuning belongs to the 18.24 campaign protocol, not this integration
+# (task hint), so this integration ships the conservative floor.
+DEFAULT_CONVICTION_WEIGHT: Final[float] = 0.5
+
+# The committed 18.15 conviction artifact dir: weights + sha256 sidecar +
+# staleness cap + the machine-readable GO/NO-GO verdict this integration
+# branches on (never a prose reading of the report).
+CONVICTION_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/conviction")
+
+# The baseline-6 9p2i referee pins the pre-screen's predicted floors derive from
+# (eval/watchability.py:817-823, the Task-18.12 pins). Consumed as committed
+# NUMBERS — the pin-as-committed-ratio precedent is
+# ``training/anchor_study.py::HIGH_FLAG_FLOOR`` (lines 154-165); neither is
+# re-measured here.
+PRESCREEN_FLAGS_PER_MEETING_FLOOR: Final[float] = 180 / 165
+# The baseline-6 9p2i conversion anchor in the PER-MEETING unit. The referee's
+# own pin is the PAIR gauge (78/136 converted/attempted backed accusations),
+# which the model structurally cannot predict — its fitted label
+# (``testimony_backed_conversion``) is per-MEETING and it has no "attempted"
+# head — so the pre-screen anchors on the baseline's own converting-MEETING
+# share instead: the SAME committed numerator (78 converted backed accusations;
+# a meeting ejects at most once, so 78 converting meetings) over the SAME
+# committed 165-meeting census the flags floor reads (eval/watchability.py
+# baseline-6 9p2i comments). Like units on both sides; the evaluated floor
+# derives population-relative from the PREDICTED flags density via the public
+# ``eval.watchability.population_relative_conversion_floor`` derivation.
+PRESCREEN_CONVERSION_PIN: Final[float] = 78 / 165
 
 _ROSTER_FILENAME: Final[str] = "roster.json"
 _WEIGHTS_FILENAME: Final[str] = "weights.json"
@@ -332,13 +401,24 @@ DecisionCallback: TypeAlias = Callable[
 class DecisionTrace:
     """Accumulators over one (or many) rollouts' impostor decisions.
 
-    ``anchor_ce_sum`` accumulates ``-log P(candidate emits the FSM's choice)``
+    ``anchor_ce_sum`` accumulates ``-log P(candidate emits the ANCHOR's choice)``
     per decision (clamped at ``-log ANCHOR_CE_EPSILON``; clamped decisions are
     tallied in ``offmenu_decisions``). ``opportunities`` / ``kills_taken``
     implement the take-rate the planning audit §4.3 measured: a CLEAN
     opportunity is an impostor decision with ``cooldown == 0`` and exactly one
     visible non-teammate co-located (no crew witness), and a take is a kill
     emitted against that target.
+
+    ``anchor_policy`` (Task 18.16) is the additive anchor seam: when unset
+    (the default) the anchor is the scripted FSM proposal itself and every
+    number is byte-identical to today; when set, the CE keys on that policy's
+    proposal instead (require ``public_map`` + ``memory`` on :meth:`record`) —
+    the 18.5 filtered-BC artifact is the intended alternative, and 18.24's
+    refined-anchor entrant is the seam's second consumer. ``agreement_hits``
+    stays keyed on the FSM proposal regardless (the row metric
+    ``fsm_intent_agreement`` must not silently re-anchor).
+    ``conviction_supply_sum`` / ``conviction_meetings`` accumulate the 18.16
+    conviction term's predicted-supply signal (:meth:`record_conviction_prediction`).
     """
 
     impostor_decisions: int = 0
@@ -348,6 +428,9 @@ class DecisionTrace:
     agreement_hits: int = 0
     opportunities: int = 0
     kills_taken: int = 0
+    conviction_supply_sum: float = 0.0
+    conviction_meetings: int = 0
+    anchor_policy: BakeoffPolicy | None = None
 
     def record(
         self,
@@ -356,9 +439,30 @@ class DecisionTrace:
         fsm_intent: ActionIntent,
         chosen: ActionIntent,
         distribution: Mapping[str, float] | None,
+        public_map: PublicMapView | None = None,
+        memory: AgentMemory | None = None,
     ) -> None:
         self.impostor_decisions += 1
-        anchor_key = intent_key(fsm_intent)
+        if self.anchor_policy is None:
+            # TODAY'S behavior, bit-for-bit: the anchor IS the scripted FSM
+            # proposal, so anchor_key == the FSM key and nothing re-anchors.
+            anchor_intent = fsm_intent
+        else:
+            if public_map is None or memory is None:
+                missing = [
+                    name
+                    for name, value in (("public_map", public_map), ("memory", memory))
+                    if value is None
+                ]
+                raise ValueError(
+                    "DecisionTrace.record needs "
+                    f"{' and '.join(missing)} to evaluate the configured "
+                    "anchor_policy"
+                )
+            anchor_intent = self.anchor_policy.evaluate(
+                packet, public_map, memory, fsm_intent=fsm_intent
+            ).intent
+        anchor_key = intent_key(anchor_intent)
         if distribution is not None:
             self.scored_decisions += 1
             probability = distribution.get(anchor_key, 0.0)
@@ -366,7 +470,10 @@ class DecisionTrace:
                 probability = ANCHOR_CE_EPSILON
                 self.offmenu_decisions += 1
             self.anchor_ce_sum += -math.log(probability)
-        if intent_key(chosen) == anchor_key:
+        # agreement_hits is the ``fsm_intent_agreement`` row metric: the
+        # FSM-agreement read must NOT silently re-anchor onto an alternative
+        # anchor policy, so it stays keyed on the FSM's own proposal.
+        if intent_key(chosen) == intent_key(fsm_intent):
             self.agreement_hits += 1
 
         own_room = packet.self_state.room
@@ -396,6 +503,29 @@ class DecisionTrace:
         if self.opportunities == 0:
             return None
         return self.kills_taken / self.opportunities
+
+    def record_conviction_prediction(self, prediction: ConvictionPrediction) -> None:
+        """Accumulate one predicted meeting's supply score (Task 18.16).
+
+        ``expected_flags`` is the flags head's real-valued SUPPLY score (per
+        ``training/conviction/model.py``'s docstring — the predicted-supply the
+        conviction term rewards). One call per model-predicted meeting; the
+        metering is the caller's (via :class:`ConvictionFitnessTerm`).
+        """
+
+        self.conviction_supply_sum += prediction.expected_flags
+        self.conviction_meetings += 1
+
+    def mean_predicted_supply(self) -> float:
+        """Mean predicted supply over recorded meetings (0.0 when none).
+
+        A no-meeting episode carries no supply signal, so the term contributes
+        exactly 0.0 — documented, never a silent NaN from a zero divide.
+        """
+
+        if self.conviction_meetings == 0:
+            return 0.0
+        return self.conviction_supply_sum / self.conviction_meetings
 
 
 class _CandidateAgent:
@@ -466,6 +596,8 @@ class _CandidateAgent:
                 fsm_intent=fsm_intent,
                 chosen=chosen,
                 distribution=distribution,
+                public_map=public_map,
+                memory=memory,
             )
         if self._on_decision is not None:
             self._on_decision(packet, public_map, memory, fsm_intent, chosen)
@@ -574,20 +706,216 @@ def rollout_candidate(
     )
 
 
+# --------------------------------------------------------------------------- #
+# The GO-gated conviction fitness term (Task 18.16).                            #
+# --------------------------------------------------------------------------- #
+
+
+def _load_conviction_bundle(
+    artifact_dir: Path,
+    use_counter: ConvictionUseCounter | None,
+) -> tuple[ConvictionEconomyModel, str, ConvictionUseCounter, ConvictionGoVerdict]:
+    """Load the committed conviction bundle, sha-verified and drift-checked.
+
+    Shared by :func:`load_conviction_fitness_term` and
+    :func:`conviction_prescreen`: reads the sha-verified weights
+    (:func:`~training.conviction.model.load_conviction_model_artifact`), the
+    committed staleness cap, and the machine-readable GO/NO-GO verdict, then
+    fails loud (``ValueError``) when the cap or the verdict is keyed to a
+    DIFFERENT sha than the weights hash to — the three committed artifacts must
+    agree on the one frozen instrument they describe.
+
+    When ``use_counter`` is supplied it must already be keyed on the committed
+    sha and its cap's ``max_uses`` must NOT exceed the committed cap — a shared
+    counter may TIGHTEN the committed staleness cap, never loosen it (mirrors
+    :func:`training.surrogate.runner.load_surrogate_runner_factory`'s rules,
+    training/surrogate/runner.py:449-462). Otherwise a fresh counter is built
+    from the committed cap, so the caller always gets a counter keyed to the
+    exact artifact it will meter.
+    """
+
+    model, sha = load_conviction_model_artifact(artifact_dir)
+    cap = load_conviction_staleness_cap(artifact_dir)
+    if cap.weights_sha256 != sha:
+        raise ValueError(
+            f"conviction staleness cap under {artifact_dir} is keyed on weights "
+            f"{cap.weights_sha256!r} but the committed weights hash to {sha!r} — "
+            "the cap and the artifact drifted apart"
+        )
+    verdict = load_conviction_verdict(artifact_dir)
+    if verdict.weights_sha256 != sha:
+        raise ValueError(
+            f"conviction verdict under {artifact_dir} is keyed on weights "
+            f"{verdict.weights_sha256!r} but the committed weights hash to "
+            f"{sha!r} — the verdict and the artifact drifted apart"
+        )
+    if use_counter is not None:
+        if use_counter.cap.weights_sha256 != sha:
+            raise ValueError(
+                "shared conviction use_counter is keyed on weights "
+                f"{use_counter.cap.weights_sha256!r} but {artifact_dir} commits "
+                f"{sha!r} — one counter never meters two artifacts"
+            )
+        if use_counter.cap.max_uses > cap.max_uses:
+            raise ValueError(
+                f"shared conviction use_counter allows {use_counter.cap.max_uses} "
+                f"uses but the committed cap under {artifact_dir} is "
+                f"{cap.max_uses} — a shared counter may tighten the committed "
+                "staleness cap, never loosen it"
+            )
+        counter = use_counter
+    else:
+        counter = ConvictionUseCounter(cap)
+    return model, sha, counter, verdict
+
+
+@dataclass(frozen=True)
+class ConvictionFitnessTerm:
+    """The GO-gated additive conviction term threaded into both inner fitnesses.
+
+    Constructed ONLY under the committed GO verdict (``fitness_term == "ships"``):
+    a NO-GO verdict can NEVER build this object — the structural-absence doctrine
+    (the 18.15 pre-registered consequence mapping) means that under NO-GO the
+    term is absent as an OBJECT, callers composing fitness with
+    ``conviction=None``, never a zero-weighted ghost. ``predict_meeting`` meters
+    ONE use against the frozen sha-keyed :class:`ConvictionUseCounter` per
+    predicted meeting (the 18.15 cap unit) and returns the model's prediction;
+    the counter is the SHARED per-run counter threaded through BOTH fitness sides
+    and the pre-screen, so the committed staleness cap is cumulative across
+    everything the run predicts.
+    """
+
+    model: ConvictionEconomyModel
+    weights_sha256: str
+    verdict: ConvictionGoVerdict
+    use_counter: ConvictionUseCounter
+    weight: float = DEFAULT_CONVICTION_WEIGHT
+
+    def __post_init__(self) -> None:
+        if self.verdict.fitness_term != "ships":
+            raise ValueError(
+                "ConvictionFitnessTerm requires a GO verdict (fitness_term="
+                f"'ships'), got {self.verdict.fitness_term!r} — under NO-GO the "
+                "term is structurally absent (conviction=None), never constructed"
+            )
+        if self.verdict.weights_sha256 != self.weights_sha256:
+            raise ValueError(
+                "conviction verdict is keyed on weights "
+                f"{self.verdict.weights_sha256!r} but the term carries "
+                f"{self.weights_sha256!r} — the verdict and the weights drifted"
+            )
+        if self.use_counter.cap.weights_sha256 != self.weights_sha256:
+            raise ValueError(
+                "conviction use_counter is keyed on weights "
+                f"{self.use_counter.cap.weights_sha256!r} but the term carries "
+                f"{self.weights_sha256!r} — one counter never meters two artifacts"
+            )
+        if not math.isfinite(self.weight) or self.weight <= 0.0:
+            raise ValueError(
+                f"conviction weight must be finite and > 0, got {self.weight!r}"
+            )
+
+    def predict_meeting(self, features: Mapping[str, float]) -> ConvictionPrediction:
+        """Predict one meeting's supply, metering ONE use on delivery.
+
+        The cap's pinned unit is a PREDICTED meeting (one delivered
+        :meth:`~training.conviction.model.ConvictionEconomyModel.predict` is
+        one use), so the use is charged only for a prediction that is actually
+        delivered: a malformed feature mapping fail-louds out of the model
+        BEFORE any charge — the cap never burns quota on failures or retries —
+        and at the spent cap the counter still raises with the internal
+        computation discarded unreturned, so no training signal escapes the
+        meter in either order. The counter is the SAME sha-keyed object
+        threaded through both fitness sides and :func:`conviction_prescreen`.
+        """
+
+        prediction = self.model.predict(features)
+        self.use_counter.record_use(weights_sha256=self.weights_sha256)
+        return prediction
+
+
+def load_conviction_fitness_term(
+    artifact_dir: Path = CONVICTION_ARTIFACT_DIR,
+    *,
+    use_counter: ConvictionUseCounter | None = None,
+    weight: float = DEFAULT_CONVICTION_WEIGHT,
+) -> ConvictionFitnessTerm | None:
+    """Load the GO-gated conviction term, or ``None`` under the committed NO-GO.
+
+    Reads the committed bundle via :func:`_load_conviction_bundle` (sha-verified,
+    drift-checked). When the committed verdict's ``fitness_term == "absent"``
+    (NO-GO) this returns ``None`` — the documented machine-readable NO-GO branch:
+    the term is STRUCTURALLY absent (no term object exists; callers compose
+    fitness with ``conviction=None``), explicitly NOT a silent fallback — the
+    branch is the committed verdict's pre-registered consequence mapping
+    (``training/artifacts/conviction/verdict.json``). Otherwise the GO term is
+    returned.
+
+    Threading discipline: ONE :class:`ConvictionUseCounter` per run. Pass it as
+    ``use_counter`` and thread the SAME returned :class:`ConvictionFitnessTerm`
+    object through the impostor term, the crew term (pass the SAME object to
+    both sides), and :func:`conviction_prescreen` — the committed staleness cap
+    is cumulative across everything the run predicts.
+    """
+
+    model, sha, counter, verdict = _load_conviction_bundle(artifact_dir, use_counter)
+    if verdict.fitness_term == "absent":
+        return None
+    return ConvictionFitnessTerm(
+        model=model,
+        weights_sha256=sha,
+        verdict=verdict,
+        use_counter=counter,
+        weight=weight,
+    )
+
+
+def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
+    """The drift-checked verdict the result rows stamp their provenance from.
+
+    Row provenance must describe a bundle a trainer could actually LOAD:
+    trusting ``verdict.json`` alone would let a partially updated artifact dir
+    (weights re-fit, verdict or cap stale) stamp rows describing an instrument
+    no consumer can construct (Codex review on PR #304). This runs the SAME
+    sha-coherence checks as the term loader and the pre-screen
+    (:func:`_load_conviction_bundle`: the weights bytes' hash == the cap's key
+    == the verdict's key, fail loud on any drift) and returns the verdict —
+    used by :func:`evaluate_candidate` and the crew twin
+    (``training/crew/scorer.py::evaluate_crew_candidate``) BEFORE any eval
+    side effects, so a stale bundle fails the run, never a row.
+    """
+
+    _, _, _, verdict = _load_conviction_bundle(artifact_dir, None)
+    return verdict
+
+
 def inner_episode_fitness(
     rollout: EpisodeRollout,
     trace: DecisionTrace,
     *,
     anchor_weight: float = DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    conviction: ConvictionFitnessTerm | None = None,
 ) -> float:
     """The SHARED per-episode inner fitness every ES/QD entrant optimizes.
 
     The tactically-reachable side-specific impostor terms + potential shaping
     (:func:`training.rewards.compute_shaped_reward`), MINUS the anchor-KL
     penalty toward the frozen FSM (``anchor_weight`` × the episode's mean
-    anchor cross-entropy). The validity gate and the 15.2 referee are NEVER
-    terms here — they are selection filters :func:`evaluate_candidate` applies
-    after training. A truncated (tick-budget-capped) episode scores the
+    anchor cross-entropy), PLUS — under a GO verdict only — the 18.16 conviction
+    term (``conviction.weight`` × the episode's mean predicted supply).
+
+    The validity gate and the 15.2 referee are NEVER terms here — they are
+    selection filters :func:`evaluate_candidate` applies after training. The
+    conviction term IS a term, and a legitimate one: it is a REWARD-side
+    prediction from FENCED pre-meeting tactical facts (the frozen Task-18.15
+    artifact, sha-keyed, metered by its own :class:`ConvictionUseCounter`,
+    shipped ONLY under the committed GO verdict —
+    ``training/artifacts/conviction/verdict.json``'s pre-registered consequence
+    mapping); it never reads, wraps, or re-derives ``eval/watchability.py``
+    scores (the designer ruling in tasks/phase-18.md:81-84), and under NO-GO it
+    is STRUCTURALLY ABSENT (``conviction=None``; no zero-weighted ghost). The
+    boundary statement — the gate/referee are selection filters, never fitness
+    terms — DOES NOT MOVE. A truncated (tick-budget-capped) episode scores the
     documented :data:`TRUNCATED_EPISODE_FITNESS` — never a silent skip, never a
     full-game read of a truncated record.
     """
@@ -595,7 +923,199 @@ def inner_episode_fitness(
     if not rollout.complete:
         return TRUNCATED_EPISODE_FITNESS
     shaped = compute_shaped_reward(rollout, "IMPOSTOR").total()
-    return shaped - anchor_weight * trace.mean_anchor_ce()
+    fitness = shaped - anchor_weight * trace.mean_anchor_ce()
+    if conviction is not None:
+        fitness += conviction.weight * trace.mean_predicted_supply()
+    return fitness
+
+
+# --------------------------------------------------------------------------- #
+# The referee pre-screen (Task 18.16) — the campaign driver's pre-spend gate.  #
+# --------------------------------------------------------------------------- #
+
+
+class ConvictionPrescreenVerdict(BaseModel):
+    """The machine-readable predicted-floors verdict the 18.21 driver consumes.
+
+    Emitted by :func:`conviction_prescreen` BEFORE the campaign driver spends
+    real-path evals: the conviction model scores a batch of caller-supplied
+    per-meeting feature mappings and predicts whether the resulting play would
+    clear the committed baseline-6 9p2i referee floors. Under NO-GO
+    (``prescreen_role == "advisory"``) the verdict is ADVISORY-ONLY —
+    ``advisory_only`` is set and a driver must never gate real-path spend on it
+    (the 18.15 pre-registered consequence mapping); the model survives as a
+    diagnostic.
+
+    ``predicted_converting_share`` is the per-meeting SHARE of meetings the
+    conversion head calls at the pinned threshold — the model's NATIVE unit:
+    its fitted ``testimony_backed_conversion`` label is per-meeting and it has
+    no "attempted" head, so the referee's converted/attempted PAIR gauge is
+    structurally not predictable (a meeting with two backed accusations and one
+    ejection reads 1/2 in pairs but 1/1 per meeting — the units genuinely
+    diverge). The channel therefore compares LIKE UNITS: ``conversion_pin`` is
+    the baseline's own converting-MEETING share (78/165 — the pair pin's
+    numerator over the same committed meeting census the flags floor reads),
+    density-adjusted by the same public derivation the referee uses, so the
+    baseline demands exactly its own per-meeting share at its own density. The
+    real referee (the pair gauge, measured on recorded bytes) remains the
+    SELECTION gate — a pre-screen pass only spends a real eval, never selects a
+    champion.
+    ``predicted_mean_conversion_prob`` is the mean conversion probability — the
+    model's EXPECTED converting-meeting share, carrying the sub-threshold mass a
+    hard call discards. It is REPORTED beside the thresholded channel, never
+    substituted for it (the fidelity report's precision/accuracy idiom): the
+    gated channel stays the pinned-threshold call because that is the model's
+    only verdict-validated operating point — the 18.15 GO verdict measured
+    recall at ``CONVICTION_CONVERSION_DECISION_THRESHOLD``, fixed before the
+    held-out evaluation, while the raw probabilities' calibration was never
+    judged. The flags floor and the conversion pin are the committed pins
+    consumed as numbers; the conversion floor derives population-relative from
+    the PREDICTED flags density via
+    ``eval.watchability.population_relative_conversion_floor``.
+
+    ``meetings_scored == 0`` is the evidence-STARVATION verdict (an empty
+    batch): every predicted channel reads 0.0, the derived conversion floor is
+    the maximal 1.0, and both floors FAIL — the referee's own doctrine
+    (``eval/watchability.py::evaluate_supply_floors``: starvation is not a
+    pass), so the driver cheaply rejects a no-meeting entrant instead of
+    crashing mid-campaign.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    weights_sha256: str
+    model_verdict: Literal["GO", "NO-GO"]
+    prescreen_role: Literal["gating", "advisory"]
+    advisory_only: bool
+    meetings_scored: int
+    conviction_uses: int
+    predicted_flags_per_meeting: float
+    flags_floor: float
+    predicted_flags_pass: bool
+    predicted_converting_share: float
+    predicted_mean_conversion_prob: float
+    conversion_pin: float
+    conversion_floor: float
+    predicted_conversion_pass: bool
+    predicted_floors_pass: bool
+
+
+def conviction_prescreen(
+    meeting_features: Sequence[Mapping[str, float]],
+    *,
+    artifact_dir: Path = CONVICTION_ARTIFACT_DIR,
+    use_counter: ConvictionUseCounter | None = None,
+    flags_floor: float = PRESCREEN_FLAGS_PER_MEETING_FLOOR,
+    conversion_pin: float = PRESCREEN_CONVERSION_PIN,
+) -> ConvictionPrescreenVerdict:
+    """Predict whether a batch of meetings would clear the referee floors (18.16).
+
+    THE public symbol the task contract names
+    (``training.bakeoff.harness.conviction_prescreen``): the campaign driver
+    calls this before spending real-path evals. ``meeting_features`` are
+    CALLER-SUPPLIED per-meeting mappings over
+    :data:`~training.conviction.dataset.CONVICTION_FEATURE_NAMES` (the live
+    kill/body serving seam lands with the campaign driver, not here; the model
+    itself fail-louds on a drifted feature layout). Use-counting flows through
+    the model's own sha-keyed :class:`ConvictionUseCounter` — one predicted
+    meeting is one use — so the pre-screen shares the committed staleness cap
+    with the fitness sides when the SAME counter is threaded in.
+
+    The floors are the committed baseline-6 9p2i pins consumed as NUMBERS (the
+    ``training/anchor_study.py::HIGH_FLAG_FLOOR`` precedent) — the conversion
+    anchor in the model's native PER-MEETING unit (see
+    :data:`PRESCREEN_CONVERSION_PIN` and the verdict docstring: the referee's
+    pair gauge is structurally not predictable, so the channel compares like
+    units) — and the conversion floor derives population-relative from the
+    PREDICTED flags density via the public ``eval.watchability`` derivation
+    (the harness is the one bake-off
+    module allowed to import ``eval``). ADVISORY-ONLY doctrine: under NO-GO the
+    ``prescreen_role`` is ``"advisory"`` and ``advisory_only`` is set — a driver
+    must never gate real-path spend on it.
+
+    An EMPTY batch (a candidate whose probe games produced no meetings) is the
+    evidence-starvation case, not an error: the referee's own doctrine FAILS
+    absent supply rather than excusing it
+    (``eval/watchability.py::evaluate_supply_floors`` — starvation is not a
+    pass; a no-supply population faces the maximal derived conversion demand of
+    1.0), so the driver receives a machine-readable FAILING verdict it can
+    cheaply reject on — never an exception mid-campaign, never a silent pass.
+    Zero uses are metered (nothing was predicted).
+    """
+
+    model, sha, counter, verdict = _load_conviction_bundle(artifact_dir, use_counter)
+    advisory_only = verdict.prescreen_role != "gating"
+    if not meeting_features:
+        # The starvation verdict: both floors FAIL by doctrine (the comparisons
+        # below would agree — 0.0 never reaches a positive committed pin and
+        # the derived demand is the maximal 1.0 — but the fail is the DOCTRINE,
+        # not an arithmetic accident, so it is stated unconditionally).
+        return ConvictionPrescreenVerdict(
+            weights_sha256=sha,
+            model_verdict=verdict.verdict,
+            prescreen_role=verdict.prescreen_role,
+            advisory_only=advisory_only,
+            meetings_scored=0,
+            conviction_uses=0,
+            predicted_flags_per_meeting=0.0,
+            flags_floor=flags_floor,
+            predicted_flags_pass=False,
+            predicted_converting_share=0.0,
+            predicted_mean_conversion_prob=0.0,
+            conversion_pin=conversion_pin,
+            conversion_floor=population_relative_conversion_floor(
+                pinned_conversion=conversion_pin,
+                pinned_flags_per_meeting=flags_floor,
+                measured_flags_per_meeting=0.0,
+            ),
+            predicted_conversion_pass=False,
+            predicted_floors_pass=False,
+        )
+    uses_before = counter.uses
+    flags: list[float] = []
+    conversion_probs: list[float] = []
+    converting = 0
+    for features in meeting_features:
+        # Predict-then-meter: a use is charged only for a DELIVERED prediction
+        # (the cap's pinned unit — see ConvictionFitnessTerm.predict_meeting),
+        # so a malformed mapping mid-batch raises without burning this
+        # meeting's quota; the completed predictions before it stay charged.
+        prediction = model.predict(features)
+        counter.record_use(weights_sha256=sha)
+        flags.append(prediction.expected_flags)
+        conversion_probs.append(prediction.conversion_prob)
+        if prediction.conversion_prob >= CONVICTION_CONVERSION_DECISION_THRESHOLD:
+            converting += 1
+    n = len(meeting_features)
+    predicted_flags_per_meeting = math.fsum(flags) / n
+    predicted_flags_pass = predicted_flags_per_meeting >= flags_floor
+    predicted_converting_share = converting / n
+    conversion_floor = population_relative_conversion_floor(
+        pinned_conversion=conversion_pin,
+        pinned_flags_per_meeting=flags_floor,
+        measured_flags_per_meeting=predicted_flags_per_meeting,
+    )
+    predicted_conversion_pass = predicted_converting_share >= conversion_floor
+    predicted_floors_pass = predicted_flags_pass and predicted_conversion_pass
+    return ConvictionPrescreenVerdict(
+        weights_sha256=sha,
+        model_verdict=verdict.verdict,
+        prescreen_role=verdict.prescreen_role,
+        advisory_only=advisory_only,
+        meetings_scored=n,
+        conviction_uses=counter.uses - uses_before,
+        predicted_flags_per_meeting=predicted_flags_per_meeting,
+        flags_floor=flags_floor,
+        predicted_flags_pass=predicted_flags_pass,
+        predicted_converting_share=predicted_converting_share,
+        # Reported, never gated: the expected converting share (mean
+        # probability) beside the thresholded call — see the verdict docstring.
+        predicted_mean_conversion_prob=math.fsum(conversion_probs) / n,
+        conversion_pin=conversion_pin,
+        conversion_floor=conversion_floor,
+        predicted_conversion_pass=predicted_conversion_pass,
+        predicted_floors_pass=predicted_floors_pass,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -726,7 +1246,9 @@ class BakeoffResult(BaseModel):
     verdict (or the experiment-tier FAIL carrying the full report + N-repeat
     spread), the leak-test verdict through the candidate's own factory, the
     surrogate-staleness usage, and wall-clock. Signature is stable per the task
-    contract.
+    contract. Task 18.16 appends the conviction provenance triple: the weight is
+    named under ``fitness_term == "ships"``; under ``"absent"`` the weight is
+    None — the row says the term is structurally absent, never zero-weighted.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -786,6 +1308,15 @@ class BakeoffResult(BaseModel):
     descriptor_footprint: Mapping[str, float]
     train_metadata: Mapping[str, object]
 
+    # Task 18.16 conviction provenance (OPTIONAL, None-default — the
+    # SupplyFloorGauge.advisory precedent: pre-18.16 serialized rows must still
+    # validate). ``conviction_weight`` is named only under "ships"; under
+    # "absent" it is None — the row says the term is structurally absent, never
+    # zero-weighted.
+    conviction_fitness_term: Literal["ships", "absent"] | None = None
+    conviction_weight: float | None = None
+    conviction_weights_sha256: str | None = None
+
     def to_json_line(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True)
 
@@ -798,6 +1329,14 @@ class BakeoffProtocolConfig:
     ``surrogate_artifact_dir=None`` disables the surrogate-path column (the
     row records ``inner_fitness_surrogate=None`` — used only by tiny CI
     configurations that must not meter the committed staleness cap).
+
+    The 18.16 ``conviction_artifact_dir`` / ``conviction_weight`` fields stamp
+    each row's conviction provenance metadata (which composition ships for
+    training). The eval protocol's fitness COLUMNS stay the anchor-composed
+    values — the eval path cannot serve the fenced per-meeting features until
+    the kill/body serving seam lands (report-conviction-model.md §2) — so the
+    row CARRIES the term's weight-under-GO metadata without re-scoring fitness
+    here.
     """
 
     eval_seeds: tuple[int, ...]
@@ -813,6 +1352,8 @@ class BakeoffProtocolConfig:
     surrogate_artifact_dir: Path | None = SURROGATE_ARTIFACT_DIR
     surrogate_use_counter: SurrogateUseCounter | None = None
     max_ticks: int = DEFAULT_MAX_TICKS
+    conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
+    conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
 
     def resolved_surrogate_counter(self) -> SurrogateUseCounter | None:
         """The SHARED cumulative use counter for this run (built lazily once).
@@ -965,6 +1506,8 @@ def _score_eval_pass(
         trace.agreement_hits += episode_trace.agreement_hits
         trace.opportunities += episode_trace.opportunities
         trace.kills_taken += episode_trace.kills_taken
+        trace.conviction_supply_sum += episode_trace.conviction_supply_sum
+        trace.conviction_meetings += episode_trace.conviction_meetings
     games = len(protocol.eval_seeds)
     descriptor_mean = {
         name: descriptor_sums[index] / games
@@ -1026,6 +1569,14 @@ def evaluate_candidate(
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
     started = time.perf_counter()
+    # The committed conviction verdict stamps the row's provenance metadata:
+    # WHICH composition ships for training (the fitness columns stay
+    # anchor-composed until the live serving seam lands — see the config).
+    # Drift-checked BEFORE any eval side effects: a stale/partially-updated
+    # bundle fails the run loud, never lands in a row.
+    conviction_verdict = load_conviction_row_provenance(
+        protocol.conviction_artifact_dir
+    )
     entrant_dir, weights_sha256 = write_candidate_artifact(candidate, artifact_root)
 
     with tempfile.TemporaryDirectory(prefix="ailibi-bakeoff-eval-") as tmp:
@@ -1195,6 +1746,13 @@ def evaluate_candidate(
         wall_clock_eval_s=time.perf_counter() - started,
         descriptor_footprint=real_pass.descriptor_mean,
         train_metadata=candidate.train_metadata,
+        conviction_fitness_term=conviction_verdict.fitness_term,
+        conviction_weight=(
+            protocol.conviction_weight
+            if conviction_verdict.fitness_term == "ships"
+            else None
+        ),
+        conviction_weights_sha256=conviction_verdict.weights_sha256,
     )
 
 
@@ -1537,23 +2095,32 @@ __all__ = [
     "BakeoffPolicy",
     "BakeoffProtocolConfig",
     "BakeoffResult",
+    "CONVICTION_ARTIFACT_DIR",
+    "ConvictionFitnessTerm",
+    "ConvictionPrescreenVerdict",
     "DEFAULT_ANCHOR_PENALTY_WEIGHT",
+    "DEFAULT_CONVICTION_WEIGHT",
     "DecisionCallback",
     "DecisionTrace",
     "DeterminismRow",
     "GoodhartSurrogateRerun",
     "MetricSpread",
+    "PRESCREEN_CONVERSION_PIN",
+    "PRESCREEN_FLAGS_PER_MEETING_FLOOR",
     "RepeatSpread",
     "SupplyGaugeRow",
     "SurrogateMeetingStats",
     "TRUNCATED_EPISODE_FITNESS",
     "TrainedCandidate",
     "build_candidate_factory",
+    "conviction_prescreen",
     "default_protocol_config",
     "evaluate_candidate",
     "inner_episode_fitness",
     "intent_key",
     "load_candidate_weights",
+    "load_conviction_fitness_term",
+    "load_conviction_row_provenance",
     "load_eval_seeds",
     "load_train_seeds",
     "load_val_seeds",
