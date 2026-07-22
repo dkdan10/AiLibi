@@ -278,14 +278,26 @@ def test_hall_of_fame_records_full_provenance(tmp_path: Path) -> None:
     }
     assert founder_row["cell_key"] == [2, 0, 1]
 
+    # Provenance is READ-ONLY: the descriptors mapping refuses in-place mutation
+    # (the store re-serialises retained members on every add, so a mutable dict
+    # would let a caller silently alter persisted provenance — the Codex-review
+    # frozen-descriptors guard).
+    descriptors = founder_like.descriptors
+    assert descriptors is not None
+    with pytest.raises(TypeError):
+        descriptors["kill_count"] = 9.9  # type: ignore[index]
+
 
 def test_create_refuses_over_existing_pool(tmp_path: Path) -> None:
     """``create`` never clobbers a committed pool and validates its inputs (18.20).
 
     A second ``create`` on a side that already has ``hall_of_fame.json`` raises
-    :class:`FileExistsError` rather than silently re-initialising it, and a
+    :class:`FileExistsError` rather than silently re-initialising it; a
     ``substrate_sha256`` that is not 64 lowercase hex fails loud BEFORE any write
-    (amendment A1).
+    (amendment A1); and a side dir holding stray ``gen-*`` member artifacts
+    WITHOUT an index (an interrupted/half-deleted tree) is refused rather than
+    silently adopted under a fresh empty index (the Codex-review dirty-root
+    guard).
     """
 
     with pytest.raises(ValueError, match="64 lowercase hex"):
@@ -295,6 +307,13 @@ def test_create_refuses_over_existing_pool(tmp_path: Path) -> None:
     HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
     with pytest.raises(FileExistsError):
         HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
+
+    # Stray member artifacts without an index: refused, and no index written.
+    dirty_side = tmp_path / "dirty" / "impostor"
+    (dirty_side / "gen-0" / ("e" * 64)).mkdir(parents=True)
+    with pytest.raises(ValueError, match="stray member artifacts"):
+        HallOfFame.create(tmp_path / "dirty", "impostor", substrate_sha256=_SUBSTRATE)
+    assert not (dirty_side / "hall_of_fame.json").exists()
 
 
 def test_add_member_fail_loud_matrix(tmp_path: Path) -> None:
@@ -425,6 +444,65 @@ def test_founder_ingestion_substrate_mismatch_refused(tmp_path: Path) -> None:
     )
     founders = fresh_hall.ingest_map_elites_founders(tmp_path / "me")
     assert len(founders) == len(archive)
+
+
+def test_founder_ingestion_is_all_or_nothing(tmp_path: Path) -> None:
+    """A duplicate founder refuses the WHOLE ingest before any write (18.20).
+
+    The Codex-review partial-mutation guard: with a hall already holding a
+    member whose genome matches one of the archive's cells, ingestion raises
+    :class:`ValueError` during the preflight and the pool is UNTOUCHED — no
+    earlier cell frozen, no index rewrite — so a retry starts from the same
+    hall. Two cells carrying the identical genome likewise refuse up front.
+    """
+
+    archive = _synthetic_archive()
+    _persist_archive(archive, tmp_path / "me")
+    hall = HallOfFame.create(
+        tmp_path / "root", "impostor", substrate_sha256=bakeoff_substrate_sha()
+    )
+    # Pre-freeze the genome of one of the LATER cells in sorted cell-key order,
+    # so a non-preflighted loop would have frozen earlier cells before raising.
+    last_cell = sorted(archive)[-1]
+    hall.add_member(
+        archive[last_cell].genome,
+        generation=3,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    members_before = hall.members
+    index_bytes_before = (
+        tmp_path / "root" / "impostor" / "hall_of_fame.json"
+    ).read_bytes()
+
+    with pytest.raises(ValueError, match="all-or-nothing"):
+        hall.ingest_map_elites_founders(tmp_path / "me")
+
+    assert hall.members == members_before  # no founder was frozen
+    assert (
+        tmp_path / "root" / "impostor" / "hall_of_fame.json"
+    ).read_bytes() == index_bytes_before
+    reloaded = HallOfFame.load(tmp_path / "root", "impostor")  # tree still clean
+    assert reloaded.members == members_before
+
+    # Two cells carrying the IDENTICAL genome refuse up front too.
+    twin_specs = [
+        {"kill_count": 0.0, "witness_exposure_rate": 0.0, "vent_usage": 0.0},
+        {"kill_count": 5.0, "witness_exposure_rate": 0.9, "vent_usage": 7.0},
+    ]
+    twin_archive: dict[tuple[int, int, int], ArchiveCell] = {
+        BEHAVIOR_DESCRIPTOR_CONFIGURATION.bin_values(descriptors): ArchiveCell(
+            genome=(0.25, -0.75), fitness=1.0, descriptors=descriptors
+        )
+        for descriptors in twin_specs
+    }
+    _persist_archive(twin_archive, tmp_path / "twins")
+    twin_hall = HallOfFame.create(
+        tmp_path / "twin-root", "impostor", substrate_sha256=bakeoff_substrate_sha()
+    )
+    with pytest.raises(ValueError, match="identical genome"):
+        twin_hall.ingest_map_elites_founders(tmp_path / "twins")
+    assert twin_hall.member_shas == ()
 
 
 # --------------------------------------------------------------------------- #
@@ -634,8 +712,11 @@ def test_sample_opponents_fail_loud_matrix() -> None:
     """The sampler fails loud on the committed matrix (18.20).
 
     An empty member set, a non-empty ``payoffs`` that is missing a member OR
-    carries an extra sha, ``slate_size < 1``, and ``exploration_floor < 0`` each
-    raise :class:`ValueError` (the mismatch is named — no hidden default).
+    carries an extra sha, ``slate_size < 1``, ``exploration_floor < 0``, and a
+    non-finite payoff entry each raise :class:`ValueError` (the mismatch is
+    named — no hidden default). The NaN case pins the exact silent failure the
+    Codex review flagged: ``[1.0, NaN, 1.0]`` would otherwise read as a
+    no-gradient uniform pool because ``min``/``max`` both skip past the NaN.
     """
 
     a, b = _sampler_member("a"), _sampler_member("b")
@@ -654,6 +735,15 @@ def test_sample_opponents_fail_loud_matrix() -> None:
         sample_opponents([a, b], {}, slate_size=0, seed=0)
     with pytest.raises(ValueError, match="exploration_floor"):
         sample_opponents([a, b], {}, slate_size=3, seed=0, exploration_floor=-0.1)
+
+    c = _sampler_member("c")
+    nan_payoffs = {"a" * 64: 1.0, "b" * 64: float("nan"), "c" * 64: 1.0}
+    with pytest.raises(ValueError, match="finite"):
+        sample_opponents([a, b, c], nan_payoffs, slate_size=3, seed=0)
+    with pytest.raises(ValueError, match="finite"):
+        sample_opponents(
+            [a, b], {"a" * 64: float("inf"), "b" * 64: 1.0}, slate_size=3, seed=0
+        )
 
 
 def test_sample_opponents_strict_hard_floor_zero() -> None:

@@ -48,13 +48,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, Literal, TypeGuard
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from agents.tactical.features import weights_from_hex_json, weights_to_hex_json
 from training.bakeoff.map_elites import ArchiveCell, load_archive_cell_genomes
@@ -141,7 +143,11 @@ class HallOfFameMember(BaseModel):
     for MAP-Elites founders (their behavioral coordinate), ``None`` otherwise.
     ``trained_against`` is a required non-empty string — a 64-hex opposing-side
     sha OR :data:`TRAINED_AGAINST_FSM` — validated by the store, so "unknown" is
-    unrepresentable.
+    unrepresentable. ``descriptors`` is stored as a read-only mapping proxy over
+    a private copy: ``frozen=True`` alone would leave the underlying dict
+    mutable through the attribute, and the store re-serialises retained members
+    into ``hall_of_fame.json`` on every ``add_member``, so a caller-side
+    mutation would otherwise silently alter persisted provenance.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -153,6 +159,22 @@ class HallOfFameMember(BaseModel):
     descriptors: Mapping[str, float] | None = None
     cell_key: tuple[int, int, int] | None = None
     path: str = Field(min_length=1)
+
+    @field_validator("descriptors", mode="after")
+    @classmethod
+    def _freeze_descriptors(
+        cls, value: Mapping[str, float] | None
+    ) -> Mapping[str, float] | None:
+        # A proxy over a PRIVATE copy: immune to both in-place mutation through
+        # the attribute AND later mutation of the caller's source dict.
+        return None if value is None else MappingProxyType(dict(value))
+
+    @field_serializer("descriptors")
+    def _serialize_descriptors(
+        self, value: Mapping[str, float] | None
+    ) -> dict[str, float] | None:
+        # pydantic cannot serialise a mappingproxy; hand it a plain dict.
+        return None if value is None else dict(value)
 
 
 # --------------------------------------------------------------------------- #
@@ -224,7 +246,12 @@ class HallOfFame:
         that ``substrate_sha256`` is exactly 64 lowercase hex chars (fail loud
         early, Task 18.20 amendment A1). Refuses loudly
         (:class:`FileExistsError`) if ``<root>/<side>/hall_of_fame.json`` already
-        exists — a ``create`` never clobbers a committed pool.
+        exists — a ``create`` never clobbers a committed pool — and
+        (:class:`ValueError`) if the side dir holds stray ``gen-*`` member
+        artifacts WITHOUT an index (an interrupted or half-deleted tree):
+        initialising an empty index beside them would present a dirty root as a
+        fresh pool until the next ``load`` trips the drift check — papering
+        over, never allowed.
         """
 
         if side not in _SIDES:
@@ -241,6 +268,19 @@ class HallOfFame:
                 f"a hall of fame already exists at {index_path}; create never "
                 "clobbers a committed pool (load it instead)"
             )
+        if side_dir.exists():
+            stray = sorted(
+                child.name
+                for child in side_dir.iterdir()
+                if child.name.startswith("gen-")
+            )
+            if stray:
+                raise ValueError(
+                    f"cannot create a fresh {side} hall of fame at {side_dir}: "
+                    f"stray member artifacts {stray} exist without an index — a "
+                    "dirty tree is never silently adopted (clean the root or "
+                    "restore its hall_of_fame.json)"
+                )
         side_dir.mkdir(parents=True, exist_ok=True)
         hall = cls(
             side=side,
@@ -451,11 +491,16 @@ class HallOfFame:
         A2) with ``origin`` :data:`MAP_ELITES_FOUNDER_ORIGIN`, ``trained_against``
         :data:`TRAINED_AGAINST_FSM` (honest provenance: cells were bred/scored vs
         the fixed FSM, never a hall member), and the cell's ``descriptors`` +
-        ``cell_key`` copied verbatim (the behavioral-diversity provenance). A cell
-        whose genome duplicates an already-frozen member fails loud via
-        :meth:`add_member` (never a silently dropped founder). Re-freezing writes
-        the SAME float-hex bytes, so each founder's ``weights.json`` and digest
-        equal the source cell's.
+        ``cell_key`` copied verbatim (the behavioral-diversity provenance).
+        Re-freezing writes the SAME float-hex bytes, so each founder's
+        ``weights.json`` and digest equal the source cell's.
+
+        Ingestion is ALL-OR-NOTHING: every founder digest is preflighted against
+        the existing members AND the batch itself BEFORE any write, so a
+        duplicate genome (a cell already frozen in the hall, or two cells
+        carrying the identical genome) raises :class:`ValueError` with the pool
+        untouched — a failed ingest never leaves a partially-mutated hall for a
+        retry to compound (:meth:`add_member`'s own guards remain the backstop).
 
         Returns the newly-frozen members in sorted cell-key order (the
         :attr:`members` property stays sha-sorted).
@@ -464,6 +509,28 @@ class HallOfFame:
         archive = load_archive_cell_genomes(
             cell_artifact_dir, expected_substrate_sha=self._substrate_sha256
         )
+        # Preflight the whole batch before the first write (all-or-nothing): the
+        # digest is a pure function of the genome bytes, so computing it here is
+        # exactly the digest add_member will re-derive.
+        existing = set(self.member_shas)
+        batch: dict[str, tuple[int, int, int]] = {}
+        for cell_key in sorted(archive):
+            weights_json = weights_to_hex_json(tuple(archive[cell_key].genome)) + "\n"
+            digest = _sha256_hex(weights_json.encode("utf-8"))
+            if digest in existing:
+                raise ValueError(
+                    f"cell {cell_key} duplicates the already-frozen member "
+                    f"{digest} in the {self._side} hall of fame; refusing the "
+                    "whole ingest before any write (all-or-nothing)"
+                )
+            if digest in batch:
+                raise ValueError(
+                    f"cells {batch[digest]} and {cell_key} carry the identical "
+                    f"genome ({digest}); refusing the whole ingest before any "
+                    "write (all-or-nothing)"
+                )
+            batch[digest] = cell_key
+
         founders: list[HallOfFameMember] = []
         for cell_key in sorted(archive):
             cell: ArchiveCell = archive[cell_key]
@@ -573,6 +640,7 @@ def sample_opponents(
                weights = [1.0] * n                              # DEFINED uniform
            else:
                {m.weights_sha256} must == set(payoffs)          # exact cover, else ValueError
+               every payoff must be finite                      # NaN/inf, else ValueError
                f  = [payoffs[m_i.weights_sha256]]
                lo, hi = min(f), max(f)
                if hi == lo:                                      # no hardness gradient
@@ -590,7 +658,11 @@ def sample_opponents(
     strict PFSP-hard (easiest -> weight 0 -> never drawn) and is safe because the
     two uniform branches guarantee a positive weight-sum. A non-empty ``payoffs``
     that does not EXACTLY cover the member set raises (no hidden default fitness);
-    ``payoffs == {}`` is the unambiguous cold-start "no data" signal.
+    ``payoffs == {}`` is the unambiguous cold-start "no data" signal. A
+    non-finite payoff (NaN/inf) raises: the payoff matrix is EXACT deterministic
+    fitness, so a non-finite entry is a corrupted row, and NaN would otherwise
+    poison ``min``/``max`` silently (``[1.0, NaN, 1.0]`` reads as a uniform
+    no-gradient pool — papering over, never allowed).
     """
 
     ordered = sorted(members, key=lambda member: member.weights_sha256)
@@ -613,6 +685,14 @@ def sample_opponents(
                 "sample_opponents payoffs must exactly cover the member set; "
                 f"missing {sorted(member_shas - payoff_shas)}, "
                 f"extra {sorted(payoff_shas - member_shas)}"
+            )
+        non_finite = sorted(
+            sha for sha, fitness in payoffs.items() if not math.isfinite(fitness)
+        )
+        if non_finite:
+            raise ValueError(
+                "sample_opponents payoffs must be finite (the exact deterministic "
+                f"payoff entries); non-finite entries for {non_finite}"
             )
         fitnesses = [payoffs[member.weights_sha256] for member in ordered]
         lo = min(fitnesses)
