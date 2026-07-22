@@ -772,7 +772,12 @@ class _StubCrewInnerAgent:
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None:
+        # Task 18.22 widened the WrappableCrewTacticalAgent protocol with a
+        # keyword-only ``ejected_id``; accept and ignore it so the recorded
+        # 3-tuple (and every existing assertion on it) stands unchanged.
+        del ejected_id
         self.concluded_calls.append((end_tick, dead_ids, emergency_caller_id))
 
 

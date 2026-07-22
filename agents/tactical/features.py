@@ -54,6 +54,27 @@ documented here so the leak review has one place to look. The leak-test
 factory mode (``eval/leak_test.py``) scans every packet a factory-built agent
 consumes, catching a leak the import-linter cannot see.
 
+Encoder v3 widening (Task 18.22), documented here as the single leak-review
+locus. The v3 subclass (:class:`TacticalFeatureEncoderV3`) appends three blocks
+below the byte-identical v2 prefix, and every one stays inside the same self-held
+surface:
+
+* **meeting-history scalars** read the agent's OWN
+  :class:`~agents.memory.working.MeetingHistory` — a channel fed EXCLUSIVELY from
+  the ``note_meeting_concluded`` hook's PUBLIC payload (the resume tick and the
+  announced ejection outcome, both facts every player at the table saw), so no
+  engine-private or other-agent state crosses in (the same public footing as a
+  meeting's ``dead_ids``; see :func:`agents.memory.store.record_meeting_outcome`).
+* **witness slots** are computed from the agent's OWN ``packet.visible_players``
+  only — who the agent can see, and how many co-located players would witness a
+  kill — never another agent's vision.
+* **last-seen recency slots** re-read the SAME ``_combined_last_seen`` merge the
+  v2 last-seen slots use (own episodic sightings + own render cache), only at a
+  short horizon the v2 50-tick normalizer cannot resolve.
+
+No v3 block reaches another agent's memory or any packet field the v2 encoder did
+not already consume, so the firewall holds unchanged.
+
 Weights posture (Wave 1). A learned policy's weights are serialized as
 **float64-hex JSON** (:func:`weights_to_hex_json` / :func:`weights_from_hex_json`)
 — an exact, lossless round-trip pinned by test, so a champion's genome
@@ -72,7 +93,7 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import ClassVar, Final
 
 from agents.memory.store import AgentMemory, MemoryStore
 from agents.memory.working import WorkingMemory
@@ -199,7 +220,10 @@ class TacticalFeatureEncoder:
     and :data:`ENCODER_VERSION` are what downstream (15.15 bake-off) imports.
     """
 
-    version: Final[str] = ENCODER_VERSION
+    # ``ClassVar`` rather than ``Final`` (Task 18.22): the v3 subclass overrides
+    # this with its own version stamp, and ``Final`` forbids the override.
+    # Behavior is identical -- a per-class constant read off the instance.
+    version: ClassVar[str] = ENCODER_VERSION
 
     def __init__(
         self,
@@ -287,22 +311,12 @@ class TacticalFeatureEncoder:
             if room_idx is not None:
                 bodies_by_room[room_idx] += 1.0 / _COUNT_NORM
 
-        # The roster the memory blocks are keyed on: every OTHER player the agent
-        # has memory of, sorted lexically. It is the union of belief-known players
-        # and players the agent has SEEN (from the per-tick episodic log), so a
-        # neutral player the agent merely saw — one perception never minted a
-        # belief row for — still gets a last-seen slot (it would otherwise be
-        # dropped, blinding the vector to routine movement history). The agent's
-        # OWN id is excluded: an impostor's own move can pass the movement-witness
-        # gate (its departure room is adjacent to its arrival), minting a
-        # ``saw_player_move`` row for itself — the store render self-suppresses for
-        # the same reason. A self belief/last-seen slot is meaningless (no agent
-        # suspects itself) and would skew the roster aggregates.
-        beliefs = memory.beliefs
-        episodic_last_seen = _episodic_last_seen(memory.episodic)
-        roster = sorted(
-            (set(beliefs.known_players()) | set(episodic_last_seen)) - {packet.agent_id}
-        )
+        # The roster the memory blocks are keyed on plus the per-tick episodic
+        # last-seen map, both from the shared :func:`slot_roster` derivation (Task
+        # 18.22 extracted this so the v3 slot blocks and the per-target head key on
+        # the SAME lexically-sorted roster the v2 blocks do). ``episodic_last_seen``
+        # is returned alongside so encode() computes it once, exactly as before.
+        roster, episodic_last_seen = _roster_and_last_seen(packet, memory)
         # Per-player last-seen (tick, room), taken from the FRESHER of the per-tick
         # episodic sighting and the render-time ``WorkingMemory.last_seen`` cache
         # (the latter is only written at meeting-render time, so the episodic log
@@ -491,6 +505,53 @@ def _combined_last_seen(
     return max(candidates, key=lambda entry: entry[0])
 
 
+def _roster_and_last_seen(
+    packet: ObservationPacket, memory: AgentMemory
+) -> tuple[tuple[str, ...], dict[str, tuple[int, str]]]:
+    """The lexical slot roster and the per-tick episodic last-seen map together.
+
+    The roster the memory blocks are keyed on: every OTHER player the agent has
+    memory of, sorted lexically. It is the union of belief-known players and
+    players the agent has SEEN (from the per-tick episodic log), so a neutral
+    player the agent merely saw — one perception never minted a belief row for —
+    still gets a slot (it would otherwise be dropped, blinding the vector to
+    routine movement history). The agent's OWN id is excluded: an impostor's own
+    move can pass the movement-witness gate (its departure room is adjacent to
+    its arrival), minting a ``saw_player_move`` row for itself — the store render
+    self-suppresses for the same reason. A self belief/last-seen slot is
+    meaningless (no agent suspects itself) and would skew the roster aggregates.
+
+    Returns the ``episodic_last_seen`` map alongside the roster so a single caller
+    (``encode``) derives it exactly once; :func:`slot_roster` drops it. Extracted
+    at Task 18.22 so the v2 slot blocks, the v3 witness/recency slots, and the
+    per-target KILL head all key on ONE roster derivation — the v2 bytes are
+    unchanged because the computation is identical, only relocated.
+    """
+
+    beliefs = memory.beliefs
+    episodic_last_seen = _episodic_last_seen(memory.episodic)
+    roster = tuple(
+        sorted(
+            (set(beliefs.known_players()) | set(episodic_last_seen)) - {packet.agent_id}
+        )
+    )
+    return roster, episodic_last_seen
+
+
+def slot_roster(packet: ObservationPacket, memory: AgentMemory) -> tuple[str, ...]:
+    """Lexically-sorted per-player slot roster shared by the v2/v3 slot blocks
+    and the 18.22 per-target head: (belief-known ∪ episodic-seen) − self.
+
+    The public projection of :func:`_roster_and_last_seen` (the last-seen map is
+    an internal by-product). ``training.bakeoff.policy_es`` imports this to key
+    the per-target KILL head on the SAME roster ordering the encoder's belief
+    slots use, so a head logit for slot ``i`` scores the exact player the
+    encoder's slot ``i`` describes.
+    """
+
+    return _roster_and_last_seen(packet, memory)[0]
+
+
 def beliefs_suspicion(memory: AgentMemory, player_id: str) -> float:
     """The agent's own suspicion float for ``player_id`` (0.5 default when unknown)."""
 
@@ -501,6 +562,249 @@ def beliefs_trust(memory: AgentMemory, player_id: str) -> float:
     """The agent's own trust float for ``player_id`` (0.5 default when unknown)."""
 
     return memory.beliefs.view(player_id).trust
+
+
+# --------------------------------------------------------------------------- #
+# Encoder v3 — the meeting-history + witness/recency widening (Task 18.22).
+#
+# Additive and versioned: every v3 block is APPENDED below the v2 layout, so the
+# v2 vector is a strict prefix of v3 and the v2 golden bytes are untouched (only
+# an ENCODER_VERSION bump legalizes a layout change, and v3 carries its own
+# stamp). The three new blocks give the per-target KILL head (18.22) the signal
+# the v2 encoder cannot: which meetings the agent has survived, which roster
+# players are co-located witnesses of a candidate kill, and a short-horizon
+# recency the v2 50-tick age normalizer cannot resolve. Every block reads only
+# the agent's OWN packet + OWN memory — see the module docstring's v3 firewall
+# note (the single leak-review locus).
+# --------------------------------------------------------------------------- #
+
+# The v3 encoder-layout version stamp (see :data:`ENCODER_VERSION`). A separate
+# identity so a recorded game attributes v3 features to v3 and the golden test
+# pins each layout to its own version.
+ENCODER_VERSION_V3: Final[str] = "v3"
+
+# The v3 meeting-history scalar block, in order. Named here so the layout has one
+# source of truth (mirroring ``_SCALAR_FEATURE_NAMES`` for the v2 scalar block).
+_V3_MEETING_FEATURE_NAMES: Final[tuple[str, ...]] = (
+    "meetings_survived_norm",
+    "meeting_ejections_norm",
+    "meeting_skips_norm",
+)
+
+# Normalizer for the meeting-history counts (~meetings-per-game): keeps the
+# survived / ejection / skip counts in ~[0, 1] without a raw-float comparison in
+# the belief path (these normalize meeting COUNTS, not beliefs).
+_MEETING_COUNT_NORM: Final[float] = 8.0
+
+# Per-slot feature counts for the two v3 roster-slot blocks (the golden layout
+# pins them, mirroring the v2 ``_BELIEF_FEATURES_PER_SLOT`` idiom).
+_WITNESS_FEATURES_PER_SLOT: Final[int] = 3  # visible, co_located, witnesses_norm
+_RECENCY_FEATURES_PER_SLOT: Final[int] = 1  # short-horizon recency
+
+
+class TacticalFeatureEncoderV3(TacticalFeatureEncoder):
+    """Encoder v2 plus the Task-18.22 meeting-history + witness/recency blocks.
+
+    Subclasses :class:`TacticalFeatureEncoder` so the entire v2 layout and
+    computation are inherited byte-for-byte: :meth:`feature_layout` and
+    :meth:`encode` call ``super()`` and APPEND the three v3 blocks, so the v2
+    vector is a strict prefix of the v3 vector. Same doctrine as v2 (firewall-
+    legal, pure-Python, deterministic, total) — every v3 value that is
+    belief/ratio-derived goes through :func:`quantize_unit_interval` on the
+    :data:`BELIEF_QUANT_LEVELS` grid before it lands in the vector (the §6.3
+    integer-grid discipline), and booleans are plain ``1.0`` / ``0.0``.
+
+    The v3 blocks, in appended order:
+
+    * **meeting_history_scalars** (3) — the agent's survived / ejection / skip
+      meeting counts from its OWN ``memory.meeting_history`` channel;
+    * **witness_slots** (``roster_slots`` × 3) — per lexical roster slot, whether
+      the agent can currently see that player, whether it is co-located, and how
+      many other visible players would witness a kill of it;
+    * **lastseen_recency_slots** (``roster_slots`` × 1) — per roster slot, a
+      short-horizon last-seen recency the v2 slots' 50-tick age cannot resolve.
+    """
+
+    version: ClassVar[str] = ENCODER_VERSION_V3
+
+    def feature_layout(self, public_map: PublicMapView) -> tuple[FeatureSegment, ...]:
+        """The v2 segment tuple plus the three v3 segments, in appended order.
+
+        The v3 segments follow the full v2 layout, so the v2 prefix is unchanged
+        and the total dimension is the v2 dimension plus ``3 + roster_slots * 3 +
+        roster_slots * 1``. The golden test pins this tuple against the v3 stamp.
+        """
+
+        return super().feature_layout(public_map) + (
+            FeatureSegment("meeting_history_scalars", len(_V3_MEETING_FEATURE_NAMES)),
+            FeatureSegment(
+                "witness_slots", self._roster_slots * _WITNESS_FEATURES_PER_SLOT
+            ),
+            FeatureSegment(
+                "lastseen_recency_slots",
+                self._roster_slots * _RECENCY_FEATURES_PER_SLOT,
+            ),
+        )
+
+    def encode(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+    ) -> tuple[float, ...]:
+        """Encode one decision into the v2 vector plus the three v3 blocks.
+
+        The v2 vector (``super().encode``) is a strict prefix; the three v3 blocks
+        are appended in layout order. Reads only ``packet``, the static
+        ``public_map``, and the agent's OWN ``memory`` — no engine, no other
+        agent's state (the meeting-history channel is hook-fed PUBLIC facts). The
+        roster is re-derived from the shared :func:`_roster_and_last_seen`, so the
+        v3 slots key on the SAME lexical roster as the inherited v2 slot blocks.
+        """
+
+        base = super().encode(packet, public_map, memory)
+        roster, episodic_last_seen = _roster_and_last_seen(packet, memory)
+
+        meeting_scalars = self._meeting_history_scalars(memory)
+        witness_slots = self._witness_slots(packet, roster)
+        recency_slots = self._lastseen_recency_slots(
+            packet, roster, episodic_last_seen, memory
+        )
+        return base + tuple(meeting_scalars + witness_slots + recency_slots)
+
+    def _meeting_history_scalars(self, memory: AgentMemory) -> list[float]:
+        """The three meeting-history counts, each normalized + quantized (18.22).
+
+        Reads the agent's OWN ``memory.meeting_history``. The hook reaches LIVING
+        agents only, so ``len(history)`` IS the number of meetings this agent
+        survived; the ejection / skip counts partition those by outcome. Each is
+        normalized by :data:`_MEETING_COUNT_NORM` and quantized onto the
+        :data:`BELIEF_QUANT_LEVELS` grid (the §6.3 integer-grid discipline).
+        """
+
+        history = memory.meeting_history
+        return [
+            quantize_unit_interval(len(history) / _MEETING_COUNT_NORM)
+            / BELIEF_QUANT_LEVELS,
+            quantize_unit_interval(history.ejection_count() / _MEETING_COUNT_NORM)
+            / BELIEF_QUANT_LEVELS,
+            quantize_unit_interval(history.skip_count() / _MEETING_COUNT_NORM)
+            / BELIEF_QUANT_LEVELS,
+        ]
+
+    def _witness_slots(
+        self, packet: ObservationPacket, roster: Sequence[str]
+    ) -> list[float]:
+        """Per roster slot: ``(visible, co_located, witnesses_norm)`` (18.22).
+
+        From the agent's OWN packet only. A slot player is ``visible`` when it is
+        in ``packet.visible_players``; ``co_located`` when its room is the agent's
+        own room; ``witnesses`` is the count of OTHER visible players in that same
+        room (the players who would witness a kill of the slot player — self is
+        never in ``visible_players``), normalized by :data:`_COUNT_NORM` and
+        quantized onto the grid. A slot player the agent cannot see, and every
+        slot past the roster, zero-fills ``(0.0, 0.0, 0.0)``.
+        """
+
+        # First occurrence wins (ids are unique in practice); the room a slot
+        # player is visible in.
+        visible_room: dict[str, str] = {}
+        for view in packet.visible_players:
+            if view.id not in visible_room:
+                visible_room[view.id] = view.room
+        self_room = packet.self_state.room
+
+        slots: list[float] = []
+        for slot in range(self._roster_slots):
+            if slot < len(roster):
+                player_id = roster[slot]
+                room = visible_room.get(player_id)
+                if room is None:
+                    slots.extend((0.0, 0.0, 0.0))
+                else:
+                    co_located = 1.0 if room == self_room else 0.0
+                    witnesses = sum(
+                        1
+                        for view in packet.visible_players
+                        if view.room == room and view.id != player_id
+                    )
+                    witnesses_norm = (
+                        quantize_unit_interval(witnesses / _COUNT_NORM)
+                        / BELIEF_QUANT_LEVELS
+                    )
+                    slots.extend((1.0, co_located, witnesses_norm))
+            else:
+                slots.extend((0.0, 0.0, 0.0))
+        return slots
+
+    def _lastseen_recency_slots(
+        self,
+        packet: ObservationPacket,
+        roster: Sequence[str],
+        episodic_last_seen: dict[str, tuple[int, str]],
+        memory: AgentMemory,
+    ) -> list[float]:
+        """Per roster slot: one short-horizon last-seen recency value (18.22).
+
+        The short-horizon signal the v2 slots' 50-tick-normalized age cannot
+        resolve. Source is the SAME :func:`_combined_last_seen` merge v2 uses (own
+        episodic sighting + own render cache). Unseen zero-fills. For a slot seen
+        at tick ``t``: ``age = max(0, packet.tick - t)``; when the recency window
+        is non-positive or ``age`` exceeds it the value is ``0.0`` (out of
+        horizon), else ``(window - age) / window`` quantized onto the grid — 1.0
+        at ``age == 0`` decaying to the window edge. Slots past the roster
+        zero-fill.
+        """
+
+        window = self._recency_window
+        slots: list[float] = []
+        for slot in range(self._roster_slots):
+            value = 0.0
+            if slot < len(roster) and window > 0:
+                player_id = roster[slot]
+                combined = _combined_last_seen(
+                    player_id, episodic_last_seen, memory.working
+                )
+                if combined is not None:
+                    age = max(0, packet.tick - combined[0])
+                    if age <= window:
+                        value = (
+                            quantize_unit_interval((window - age) / window)
+                            / BELIEF_QUANT_LEVELS
+                        )
+            slots.append(value)
+        return slots
+
+
+def encode_features_v3(
+    packet: ObservationPacket,
+    public_map: PublicMapView,
+    memory: AgentMemory,
+    *,
+    roster_slots: int = DEFAULT_ROSTER_SLOTS,
+    recency_window: int = DEFAULT_RECENCY_WINDOW,
+) -> tuple[float, ...]:
+    """Encode one decision with :class:`TacticalFeatureEncoderV3` (Task 18.22).
+
+    Additive and versioned: the returned vector is the v2 vector (byte-identical
+    prefix) followed by the three v3 blocks (meeting-history scalars, witness
+    slots, last-seen recency slots). Firewall doctrine is the v2 doctrine
+    unchanged — it reads ONLY the agent's own ``packet`` and own ``memory``, and
+    the meeting-history channel it consumes is fed exclusively from the
+    ``note_meeting_concluded`` hook's PUBLIC payload (the module docstring's v3
+    firewall note is the single leak-review locus). Every belief/ratio-derived v3
+    value is quantized onto the :data:`BELIEF_QUANT_LEVELS` integer grid (the §6.3
+    residue-flips-argmax discipline) before it lands in the vector.
+
+    Constructs a fresh encoder per call (no shared state; the encoder is a thin
+    stateless wrapper over ``roster_slots`` / ``recency_window``), mirroring how
+    a caller would build :class:`TacticalFeatureEncoder` directly.
+    """
+
+    encoder = TacticalFeatureEncoderV3(
+        roster_slots=roster_slots, recency_window=recency_window
+    )
+    return encoder.encode(packet, public_map, memory)
 
 
 # --------------------------------------------------------------------------- #
@@ -593,13 +897,17 @@ __all__ = [
     "DEFAULT_RECENCY_WINDOW",
     "DEFAULT_ROSTER_SLOTS",
     "ENCODER_VERSION",
+    "ENCODER_VERSION_V3",
     "FeatureSegment",
     "TacticalFeatureEncoder",
+    "TacticalFeatureEncoderV3",
     "beliefs_suspicion",
     "beliefs_trust",
+    "encode_features_v3",
     "mlp_forward",
     "mlp_genome_length",
     "quantize_unit_interval",
+    "slot_roster",
     "weights_from_hex_json",
     "weights_to_hex_json",
 ]

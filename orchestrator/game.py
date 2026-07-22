@@ -39,6 +39,7 @@ from agents.memory.store import (
     AgentMemory,
     absorb_meeting_evidence,
     absorb_reported_testimony,
+    record_meeting_outcome,
     render_for_prompt,
 )
 from agents.perception import (
@@ -636,25 +637,37 @@ class ReportedTestimonyAgent(Protocol):
 
 @runtime_checkable
 class MeetingPacingAgent(Protocol):
-    """Agent that bookkeeps meeting-end pacing facts (Task 10.8).
+    """Agent that bookkeeps meeting-end pacing facts (Task 10.8, 18.22).
 
     After every resolved meeting the orchestrator notifies each living
-    agent of three PUBLIC facts -- when gameplay resumes (``end_tick``),
+    agent of four PUBLIC facts -- when gameplay resumes (``end_tick``),
     the announced post-meeting dead roster (deaths and ejections are
     public at meetings, the same knowledge the Task 10.3 DEAD prompt line
-    renders), and which player's emergency action opened the meeting
-    (``None`` for a body report). The crewmate emergency trigger's
+    renders), which player's emergency action opened the meeting
+    (``None`` for a body report), and the meeting's ejection outcome
+    (``ejected_id`` -- the ejected player, or ``None`` for a skip/tie).
+    The crewmate emergency trigger's
     :class:`~agents.tactical.crewmate_policy.EmergencyPacingTracker`
-    consumes these for the global
+    consumes the first three for the global
     :data:`~agents.tactical.crewmate_policy.EMERGENCY_COOLDOWN_TICKS`
     cooldown, the one-call-per-game accounting (a call is spent only when
     a meeting actually OPENS from it -- engine truth, so a pre-empted
     intent does not burn the call), and the crossed-since-meeting reset.
 
+    The ``ejected_id`` fact (Task 18.22) feeds the meeting-history memory
+    channel the v3 tactical feature encoder reads: it is the announced
+    ejection tally everyone at the table saw, on the same public footing
+    as ``dead_ids``, so folding it into an agent's own memory crosses no
+    firewall. It defaults to ``None`` -- the orchestrator always passes
+    engine truth, but the default keeps every existing direct caller
+    (the pre-18.22 pacing consumers) working untouched.
+
     Optional capability like :class:`BeliefPersistingAgent`: a scripted /
-    packet-recording test agent without pacing bookkeeping is skipped, and
-    an impostor :class:`TacticalAgent` implements it as a no-op (impostors
-    gain no button behavior until Wave 2 decides it).
+    packet-recording test agent without pacing bookkeeping is skipped. An
+    impostor :class:`TacticalAgent` still folds ``ejected_id`` into its own
+    meeting-history memory (the v3 encoder is impostor-side, Task 18.22) but
+    performs no tracker/button bookkeeping (impostors gain no button
+    behavior until Wave 2 decides it).
     """
 
     def note_meeting_concluded(
@@ -663,6 +676,7 @@ class MeetingPacingAgent(Protocol):
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None: ...
 
 
@@ -1910,6 +1924,7 @@ class HeadlessGame:
             emergency_caller_id=(
                 trigger.triggered_by if trigger_kind == "emergency" else None
             ),
+            ejected_id=artifacts.result.ejected_player_id,
         )
         return next_state, post_events
 
@@ -2243,19 +2258,24 @@ def _notify_meeting_concluded(
     state: WorldState,
     agents: Mapping[PlayerId, AgentInterface],
     emergency_caller_id: PlayerId | None,
+    ejected_id: PlayerId | None,
 ) -> None:
-    """Fan one concluded meeting's pacing facts out to living agents (10.8).
+    """Fan one concluded meeting's pacing facts out to living agents (10.8, 18.22).
 
     The orchestrator-owned mirror of :func:`_absorb_meeting_beliefs` for the
     :class:`MeetingPacingAgent` capability: every player still alive in the
     post-meeting ``state`` learns the tick gameplay resumes at
     (``state.tick`` -- :func:`apply_meeting_result` already advanced it),
     the announced dead roster (sorted, post-ejection -- everyone at the
-    table saw who is gone), and the meeting's emergency caller (``None``
-    for a body report). All three are public knowledge at a meeting, so no
-    engine-private state crosses the firewall. Iteration is sorted for
-    determinism; agents without the capability are skipped (capability
-    gate, not a silent fallback -- see :class:`MeetingPacingAgent`).
+    table saw who is gone), the meeting's emergency caller (``None`` for a
+    body report), and the meeting's ejection outcome (``ejected_id`` -- the
+    ejected player, or ``None`` for a skip/tie). All four are public
+    knowledge at a meeting: the ejection tally is announced to the table on
+    the same footing as ``dead_ids``, so forwarding it crosses no firewall
+    (Task 18.22 -- it feeds the meeting-history memory channel the v3
+    tactical encoder reads). Iteration is sorted for determinism; agents
+    without the capability are skipped (capability gate, not a silent
+    fallback -- see :class:`MeetingPacingAgent`).
     """
 
     dead_ids = tuple(
@@ -2272,6 +2292,7 @@ def _notify_meeting_concluded(
                 end_tick=state.tick,
                 dead_ids=dead_ids,
                 emergency_caller_id=emergency_caller_id,
+                ejected_id=ejected_id,
             )
 
 
@@ -2958,17 +2979,31 @@ class TacticalAgent:
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None:
-        """Fold one meeting's pacing facts into the emergency tracker (10.8).
+        """Fold one meeting's pacing facts into memory + the tracker (10.8, 18.22).
 
-        Implements :class:`MeetingPacingAgent`. A no-op for an impostor
-        agent (no tracker -- impostors gain no button behavior). The
-        orchestrator calls this AFTER :meth:`absorb_meeting_evidence`, so
-        the tracker's post-meeting over-gate baseline reads the folded
-        beliefs and only a fresh below-to-above crossing re-arms the
-        suspicion trigger.
+        Implements :class:`MeetingPacingAgent`. Two folds, in order:
+
+        FIRST the meeting-history memory channel (Task 18.22): the resume
+        tick and the announced ejection outcome (both public at the table)
+        are recorded into this agent's OWN memory via
+        :func:`~agents.memory.store.record_meeting_outcome`, which the v3
+        tactical feature encoder reads. This fold is UN-gated by the
+        emergency tracker: it runs for BOTH roles because the v3 encoder is
+        impostor-side too, and an impostor has no tracker. The hook only ever
+        reaches living agents, so the append is monotone in ``end_tick`` and
+        the recorded history length IS this agent's meetings-survived count.
+
+        THEN the crewmate emergency tracker (Task 10.8), unchanged: a no-op
+        for an impostor agent (no tracker -- impostors gain no button
+        behavior). The orchestrator calls this AFTER
+        :meth:`absorb_meeting_evidence`, so the tracker's post-meeting
+        over-gate baseline reads the folded beliefs and only a fresh
+        below-to-above crossing re-arms the suspicion trigger.
         """
 
+        record_meeting_outcome(self._memory, end_tick=end_tick, ejected_id=ejected_id)
         if self._emergency_tracker is None:
             return
         self._emergency_tracker.observe_meeting_end(
