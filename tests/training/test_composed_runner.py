@@ -129,11 +129,16 @@ _COMPOSED_ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "composed"
 
 
 def _composed_factory() -> object:
-    """A committed-artifact composed-runner factory (fresh use-counters)."""
+    """A committed-artifact composed-runner factory (fresh use-counters).
+
+    Goes through the factory's DEFAULT adoption gate against the committed
+    composed verdict — every test driving it also exercises the gate's GO path.
+    """
 
     return load_composed_runner_factory(
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
     )
 
 
@@ -777,6 +782,7 @@ def test_one_meeting_meters_both_counters_cumulatively() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
+        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -812,6 +818,7 @@ def test_spent_surrogate_cap_fails_loud_from_the_composed_path() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
+        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -843,6 +850,7 @@ def test_spent_conviction_cap_fails_loud_after_the_entry_metering() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
+        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -947,6 +955,67 @@ def test_no_go_conviction_verdict_makes_the_runner_unbuildable(
         )
 
 
+def test_factory_adoption_gate_refuses_non_go_composed_verdicts(
+    tmp_path: Path,
+) -> None:
+    """The DEFAULT factory path enforces the 18.24 adoption gate (Codex, PR #310).
+
+    A campaign adopts the composed runner ONLY under its committed GO verdict:
+    the factory's default path loads the composed verdict, cross-checks both
+    component shas, and refuses a NO-GO, a sha drift, or a missing verdict. The
+    ``composed_artifact_dir=None`` escape stays open for the DIAGNOSTIC path
+    (the Goodhart leg / re-evaluation machinery), never for campaign wiring.
+    """
+
+    composed_dir = tmp_path / "composed"
+    composed_dir.mkdir()
+    for name in _COMPOSED_ARTIFACT_DIR.iterdir():
+        (composed_dir / name.name).write_bytes(name.read_bytes())
+    committed = load_composed_verdict(composed_dir)
+
+    # A re-recorded NO-GO/diagnostic-only composed verdict refuses the factory.
+    tampered = committed.model_copy(
+        update={"verdict": "NO-GO", "composed_role": "diagnostic-only"}
+    )
+    (composed_dir / COMPOSED_VERDICT_FILENAME).write_text(
+        tampered.model_dump_json(indent=2)
+    )
+    with pytest.raises(ValueError, match="DIAGNOSTIC-ONLY and never a campaign"):
+        load_composed_runner_factory(
+            conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+            surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+            composed_artifact_dir=composed_dir,
+        )
+
+    # A composed verdict keyed to different weights refuses too (drift).
+    drifted = committed.model_copy(update={"surrogate_weights_sha256": "0" * 64})
+    (composed_dir / COMPOSED_VERDICT_FILENAME).write_text(
+        drifted.model_dump_json(indent=2)
+    )
+    with pytest.raises(ValueError, match="drifted apart"):
+        load_composed_runner_factory(
+            conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+            surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+            composed_artifact_dir=composed_dir,
+        )
+
+    # No committed composed verdict at all -> nothing to adopt.
+    with pytest.raises(FileNotFoundError, match="no committed composed verdict"):
+        load_composed_runner_factory(
+            conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+            surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+            composed_artifact_dir=tmp_path / "empty",
+        )
+
+    # The diagnostic escape builds regardless of the composed verdict's state.
+    factory = load_composed_runner_factory(
+        conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+        surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+    )
+    assert isinstance(factory(), ComposedMeetingRunner)
+
+
 # --------------------------------------------------------------------------- #
 # 7. FULL COMPOSED-DRIVEN HEADLESSGAME — coherence, determinism, fold survival #
 # --------------------------------------------------------------------------- #
@@ -960,6 +1029,7 @@ def _run_composed_game(
     factory = load_composed_runner_factory(
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
     )
     absorbed: list[PlayerId] = []
     base_factory = build_default_agent_factory()
@@ -1195,6 +1265,152 @@ def test_composed_fidelity_top1_matches_an_independent_recompute(
             hits += 1
     assert ejections == 60
     assert composed_fidelity.convicting_top1 == pytest.approx(hits / 60, abs=1e-12)
+
+
+def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
+    composed_fidelity: ComposedFidelityReport, committed_shas: tuple[str, str]
+) -> None:
+    """The GO verdict is invariant to the runner's live §7.12 candidate exclusion.
+
+    The committed verdict's top-1 cell is the STANDING axis-1 recipe (the
+    surrogate fidelity harness's self-only candidate views — the exact channel
+    the committed 0.7667 was measured on). The live runner additionally drops an
+    impostor voter's fellow impostors from its candidate set (the §7.12
+    firewall), which shifts the softmax denominator on multi-impostor meetings.
+    Measured, never assumed away (Codex review on PR #310; the surrogate's own
+    live-parity idiom): re-scoring the whole held-out split through the LIVE
+    views moves the top-1 to 45/60 = 0.75 while the decision channel is
+    unchanged — and every gating cell still clears its bar, so the composed
+    verdict reads GO under the live channel too.
+    """
+
+    from training.conviction.dataset import (
+        build_conviction_table,
+        validate_conviction_split,
+    )
+    from training.surrogate.dataset import MeetingTableRow, build_meeting_table
+    from training.surrogate.fidelity import build_meeting_views, compute_honest_ceiling
+
+    table = build_meeting_table(_CORPUS)
+    assert table.splits is not None
+    test_seeds = frozenset(table.splits.test)
+    ctable = build_conviction_table(_CORPUS)
+    _, conviction_test_seeds = validate_conviction_split(ctable)
+    assert conviction_test_seeds == test_seeds
+
+    predictor, surrogate_sha = load_ballot_predictor_artifact(_SURROGATE_ARTIFACT_DIR)
+    conviction_model, conviction_sha = load_conviction_model_artifact(
+        _CONVICTION_ARTIFACT_DIR
+    )
+    crows = {(r.seed, r.meeting_id): r for r in ctable.rows if r.seed in test_seeds}
+    rows_by_meeting: dict[tuple[int, str], list[MeetingTableRow]] = {}
+    for row in table.rows:
+        if row.seed in test_seeds:
+            rows_by_meeting.setdefault((row.seed, row.meeting_id), []).append(row)
+    test_views = sorted(
+        (v for v in build_meeting_views(table) if v.seed in test_seeds),
+        key=lambda v: (v.seed, v.meeting_id),
+    )
+
+    decision_hits = top1_hits = exact_hits = ejections = 0
+    gate_convictions = tally_ejections = 0
+    for view in test_views:
+        by_voter: dict[PlayerId, PredictedBallot] = {}
+        ballots: list[VoteBallot] = []
+        for row in rows_by_meeting[(view.seed, view.meeting_id)]:
+            impostors = {f.candidate for f in row.candidates if f.is_impostor}
+            candidates: list[PlayerId] = []
+            features: dict[PlayerId, dict[str, float]] = {}
+            for feat in row.candidates:
+                if feat.is_self:
+                    continue
+                # The live runner's §7.12 exclusion, mirrored off the row roles.
+                if row.voter_is_impostor and feat.candidate in impostors:
+                    continue
+                candidates.append(feat.candidate)
+                features[feat.candidate] = {
+                    "belief_suspicion": float(feat.belief_suspicion),
+                    "belief_trust": float(feat.belief_trust),
+                    "is_reporter": float(feat.is_reporter),
+                    "witnessed_vent": float(feat.witnessed_vent),
+                    "meeting_index": float(row.meeting_index),
+                    "alive_count": float(len(row.candidates)),
+                }
+            predicted = predictor.predict_ballot(
+                VoterBallotView(
+                    voter=row.voter, candidates=tuple(candidates), features=features
+                )
+            )
+            by_voter[row.voter] = predicted
+            ballots.append(
+                VoteBallot(
+                    voter=row.voter,
+                    target=predicted.target,
+                    confidence=predicted.confidence,
+                    primary_reason_id=None,
+                    considered_alternatives=(),
+                    rationale_text="live-exclusion variant",
+                )
+            )
+        _, tally_ejected = tally_ballots(
+            ballots, skip_confidence_threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+        )
+        if tally_ejected is not None:
+            tally_ejections += 1
+        voters = sorted(by_voter)
+        shares: dict[PlayerId, float] = {}
+        for cand in view.candidates:
+            masses = [
+                by_voter[v].target_probs.get(cand, 0.0) for v in voters if v != cand
+            ]
+            shares[cand] = sum(masses) / len(masses) if masses else 0.0
+        ranking = tuple(sorted(view.candidates, key=lambda c: (-shares[c], c)))
+        crow = crows[(view.seed, view.meeting_id)]
+        convict = (
+            conviction_model.predict(crow.features).conversion_prob
+            >= CONVICTION_CONVERSION_DECISION_THRESHOLD
+        )
+        if convict:
+            gate_convictions += 1
+        predicted_ejected = ranking[0] if convict else tally_ejected
+        if (predicted_ejected is not None) == (view.ejected is not None):
+            decision_hits += 1
+        if predicted_ejected == view.ejected:
+            exact_hits += 1
+        if view.ejected is not None:
+            ejections += 1
+            if ranking[0] == view.ejected:
+                top1_hits += 1
+
+    # The measured live-exclusion cells: decision channel identical, top-1 one
+    # hit lower, the surrogate tally still all-SKIP.
+    assert (decision_hits, ejections) == (83, 60)
+    assert top1_hits == 45
+    assert exact_hits == 75
+    assert tally_ejections == 0
+    assert gate_convictions == composed_fidelity.predicted_convictions
+
+    # The verdict is invariant: re-deciding on the live-channel cells reads GO.
+    ceiling = compute_honest_ceiling(test_views)
+    conviction_weights_sha256, surrogate_weights_sha256 = committed_shas
+    assert conviction_sha == conviction_weights_sha256
+    assert surrogate_sha == surrogate_weights_sha256
+    variant = composed_fidelity.model_copy(
+        update={
+            "decision_accuracy": decision_hits / 96,
+            "convicting_top1": top1_hits / 60,
+            "exact_outcome_match": exact_hits / 96,
+            "top1_ceiling": ceiling.max_achievable_top1,
+        }
+    )
+    verdict = decide_composed_go(
+        variant,
+        conviction_weights_sha256=conviction_weights_sha256,
+        surrogate_weights_sha256=surrogate_weights_sha256,
+    )
+    assert verdict.verdict == "GO"
+    assert verdict.meets_decision_bar and verdict.meets_top1_bar
+    assert verdict.convicting_top1 == pytest.approx(0.75)
 
 
 # --------------------------------------------------------------------------- #

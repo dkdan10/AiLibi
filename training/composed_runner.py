@@ -129,6 +129,7 @@ from training.surrogate.runner import (
 # leaves untouched) — the same two dirs the component loaders default to.
 _CONVICTION_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/conviction")
 _SURROGATE_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/surrogate")
+_COMPOSED_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/composed")
 
 # The committed composed-artifact sidecars under ``training/artifacts/composed/``.
 COMPOSED_MANIFEST_FILENAME: Final[str] = "manifest.json"
@@ -338,6 +339,7 @@ def load_composed_runner_factory(
     conviction_use_counter: ConvictionUseCounter | None = None,
     surrogate_use_counter: SurrogateUseCounter | None = None,
     corpus_dir: Path | None = None,
+    composed_artifact_dir: Path | None = _COMPOSED_ARTIFACT_DIR,
 ) -> Callable[[], ComposedMeetingRunner]:
     """Build a per-game composed-runner factory (18.21's ``Callable[[], MeetingRunner]``).
 
@@ -347,6 +349,17 @@ def load_composed_runner_factory(
     across games (a fresh runner per game never resets them), the surrogate-factory
     ownership doctrine. This is the slot 18.21's runner-factory seam plugs a
     GO-verdict composed runner into without ever editing the frozen driver.
+
+    **The adoption gate (default ON — Codex review on PR #310).** With the
+    default ``composed_artifact_dir`` the factory also loads the committed
+    COMPOSED verdict, cross-checks it against BOTH loaded component shas, and
+    refuses anything but the committed **GO** — the 18.24 rule made structural
+    (a campaign adopts the composed runner ONLY under its committed GO verdict,
+    and a re-recorded NO-GO/diagnostic-only verdict must never quietly hand a
+    campaign a runnable factory). Pass ``composed_artifact_dir=None`` for the
+    DIAGNOSTIC path — the Goodhart leg and the first-eval/re-ground machinery
+    construct the runner regardless of (and before) any committed composed
+    verdict; that escape is for the diagnostics, never for campaign wiring.
     """
 
     components = load_composed_components(
@@ -356,6 +369,34 @@ def load_composed_runner_factory(
         surrogate_use_counter=surrogate_use_counter,
         corpus_dir=corpus_dir,
     )
+    if composed_artifact_dir is not None:
+        composed_verdict = load_composed_verdict(composed_artifact_dir)
+        if (
+            composed_verdict.conviction_weights_sha256
+            != components.conviction_weights_sha256
+            or composed_verdict.surrogate_weights_sha256
+            != components.surrogate_weights_sha256
+        ):
+            raise ValueError(
+                f"the committed composed verdict under {composed_artifact_dir} is "
+                f"keyed on (conviction "
+                f"{composed_verdict.conviction_weights_sha256!r}, surrogate "
+                f"{composed_verdict.surrogate_weights_sha256!r}) but the loaded "
+                f"components hash to (conviction "
+                f"{components.conviction_weights_sha256!r}, surrogate "
+                f"{components.surrogate_weights_sha256!r}) — the verdict and the "
+                "artifacts drifted apart"
+            )
+        if composed_verdict.verdict != "GO":
+            raise ValueError(
+                f"the committed composed verdict under {composed_artifact_dir} is "
+                f"{composed_verdict.verdict!r} (composed_role="
+                f"{composed_verdict.composed_role!r}) — a NO-GO composition is "
+                "DIAGNOSTIC-ONLY and never a campaign configuration; pass "
+                "composed_artifact_dir=None only for the diagnostic path (the "
+                "Goodhart leg / re-evaluation machinery), never for campaign "
+                "wiring (no silent fallbacks)"
+            )
 
     def factory() -> ComposedMeetingRunner:
         return ComposedMeetingRunner(components=components)
@@ -1182,11 +1223,15 @@ def run_composed_goodhart_leg(
         load_conviction_staleness_cap(conviction_artifact_dir)
     )
     surrogate_counter = SurrogateUseCounter(load_staleness_cap(surrogate_artifact_dir))
+    # The leg IS the diagnostic instrument: it probes the composed path
+    # regardless of (and, at a re-ground, before) any committed composed
+    # verdict, so it opts out of the factory's adoption gate explicitly.
     factory = load_composed_runner_factory(
         conviction_artifact_dir=conviction_artifact_dir,
         surrogate_artifact_dir=surrogate_artifact_dir,
         conviction_use_counter=conviction_counter,
         surrogate_use_counter=surrogate_counter,
+        composed_artifact_dir=None,
     )
 
     surrogate_before = surrogate_counter.uses

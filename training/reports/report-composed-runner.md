@@ -132,6 +132,24 @@ decision accuracy — the always-SKIP constant), so on the composed skip branch
 the pass-through tally is in practice always SKIPPED and the decision channel
 is carried entirely by the conviction gate.
 
+**The live candidate-view variant (measured, never assumed away — Codex review
+on PR #310).** The top-1 cell above is the STANDING axis-1 recipe: the
+surrogate fidelity harness's self-only candidate views, the exact channel the
+committed 0.7667 was measured on. The live runner additionally drops an
+impostor voter's fellow impostors from its candidate set (the §7.12 firewall),
+which shifts the softmax denominator on multi-impostor meetings. Re-scoring
+the whole held-out split through the LIVE views: decision accuracy **83/96 =
+0.8646 (identical)**, convicting top-1 **45/60 = 0.7500** (one hit lower),
+exact-outcome **75/96 = 0.7813**, surrogate tally still all-SKIP (0/96). Every
+gating cell still clears its bar (0.8646 > 0.625; 0.7500 ≥ 0.6375), so **the
+GO verdict is invariant to the live channel** — pinned by the committed test
+`test_go_verdict_holds_under_the_live_teammate_exclusion_ranking` (the
+surrogate's own live-parity idiom, `test_no_go_verdict_holds_on_live_served_
+clamped_features`). The verdict itself stays on the standing recipe: the
+pre-registered bar names the standing axis-1 form, and re-cutting the recipe
+after the first evaluation would be exactly the peeking the discipline
+forbids.
+
 ## 4. THE VERDICT: GO
 
 | axis | measured | bar | pass |
@@ -149,10 +167,14 @@ re-use, well clear of the 0.625 constant but below the model's 0.9375 accuracy
 on its own conversion label; (b) the top-1 cell is the surrogate's retained
 ranking channel measured in the standing axis-1 form — identical to the
 committed 0.7667, confirming the composition preserves the WHO channel
-unchanged; (c) exact-outcome (0.7917) compounds both channels and is quoted
-informationally per the pre-registration; (d) every number here is a
-baseline-6 population measurement — nothing transfers as an absolute
-(population-relative doctrine), and any substrate change re-runs §8.
+unchanged; the verdict is also invariant to the gate-conditioned reading of
+"among convicting meetings" (top-1 among gate-convicted ejections = 41/48 =
+0.8542 ≥ 0.6375) AND to the live candidate-view variant (§3: 45/60 = 0.7500 ≥
+0.6375), so no interpretation of axis 2 flips it; (c) exact-outcome (0.7917)
+compounds both channels and is quoted informationally per the
+pre-registration; (d) every number here is a baseline-6 population
+measurement — nothing transfers as an absolute (population-relative
+doctrine), and any substrate change re-runs §8.
 
 ## 5. What the composed path changes inside training rollouts
 
@@ -331,9 +353,13 @@ uv run pytest tests/training/test_composed_runner.py -q
 * **18.21's driver** (when it lands) takes
   `load_composed_runner_factory(conviction_use_counter=…,
   surrogate_use_counter=…)` as an OPTIONAL campaign configuration — only under
-  this committed GO verdict (`load_composed_verdict`), only at a swap boundary
-  (18.24), with both counters quoted in the campaign meters and the §6.3
-  constraints carried. The default remains the fake provider; nothing adopts
+  this committed GO verdict, only at a swap boundary (18.24), with both
+  counters quoted in the campaign meters and the §6.3 constraints carried. The
+  18.24 rule is structural: the factory's DEFAULT path loads the committed
+  composed verdict, cross-checks both component shas, and refuses anything but
+  GO (`composed_artifact_dir=None` is the diagnostic escape for the Goodhart
+  leg / re-evaluation machinery, never for campaign wiring). The default
+  campaign meeting path remains the fake provider; nothing adopts
   automatically.
 * **The standing rules bind regardless:** final champion numbers are never
   composed-runner-scored; the Goodhart probe re-runs when the composed
