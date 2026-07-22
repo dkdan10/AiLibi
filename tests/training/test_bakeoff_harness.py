@@ -1325,6 +1325,14 @@ def test_conviction_prescreen_under_go(tmp_path: Path) -> None:
         measured_flags_per_meeting=verdict.predicted_flags_per_meeting,
     )
 
+    # The expected converting share (mean conversion probability) is REPORTED
+    # beside the thresholded channel — the exact unmetered-recompute mean —
+    # and is never a pass input (the pass bits below read only the thresholded
+    # share): the gated channel stays the pinned-threshold call, the model's
+    # only verdict-validated operating point.
+    conversion_probs = [unmetered.predict(f).conversion_prob for f in features]
+    assert verdict.predicted_mean_conversion_prob == math.fsum(conversion_probs) / 3
+
     # The pass bits are the literal comparisons and the verdict is their AND.
     assert verdict.predicted_flags_pass == (
         verdict.predicted_flags_per_meeting >= verdict.flags_floor
@@ -1351,10 +1359,35 @@ def test_conviction_prescreen_under_nogo_is_advisory_only(tmp_path: Path) -> Non
     assert verdict.advisory_only is True
 
 
-def test_conviction_prescreen_empty_batch_raises(tmp_path: Path) -> None:
-    _write_conviction_fixture(tmp_path, go=True)
-    with pytest.raises(ValueError, match="at least one meeting"):
-        conviction_prescreen([], artifact_dir=tmp_path)
+def test_conviction_prescreen_empty_batch_is_the_starvation_fail(
+    tmp_path: Path,
+) -> None:
+    # An empty batch is the evidence-STARVATION verdict, not an exception (the
+    # referee's own doctrine: starvation is not a pass —
+    # eval/watchability.py::evaluate_supply_floors): the driver gets a
+    # machine-readable FAILING verdict it can cheaply reject on.
+    sha = _write_conviction_fixture(tmp_path, go=True)
+    counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
+    verdict = conviction_prescreen([], artifact_dir=tmp_path, use_counter=counter)
+
+    assert verdict.weights_sha256 == sha
+    assert verdict.meetings_scored == 0
+    # Nothing was predicted, so nothing was metered.
+    assert verdict.conviction_uses == 0
+    assert counter.uses == 0
+    # Every predicted channel reads 0.0 and the derived conversion demand is
+    # the maximal 1.0 (the population_relative_conversion_floor starvation
+    # shape); both floors FAIL unconditionally.
+    assert verdict.predicted_flags_per_meeting == 0.0
+    assert verdict.predicted_converting_share == 0.0
+    assert verdict.predicted_mean_conversion_prob == 0.0
+    assert verdict.conversion_floor == 1.0
+    assert verdict.predicted_flags_pass is False
+    assert verdict.predicted_conversion_pass is False
+    assert verdict.predicted_floors_pass is False
+    # The role fields still ride the committed verdict (GO fixture: gating).
+    assert verdict.prescreen_role == "gating"
+    assert verdict.advisory_only is False
 
 
 # --------------------------------------------------------------------------- #

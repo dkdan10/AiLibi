@@ -919,10 +919,26 @@ class ConvictionPrescreenVerdict(BaseModel):
     ``predicted_converting_share`` is the per-meeting SHARE of meetings the
     conversion head calls at the pinned threshold — a LOWER-BOUND proxy for the
     referee's converted/attempted gauge (converted/meetings <=
-    converted/attempted), so a predicted PASS is the conservative direction. The
-    flags floor and the conversion pin are the committed pins consumed as
-    numbers; the conversion floor derives population-relative from the PREDICTED
-    flags density via ``eval.watchability.population_relative_conversion_floor``.
+    converted/attempted), so a predicted PASS is the conservative direction.
+    ``predicted_mean_conversion_prob`` is the mean conversion probability — the
+    model's EXPECTED converting-meeting share, carrying the sub-threshold mass a
+    hard call discards. It is REPORTED beside the thresholded channel, never
+    substituted for it (the fidelity report's precision/accuracy idiom): the
+    gated channel stays the pinned-threshold call because that is the model's
+    only verdict-validated operating point — the 18.15 GO verdict measured
+    recall at ``CONVICTION_CONVERSION_DECISION_THRESHOLD``, fixed before the
+    held-out evaluation, while the raw probabilities' calibration was never
+    judged. The flags floor and the conversion pin are the committed pins
+    consumed as numbers; the conversion floor derives population-relative from
+    the PREDICTED flags density via
+    ``eval.watchability.population_relative_conversion_floor``.
+
+    ``meetings_scored == 0`` is the evidence-STARVATION verdict (an empty
+    batch): every predicted channel reads 0.0, the derived conversion floor is
+    the maximal 1.0, and both floors FAIL — the referee's own doctrine
+    (``eval/watchability.py::evaluate_supply_floors``: starvation is not a
+    pass), so the driver cheaply rejects a no-meeting entrant instead of
+    crashing mid-campaign.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -937,6 +953,7 @@ class ConvictionPrescreenVerdict(BaseModel):
     flags_floor: float
     predicted_flags_pass: bool
     predicted_converting_share: float
+    predicted_mean_conversion_prob: float
     conversion_pin: float
     conversion_floor: float
     predicted_conversion_pass: bool
@@ -971,21 +988,54 @@ def conviction_prescreen(
     module allowed to import ``eval``). ADVISORY-ONLY doctrine: under NO-GO the
     ``prescreen_role`` is ``"advisory"`` and ``advisory_only`` is set — a driver
     must never gate real-path spend on it.
+
+    An EMPTY batch (a candidate whose probe games produced no meetings) is the
+    evidence-starvation case, not an error: the referee's own doctrine FAILS
+    absent supply rather than excusing it
+    (``eval/watchability.py::evaluate_supply_floors`` — starvation is not a
+    pass; a no-supply population faces the maximal derived conversion demand of
+    1.0), so the driver receives a machine-readable FAILING verdict it can
+    cheaply reject on — never an exception mid-campaign, never a silent pass.
+    Zero uses are metered (nothing was predicted).
     """
 
-    if not meeting_features:
-        raise ValueError(
-            "conviction_prescreen needs at least one meeting feature mapping — "
-            "there is no predicted-floors verdict over nothing"
-        )
     model, sha, counter, verdict = _load_conviction_bundle(artifact_dir, use_counter)
+    advisory_only = verdict.prescreen_role != "gating"
+    if not meeting_features:
+        # The starvation verdict: both floors FAIL by doctrine (the comparisons
+        # below would agree — 0.0 never reaches a positive committed pin and
+        # the derived demand is the maximal 1.0 — but the fail is the DOCTRINE,
+        # not an arithmetic accident, so it is stated unconditionally).
+        return ConvictionPrescreenVerdict(
+            weights_sha256=sha,
+            model_verdict=verdict.verdict,
+            prescreen_role=verdict.prescreen_role,
+            advisory_only=advisory_only,
+            meetings_scored=0,
+            conviction_uses=0,
+            predicted_flags_per_meeting=0.0,
+            flags_floor=flags_floor,
+            predicted_flags_pass=False,
+            predicted_converting_share=0.0,
+            predicted_mean_conversion_prob=0.0,
+            conversion_pin=conversion_pin,
+            conversion_floor=population_relative_conversion_floor(
+                pinned_conversion=conversion_pin,
+                pinned_flags_per_meeting=flags_floor,
+                measured_flags_per_meeting=0.0,
+            ),
+            predicted_conversion_pass=False,
+            predicted_floors_pass=False,
+        )
     uses_before = counter.uses
     flags: list[float] = []
+    conversion_probs: list[float] = []
     converting = 0
     for features in meeting_features:
         counter.record_use(weights_sha256=sha)
         prediction = model.predict(features)
         flags.append(prediction.expected_flags)
+        conversion_probs.append(prediction.conversion_prob)
         if prediction.conversion_prob >= CONVICTION_CONVERSION_DECISION_THRESHOLD:
             converting += 1
     n = len(meeting_features)
@@ -1003,13 +1053,16 @@ def conviction_prescreen(
         weights_sha256=sha,
         model_verdict=verdict.verdict,
         prescreen_role=verdict.prescreen_role,
-        advisory_only=verdict.prescreen_role != "gating",
+        advisory_only=advisory_only,
         meetings_scored=n,
         conviction_uses=counter.uses - uses_before,
         predicted_flags_per_meeting=predicted_flags_per_meeting,
         flags_floor=flags_floor,
         predicted_flags_pass=predicted_flags_pass,
         predicted_converting_share=predicted_converting_share,
+        # Reported, never gated: the expected converting share (mean
+        # probability) beside the thresholded call — see the verdict docstring.
+        predicted_mean_conversion_prob=math.fsum(conversion_probs) / n,
         conversion_pin=conversion_pin,
         conversion_floor=conversion_floor,
         predicted_conversion_pass=predicted_conversion_pass,
