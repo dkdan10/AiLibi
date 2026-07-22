@@ -1347,20 +1347,32 @@ class ConvictionGateCheck(BaseModel):
 
     The 18.16 pre-screen is a PREDICTED-floors gate the campaign driver
     consults before spending real-path evals; the recorded referee floors are
-    the reality it predicts. ``laundered`` names every validity-passing policy
-    whose predicted floors PASS while its recorded supply floors FAIL — the
-    seam through which predicted supply could spend (or, mis-consumed, select)
-    where the recorded referee refuses — flagged REGARDLESS of magnitude, the
-    standing gate-flip convention. ``false_blocked`` is the reverse divergence
-    (predicted FAIL, recorded PASS): an efficiency loss, reported, never a
-    blocker. Both are validity-gated — an inadmissible set is not a reachable
-    attack (the standing doctrine); the per-read booleans stay raw.
+    the reality it predicts. A predicted-PASS / recorded-FAIL divergence
+    splits on the standing BASELINE-RELATIVE gate convention (the probe's
+    gate-flip doctrine — a flip is measured against the honest scripted
+    baseline, never in isolation):
+
+    * ``laundered`` — validity-passing policies whose predicted floors PASS
+      while their recorded supply floors FAIL and the honest baseline does
+      NOT share the divergence: adversarial play FLIPPED the predicted gate —
+      the true laundering seam, flagged REGARDLESS of magnitude;
+    * ``substrate_divergent`` — the same predicted-PASS / recorded-FAIL read
+      when the HONEST BASELINE shows it too: no lever flipped anything — the
+      model predicts the real-path supply economy it was fit on while this
+      substrate's meetings mint no flags in bytes. A consumption hazard
+      (named, never silent), not lever laundering.
+
+    ``false_blocked`` is the reverse divergence (predicted FAIL, recorded
+    PASS): an efficiency loss, reported, never a blocker. All three are
+    validity-gated — an inadmissible set is not a reachable attack (the
+    standing doctrine); the per-read booleans stay raw.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     prescreen_is_gating: bool
     laundered: tuple[str, ...]
+    substrate_divergent: tuple[str, ...]
     false_blocked: tuple[str, ...]
     verdict: str
 
@@ -1719,15 +1731,36 @@ def _build_conviction_read(
 def _build_gate_check(
     reads: Sequence[ConvictionLeverRead], *, prescreen_is_gating: bool
 ) -> ConvictionGateCheck:
-    """The composed-gate laundering check over every probed policy."""
+    """The composed-gate laundering check over every probed policy.
 
-    laundered = tuple(
+    The standing BASELINE-RELATIVE gate convention: a predicted-PASS /
+    recorded-FAIL divergence is LAUNDERING only when the honest scripted
+    baseline does not share it — a divergence the baseline shows too is the
+    substrate speaking (the model predicts real-path supply; this substrate
+    mints none), named as ``substrate_divergent``, never dressed up as a
+    lever flip.
+    """
+
+    baseline = next((read for read in reads if read.tactic == _BASELINE_TACTIC), None)
+    if baseline is None:
+        raise ValueError(
+            "the gate check needs the scripted-FSM baseline read — no "
+            f"{_BASELINE_TACTIC!r} entry in the reads"
+        )
+    baseline_diverges = (
+        baseline.validity_passed
+        and baseline.prescreen_floors_pass
+        and not baseline.supply_floors_passed
+    )
+    divergent = tuple(
         read.tactic
         for read in reads
         if read.validity_passed
         and read.prescreen_floors_pass
         and not read.supply_floors_passed
     )
+    laundered = () if baseline_diverges else divergent
+    substrate_divergent = divergent if baseline_diverges else ()
     false_blocked = tuple(
         read.tactic
         for read in reads
@@ -1739,10 +1772,21 @@ def _build_gate_check(
         verdict = (
             "PREDICTION-LAUNDERED: the committed pre-screen's predicted floors "
             f"PASS for {', '.join(laundered)} while the recorded supply floors "
-            "FAIL — predicted supply clears the composed gate where the "
-            "recorded referee refuses; the 18.24 protocol must not spend (or "
-            "be mis-read to select) on the pre-screen verdict for these "
-            "families without a recorded-bytes confirm"
+            "FAIL and the honest baseline shows no such divergence — "
+            "adversarial play flipped the predicted gate; the 18.24 protocol "
+            "must not spend (or be mis-read to select) on the pre-screen "
+            "verdict for these families without a recorded-bytes confirm"
+        )
+    elif substrate_divergent:
+        verdict = (
+            "SUBSTRATE-DIVERGENT: the committed pre-screen's predicted floors "
+            f"PASS for {', '.join(substrate_divergent)} while the recorded "
+            "floors FAIL — the HONEST baseline shares the divergence, so no "
+            "lever flipped the predicted gate; the model predicts the "
+            "real-path supply economy it was fit on while this substrate's "
+            "meetings mint no flags in bytes. A pre-screen PASS is real-path "
+            "spend advice ONLY on such a substrate — never a recorded-floor "
+            "read"
         )
     else:
         verdict = (
@@ -1754,13 +1798,17 @@ def _build_gate_check(
     return ConvictionGateCheck(
         prescreen_is_gating=prescreen_is_gating,
         laundered=laundered,
+        substrate_divergent=substrate_divergent,
         false_blocked=false_blocked,
         verdict=verdict,
     )
 
 
 def _build_conviction_findings(
-    reads: Sequence[ConvictionLeverRead], *, roster_key: str
+    reads: Sequence[ConvictionLeverRead],
+    *,
+    gate_check: ConvictionGateCheck,
+    roster_key: str,
 ) -> tuple[ConvictionPathFinding, ...]:
     """Promote every material conviction-path seam to a NAMED finding."""
 
@@ -1798,11 +1846,7 @@ def _build_conviction_findings(
                     ),
                 )
             )
-        if (
-            read.validity_passed
-            and read.prescreen_floors_pass
-            and not read.supply_floors_passed
-        ):
+        if read.tactic in gate_check.laundered:
             findings.append(
                 ConvictionPathFinding(
                     mechanism="prescreen-gate-laundering",
@@ -1810,10 +1854,11 @@ def _build_conviction_findings(
                     label=read.label,
                     behavioral_cause=(
                         f"{read.label}: the committed pre-screen's predicted "
-                        "floors PASS while the recorded supply floors FAIL — "
-                        "the composed gate would spend a real eval on play "
-                        "whose bytes the referee refuses (flagged regardless "
-                        "of magnitude, the standing gate-flip convention)"
+                        "floors PASS while the recorded supply floors FAIL "
+                        "and the honest baseline shows no such divergence — "
+                        "adversarial play flipped the predicted gate (flagged "
+                        "regardless of magnitude, the standing gate-flip "
+                        "convention)"
                     ),
                     materiality_arithmetic=read.materiality_arithmetic,
                     recommended_guard=(
@@ -1823,10 +1868,52 @@ def _build_conviction_findings(
                     ),
                     blocker=(
                         f"prescreen-gate-laundering[{read.tactic},{roster_key}]: "
-                        "predicted floors PASS / recorded floors FAIL"
+                        "predicted floors PASS / recorded floors FAIL, not "
+                        "shared by the honest baseline"
                     ),
                 )
             )
+    if gate_check.substrate_divergent:
+        baseline = next(read for read in reads if read.tactic == _BASELINE_TACTIC)
+        affected = "+".join(gate_check.substrate_divergent)
+        findings.append(
+            ConvictionPathFinding(
+                mechanism="prescreen-substrate-divergence",
+                tactic=affected,
+                label="composed-gate substrate divergence",
+                behavioral_cause=(
+                    "the committed pre-screen's predicted floors PASS while "
+                    f"the recorded floors FAIL for {affected} — the HONEST "
+                    "scripted baseline shares the divergence, so no lever "
+                    "flipped the predicted gate; the model predicts the "
+                    "real-path supply economy it was fit on while this "
+                    "substrate's meetings mint no flags in bytes "
+                    "(prediction-vs-substrate, not lever laundering)"
+                ),
+                materiality_arithmetic=(
+                    "honest baseline: predicted flags/meeting "
+                    f"{baseline.predicted_flags_per_meeting:.3f} + predicted "
+                    f"converting share {baseline.predicted_converting_share:.3f} "
+                    "clear the committed pins while recorded flags/meeting = "
+                    f"{baseline.actual_flags_per_meeting:.3f} (a gate "
+                    "divergence is flagged regardless of magnitude — the "
+                    "standing gate-flip convention)"
+                ),
+                recommended_guard=(
+                    "the 18.24 protocol must consume a pre-screen PASS as "
+                    "real-path spend advice ONLY — never as a recorded-floor "
+                    "read on a substrate whose meetings cannot mint flags; "
+                    "pair every gating use with a recorded-bytes floor read — "
+                    "routed, never self-served"
+                ),
+                blocker=(
+                    f"prescreen-substrate-divergence[{affected},{roster_key}]: "
+                    "predicted floors PASS / recorded floors FAIL, shared by "
+                    "the honest baseline — a pre-screen PASS is real-path "
+                    "spend advice only on this substrate"
+                ),
+            )
+        )
     return tuple(findings)
 
 
@@ -1954,7 +2041,9 @@ def run_conviction_path_probe(
     gate_check = _build_gate_check(
         reads, prescreen_is_gating=term.verdict.prescreen_role == "gating"
     )
-    findings = _build_conviction_findings(reads, roster_key=probe.roster_key)
+    findings = _build_conviction_findings(
+        reads, gate_check=gate_check, roster_key=probe.roster_key
+    )
     blockers = tuple(finding.blocker for finding in findings) + _standing_blockers(
         probe
     )
