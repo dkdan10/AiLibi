@@ -529,7 +529,6 @@ def test_staleness_cap_retires_and_exhausted_pool_stops_loudly(
         crew=_crew_side(population=1),
         master_seed=77,
         generations_per_swap=2,
-        payoff_seeds=(),
         slate_size=1,
         staleness_cap=OpponentStalenessCap(max_generations=1, unit="generations"),
         max_ticks=3,
@@ -691,7 +690,22 @@ def test_misconfigurations_fail_loud_before_any_game(tmp_path: Path) -> None:
         run_alternating_freeze(
             _make_config(tmp_path / "d", impostor=_impostor_side(side="crew"))
         )
-    for sub in ("a", "b", "c", "d"):
+    # The payoff protocol is never a silent whole-campaign PFSP bypass: the
+    # empty seed set is refused (the sampler's cold-start exception is
+    # gen-1-shaped and the driver measures even generation 1's row).
+    with pytest.raises(ValueError, match="payoff_seeds must be non-empty"):
+        run_alternating_freeze(_make_config(tmp_path / "e", payoff_seeds=()))
+    # A typo'd first_side from an untyped/deserialized config must never
+    # silently run the campaign in the opposite order.
+    with pytest.raises(ValueError, match="first_side must be"):
+        run_alternating_freeze(_make_config(tmp_path / "f", first_side="imposter"))
+    # inf passes a bare positivity check; the ES scale knobs must be finite
+    # before any hall or rollout artifact exists.
+    with pytest.raises(ValueError, match="sigma must be finite"):
+        run_alternating_freeze(
+            _make_config(tmp_path / "g", impostor=_impostor_side(sigma=float("inf")))
+        )
+    for sub in ("a", "b", "c", "d", "e", "f", "g"):
         _assert_no_disk_mutation(tmp_path / sub)
 
 

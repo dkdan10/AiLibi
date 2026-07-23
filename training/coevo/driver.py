@@ -58,8 +58,9 @@ run, its replacements being the freshly frozen champions/exploits (fresh shas)
 stops the campaign loudly. Payoff maps passed to the sampler are measured
 fresh each generation (current champion vs every active member — the exact
 deterministic payoff row the §6 note calls a luxury) and therefore exactly
-cover the pool; the empty map is passed ONLY under the documented no-payoff
-configuration (``payoff_seeds=()``, cold-start uniform). Founders ingest
+cover the pool; the driver never passes the empty map at all — the sampler's
+cold-start-uniform exception is gen-1-shaped and this driver measures even
+generation 1's row, strictly stronger than the exception. Founders ingest
 through the substrate-fenced ``ingest_map_elites_founders`` BEFORE any pool
 build or sampling. ``HallOfFame.create`` pins the campaign substrate sha, and
 because TWO sha definitions exist (``compute_substrate_sha`` composite vs
@@ -360,12 +361,11 @@ class CoevoCampaignConfig:
     ``training.bakeoff.map_elites.bakeoff_substrate_sha`` raw MANIFEST) — both
     ride every row. ``hall_root=None`` resolves to the contract-named
     :data:`~training.coevo.hall_of_fame.DEFAULT_COEVO_ARTIFACT_ROOT`; tests
-    pass a tmp path. ``payoff_seeds`` is REQUIRED (no default — the payoff
-    protocol is a named campaign choice, never a silent one): non-empty seeds
-    measure the payoff row fresh each generation (exact pool cover — the PFSP
-    hardness weighting), while an explicit ``()`` disables it and the sampler
-    draws cold-start uniform every generation (the documented cheap mode,
-    with the PFSP stabilizer deliberately off). ``meeting_runner_factory``
+    pass a tmp path. ``payoff_seeds`` is REQUIRED and non-empty: the payoff
+    row (the PFSP hardness weighting) is measured fresh each generation with
+    exact pool cover, so the sampler's empty-map cold-start branch is never
+    taken — the contract allows the empty map ONLY as the gen-1 cold-start
+    exception, never as a whole-campaign PFSP bypass. ``meeting_runner_factory``
     (the generic future-GO-verdict-runner slot) and ``composed`` (the gated
     18.29 adoption) are mutually exclusive; both serve TRAINING games only.
     """
@@ -569,8 +569,8 @@ def projected_game_bound(config: CoevoCampaignConfig) -> int:
 # --------------------------------------------------------------------------- #
 
 
-def _validate_seeds(name: str, seeds: tuple[int, ...], *, allow_empty: bool) -> None:
-    if not seeds and not allow_empty:
+def _validate_seeds(name: str, seeds: tuple[int, ...]) -> None:
+    if not seeds:
         raise ValueError(f"{name} must be non-empty")
     if len(set(seeds)) != len(seeds):
         raise ValueError(
@@ -599,17 +599,24 @@ def _validate_side(
         raise ValueError(f"genome_length must be >= 1, got {config.genome_length}")
     if config.population < 1:
         raise ValueError(f"population must be >= 1, got {config.population}")
-    if not config.sigma > 0.0:
-        raise ValueError(f"sigma must be > 0, got {config.sigma}")
-    if not config.init_scale > 0.0:
-        raise ValueError(f"init_scale must be > 0, got {config.init_scale}")
+    # The finiteness checks mirror anchor_weight's: ``inf > 0`` is True, so a
+    # bare positivity check would let a non-finite knob from a deserialized
+    # config reach the ES/rollout layers before failing (Codex review on
+    # PR #311 — fail before any training artifact is written).
+    if not math.isfinite(config.sigma) or not config.sigma > 0.0:
+        raise ValueError(f"sigma must be finite and > 0, got {config.sigma!r}")
+    if not math.isfinite(config.init_scale) or not config.init_scale > 0.0:
+        raise ValueError(
+            f"init_scale must be finite and > 0, got {config.init_scale!r}"
+        )
     if not math.isfinite(config.anchor_weight) or config.anchor_weight < 0.0:
         raise ValueError(
             f"anchor_weight must be finite and >= 0, got {config.anchor_weight!r}"
         )
-    if config.exploration_floor < 0.0:
+    if not math.isfinite(config.exploration_floor) or config.exploration_floor < 0.0:
         raise ValueError(
-            f"exploration_floor must be >= 0, got {config.exploration_floor}"
+            f"exploration_floor must be finite and >= 0, got "
+            f"{config.exploration_floor!r}"
         )
     if expected_side == "crew" and config.anchor_policy is not None:
         raise ValueError(
@@ -680,9 +687,16 @@ def _validate_config(
         )
     if config.game_ceiling < 1:
         raise ValueError(f"game_ceiling must be >= 1, got {config.game_ceiling}")
-    _validate_seeds("fitness_seeds", config.fitness_seeds, allow_empty=False)
-    _validate_seeds("benchmark_seeds", config.benchmark_seeds, allow_empty=False)
-    _validate_seeds("payoff_seeds", config.payoff_seeds, allow_empty=True)
+    if config.first_side not in ("impostor", "crew"):
+        # A deserialized/untyped config bypasses the Literal, and a typo must
+        # never silently run the campaign in the opposite order (Codex review
+        # on PR #311).
+        raise ValueError(
+            f"first_side must be 'impostor' or 'crew'; got {config.first_side!r}"
+        )
+    _validate_seeds("fitness_seeds", config.fitness_seeds)
+    _validate_seeds("benchmark_seeds", config.benchmark_seeds)
+    _validate_seeds("payoff_seeds", config.payoff_seeds)
     if _SHA256_HEX_RE.fullmatch(config.substrate_sha256) is None:
         raise ValueError(
             "substrate_sha256 must be exactly 64 lowercase hex chars; got "
@@ -1139,10 +1153,14 @@ class _CampaignEngine:
             )
 
         # 2. The payoff row: the moving champion's exact deterministic fitness
-        #    vs EVERY active member this generation (exact cover, the sampler
-        #    contract). payoff_seeds=() is the documented uniform mode.
+        #    vs EVERY active member this generation — exact pool cover, the
+        #    sampler contract. Measured for every non-FSM generation
+        #    (payoff_seeds is validated non-empty), so the sampler's empty-map
+        #    cold-start branch is never taken by this driver (Codex review on
+        #    PR #311: the contract's cold-start exception is gen-1-shaped,
+        #    never a whole-campaign PFSP bypass). ``None`` = FSM mode only.
         payoffs: dict[str, float] | None = None
-        if not fsm_mode and config.payoff_seeds:
+        if not fsm_mode:
             payoff_imp_trace, payoff_crew_trace = self._fresh_traces()
             champion_policy = moving.config.build_policy(moving.champion)
             payoffs = {}
@@ -1178,9 +1196,14 @@ class _CampaignEngine:
             ]
             slate_total = 1
         else:
+            if payoffs is None:  # pragma: no cover - structurally unreachable
+                raise RuntimeError(
+                    "the payoff row is measured for every non-FSM generation; "
+                    "sampling without one is unreachable by construction"
+                )
             slate = sample_opponents(
                 active,
-                payoffs if payoffs is not None else {},
+                payoffs,
                 slate_size=config.slate_size,
                 seed=derive_stream_seed(
                     config.master_seed, _STREAM_SLATE, swap_index, generation_in_swap
