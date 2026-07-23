@@ -91,17 +91,26 @@ Two ADDITIVE seams, each inert when unset (digest-identical):
 The driver owns ALL the meters, threaded once and cumulative (the harness's
 one-term/one-counter ``resolved_conviction_term()`` pattern): the ONE
 :class:`~training.bakeoff.harness.ConvictionFitnessTerm` (when configured) is
-passed into every training rollout's fitness composition, its
-:class:`~training.conviction.model.ConvictionUseCounter` shared with the
-composed runner's gate reads; the surrogate counter (composed configurations
-only) meters every composed meeting's probe read. A campaign whose meter is
-already spent refuses to START the next swap (the loud swap-boundary stop the
-hint names — the natural re-grounding point); a mid-swap exhaustion raises
-from the counter itself. Note the term's PREDICTIONS reach an episode trace
-only when the configured meeting runner actually serves them
-(``training/conviction/serving.py`` / the composed runner's gate) — the
-driver's job here is the one-object threading + honest consumption quoting,
-mirroring the 18.30/18.24 asymmetry note.
+SERVED LIVE on every training game of a non-composed campaign — each game's
+runner is wrapped in the committed 18.30
+:class:`~training.conviction.serving.ConvictionServingMeetingRunner` (one
+metered prediction per meeting on the shared counter), the predictions are
+recorded into BOTH sides' episode traces, and both fitnesses are recomposed
+through the pure ``inner_episode_fitness`` / ``crew_inner_episode_fitness``
+functions — the 18.16 doctrine's "SAME term object serves BOTH sides", now
+actually delivered into training pressure (Codex review on PR #311; the
+18.30 asymmetry note says the loops stay anchor-composed "until the 18.24
+campaign threads the same term", and the campaign threads it by configuring
+this seam). Under a COMPOSED configuration the term is NOT double-wrapped:
+the composed runner's own gate reads meter the SAME shared
+:class:`~training.conviction.model.ConvictionUseCounter`, and conviction
+pressure reaches training through actual ejection outcomes; the surrogate
+counter (composed configurations only) meters every composed meeting's probe
+read. Benchmark and exploiter games never serve the term (``conviction=None``
+— the absolute meter stays pure). A campaign whose meter is already spent
+refuses to start — at engine init BEFORE any disk mutation, and again at
+every swap boundary (the loud boundary stop the hint names — the natural
+re-grounding point); a mid-swap exhaustion raises from the counter itself.
 
 Integration-risk guard: compounding budgets (population × generations × seeds
 × slate) are computed UP FRONT as :func:`projected_game_bound` (a stated
@@ -142,7 +151,13 @@ from typing import Any, Final, Generic, Literal, TypeAlias, TypeVar, cast
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from agents.tactical.features import weights_to_hex_json
-from orchestrator.game import DEFAULT_MAX_TICKS
+from engine.world import load_canonical_map
+from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
+from orchestrator.game import (
+    DEFAULT_MAX_TICKS,
+    MeetingRunner,
+    build_default_meeting_runner,
+)
 from training.bakeoff.es import (
     ESConfig,
     ESResult,
@@ -161,7 +176,9 @@ from training.bakeoff.harness import (
     BakeoffPolicy,
     ConvictionFitnessTerm,
     DecisionTrace,
+    inner_episode_fitness,
 )
+from training.bakeoff.map_elites import load_archive_cell_genomes
 from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX
 from training.coevo.hall_of_fame import (
     DEFAULT_COEVO_ARTIFACT_ROOT,
@@ -179,10 +196,16 @@ from training.composed_runner import (
     load_composed_verdict,
 )
 from training.conviction.model import (
+    ConvictionPrediction,
     ConvictionUseCounter,
     load_conviction_staleness_cap,
 )
-from training.crew.scorer import CrewDecisionTrace, CrewTrackPolicy
+from training.conviction.serving import ConvictionServingMeetingRunner
+from training.crew.scorer import (
+    CrewDecisionTrace,
+    CrewTrackPolicy,
+    crew_inner_episode_fitness,
+)
 from training.surrogate.ballots import load_staleness_cap
 from training.surrogate.runner import SurrogateUseCounter
 
@@ -792,6 +815,14 @@ def _validate_config(
         raise ValueError(
             f"tasks_per_crewmate must be >= 1, got {config.tasks_per_crewmate}"
         )
+    canonical_task_count = len(load_canonical_map().tasks)
+    if config.tasks_per_crewmate > canonical_task_count:
+        # The seeder enforces the same bound — but only inside the first
+        # rollout, after the campaign tree exists (Codex review on PR #311).
+        raise ValueError(
+            f"tasks_per_crewmate must be <= {canonical_task_count} (the "
+            f"canonical map's task count); got {config.tasks_per_crewmate}"
+        )
     if config.max_ticks < 1:
         raise ValueError(f"max_ticks must be >= 1, got {config.max_ticks}")
     _validate_seeds("fitness_seeds", config.fitness_seeds)
@@ -900,10 +931,31 @@ class _CampaignEngine:
             # The adoption gate runs once up front too (fail loud BEFORE the
             # halls are created), then again at every swap boundary.
             self._load_composed_factory()
+        # The conviction term is served live on training games ONLY on the
+        # non-composed path — the composed runner's own gate reads meter the
+        # same shared counter, and a second serving wrap would double-meter
+        # every meeting.
+        self._serve_conviction = config.conviction is not None and (
+            config.composed is None
+        )
+        # A meter already spent at campaign start is refused HERE — before the
+        # plan, rows file, or either hall exists (Codex review on PR #311) —
+        # not discovered at the first swap boundary behind a half-built tree.
+        self._check_meters_at_boundary(0)
 
-        # Disk: preflight BOTH hall roots read-only, then plan log, rows file,
-        # the two per-side halls, founders, ledger.
+        # Disk: preflight founder archives + BOTH hall roots read-only, then
+        # plan log, rows file, the two per-side halls, founders, ledger.
         hall_root = config.resolved_hall_root
+        for side_config in (config.impostor, config.crew):
+            if side_config.founder_cells_dir is not None:
+                # The substrate-fenced loader ingest re-runs at ingest time;
+                # running it read-only FIRST means a stale/corrupt founder
+                # archive fails before any mkdir or hall exists (Codex review
+                # on PR #311).
+                load_archive_cell_genomes(
+                    side_config.founder_cells_dir,
+                    expected_substrate_sha=config.substrate_sha256,
+                )
         _preflight_fresh_hall_root(hall_root)
         config.work_dir.mkdir(parents=True, exist_ok=True)
         self._rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
@@ -1030,7 +1082,19 @@ class _CampaignEngine:
         impostor_trace: DecisionTrace,
         crew_trace: CrewDecisionTrace,
     ) -> CoevoRolloutResult:
-        """One metered co-evo game (fold-after-scoring accumulators threaded)."""
+        """One metered co-evo game (fold-after-scoring accumulators threaded).
+
+        With a conviction term on a non-composed campaign, the game's meeting
+        runner is wrapped in the committed 18.30
+        :class:`ConvictionServingMeetingRunner` (one metered prediction per
+        meeting, buffered), the predictions are recorded into BOTH sides'
+        returned episode traces, and both fitnesses are recomposed through the
+        pure fitness functions — the term's addend actually reaches the
+        training signal (Codex review on PR #311). The caller accumulators
+        were folded inside ``rollout_coevo`` before the post-hoc recording, so
+        their conviction sums deliberately stay episode-trace-only; the
+        row-level consumption column reads the shared counter directly.
+        """
 
         impostor_policy, crew_policy = _ordered_pair(moving_side, mover, opponent)
         output_dir = (
@@ -1038,7 +1102,32 @@ class _CampaignEngine:
         )
         self._rollout_counter += 1
         self._games_total += 1
-        return rollout_coevo(
+
+        predictions: list[ConvictionPrediction] = []
+        resolved_factory = meeting_runner_factory
+        if conviction is not None and self._serve_conviction:
+            term = conviction
+            base_factory = meeting_runner_factory
+
+            def serving_factory() -> MeetingRunner:
+                if base_factory is not None:
+                    inner: MeetingRunner = base_factory()
+                else:
+                    # Exactly the runner rollout_coevo builds on its None path.
+                    inner = build_default_meeting_runner(
+                        llm_client=build_default_client(
+                            env={ENV_PROVIDER: PROVIDER_FAKE}
+                        )
+                    )
+                return ConvictionServingMeetingRunner(
+                    inner=inner,
+                    predict=term.predict_meeting,
+                    record=predictions.append,
+                )
+
+            resolved_factory = serving_factory
+
+        result = rollout_coevo(
             impostor_policy,
             crew_policy,
             seed,
@@ -1046,13 +1135,40 @@ class _CampaignEngine:
             num_players=self._config.num_players,
             num_impostors=self._config.num_impostors,
             tasks_per_crewmate=self._config.tasks_per_crewmate,
-            meeting_runner_factory=meeting_runner_factory,
+            meeting_runner_factory=resolved_factory,
             max_ticks=self._config.max_ticks,
             impostor_anchor_weight=impostor_anchor_weight,
             crew_anchor_weight=crew_anchor_weight,
             conviction=conviction,
             impostor_trace=impostor_trace,
             crew_trace=crew_trace,
+        )
+        if conviction is None or not predictions:
+            return result
+        # Record the served predictions into BOTH sides' episode traces (the
+        # 18.16 "same term object serves both sides" doctrine) and recompose
+        # both fitnesses through the pure (rollout, trace) functions — the
+        # per-meeting supply sums are order-free, so post-hoc recording is
+        # exactly the serving-time aggregate.
+        for prediction in predictions:
+            result.impostor_trace.record_conviction_prediction(prediction)
+            result.crew_trace.record_conviction_prediction(prediction)
+        return CoevoRolloutResult(
+            rollout=result.rollout,
+            impostor_fitness=inner_episode_fitness(
+                result.rollout,
+                result.impostor_trace,
+                anchor_weight=impostor_anchor_weight,
+                conviction=conviction,
+            ),
+            crew_fitness=crew_inner_episode_fitness(
+                result.rollout,
+                result.crew_trace,
+                anchor_weight=crew_anchor_weight,
+                conviction=conviction,
+            ),
+            impostor_trace=result.impostor_trace,
+            crew_trace=result.crew_trace,
         )
 
     def _fresh_traces(self) -> tuple[DecisionTrace, CrewDecisionTrace]:
@@ -1175,14 +1291,16 @@ class _CampaignEngine:
     ) -> tuple[bool, str, str | None]:
         """Freeze the swap champion (fresh sha) or record the unchanged one.
 
-        ``trained_against`` is the DISTINCT opponent the champion faced the
-        most driver generations this swap (ties break to the lexically
-        smallest sha — deterministic), or the reserved scripted-FSM sentinel
-        when the whole swap ran against the empty-pool scripted FSM. A
-        champion whose genome is already a member (no strict improvement over
-        a previously frozen seed) is NOT re-frozen — the sha is the member
-        identity — and the row says so (``champion_frozen=False``), never a
-        silent duplicate.
+        ``trained_against`` is the opponent with the greatest CUMULATIVE SLATE
+        WEIGHT this swap — draw multiplicities summed across the swap's
+        generations, matching the ES fitness weighting exactly, so the named
+        opponent is the one that dominated the champion's training signal
+        (ties break to the lexically smallest sha — deterministic) — or the
+        reserved scripted-FSM sentinel when the whole swap ran against the
+        empty-pool scripted FSM. A champion whose genome is already a member
+        (no strict improvement over a previously frozen seed) is NOT re-frozen
+        — the sha is the member identity — and the row says so
+        (``champion_frozen=False``), never a silent duplicate.
         """
 
         champion_sha = _genome_sha(moving.champion)
@@ -1319,9 +1437,15 @@ class _CampaignEngine:
                 for sha in sorted(multiplicities)
             ]
             slate_total = len(slate_shas)
-            for sha, _, _ in distinct_entries:
+            for sha, multiplicity, _ in distinct_entries:
+                # The LEDGER meters one use per DISTINCT member per driver
+                # generation (the hand-off's staleness unit); the PROVENANCE
+                # counter weights by draw multiplicity, because a slate like
+                # (A, A, B) trains 2/3 against A and trained_against should
+                # name the opponent that dominated the training signal
+                # (Codex review on PR #311).
                 self._ledger.record_generation_use(weights_sha256=sha)
-                swap_use_counts[sha] += 1
+                swap_use_counts[sha] += multiplicity
         opponent_uses = {
             sha: self._ledger.uses(weights_sha256=sha)
             for sha, _, _ in distinct_entries

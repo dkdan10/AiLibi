@@ -57,7 +57,11 @@ import pytest
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from orchestrator.game import MeetingRunner, build_default_meeting_runner
 from training.bakeoff.es import random_genome
-from training.bakeoff.harness import BakeoffPolicy
+from training.bakeoff.harness import (
+    BakeoffPolicy,
+    ConvictionFitnessTerm,
+    load_conviction_fitness_term,
+)
 from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
     ArchiveCell,
@@ -86,6 +90,7 @@ from training.coevo.hall_of_fame import (
     OpponentStalenessCap,
     Side,
 )
+from training.conviction.model import ConvictionStalenessCap, ConvictionUseCounter
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import CrewOptionScorer, CrewTrackPolicy, build_crew_scorer
 
@@ -520,6 +525,70 @@ def test_scenario_terms_shift_swap_fitness_by_exactly_their_value(
 
 
 # --------------------------------------------------------------------------- #
+# The conviction term is SERVED into training fitness (the 18.30 wrap).       #
+# --------------------------------------------------------------------------- #
+
+
+def _tightly_capped_term(max_uses: int) -> ConvictionFitnessTerm:
+    """The committed GO conviction term with OUR OWN tight counter.
+
+    Reads the committed artifact bundle (read-only) and meters exclusively a
+    test-local counter (tighter than the committed cap — the loader's
+    tighten-never-loosen rule), so the committed staleness budget is never
+    consumed by CI.
+    """
+
+    probe = load_conviction_fitness_term()
+    assert probe is not None  # the committed verdict is GO
+    counter = ConvictionUseCounter(
+        ConvictionStalenessCap(
+            weights_sha256=probe.weights_sha256,
+            max_uses=max_uses,
+            unit=probe.use_counter.cap.unit,
+        )
+    )
+    term = load_conviction_fitness_term(use_counter=counter)
+    assert term is not None
+    return term
+
+
+def test_conviction_term_is_served_into_training_fitness(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+    tmp_path: Path,
+) -> None:
+    """The configured term is served live, metered once, and moves fitness.
+
+    Each run gets its OWN tight counter (consumption is cumulative per run and
+    rides the rows, so a shared counter would break the double-run digest);
+    under the pinned seeds at least one training meeting is predicted, so the
+    consumption column moves off zero, the final row quotes exactly the shared
+    counter's cumulative reads, and the fitness channel visibly differs from
+    the unserved baseline — the term is training pressure, never a
+    zero-weighted ghost.
+    """
+
+    first_plain, _, _ = baseline_runs
+    served_one = run_alternating_freeze(
+        _make_config(tmp_path / "one", conviction=_tightly_capped_term(500))
+    )
+    term_two = _tightly_capped_term(500)
+    served_two = run_alternating_freeze(
+        _make_config(tmp_path / "two", conviction=term_two)
+    )
+    # Deterministic under serving: two runs with fresh counters are identical.
+    assert served_one.digest() == served_two.digest()
+    # Consumption: cumulative, non-decreasing, quoted from the ONE counter.
+    uses = [row.conviction_uses for row in served_two.rows]
+    assert all(count is not None for count in uses)
+    assert uses == sorted(cast("list[int]", uses))
+    assert uses[-1] == term_two.use_counter.uses
+    assert term_two.use_counter.uses > 0
+    # The served term reaches the training-fitness channel: the campaign rows
+    # visibly differ from the unserved baseline (selection pressure changed).
+    assert served_one.digest() != first_plain.digest()
+
+
+# --------------------------------------------------------------------------- #
 # Staleness: retire-and-replace + the loud exhausted-pool stop.                #
 # --------------------------------------------------------------------------- #
 
@@ -730,6 +799,10 @@ def test_misconfigurations_fail_loud_before_any_game(tmp_path: Path) -> None:
         )
     with pytest.raises(ValueError, match="max_ticks must be"):
         run_alternating_freeze(_make_config(tmp_path / "k", max_ticks=0))
+    # The seeder's own upper bound on tasks-per-crewmate, checked pre-mutation
+    # against the canonical map.
+    with pytest.raises(ValueError, match="canonical map's task count"):
+        run_alternating_freeze(_make_config(tmp_path / "m", tasks_per_crewmate=999))
     # A NaN/inf seed genome could play whole games and freeze NaN weights
     # into a hall; a corrupted seed artifact never enters the campaign.
     with pytest.raises(ValueError, match="non-finite genes"):
@@ -741,8 +814,38 @@ def test_misconfigurations_fail_loud_before_any_game(tmp_path: Path) -> None:
                 ),
             )
         )
-    for sub in ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"):
+    for sub in ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"):
         _assert_no_disk_mutation(tmp_path / sub)
+
+
+def test_spent_conviction_meter_is_refused_before_any_disk_mutation(
+    tmp_path: Path,
+) -> None:
+    # A caller-supplied term whose shared counter is already at its cap must
+    # refuse at engine init — never after the plan/rows/halls exist.
+    term = _tightly_capped_term(1)
+    term.use_counter.record_use(weights_sha256=term.weights_sha256)
+    with pytest.raises(RuntimeError, match="already spent"):
+        run_alternating_freeze(_make_config(tmp_path, conviction=term))
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_stale_founder_archive_is_refused_before_any_disk_mutation(
+    tmp_path: Path,
+) -> None:
+    # The founder archive records the real bakeoff substrate; a campaign
+    # pinned at a DIFFERENT substrate must fail the fence read-only, before
+    # the work dir or either hall exists (previously the fence fired at
+    # ingest time, behind a freshly created empty hall).
+    cells = _founder_cells(tmp_path)
+    config = _make_config(
+        tmp_path,
+        substrate_sha256=_SUBSTRATE,
+        impostor=_impostor_side(founder_cells_dir=cells),
+    )
+    with pytest.raises(ValueError, match="adopted substrate"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
 
 
 def test_dirty_hall_root_is_refused_before_any_side_is_created(
