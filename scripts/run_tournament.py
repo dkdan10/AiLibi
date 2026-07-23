@@ -527,7 +527,8 @@ def _read_candidate_stamp(artifact_dir: Path) -> TacticalPolicyStamp:
 def _read_candidate_hidden(artifact_dir: Path) -> int:
     """Read the masked-MLP ``hidden`` width from a candidate's ``config.json``.
 
-    The ``v2`` policy family (policy-es / bc-dagger / map-elites) rebuilds through
+    The masked-MLP policy families (``v2`` — policy-es / bc-dagger / map-elites —
+    and the Task-18.22 ``v3``) rebuild through
     :func:`training.bakeoff.policy_es.build_masked_mlp_policy`, whose ``hidden``
     width is a committed artifact parameter, not a hard-coded champion constant.
     A missing / non-integer ``hidden`` is fail-loud.
@@ -640,8 +641,15 @@ def _load_candidate_policy(
     else:
         hidden = _read_candidate_hidden(artifact_dir)
         try:
+            # The encoder_version seam (Task 18.22): the stamp selects the v2 or
+            # v3 masked-MLP family, so a v3 artifact rebuilds with its own wider
+            # encoder + per-target head instead of failing the v2 genome-length
+            # check; an unknown stamp version raises here (no silent fallback).
             policy = policy_es.build_masked_mlp_policy(
-                weights, game_map=game_map, hidden=hidden
+                weights,
+                game_map=game_map,
+                hidden=hidden,
+                encoder_version=stamp.encoder_version,
             )
         except ValueError as exc:
             raise SystemExit(

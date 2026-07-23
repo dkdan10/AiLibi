@@ -26,7 +26,7 @@ from agents.memory.beliefs import (
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
-from agents.memory.working import LastSeen, WorkingMemory
+from agents.memory.working import LastSeen, MeetingHistory, WorkingMemory
 from agents.perception import (
     EVENT_REPORTED_TESTIMONY,
     EVENT_SAW_PLAYER_MOVE,
@@ -116,15 +116,22 @@ _ACTIVE_PLAYER_ACTIONS: Final[frozenset[str]] = frozenset({"report", "task"})
 class AgentMemory:
     """Composite memory surface for a single agent (DESIGN.md §6.1).
 
-    Aggregates references to the three Task-2.3 stores. The composite
-    does not copy state: callers mutate the underlying stores directly
-    and the composite reflects every change. ``render_for_prompt``
-    reads from all three components (R-6 acceptance gate).
+    Aggregates references to the three Task-2.3 stores plus the Task-18.22
+    ``meeting_history`` channel. The composite does not copy state: callers
+    mutate the underlying stores directly and the composite reflects every
+    change. ``render_for_prompt`` reads from the three original components
+    (R-6 acceptance gate); ``meeting_history`` is inert to rendering -- it is
+    fed by :func:`record_meeting_outcome` from the public
+    ``note_meeting_concluded`` hook and consumed ONLY by the v3 tactical
+    feature encoder, so every existing three-field construction and every
+    rendered prompt byte are unchanged (the field defaults to an empty
+    :class:`~agents.memory.working.MeetingHistory`).
     """
 
     episodic: MemoryStore = field(default_factory=MemoryStore)
     working: WorkingMemory = field(default_factory=WorkingMemory)
     beliefs: BeliefState = field(default_factory=BeliefState)
+    meeting_history: MeetingHistory = field(default_factory=MeetingHistory)
 
 
 @dataclass(frozen=True)
@@ -537,6 +544,35 @@ def absorb_reported_testimony(
                     source=statement.speaker,
                 )
             )
+
+
+def record_meeting_outcome(
+    memory: AgentMemory, *, end_tick: int, ejected_id: PlayerId | None
+) -> None:
+    """Fold one concluded meeting's public outcome into memory (Task 18.22).
+
+    The meeting-history twin of :func:`absorb_meeting_evidence`: where that
+    wrapper folds a meeting into a scalar suspicion Δ on the belief state, this
+    one records the meeting's PUBLIC result -- the resume ``end_tick`` and the
+    announced ``ejected_id`` (``None`` when the vote skipped or tied) -- into
+    ``memory.meeting_history`` by delegating to
+    :meth:`~agents.memory.working.MeetingHistory.record`.
+
+    The channel is fed EXCLUSIVELY from the ``note_meeting_concluded`` hook's
+    PUBLIC payload (the resume tick plus the announced ejection outcome -- both
+    facts every player at the table already knows), so it is firewall-clean by
+    construction: no engine-private state crosses into agent memory (DESIGN.md
+    §4.7, the same public footing as the meeting's ``dead_ids``). It is consumed
+    ONLY by the v3 tactical feature encoder's meeting-history channel and is
+    inert to :func:`render_for_prompt` and every other consumer -- it carries no
+    prompt-byte impact anywhere.
+
+    The non-negative / non-decreasing ``end_tick`` guards live in
+    ``MeetingHistory.record``, so an out-of-order fold fails loud (AGENTS.md
+    "no silent fallbacks") rather than silently reordering the log.
+    """
+
+    memory.meeting_history.record(end_tick=end_tick, ejected_id=ejected_id)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -1855,6 +1891,7 @@ __all__ = [
     "DEFAULT_TOKEN_BUDGET",
     "ENV_OBSERVATION_ID_RENDERING",
     "EpisodicEvent",
+    "MeetingHistory",
     "MemoryStore",
     "PlayerBelief",
     "PlayerId",
@@ -1865,5 +1902,6 @@ __all__ = [
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
     "observation_id_rendering_enabled",
+    "record_meeting_outcome",
     "render_for_prompt",
 ]

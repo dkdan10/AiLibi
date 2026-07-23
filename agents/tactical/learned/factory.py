@@ -285,7 +285,9 @@ class WrappableCrewTacticalAgent(WrappableTacticalAgent, Protocol):
     emergency opens a meeting, so it must observe the engine-truth
     meeting-concluded signal rather than delegate it blindly. The production
     ``orchestrator.game.TacticalAgent`` satisfies this — its
-    ``note_meeting_concluded`` signature is mirrored exactly.
+    ``note_meeting_concluded`` signature is mirrored exactly, including the
+    Task 18.22 keyword-only ``ejected_id`` payload that feeds the inner agent's
+    meeting-history memory channel (the v3 encoder's input).
     """
 
     def note_meeting_concluded(
@@ -294,6 +296,7 @@ class WrappableCrewTacticalAgent(WrappableTacticalAgent, Protocol):
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None: ...
 
 
@@ -388,6 +391,7 @@ class _LearnedCrewAgent:
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None:
         """Track this agent's own spent emergency use, then delegate verbatim.
 
@@ -396,7 +400,8 @@ class _LearnedCrewAgent:
         engine's per-player counter — the ``_CrewCandidateAgent`` precedent
         (``training/crew/scorer.py:747-769``). The inner agent's own bookkeeping
         (its ``EmergencyPacingTracker`` + memory) still runs; this forwards
-        verbatim.
+        verbatim, including the Task 18.22 ``ejected_id`` payload that feeds the
+        inner agent's meeting-history memory channel (the v3 encoder's input).
         """
 
         if emergency_caller_id == self._agent_id:
@@ -405,6 +410,7 @@ class _LearnedCrewAgent:
             end_tick=end_tick,
             dead_ids=dead_ids,
             emergency_caller_id=emergency_caller_id,
+            ejected_id=ejected_id,
         )
 
     def __getattr__(self, name: str) -> object:

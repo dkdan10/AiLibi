@@ -136,15 +136,19 @@ DEFAULT_TASKS_PER_CREWMATE: Final[int] = 2
 MODE_TOP_K: Final[str] = "top-k"
 MODE_CHAMPION_TRACE: Final[str] = "champion-trace"
 
-# The masked-MLP family's encoder identity (MaskedMlpPolicy builds the v2
-# encoder; the committed policy-es stamp pins "v2"). A new family (e.g. the
-# 18.22 encoder v3) is supported by extending the dispatch in
-# _build_agent_factory and this whitelist — never by silently building the
-# wrong encoder for an unknown version.
+# The masked-MLP family's encoder identities. Both rebuild through
+# ``build_masked_mlp_policy``'s ``encoder_version`` seam (Task 18.22): the
+# committed policy-es champion stamps "v2"; the 18.22 encoder-v3 + per-target
+# head family stamps "v3" (wider input AND head, so the seam — not a hard-coded
+# builder — is what keeps the genome shape honest). A new family is supported by
+# extending the dispatch in _build_agent_factory and this whitelist — never by
+# silently building the wrong encoder for an unknown version.
 _MASKED_MLP_ENCODER_VERSION: Final[str] = "v2"
+_MASKED_MLP_ENCODER_VERSION_V3: Final[str] = "v3"
 _SUPPORTED_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
     _UTILITY_ENCODER_VERSION,
     _MASKED_MLP_ENCODER_VERSION,
+    _MASKED_MLP_ENCODER_VERSION_V3,
 )
 
 # The non-decisive outcome run_tournament_eval folds with
@@ -282,9 +286,9 @@ class RealPathCandidate(BaseModel):
             raise ValueError(
                 f"candidate {self.label!r}: unsupported encoder_version "
                 f"{self.encoder_version!r}; supported families: "
-                f"{_SUPPORTED_ENCODER_VERSIONS!r}. A new family (e.g. the 18.22 "
-                "encoder v3) extends _build_agent_factory's dispatch and this "
-                "whitelist — never a silent fallback to the wrong builder"
+                f"{_SUPPORTED_ENCODER_VERSIONS!r}. A new family extends "
+                "_build_agent_factory's dispatch and this whitelist — never a "
+                "silent fallback to the wrong builder"
             )
         if self.encoder_version == _UTILITY_ENCODER_VERSION:
             if self.hidden is not None:
@@ -536,8 +540,14 @@ def _build_agent_factory(
                 f"candidate {candidate.label!r}: family "
                 f"{candidate.encoder_version!r} requires a hidden width"
             )
+        # The encoder_version seam (Task 18.22) selects the v2 or v3 family —
+        # the whitelist above already vetted it, and the post-check below pins
+        # the rebuilt identity against the declared one.
         policy = build_masked_mlp_policy(
-            candidate.genome, game_map=game_map, hidden=hidden
+            candidate.genome,
+            game_map=game_map,
+            hidden=hidden,
+            encoder_version=candidate.encoder_version,
         )
     if policy.encoder_version != candidate.encoder_version:
         raise RealPathStampError(

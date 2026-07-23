@@ -54,6 +54,25 @@ class LastSeen:
     room: RoomId
 
 
+@dataclass(frozen=True)
+class MeetingOutcome:
+    """One concluded meeting's PUBLIC result (Task 18.22).
+
+    Both fields are facts every player at the table observed: ``end_tick`` is
+    the tick gameplay resumed at, and ``ejected_id`` is the player the vote
+    tally removed -- ``None`` when the meeting skipped or tied. The channel is
+    fed only from the ``note_meeting_concluded`` hook payload (the resume tick
+    plus the announced ejection outcome), so no engine-private state crosses
+    into agent memory and the row is firewall-clean by construction (DESIGN.md
+    §4.7, the same public footing as a meeting's ``dead_ids``). Consumed only
+    by the v3 tactical feature encoder's meeting-history channel; inert to
+    prompt rendering.
+    """
+
+    end_tick: int
+    ejected_id: PlayerId | None
+
+
 class WorkingMemory:
     """Per-agent volatile scratch state.
 
@@ -109,3 +128,58 @@ class WorkingMemory:
 
     def last_seen(self, player_id: PlayerId) -> LastSeen | None:
         return self._last_seen.get(player_id)
+
+
+class MeetingHistory:
+    """Append-only log of concluded-meeting outcomes (Task 18.22).
+
+    The per-agent meeting-history channel the v3 tactical feature encoder
+    reads. It owns its own list -- no singleton, no module-level state -- and
+    grows only through :meth:`record`, called once per living agent from the
+    ``note_meeting_concluded`` hook (via
+    :func:`agents.memory.store.record_meeting_outcome`). The hook reaches
+    LIVING agents only, so ``len(self)`` IS the number of meetings this agent
+    survived; :meth:`ejection_count` and :meth:`skip_count` partition those
+    survived meetings by whether a player was ejected.
+
+    :meth:`record` mirrors :meth:`WorkingMemory.record_sighting`'s guards: it
+    rejects a negative ``end_tick`` and enforces non-decreasing ``end_tick``
+    order. Meetings conclude in gameplay-tick order, so an out-of-order write
+    is a wiring bug, not a normal state (AGENTS.md "no silent fallbacks"). An
+    ``end_tick`` EQUAL to the previous one is allowed for the same reason the
+    sighting guard allows it -- a repeated fold of the same resume tick must
+    not raise.
+    """
+
+    def __init__(self) -> None:
+        self._outcomes: list[MeetingOutcome] = []
+
+    @property
+    def outcomes(self) -> tuple[MeetingOutcome, ...]:
+        """Recorded outcomes in insertion (non-decreasing ``end_tick``) order."""
+
+        return tuple(self._outcomes)
+
+    def __len__(self) -> int:
+        return len(self._outcomes)
+
+    def ejection_count(self) -> int:
+        """Recorded meetings that EJECTED a player (``ejected_id is not None``)."""
+
+        return sum(1 for outcome in self._outcomes if outcome.ejected_id is not None)
+
+    def skip_count(self) -> int:
+        """Recorded meetings that SKIPPED or tied (``ejected_id is None``)."""
+
+        return sum(1 for outcome in self._outcomes if outcome.ejected_id is None)
+
+    def record(self, *, end_tick: int, ejected_id: PlayerId | None) -> None:
+        if end_tick < 0:
+            raise ValueError(f"meeting end_tick must be non-negative, got {end_tick}")
+        previous = self._outcomes[-1] if self._outcomes else None
+        if previous is not None and end_tick < previous.end_tick:
+            raise ValueError(
+                "meeting outcomes must be recorded in non-decreasing end_tick "
+                f"order: got tick {end_tick} after tick {previous.end_tick}"
+            )
+        self._outcomes.append(MeetingOutcome(end_tick=end_tick, ejected_id=ejected_id))

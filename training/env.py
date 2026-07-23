@@ -457,13 +457,16 @@ class _InterposedAgent:
         end_tick: int,
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
     ) -> None:
         """Track this agent's own spent emergency use, then delegate (Task 15.8).
 
         Explicitly overridden (rather than delegated via ``__getattr__``) so the
         mask's ``emergency_uses_remaining`` tracker stays in lockstep with the
         engine's per-player counter. The inner agent's own bookkeeping (its
-        ``EmergencyPacingTracker`` + memory) still runs — this forwards verbatim.
+        ``EmergencyPacingTracker`` + memory) still runs — this forwards verbatim,
+        including the Task 18.22 ``ejected_id`` payload that feeds the inner
+        agent's meeting-history memory channel (the v3 encoder's input).
         """
 
         if emergency_caller_id == self._agent_id:
@@ -472,6 +475,7 @@ class _InterposedAgent:
             end_tick=end_tick,
             dead_ids=dead_ids,
             emergency_caller_id=emergency_caller_id,
+            ejected_id=ejected_id,
         )
 
     def __getattr__(self, name: str) -> object:
