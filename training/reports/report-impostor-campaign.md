@@ -398,6 +398,41 @@ flags mint at 5–6× the floor, and the impostor never kills (hence the degener
 witnessed-kill gauge and referee FAIL). Watchability-gauge-passing, win-0: not flip-bar
 material; the selection weight rides on the utility legs (pending).
 
+### 4.2 Leg 01 — run-01-utility-champion, tranche 1 (seeds 4000–4002; session 1, COMPLETE)
+
+Recorded solo, `meeting_timeout_seconds=900`, still inside the F7 impaired-status
+window. Candidates: the swap-2 co-adaptation champion vs the swap-0 champion (= the
+committed champion) — the campaign's central selection question on real bytes.
+
+Pre-screen (spend advice ONLY): `8ac3652a…` predicted 1.6109 flags/meeting PASS,
+`6d327dcb…` 1.6180 PASS; fake recorded flags 0 (flag-mintless) quoted beside. Real
+recorded reads below are the paired recorded-bytes floor reads.
+
+**Ranking (17.14 discipline):**
+
+| rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
+|---|---|---|---|---|---|---|---|
+| 1 | `8ac3652a…` gen 9 (co-adapted) | 62.60 | PASS | FAIL | **0.000** | 0.857 | 3/3, uniform, sha == digest |
+| 2 | `6d327dcb…` gen 3 (committed champion) | 41.27 | PASS | FAIL | **0.667** | 0.750 | 3/3, uniform, sha == digest |
+
+Floor sensitivity (measured − floor, signed):
+
+| candidate | witnessed_event_rate | flags_per_meeting | testimony_backed_conversion |
+|---|---|---|---|
+| `8ac3652a…` | 0.2308 − 0.0339 = **+0.1969 PASS** | 0.8333 − 1.0909 = **−0.2576 FAIL** | 0.5000 − 0.7508 = **−0.2508 FAIL** |
+| `6d327dcb…` | 0.1429 − 0.0339 = **+0.1090 PASS** | 0.8889 − 1.0909 = **−0.2020 FAIL** | 0.6000 − 0.7039 = **−0.1039 FAIL** |
+
+**Reading (the 17.12 honesty ruling applies):** the library's `selection_score` ranks by
+watchability (+ referee bonus), so rank 1 is NOT the flip-bar reading. On the full row:
+the co-adapted champion is watchability-RICHER (62.60 vs 41.27; witnessed rate 0.23;
+4 meetings/game economy) and wins ZERO of three real games, while the committed champion
+keeps the win edge (0.667 ≥ the same-substrate FSM 0.36) with the familiar starved-supply
+referee FAIL. **Co-adaptation moved the champion along the §1.3 tension axis — toward
+supply, away from winning — rather than past the flip bar**; its fake-path specialization
+against the trained crew scorer did not transfer to real games (consistent with its
+anchor-benchmark drop in §3.1). n=3 seeds; tranche 2 doubles this before any 18.26
+naming leans on it.
+
 <!-- SESSION-1-LEGS: extended per leg -->
 
 ---
@@ -467,6 +502,28 @@ by the by-kind breakdowns in the sweep JSON. Zero kills across all 6 games also 
 kill-craft cells degenerate for this lineage (no downward tail exists; stated, not
 scored). Entropy cells quoted but UNJUDGEABLE per the memo (no per-agent variance
 field — the routed follow-up contract).
+
+### 5.2 Sweep — leg 01 tranche 1 (6 real games, completeness fence PASSED first)
+
+| cell | `8ac3652a…` (co-adapted) | `6d327dcb…` (committed) | corpus 9p2i |
+|---|---|---|---|
+| off-menu rate | **0/142 = 0.0** | **0/132 = 0.0** | 0/6663 (structural) |
+| meetings / games | 12 / 3 | 9 / 3 | 463 / 150 |
+| kills (crew-witnessed) | 13 (3) | 14 (2) | 505 (12) |
+| frame-attempt meetings | 12/12 | 9/9 | 437/463 = 0.944 |
+| frame conversions | 0/12 | 1/9 | 23/437 = 0.0526 |
+| teammate accusations | 0/14 | 0/12 | 0/549 |
+| false-vouch (saw_player) | 2/16 (1 fabricated) | 3/16 (1 fabricated) | 74/602 (16 fab.) |
+| impostor alibis (survived) | 2/2 | 3/3 | 77 (59) |
+| effective deflection | 0/5 | 1/2 | 69/152 |
+| impostor action entropy (cond.) | 0.4358 | 0.4452 | 0.6526 |
+
+The utility arms are **on-menu by construction (0.0)** — the structural counterfactual
+to §5.1's 0.78/0.95, both arms now recorded inside this campaign's artifacts. The
+co-adapted champion's meeting economy is denser (4.0 meetings/game vs the committed
+champion's 3.0 and the corpus 3.1) with 100% frame-attempt meetings and no conversions;
+alibi survival is 5/5 pooled (advisory n). No cell at this n is claim-grade; deltas
+defer to 18.27 with the 18.26 comparator arms.
 
 <!-- SESSION-1-SWEEPS: extended per leg -->
 
