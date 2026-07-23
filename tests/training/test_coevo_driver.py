@@ -47,6 +47,7 @@ platform-sensitivity lesson from the ``test_es`` hash pin).
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -380,12 +381,13 @@ def test_rows_carry_the_report_channels(
         # The substrate pin names WHICH committed sha definition was passed.
         assert row.substrate_sha256 == _SUBSTRATE
         assert row.substrate_sha_kind == "bakeoff_substrate_sha"
-        # Per-gen fitness channel.
-        assert isinstance(row.champion_fitness, float)
-        assert isinstance(row.generation_best_fitness, float)
+        # Per-gen fitness channel (finite — the ES core refuses NaN/inf, and
+        # the truncation sentinel is a finite documented constant).
+        assert math.isfinite(row.champion_fitness)
+        assert math.isfinite(row.generation_best_fitness)
         # The absolute anchor benchmark, both directions, every generation.
-        assert isinstance(row.anchor_benchmark_champion_side, float)
-        assert isinstance(row.anchor_benchmark_fsm_side, float)
+        assert math.isfinite(row.anchor_benchmark_champion_side)
+        assert math.isfinite(row.anchor_benchmark_fsm_side)
         # The exploiter row, every generation (baseline == the scripted FSM's
         # own reading from the SAME benchmark games).
         assert row.exploiter_outcome in {"frozen", "duplicate", "not-found"}
