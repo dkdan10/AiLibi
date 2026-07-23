@@ -334,11 +334,18 @@ founders (F2), exercised end-to-end here.
 ## 4. Real-path re-rank legs (18.17 machinery; 17.14 table discipline)
 
 Standing shape per leg: pre-screen (spend advice ONLY, blocker 4) → `run_realpath_rerank`
-(design B / `MODE_TOP_K`, 9p2i, baseline-6, seeds `4000–4005`, per-seed retry budget 8,
-300 s meeting timeout) under the canonical Featherless real path
+(design B / `MODE_TOP_K`, 9p2i, baseline-6, seeds `4000–4005` run in tranches of 3 —
+the library's ranking write is all-or-nothing per invocation, so tranches keep a session
+boundary from losing hours of recordings; per-seed retry budget 8,
+`meeting_timeout_seconds=900` — the library default 300 s was measured too tight for a
+real 9-player meeting at this plan's throughput, see F7) under the canonical Featherless
+real path
 (`AILIBI_LLM_PROVIDER=featherless`, `AILIBI_PROMPT_SET=qwen3_6_27b`, model
-`Qwen/Qwen3.6-27B`) — two legs run as parallel single-process workers (the standing
-2-worker shape). Stamp proofs are the library's own `_verify_stamps` (stamp read BACK from
+`Qwen/Qwen3.6-27B`) — legs run ONE at a time (finding F7: two concurrent legs starve the
+library's 300 s per-meeting wall-clock proxy on the 4-unit plan and burn the per-seed
+retry budget on timeouts; the corpus runbook's 2-worker shape belongs to
+`run_tournament`'s seed-range workers, not to concurrent `run_realpath_rerank`
+processes). Stamp proofs are the library's own `_verify_stamps` (stamp read BACK from
 bytes, uniform, sha == computed genome digest); floor sensitivity is quoted per entrant
 from the recorded `watchability.supply_gauges` (signed distance beside PASS/FAIL, the
 population-relative conversion floor, the rare-event z where applicable).
@@ -454,6 +461,21 @@ and available to 18.25.
   `roster.json` and drops audit sidecars for its pre-screen dirs — the same idiom
   `training/realpath.py` applies to its own recordings.
 
+- **F7 — one re-rank leg at a time.** Two concurrent `run_realpath_rerank` processes on
+  the 4-unit Featherless plan (a 27B request uses 2 units; a meeting's parallel ballot
+  phase can fill both slots from ONE game) push per-meeting wall-clock past the
+  library's 300 s timeout proxy, and every timeout burns one of the 8 per-seed
+  attempts — observed live in session 1 (both legs' first seeds stalled at their first
+  meeting through 7 attempts; the 8th attempt then timed out even SOLO —
+  `RealPathSeedExhaustedError`, 8/8 timeouts on `meeting-0`). A real 9-player meeting
+  (opening + chain + opt-ins + 9 parallel ballots ≈ up to ~20 27B calls with
+  rendered-memory prompts) exceeds 300 s at this plan's throughput even with one leg.
+  The standing "2 staggered workers" runbook line is about `run_tournament` seed-range
+  workers and does NOT transfer to concurrent re-rank legs. Session-1 remedy, both via
+  documented config: one leg at a time + `meeting_timeout_seconds=900` (still a real
+  hang bound; the proxy exists to catch hangs, not to price slow meetings). Real-path
+  wall-clock therefore prices well above the planning table's 2-worker amortization;
+  routed to 18.25's duration honesty and to the close.
 - **F6 — the conviction term was non-decisive for impostor selection on the utility
   lineage at this budget.** The run-01 same-seed `conviction=None` twin (§6.1) reproduced
   the impostor champion lineage sha-for-sha; only crew selection diverged. The term's
