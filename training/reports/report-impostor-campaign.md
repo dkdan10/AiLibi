@@ -148,7 +148,7 @@ in session 1 (§3).
 
 | session | date | work | status |
 |---|---|---|---|
-| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded (§3); real-path re-rank legs started (§4); instrument sweeps over completed legs (§5) | this session |
+| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); real-path re-rank legs started (§4); instrument sweeps over completed legs (§5) | this session |
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
 §4/§6/§8 as they land; the close (18.28) waits on 18.23 + 18.29 regardless.
@@ -167,12 +167,12 @@ sha sidecars + index, written by the driver). Everything below is read from thos
 row's `conviction_uses` delta per generation divided by TRAINING games (games_gen minus
 the 128 benchmark+exploiter games that never serve the term: 4 + (1+5×6)×4; run 05:
 3 + 31×3 = 96) is the predicted-meetings-per-training-game meter. Across every
-generation of every run it reads 2.0–3.8 (utility runs; max 3.76, run-03 gen 2–3) and
-0.5–1.4 (free-policy runs) against the scripted-FSM census of ~3.63 meetings/game
-(29/8 seeds, the 18.18 probe). **No entrant multiplied meeting count** — the max
-excursion is +3.7%, two orders under the 25% materiality bar. Blocker (2)'s
-meeting-count condition is clean for every session-1 lineage; no conviction credit is
-flagged SUSPECT.
+generation of every run it reads 0.5–3.8 (utility runs 2.0–3.8, max 3.76 at run-03
+gen 2–3; free-policy v3 0.5–1.4; v2+founders 1.2–3.5) against the scripted-FSM census of
+~3.63 meetings/game (29/8 seeds, the 18.18 probe). **No entrant multiplied meeting
+count** — the max excursion is +3.7%, two orders under the 25% materiality bar.
+Blocker (2)'s meeting-count condition is clean for every session-1 lineage; no
+conviction credit is flagged SUSPECT.
 
 ### 3.1 run-01-utility-champion (session 1 — COMPLETE, 2 358 games, 12 rows)
 
@@ -293,13 +293,27 @@ absolute progress against the FSM anchor. This is the clearest Red-Queen reading
 session (and the expected one for a from-scratch policy adapting to its opponent
 distribution). The crew side reads as mild real progress (+0.14 anchor, payoffs up).
 
-### 3.5 run-05-freepolicy-v2-founders
+### 3.5 run-05-freepolicy-v2-founders (session 1 — COMPLETE, 848 games, 4 rows)
 
-PENDING — the run is mid-execution at session-1 close of this section (its founder-pool
-crew swap is the priced-slow leg, §1.4/F3); its rows land in this file and in the
-committed jsonl when it completes.
+| gen | swap | moving | pool | champion_fitness | updated | anchor_champ | anchor_fsm | exploiter | conv_uses | games_cum |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | impostor | 0 | 20.4604 | no | 19.4909 | 12.8047 | **frozen** 12.82>12.80 | 148 | 138 |
+| 2 | 0 | impostor | 1 | 19.6405 | yes | 19.0540 | 12.7796 | **frozen** 12.79>12.78 | 251 | 278 |
+| 3 | 1 | crew | **31** | 11.8602 | yes | 3.6765 | 5.0000 | **frozen** 20.67>5.00 | 629 | 562 |
+| 4 | 1 | crew | **32** | 16.4891 | yes | 11.2015 | 17.0000 | **frozen** 21.33>17.00 | 862 | 848 |
 
-<!-- RUN-05-ROWS: pending -->
+Meters: conviction 862 / 52 481 (1.64%); games 848 / bound 1 176. Frozen champions:
+swap 0 `43b113ec…` (the policy-es seed held one generation, displaced at gen 2 against a
+slate containing the gen-1 crew exploiter), swap 1 crew `3921f86a…`. **The founder
+clause is exercised**: both crew generations trained against the 31–32-member impostor
+pool (30 MAP-Elites founders + the swap-0 champion + an exploiter), and the crew champion
+improved sharply against it (co-matchup payoff 5.72 → 13.00, champion-side anchor
+3.68 → 11.20). No retirements (2 servable generations vs cap 8).
+
+**Cycling verdict:** the budget (2 impostor generations) is below any signature read;
+recorded for provenance, verdict N/A at this depth. The lineage's value in session 1 is
+structural: the only family whose sequential-session restarts can reload committed
+founders (F2), exercised end-to-end here.
 
 ### 3.6 Cross-run readings
 

@@ -17,6 +17,15 @@
       "path": "gen-2/38274bf2316827a73fd9fccd2d3c9815db6fb8b625c3e7a3b8de45e0d1e62c16",
       "trained_against": "43b113ec7ebd911b1720401884ca7e0e0cf452e611f01904ae41cb6e3c3d68d9",
       "weights_sha256": "38274bf2316827a73fd9fccd2d3c9815db6fb8b625c3e7a3b8de45e0d1e62c16"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 4,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-4/3921f86a8435795c259221a228ee346a494d792cbcf71e388f087f6181f09665",
+      "trained_against": "85b926a42aa3f39174c69ce152df1e207e1441a96595c59e485a3a9af42594bd",
+      "weights_sha256": "3921f86a8435795c259221a228ee346a494d792cbcf71e388f087f6181f09665"
     }
   ],
   "side": "crew",
