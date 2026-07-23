@@ -136,9 +136,10 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, Generic, Literal, TypeAlias, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from agents.tactical.features import weights_to_hex_json
 from orchestrator.game import DEFAULT_MAX_TICKS
@@ -450,8 +451,8 @@ class CoevoCampaignRow(BaseModel):
     scenario_labels: tuple[str, ...]
     opponent_pool_size: int = Field(ge=0)
     opponent_slate_shas: tuple[str, ...]
-    opponent_payoffs: dict[str, float] | None
-    opponent_uses: dict[str, int]
+    opponent_payoffs: Mapping[str, float] | None
+    opponent_uses: Mapping[str, int]
     retired_opponent_shas: tuple[str, ...]
     champion_fitness: float
     generation_best_fitness: float
@@ -473,6 +474,34 @@ class CoevoCampaignRow(BaseModel):
     adoption_constraints: tuple[str, ...]
     games_played_generation: int = Field(ge=0)
     games_played_cumulative: int = Field(ge=0)
+
+    @field_validator("opponent_payoffs", mode="after")
+    @classmethod
+    def _freeze_payoffs(
+        cls, value: Mapping[str, float] | None
+    ) -> Mapping[str, float] | None:
+        # A read-only proxy over a PRIVATE copy (the HallOfFameMember
+        # descriptors idiom): ``frozen=True`` alone leaves the nested mapping
+        # mutable through the attribute, and a caller-side mutation after
+        # ``_emit`` would silently drift ``to_json_line``/``digest`` away from
+        # the on-disk JSONL (Codex review on PR #311).
+        return None if value is None else MappingProxyType(dict(value))
+
+    @field_validator("opponent_uses", mode="after")
+    @classmethod
+    def _freeze_uses(cls, value: Mapping[str, int]) -> Mapping[str, int]:
+        return MappingProxyType(dict(value))
+
+    @field_serializer("opponent_payoffs")
+    def _serialize_payoffs(
+        self, value: Mapping[str, float] | None
+    ) -> dict[str, float] | None:
+        # pydantic cannot serialise a mappingproxy; hand it a plain dict.
+        return None if value is None else dict(value)
+
+    @field_serializer("opponent_uses")
+    def _serialize_uses(self, value: Mapping[str, int]) -> dict[str, int]:
+        return dict(value)
 
     def to_json_line(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True)
@@ -632,6 +661,14 @@ def _validate_side(
                 f"{expected_side} initial_genome length {len(initial)} != "
                 f"genome_length {config.genome_length}"
             )
+        if not all(math.isfinite(gene) for gene in initial):
+            # A corrupted seed artifact/config must fail here — a NaN genome
+            # can play whole games and even freeze NaN weights into a hall
+            # (Codex review on PR #311), never a loud stop downstream.
+            raise ValueError(
+                f"{expected_side} initial_genome contains non-finite genes; a "
+                "corrupted seed never enters the campaign"
+            )
     else:
         initial = random_genome(
             config.genome_length,
@@ -666,6 +703,40 @@ def _validate_side(
     return initial
 
 
+def _preflight_fresh_hall_root(hall_root: Path) -> None:
+    """Refuse a dirty hall root for EITHER side before creating ANY hall.
+
+    ``HallOfFame.create`` runs the same two refusals per side, but creating
+    side-by-side would mutate the first side before discovering the second
+    side's dirt — a half-initialized campaign tree whose retry then trips on
+    the freshly created half instead of the original problem (Codex review on
+    PR #311). The checks are restated read-only over BOTH sides (the
+    hall_of_fame restated-literal idiom — its filename constant is private),
+    with ``create``'s own guards remaining the authoritative backstop.
+    """
+
+    for side in ("impostor", "crew"):
+        side_dir = hall_root / side
+        index_path = side_dir / "hall_of_fame.json"
+        if index_path.exists():
+            raise FileExistsError(
+                f"a hall of fame already exists at {index_path}; the campaign "
+                "never clobbers a committed pool (pick a fresh hall_root)"
+            )
+        if side_dir.exists():
+            stray = sorted(
+                child.name
+                for child in side_dir.iterdir()
+                if child.name.startswith("gen-")
+            )
+            if stray:
+                raise ValueError(
+                    f"cannot create a fresh {side} hall of fame at {side_dir}: "
+                    f"stray member artifacts {stray} exist without an index — a "
+                    "dirty tree is never silently adopted"
+                )
+
+
 def _validate_config(
     config: CoevoCampaignConfig,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -694,6 +765,35 @@ def _validate_config(
         raise ValueError(
             f"first_side must be 'impostor' or 'crew'; got {config.first_side!r}"
         )
+    if config.substrate_sha_kind not in (
+        "compute_substrate_sha",
+        "bakeoff_substrate_sha",
+    ):
+        # Same deserialized-config shape as first_side: without this check the
+        # first validation would be CoevoCampaignRow's Literal — AFTER a whole
+        # generation's games ran and halls were written (Codex review on
+        # PR #311).
+        raise ValueError(
+            "substrate_sha_kind must be 'compute_substrate_sha' or "
+            f"'bakeoff_substrate_sha'; got {config.substrate_sha_kind!r}"
+        )
+    # The roster/tick knobs reach the seeder/scheduler only inside the first
+    # rollout — after the work dir, plan, halls, and rows file exist, whose
+    # clobber guard would then block the retry (Codex review on PR #311).
+    if config.num_impostors < 1:
+        raise ValueError(f"num_impostors must be >= 1, got {config.num_impostors}")
+    if config.num_players < config.num_impostors + 1:
+        raise ValueError(
+            "num_players must be >= num_impostors + 1 (at least one crewmate); "
+            f"got {config.num_players} players with {config.num_impostors} "
+            "impostors"
+        )
+    if config.tasks_per_crewmate < 1:
+        raise ValueError(
+            f"tasks_per_crewmate must be >= 1, got {config.tasks_per_crewmate}"
+        )
+    if config.max_ticks < 1:
+        raise ValueError(f"max_ticks must be >= 1, got {config.max_ticks}")
     _validate_seeds("fitness_seeds", config.fitness_seeds)
     _validate_seeds("benchmark_seeds", config.benchmark_seeds)
     _validate_seeds("payoff_seeds", config.payoff_seeds)
@@ -801,11 +901,13 @@ class _CampaignEngine:
             # halls are created), then again at every swap boundary.
             self._load_composed_factory()
 
-        # Disk: plan log, rows file, the two per-side halls, founders, ledger.
+        # Disk: preflight BOTH hall roots read-only, then plan log, rows file,
+        # the two per-side halls, founders, ledger.
+        hall_root = config.resolved_hall_root
+        _preflight_fresh_hall_root(hall_root)
         config.work_dir.mkdir(parents=True, exist_ok=True)
         self._rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
         self._write_plan()
-        hall_root = config.resolved_hall_root
         self._states: dict[Side, _SideState] = {}
         for side, side_config, initial in (
             ("impostor", config.impostor, impostor_initial),

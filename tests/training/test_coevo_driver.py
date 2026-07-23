@@ -426,6 +426,14 @@ def test_rows_carry_the_report_channels(
     assert row1.opponent_uses == {champion_sha: 1}
     assert row1.retired_opponent_shas == ()
 
+    # The row mappings are READ-ONLY views (the machine-readable campaign
+    # truth cannot drift from the on-disk JSONL after emission). The casts
+    # satisfy the type checker so the RUNTIME immutability is what's pinned.
+    with pytest.raises(TypeError):
+        cast("dict[str, int]", row1.opponent_uses)["tamper"] = 1
+    with pytest.raises(TypeError):
+        cast("dict[str, float]", row1.opponent_payoffs)["tamper"] = 1.0
+
     # Games are counted per generation and cumulatively.
     assert row0.games_played_cumulative == row0.games_played_generation
     assert (
@@ -705,8 +713,49 @@ def test_misconfigurations_fail_loud_before_any_game(tmp_path: Path) -> None:
         run_alternating_freeze(
             _make_config(tmp_path / "g", impostor=_impostor_side(sigma=float("inf")))
         )
-    for sub in ("a", "b", "c", "d", "e", "f", "g"):
+    # The substrate-kind provenance label would otherwise first fail at row
+    # construction — AFTER a generation's games ran.
+    with pytest.raises(ValueError, match="substrate_sha_kind must be"):
+        run_alternating_freeze(
+            _make_config(tmp_path / "h", substrate_sha_kind="bogus-kind")
+        )
+    # Roster/tick knobs reach the seeder/scheduler only inside the first
+    # rollout; they must fail before the rows file exists (whose clobber
+    # guard would block the retry).
+    with pytest.raises(ValueError, match="num_impostors must be"):
+        run_alternating_freeze(_make_config(tmp_path / "i", num_impostors=0))
+    with pytest.raises(ValueError, match="num_players must be"):
+        run_alternating_freeze(
+            _make_config(tmp_path / "j", num_players=1, num_impostors=1)
+        )
+    with pytest.raises(ValueError, match="max_ticks must be"):
+        run_alternating_freeze(_make_config(tmp_path / "k", max_ticks=0))
+    # A NaN/inf seed genome could play whole games and freeze NaN weights
+    # into a hall; a corrupted seed artifact never enters the campaign.
+    with pytest.raises(ValueError, match="non-finite genes"):
+        run_alternating_freeze(
+            _make_config(
+                tmp_path / "l",
+                impostor=_impostor_side(
+                    initial_genome=(float("nan"),) * _IMPOSTOR_GENOME_LENGTH
+                ),
+            )
+        )
+    for sub in ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"):
         _assert_no_disk_mutation(tmp_path / sub)
+
+
+def test_dirty_hall_root_is_refused_before_any_side_is_created(
+    tmp_path: Path,
+) -> None:
+    # A committed crew hall already at the root: the read-only preflight
+    # refuses BEFORE the impostor hall (or the work dir) is created — no
+    # half-initialized campaign tree for a retry to trip on.
+    HallOfFame.create(tmp_path / "halls", "crew", substrate_sha256=_SUBSTRATE)
+    with pytest.raises(FileExistsError, match="never clobbers a committed pool"):
+        run_alternating_freeze(_make_config(tmp_path))
+    assert not (tmp_path / "halls" / "impostor").exists()
+    assert not (tmp_path / "work").exists()
 
 
 def test_composed_adoption_fails_loud_on_missing_artifacts(tmp_path: Path) -> None:
