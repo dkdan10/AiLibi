@@ -1529,7 +1529,18 @@ construction and score through the dense terms (never `compute_shaped_reward`'s 
 gate); scenarios feed FITNESS pressure, and the standing gates/referee never move. The
 campaign consumes scenarios ONLY through 18.21's additive scenario-provider seam — this
 task implements a provider conforming to that seam (no driver edit); watchability
-quantities never appear in scenario fitness.
+quantities never appear in scenario fitness. The merged seam (316d4e5) is exact:
+`CoevoScenarioProvider = Callable[[int, Side], Sequence[CoevoScenarioTerm]]`
+(training/coevo/driver.py:309), called ONCE per swap with `(swap_index, moving_side)`; a
+`CoevoScenarioTerm` carries `label` + `fitness: Callable[[tuple[float, ...]], float]`
+receiving ONLY the flat genome — the provider closes over the side's policy builder and
+runs its scenario episodes itself, and the term's value ADDS to the moving side's ES
+fitness after the slate mean (payoff/benchmark/exploiter games untouched; `label` rides
+the campaign rows as `scenario_labels`). Two obligations follow: the fitness callable must
+be pure and deterministic (a nondeterministic term is the only way a provider can break
+the driver's pinned double-run digest), and scenario-episode budgets sit OUTSIDE the
+driver's `projected_game_bound` ceiling guard — the provider owns its own game budget and
+states it.
 
 **Files in scope:**
 - orchestrator/game.py; (the additive `initial_state` seam)
@@ -1600,7 +1611,13 @@ every gating use pairs with a recorded-bytes floor read on flag-mintless substra
 asymmetry this campaign owns (the 18.30 hand-off): the harness/crew eval passes serve the
 term live, but the impostor TRAINING loops are deliberately still anchor-composed — 
 threading the term into impostor training is THIS campaign's protocol decision, made under
-blocker (2)'s guard and recorded in the report. Scenario legs (18.23) and the composed
+blocker (2)'s guard and recorded in the report. The merged driver (316d4e5) makes the
+mechanism concrete: passing `conviction=` to `run_alternating_freeze` serves the term LIVE
+into BOTH sides' training fitness (a Codex-round fix — there is no metering-only mode),
+while under a composed configuration the term object is inert in training fitness
+(contributes exactly zero; conviction pressure flows through real ejection outcomes
+instead) — so the protocol decision is exactly: non-composed + `conviction=` under
+blocker (2)'s guard, composed, or neither. Scenario legs (18.23) and the composed
 meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
@@ -1616,7 +1633,28 @@ prescreen-substrate-divergence-shape (pre-screen PASS = spend advice only; pair 
 gating use with a recorded-bytes floor read — blocker (4)'s shape), and
 emergency-predicted-supply-above-bar (forced-emergency predicted-supply delta +29.5%
 exceeds the 25% materiality bar with recorded 0.0 — the laundering shape; blockers
-(2)+(3)'s recorded-bytes conditioning applies unchanged). Seed hygiene: every study-artifact entrant (the 18.5
+(2)+(3)'s recorded-bytes conditioning applies unchanged). Driver-consumption facts the
+campaign plans around (316d4e5, verified): `CoevoCampaignConfig` requires `work_dir`,
+`substrate_sha256` + `substrate_sha_kind` (named per the two-definition rule below and
+quoted in every row), both side configs, `master_seed`, `num_swaps`,
+`generations_per_swap`, `fitness_seeds`, `benchmark_seeds`, and non-empty unique
+`payoff_seeds`; defaults slate_size 3, staleness_cap 8, exploiter 5×6 (the probe cannot be
+disabled and dominates the projected game bound at defaults), game_ceiling 25 000 with
+`allow_over_ceiling` defaulting False. The driver REFUSES to resume: an existing hall
+root or rows file is a no-clobber error, so the multi-session shape is SEQUENTIAL FRESH
+RUNS — each session a fresh work_dir + hall_root seeded via `initial_genome=` from the
+prior session's frozen champion, the opponent pool restarting from substrate-fenced
+MAP-Elites founders (there is NO path to load a prior run's hall as the pool); if
+mid-campaign evidence shows cross-session pool continuity is load-bearing, that is a
+routed amendment under the integration-risk discipline, never a silent machinery patch.
+Composed-adoption hygiene: the merged suite never runs a composed campaign end-to-end
+(rows with `meeting_runner="composed"` are unexercised), so the first composed swap is
+preceded by a miniature composed smoke campaign whose rows are read before any real
+spend; under a composed configuration `opponent_payoffs` are composed-runner-scored
+hardness meters, never absolute champion numbers (benchmark/exploiter columns stay
+fake-path by construction); and the first retire-and-replace event
+(`retired_opponent_shas` non-empty) gets a sanity read in the rows — the suite pins
+exhaustion, not continuation. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
@@ -1660,7 +1698,9 @@ real-path legs total ~40–50 h spread across sessions — checkpoint-push per g
 Run the standing runbook per real-path leg (2 staggered workers, jittered backoff,
 `AILIBI_SEED_MAX_ATTEMPTS=8`, per-seed atomic staging, checkpoint-push). If a meter (cap)
 exhausts mid-campaign, the swap-boundary stop is the design working — re-ground and
-resume, and say so in the report.
+resume, and say so in the report; per the driver's no-clobber discipline "resume" means a
+FRESH run in a new work_dir seeded from the frozen champion (the driver-consumption block
+above), and checkpoint-push covers the streamed `campaign-rows.jsonl` + frozen hall dirs.
 
 **Integration risk:**
 
@@ -1681,7 +1721,17 @@ The counter-adaptation half: evolve the crew side (both bases: general + owned-t
 against the frozen impostor campaign champions + hall of fame, with the conviction-supply
 term giving crew fitness the conviction-economy gradient the fake path denies it, the
 interrupt-preserving constraint kept (the 15.22 guard — starvation stays unreachable), and
-real-path re-ranks per generation. Report mirrors 18.24 (rows, cycling detector, floor
+real-path re-ranks per generation. Reachability honesty (the merged driver, 316d4e5): the
+frozen-champion half of that shape is direct, the hall half is NOT — there is no seam for
+adopting 18.24's committed hall as this campaign's opponent pool; the impostor side enters
+via `impostor.initial_genome` seeded from a committed 18.24 champion (re-frozen as a fresh
+lineage in this campaign's own hall; founders are substrate-fenced MAP-Elites cells only),
+so the counter-adaptation reading is against the champion lineage plus this campaign's own
+accumulating hall, and if the report judges full-pool continuity load-bearing that is a
+routed amendment, never a silent driver edit. Crew mechanics the driver pins:
+`first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
+anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
+`encoder_version` (the 18.19 conflation guard, enforced both directions). Report mirrors 18.24 (rows, cycling detector, floor
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.
@@ -1892,7 +1942,10 @@ deadline_default blindness, the unassigned validity-gate stamped-substrate quest
 LLM-free meeting paths — every zero-LLM composed meeting fails `cost_and_provenance_exact`
 for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
-hash pin that fails on non-Linux interpreters) as review inputs, not as contracts.
+hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
+`composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
+than design, and the silently-overwritable `campaign-plan.json`) as review inputs, not as
+contracts.
 
 **Integration risk:**
 

@@ -20,7 +20,17 @@ The counter-adaptation half: evolve the crew side (both bases: general + owned-t
 against the frozen impostor campaign champions + hall of fame, with the conviction-supply
 term giving crew fitness the conviction-economy gradient the fake path denies it, the
 interrupt-preserving constraint kept (the 15.22 guard — starvation stays unreachable), and
-real-path re-ranks per generation. Report mirrors 18.24 (rows, cycling detector, floor
+real-path re-ranks per generation. Reachability honesty (the merged driver, 316d4e5): the
+frozen-champion half of that shape is direct, the hall half is NOT — there is no seam for
+adopting 18.24's committed hall as this campaign's opponent pool; the impostor side enters
+via `impostor.initial_genome` seeded from a committed 18.24 champion (re-frozen as a fresh
+lineage in this campaign's own hall; founders are substrate-fenced MAP-Elites cells only),
+so the counter-adaptation reading is against the champion lineage plus this campaign's own
+accumulating hall, and if the report judges full-pool continuity load-bearing that is a
+routed amendment, never a silent driver edit. Crew mechanics the driver pins:
+`first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
+anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
+`encoder_version` (the 18.19 conflation guard, enforced both directions). Report mirrors 18.24 (rows, cycling detector, floor
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.

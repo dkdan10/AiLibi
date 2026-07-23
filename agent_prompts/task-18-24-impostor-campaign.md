@@ -34,7 +34,13 @@ every gating use pairs with a recorded-bytes floor read on flag-mintless substra
 asymmetry this campaign owns (the 18.30 hand-off): the harness/crew eval passes serve the
 term live, but the impostor TRAINING loops are deliberately still anchor-composed — 
 threading the term into impostor training is THIS campaign's protocol decision, made under
-blocker (2)'s guard and recorded in the report. Scenario legs (18.23) and the composed
+blocker (2)'s guard and recorded in the report. The merged driver (316d4e5) makes the
+mechanism concrete: passing `conviction=` to `run_alternating_freeze` serves the term LIVE
+into BOTH sides' training fitness (a Codex-round fix — there is no metering-only mode),
+while under a composed configuration the term object is inert in training fitness
+(contributes exactly zero; conviction pressure flows through real ejection outcomes
+instead) — so the protocol decision is exactly: non-composed + `conviction=` under
+blocker (2)'s guard, composed, or neither. Scenario legs (18.23) and the composed
 meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign starts
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
@@ -50,7 +56,28 @@ prescreen-substrate-divergence-shape (pre-screen PASS = spend advice only; pair 
 gating use with a recorded-bytes floor read — blocker (4)'s shape), and
 emergency-predicted-supply-above-bar (forced-emergency predicted-supply delta +29.5%
 exceeds the 25% materiality bar with recorded 0.0 — the laundering shape; blockers
-(2)+(3)'s recorded-bytes conditioning applies unchanged). Seed hygiene: every study-artifact entrant (the 18.5
+(2)+(3)'s recorded-bytes conditioning applies unchanged). Driver-consumption facts the
+campaign plans around (316d4e5, verified): `CoevoCampaignConfig` requires `work_dir`,
+`substrate_sha256` + `substrate_sha_kind` (named per the two-definition rule below and
+quoted in every row), both side configs, `master_seed`, `num_swaps`,
+`generations_per_swap`, `fitness_seeds`, `benchmark_seeds`, and non-empty unique
+`payoff_seeds`; defaults slate_size 3, staleness_cap 8, exploiter 5×6 (the probe cannot be
+disabled and dominates the projected game bound at defaults), game_ceiling 25 000 with
+`allow_over_ceiling` defaulting False. The driver REFUSES to resume: an existing hall
+root or rows file is a no-clobber error, so the multi-session shape is SEQUENTIAL FRESH
+RUNS — each session a fresh work_dir + hall_root seeded via `initial_genome=` from the
+prior session's frozen champion, the opponent pool restarting from substrate-fenced
+MAP-Elites founders (there is NO path to load a prior run's hall as the pool); if
+mid-campaign evidence shows cross-session pool continuity is load-bearing, that is a
+routed amendment under the integration-risk discipline, never a silent machinery patch.
+Composed-adoption hygiene: the merged suite never runs a composed campaign end-to-end
+(rows with `meeting_runner="composed"` are unexercised), so the first composed swap is
+preceded by a miniature composed smoke campaign whose rows are read before any real
+spend; under a composed configuration `opponent_payoffs` are composed-runner-scored
+hardness meters, never absolute champion numbers (benchmark/exploiter columns stay
+fake-path by construction); and the first retire-and-replace event
+(`retired_opponent_shas` non-empty) gets a sanity read in the rows — the suite pins
+exhaustion, not continuation. Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
@@ -94,7 +121,9 @@ real-path legs total ~40–50 h spread across sessions — checkpoint-push per g
 Run the standing runbook per real-path leg (2 staggered workers, jittered backoff,
 `AILIBI_SEED_MAX_ATTEMPTS=8`, per-seed atomic staging, checkpoint-push). If a meter (cap)
 exhausts mid-campaign, the swap-boundary stop is the design working — re-ground and
-resume, and say so in the report.
+resume, and say so in the report; per the driver's no-clobber discipline "resume" means a
+FRESH run in a new work_dir seeded from the frozen champion (the driver-consumption block
+above), and checkpoint-push covers the streamed `campaign-rows.jsonl` + frozen hall dirs.
 
 ## Integration risk
 

@@ -26,7 +26,18 @@ construction and score through the dense terms (never `compute_shaped_reward`'s 
 gate); scenarios feed FITNESS pressure, and the standing gates/referee never move. The
 campaign consumes scenarios ONLY through 18.21's additive scenario-provider seam — this
 task implements a provider conforming to that seam (no driver edit); watchability
-quantities never appear in scenario fitness.
+quantities never appear in scenario fitness. The merged seam (316d4e5) is exact:
+`CoevoScenarioProvider = Callable[[int, Side], Sequence[CoevoScenarioTerm]]`
+(training/coevo/driver.py:309), called ONCE per swap with `(swap_index, moving_side)`; a
+`CoevoScenarioTerm` carries `label` + `fitness: Callable[[tuple[float, ...]], float]`
+receiving ONLY the flat genome — the provider closes over the side's policy builder and
+runs its scenario episodes itself, and the term's value ADDS to the moving side's ES
+fitness after the slate mean (payoff/benchmark/exploiter games untouched; `label` rides
+the campaign rows as `scenario_labels`). Two obligations follow: the fitness callable must
+be pure and deterministic (a nondeterministic term is the only way a provider can break
+the driver's pinned double-run digest), and scenario-episode budgets sit OUTSIDE the
+driver's `projected_game_bound` ceiling guard — the provider owns its own game budget and
+states it.
 
 **Files in scope:**
 - orchestrator/game.py; (the additive `initial_state` seam)

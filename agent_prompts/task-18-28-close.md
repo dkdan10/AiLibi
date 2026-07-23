@@ -67,7 +67,10 @@ deadline_default blindness, the unassigned validity-gate stamped-substrate quest
 LLM-free meeting paths — every zero-LLM composed meeting fails `cost_and_provenance_exact`
 for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
-hash pin that fails on non-Linux interpreters) as review inputs, not as contracts.
+hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
+`composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
+than design, and the silently-overwritable `campaign-plan.json`) as review inputs, not as
+contracts.
 
 ## Integration risk
 
