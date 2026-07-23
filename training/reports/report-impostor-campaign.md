@@ -473,9 +473,14 @@ and available to 18.25.
   The standing "2 staggered workers" runbook line is about `run_tournament` seed-range
   workers and does NOT transfer to concurrent re-rank legs. Session-1 remedy, both via
   documented config: one leg at a time + `meeting_timeout_seconds=900` (still a real
-  hang bound; the proxy exists to catch hangs, not to price slow meetings). Real-path
-  wall-clock therefore prices well above the planning table's 2-worker amortization;
-  routed to 18.25's duration honesty and to the close.
+  hang bound; the proxy exists to catch hangs, not to price slow meetings).
+  **Measurement provenance caveat:** the session-1 timeout exhaustion and per-game
+  wall-clock were recorded during a Featherless status window the owner reports as
+  PARTIALLY IMPAIRED — the 300 s default may be adequate at healthy status, and this
+  leg's wall-clock is NOT representative pricing. Re-measure the timeout question at
+  healthy provider status before folding this repricing into 18.25's duration honesty;
+  the recordings themselves stay valid regardless (the validity gate checks model +
+  cost, never latency).
 - **F6 — the conviction term was non-decisive for impostor selection on the utility
   lineage at this budget.** The run-01 same-seed `conviction=None` twin (§6.1) reproduced
   the impostor champion lineage sha-for-sha; only crew selection diverged. The term's
