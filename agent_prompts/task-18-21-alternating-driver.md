@@ -32,6 +32,33 @@ seams, each inert when unset (digest-identical): a per-swap scenario-provider ca
 runner) plugs into without ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
+Three merged hand-offs now bind this contract (18.20 at 4173ef1, 18.22 at ea0eb62, 18.29 at
+6339116 — all verified against their contracts). (a) HALL-OF-FAME CONSUMPTION DISCIPLINE:
+the driver constructs ONE `OpponentStalenessLedger` per run from the cap + the pool's
+member shas, `register`s every freshly frozen champion, and treats a capped opponent as
+RETIRE-AND-REPLACE (fresh sha) — never an in-place reset; "one generation use" means one
+use per DISTINCT sampled member per driver generation, and `sample_opponents` draws WITH
+replacement, so the driver dedupes the slate before metering; payoff maps passed to the
+sampler must exactly cover the pool (empty = cold-start uniform is the only exception);
+founders ingest through the substrate-fenced `ingest_map_elites_founders` BEFORE any pool
+build or sampling; `HallOfFame.create` pins the campaign substrate sha, and TWO sha
+definitions exist (the 18.24 block: `compute_substrate_sha` composite vs
+`bakeoff_substrate_sha` raw MANIFEST) — the driver names which one it passes, in the row
+schema. Per-side campaign constants (caps, floors) are this driver's to own;
+`DEFAULT_COEVO_ARTIFACT_ROOT` is exported for it. (b) COMPOSED-RUNNER ADOPTION MECHANICS:
+the meeting-runner factory seam adopts 18.29 ONLY via `load_composed_runner_factory` on
+its DEFAULT path (the committed-GO gate + sha cross-check; `composed_artifact_dir=None` is
+a diagnostics-only escape, never a campaign configuration), and only at a swap boundary;
+under a composed configuration the row schema's "conviction/surrogate consumption" means
+BOTH component counters (gate reads + probe reads), and
+`verdict.json.adoption_constraints` is surfaced verbatim in the campaign meters — composed
+pre-screen reads are spend advice paired with recorded-bytes floor reads, composed-substrate
+probe reads are diagnostic-grade, and champion numbers are never composed-runner-scored.
+(c) V3-FAMILY ENTRANT CONFIGS: the per-side entrant config carries `encoder_version` (v2
+default, byte-identical artifacts); a hall/side stays SINGLE-FAMILY per campaign (a mixed
+family fails loud only at genome-length reload), so the driver pins the family in config —
+HoF rows deliberately carry no encoder stamp.
+
 **Files in scope:**
 - training/coevo/driver.py (new)
 - tests/training/test_coevo_driver.py; (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)

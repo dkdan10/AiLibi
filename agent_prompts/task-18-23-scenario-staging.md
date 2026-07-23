@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 18.23 — Scenario staging: state injection + the skill-scenario library, anchored to audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1565-1571, 1627 (post-18.30 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133. Do not implement work outside these references.
+Implement Task 18.23 — Scenario staging: state injection + the skill-scenario library, anchored to audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1579-1585, 1641 (post-18.22 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-scenario-staging`
 **Depends on:** 18.16, 18.21, 18.22
-**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1565-1571, 1627 (post-18.30 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
+**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1579-1585, 1641 (post-18.22 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
 The training-grounds instrument: an `initial_state` injection seam on the headless game
@@ -67,7 +67,9 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 
 `orchestrator/game.py` is the most byte-adjacent file in the tree; the seam must be
 provably inert when unused (the full replay/recording byte-identity suites are the gate —
-run them before and after). Scenario fitness definitions are the Goodhart-adjacent part:
+run them before and after). 18.22's hook-payload widening (`_notify_meeting_concluded`
+now passes `ejected_id` engine truth to every agent) lives in the same file — the
+byte-adjacency caution covers that block too. Scenario fitness definitions are the Goodhart-adjacent part:
 each must name what it deliberately does NOT reward (e.g. discovery-latency must not reward
 meeting suppression — the FO-2 lesson).
 
@@ -118,4 +120,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-18-scenario-staging` with a title like `task 18.23: scenario staging: state injection + the skill-scenario library`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1565-1571, 1627 (post-18.30 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1579-1585, 1641 (post-18.22 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -39,7 +39,18 @@ meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign 
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
 component use-counters quoted in the campaign meters), recorded per-generation in the
-rows — the close (18.28) still waits on both either way. Seed hygiene: every study-artifact entrant (the 18.5
+rows — the close (18.28) still waits on both either way. The composed verdict LANDED GO
+(6339116: decision accuracy 0.8646 > 0.625, convicting top-1 0.7667 ≥ 0.6375) with three
+adoption constraints machine-readable in `training/artifacts/composed/verdict.json`
+(`adoption_constraints`) — carried verbatim into the campaign meters on adoption:
+composed-provenance-validity (composed-substrate probe reads are diagnostic-grade — every
+LLM-free meeting path fails `cost_and_provenance_exact` until the validity gate answers
+the stamped-substrate question, an eval/-side open item routed to the close),
+prescreen-substrate-divergence-shape (pre-screen PASS = spend advice only; pair every
+gating use with a recorded-bytes floor read — blocker (4)'s shape), and
+emergency-predicted-supply-above-bar (forced-emergency predicted-supply delta +29.5%
+exceeds the 25% materiality bar with recorded 0.0 — the laundering shape; blockers
+(2)+(3)'s recorded-bytes conditioning applies unchanged). Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):

@@ -1382,6 +1382,33 @@ seams, each inert when unset (digest-identical): a per-swap scenario-provider ca
 runner) plugs into without ever editing the frozen driver. Deterministic end-to-end on the fake/surrogate path;
 machine-readable campaign rows.
 
+Three merged hand-offs now bind this contract (18.20 at 4173ef1, 18.22 at ea0eb62, 18.29 at
+6339116 — all verified against their contracts). (a) HALL-OF-FAME CONSUMPTION DISCIPLINE:
+the driver constructs ONE `OpponentStalenessLedger` per run from the cap + the pool's
+member shas, `register`s every freshly frozen champion, and treats a capped opponent as
+RETIRE-AND-REPLACE (fresh sha) — never an in-place reset; "one generation use" means one
+use per DISTINCT sampled member per driver generation, and `sample_opponents` draws WITH
+replacement, so the driver dedupes the slate before metering; payoff maps passed to the
+sampler must exactly cover the pool (empty = cold-start uniform is the only exception);
+founders ingest through the substrate-fenced `ingest_map_elites_founders` BEFORE any pool
+build or sampling; `HallOfFame.create` pins the campaign substrate sha, and TWO sha
+definitions exist (the 18.24 block: `compute_substrate_sha` composite vs
+`bakeoff_substrate_sha` raw MANIFEST) — the driver names which one it passes, in the row
+schema. Per-side campaign constants (caps, floors) are this driver's to own;
+`DEFAULT_COEVO_ARTIFACT_ROOT` is exported for it. (b) COMPOSED-RUNNER ADOPTION MECHANICS:
+the meeting-runner factory seam adopts 18.29 ONLY via `load_composed_runner_factory` on
+its DEFAULT path (the committed-GO gate + sha cross-check; `composed_artifact_dir=None` is
+a diagnostics-only escape, never a campaign configuration), and only at a swap boundary;
+under a composed configuration the row schema's "conviction/surrogate consumption" means
+BOTH component counters (gate reads + probe reads), and
+`verdict.json.adoption_constraints` is surfaced verbatim in the campaign meters — composed
+pre-screen reads are spend advice paired with recorded-bytes floor reads, composed-substrate
+probe reads are diagnostic-grade, and champion numbers are never composed-runner-scored.
+(c) V3-FAMILY ENTRANT CONFIGS: the per-side entrant config carries `encoder_version` (v2
+default, byte-identical artifacts); a hall/side stays SINGLE-FAMILY per campaign (a mixed
+family fails loud only at genome-length reload), so the driver pins the family in config —
+HoF rows deliberately carry no encoder stamp.
+
 **Files in scope:**
 - training/coevo/driver.py (new)
 - tests/training/test_coevo_driver.py; (a miniature two-swap campaign on tiny budgets: freeze/swap mechanics, HoF growth, benchmark emission, exploiter integration, determinism digest)
@@ -1477,12 +1504,19 @@ by construction) and quantize everything through the established integer-grid he
 **Public types introduced:**
 - `agents.tactical.features.encode_features_v3`
 
+**Post-merge coordination note (2026-07-23):** the merged implementation (ea0eb62) also
+touched `training/realpath.py` + `scripts/run_tournament.py` (+ their tests) — the
+v3-artifact reload ripple (whitelist + `encoder_version` threading so a v3-stamped
+champion rebuilds instead of failing the v2 genome-length check). SANCTIONED as coordination:
+coherent, fail-loud, and fixture-pinned; recorded here because the PR body under-declared
+it against the contract file list.
+
 **Ready-to-paste prompt:** `agent_prompts/task-18-22-encoder-v3.md`
 
 ### Task 18.23 — Scenario staging: state injection + the skill-scenario library
 **Branch:** `phase-18-scenario-staging`
 **Depends on:** 18.16, 18.21, 18.22
-**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1565-1571, 1627 (post-18.30 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
+**Section refs:** audits/audit-phase-18-planning.md §4 (#12) + the dive findings (both entry points hardwire `seed_initial_state` — orchestrator/game.py:1579-1585, 1641 (post-18.22 anchors); `WorldState` hand-construction precedent at tests/training/test_env.py:531-543; dense terms score truncated episodes — training/rewards.py:250-256); orchestrator/seeder.py:29-133
 **Complexity:** Integration
 
 The training-grounds instrument: an `initial_state` injection seam on the headless game
@@ -1530,7 +1564,9 @@ determinism story is inherited, not re-invented.
 
 `orchestrator/game.py` is the most byte-adjacent file in the tree; the seam must be
 provably inert when unused (the full replay/recording byte-identity suites are the gate —
-run them before and after). Scenario fitness definitions are the Goodhart-adjacent part:
+run them before and after). 18.22's hook-payload widening (`_notify_meeting_concluded`
+now passes `ejected_id` engine truth to every agent) lives in the same file — the
+byte-adjacency caution covers that block too. Scenario fitness definitions are the Goodhart-adjacent part:
 each must name what it deliberately does NOT reward (e.g. discovery-latency must not reward
 meeting suppression — the FO-2 lesson).
 
@@ -1569,7 +1605,18 @@ meeting-outcome runner (18.29) are deliberately NOT prerequisites: the campaign 
 without them, and if either merges mid-campaign a later swap MAY adopt it (the composed
 runner ONLY under its committed GO verdict, through 18.21's runner-factory seam, with both
 component use-counters quoted in the campaign meters), recorded per-generation in the
-rows — the close (18.28) still waits on both either way. Seed hygiene: every study-artifact entrant (the 18.5
+rows — the close (18.28) still waits on both either way. The composed verdict LANDED GO
+(6339116: decision accuracy 0.8646 > 0.625, convicting top-1 0.7667 ≥ 0.6375) with three
+adoption constraints machine-readable in `training/artifacts/composed/verdict.json`
+(`adoption_constraints`) — carried verbatim into the campaign meters on adoption:
+composed-provenance-validity (composed-substrate probe reads are diagnostic-grade — every
+LLM-free meeting path fails `cost_and_provenance_exact` until the validity gate answers
+the stamped-substrate question, an eval/-side open item routed to the close),
+prescreen-substrate-divergence-shape (pre-screen PASS = spend advice only; pair every
+gating use with a recorded-bytes floor read — blocker (4)'s shape), and
+emergency-predicted-supply-above-bar (forced-emergency predicted-supply delta +29.5%
+exceeds the 25% materiality bar with recorded 0.0 — the laundering shape; blockers
+(2)+(3)'s recorded-bytes conditioning applies unchanged). Seed hygiene: every study-artifact entrant (the 18.5
 candidates, the 18.6 cells) carries a substrate sha; a seed whose sha mismatches the
 campaign substrate is re-fit/re-run at the current substrate before entry (cheap and
 deterministic), never consumed stale. Two sha DEFINITIONS exist (merged, verified):
@@ -1841,8 +1888,11 @@ matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit shou
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
 and the un-unit-tested deadline_default freeze-guard branch, the unassigned validity-gate
-deadline_default blindness, the platform-sensitive `test_es` hash pin that fails on
-non-Linux interpreters) as review inputs, not as contracts.
+deadline_default blindness, the unassigned validity-gate stamped-substrate question for
+LLM-free meeting paths — every zero-LLM composed meeting fails `cost_and_provenance_exact`
+for want of a model row, which is why composed-substrate probe reads are pinned
+diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
+hash pin that fails on non-Linux interpreters) as review inputs, not as contracts.
 
 **Integration risk:**
 

@@ -63,8 +63,11 @@ matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit shou
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
 and the un-unit-tested deadline_default freeze-guard branch, the unassigned validity-gate
-deadline_default blindness, the platform-sensitive `test_es` hash pin that fails on
-non-Linux interpreters) as review inputs, not as contracts.
+deadline_default blindness, the unassigned validity-gate stamped-substrate question for
+LLM-free meeting paths — every zero-LLM composed meeting fails `cost_and_provenance_exact`
+for want of a model row, which is why composed-substrate probe reads are pinned
+diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
+hash pin that fails on non-Linux interpreters) as review inputs, not as contracts.
 
 ## Integration risk
 
