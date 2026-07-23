@@ -148,7 +148,11 @@ in session 1 (§3).
 
 | session | date | work | status |
 |---|---|---|---|
-| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); real-path re-rank legs started (§4); instrument sweeps over completed legs (§5) | this session |
+| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | this session |
+
+Real-path legs remaining after session 1: leg 04 tranche 2 (seeds 4003–4005); legs
+01/02/03/05 (each 2 tranches; leg 01 tranche 1 in flight at session-1 close) — ~54 real
+games, ≈18 h at healthy provider status.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
 §4/§6/§8 as they land; the close (18.28) waits on 18.23 + 18.29 regardless.
@@ -357,7 +361,44 @@ re-rank per IMPOSTOR SWAP over frozen hall members (K=2: the swap champions, new
 first, exploiter finds as alternates), the same 18.17 machinery and the same
 ~12-games-per-leg arithmetic.
 
-<!-- SESSION-1-LEGS: filled per leg as each completes -->
+### 4.1 Leg 04 — run-04-freepolicy-v3, tranche 1 (seeds 4000–4002; session 1, COMPLETE)
+
+Recorded solo under `meeting_timeout_seconds=900`, during the F7 impaired-status window
+(wall-clock not representative). Candidates: the run's two frozen swap champions.
+
+**Pre-screen (spend advice ONLY — blocker 4), quoted beside the recorded reads:**
+
+| candidate | predicted flags/meeting | predicted floors | fake recorded flags | REAL recorded flags/meeting |
+|---|---|---|---|---|
+| `27f852fe…` (gen 9) | 4.1642 | PASS | 0 (flag-mintless) | **6.6667** |
+| `348df066…` (gen 3) | 5.2389 | PASS | 0 (flag-mintless) | **5.5000** |
+
+The prescreen's supply prediction was directionally confirmed by the real bytes — and
+the pairing discipline held: no gating read ever stood on the prediction alone.
+
+**Ranking (17.14 discipline — stamp proofs + signed floor distances):**
+
+| rank | candidate | selection | validity | referee | stamp proof |
+|---|---|---|---|---|---|
+| 1 | `27f852fe…` gen 9 | 20.33 | PASS | **FAIL** | 3/3 games stamped, uniform, sha == computed digest |
+| 2 | `348df066…` gen 3 | 17.10 | PASS | **FAIL** | 3/3 games stamped, uniform, sha == computed digest |
+
+Floor sensitivity (measured − floor, signed):
+
+| candidate | witnessed_event_rate | flags_per_meeting | testimony_backed_conversion |
+|---|---|---|---|
+| `27f852fe…` | None vs 0.0339 → **FAIL** (0 kills — denominator empty) | 6.6667 − 1.0909 = **+5.5758 PASS** | 0.7500 − 0.0939 = **+0.6561 PASS** |
+| `348df066…` | None vs 0.0339 → **FAIL** (0 kills) | 5.5000 − 1.0909 = **+4.4091 PASS** | 0.6000 − 0.1138 = **+0.4862 PASS** |
+
+Core channels: impostor win 0.0 (both), ejection accuracy 1.0, meetings/game 0.67 / 1.0.
+Reading (per the 17.12 selection-bar-honesty ruling — a legible instrument outcome, not
+a silent rejection): the v3 lineage's real economy is **supply-rich because the impostor
+is weak and gets prosecuted** — the crew converts testimony against it at 0.60–0.75,
+flags mint at 5–6× the floor, and the impostor never kills (hence the degenerate
+witnessed-kill gauge and referee FAIL). Watchability-gauge-passing, win-0: not flip-bar
+material; the selection weight rides on the utility legs (pending).
+
+<!-- SESSION-1-LEGS: extended per leg -->
 
 ---
 
@@ -393,7 +434,41 @@ Claims are deferred to 18.27 — this section reports deltas, never rules. Entro
 are quoted but UNJUDGEABLE under §6.a of the memo as-recorded (no per-agent variance
 field is emitted; the routed follow-up contract owns it).
 
-<!-- SESSION-1-SWEEPS: filled after legs complete -->
+### 5.1 Sweep — leg 04 tranche 1 (6 real games, byte-completeness fence PASSED first)
+
+`compute_kill_craft_report` passed both candidate dirs (every game reached GAME_OVER
+with a stamped terminal row) before any off-menu/deception denominator was read.
+Cells (candidate arm / the re-anchored corpus column), n stated — at 3 games and 3–4
+meetings per arm every rate cell is advisory-scale; z reads defer to 18.27 with the
+18.26 same-seed FSM comparator arm, per the memo:
+
+| cell | `27f852fe…` (gen 9) | `348df066…` (gen 3) | corpus 9p2i |
+|---|---|---|---|
+| **off-menu rate** | **79/101 = 0.782** | **114/120 = 0.950** | 0/6663 = 0.0 (structural) |
+| meetings / games | 3 / 3 | 4 / 3 | 463 / 150 |
+| kills (crew-witnessed) | 0 (–) | 0 (–) | 505 (12) |
+| frame-attempt meetings | 3/3 | 3/4 | 437/463 |
+| frame conversions | 0/3 | 0/3 | 23/437 |
+| teammate accusations | 0/3 | 0/4 | 0/549 |
+| false-vouch (saw_player) | 1/2 | 0/3 | 74/602 |
+| impostor alibis (survived) | 0 (0) | 0 (0) | 77 (59) |
+| impostor action entropy (cond.) | 0.4821 (6 ag / 101 dec) | 0.4735 (6 ag / 120 dec) | 0.6526 (300 / 6663) |
+| crew action entropy (cond.) | 0.9086 | 0.9790 | 0.8693 |
+
+**The headline cell: off-menu rate 0.78 / 0.95 against a structural-0 baseline** — the
+first free-policy recordings the instrument has ever scored, and it fires massively.
+Interpretation discipline: a free-policy agent CAN emit any legal intent by
+construction, so a nonzero off-menu rate is the FAMILY's action space showing, and the
+enabling lever is the family itself — the counterfactual "ablation" is the menu-bounded
+utility lineage, whose recordings are on-menu by construction (0/…). Both arms of that
+counterfactual exist in this campaign's artifacts; whether the specific off-menu
+DISTRIBUTION (which kinds, which targets) constitutes a skill is 18.27's reading, fed
+by the by-kind breakdowns in the sweep JSON. Zero kills across all 6 games also makes
+kill-craft cells degenerate for this lineage (no downward tail exists; stated, not
+scored). Entropy cells quoted but UNJUDGEABLE per the memo (no per-agent variance
+field — the routed follow-up contract).
+
+<!-- SESSION-1-SWEEPS: extended per leg -->
 
 ---
 
