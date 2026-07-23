@@ -56,6 +56,7 @@ import pytest
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from orchestrator.game import MeetingRunner, build_default_meeting_runner
+from training.anchor_study import compute_substrate_sha
 from training.bakeoff.es import random_genome
 from training.bakeoff.harness import (
     BakeoffPolicy,
@@ -876,3 +877,179 @@ def test_composed_adoption_fails_loud_on_missing_artifacts(tmp_path: Path) -> No
     with pytest.raises(FileNotFoundError):
         run_alternating_freeze(config)
     _assert_no_disk_mutation(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# The committed impostor-campaign rows (Task 18.24).                           #
+#                                                                              #
+# Five sequential fresh driver runs, their campaign rows concatenated into one #
+# committed JSONL, in run order:                                               #
+#                                                                              #
+#   1. run-01-utility-champion         12 rows (4 swaps × 3 generations)       #
+#   2. run-02-utility-lambda4          12 rows                                 #
+#   3. run-03-utility-bcanchor         12 rows                                 #
+#   4. run-04-freepolicy-v3            12 rows                                 #
+#   5. run-05-freepolicy-v2-founders    4 rows (2 swaps × 2 generations)       #
+#                                                                              #
+# The runs are recoverable from the concatenation because ``generation_index`` #
+# (global per run, ge=1, monotone) restarts at 1 at each run boundary. These   #
+# are pure file-read STRUCTURAL pins on the shipped campaign (the             #
+# ``test_bakeoff`` committed-artifact idiom): no rollouts run here, and — the   #
+# module's pin doctrine — NO campaign float value or digest is pinned as an     #
+# absolute constant. The two substrate shas are pinned by DYNAMIC self-        #
+# consistency against their live definitions (guarding the two-definition       #
+# dispatch), never as hardcoded hex. A missing rows file fails the read loudly, #
+# which is the correct behaviour for a committed-artifact pin (the file lands   #
+# once the campaign runs finish).                                              #
+# --------------------------------------------------------------------------- #
+
+_CAMPAIGN_ROWS_PATH: Path = Path("training/reports/results-impostor-campaign.jsonl")
+
+# Per-run (block) structural facts, in file order; the last block is the
+# shorter 2-swap founder run.
+_EXPECTED_BLOCK_LENGTHS: tuple[int, ...] = (12, 12, 12, 12, 4)
+_BLOCK_NUM_SWAPS: tuple[int, ...] = (4, 4, 4, 4, 2)
+# The impostor-moving encoder family per block: the utility scorer's v1 for the
+# three utility runs, then the free-policy family's "v3"/"v2" pins.
+_BLOCK_IMPOSTOR_ENCODERS: tuple[str, ...] = (
+    _IMPOSTOR_ENCODER,
+    _IMPOSTOR_ENCODER,
+    _IMPOSTOR_ENCODER,
+    "v3",
+    "v2",
+)
+# Blocks 1-3 bind to the anchor-study corpus/floor substrate; blocks 4-5 to the
+# MAP-Elites corpus MANIFEST substrate.
+_COMPUTE_SUBSTRATE_BLOCKS: frozenset[int] = frozenset({0, 1, 2})
+_BAKEOFF_SUBSTRATE_BLOCKS: frozenset[int] = frozenset({3, 4})
+# The projected per-run game ceiling every run stayed under.
+_CAMPAIGN_GAME_CEILING: int = 25000
+
+
+def _committed_campaign_rows() -> list[CoevoCampaignRow]:
+    """Every committed campaign row, parsed in file order (loud on a bad line).
+
+    The ``CoevoCampaignRow(**json.loads(line))`` round-trip idiom — the same one
+    ``test_rows_file_round_trips_the_emitted_rows`` uses — so a schema drift (an
+    added/removed/renamed field under ``extra="forbid"``) trips HERE too. A
+    missing file raises at ``read_text`` (the committed-artifact pin contract).
+    """
+
+    lines = _CAMPAIGN_ROWS_PATH.read_text().splitlines()
+    return [CoevoCampaignRow(**json.loads(line)) for line in lines if line.strip()]
+
+
+def _campaign_blocks() -> list[list[CoevoCampaignRow]]:
+    """Recover the five runs by splitting on the per-run ``generation_index``.
+
+    ``generation_index`` is global WITHIN a run (ge=1, monotone) and restarts at
+    1 at each run boundary, so a fresh block opens exactly when a row's
+    ``generation_index`` is 1.
+    """
+
+    blocks: list[list[CoevoCampaignRow]] = []
+    current: list[CoevoCampaignRow] = []
+    for row in _committed_campaign_rows():
+        if row.generation_index == 1 and current:
+            blocks.append(current)
+            current = []
+        current.append(row)
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+class TestCommittedImpostorCampaignRows:
+    """Structural pins on the committed five-run impostor campaign JSONL."""
+
+    def test_every_line_parses_and_total_row_count(self) -> None:
+        rows = _committed_campaign_rows()
+        # Every line round-trips through the row schema; the campaign is the
+        # concatenation of the five runs' rows: 4×12 + 4 == 52.
+        assert sum(_EXPECTED_BLOCK_LENGTHS) == 52
+        assert len(rows) == 52
+
+    def test_generation_index_split_yields_five_blocks(self) -> None:
+        blocks = _campaign_blocks()
+        # Splitting on generation_index == 1 recovers exactly the five runs.
+        assert len(blocks) == 5
+        assert tuple(len(block) for block in blocks) == _EXPECTED_BLOCK_LENGTHS
+
+    def test_every_row_carries_the_fixed_protocol_columns(self) -> None:
+        for row in _committed_campaign_rows():
+            assert row.schema_version == COEVO_CAMPAIGN_ROW_SCHEMA_VERSION
+            # The non-composed + conviction protocol decision: training games
+            # ran on the fake-provider meeting path, no adoption constraints, no
+            # scenario terms, and the surrogate instrument is absent (None, not
+            # a zero-ghost).
+            assert row.meeting_runner == "fake-provider"
+            assert row.adoption_constraints == ()
+            assert row.scenario_labels == ()
+            assert row.surrogate_uses is None
+            # One side moves per generation, always.
+            assert row.moving_side != row.frozen_side
+
+    def test_conviction_term_served_non_decreasing_per_block(self) -> None:
+        for block in _campaign_blocks():
+            uses = [row.conviction_uses for row in block]
+            # Served every generation (never a None zero-ghost), cumulative and
+            # non-decreasing within the run, and strictly positive by the end —
+            # the conviction term reached the training-fitness channel.
+            assert all(count is not None for count in uses)
+            metered = cast("list[int]", uses)
+            assert metered == sorted(metered)
+            assert metered[-1] > 0
+
+    def test_each_block_alternates_from_an_impostor_first_swap(self) -> None:
+        for block in _campaign_blocks():
+            # first_side impostor: the opening swap of every run moves the
+            # impostor side.
+            assert block[0].moving_side == "impostor"
+            # Games accrue strictly within a run (the per-run cumulative clock),
+            # and every run stays under the projected ceiling.
+            cumulative = [row.games_played_cumulative for row in block]
+            assert all(
+                earlier < later
+                for earlier, later in zip(cumulative, cumulative[1:], strict=False)
+            )
+            assert cumulative[-1] <= _CAMPAIGN_GAME_CEILING
+
+    def test_substrate_sha_kind_and_value_dispatch_per_block(self) -> None:
+        # A DYNAMIC self-consistency pin: the recorded shas must equal the live
+        # definitions, guarding the two-definition dispatch (never hardcoded).
+        compute_sha = compute_substrate_sha()
+        bakeoff_sha = bakeoff_substrate_sha()
+        for index, block in enumerate(_campaign_blocks()):
+            if index in _COMPUTE_SUBSTRATE_BLOCKS:
+                for row in block:
+                    assert row.substrate_sha_kind == "compute_substrate_sha"
+                    assert row.substrate_sha256 == compute_sha
+            else:
+                assert index in _BAKEOFF_SUBSTRATE_BLOCKS
+                for row in block:
+                    assert row.substrate_sha_kind == "bakeoff_substrate_sha"
+                    assert row.substrate_sha256 == bakeoff_sha
+
+    def test_moving_encoder_version_per_block_and_side(self) -> None:
+        for index, block in enumerate(_campaign_blocks()):
+            impostor_encoder = _BLOCK_IMPOSTOR_ENCODERS[index]
+            for row in block:
+                if row.moving_side == "impostor":
+                    assert row.moving_encoder_version == impostor_encoder
+                else:
+                    assert row.moving_encoder_version == _CREW_ENCODER
+
+    def test_swap_champions_are_frozen_once_per_swap(self) -> None:
+        for index, block in enumerate(_campaign_blocks()):
+            frozen_rows = [row for row in block if row.champion_frozen]
+            # One freeze per swap, each carrying a real champion sha.
+            assert len(frozen_rows) == _BLOCK_NUM_SWAPS[index]
+            for row in frozen_rows:
+                assert row.champion_frozen_sha is not None
+
+    def test_founder_pool_serves_the_final_run(self) -> None:
+        block5 = _campaign_blocks()[4]
+        # The 30 MAP-Elites founders in the impostor hall are the frozen pool
+        # the crew-moving swap trains against (opponent_pool_size is the FROZEN
+        # side's active pool for the moving side's generation).
+        assert any(row.opponent_pool_size >= 30 for row in block5)
