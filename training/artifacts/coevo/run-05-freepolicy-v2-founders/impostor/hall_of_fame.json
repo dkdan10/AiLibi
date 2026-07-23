@@ -18,6 +18,15 @@
       "weights_sha256": "026f222d15f4fe65566bad3d2b6fbe211f5deea537c280aa58ec890731e78a51"
     },
     {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 3,
+      "origin": "exploiter-probe",
+      "path": "gen-3/119e5374b4afb9c64f0463483b0cbc9457fc589737abafb24838798703692f2c",
+      "trained_against": "de7b5e9852eebfad7b3e570c6fd742179837c86c54cac4af7c612748acebd7bf",
+      "weights_sha256": "119e5374b4afb9c64f0463483b0cbc9457fc589737abafb24838798703692f2c"
+    },
+    {
       "cell_key": [
         3,
         1,

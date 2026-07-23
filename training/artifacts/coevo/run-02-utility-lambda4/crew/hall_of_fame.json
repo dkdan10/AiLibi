@@ -39,6 +39,15 @@
     {
       "cell_key": null,
       "descriptors": null,
+      "generation": 12,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-12/53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "trained_against": "2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0",
+      "weights_sha256": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
       "generation": 8,
       "origin": "exploiter-probe",
       "path": "gen-8/658a0fbff4e01758763eb9805a9ee2df338f71df88529fa8f36bfb8e8a815092",

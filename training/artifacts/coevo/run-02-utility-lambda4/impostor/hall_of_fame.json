@@ -21,6 +21,33 @@
     {
       "cell_key": null,
       "descriptors": null,
+      "generation": 12,
+      "origin": "exploiter-probe",
+      "path": "gen-12/975048e7dcc56c2dce986a76fb89b5bcc61b881f9294c31954e88e49416afb18",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "975048e7dcc56c2dce986a76fb89b5bcc61b881f9294c31954e88e49416afb18"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 11,
+      "origin": "exploiter-probe",
+      "path": "gen-11/d00cd283a70af65db1bcac0f02bea1237554d372039a40659c98863f7f5caae2",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "d00cd283a70af65db1bcac0f02bea1237554d372039a40659c98863f7f5caae2"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 10,
+      "origin": "exploiter-probe",
+      "path": "gen-10/d2aba2ba32030da9a65b1c1f21fe00470f30c949edaca63f07b7833ba3197e04",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "d2aba2ba32030da9a65b1c1f21fe00470f30c949edaca63f07b7833ba3197e04"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
       "generation": 6,
       "origin": "exploiter-probe",
       "path": "gen-6/f9a26c912d34fd3e31dbbf541236f272eec9841a9c6ae9e4b437779d0672cdd6",
