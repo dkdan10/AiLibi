@@ -521,6 +521,23 @@ the tranche-1 conclusion holds with doubled denominators (the committed champion
 the win edge ≥ the FSM 0.36; the co-adapted champion's watchability premium persists,
 44.10 vs 30.97 on t2). Flags floors FAIL for both on both tranches.
 
+### 4.7 Tranche-2 extensions, legs 02 + 03 (seeds 4003–4005; session 2 chain)
+
+**Leg 02 t2:** `10c1f9f3…` win 0.667 (pooled **5/6 = 0.833** — the strongest real-path
+win of the campaign), but flags 0.5000 on t2 (t1: at-the-floor 1.0909) — pooled ≈ 0.81,
+below floor: **the at-the-floor read was tranche noise.** `2ca47451…` t2 flags 1.1250
+PASS / win 0.333 (pooled 0.667; pooled flags ≈ 0.53). **Leg 03 t2:** `a89be618…` win
+0.667 (pooled 0.667, stable) but flags 0.3000 on t2 (t1: 1.4000) — pooled ≈ 0.85,
+below floor; conversion misses widen. Committed champion win 0.333 (pooled across four
+tranches of two legs: **6/12 = 0.500**, the most-sampled stability read of the session).
+
+**The pooled 6-seed picture that §8 will read from:** win channels are stable
+tranche-to-tranche while supply-gauge channels swing by ±0.5–1.1 flags/meeting — at
+3-seed tranches the gauges are advisory, and NO candidate passes all three supply
+floors pooled. The flip bar remains unpassed; what the campaign produced is a win-rate
+ladder (0.833 / 0.667 / 0.667 / 0.500 / 0.167 / 0.000) with per-candidate gauge
+profiles, handed to 18.26's 30-seed test-split discipline for the definitive read.
+
 <!-- SESSION-1-LEGS: extended per leg -->
 
 ---
@@ -674,6 +691,24 @@ corpus 2.4% witnessed rate this is unremarkable statistically at n=12, but coher
 with the exploiter's breeding objective), and v2 impostor entropy sits ABOVE the corpus
 FSM (0.88–0.94 vs 0.65) where utility/v3 sit below. All cells remain advisory-scale;
 z reads defer to 18.27 with the 18.26 comparator arms.
+
+### 5.6 Sweeps — legs 02/03 tranche 2, and the deflection resolution
+
+Completeness fence PASSED on all four dirs. **The §5.3 deflection candidate does NOT
+sustain:** `10c1f9f3…` t2 deflection 1/8 → pooled 7/16 = 0.4375 ≈ the corpus 0.4539.
+The tranche-1 0.750 was small-n noise; the candidate resolves NOT-SUSTAINED (no
+emergence candidacy, no real-path ablation leg required; the §6.2 fake-path twin's
+provenance stands recorded regardless). Other t2 cells: frame conversions 2 more (both
+gen-9 candidates), teammate accusations 0 everywhere (now 0/§ across every arm of the
+campaign), off-menu 0 on all four utility dirs.
+
+**A context cell surfaced WITHOUT candidacy: pooled utility-family alibi survival is
+29/29** across all candidates and tranches vs the corpus 59/77 = 0.766. No campaign
+lever enables it (it appears identically on the committed champion), so no 18.4-named
+ablation exists and it reads NOT-DEMONSTRATED by construction — its comparator is the
+18.26 same-seed real-path FSM arm (if scripted movers also survive ~100% under this
+provider era, it is an era effect, not behavior). Quoted for 18.27's context, never
+ruled here.
 
 <!-- SESSION-1-SWEEPS: extended per leg -->
 
