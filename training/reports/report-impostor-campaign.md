@@ -150,9 +150,11 @@ in session 1 (§3).
 |---|---|---|---|
 | 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | this session |
 
-Real-path legs remaining after session 1: leg 04 tranche 2 (seeds 4003–4005); legs
-01/02/03/05 (each 2 tranches; leg 01 tranche 1 in flight at session-1 close) — ~54 real
-games, ≈18 h at healthy provider status.
+| 2 | 2026-07-24 | Overnight detached chain: leg 03 t1 + leg 05 t1 + leg 04 t2 + leg 01 t2 recorded, ranked, swept (§4.4–4.6, §5.4–5.5); leg 02 t2 in flight; F8 recorded | this session |
+
+Real-path legs remaining after the session-2 morning pass: leg 02 t2 (in flight),
+leg 03 t2, leg 05 t2 — 18 real games. Then: finalist naming (§8), contingent
+meeting-layer ablation recordings, final gates.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
 §4/§6/§8 as they land; the close (18.28) waits on 18.23 + 18.29 regardless.
@@ -492,6 +494,33 @@ seeds is an incidental provider-noise replication: win 0.667 in both, flags 0.88
 0.727, conversion 0.60 vs 0.50 — win stable, gauge channels noisy at ±0.1–0.16, the
 selection-tolerant noise scale design B priced in.
 
+### 4.5 Leg 05 — run-05-freepolicy-v2-founders, tranche 1 (seeds 4000–4002; session 2 overnight chain, COMPLETE)
+
+Candidates: the run's single swap champion (`43b113ec…`) + the impostor-family
+exploiter (`119e5374…`, K=2 alternate — the first exploiter-probe member to reach a
+real leg). Pre-screens PASS (3.06 / 3.22 predicted flags), advice only.
+
+| rank | candidate | selection | validity | referee | win | witnessed | flags | conversion |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `119e5374…` (exploiter) | 64.70 | PASS | FAIL | 0.000 | **0.0000 − 0.0339 FAIL** (5 kills, 0 witnessed) | 5.5000 **PASS** | 0.7500 **PASS** |
+| 2 | `43b113ec…` (champion) | 53.60 | PASS | FAIL | 0.000 | **0.0000 FAIL** (7 kills, 0 witnessed) | 2.1429 **PASS** | 0.7143 **PASS** |
+
+Stamp proofs 3/3, uniform, sha == digest on both. Distinct from the v3 shape: these
+candidates DO kill (12 kills pooled) — every kill unwitnessed — while still losing
+every game; the witnessed-kill gauge fails on stealth rather than on abstinence.
+
+### 4.6 Tranche-2 extensions (seeds 4003–4005; session 2 overnight chain)
+
+**Leg 04 t2** replicates t1 on fresh seeds — win 0.000 both candidates, zero kills,
+flags 6.00 / 6.25 PASS, conversion 1.00 / 1.00 PASS, witnessed degenerate FAIL. The v3
+supply-rich/win-0 economy is now stable across 6 seeds per candidate, not seed noise.
+
+**Leg 01 t2**: `8ac3652a…` win 1/3, `6d327dcb…` win 1/3 on the fresh seeds. **Pooled
+6-seed reads: committed champion win 3/6 = 0.500; co-adapted champion 1/6 = 0.167** —
+the tranche-1 conclusion holds with doubled denominators (the committed champion keeps
+the win edge ≥ the FSM 0.36; the co-adapted champion's watchability premium persists,
+44.10 vs 30.97 on t2). Flags floors FAIL for both on both tranches.
+
 <!-- SESSION-1-LEGS: extended per leg -->
 
 ---
@@ -627,6 +656,24 @@ tranche 2 sustains the delta.
 No new candidate behaviors at this n beyond the §5.3 deflection cell (which this leg's
 committed-champion arm does NOT reproduce — 2/6 — sharpening it as λ=4-lineage-specific
 if tranche 2 sustains it). Pooled alibi survival across utility legs is now 13/13.
+
+### 5.5 Sweeps — leg 05 t1 + tranche-2 extensions (completeness fence PASSED on all six dirs)
+
+| cell | v2 champion | v2 exploiter | v3 gen9 (t2) | v3 gen3 (t2) | utility gen9 (t2) | utility gen3 (t2) | corpus |
+|---|---|---|---|---|---|---|---|
+| **off-menu rate** | **41/114 = 0.360** | **41/106 = 0.387** | 75/83 = 0.904 | 73/83 = 0.880 | 0/155 | 0/181 | 0.0 |
+| meetings / games | 7 / 3 | 6 / 3 | 4 / 3 | 4 / 3 | 11 / 3 | 10 / 3 | 3.1/g |
+| kills (witnessed) | 7 (0) | 5 (0) | 0 | 0 | 14 (4) | 13 (5) | 505 (12) |
+| frame attempts / conv | 5/7, 0 | 5/6, 0 | 3/4, 0 | 3/4, 0 | 10/11, 0 | 9/10, 0 | 437/463, 23 |
+| impostor entropy (cond.) | **0.883** | **0.939** | 0.388 | 0.510 | 0.441 | 0.882 | 0.6526 |
+
+**The off-menu family gradient is now measured at both free-policy points: utility 0.0
+(structural) → v2 ≈ 0.36–0.39 → v3 ≈ 0.88–0.95** (v3's t2 replicating t1). The v2
+candidates' kill profile is stealth-shaped (12 kills, 0 witnessed pooled — vs the
+corpus 2.4% witnessed rate this is unremarkable statistically at n=12, but coherent
+with the exploiter's breeding objective), and v2 impostor entropy sits ABOVE the corpus
+FSM (0.88–0.94 vs 0.65) where utility/v3 sit below. All cells remain advisory-scale;
+z reads defer to 18.27 with the 18.26 comparator arms.
 
 <!-- SESSION-1-SWEEPS: extended per leg -->
 
