@@ -433,6 +433,34 @@ against the trained crew scorer did not transfer to real games (consistent with 
 anchor-benchmark drop in §3.1). n=3 seeds; tranche 2 doubles this before any 18.26
 naming leans on it.
 
+### 4.3 Leg 02 — run-02-utility-lambda4, tranche 1 (seeds 4000–4002; session 1, COMPLETE)
+
+Recorded solo, 900 s bound, F7 window. Candidates: the λ=4 lineage's two swap champions.
+Pre-screen (advice only): both candidates predicted 1.2300 flags/meeting, floors PASS;
+fake recorded flags 0 quoted beside; real recorded reads below.
+
+**Ranking (17.14 discipline):**
+
+| rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
+|---|---|---|---|---|---|---|---|
+| 1 | `10c1f9f3…` gen 3 | 35.90 | PASS | FAIL | **1.000** | 0.333 | 3/3, uniform, sha == digest |
+| 2 | `2ca47451…` gen 9 | 32.33 | PASS | FAIL | **1.000** | 0.667 | 3/3, uniform, sha == digest |
+
+Floor sensitivity (measured − floor, signed):
+
+| candidate | witnessed_event_rate | flags_per_meeting | testimony_backed_conversion |
+|---|---|---|---|
+| `10c1f9f3…` | 0.3846 − 0.0339 = **+0.3507 PASS** | 1.0909 − 1.0909 = **+0.0000 PASS (at the floor)** | 0.2000 − 0.5735 = **−0.3735 FAIL** |
+| `2ca47451…` | 0.3125 − 0.0339 = **+0.2786 PASS** | 0.0909 − 1.0909 = **−1.0000 FAIL** | 0.1818 − 1.0000 = **−0.8182 FAIL** |
+
+**Reading: the strongest flip-bar candidate of the session.** `10c1f9f3…` wins 3/3 real
+games (≥ the same-substrate FSM 0.36), passes the witnessed-kill gauge (+0.35), and
+meets the flags floor EXACTLY — the first campaign candidate to clear two of three
+supply gauges while holding the win edge. The remaining gap is the testimony-backed
+conversion floor (0.20 vs the derived 0.57). Its opponents' ejection accuracy is 0.333
+(crew ejections mostly WRONG against it — see the deflection cell, §5.3). n=3; tranche 2
+is the priority next leg before any 18.26 naming.
+
 <!-- SESSION-1-LEGS: extended per leg -->
 
 ---
@@ -524,6 +552,33 @@ co-adapted champion's meeting economy is denser (4.0 meetings/game vs the commit
 champion's 3.0 and the corpus 3.1) with 100% frame-attempt meetings and no conversions;
 alibi survival is 5/5 pooled (advisory n). No cell at this n is claim-grade; deltas
 defer to 18.27 with the 18.26 comparator arms.
+
+### 5.3 Sweep — leg 02 tranche 1 (6 real games, completeness fence PASSED first)
+
+| cell | `10c1f9f3…` (gen 3, the flip-bar candidate) | `2ca47451…` (gen 9) | corpus 9p2i |
+|---|---|---|---|
+| off-menu rate | 0/153 = 0.0 (structural) | 0/140 = 0.0 | 0/6663 |
+| meetings / games | 11 / 3 | 11 / 3 | 463 / 150 |
+| kills (crew-witnessed) | 13 (5) | 16 (5) | 505 (12) |
+| frame-attempt meetings | 11/11 | 11/11 | 437/463 |
+| frame conversions | 1/11 | 0/11 | 23/437 |
+| teammate accusations | 0/17 | 0/14 | 0/549 |
+| false-vouch (saw_player) | 0/14 (0 fabricated) | 1/14 (0 fab.) | 74/602 |
+| impostor alibis (survived) | 2/2 | 7/7 | 77 (59) |
+| **effective deflection** | **6/8 = 0.750** | 1/9 = 0.111 | 69/152 = 0.454 |
+| impostor action entropy (cond.) | 0.4410 | 0.5717 | 0.6526 |
+
+**Candidate behavior surfaced: elevated deflection efficacy on the flip-bar candidate**
+(0.750 vs corpus 0.454, and vs its own sibling's 0.111) — coherent with its 0.333
+opponent ejection accuracy: when this impostor is actively suspected, its meeting-layer
+deflection survives at an elevated rate. Advisory-scale n (8 active survivals);
+candidacy is PENDING tranche-2 denominators before it reads as a §6-claimable delta.
+The 18.4-named lever is `anchor-lambda=4.0`; the fake-path ablation twin
+(`ablation-run-02-anchor-lambda`: identical config + master seed, anchor weight
+reverted to the committed λ=1.0) is RUNNING at this section's session-1 close — its
+provenance lands in §6.2 regardless of how candidacy resolves, and any meeting-layer
+half of the ablation (real-path re-recording) is priced for a later session only if
+tranche 2 sustains the delta.
 
 <!-- SESSION-1-SWEEPS: extended per leg -->
 
