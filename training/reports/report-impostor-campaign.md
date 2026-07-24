@@ -843,12 +843,24 @@ provenance, trajectory divergence) are recorded here either way.
 
 ## 8. Finalists for 18.26
 
-Named when the campaign's legs and sweeps are complete (a later session). The naming will
-quote, per finalist: the frozen artifact sha, the real-path re-rank row (stamp proof,
-floor sensitivity), the conviction-meter reading under §1.1's guard, and the sweep cells
-its candidacy rests on.
+Named on the pooled 6-seed evidence (§4.7), pending only leg-05 t2's confirmation pass
+(its candidates are win-0 and cannot change this list). Every conviction-meter read
+under §1.1's guard was clean for all three (§3), and no selection below leans on
+conviction-influenced ordering (the ladder is recorded-bytes win + gauge reads).
 
-<!-- SESSION-FINALISTS: pending -->
+| finalist | artifact | pooled real-path read | why 18.26 spends on it |
+|---|---|---|---|
+| **1. `10c1f9f3…`** (λ=4, gen 3) | `training/artifacts/coevo/run-02-utility-lambda4/impostor/gen-3/10c1f9f3…` | win **0.833** (5/6); gauges noisy (flags 1.09 → 0.50) | the strongest real-path impostor the campaign produced; the λ-dial lineage the piKL reading predicted; 18.26's 30-seed split decides whether its supply economy firms |
+| **2. `a89be618…`** (bc-anchor, gen 9) | `…/run-03-utility-bcanchor/impostor/gen-9/a89be618…` | win 0.667; the closest single-tranche full-bar approach (−0.072 conversion, §4.4) | the refined-anchor seam's product; carried the campaign's only near-complete gauge sweep |
+| **3. `6d327dcb…`** (the committed champion, control) | `…/run-01-utility-champion/impostor/gen-3/6d327dcb…` (= the committed `agents/tactical/learned` genome) | win 0.500 over 12 seeds — the most-sampled stability read | the incumbent default-mover reference arm 18.26 needs regardless; its FSM-comparator recording doubles as the emergence-claim comparator base |
+
+**Named non-finalist exhibit:** `27f852fe…` (v3, gen 9) — win 0.000 excludes it from
+the flip-bar eval, but it is the off-menu instrument's primary arm (0.90 pooled rate vs
+the structural 0); IF 18.27 wants claim-grade off-menu denominators, a 18.26-style
+recording of this artifact is the cheapest way to get them. Owner's spend decision, not
+this report's.
+
+<!-- SESSION-FINALISTS: leg-05-t2 confirmation pending -->
 
 ---
 
