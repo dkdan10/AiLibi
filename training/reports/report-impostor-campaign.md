@@ -461,6 +461,37 @@ conversion floor (0.20 vs the derived 0.57). Its opponents' ejection accuracy is
 (crew ejections mostly WRONG against it — see the deflection cell, §5.3). n=3; tranche 2
 is the priority next leg before any 18.26 naming.
 
+### 4.4 Leg 03 — run-03-utility-bcanchor, tranche 1 (seeds 4000–4002; session 1, COMPLETE)
+
+Recorded solo, 900 s bound, F7 window. Candidates: the bc-anchor lineage's swap
+champions. Pre-screen (advice only): `a89be618…` predicted 1.2700 flags, **predicted
+floors FAIL**; `6d327dcb…` 1.6180 PASS. Per blocker (4) the FAIL never gated — both
+were recorded, and the real bytes REVERSED the advice (below).
+
+**Ranking (17.14 discipline; stamp proofs 3/3, uniform, sha == digest on both):**
+
+| rank | candidate | selection | validity | referee | win | ejection acc |
+|---|---|---|---|---|---|---|
+| 1 | `6d327dcb…` gen 3 (committed champion) | 51.70 | PASS | FAIL | 0.667 | 1.000 |
+| 2 | `a89be618…` gen 9 (bc-anchor co-adapted) | 43.93 | PASS | FAIL | **0.667** | 0.750 |
+
+Floor sensitivity (measured − floor, signed):
+
+| candidate | witnessed_event_rate | flags_per_meeting | testimony_backed_conversion |
+|---|---|---|---|
+| `6d327dcb…` | +0.0994 PASS | 0.7273 − 1.0909 = −0.3636 FAIL | 0.5000 − 0.8603 = −0.3603 FAIL |
+| `a89be618…` | +0.2161 PASS | 1.4000 − 1.0909 = **+0.3091 PASS** | 0.3750 − 0.4469 = **−0.0719 FAIL (the closest miss of the session)** |
+
+**Two readings.** (1) `a89be618…` is now the candidate closest to the FULL flip bar:
+win 0.667 ≥ FSM 0.36, witnessed +0.22 PASS, flags +0.31 PASS, conversion just −0.072
+short — and it is the candidate whose pre-screen predicted FAIL. The prescreen-as-
+spend-advice discipline (blocker 4) is vindicated in the direction the probe did not
+emphasize: gating on the prediction would have DISCARDED the best candidate. Quoted
+into §7 as finding F8. (2) The committed champion's appearance in two legs on the SAME
+seeds is an incidental provider-noise replication: win 0.667 in both, flags 0.889 vs
+0.727, conversion 0.60 vs 0.50 — win stable, gauge channels noisy at ±0.1–0.16, the
+selection-tolerant noise scale design B priced in.
+
 <!-- SESSION-1-LEGS: extended per leg -->
 
 ---
@@ -580,6 +611,23 @@ provenance lands in §6.2 regardless of how candidacy resolves, and any meeting-
 half of the ablation (real-path re-recording) is priced for a later session only if
 tranche 2 sustains the delta.
 
+### 5.4 Sweep — leg 03 tranche 1 (6 real games, completeness fence PASSED first)
+
+| cell | `6d327dcb…` (committed) | `a89be618…` (bc-anchor) | corpus 9p2i |
+|---|---|---|---|
+| off-menu rate | 0/139 (structural) | 0/136 | 0/6663 |
+| meetings / games | 10 / 3 | 11 / 3 | 463 / 150 |
+| kills (crew-witnessed) | 12 (3) | 15 (2) | 505 (12) |
+| frame attempts / conversions | 9/10, 1/9 | 10/11, 0/10 | 437/463, 23/437 |
+| teammate accusations | 0/11 | 0/14 | 0/549 |
+| impostor alibis (survived) | 3/3 | 3/3 | 77 (59) |
+| effective deflection | 2/6 | 0/3 | 69/152 |
+| impostor action entropy (cond.) | 0.6005 | 0.4700 | 0.6526 |
+
+No new candidate behaviors at this n beyond the §5.3 deflection cell (which this leg's
+committed-champion arm does NOT reproduce — 2/6 — sharpening it as λ=4-lineage-specific
+if tranche 2 sustains it). Pooled alibi survival across utility legs is now 13/13.
+
 <!-- SESSION-1-SWEEPS: extended per leg -->
 
 ---
@@ -690,6 +738,14 @@ provenance, trajectory divergence) are recorded here either way.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F8 — the pre-screen's advisory-only status protected the best candidate.** The
+  session's closest full-flip-bar candidate (`a89be618…`, §4.4: win 0.667 + witnessed
+  PASS + flags PASS, conversion −0.072) is the one candidate whose pre-screen predicted
+  floors FAILED. Blocker (4) frames the divergence hazard as predicted-PASS/recorded-
+  FAIL; session 1 exhibited the mirror image — predicted-FAIL/recorded-mostly-PASS —
+  and the spend-advice-only discipline is what kept the candidate in play. The
+  prescreen's value at this budget is directional supply prediction, not candidate
+  gating in either direction.
 - **F6 — the conviction term was non-decisive for impostor selection on the utility
   lineage at this budget.** The run-01 same-seed `conviction=None` twin (§6.1) reproduced
   the impostor champion lineage sha-for-sha; only crew selection diverged. The term's
