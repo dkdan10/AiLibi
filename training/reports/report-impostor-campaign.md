@@ -615,6 +615,28 @@ identical by construction); (b) the term's live selection pressure this phase is
 currently a CREW-side phenomenon on the utility family — quoted into §7 as finding F6
 and available to 18.25.
 
+### 6.2 `ablation:*/anchor-lambda=4.0` — the run-02 twin (session 1, RUN, complete)
+
+Named lever for the λ=4 lineage's §4.3 flip-bar result and the §5.3 deflection
+candidate. Config: byte-identical to run-02 (same `master_seed=182402`, same seed
+budgets, same lambda-4.0 `initial_genome`, conviction term kept) with `anchor_weight`
+reverted to the committed λ=1.0; 2 532 games, 12 rows; frozen artifacts at
+`training/artifacts/coevo/ablation-run-02-anchor-lambda/`.
+
+**Result: the lever is SELECTION-DECISIVE on this lineage** — the impostor champion
+diverges at generation 1 (swap 0 freezes `ea4bc955…`, not `10c1f9f3…`), the ablated
+lineage's champion-side anchors run ~1.9 points closer to the FSM (19.21–19.32 vs
+17.28–17.57), and its swap-2 impostor champion never updates (no swap-2 freeze). The
+crew champions reproduce sha-identical across the pair despite facing different
+impostor opponents (the crew selection basin is robust at this budget). Contrast with
+§6.1: the conviction term was non-decisive; the anchor weight is the lever that
+actually steers utility-family impostor selection here. Consequences: (a) the §5.3
+deflection candidate HAS a live counterfactual arm — the ablated champion is a
+different genome, so a recede read is meaningful; (b) completing that read for a
+meeting-layer cell requires the ablated champion's REAL-path recordings (priced ~2 h,
+scheduled only if tranche 2 sustains the delta); the fake-path halves (artifacts,
+provenance, trajectory divergence) are recorded here either way.
+
 <!-- SESSION-ABLATIONS: extended as candidates surface -->
 
 ---
