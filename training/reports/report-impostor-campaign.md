@@ -150,11 +150,11 @@ in session 1 (§3).
 |---|---|---|---|
 | 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | this session |
 
-| 2 | 2026-07-24 | Overnight detached chain: leg 03 t1 + leg 05 t1 + leg 04 t2 + leg 01 t2 recorded, ranked, swept (§4.4–4.6, §5.4–5.5); leg 02 t2 in flight; F8 recorded | this session |
+| 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
-Real-path legs remaining after the session-2 morning pass: leg 02 t2 (in flight),
-leg 03 t2, leg 05 t2 — 18 real games. Then: finalist naming (§8), contingent
-meeting-layer ablation recordings, final gates.
+**The campaign's recording program is COMPLETE** (10 legs / 66 real games / 10 578
+metered fake games + twins). Remaining for the task: none — the close (18.28) waits on
+18.23/18.29 per the contract, and adoption/claims are 18.26/18.27's.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
 §4/§6/§8 as they land; the close (18.28) waits on 18.23 + 18.29 regardless.
@@ -538,7 +538,15 @@ floors pooled. The flip bar remains unpassed; what the campaign produced is a wi
 ladder (0.833 / 0.667 / 0.667 / 0.500 / 0.167 / 0.000) with per-candidate gauge
 profiles, handed to 18.26's 30-seed test-split discipline for the definitive read.
 
-<!-- SESSION-1-LEGS: extended per leg -->
+### 4.8 Leg 05 tranche 2 (seeds 4003–4005; session 2 chain, COMPLETE — the campaign's final leg)
+
+Confirms tranche 1 in full: win 0.000 both candidates; every kill unwitnessed (pooled
+across tranches: 18 kills, 0 witnessed); flags 1.1667 / 2.8333 PASS and conversion
+1.000 / 0.857 PASS; witnessed gauge FAIL on stealth. Stamp proofs 3/3, uniform,
+sha == digest. **The recording program of this campaign is complete: 10 legs, 66 real
+games, every ranking written, every gating read paired with recorded bytes.**
+
+<!-- all session-1/2 legs recorded -->
 
 ---
 
@@ -710,7 +718,15 @@ ablation exists and it reads NOT-DEMONSTRATED by construction — its comparator
 provider era, it is an era effect, not behavior). Quoted for 18.27's context, never
 ruled here.
 
-<!-- SESSION-1-SWEEPS: extended per leg -->
+### 5.7 Sweep — leg 05 tranche 2 (fence PASSED)
+
+v2 off-menu 30/82 = 0.366 and 36/91 = 0.396 — the family gradient point replicates
+(pooled v2 ≈ 0.37 across both tranches); impostor entropy 0.69–0.71 (between the
+corpus 0.65 and t1's 0.88–0.94); teammate accusations 0 (campaign-wide total stays 0).
+The sweep program of this campaign is complete; all cells and by-kind breakdowns are
+preserved in the session sweep JSONs for 18.27.
+
+<!-- all session-1/2 sweeps recorded -->
 
 ---
 
@@ -860,7 +876,8 @@ the structural 0); IF 18.27 wants claim-grade off-menu denominators, a 18.26-sty
 recording of this artifact is the cheapest way to get them. Owner's spend decision, not
 this report's.
 
-<!-- SESSION-FINALISTS: leg-05-t2 confirmation pending -->
+Leg-05 t2 landed (§4.8) and confirms: its candidates are win-0; **the finalist list
+above is final for this campaign.**
 
 ---
 
