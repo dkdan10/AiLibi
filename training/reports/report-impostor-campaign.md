@@ -674,13 +674,13 @@ meetings per arm every rate cell is advisory-scale; z reads defer to 18.27 with 
 
 **The largest cell movement: off-menu rate 0.78 / 0.95 against a structural-0
 baseline** — the first free-policy recordings the instrument has ever scored.
-Classification discipline (per the 18.4 memo's clause (c)): this cell is a
-FAMILY-SCOPED MEASUREMENT, **NOT an emergence candidate, and reads NOT-DEMONSTRATED by
-construction for claim purposes** — a free-policy agent can emit any legal intent, so a
-nonzero rate is the family's action space showing, and NO 18.4-named lever exists whose
-same-seed, same-config disabling could show recession within the family (an
-encoder-v3→v2 swap changes genome length and is a different run, not a lever-off twin;
-v2 is itself off-menu-capable). The utility lineage's structural 0 is quoted as the
+Classification discipline (per the 18.4 memo's clause (c)): this cell reads
+**NOT-DEMONSTRATED — established by RUNNING the registered ablation, not by assertion
+(§6.3)**. The memo registers `encoder-v3` as a training-time lever and prescribes the
+re-train-with-lever-reverted procedure; that ablation was run and the behavior does NOT
+recede (0.8811 → 0.6082; both criterion parts fail at adequate power). The enabler is
+therefore the free-policy ACTION SPACE, not the encoder — a free-policy agent can emit
+any legal intent, and the v2-reverted champion still steps off-menu at 0.61. The utility lineage's structural 0 is quoted as the
 cross-family CONTEXT arm, not as a §6.c counterfactual. What 18.27 may rule on is the
 off-menu DISTRIBUTION (which kinds, which targets — preserved in the committed sweep
 JSONs), against the 18.26 comparator arms and only if a lever-shaped claim can be
@@ -771,9 +771,8 @@ present on the control arm, so no campaign lever explains it).
 | impostor entropy (cond.) | **0.883** | **0.939** | 0.388 | 0.510 | 0.441 | 0.882 | 0.6526 |
 
 **The off-menu family gradient is now measured at both free-policy points: utility 0.0
-(structural) → v2 ≈ 0.36–0.39 → v3 ≈ 0.88–0.95** (v3's t2 replicating t1; a
-family-scoped measurement per §5.1's classification — never itself an emergence
-candidate). The v2
+(structural) → v2 ≈ 0.36–0.39 → v3 ≈ 0.88–0.95** (v3's t2 replicating t1; NOT-DEMONSTRATED per §5.1/§6.3 — the
+registered encoder-v3 ablation was run and the behavior did not recede). The v2
 candidates' kill profile is stealth-shaped (12 kills, 0 witnessed pooled — vs the
 corpus 2.4% witnessed rate this is unremarkable statistically at n=12, but coherent
 with the exploiter's breeding objective), and v2 impostor entropy sits ABOVE the corpus
@@ -891,7 +890,56 @@ meeting-layer cell requires the ablated champion's REAL-path recordings (priced 
 scheduled only if tranche 2 sustains the delta); the fake-path halves (artifacts,
 provenance, trajectory divergence) are recorded here either way.
 
-<!-- SESSION-ABLATIONS: extended as candidates surface -->
+
+### 6.3 `ablation:off-menu/encoder-v3` — RUN (session 3, the registered lever)
+
+The memo (§6.c) registers `encoder-v3`/`within-kind-targets` (18.22) in the lever plane
+and prescribes the training-time procedure: re-run the enabling training leg with the
+lever reverted under otherwise identical config and training seeds, take THAT leg's
+champion, record it on the champion arm's recording seed list. Run exactly so.
+
+**Provenance.** Config: run-04's configuration with `encoder_version="v2"`
+(genome_length 1049, hidden 8), identical `master_seed=182404`, identical swap /
+generation / fitness / benchmark / payoff budgets, no `initial_genome` (matching
+run-04's random init), `substrate_sha256=e4547789…` kind `bakeoff_substrate_sha`.
+Fake-path leg: 2 412 games, 12 rows, artifacts at
+`training/artifacts/coevo/ablation-run-04-encoder-v3/`. Real leg: the ablated swap
+champions (`bfa51767…` gen 9, `a4076d29…` gen 3) on the champion arm's seed list
+(4000–4002), pre-screens quoted first (0.9237 / 1.1435, both predicted-FAIL — spend
+made anyway per blocker 4), recordings + ranking + sweep + manifest at
+`training/artifacts/coevo/realpath-ablation/ablation-run-04-encoder-v3/`, leg log at
+`provenance/session3-ablation-encoder-v3.log`.
+
+**The recede read (memo §6.c criterion, both parts required):**
+
+| arm | off-menu | rate |
+|---|---|---|
+| champion arm (v3, run-04, both tranches) | 341 / 387 | **0.8811** |
+| ablated arm (v2 revert, this leg) | 222 / 365 | **0.6082** |
+| floor arm (menu-bounded / FSM recordings) | 0 / 6 663 | 0.0000 |
+
+- (i) significance vs the floor arm after ablation: **z = 64.69 — still overwhelmingly
+  significant**, so (i) is NOT met.
+- (ii) recede-to-half: `|0.6082 − 0| = 0.6082` vs `½·|0.8811 − 0| = 0.4406` — **0.6082 >
+  0.4406, NOT met**. Denominator adequacy passes (365 ≥ ½ × 387), so this is a real
+  non-recession, not an under-powered one.
+
+**Verdict: the behavior does NOT recede when the registered lever is reverted.** The
+encoder is not the enabler; the free-policy ACTION SPACE is (the v2-reverted champion
+still steps off-menu at 0.61, and the independent v2 lineage run-05 reads 0.37). Per
+the memo's conjunctive discipline, clause (c) is unsatisfied → **off-menu reads
+NOT-DEMONSTRATED — now on run evidence rather than on the a-priori argument §5.1
+originally made.** 18.27 consumes this ablation record; the off-menu distribution
+remains available as context, never as a lever-linked claim.
+
+**Secondary finding (F11).** The v2 revert TRAINS MARKEDLY BETTER at this budget:
+champion fitness 11.61 vs v3's 3.06, champion-side anchor benchmark +12.74 vs −1.22,
+5 of 6 impostor generations updating. Encoder v3's extra channels (witness / recency /
+meeting-history + the per-target kill head; 1442 genes vs 1049) cost more than they
+bought for a from-scratch ES at 12 generations — a direct input to 18.22's disposition
+and to any future free-policy campaign sizing.
+
+<!-- ablations recorded -->
 
 ---
 
@@ -959,6 +1007,14 @@ provenance, trajectory divergence) are recorded here either way.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F11 — encoder v3 cost more than it bought at this budget.** The
+  `ablation:off-menu/encoder-v3` twin (§6.3), which is run-04's config with the encoder
+  reverted to v2 under the identical master seed, reached champion fitness 11.61 vs
+  v3's 3.06 and a champion-side anchor benchmark of +12.74 vs −1.22, updating in 5 of 6
+  impostor generations vs 4 of 6. For a from-scratch ES at 12 generations the v3
+  channels (witness / recency / meeting-history + per-target kill head; 1442 genes vs
+  1049) are a net loss. Routed to 18.22's disposition and to free-policy campaign
+  sizing — this campaign does not rule on the encoder, it reports the measurement.
 - **F10 — the campaign evaluated every generation's CHAMPION on the real path, not a
   per-generation top-K; the gap is a scope decision, quantified.** The contract's
   "per-generation real-path top-K re-ranks (18.17, ~2 h/gen)" reads K=2 per generation

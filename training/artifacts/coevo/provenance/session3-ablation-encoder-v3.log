@@ -1,0 +1,6 @@
+[ablation-run-04-encoder-v3] ablated champions: [(9, 'bfa517676dd4'), (3, 'a4076d294a32')]
+[ablation-run-04-encoder-v3] prescreen gen9 bfa517676dd4: pred_flags=0.9237 pass=False
+[ablation-run-04-encoder-v3] prescreen gen3 a4076d294a32: pred_flags=1.1435 pass=False
+[ablation-run-04-encoder-v3] rank 1: ablation-run-04-encoder-v3-gen9-bfa517676dd4 sel=18.9 win=0.3333333333333333
+[ablation-run-04-encoder-v3] rank 2: ablation-run-04-encoder-v3-gen3-a4076d294a32 sel=4.23 win=0.0
+[ablation-run-04-encoder-v3] ABLATION LEG DONE 4000-4002
