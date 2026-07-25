@@ -151,6 +151,7 @@ in session 1 (§3).
 |---|---|---|---|
 | 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 362 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | session 1 |
 
+| 3 | 2026-07-25 | Codex rounds 1–2 absorbed: evidence committed in-repo (60+30 recordings + manifests), baseline-6 comparator corrected, per-tranche prescreen records (F9), the 5 intermediates recovered via the scenario seam (F1 resolved) + 30 back-fill games recorded and processed (§4.9); §8 finalists REVISED | session 3 |
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
 **The campaign's recording program is COMPLETE** — 10 legs / 60 real games (the
@@ -577,7 +578,38 @@ across tranches: 18 kills, 0 witnessed); flags 1.1667 / 2.8333 PASS and conversi
 sha == digest. **The recording program of this campaign is complete: 10 legs, 60 real
 games, every ranking written, every gating read paired with recorded bytes.**
 
-<!-- all session-1/2 legs recorded -->
+### 4.9 The back-fill legs — the 5 recovered intermediate champions (session 3; 30 real games)
+
+Provenance: F1's resolution — every candidate recovered via the zero-valued capturing
+scenario term on a deterministic re-run whose rows assert-matched the committed block,
+digest-verified, frozen under `training/artifacts/coevo/intermediates/`. Pre-screens
+ran before every spend (per-tranche records committed beside the rankings under
+`training/artifacts/coevo/realpath-backfill/`; all PASS, values deterministic). Stamp
+proofs: 3/3 games, uniform, sha == computed digest on ALL 10 rows of both tranches.
+
+| candidate | tranche | win | witnessed − floor | flags − floor | conversion − floor |
+|---|---|---|---|---|---|
+| run-02 gen-1 `dff6e472…` | t1 | **1.000** | +0.2994 PASS | **+0.5455 PASS** | −0.1602 FAIL |
+| | t2 | 0.667 | +0.2518 PASS | −0.6465 FAIL | −0.7778 FAIL |
+| run-02 gen-2 `ea4bc955…` | t1 | **1.000** | +0.0911 PASS | **+0.1399 PASS** | −0.2584 FAIL |
+| | t2 | **1.000** | +0.2518 PASS | −0.7909 FAIL | −0.8750 FAIL |
+| run-03 gen-7 `9bc30c15…` | t1 | 0.333 | +0.1804 PASS | −0.3909 FAIL | −0.3938 FAIL |
+| | t2 | 0.333 | +0.3661 PASS | −0.5076 FAIL | −0.5000 FAIL |
+| run-04 gen-1 `b775a7e6…` | t1 | 0.000 | None FAIL (0 kills) | +6.9091 PASS | +0.5885 PASS |
+| | t2 | 0.000 | None FAIL | +7.2424 PASS | +0.9249 PASS |
+| run-04 gen-2 `ee28facf…` | t1 | 0.000 | None FAIL | +5.6591 PASS | +0.7073 PASS |
+| | t2 | 0.000 | None FAIL | +6.3091 PASS | +0.4869 PASS |
+
+**Pooled 6-seed reads: `ea4bc955…` wins 6/6 = 1.000 — the only candidate in the
+campaign to win every real game** (and the genome the λ=1.0 ablation twin independently
+selected as its swap-0 champion — two trajectories converge on it); `dff6e472…` pools
+5/6 = 0.833, tying the previously-named finalist; `9bc30c15…` 2/6 mid-pack; the v3
+intermediates reproduce the family's win-0/supply-rich shape. Gauge channels swing
+tranche-to-tranche exactly as §4.7 measured for the swap champions. The sweeps over all
+30 back-fill games (committed per leg) show no new candidate behaviors: utility arms
+on-menu, v3 arms off-menu 0.85–0.94, deflection cells unremarkable (pooled ≈ corpus).
+
+<!-- all legs recorded -->
 
 ---
 
@@ -919,24 +951,28 @@ provenance, trajectory divergence) are recorded here either way.
 
 ## 8. Finalists for 18.26
 
-Named on the pooled 6-seed evidence (§4.7), pending only leg-05 t2's confirmation pass
-(its candidates are win-0 and cannot change this list). Every conviction-meter read
-under §1.1's guard was clean for all three (§3), and no selection below leans on
-conviction-influenced ordering (the ladder is recorded-bytes win + gauge reads).
+Named on the pooled 6-seed evidence of ALL fourteen real-path-evaluated candidates
+(9 swap champions/exploiters + the 5 back-filled intermediates — the per-generation
+protocol is complete; §4.9). Every conviction-meter read under §1.1's guard was clean,
+and no selection leans on conviction-influenced ordering.
 
 | finalist | artifact | pooled real-path read | why 18.26 spends on it |
 |---|---|---|---|
-| **1. `10c1f9f3…`** (λ=4, gen 3) | `training/artifacts/coevo/run-02-utility-lambda4/impostor/gen-3/10c1f9f3…` | win **0.833** (5/6); gauges noisy (flags 1.09 → 0.50) | the strongest real-path impostor the campaign produced; the λ-dial lineage the piKL reading predicted; 18.26's 30-seed split decides whether its supply economy firms |
-| **2. `a89be618…`** (bc-anchor, gen 9) | `…/run-03-utility-bcanchor/impostor/gen-9/a89be618…` | win 0.667; the closest single-tranche full-bar approach (−0.072 conversion, §4.4) | the refined-anchor seam's product; carried the campaign's only near-complete gauge sweep |
-| **3. `6d327dcb…`** (the committed champion, control) | `…/run-01-utility-champion/impostor/gen-3/6d327dcb…` (= the committed `agents/tactical/learned` genome) | win 0.500 over 12 games on the 6 unique seeds (two provider draws each) — the deepest repeated-measures read | the incumbent default-mover reference arm 18.26 needs regardless; its FSM-comparator recording doubles as the emergence-claim comparator base |
+| **1. `ea4bc955…`** (λ=4 lineage, gen-2 intermediate ≡ the λ=1 twin's swap-0 champion) | `training/artifacts/coevo/intermediates/run-02-utility-lambda4/gen-2/…` | win **6/6 = 1.000** — the campaign's only perfect real-path record; flags PASS on t1, gauge noise per §4.7 | the strongest impostor the campaign produced, found by BOTH the λ=4 trajectory and the λ=1 twin — the convergence point of the utility family under co-adaptive pressure |
+| **2. `10c1f9f3…`** (λ=4, gen-3 swap champion) | `…/run-02-utility-lambda4/impostor/gen-3/…` | win 5/6 = 0.833; flags at-the-floor on t1 | the λ-dial swap champion; with finalist 1 it brackets the λ=4 lineage's win/supply trade |
+| **3. `dff6e472…`** (λ=4, gen-1 intermediate) | `…/intermediates/run-02-utility-lambda4/gen-1/…` | win 5/6 = 0.833; the largest utility flags clearance of the campaign on t1 (+0.55) | the supply-richest of the win-leading candidates |
+| **4. `a89be618…`** (bc-anchor, gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | win 4/6 = 0.667; the closest single-tranche full-bar approach (−0.072 conversion, §4.4) | the refined-anchor seam's product |
+| **5. `6d327dcb…`** (the committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | win 6/12 = 0.500 over 12 games on 6 unique seeds | the incumbent reference arm 18.26 needs regardless |
 
-**Named non-finalist exhibit:** `27f852fe…` (v3, gen 9) — win 0.000 excludes it from
-the flip-bar eval, but it is the off-menu instrument's primary arm (0.90 pooled rate vs
-the structural 0); IF 18.27 wants claim-grade off-menu denominators, a 18.26-style
-recording of this artifact is the cheapest way to get them. Owner's spend decision, not
-this report's.
+All five wins clear the same-substrate baseline-6 FSM 0.300. Every finalist is
+λ=4-lineage or anchor-seam utility-family; the flip bar itself remains unpassed
+(no candidate passes all three supply gauges pooled). At ~5 h/finalist, 18.26's spend
+on 3–5 of these is the owner's call — the ladder above is the ordering evidence.
+**Named non-finalist exhibit** (unchanged): `27f852fe…` (v3, gen 9) for the off-menu
+instrument's claim-grade denominators if 18.27 wants them.
 
-Leg-05 t2 landed (§4.8) and confirms: its candidates are win-0; **the finalist list
+The back-fill legs landed (§4.9) and REVISED this list — the round-2 review push was
+empirically right that intermediates could outrank the original finalists. **The list
 above is final for this campaign.**
 
 ---
