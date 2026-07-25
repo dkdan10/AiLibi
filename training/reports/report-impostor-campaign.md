@@ -154,10 +154,11 @@ in session 1 (§3).
 | 3 | 2026-07-25 | Codex rounds 1–2 absorbed: evidence committed in-repo (60+30 recordings + manifests), baseline-6 comparator corrected, per-tranche prescreen records (F9), the 5 intermediates recovered via the scenario seam (F1 resolved) + 30 back-fill games recorded and processed (§4.9); §8 finalists REVISED | session 3 |
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
-**The campaign's recording program is COMPLETE** — 10 legs / 60 real games (the
-recordings sha256 manifest at `training/artifacts/coevo/realpath/recordings-manifest.sha256`
-is the content-address of all 60), 10 362 campaign fake-path games + 4 932
-ablation-twin games. Remaining for the task: none — the close (18.28) waits on
+**The campaign's recording program is COMPLETE through session 3** — **16 legs / 96 real
+games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation; three sha256 manifests
+under `training/artifacts/coevo/realpath{,-backfill,-ablation}/` content-address all 96),
+10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
+2 532 anchor-λ + 2 412 encoder-v3). Remaining for the task: none — the close (18.28) waits on
 18.23/18.29 per the contract, and adoption/claims are 18.26/18.27's.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
@@ -588,7 +589,12 @@ Provenance: F1's resolution — every candidate recovered via the zero-valued ca
 scenario term on a deterministic re-run whose rows assert-matched the committed block,
 digest-verified, frozen under `training/artifacts/coevo/intermediates/`. Pre-screens
 ran before every spend (per-tranche records committed beside the rankings under
-`training/artifacts/coevo/realpath-backfill/`; all PASS, values deterministic). Stamp
+`training/artifacts/coevo/realpath-backfill/`; values deterministic per candidate).
+**Verdicts, quoted exactly:** run-02 `dff6e472…` 1.2300 PASS and `ea4bc955…` 1.2562
+PASS; run-04 `b775a7e6…` 5.0553 PASS and `ee28facf…` 6.5766 PASS; **run-03
+`9bc30c15…` 1.0585 predicted-floors FAIL in BOTH tranches** — spend made anyway, per
+blocker (4)'s advisory-only discipline (the second predicted-FAIL of the campaign after
+§4.4's `a89be618…`, and again the recorded bytes are the gate). Stamp
 proofs: 3/3 games, uniform, sha == computed digest on ALL 10 rows of both tranches.
 
 | candidate | tranche | win | witnessed − floor | flags − floor | conversion − floor |
@@ -786,8 +792,8 @@ sustain:** `10c1f9f3…` t2 deflection 1/8 → pooled 7/16 = 0.4375 ≈ the corp
 The tranche-1 0.750 was small-n noise; the candidate resolves NOT-SUSTAINED (no
 emergence candidacy, no real-path ablation leg required; the §6.2 fake-path twin's
 provenance stands recorded regardless). Other t2 cells: frame conversions 2 more (both
-gen-9 candidates), teammate accusations 0 everywhere (now 0/§ across every arm of the
-campaign), off-menu 0 on all four utility dirs.
+gen-9 candidates), teammate accusations 0 everywhere (campaign-wide **0/297** across every arm,
+summed from the committed sweeps; corpus 0/549), off-menu 0 on all four utility dirs.
 
 **A context cell surfaced WITHOUT candidacy: pooled utility-family alibi survival is
 31/31** across all candidates and tranches vs the corpus 59/77 = 0.766. No campaign
@@ -1136,12 +1142,18 @@ crew = CoevoSideConfig(
     encoder_version="crew-option-features-v2",
     initial_genome=load_candidate_weights(Path("training/artifacts/crew/crew-owned-tasks-es")),
 )
-common = dict(
-    crew=crew, num_swaps=4, generations_per_swap=3,
-    fitness_seeds=(1000, 1001, 1002, 1005, 1006, 1007),
-    benchmark_seeds=(2000, 2001, 2002, 2003), payoff_seeds=(3000, 3001, 3002, 3003),
-    conviction=load_conviction_fitness_term(Path("training/artifacts/conviction")),
-)
+def common():
+    # NOTE: a FRESH ConvictionFitnessTerm per run — the term owns a mutable
+    # use counter the engine adopts as-is, and every committed run's rows
+    # restart `conviction_uses` at 0 (§1.4). Hoisting one term into a shared
+    # dict would make later runs' meters cumulative and fail to reproduce
+    # their rows (and could exhaust the shared cap).
+    return dict(
+        crew=crew, num_swaps=4, generations_per_swap=3,
+        fitness_seeds=(1000, 1001, 1002, 1005, 1006, 1007),
+        benchmark_seeds=(2000, 2001, 2002, 2003), payoff_seeds=(3000, 3001, 3002, 3003),
+        conviction=load_conviction_fitness_term(Path("training/artifacts/conviction")),
+    )
 champion = load_candidate_weights(Path("training/artifacts/impostor/utility-es"))
 # run-01: impostor side = utility family, initial_genome=champion, master_seed=182401,
 #         substrate=(composite, "compute_substrate_sha"), work_dir/hall_root fresh.
@@ -1157,7 +1169,7 @@ champion = load_candidate_weights(Path("training/artifacts/impostor/utility-es")
 #         payoff_seeds=(3000, 3001), benchmark_seeds=(2000, 2001, 2002).
 # hall_root = training/artifacts/coevo/<run-name>; work_dir outside the tree.
 # result = run_alternating_freeze(CoevoCampaignConfig(work_dir=…, substrate_sha256=…,
-#          substrate_sha_kind=…, impostor=…, master_seed=…, **common))
+#          substrate_sha_kind=…, impostor=…, master_seed=…, **common()))
 ```
 
 Verification pins over the committed rows: `uv run pytest
