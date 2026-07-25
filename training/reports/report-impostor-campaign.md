@@ -501,7 +501,7 @@ selection-tolerant noise scale design B priced in.
 
 Candidates: the run's single swap champion (`43b113ec…`) + the impostor-family
 exploiter (`119e5374…`, K=2 alternate — the first exploiter-probe member to reach a
-real leg). Pre-screens PASS (3.06 / 3.22 predicted flags), advice only.
+real leg). Pre-screens PASS (3.2742 / 3.2176 predicted flags; the values are deterministic per candidate and identical on every invocation), advice only. [A prior draft of this line mis-transcribed 3.2742 as "3.06"; the committed prescreen-quotes.json is the authority.]
 
 | rank | candidate | selection | validity | referee | win | witnessed | flags | conversion |
 |---|---|---|---|---|---|---|---|---|
@@ -879,6 +879,16 @@ provenance, trajectory divergence) are recorded here either way.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F9 — the session-1 leg harness kept only one pre-screen record per run.** The
+  operator harness wrote prescreen-quotes.json per invocation IN PLACE, so the
+  tranche-2 write overwrote tranche 1's. No information was lost (the pre-screen
+  is deterministic per candidate — same genome over the same cached fake set —
+  so all invocations produce byte-identical verdicts, and every invocation's
+  occurrence + ordering before its spend is evidenced by the chain.log/task-log
+  provenance), but auditability required reconstruction: the committed
+  prescreen-quotes.json files are now keyed by tranche with per-invocation
+  provenance. Harness deficiency, operator-side; future legs write per-tranche
+  records natively.
 - **F8 — the pre-screen's advisory-only status protected the best candidate.** The
   session's closest full-flip-bar candidate (`a89be618…`, §4.4: win 0.667 + witnessed
   PASS + flags PASS, conversion −0.072) is the one candidate whose pre-screen predicted
@@ -935,10 +945,12 @@ reproduce the exact bytes. The committed evidence extracts live at
 full 17.14 records incl. stamp proofs, gauges, and seed telemetry), every pre-screen
 quote (`prescreen-quotes.json`), every instrument sweep (`sweep-*.json`), the
 re-anchored baseline cells (`baseline-cells-corpus.json`), and the sha256
-content-address manifest of all 60 raw recordings
-(`recordings-manifest.sha256`; the raw replay bytes themselves are retained on the
-operator machine at `~/ailibi-campaign-1824/` for 18.27's re-reads and verify against
-the manifest). The five run configs are exactly:
+manifest of all 60 raw recordings (`recordings-manifest.sha256`) — **and the 60 raw
+replay files themselves, committed at the manifest's paths under
+`training/artifacts/coevo/realpath/` (28 MB; audit sidecars excluded — the instruments
+never read them), so collaborators and CI can verify the manifest and 18.27 can
+re-read the bytes from a fresh checkout**. The operator-machine copy at
+`~/ailibi-campaign-1824/` is now redundant. The five run configs are exactly:
 
 ```python
 # session harness (operator-authored; the machinery is consumed frozen)

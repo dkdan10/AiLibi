@@ -1,26 +1,64 @@
 {
-  "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0": {
-    "candidate": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
-    "conversion_floor": 0.31873631412636194,
-    "conviction_uses": 25,
-    "meetings_scored": 25,
-    "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
-    "predicted_converting_share": 0.64,
-    "predicted_flags_pass": true,
-    "predicted_flags_per_meeting": 1.6179596000924903,
-    "predicted_floors_pass": true,
-    "recorded_flags_fake_substrate": 0
-  },
-  "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45": {
-    "candidate": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
-    "conversion_floor": 0.32012400625669896,
-    "conviction_uses": 21,
-    "meetings_scored": 21,
-    "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
-    "predicted_converting_share": 0.6190476190476191,
-    "predicted_flags_pass": true,
-    "predicted_flags_per_meeting": 1.6109459748711092,
-    "predicted_floors_pass": true,
-    "recorded_flags_fake_substrate": 0
+  "deterministic_per_candidate": true,
+  "note": "Reconstructed per-tranche record (2026-07-25): the session-1 leg harness wrote a single prescreen-quotes.json per run and the tranche-2 invocation overwrote the tranche-1 file in place (operator-harness deficiency, report finding F9). The pre-screen is DETERMINISTIC per candidate (same genome over the same cached fake recording set -> byte-identical verdict every invocation), so the per-tranche values below are equal by construction; each invocation ran BEFORE its tranche's real spend, evidenced by the invocation provenance (chain.log start lines / session task logs).",
+  "tranches": {
+    "tranche-4000-4002": {
+      "invocation": "session-1 operator leg, launched 2026-07-23 ~16:45 EDT (task log bvquplvzb)",
+      "quotes": {
+        "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0": {
+          "candidate": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+          "conversion_floor": 0.31873631412636194,
+          "conviction_uses": 25,
+          "meetings_scored": 25,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.64,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 1.6179596000924903,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        },
+        "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45": {
+          "candidate": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
+          "conversion_floor": 0.32012400625669896,
+          "conviction_uses": 21,
+          "meetings_scored": 21,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.6190476190476191,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 1.6109459748711092,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        }
+      }
+    },
+    "tranche-4003-4005": {
+      "invocation": "overnight chain, START 2026-07-24 09:24:35 EDT (chain.log)",
+      "quotes": {
+        "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0": {
+          "candidate": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+          "conversion_floor": 0.31873631412636194,
+          "conviction_uses": 25,
+          "meetings_scored": 25,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.64,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 1.6179596000924903,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        },
+        "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45": {
+          "candidate": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
+          "conversion_floor": 0.32012400625669896,
+          "conviction_uses": 21,
+          "meetings_scored": 21,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.6190476190476191,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 1.6109459748711092,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        }
+      }
+    }
   }
 }
