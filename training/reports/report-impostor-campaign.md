@@ -834,11 +834,18 @@ provenance, trajectory divergence) are recorded here either way.
   intermediate champions went un-evaluated on the real path** (run-02 gens 1–2, run-03
   gen 7, run-04 gens 1–2 — every other generation's champion is byte-identical to a
   frozen, re-ranked swap champion). The §8 finalist reads therefore select among
-  swap-boundary champions only; whether an intermediate champion could outrank them is
-  unknowable at this machinery. Routed with the integration-risk discipline: a driver
-  amendment (persist per-generation champion genomes or expose the per-generation ES
-  champion trace) plus, if adopted, the 5 back-fill legs (~10 h) — an owner/18.28 call,
-  never a silent machinery patch in this campaign.
+  swap-boundary champions only; whether an intermediate champion could outrank them was
+  initially unknowable. RESOLVED IN-CONTRACT (2026-07-25, the Codex-review round): the
+  driver's public `scenario_provider` seam passes every evaluated genome through the
+  term's fitness callable, so a ZERO-valued capturing term recovers the intermediates
+  from deterministic re-runs with byte-identical selection (the pinned scenario-term
+  semantics) — no machinery patch. All 5 recovered, each re-run's rows assert-matched
+  its committed block (modulo `scenario_labels`) and each genome digest-matched the
+  committed row's `champion_weights_sha256`; frozen under
+  `training/artifacts/coevo/intermediates/`. The 5 back-fill legs (30 real games) run
+  under the standing runbook; §4.9 carries their rankings. The routed driver amendment
+  (persist per-generation champions natively) remains worthwhile for future campaigns —
+  the recovery costs a full fake-path re-run per lineage.
 - **F2 — the founder-restart clause is family-gated.** The only committed MAP-Elites
   founder pool is v2/1049 (`bakeoff_substrate_sha`-fenced). Utility (19) and v3 (1442)
   lineages cannot ingest it (the driver's reload length-check), so their sessions restart
