@@ -1,0 +1,46 @@
+=== backfill chain start Sat Jul 25 00:35:34 EDT 2026 ===
+--- START run-02-utility-lambda4 seeds=4000,4001,4002 Sat Jul 25 00:35:34 EDT 2026
+[run-02-utility-lambda4] backfill candidates: [(1, 'dff6e472e00a'), (2, 'ea4bc955dfe0')]
+[run-02-utility-lambda4] prescreen gen1 dff6e472e00a: pred_flags=1.2300 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen2 ea4bc955dfe0: pred_flags=1.2562 pass=True recorded_fake=0
+[run-02-utility-lambda4] rank 1: run-02-utility-lambda4-intermediate-gen2-ea4bc955dfe0 sel=40.7 win=1.0
+[run-02-utility-lambda4] rank 2: run-02-utility-lambda4-intermediate-gen1-dff6e472e00a sel=35.53 win=1.0
+[run-02-utility-lambda4] BACKFILL LEG DONE 4000-4002
+--- DONE run-02-utility-lambda4 seeds=4000,4001,4002 Sat Jul 25 02:22:38 EDT 2026
+--- START run-03-utility-bcanchor seeds=4000,4001,4002 Sat Jul 25 02:22:38 EDT 2026
+[run-03-utility-bcanchor] backfill candidates: [(7, '9bc30c15684e')]
+[run-03-utility-bcanchor] prescreen gen7 9bc30c15684e: pred_flags=1.0585 pass=False recorded_fake=0
+[run-03-utility-bcanchor] rank 1: run-03-utility-bcanchor-intermediate-gen7-9bc30c15684e sel=57.03 win=0.3333333333333333
+[run-03-utility-bcanchor] BACKFILL LEG DONE 4000-4002
+--- DONE run-03-utility-bcanchor seeds=4000,4001,4002 Sat Jul 25 03:11:00 EDT 2026
+--- START run-04-freepolicy-v3 seeds=4000,4001,4002 Sat Jul 25 03:11:00 EDT 2026
+[run-04-freepolicy-v3] backfill candidates: [(1, 'b775a7e6fd9e'), (2, 'ee28facfba05')]
+[run-04-freepolicy-v3] prescreen gen1 b775a7e6fd9e: pred_flags=5.0553 pass=True recorded_fake=0
+[run-04-freepolicy-v3] prescreen gen2 ee28facfba05: pred_flags=6.5766 pass=True recorded_fake=0
+[run-04-freepolicy-v3] rank 1: run-04-freepolicy-v3-intermediate-gen2-ee28facfba05 sel=30.93 win=0.0
+[run-04-freepolicy-v3] rank 2: run-04-freepolicy-v3-intermediate-gen1-b775a7e6fd9e sel=7.47 win=0.0
+[run-04-freepolicy-v3] BACKFILL LEG DONE 4000-4002
+--- DONE run-04-freepolicy-v3 seeds=4000,4001,4002 Sat Jul 25 03:57:23 EDT 2026
+--- START run-02-utility-lambda4 seeds=4003,4004,4005 Sat Jul 25 03:57:23 EDT 2026
+[run-02-utility-lambda4] backfill candidates: [(1, 'dff6e472e00a'), (2, 'ea4bc955dfe0')]
+[run-02-utility-lambda4] prescreen gen1 dff6e472e00a: pred_flags=1.2300 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen2 ea4bc955dfe0: pred_flags=1.2562 pass=True recorded_fake=0
+[run-02-utility-lambda4] rank 1: run-02-utility-lambda4-intermediate-gen1-dff6e472e00a sel=29.73 win=0.6666666666666666
+[run-02-utility-lambda4] rank 2: run-02-utility-lambda4-intermediate-gen2-ea4bc955dfe0 sel=18.47 win=1.0
+[run-02-utility-lambda4] BACKFILL LEG DONE 4003-4005
+--- DONE run-02-utility-lambda4 seeds=4003,4004,4005 Sat Jul 25 05:28:26 EDT 2026
+--- START run-03-utility-bcanchor seeds=4003,4004,4005 Sat Jul 25 05:28:26 EDT 2026
+[run-03-utility-bcanchor] backfill candidates: [(7, '9bc30c15684e')]
+[run-03-utility-bcanchor] prescreen gen7 9bc30c15684e: pred_flags=1.0585 pass=False recorded_fake=0
+[run-03-utility-bcanchor] rank 1: run-03-utility-bcanchor-intermediate-gen7-9bc30c15684e sel=44.8 win=0.3333333333333333
+[run-03-utility-bcanchor] BACKFILL LEG DONE 4003-4005
+--- DONE run-03-utility-bcanchor seeds=4003,4004,4005 Sat Jul 25 06:18:07 EDT 2026
+--- START run-04-freepolicy-v3 seeds=4003,4004,4005 Sat Jul 25 06:18:07 EDT 2026
+[run-04-freepolicy-v3] backfill candidates: [(1, 'b775a7e6fd9e'), (2, 'ee28facfba05')]
+[run-04-freepolicy-v3] prescreen gen1 b775a7e6fd9e: pred_flags=5.0553 pass=True recorded_fake=0
+[run-04-freepolicy-v3] prescreen gen2 ee28facfba05: pred_flags=6.5766 pass=True recorded_fake=0
+[run-04-freepolicy-v3] rank 1: run-04-freepolicy-v3-intermediate-gen2-ee28facfba05 sel=36.3 win=0.0
+[run-04-freepolicy-v3] rank 2: run-04-freepolicy-v3-intermediate-gen1-b775a7e6fd9e sel=20.63 win=0.0
+[run-04-freepolicy-v3] BACKFILL LEG DONE 4003-4005
+--- DONE run-04-freepolicy-v3 seeds=4003,4004,4005 Sat Jul 25 07:12:20 EDT 2026
+=== backfill chain complete Sat Jul 25 07:12:20 EDT 2026 ===

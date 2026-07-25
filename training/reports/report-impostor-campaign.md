@@ -294,7 +294,9 @@ progress nor the flat-anchor cycling shape; inconclusive at this budget, stated 
 Meters: conviction 886 / 52 481 (1.69%); games 2 308 / 3 816. Frozen champions: swap 0
 `348df066…`, swap 2 `27f852fe…` (both trained against slates containing the gen-1 crew
 exploiter `76a0e8c5…`); crew `43e5b869…` / `9dc8432f…`. The from-scratch v3 lineage
-moved EVERY impostor generation it could (7 of 9 updates across the run).
+updated its impostor champion in **4 of its 6 moving generations** (gens 1, 2, 3, 8) and
+its crew champion in 5 of 6 — 9 updates across the run's 12 generations, counted from
+the committed rows' `champion_updated` column.
 
 **Cycling verdict: the pre-registered signature is PRESENT on the impostor side** — the
 co-matchup payoff rises strongly (0.04 → 3.20, +3.16) while the champion-side absolute
@@ -332,9 +334,11 @@ founders (F2), exercised end-to-end here.
   happened ONLY once co-adapted crew entered the opponent pool. Opponent pressure, not
   more scripted-crew ES, is what moves the utility champion — the phase's premise,
   observed directly.
-- **Exploiter probe earns its cost:** 20 frozen exploits across four runs, in both
-  directions; every crew champion of the session is exploitable by an impostor-family
-  exploiter at +2 to +11 over the FSM bar, and those exploits then serve as opponents.
+- **Exploiter probe earns its cost:** **35 frozen exploits across the five runs** (31 in
+  runs 01–04: 7/10/9/5; 4 in run 05), counted from the committed hall indexes'
+  `exploiter-probe` members on both sides; every crew champion of the session is
+  exploitable by an impostor-family exploiter at +2 to +11 over the FSM bar, and those
+  exploits then serve as opponents.
 - **No retirement events fired** (staleness cap 8 vs ≤6 servable generations per pool
   member at this budget) — the retire-and-replace sanity read stays pending a
   longer-horizon session.
@@ -568,7 +572,7 @@ tranche-to-tranche while supply-gauge channels swing by ±0.5–1.1 flags/meetin
 3-seed tranches the gauges are advisory, and NO candidate passes all three supply
 floors pooled. The flip bar remains unpassed; what the campaign produced is a win-rate
 ladder (0.833 / 0.667 / 0.667 / 0.500 / 0.167 / 0.000) with per-candidate gauge
-profiles, handed to 18.26's 30-seed test-split discipline for the definitive read.
+profiles, handed to 18.26's **50-seed** finalist protocol (the ratified 50/50 definition of done, with the same-seed FSM comparator row) for the definitive read.
 
 ### 4.8 Leg 05 tranche 2 (seeds 4003–4005; session 2 chain, COMPLETE — the campaign's final leg)
 
@@ -606,8 +610,10 @@ selected as its swap-0 champion — two trajectories converge on it); `dff6e472�
 5/6 = 0.833, tying the previously-named finalist; `9bc30c15…` 2/6 mid-pack; the v3
 intermediates reproduce the family's win-0/supply-rich shape. Gauge channels swing
 tranche-to-tranche exactly as §4.7 measured for the swap champions. The sweeps over all
-30 back-fill games (committed per leg) show no new candidate behaviors: utility arms
-on-menu, v3 arms off-menu 0.85–0.94, deflection cells unremarkable (pooled ≈ corpus).
+30 back-fill games (committed per leg) show utility arms on-menu and v3 arms off-menu
+0.85–0.94; their deflection cells pool to **6/38 = 0.158**, which — with the swap-champion
+arms — surfaces the family-wide deflection depression resolved in §5.8 (an earlier
+revision of this line called them "unremarkable ≈ corpus"; that was wrong).
 
 <!-- all legs recorded -->
 
@@ -733,7 +739,7 @@ tranche 2 sustains the delta.
 
 ### 5.4 Sweep — leg 03 tranche 1 (6 real games, completeness fence PASSED first)
 
-| cell | `6d327dcb…` (committed) | `a89be618…` (bc-anchor) | corpus 9p2i |
+| cell | `a89be618…` (bc-anchor) | `6d327dcb…` (committed) | corpus 9p2i |
 |---|---|---|---|
 | off-menu rate | 0/139 (structural) | 0/136 | 0/6663 |
 | meetings / games | 10 / 3 | 11 / 3 | 463 / 150 |
@@ -744,9 +750,15 @@ tranche 2 sustains the delta.
 | effective deflection | 2/6 | 0/3 | 69/152 |
 | impostor action entropy (cond.) | 0.6005 | 0.4700 | 0.6526 |
 
-No new candidate behaviors at this n beyond the §5.3 deflection cell (which this leg's
-committed-champion arm does NOT reproduce — 2/6 — sharpening it as λ=4-lineage-specific
-if tranche 2 sustains it). Pooled alibi survival across utility legs is now 13/13.
+(Column order follows the recording-dir index, which is the CANDIDATE INPUT order
+— newest champion first — not the ranking order; an earlier revision of this table
+transposed the two headers. Verified against the committed
+`run-03-utility-bcanchor/sweep-4000-4002.json`.)
+
+No new candidate behaviors at this n. On the corrected labels the deflection cells are
+`a89be618…` 2/6 and the committed champion 0/3 — both BELOW the corpus 0.454, which is
+the first appearance of the family-wide deflection depression §5.8 resolves (it is
+present on the control arm, so no campaign lever explains it).
 
 ### 5.5 Sweeps — leg 05 t1 + tranche-2 extensions (completeness fence PASSED on all six dirs)
 
@@ -779,7 +791,7 @@ gen-9 candidates), teammate accusations 0 everywhere (now 0/§ across every arm 
 campaign), off-menu 0 on all four utility dirs.
 
 **A context cell surfaced WITHOUT candidacy: pooled utility-family alibi survival is
-29/29** across all candidates and tranches vs the corpus 59/77 = 0.766. No campaign
+31/31** across all candidates and tranches vs the corpus 59/77 = 0.766. No campaign
 lever enables it (it appears identically on the committed champion), so no 18.4-named
 ablation exists and it reads NOT-DEMONSTRATED by construction — its comparator is the
 18.26 same-seed real-path FSM arm (if scripted movers also survive ~100% under this
@@ -794,7 +806,35 @@ corpus 0.65 and t1's 0.88–0.94); teammate accusations 0 (campaign-wide total s
 The sweep program of this campaign is complete; all cells and by-kind breakdowns are
 preserved in the session sweep JSONs for 18.27.
 
-<!-- all session-1/2 sweeps recorded -->
+
+### 5.8 The deflection depression — a surfaced delta, classified (session 3)
+
+Corrected reading (the §4.9/§5.4 errata): effective deflection is depressed on EVERY
+utility-family arm of this campaign relative to the corpus 69/152 = 0.4539:
+
+| arm group | pooled deflection | vs corpus |
+|---|---|---|
+| committed champion `6d327dcb…` (**control — no campaign lever applied**) | 3/14 = 0.214 | −0.240 |
+| λ=4 swap champions | 9/28 = 0.321 | −0.133 |
+| bc-anchor swap champions | 2/9 = 0.222 | −0.232 |
+| run-01 co-adapted champion | 0/7 = 0.000 | −0.454 |
+| recovered intermediates | 6/38 = 0.158 | −0.296 |
+| **all utility arms pooled** | **20/96 = 0.208** | **−0.246** |
+
+**Classification: surfaced delta, NOT-DEMONSTRATED by construction — no campaign lever
+enables it.** The decisive evidence is the control arm: the committed champion is the
+incumbent genome, untouched by any campaign lever (no λ change, no anchor-policy swap,
+no encoder change, no co-adaptation), and it exhibits the depression at 0.214. A
+behavior present on the un-levered control cannot recede under any
+`ablation:deflection/<lever-id>` this campaign could name, so the §6.c discipline is
+unsatisfiable here by construction rather than by omission.
+
+What the cell most likely contrasts is **learned mover vs the corpus's scripted-FSM
+mover** (the corpus was recorded `fsm-default`), not any campaign lever — which is
+precisely what 18.26's same-seed FSM comparator arm resolves. Quoted for 18.27's
+context with its comparator routed there; this report does not rule.
+
+<!-- all sweeps recorded -->
 
 ---
 
@@ -874,8 +914,9 @@ provenance, trajectory divergence) are recorded here either way.
   semantics) — no machinery patch. All 5 recovered, each re-run's rows assert-matched
   its committed block (modulo `scenario_labels`) and each genome digest-matched the
   committed row's `champion_weights_sha256`; frozen under
-  `training/artifacts/coevo/intermediates/`. The 5 back-fill legs (30 real games) run
-  under the standing runbook; §4.9 carries their rankings. The routed driver amendment
+  `training/artifacts/coevo/intermediates/`. The 5 back-fill legs (30 real games) ran
+  under the standing runbook; §4.9 carries their rankings. Coverage achieved and its
+  remaining gap: F10. The routed driver amendment
   (persist per-generation champions natively) remains worthwhile for future campaigns —
   the recovery costs a full fake-path re-run per lineage.
 - **F2 — the founder-restart clause is family-gated.** The only committed MAP-Elites
@@ -918,6 +959,25 @@ provenance, trajectory divergence) are recorded here either way.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F10 — the campaign evaluated every generation's CHAMPION on the real path, not a
+  per-generation top-K; the gap is a scope decision, quantified.** The contract's
+  "per-generation real-path top-K re-ranks (18.17, ~2 h/gen)" reads K=2 per generation
+  (18.17 design B). What this campaign evaluated: all 14 distinct champions across 60
+  generations of 5 lineages (every swap champion, every distinct generation champion via
+  the F1 recovery, one exploiter) — the K=1 slice per generation plus K=2 at every swap
+  boundary. Completing K=2 for every generation of every lineage is ~46 further
+  candidates × 6 seeds ≈ 276 real games ≈ **90–140 h**, against the contract's own stated
+  operator envelope of ~40–50 h — an envelope that prices ONE lineage's per-generation
+  re-ranks (the planning audit's design-B line: "~40 h/utility-es run"), not five. The
+  campaign spent its breadth on 5 lineages instead; that trade is stated here rather
+  than claimed away. **This matters more than a bookkeeping gap**, and the campaign's own
+  evidence says so: fake-path fitness ordering predicted real-path outcomes POORLY (the
+  run-01 co-adapted champion out-scored the committed champion on fake fitness and lost
+  0.167 vs 0.500 on the real path; run-02's gen-2 intermediate out-won its own swap
+  champion), so a generation's fake-path runner-up could plausibly outrank its champion
+  on the real path. Routed to the owner/18.28: either accept the champion-slice coverage
+  as the campaign's scope, or fund the K=2 completion (~90–140 h) before 18.26's
+  finalist spend.
 - **F9 — the session-1 leg harness kept only one pre-screen record per run.** The
   operator harness wrote prescreen-quotes.json per invocation IN PLACE, so the
   tranche-2 write overwrote tranche 1's. No information was lost (the pre-screen
@@ -926,8 +986,13 @@ provenance, trajectory divergence) are recorded here either way.
   occurrence + ordering before its spend is evidenced by the chain.log/task-log
   provenance), but auditability required reconstruction: the committed
   prescreen-quotes.json files are now keyed by tranche with per-invocation
-  provenance. Harness deficiency, operator-side; future legs write per-tranche
-  records natively.
+  provenance, and the **leg/chain logs themselves are committed at
+  `training/artifacts/coevo/provenance/`** — each log is the process's own append-only
+  stdout, so the pre-screen lines appearing ABOVE that leg's `rank`/`LEG DONE` lines is
+  in-repo evidence that the pre-screen preceded the spend, per leg, for every tranche
+  (session-1 legs individually; sessions 2–3 through the two chain logs, whose
+  `--- START/DONE` stamps also fix each leg's wall-clock window). Harness deficiency,
+  operator-side; future legs write per-tranche records natively.
 - **F8 — the pre-screen's advisory-only status protected the best candidate.** The
   session's closest full-flip-bar candidate (`a89be618…`, §4.4: win 0.667 + witnessed
   PASS + flags PASS, conversion −0.072) is the one candidate whose pre-screen predicted
@@ -952,8 +1017,8 @@ provenance, trajectory divergence) are recorded here either way.
 ## 8. Finalists for 18.26
 
 Named on the pooled 6-seed evidence of ALL fourteen real-path-evaluated candidates
-(9 swap champions/exploiters + the 5 back-filled intermediates — the per-generation
-protocol is complete; §4.9). Every conviction-meter read under §1.1's guard was clean,
+(9 swap champions/exploiters + the 5 back-filled intermediates; §4.9 — the coverage
+achieved and its remaining gap to the contract's top-K wording are stated in F10). Every conviction-meter read under §1.1's guard was clean,
 and no selection leans on conviction-influenced ordering.
 
 | finalist | artifact | pooled real-path read | why 18.26 spends on it |
@@ -988,7 +1053,7 @@ reproduce the exact bytes. The committed evidence extracts live at
 full 17.14 records incl. stamp proofs, gauges, and seed telemetry), every pre-screen
 quote (`prescreen-quotes.json`), every instrument sweep (`sweep-*.json`), the
 re-anchored baseline cells (`baseline-cells-corpus.json`), and the sha256
-manifest of all 60 raw recordings (`recordings-manifest.sha256`) — **and the 60 raw
+manifest of all 60 raw recordings (`recordings-manifest.sha256`), the leg/chain logs that fix pre-screen-before-spend ordering (`provenance/`) — **and the 60 raw
 replay files themselves, committed at the manifest's paths under
 `training/artifacts/coevo/realpath/` (28 MB; audit sidecars excluded — the instruments
 never read them), so collaborators and CI can verify the manifest and 18.27 can

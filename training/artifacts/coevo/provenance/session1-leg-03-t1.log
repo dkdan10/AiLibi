@@ -1,0 +1,7 @@
+[run-03-utility-bcanchor] candidates: [('alternating-freeze-champion', 9, 'a89be618bfbb'), ('alternating-freeze-champion', 3, '6d327dcbde94')]
+[run-03-utility-bcanchor] prescreen a89be618bfbb: pred_flags=1.2700 pass=False recorded_fake_flags=0
+[run-03-utility-bcanchor] prescreen 6d327dcbde94: pred_flags=1.6180 pass=True recorded_fake_flags=0
+[run-03-utility-bcanchor] meeting_timeout_seconds=900.0 (override)
+[run-03-utility-bcanchor] rank 1: run-03-utility-bcanchor-alternating-freeze-champion-gen3-6d327dcbde94 selection=51.7000 validity=True referee=False
+[run-03-utility-bcanchor] rank 2: run-03-utility-bcanchor-alternating-freeze-champion-gen9-a89be618bfbb selection=43.9300 validity=True referee=False
+[run-03-utility-bcanchor] LEG DONE ranking=/Users/danielkeinan/ailibi-campaign-1824/realpath/run-03-utility-bcanchor/ranking.jsonl
