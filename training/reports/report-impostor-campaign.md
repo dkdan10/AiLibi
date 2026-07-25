@@ -799,8 +799,9 @@ summed from the committed sweeps; corpus 0/549), off-menu 0 on all four utility 
 31/31** across all candidates and tranches vs the corpus 59/77 = 0.766. No campaign
 lever enables it (it appears identically on the committed champion), so no 18.4-named
 ablation exists and it reads NOT-DEMONSTRATED by construction — its comparator is the
-18.26 same-seed real-path FSM arm (if scripted movers also survive ~100% under this
-provider era, it is an era effect, not behavior). Quoted for 18.27's context, never
+18.26 same-seed real-path FSM arm; the 3-game same-seed FSM arm recorded at §5.9 reads
+2/3 = 0.667 (vs the campaign's 31/31), which points to a mover difference rather than a
+pure era effect — advisory at that n, and 18.26's 50-seed arm remains the venue. Quoted for 18.27's context, never
 ruled here.
 
 ### 5.7 Sweep — leg 05 tranche 2 (fence PASSED)
@@ -838,6 +839,39 @@ What the cell most likely contrasts is **learned mover vs the corpus's scripted-
 mover** (the corpus was recorded `fsm-default`), not any campaign lever — which is
 precisely what 18.26's same-seed FSM comparator arm resolves. Quoted for 18.27's
 context with its comparator routed there; this report does not rule.
+
+
+### 5.9 The same-seed real-path comparator arm (recorded session 4)
+
+The §6.c provenance rule requires a real-path ablation to be judged against a real-path
+comparator on the same seeds — not the corpus anchor. That arm did not exist, so it was
+recorded: the scripted-FSM mover (`agent_factory=None`, both sides scripted) on seeds
+4000–4002 through the same real seam and provider pin as every campaign leg, 3 games,
+recordings + manifest committed at
+`training/artifacts/coevo/realpath-comparator/`.
+
+| cell | FSM comparator (same seeds, n=3 games) | campaign utility arms | corpus 9p2i |
+|---|---|---|---|
+| off-menu | **0 / 149 = 0.0000** | 0 (structural) | 0/6 663 |
+| meetings / games | 12 / 3 | ~3.4/game | 463 / 150 |
+| kills (crew-witnessed) | 11 (0) | 13–16 (2–5) | 505 (12) |
+| frame-attempt meetings | 12/12 | ~9/10 | 437/463 |
+| teammate accusations | 0/13 | 0/297 | 0/549 |
+| **effective deflection** | **2/4 = 0.500** | 20/96 = 0.208 | 69/152 = 0.454 |
+| alibi survival | 2/3 = 0.667 | 31/31 = 1.000 | 59/77 = 0.766 |
+
+Two readings this arm buys (both at small n — 3 games — and therefore advisory):
+
+1. **It measures the off-menu instrument's structural zero on the REAL path** rather
+   than assuming it: the scripted mover emits 0 off-menu actions in 149 decisions,
+   confirming the comparator value the §6.3 recede test uses.
+2. **It sharpens §5.8's deflection classification.** The same-seed FSM arm deflects at
+   0.500 — in line with the corpus 0.454 and roughly 2.4× the campaign's learned arms
+   (0.208). So the depression tracks LEARNED-vs-SCRIPTED mover, not a provider-era
+   effect, exactly the contrast §5.8 said 18.26's comparator would resolve. It remains
+   NOT-DEMONSTRATED (no campaign lever; present on the un-levered control), and the
+   denominators here (4 active survivals) are far too small to rule on — 18.26's
+   50-seed comparator arm is still the venue. Quoted, not ruled.
 
 <!-- all sweeps recorded -->
 
@@ -916,19 +950,25 @@ made anyway per blocker 4), recordings + ranking + sweep + manifest at
 `training/artifacts/coevo/realpath-ablation/ablation-run-04-encoder-v3/`, leg log at
 `provenance/session3-ablation-encoder-v3.log`.
 
-**The recede read (memo §6.c criterion, both parts required):**
+**The recede read (memo §6.c criterion, both parts required) — computed against the
+SAME-SEED REAL-PATH comparator**, recorded for this purpose (§5.9); the corpus is only
+the sweep anchor and is not used as the claim comparator:
 
-| arm | off-menu | rate |
+| arm (all on seeds 4000–4002, real path) | off-menu | rate |
 |---|---|---|
-| champion arm (v3, run-04, both tranches) | 341 / 387 | **0.8811** |
+| champion arm (v3, run-04 tranche 1) | 193 / 221 | **0.8733** |
 | ablated arm (v2 revert, this leg) | 222 / 365 | **0.6082** |
-| floor arm (menu-bounded / FSM recordings) | 0 / 6 663 | 0.0000 |
+| **comparator arm (scripted FSM, same seeds, recorded session 4)** | **0 / 149** | **0.0000** |
 
-- (i) significance vs the floor arm after ablation: **z = 64.69 — still overwhelmingly
+- (i) significance vs the same-seed comparator after ablation: **z = 12.63 — still
   significant**, so (i) is NOT met.
-- (ii) recede-to-half: `|0.6082 − 0| = 0.6082` vs `½·|0.8811 − 0| = 0.4406` — **0.6082 >
-  0.4406, NOT met**. Denominator adequacy passes (365 ≥ ½ × 387), so this is a real
-  non-recession, not an under-powered one.
+- (ii) recede-to-half: `|0.6082 − 0| = 0.6082` vs `½·|0.8733 − 0| = 0.4367` — **0.6082 >
+  0.4367, NOT met**. Denominator adequacy passes (365 ≥ ½ × 221).
+
+(The verdict is unchanged from the first computation, which used the corpus anchor at
+`0/6 663`; correcting the provenance moved z from 64.69 to 12.63 and the half-threshold
+from 0.4406 to 0.4367, neither near a flip. Recorded here so the provenance rule is
+followed, not because the answer was in doubt.)
 
 **Verdict: the behavior does NOT recede when the registered lever is reverted.** The
 encoder is not the enabler; the free-policy ACTION SPACE is (the v2-reverted champion
