@@ -1,0 +1,9 @@
+[run-02-utility-lambda4] re-run games=2424 distinct genomes=37
+[run-02-utility-lambda4] expected 37 distinct, got 37
+[run-02-utility-lambda4] gen 1: champion dff6e472e00a | ranking [(19.509, 'dff6e472'), (19.473, '3a89655f'), (19.465, 'cdfb5550')]
+[run-02-utility-lambda4] gen 2: champion ea4bc955dfe0 | ranking [(19.812, 'ea4bc955'), (19.805, '2b40b2c1'), (19.791, '786e7a1d')]
+[run-02-utility-lambda4] gen 3: champion 10c1f9f3c0a2 | ranking [(19.824, '10c1f9f3'), (19.803, '2bac4cfe'), (19.751, '36b6a39c')]
+[run-02-utility-lambda4] gen 7: champion 10c1f9f3c0a2 | ranking [(19.537, 'cb17deda'), (19.524, 'f4c615ab'), (19.413, '67b70e9f')]
+[run-02-utility-lambda4] gen 8: champion 10c1f9f3c0a2 | ranking [(19.633, 'f280962f'), (19.5, 'c07ffdb2'), (19.497, '65a84ea3')]
+[run-02-utility-lambda4] gen 9: champion 2ca474514b86 | ranking [(19.279, '2ca47451'), (19.257, 'bfd145cb'), (19.099, '9a7b7a05')]
+[run-02-utility-lambda4] RUNNERUPS DONE
