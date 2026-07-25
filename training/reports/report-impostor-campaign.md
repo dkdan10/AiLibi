@@ -11,9 +11,10 @@ emergence instruments.
 audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at);
 audits/audit-phase-18-emergence-preregistration.md (the 18.4 ratified bars);
 report-goodhart-probe.md "Blockers" (the four named blockers, folded verbatim in §1.2).
-**Date started:** 2026-07-23 (session 1).
-**Status:** IN PROGRESS — multi-session. §2 is the session ledger; every row, leg, and
-sweep below states which session produced it.
+**Date started:** 2026-07-23 (session 1). **Date completed:** 2026-07-24 (session 2).
+**Status:** RECORDING PROGRAM COMPLETE — all rows, legs, sweeps, and ablations recorded;
+finalists named (§8). Claims are 18.27's, adoption is 18.26/18.27's, the close is
+18.28's. §2 is the session ledger; every row, leg, and sweep states its session.
 
 ---
 
@@ -148,12 +149,14 @@ in session 1 (§3).
 
 | session | date | work | status |
 |---|---|---|---|
-| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 378 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | this session |
+| 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 362 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | session 1 |
 
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
-**The campaign's recording program is COMPLETE** (10 legs / 66 real games / 10 578
-metered fake games + twins). Remaining for the task: none — the close (18.28) waits on
+**The campaign's recording program is COMPLETE** — 10 legs / 60 real games (the
+recordings sha256 manifest at `training/artifacts/coevo/realpath/recordings-manifest.sha256`
+is the content-address of all 60), 10 362 campaign fake-path games + 4 932
+ablation-twin games. Remaining for the task: none — the close (18.28) waits on
 18.23/18.29 per the contract, and adoption/claims are 18.26/18.27's.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
@@ -428,7 +431,7 @@ Floor sensitivity (measured − floor, signed):
 watchability (+ referee bonus), so rank 1 is NOT the flip-bar reading. On the full row:
 the co-adapted champion is watchability-RICHER (62.60 vs 41.27; witnessed rate 0.23;
 4 meetings/game economy) and wins ZERO of three real games, while the committed champion
-keeps the win edge (0.667 ≥ the same-substrate FSM 0.36) with the familiar starved-supply
+keeps the win edge (0.667 ≥ the same-substrate baseline-6 FSM 0.300 = 15/50, the adopting record audits/audit-phase-18-baseline-6.md — §1.3's 0.36 is the baseline-5 figure) with the familiar starved-supply
 referee FAIL. **Co-adaptation moved the champion along the §1.3 tension axis — toward
 supply, away from winning — rather than past the flip bar**; its fake-path specialization
 against the trained crew scorer did not transfer to real games (consistent with its
@@ -456,7 +459,7 @@ Floor sensitivity (measured − floor, signed):
 | `2ca47451…` | 0.3125 − 0.0339 = **+0.2786 PASS** | 0.0909 − 1.0909 = **−1.0000 FAIL** | 0.1818 − 1.0000 = **−0.8182 FAIL** |
 
 **Reading: the strongest flip-bar candidate of the session.** `10c1f9f3…` wins 3/3 real
-games (≥ the same-substrate FSM 0.36), passes the witnessed-kill gauge (+0.35), and
+games (≥ the same-substrate baseline-6 FSM 0.300), passes the witnessed-kill gauge (+0.35), and
 meets the flags floor EXACTLY — the first campaign candidate to clear two of three
 supply gauges while holding the win edge. The remaining gap is the testimony-backed
 conversion floor (0.20 vs the derived 0.57). Its opponents' ejection accuracy is 0.333
@@ -485,7 +488,7 @@ Floor sensitivity (measured − floor, signed):
 | `a89be618…` | +0.2161 PASS | 1.4000 − 1.0909 = **+0.3091 PASS** | 0.3750 − 0.4469 = **−0.0719 FAIL (the closest miss of the session)** |
 
 **Two readings.** (1) `a89be618…` is now the candidate closest to the FULL flip bar:
-win 0.667 ≥ FSM 0.36, witnessed +0.22 PASS, flags +0.31 PASS, conversion just −0.072
+win 0.667 ≥ the baseline-6 FSM 0.300, witnessed +0.22 PASS, flags +0.31 PASS, conversion just −0.072
 short — and it is the candidate whose pre-screen predicted FAIL. The prescreen-as-
 spend-advice discipline (blocker 4) is vindicated in the direction the probe did not
 emphasize: gating on the prediction would have DISCARDED the best candidate. Quoted
@@ -511,15 +514,41 @@ every game; the witnessed-kill gauge fails on stealth rather than on abstinence.
 
 ### 4.6 Tranche-2 extensions (seeds 4003–4005; session 2 overnight chain)
 
-**Leg 04 t2** replicates t1 on fresh seeds — win 0.000 both candidates, zero kills,
-flags 6.00 / 6.25 PASS, conversion 1.00 / 1.00 PASS, witnessed degenerate FAIL. The v3
-supply-rich/win-0 economy is now stable across 6 seeds per candidate, not seed noise.
+**Pre-screens, tranche 2 (blocker 4, quoted per §1.4's promise):** every t2 leg re-ran
+its pre-screen before the spend; the verdicts are byte-identical to tranche 1 by
+construction (same candidate genomes over the same deterministic fake recording sets),
+re-metered on fresh counters (17–25 meetings scored per read) and re-quoted in the
+chain log + the committed `prescreen-quotes.json` per run
+(`training/artifacts/coevo/realpath/<run>/`): leg 04 — 4.1642 / 5.2389 PASS; leg 01 —
+1.6109 / 1.6180 PASS; leg 02 — 1.2300 / 1.2300 PASS; leg 03 — `a89be618…` 1.2700
+**predicted-FAIL** (spend made anyway, F8) / 1.6180 PASS; leg 05 — 3.2742 / 3.2176
+PASS. Fake recorded flags 0 beside every quote; the recorded reads are the tables
+below.
 
-**Leg 01 t2**: `8ac3652a…` win 1/3, `6d327dcb…` win 1/3 on the fresh seeds. **Pooled
-6-seed reads: committed champion win 3/6 = 0.500; co-adapted champion 1/6 = 0.167** —
-the tranche-1 conclusion holds with doubled denominators (the committed champion keeps
-the win edge ≥ the FSM 0.36; the co-adapted champion's watchability premium persists,
-44.10 vs 30.97 on t2). Flags floors FAIL for both on both tranches.
+**Full tranche-2 rankings (17.14 discipline — stamp proofs + all three signed floor
+distances per candidate; every row: validity PASS, referee FAIL, stamp 3/3 games,
+uniform, sha == computed digest):**
+
+| leg (t2) | candidate | selection | win | witnessed − floor | flags − floor | conversion − floor |
+|---|---|---|---|---|---|---|
+| 04 | `27f852fe…` gen 9 | 24.67 | 0.000 | None vs 0.0339 **FAIL** (0 kills) | +4.9091 PASS | +0.8957 PASS |
+| 04 | `348df066…` gen 3 | 24.67 | 0.000 | None vs 0.0339 **FAIL** | +5.1591 PASS | +0.8999 PASS |
+| 01 | `8ac3652a…` gen 9 | 44.10 | 0.333 | +0.2518 PASS | −0.2727 FAIL | −0.0980 FAIL |
+| 01 | `6d327dcb…` gen 3 | 30.97 | 0.333 | +0.3507 PASS | −0.6909 FAIL | −0.6250 FAIL |
+| 02 | `2ca47451…` gen 9 | 53.00 | 0.333 | +0.2661 PASS | **+0.0341 PASS** | −0.0561 FAIL |
+| 02 | `10c1f9f3…` gen 3 | 25.73 | 0.667 | +0.2518 PASS | −0.5909 FAIL | −0.9000 FAIL |
+| 03 | `6d327dcb…` gen 3 | 42.53 | 0.333 | +0.2994 PASS | −0.3909 FAIL | −0.4652 FAIL |
+| 03 | `a89be618…` gen 9 | 41.50 | 0.667 | +0.2161 PASS | −0.7909 FAIL | −0.4286 FAIL |
+| 05 | `43b113ec…` gen 2 | 49.00 | 0.000 | −0.0339 FAIL (kills unwitnessed) | +0.0758 PASS | +0.4637 PASS |
+| 05 | `119e5374…` expl. | 47.90 | 0.000 | −0.0339 FAIL | +1.7424 PASS | +0.6363 PASS |
+
+**Leg 04 t2** replicates t1 — the v3 supply-rich/win-0 economy is stable across 6 seeds
+per candidate, not seed noise. **Leg 01 t2**: pooled 6-seed reads — committed champion
+win 3/6 = 0.500; co-adapted champion 1/6 = 0.167 — the tranche-1 conclusion holds with
+doubled denominators (the win edge stays ≥ the baseline-6 FSM 0.300; the co-adapted
+watchability premium persists, 44.10 vs 30.97 on t2). The leg-02 t2 curiosity: the
+gen-9 λ=4 candidate posts the campaign's only t2 flags PASS (+0.0341) — gauge noise
+cuts both ways across tranches.
 
 ### 4.7 Tranche-2 extensions, legs 02 + 03 (seeds 4003–4005; session 2 chain)
 
@@ -529,7 +558,9 @@ below floor: **the at-the-floor read was tranche noise.** `2ca47451…` t2 flags
 PASS / win 0.333 (pooled 0.667; pooled flags ≈ 0.53). **Leg 03 t2:** `a89be618…` win
 0.667 (pooled 0.667, stable) but flags 0.3000 on t2 (t1: 1.4000) — pooled ≈ 0.85,
 below floor; conversion misses widen. Committed champion win 0.333 (pooled across four
-tranches of two legs: **6/12 = 0.500**, the most-sampled stability read of the session).
+tranches of two legs: **6 wins in 12 games over the 6 UNIQUE seeds 4000–4005 — two
+independent provider draws per seed = 0.500**; the deepest repeated-measures stability
+read of the session, NOT 12-seed scenario coverage).
 
 **The pooled 6-seed picture that §8 will read from:** win channels are stable
 tranche-to-tranche while supply-gauge channels swing by ±0.5–1.1 flags/meeting — at
@@ -543,7 +574,7 @@ profiles, handed to 18.26's 30-seed test-split discipline for the definitive rea
 Confirms tranche 1 in full: win 0.000 both candidates; every kill unwitnessed (pooled
 across tranches: 18 kills, 0 witnessed); flags 1.1667 / 2.8333 PASS and conversion
 1.000 / 0.857 PASS; witnessed gauge FAIL on stealth. Stamp proofs 3/3, uniform,
-sha == digest. **The recording program of this campaign is complete: 10 legs, 66 real
+sha == digest. **The recording program of this campaign is complete: 10 legs, 60 real
 games, every ranking written, every gating read paired with recorded bytes.**
 
 <!-- all session-1/2 legs recorded -->
@@ -603,18 +634,21 @@ meetings per arm every rate cell is advisory-scale; z reads defer to 18.27 with 
 | impostor action entropy (cond.) | 0.4821 (6 ag / 101 dec) | 0.4735 (6 ag / 120 dec) | 0.6526 (300 / 6663) |
 | crew action entropy (cond.) | 0.9086 | 0.9790 | 0.8693 |
 
-**The headline cell: off-menu rate 0.78 / 0.95 against a structural-0 baseline** — the
-first free-policy recordings the instrument has ever scored, and it fires massively.
-Interpretation discipline: a free-policy agent CAN emit any legal intent by
-construction, so a nonzero off-menu rate is the FAMILY's action space showing, and the
-enabling lever is the family itself — the counterfactual "ablation" is the menu-bounded
-utility lineage, whose recordings are on-menu by construction (0/…). Both arms of that
-counterfactual exist in this campaign's artifacts; whether the specific off-menu
-DISTRIBUTION (which kinds, which targets) constitutes a skill is 18.27's reading, fed
-by the by-kind breakdowns in the sweep JSON. Zero kills across all 6 games also makes
-kill-craft cells degenerate for this lineage (no downward tail exists; stated, not
-scored). Entropy cells quoted but UNJUDGEABLE per the memo (no per-agent variance
-field — the routed follow-up contract).
+**The largest cell movement: off-menu rate 0.78 / 0.95 against a structural-0
+baseline** — the first free-policy recordings the instrument has ever scored.
+Classification discipline (per the 18.4 memo's clause (c)): this cell is a
+FAMILY-SCOPED MEASUREMENT, **NOT an emergence candidate, and reads NOT-DEMONSTRATED by
+construction for claim purposes** — a free-policy agent can emit any legal intent, so a
+nonzero rate is the family's action space showing, and NO 18.4-named lever exists whose
+same-seed, same-config disabling could show recession within the family (an
+encoder-v3→v2 swap changes genome length and is a different run, not a lever-off twin;
+v2 is itself off-menu-capable). The utility lineage's structural 0 is quoted as the
+cross-family CONTEXT arm, not as a §6.c counterfactual. What 18.27 may rule on is the
+off-menu DISTRIBUTION (which kinds, which targets — preserved in the committed sweep
+JSONs), against the 18.26 comparator arms and only if a lever-shaped claim can be
+constructed there. Zero kills across all 6 games also makes kill-craft cells degenerate
+for this lineage (no downward tail; stated, not scored). Entropy cells quoted but
+UNJUDGEABLE per the memo (no per-agent variance field — the routed follow-up contract).
 
 ### 5.2 Sweep — leg 01 tranche 1 (6 real games, completeness fence PASSED first)
 
@@ -693,7 +727,9 @@ if tranche 2 sustains it). Pooled alibi survival across utility legs is now 13/1
 | impostor entropy (cond.) | **0.883** | **0.939** | 0.388 | 0.510 | 0.441 | 0.882 | 0.6526 |
 
 **The off-menu family gradient is now measured at both free-policy points: utility 0.0
-(structural) → v2 ≈ 0.36–0.39 → v3 ≈ 0.88–0.95** (v3's t2 replicating t1). The v2
+(structural) → v2 ≈ 0.36–0.39 → v3 ≈ 0.88–0.95** (v3's t2 replicating t1; a
+family-scoped measurement per §5.1's classification — never itself an emergence
+candidate). The v2
 candidates' kill profile is stealth-shaped (12 kills, 0 witnessed pooled — vs the
 corpus 2.4% witnessed rate this is unremarkable statistically at n=12, but coherent
 with the exploiter's breeding objective), and v2 impostor entropy sits ABOVE the corpus
@@ -789,12 +825,19 @@ provenance, trajectory divergence) are recorded here either way.
 
 ## 7. Findings (integration findings + routed items; never silent patches)
 
-- **F1 — per-generation champion genomes are not persisted by the merged driver.** Only
-  swap champions and exploiter finds reach the hall; the per-generation
-  `champion_weights_sha256` in the rows has no reloadable genome. The contract's
-  "per-generation real-path top-K re-ranks" therefore runs per impostor SWAP here (§4).
-  Routed: a driver amendment (persist per-generation champion genomes, or expose the ES
-  champion trace per generation) if per-generation real selection proves load-bearing —
+- **F1 — per-generation champion genomes are not persisted by the merged driver, so the
+  contract's "per-generation real-path top-K re-ranks" was NOT mechanically servable
+  and this campaign executed per-SWAP re-ranks instead — an explicit contract
+  deviation, quantified:** only swap champions and exploiter finds reach the hall; the
+  per-generation `champion_weights_sha256` in the rows has no reloadable genome, and
+  the frozen-machinery clause bars persisting them mid-campaign. Exactly **5
+  intermediate champions went un-evaluated on the real path** (run-02 gens 1–2, run-03
+  gen 7, run-04 gens 1–2 — every other generation's champion is byte-identical to a
+  frozen, re-ranked swap champion). The §8 finalist reads therefore select among
+  swap-boundary champions only; whether an intermediate champion could outrank them is
+  unknowable at this machinery. Routed with the integration-risk discipline: a driver
+  amendment (persist per-generation champion genomes or expose the per-generation ES
+  champion trace) plus, if adopted, the 5 back-fill legs (~10 h) — an owner/18.28 call,
   never a silent machinery patch in this campaign.
 - **F2 — the founder-restart clause is family-gated.** The only committed MAP-Elites
   founder pool is v2/1049 (`bakeoff_substrate_sha`-fenced). Utility (19) and v3 (1442)
@@ -868,7 +911,7 @@ conviction-influenced ordering (the ladder is recorded-bytes win + gauge reads).
 |---|---|---|---|
 | **1. `10c1f9f3…`** (λ=4, gen 3) | `training/artifacts/coevo/run-02-utility-lambda4/impostor/gen-3/10c1f9f3…` | win **0.833** (5/6); gauges noisy (flags 1.09 → 0.50) | the strongest real-path impostor the campaign produced; the λ-dial lineage the piKL reading predicted; 18.26's 30-seed split decides whether its supply economy firms |
 | **2. `a89be618…`** (bc-anchor, gen 9) | `…/run-03-utility-bcanchor/impostor/gen-9/a89be618…` | win 0.667; the closest single-tranche full-bar approach (−0.072 conversion, §4.4) | the refined-anchor seam's product; carried the campaign's only near-complete gauge sweep |
-| **3. `6d327dcb…`** (the committed champion, control) | `…/run-01-utility-champion/impostor/gen-3/6d327dcb…` (= the committed `agents/tactical/learned` genome) | win 0.500 over 12 seeds — the most-sampled stability read | the incumbent default-mover reference arm 18.26 needs regardless; its FSM-comparator recording doubles as the emergence-claim comparator base |
+| **3. `6d327dcb…`** (the committed champion, control) | `…/run-01-utility-champion/impostor/gen-3/6d327dcb…` (= the committed `agents/tactical/learned` genome) | win 0.500 over 12 games on the 6 unique seeds (two provider draws each) — the deepest repeated-measures read | the incumbent default-mover reference arm 18.26 needs regardless; its FSM-comparator recording doubles as the emergence-claim comparator base |
 
 **Named non-finalist exhibit:** `27f852fe…` (v3, gen 9) — win 0.000 excludes it from
 the flip-bar eval, but it is the off-menu instrument's primary arm (0.90 pooled rate vs
@@ -883,7 +926,19 @@ above is final for this campaign.**
 
 ## 9. Reproduce
 
-Every figure re-derives from committed bytes. The five run configs are exactly:
+Reproducibility is two-tier, stated honestly. **Fake path:** every §3/§6 figure
+re-derives from committed bytes (deterministic under `master_seed` on the recording
+platform; configs below). **Real path (§4/§5): recorded evidence, not re-derivable** —
+Featherless meetings are provider-nondeterministic, so re-running the seeds cannot
+reproduce the exact bytes. The committed evidence extracts live at
+`training/artifacts/coevo/realpath/<run>/`: every ranking row (`ranking-*.jsonl`, the
+full 17.14 records incl. stamp proofs, gauges, and seed telemetry), every pre-screen
+quote (`prescreen-quotes.json`), every instrument sweep (`sweep-*.json`), the
+re-anchored baseline cells (`baseline-cells-corpus.json`), and the sha256
+content-address manifest of all 60 raw recordings
+(`recordings-manifest.sha256`; the raw replay bytes themselves are retained on the
+operator machine at `~/ailibi-campaign-1824/` for 18.27's re-reads and verify against
+the manifest). The five run configs are exactly:
 
 ```python
 # session harness (operator-authored; the machinery is consumed frozen)

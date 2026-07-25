@@ -1,0 +1,26 @@
+{
+  "10c1f9f3c0a263d9175f6e249b8083d6a24f2eb70238cb5bc623cc8ba47574e7": {
+    "candidate": "10c1f9f3c0a263d9175f6e249b8083d6a24f2eb70238cb5bc623cc8ba47574e7",
+    "conversion_floor": 0.41927719593148827,
+    "conviction_uses": 21,
+    "meetings_scored": 21,
+    "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+    "predicted_converting_share": 0.47619047619047616,
+    "predicted_flags_pass": true,
+    "predicted_flags_per_meeting": 1.2299797946156628,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0": {
+    "candidate": "2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0",
+    "conversion_floor": 0.41927719593148827,
+    "conviction_uses": 21,
+    "meetings_scored": 21,
+    "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+    "predicted_converting_share": 0.47619047619047616,
+    "predicted_flags_pass": true,
+    "predicted_flags_per_meeting": 1.2299797946156628,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  }
+}

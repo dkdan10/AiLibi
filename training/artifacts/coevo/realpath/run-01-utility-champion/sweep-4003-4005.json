@@ -1,0 +1,495 @@
+[
+  {
+    "baseline_cells_corpus_9p2i": {
+      "alibi_survival_rate": [
+        11,
+        14
+      ],
+      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_witnessed_kill_rate": [
+        20,
+        599
+      ],
+      "effective_deflection_rate": [
+        47,
+        196
+      ],
+      "false_vouch_corroboration_rate": [
+        13,
+        46
+      ],
+      "false_vouch_saw_player_rate": [
+        34,
+        149
+      ],
+      "frame_attempt_rate": [
+        415,
+        541
+      ],
+      "frame_conversion_rate": [
+        5,
+        415
+      ],
+      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "off_menu_rate": [
+        0,
+        7693
+      ],
+      "teammate_accusation_rate": [
+        0,
+        455
+      ],
+      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+    },
+    "byte_complete": true,
+    "deception": {
+      "alibi_fabrication": {
+        "survival_rate": 1.0,
+        "survived": 1,
+        "total_impostor_alibis": 1
+      },
+      "corroboration_claims_impostor": 7,
+      "corroboration_claims_total": 24,
+      "crew_ejected_meetings": 1,
+      "effective_deflection": {
+        "accused_impostor_events": 6,
+        "accused_impostor_survivals": 2,
+        "active_survivals": 2,
+        "effective_deflections": 0,
+        "named_target_deflections": 0,
+        "skip_saved_active_survivals": 2,
+        "third_party_deflections": 0
+      },
+      "false_vouch_corroboration_rate": 0.0,
+      "false_vouch_corroborations": 0,
+      "false_vouch_fabricated": 1,
+      "false_vouch_fabricated_subject_observations": 1,
+      "false_vouch_grounded": 1,
+      "false_vouch_grounded_share": 0.5,
+      "false_vouch_grounded_subject_observations": 1,
+      "false_vouch_saw_player_observations": 2,
+      "false_vouch_saw_player_rate": 0.13333333333333333,
+      "false_vouch_subject_events": 2,
+      "false_vouches_total": 2,
+      "frame_attempt_meetings": 10,
+      "frame_attempts": 11,
+      "frame_conversions": {
+        "advisory": true,
+        "denominator": 10,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.2775401687666166,
+        "wilson_low": 0.0
+      },
+      "games_total": 3,
+      "impostor_accusations_total": 11,
+      "impostor_ejected_meetings": 4,
+      "impostor_self_accusations": 0,
+      "meetings_total": 11,
+      "no_eject_meetings": 6,
+      "num_impostors": 2,
+      "num_players": 9,
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/000-run-01-utility-champion-alternating-freeze-champion-gen9-8ac3652a74f8",
+      "tasks_per_crewmate": 2,
+      "teammate_accusations": {
+        "advisory": true,
+        "denominator": 11,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.2588400172488141,
+        "wilson_low": 2.7755575615628914e-17
+      },
+      "vouch_observations_impostor": 15
+    },
+    "kill_craft": {
+      "co_present_histogram": {
+        "0": 11,
+        "1": 3
+      },
+      "crew_witnessed_kills": 4,
+      "entropy_by_side": {
+        "CREWMATE": {
+          "agents": 21,
+          "buckets": {
+            "none|crowd": {
+              "action_kinds": {
+                "do_task": 39,
+                "move": 77,
+                "repair_sabotage": 6,
+                "report": 6,
+                "wait": 15
+              },
+              "decisions": 143,
+              "entropy": 1.7172408534782724
+            },
+            "none|pair": {
+              "action_kinds": {
+                "do_task": 75,
+                "move": 52,
+                "report": 7,
+                "wait": 26
+              },
+              "decisions": 160,
+              "entropy": 1.6628831932836157
+            },
+            "none|solo": {
+              "action_kinds": {
+                "do_task": 129,
+                "move": 54,
+                "repair_sabotage": 1,
+                "report": 5,
+                "wait": 19
+              },
+              "decisions": 208,
+              "entropy": 1.4142257551781499
+            }
+          },
+          "decisions": 511,
+          "mean_conditional_entropy": 0.9006803050093686,
+          "mean_unconditional_entropy": 1.1786092471254337
+        },
+        "IMPOSTOR": {
+          "agents": 6,
+          "buckets": {
+            "cooling|crowd": {
+              "action_kinds": {
+                "move": 2,
+                "wait": 19
+              },
+              "decisions": 21,
+              "entropy": 0.4537163391869448
+            },
+            "cooling|pair": {
+              "action_kinds": {
+                "move": 2,
+                "wait": 17
+              },
+              "decisions": 19,
+              "entropy": 0.4854607607459134
+            },
+            "cooling|solo": {
+              "action_kinds": {
+                "move": 1,
+                "sabotage": 1,
+                "vent": 22,
+                "wait": 11
+              },
+              "decisions": 35,
+              "entropy": 1.2389617765155148
+            },
+            "ready|crowd": {
+              "action_kinds": {
+                "kill": 8,
+                "move": 2,
+                "wait": 1
+              },
+              "decisions": 11,
+              "entropy": 1.0957952550009336
+            },
+            "ready|pair": {
+              "action_kinds": {
+                "kill": 12,
+                "move": 7
+              },
+              "decisions": 19,
+              "entropy": 0.9494520153879484
+            },
+            "ready|solo": {
+              "action_kinds": {
+                "move": 43,
+                "sabotage": 1,
+                "wait": 6
+              },
+              "decisions": 50,
+              "entropy": 0.6670730006443817
+            }
+          },
+          "decisions": 155,
+          "mean_conditional_entropy": 0.44053254628691385,
+          "mean_unconditional_entropy": 1.7268905436034327
+        }
+      },
+      "games_total": 3,
+      "kills_total": 14,
+      "mean_co_present_unwitnessed": 0.0,
+      "mean_co_present_witnessed": 0.75,
+      "mean_one_hop_unwitnessed": 0.5,
+      "mean_one_hop_witnessed": 0.5,
+      "num_impostors": 2,
+      "num_players": 9,
+      "one_hop_histogram": {
+        "0": 9,
+        "1": 3,
+        "2": 2
+      },
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/000-run-01-utility-champion-alternating-freeze-champion-gen9-8ac3652a74f8",
+      "tasks_per_crewmate": 2,
+      "witnessed_point_biserial_co_present": 0.8257228238447706,
+      "witnessed_point_biserial_within_one_hop": 0.48412291827592707
+    },
+    "off_menu": {
+      "games_total": 3,
+      "impostor_decisions": 155,
+      "num_impostors": 2,
+      "num_players": 9,
+      "off_menu_by_kind": 0,
+      "off_menu_by_target": 0,
+      "off_menu_rate": 0.0,
+      "off_menu_total": 0,
+      "on_menu_total": 155,
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/000-run-01-utility-champion-alternating-freeze-champion-gen9-8ac3652a74f8",
+      "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+      "tasks_per_crewmate": 2
+    },
+    "sample_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/000-run-01-utility-champion-alternating-freeze-champion-gen9-8ac3652a74f8"
+  },
+  {
+    "baseline_cells_corpus_9p2i": {
+      "alibi_survival_rate": [
+        11,
+        14
+      ],
+      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_witnessed_kill_rate": [
+        20,
+        599
+      ],
+      "effective_deflection_rate": [
+        47,
+        196
+      ],
+      "false_vouch_corroboration_rate": [
+        13,
+        46
+      ],
+      "false_vouch_saw_player_rate": [
+        34,
+        149
+      ],
+      "frame_attempt_rate": [
+        415,
+        541
+      ],
+      "frame_conversion_rate": [
+        5,
+        415
+      ],
+      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "off_menu_rate": [
+        0,
+        7693
+      ],
+      "teammate_accusation_rate": [
+        0,
+        455
+      ],
+      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+    },
+    "byte_complete": true,
+    "deception": {
+      "alibi_fabrication": {
+        "survival_rate": 1.0,
+        "survived": 1,
+        "total_impostor_alibis": 1
+      },
+      "corroboration_claims_impostor": 7,
+      "corroboration_claims_total": 25,
+      "crew_ejected_meetings": 0,
+      "effective_deflection": {
+        "accused_impostor_events": 8,
+        "accused_impostor_survivals": 5,
+        "active_survivals": 5,
+        "effective_deflections": 1,
+        "named_target_deflections": 1,
+        "skip_saved_active_survivals": 4,
+        "third_party_deflections": 0
+      },
+      "false_vouch_corroboration_rate": 0.14285714285714285,
+      "false_vouch_corroborations": 1,
+      "false_vouch_fabricated": 0,
+      "false_vouch_fabricated_subject_observations": 0,
+      "false_vouch_grounded": 3,
+      "false_vouch_grounded_share": 1.0,
+      "false_vouch_grounded_subject_observations": 4,
+      "false_vouch_saw_player_observations": 4,
+      "false_vouch_saw_player_rate": 0.23529411764705882,
+      "false_vouch_subject_events": 3,
+      "false_vouches_total": 5,
+      "frame_attempt_meetings": 9,
+      "frame_attempts": 13,
+      "frame_conversions": {
+        "advisory": true,
+        "denominator": 9,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.2991527535509594,
+        "wilson_low": 0.0
+      },
+      "games_total": 3,
+      "impostor_accusations_total": 13,
+      "impostor_ejected_meetings": 3,
+      "impostor_self_accusations": 0,
+      "meetings_total": 10,
+      "no_eject_meetings": 7,
+      "num_impostors": 2,
+      "num_players": 9,
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/001-run-01-utility-champion-alternating-freeze-champion-gen3-6d327dcbde94",
+      "tasks_per_crewmate": 2,
+      "teammate_accusations": {
+        "advisory": true,
+        "denominator": 13,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.22810184305529166,
+        "wilson_low": 0.0
+      },
+      "vouch_observations_impostor": 17
+    },
+    "kill_craft": {
+      "co_present_histogram": {
+        "0": 9,
+        "1": 4
+      },
+      "crew_witnessed_kills": 5,
+      "entropy_by_side": {
+        "CREWMATE": {
+          "agents": 21,
+          "buckets": {
+            "none|crowd": {
+              "action_kinds": {
+                "do_task": 49,
+                "move": 87,
+                "repair_sabotage": 6,
+                "report": 9,
+                "wait": 10
+              },
+              "decisions": 161,
+              "entropy": 1.66063583794899
+            },
+            "none|pair": {
+              "action_kinds": {
+                "do_task": 63,
+                "move": 46,
+                "report": 3,
+                "wait": 16
+              },
+              "decisions": 128,
+              "entropy": 1.5358799010837436
+            },
+            "none|solo": {
+              "action_kinds": {
+                "do_task": 126,
+                "move": 45,
+                "report": 4,
+                "wait": 12
+              },
+              "decisions": 187,
+              "entropy": 1.251224889275451
+            }
+          },
+          "decisions": 476,
+          "mean_conditional_entropy": 0.8624824880481111,
+          "mean_unconditional_entropy": 1.1650952735584734
+        },
+        "IMPOSTOR": {
+          "agents": 6,
+          "buckets": {
+            "cooling|crowd": {
+              "action_kinds": {
+                "move": 4,
+                "vent": 1,
+                "wait": 22
+              },
+              "decisions": 27,
+              "entropy": 0.824980257347893
+            },
+            "cooling|pair": {
+              "action_kinds": {
+                "move": 3,
+                "sabotage": 1,
+                "vent": 2,
+                "wait": 24
+              },
+              "decisions": 30,
+              "entropy": 1.0137576782928113
+            },
+            "cooling|solo": {
+              "action_kinds": {
+                "move": 1,
+                "vent": 9,
+                "wait": 9
+              },
+              "decisions": 19,
+              "entropy": 1.2448406699719212
+            },
+            "ready|crowd": {
+              "action_kinds": {
+                "kill": 11,
+                "move": 5,
+                "sabotage": 1,
+                "wait": 3
+              },
+              "decisions": 20,
+              "entropy": 1.6010143058068347
+            },
+            "ready|pair": {
+              "action_kinds": {
+                "kill": 11,
+                "move": 13,
+                "sabotage": 2,
+                "vent": 1,
+                "wait": 14
+              },
+              "decisions": 41,
+              "entropy": 1.9072487595046468
+            },
+            "ready|solo": {
+              "action_kinds": {
+                "move": 33,
+                "vent": 1,
+                "wait": 10
+              },
+              "decisions": 44,
+              "entropy": 0.9211523711895112
+            }
+          },
+          "decisions": 181,
+          "mean_conditional_entropy": 0.8820973009601634,
+          "mean_unconditional_entropy": 1.7203759943913024
+        }
+      },
+      "games_total": 3,
+      "kills_total": 13,
+      "mean_co_present_unwitnessed": 0.0,
+      "mean_co_present_witnessed": 0.8,
+      "mean_one_hop_unwitnessed": 0.5,
+      "mean_one_hop_witnessed": 0.6,
+      "num_impostors": 2,
+      "num_players": 9,
+      "one_hop_histogram": {
+        "0": 8,
+        "1": 3,
+        "2": 2
+      },
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/001-run-01-utility-champion-alternating-freeze-champion-gen3-6d327dcbde94",
+      "tasks_per_crewmate": 2,
+      "witnessed_point_biserial_co_present": 0.8432740427115679,
+      "witnessed_point_biserial_within_one_hop": 0.5692099788303082
+    },
+    "off_menu": {
+      "games_total": 3,
+      "impostor_decisions": 181,
+      "num_impostors": 2,
+      "num_players": 9,
+      "off_menu_by_kind": 0,
+      "off_menu_by_target": 0,
+      "off_menu_rate": 0.0,
+      "off_menu_total": 0,
+      "on_menu_total": 181,
+      "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/001-run-01-utility-champion-alternating-freeze-champion-gen3-6d327dcbde94",
+      "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+      "tasks_per_crewmate": 2
+    },
+    "sample_dir": "/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/recordings-4003-4005/001-run-01-utility-champion-alternating-freeze-champion-gen3-6d327dcbde94"
+  }
+]
