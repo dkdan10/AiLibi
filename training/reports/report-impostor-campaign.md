@@ -11,10 +11,20 @@ emergence instruments.
 audits/audit-phase-17-close.md §1.3 (the flip bar the campaign aims at);
 audits/audit-phase-18-emergence-preregistration.md (the 18.4 ratified bars);
 report-goodhart-probe.md "Blockers" (the four named blockers, folded verbatim in §1.2).
-**Date started:** 2026-07-23 (session 1). **Date completed:** 2026-07-24 (session 2).
-**Status:** RECORDING PROGRAM COMPLETE — all rows, legs, sweeps, and ablations recorded;
-finalists named (§8). Claims are 18.27's, adoption is 18.26/18.27's, the close is
-18.28's. §2 is the session ledger; every row, leg, and sweep states its session.
+**Date started:** 2026-07-23 (session 1). **Last evidence recorded:** 2026-07-26
+(session 4 — the review rounds produced the back-fill, the comparator arm, the encoder
+ablation, and the K=2 runner-up legs; see §2).
+**Status: PROVISIONAL — the per-generation top-K (K=2) coverage the contract asks for is
+COMPLETE FOR ONE LINEAGE ONLY (run-02).** All rows, swap-boundary legs, per-generation
+CHAMPION legs, sweeps and ablations are recorded across all five lineages; the K=2
+runner-up slice is recorded for run-02 only, and §4.10 demonstrated that slice can carry
+finalist-grade candidates (two entered §8). The other four lineages' ~40 runner-ups are
+unevaluated, so **§8's finalist slate is provisional and this campaign should not be
+consumed as a complete per-generation top-K selection** — F10 states the exposure and
+routes the decision (fund the remaining ~240 games, or accept a run-02-complete slate)
+to the owner/18.28 BEFORE 18.26's finalist spend. Claims are 18.27's, adoption is
+18.26/18.27's, the close is 18.28's. §2 is the session ledger; every row, leg, and sweep
+states its session.
 
 ---
 
@@ -155,7 +165,8 @@ in session 1 (§3).
 | 3 | 2026-07-25 | Codex rounds 1–2 absorbed: evidence committed in-repo (60+30 recordings + manifests), baseline-6 comparator corrected, per-tranche prescreen records (F9), the 5 intermediates recovered via the scenario seam (F1 resolved) + 30 back-fill games recorded and processed (§4.9); §8 finalists REVISED | session 3 |
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
-**The campaign's recording program is COMPLETE through session 4** — **20 legs / 135 real
+**The campaign's recording program is complete for every lineage's CHAMPION slice and,
+at K=2, for run-02 only (the §1/F10 provisional status)** — **20 legs / 135 real
 games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation + 3 FSM comparator + 36
 K=2 runner-up; five sha256 manifests
 under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
@@ -302,12 +313,16 @@ updated its impostor champion in **4 of its 6 moving generations** (gens 1, 2, 3
 its crew champion in 5 of 6 — 9 updates across the run's 12 generations, counted from
 the committed rows' `champion_updated` column.
 
-**Cycling verdict: the pre-registered signature is PRESENT on the impostor side** — the
-co-matchup payoff rises strongly (0.04 → 3.20, +3.16) while the champion-side absolute
-anchor stays flat-to-down (−0.82 → −1.22): motion against the co-adapting pool without
-absolute progress against the FSM anchor. This is the clearest Red-Queen reading of the
-session (and the expected one for a from-scratch policy adapting to its opponent
-distribution). The crew side reads as mild real progress (+0.14 anchor, payoffs up).
+**Cycling verdict: SIGNATURE-ADJACENT, NOT present — the oscillation half is unmet.**
+The champion-side absolute anchor stays flat-to-down (−0.82 → −1.22) while the co-matchup
+payoff rises 0.04 → 0.45 → 1.14 → 1.14 → 3.20, i.e. **monotone non-decreasing with no
+reversal anywhere in the sequence**. The pre-registered detector defines cycling as an
+OSCILLATING co-matchup beside a flat anchor; a monotone rise is opponent-relative
+improvement without absolute progress, which is adjacent to the Red-Queen reading but is
+not it. Classified inconclusive-adjacent pending an observed reversal (an earlier
+revision of this line called the signature PRESENT on these two impostor swaps — that
+overread a monotone series as oscillation). The crew side reads as mild real progress
+(+0.14 anchor, payoffs up).
 
 ### 3.5 run-05-freepolicy-v2-founders (session 1 — COMPLETE, 848 games, 4 rows)
 
@@ -340,9 +355,14 @@ founders (F2), exercised end-to-end here.
   observed directly.
 - **Exploiter probe earns its cost:** **35 frozen exploits across the five runs** (31 in
   runs 01–04: 7/10/9/5; 4 in run 05), counted from the committed hall indexes'
-  `exploiter-probe` members on both sides; every crew champion of the session is
-  exploitable by an impostor-family exploiter at +2 to +11 over the FSM bar, and those
-  exploits then serve as opponents.
+  `exploiter-probe` members on both sides; the stream is side-asymmetric and one
+  lineage is a clean exception: impostor-family exploiters (found while CREW was moving,
+  frozen into the impostor hall) number 6 / 4 / 6 / **0** / 2 for runs 01–05 — **run-04's
+  v3 crew champions were never exploited, with all six crew-moving generations reporting
+  `exploiter_outcome="not-found"`** — while crew-family exploiters number 1 / 6 / 3 / 5 / 2.
+  Where they are found they beat the bar by +2 to +11, and those exploits then serve as
+  opponents. (An earlier revision claimed every crew champion of the session was
+  exploitable; run-04 contradicts it.)
 - **No retirement events fired** (staleness cap 8 vs ≤6 servable generations per pool
   member at this budget) — the retire-and-replace sanity read stays pending a
   longer-horizon session.
@@ -944,6 +964,44 @@ Two readings this arm buys (both at small n — 3 games — and therefore adviso
    denominators here (4 active survivals) are far too small to rule on — 18.26's
    50-seed comparator arm is still the venue. Quoted, not ruled.
 
+
+### 5.10 Sweep — the K=2 runner-up legs (36 real games, both tranches; fence PASSED)
+
+Required because two runner-ups are named finalists (§8) and 18.27 consumes this
+report's sweep cells. Aggregated over all six runner-ups per tranche:
+
+| cell | runner-ups t1 (18 games) | runner-ups t2 (18 games) | pooled | corpus 9p2i |
+|---|---|---|---|---|
+| off-menu | 0 / 855 | 0 / 911 | **0 / 1 766** (structural) | 0 / 6 663 |
+| meetings | 67 | 54 | 121 | 463 |
+| kills (crew-witnessed) | 79 (19) | 78 (24) | 157 (43) = 0.274 | 505 (12) = 0.024 |
+| frame-attempt meetings | 66/67 | 53/54 | 119/121 = 0.983 | 437/463 = 0.944 |
+| frame conversions | 4 | 6 | 10/119 = 0.084 | 23/437 = 0.053 |
+| teammate accusations | 0/93 | 0/79 | **0/172** | 0/549 |
+| effective deflection | 20/49 | 6/38 | **26/87 = 0.299** | 69/152 = 0.454 |
+| alibi survival | 14/19 | 14/15 | 28/34 = 0.824 | 59/77 = 0.766 |
+| false-vouch (saw_player) | 16/111 | 7/88 | 23/199 = 0.116 | 74/602 = 0.123 |
+
+Classification of what this surfaces:
+
+- **Off-menu 0/1 766** — the utility family's structural zero, as everywhere (context,
+  no candidacy).
+- **Crew-witnessed kill rate 0.274 vs corpus 0.024** — the largest cell movement in the
+  runner-up arms, and NOT a new candidate: the same elevation appears across every
+  utility arm of this campaign (the witnessed gauge PASSES on essentially every utility
+  candidate in §4, including the un-levered committed-champion control), so no campaign
+  lever explains it and §6.c is unsatisfiable by construction — the same shape as §5.8's
+  deflection cell, with the same comparator: §5.9's same-seed FSM arm reads 11 kills / 0
+  witnessed, so learned-vs-scripted is again the live hypothesis for 18.26 to resolve,
+  not a lever claim.
+- **Deflection 0.299 vs corpus 0.454** — inside the family-wide depression §5.8 already
+  classifies NOT-DEMONSTRATED on control-arm evidence; changes nothing.
+- **Alibi 28/34, teammate 0/172, false-vouch 0.116, frame 0.983 / conversions 0.084** —
+  all inside established campaign ranges; nothing new surfaced.
+
+No runner-up arm surfaces a candidate emergence behavior that a campaign lever could
+ablate, so the §6 ablation set is unchanged by these legs.
+
 <!-- all sweeps recorded -->
 
 ---
@@ -1208,8 +1266,8 @@ guard was clean, and no selection leans on conviction-influenced ordering.
 | **6. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
 | **7. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
 
-Every entry is λ=4-lineage or anchor-seam utility-family. **Slate-completeness caveat
-(F10):** this ladder is complete for run-02's K=2 slice and for every lineage's
+Every entry is λ=4-lineage or anchor-seam utility-family. **This slate is PROVISIONAL
+(F10, and the status line at the head of this report):** this ladder is complete for run-02's K=2 slice and for every lineage's
 champions; the other four lineages' runner-ups are unevaluated, and §4.10 shows that
 slice can carry finalist-grade candidates. 18.26's spend on the top N is the owner's
 call at ~5 h/finalist under the ratified 50-seed protocol.
@@ -1230,16 +1288,37 @@ re-derives from committed bytes (deterministic under `master_seed` on the record
 platform; configs below). **Real path (§4/§5): recorded evidence, not re-derivable** —
 Featherless meetings are provider-nondeterministic, so re-running the seeds cannot
 reproduce the exact bytes. The committed evidence extracts live at
-`training/artifacts/coevo/realpath/<run>/`: every ranking row (`ranking-*.jsonl`, the
-full 17.14 records incl. stamp proofs, gauges, and seed telemetry), every pre-screen
-quote (`prescreen-quotes.json`), every instrument sweep (`sweep-*.json`), the
-re-anchored baseline cells (`baseline-cells-corpus.json`), and the sha256
-manifest of all 60 raw recordings (`recordings-manifest.sha256`), the leg/chain logs that fix pre-screen-before-spend ordering (`provenance/`) — **and the 60 raw
-replay files themselves, committed at the manifest's paths under
-`training/artifacts/coevo/realpath/` (28 MB; audit sidecars excluded — the instruments
-never read them), so collaborators and CI can verify the manifest and 18.27 can
-re-read the bytes from a fresh checkout**. The operator-machine copy at
-`~/ailibi-campaign-1824/` is now redundant. The five run configs are exactly:
+`training/artifacts/coevo/<root>/<run>/` for every arm: each ranking row
+(`ranking-*.jsonl`, the full 17.14 records incl. stamp proofs, gauges, seed telemetry),
+each pre-screen quote file (per tranche), each instrument sweep (`sweep-*.json`), the
+re-anchored baseline cells (`baseline-cells-corpus.json`), the leg/chain logs that fix
+pre-screen-before-spend ordering (`provenance/`), the as-recorded→repository path map
+for every `replay_set_dir`/`sample_dir` field (`PATHS.md` — those fields are left
+verbatim as library output rather than rewritten, so an extract never disagrees with the
+process that produced it) — **and all 135 raw replay files themselves, committed at
+their manifests' paths (audit sidecars excluded; no instrument reads them), so
+collaborators and CI can verify every manifest and 18.27 can re-read any arm's bytes
+from a fresh checkout**. The five roots / six manifests that content-address the
+complete real-path corpus:
+
+| root under `training/artifacts/coevo/` | manifest | recordings |
+|---|---|---|
+| `realpath/` | `recordings-manifest.sha256` | 60 — swap-boundary legs (5 lineages × 2 tranches) |
+| `realpath-backfill/` | `recordings-manifest.sha256` | 30 — the 5 recovered per-generation champions |
+| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, tranche 1 |
+| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 18 — K=2 runner-ups, tranche 2 |
+| `realpath-ablation/ablation-run-04-encoder-v3/` | `recordings-manifest.sha256` | 6 — the registered off-menu ablation |
+| `realpath-comparator/` | `recordings-manifest.sha256` | 3 — same-seed scripted-FSM comparator |
+| | **total** | **135** |
+
+Verify every manifest from a fresh checkout:
+
+```bash
+find training/artifacts/coevo -name 'recordings-manifest*.sha256' -print0 | \
+  xargs -0 -I{} sh -c 'cd "$(dirname {})" && shasum -a 256 -c "$(basename {})"'
+```
+
+The operator-machine copies at `~/ailibi-campaign-1824/` are now redundant. The five run configs are exactly:
 
 ```python
 # session harness (operator-authored; the machinery is consumed frozen)
