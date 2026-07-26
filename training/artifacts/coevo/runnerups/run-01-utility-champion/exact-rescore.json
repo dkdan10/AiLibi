@@ -1,0 +1,194 @@
+{
+  "1": {
+    "champion_is_rank1": false,
+    "committed_champion": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "exact_ranking": [
+      [
+        20.166017,
+        "6cf5ffb68774"
+      ],
+      [
+        20.130684,
+        "e6232cd4ccb8"
+      ],
+      [
+        19.456905,
+        "0cd9cdfe2326"
+      ],
+      [
+        19.445436,
+        "d51194c7cb9b"
+      ],
+      [
+        18.814292,
+        "c741330b106b"
+      ],
+      [
+        18.734287,
+        "b90865e7685a"
+      ]
+    ],
+    "margin_rank1_rank2": 0.035333,
+    "runner_up": "6cf5ffb687746790b2124ff12de6cbbbc5dab7f61d9987cd6affcd9ad8abd580"
+  },
+  "2": {
+    "champion_is_rank1": false,
+    "committed_champion": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "exact_ranking": [
+      [
+        20.074739,
+        "7c093a035369"
+      ],
+      [
+        19.852764,
+        "967fa83ca685"
+      ],
+      [
+        19.475259,
+        "86954fca627a"
+      ],
+      [
+        18.929531,
+        "66e4f55d00c9"
+      ],
+      [
+        18.894123,
+        "fc99d4e5b2ca"
+      ],
+      [
+        18.376808,
+        "07f86446edef"
+      ]
+    ],
+    "margin_rank1_rank2": 0.221975,
+    "runner_up": "7c093a035369826920ba9aea96a83d60cea8d595387bc72832c43dc18bd2daec"
+  },
+  "3": {
+    "champion_is_rank1": false,
+    "committed_champion": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "exact_ranking": [
+      [
+        20.098914,
+        "11aa68637a8f"
+      ],
+      [
+        20.053319,
+        "bdb3e9092129"
+      ],
+      [
+        19.814716,
+        "9d0fcebea62c"
+      ],
+      [
+        19.44535,
+        "ea8a72aff64c"
+      ],
+      [
+        19.371049,
+        "c7527aa61233"
+      ],
+      [
+        18.356635,
+        "e4d129cf7d20"
+      ]
+    ],
+    "margin_rank1_rank2": 0.045595,
+    "runner_up": "11aa68637a8f12e53780db29cabffb7f88af437f0635db9af3aacdc1014260c4"
+  },
+  "7": {
+    "champion_is_rank1": true,
+    "committed_champion": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
+    "exact_ranking": [
+      [
+        19.743881,
+        "8ac3652a74f8"
+      ],
+      [
+        19.653805,
+        "e531c1f9a704"
+      ],
+      [
+        19.445062,
+        "4f60bfdf1add"
+      ],
+      [
+        19.430028,
+        "70a136c37d7a"
+      ],
+      [
+        19.393162,
+        "798da1649965"
+      ],
+      [
+        18.745076,
+        "2b45ae1fe32f"
+      ]
+    ],
+    "margin_rank1_rank2": 0.090076,
+    "runner_up": "e531c1f9a704a5011b4ff0150e6f263422d5295c7954ed3b5165d2ad9d16ad26"
+  },
+  "8": {
+    "champion_is_rank1": false,
+    "committed_champion": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
+    "exact_ranking": [
+      [
+        19.711851,
+        "609ea9ce9e87"
+      ],
+      [
+        19.590699,
+        "9673fac8092e"
+      ],
+      [
+        19.58894,
+        "499dcbfae1e5"
+      ],
+      [
+        19.490157,
+        "ab033cb0d461"
+      ],
+      [
+        19.219726,
+        "5a07a4e4e7f6"
+      ],
+      [
+        14.869544,
+        "6a102d731fed"
+      ]
+    ],
+    "margin_rank1_rank2": 0.121151,
+    "runner_up": "609ea9ce9e878cded117da0b20a24ee6b4fbc47c66dec5344ded0defb581876c"
+  },
+  "9": {
+    "champion_is_rank1": false,
+    "committed_champion": "8ac3652a74f81e72440f960a68fa8ae258dd033451d9982592fb48daaa1a7d45",
+    "exact_ranking": [
+      [
+        19.591352,
+        "1f5efd3c2f47"
+      ],
+      [
+        19.531316,
+        "45b840665b0f"
+      ],
+      [
+        19.455117,
+        "ab5ce653cabc"
+      ],
+      [
+        18.577216,
+        "09d53ab0d861"
+      ],
+      [
+        14.937059,
+        "2f9c3532c3a6"
+      ],
+      [
+        14.917028,
+        "5c0fe66ee99b"
+      ]
+    ],
+    "margin_rank1_rank2": 0.060036,
+    "runner_up": "1f5efd3c2f47462c4373ca2e051e12007d60aa9dfc222173821099cfa258c26f"
+  }
+}
