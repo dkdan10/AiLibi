@@ -750,7 +750,12 @@ class TacticalRolloutEnv:
             tasks_per_crewmate=self._tasks_per_crewmate,
         )
 
-    def rollout_injected(self, initial_state: WorldState) -> EpisodeRollout:
+    def rollout_injected(
+        self,
+        initial_state: WorldState,
+        *,
+        agent_factory: AgentFactory | None = None,
+    ) -> EpisodeRollout:
         """Run one no-replay episode from an injected mid-game state (Task 18.23).
 
         The env half of the scenario-staging seam: drives
@@ -762,6 +767,18 @@ class TacticalRolloutEnv:
         the recording path is structurally wrong for it and the mismatch fails
         loud here rather than deep in reconstruction (AGENTS.md "no silent
         fallbacks").
+
+        ``agent_factory`` (default ``None`` = the env's interposition factory
+        with the constructor's ``intent_selector``) lets a scenario episode run
+        the campaign's OWN memory-aware agents — e.g. the factory
+        ``training.coevo.factory.build_coevo_factory`` builds over the sides'
+        learned policies, whose wrappers read the inner agent's live
+        ``AgentMemory`` (the v3 meeting-history / last-seen channels an
+        :data:`IntentSelector` never sees). Mutually exclusive with a
+        constructor ``intent_selector`` (fail loud rather than silently ignore
+        one seam), and a supplied factory owns its OWN mid-game trackers: the
+        interposition factory's mask-side emergency seeding applies only to
+        the default path.
 
         The roster (``num_players`` / ``num_impostors``) is derived from the
         injected state itself, so the episode record is consistent with the
@@ -788,6 +805,13 @@ class TacticalRolloutEnv:
                 "(Task 18.23): an injected episode has no recorded hash chain "
                 "to reconstruct, so the env must be constructed with "
                 "no_replay=True."
+            )
+        if agent_factory is not None and self._intent_selector is not None:
+            raise ValueError(
+                "rollout_injected() received an explicit agent_factory but the "
+                "env was constructed with an intent_selector; the two are "
+                "competing agent seams, so pass exactly one (drop the selector "
+                "to drive the episode through the supplied factory)."
             )
         if initial_state.tick >= self._max_ticks:
             raise ValueError(
@@ -825,12 +849,19 @@ class TacticalRolloutEnv:
             if player.alive and player.role == "CREWMATE"
         ]
         tasks_per_crewmate = max(instances_per_crewmate, default=0)
-        # Seed the mask-side emergency trackers with the staged state's spent
-        # uses, so the mask keeps mirroring engine legality mid-game.
-        factory = build_interposition_factory(
-            game_map=self._game_map,
-            intent_selector=self._intent_selector,
-            emergency_uses_spent=initial_state.emergency_uses,
+        # Default path: the interposition factory, its mask-side emergency
+        # trackers seeded with the staged state's spent uses so the mask keeps
+        # mirroring engine legality mid-game. A supplied factory replaces the
+        # whole agent seam (the campaign's memory-aware wrappers) and owns its
+        # own trackers.
+        factory = (
+            agent_factory
+            if agent_factory is not None
+            else build_interposition_factory(
+                game_map=self._game_map,
+                intent_selector=self._intent_selector,
+                emergency_uses_spent=initial_state.emergency_uses,
+            )
         )
         game = HeadlessGame(
             seed=initial_state.seed,

@@ -764,3 +764,47 @@ def test_rollout_injected_rejects_invalid_emergency_counters() -> None:
         )
     with pytest.raises(ValueError, match="not on its roster"):
         env.rollout_injected(replace(base, emergency_uses={"p-99": 1}))
+
+
+def test_rollout_injected_accepts_an_explicit_agent_factory() -> None:
+    """The campaign-agent seam: an explicit factory replaces the default one.
+
+    ``agent_factory`` swaps WHO builds the agents (e.g. the coevo factory's
+    memory-aware wrappers), never the machinery around them — so handing the
+    seam the exact factory the default path would have built must reproduce
+    the default injected episode byte-for-byte.
+    """
+
+    game_map = load_canonical_map()
+    state = replace(_base_state(game_map), tick=10)
+    default_episode = _env(no_replay=True).rollout_injected(state)
+    factory = build_interposition_factory(
+        game_map=game_map,
+        intent_selector=None,
+        emergency_uses_spent=state.emergency_uses,
+    )
+    explicit = _env(no_replay=True).rollout_injected(state, agent_factory=factory)
+    assert explicit.state_hashes == default_episode.state_hashes
+    assert explicit.frames == default_episode.frames
+    assert explicit.events == default_episode.events
+    assert explicit.meetings == default_episode.meetings
+
+
+def test_rollout_injected_rejects_competing_agent_seams() -> None:
+    """An explicit factory plus a constructor selector is refused, fail loud.
+
+    Both claim the whole agent seam; silently ignoring either would run a
+    different episode than the caller configured (AGENTS.md no silent
+    fallbacks).
+    """
+
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+
+    def delegate(decision: MaskedDecision) -> ActionIntent:
+        return decision.fsm_intent
+
+    env = _env(no_replay=True, intent_selector=delegate)
+    factory = build_interposition_factory(game_map=game_map)
+    with pytest.raises(ValueError, match="competing agent seams"):
+        env.rollout_injected(state, agent_factory=factory)

@@ -70,7 +70,7 @@ from engine.events import (
 )
 from engine.rng import EngineRng, RngStateHashPolicy
 from engine.world import Map, WorldState, load_canonical_map
-from orchestrator.game import MeetingRunner
+from orchestrator.game import AgentFactory, MeetingRunner
 from training.coevo.driver import CoevoScenarioTerm
 from training.coevo.hall_of_fame import Side
 from training.env import IntentSelector, TacticalRolloutEnv
@@ -89,6 +89,14 @@ ScenarioStateBuilder: TypeAlias = Callable[[Map, int], WorldState]
 #: drives its scenario episodes (the provider closes over this — the selector
 #: itself is responsible for delegating the other side's decisions to the FSM).
 SelectorBuilder: TypeAlias = Callable[[tuple[float, ...]], IntentSelector]
+
+#: Turns one flat genome into a full :data:`~orchestrator.game.AgentFactory`
+#: for its scenario episodes — the campaign-faithful path: a factory built the
+#: way the driver builds its own (e.g. ``build_coevo_factory`` over the side's
+#: ``build_policy``) wraps memory-aware learned agents whose live
+#: ``AgentMemory`` feeds the v3 meeting-history / last-seen channels that an
+#: :data:`IntentSelector` (packet + mask only) can never see.
+AgentFactoryBuilder: TypeAlias = Callable[[tuple[float, ...]], AgentFactory]
 
 # The runtime-valid side set, derived from the ``Side`` Literal so it never
 # drifts (the ``training.rewards._validate_side`` precedent): a side arriving
@@ -931,22 +939,34 @@ class ScenarioProvider:
     horizon-capped by construction (``spec.staged_tick + spec.horizon_ticks``),
     far below a full game.
 
-    ``selector_builders`` maps each side to a genome→selector factory; the
-    built selector drives EVERY agent in the episode, so it is responsible for
-    delegating decisions it does not own (typically the other side's, via
-    ``MaskedDecision.fsm_intent``). ``meeting_runner_factory`` installs an
-    ejection-capable meeting layer in the scenario episodes (the env's default
-    forced-fake layer resolves every meeting SKIPPED, so ejection-conditioned
-    fitness clauses only become fully live through this seam).
-    ``rng_hash_policy`` forwards the standard training fast-path opt-in
-    (trajectories — and therefore fitness — are identical under either
-    policy).
+    Each side is driven through exactly one of two seams. ``selector_builders``
+    maps a side to a genome→selector factory; the built selector drives EVERY
+    agent in the episode, so it is responsible for delegating decisions it does
+    not own (typically the other side's, via ``MaskedDecision.fsm_intent``).
+    ``agent_factory_builders`` maps a side to a genome→\
+    :data:`~orchestrator.game.AgentFactory` factory instead — the
+    campaign-faithful path: a factory built the way the driver's own rollouts
+    build theirs (``build_coevo_factory`` over the side's policies) wraps
+    memory-aware learned agents whose live ``AgentMemory`` feeds the v3
+    meeting-history / last-seen observation channels that a bare selector
+    (packet + mask only) can never see. A side configured under both seams is
+    refused (two competing drivers for the same episodes), as is a provider
+    with neither (it could only ever return ``()``). A factory builder
+    inherits the purity obligation above: the factory — and every agent it
+    creates — must be deterministic functions of the genome and the episode.
+    ``meeting_runner_factory`` installs an ejection-capable meeting layer in
+    the scenario episodes (the env's default forced-fake layer resolves every
+    meeting SKIPPED, so ejection-conditioned fitness clauses only become fully
+    live through this seam). ``rng_hash_policy`` forwards the standard
+    training fast-path opt-in (trajectories — and therefore fitness — are
+    identical under either policy).
     """
 
     def __init__(
         self,
         *,
-        selector_builders: Mapping[Side, SelectorBuilder],
+        selector_builders: Mapping[Side, SelectorBuilder] | None = None,
+        agent_factory_builders: Mapping[Side, AgentFactoryBuilder] | None = None,
         fitness_seeds: Sequence[int],
         scenarios: Mapping[Side, Sequence[ScenarioSpec]] | None = None,
         game_map: Map | None = None,
@@ -961,17 +981,40 @@ class ScenarioProvider:
                 f"fitness_seeds must be unique, got {seeds!r}: a duplicate seed "
                 "silently double-weights that seed's episode in the scenario mean"
             )
+        selectors = dict(selector_builders) if selector_builders is not None else {}
+        factories = (
+            dict(agent_factory_builders) if agent_factory_builders is not None else {}
+        )
         # The driver only ever asks for the lowercase ``Side`` literals, so a
         # mistyped / role-cased key (``"IMPOSTOR"``) would never be looked up —
         # the provider would return () and a zero budget for the real side,
         # silently disabling every scenario term for a whole campaign
         # (AGENTS.md "no silent fallbacks").
-        for side in selector_builders:
+        for side in selectors:
             if side not in _VALID_SIDES:
                 raise ValueError(
                     f"unknown selector-builder side {side!r}; expected one of "
                     f"{sorted(_VALID_SIDES)}"
                 )
+        for side in factories:
+            if side not in _VALID_SIDES:
+                raise ValueError(
+                    f"unknown agent-factory-builder side {side!r}; expected one "
+                    f"of {sorted(_VALID_SIDES)}"
+                )
+        overlap = selectors.keys() & factories.keys()
+        if overlap:
+            raise ValueError(
+                f"sides {sorted(overlap)!r} appear in both selector_builders and "
+                "agent_factory_builders: the two are competing drivers for the "
+                "same scenario episodes — configure each side under exactly one"
+            )
+        if not selectors and not factories:
+            raise ValueError(
+                "ScenarioProvider needs at least one side in selector_builders "
+                "or agent_factory_builders: with neither it could only ever "
+                "return () and a zero budget (a silently inert provider)"
+            )
         if scenarios is not None:
             for side in scenarios:
                 if side not in _VALID_SIDES:
@@ -1002,7 +1045,8 @@ class ScenarioProvider:
                     "repeated scenario silently double-weights its term in the "
                     "swap's ES fitness (labels ride campaign rows as provenance)"
                 )
-        self._selector_builders = dict(selector_builders)
+        self._selector_builders = selectors
+        self._agent_factory_builders = factories
         self._fitness_seeds = seeds
         self._scenarios = resolved
         self._game_map = game_map if game_map is not None else load_canonical_map()
@@ -1017,11 +1061,14 @@ class ScenarioProvider:
         """Scenario episodes one ES evaluation of ``side`` costs (the budget).
 
         ``len(scenarios[side]) * len(fitness_seeds)`` — every term runs each
-        fitness seed once per genome; 0 when the side has no selector builder
-        or no scenarios (the provider is inert for it).
+        fitness seed once per genome; 0 when the side has no builder (selector
+        or agent-factory) or no scenarios (the provider is inert for it).
         """
 
-        if side not in self._selector_builders:
+        if (
+            side not in self._selector_builders
+            and side not in self._agent_factory_builders
+        ):
             return 0
         return len(self._scenarios.get(side, ())) * len(self._fitness_seeds)
 
@@ -1029,25 +1076,40 @@ class ScenarioProvider:
         # Scenario pressure is swap-independent (the seam passes swap_index for
         # providers that stage curricula; this library serves a constant set).
         del swap_index
-        builder = self._selector_builders.get(side)
+        selector_builder = self._selector_builders.get(side)
+        factory_builder = self._agent_factory_builders.get(side)
         specs = self._scenarios.get(side, ())
-        if builder is None or not specs:
+        if (selector_builder is None and factory_builder is None) or not specs:
             return ()
         return tuple(
             CoevoScenarioTerm(
                 label=spec.name,
-                fitness=self._build_term_fitness(spec, builder),
+                fitness=self._build_term_fitness(
+                    spec,
+                    selector_builder=selector_builder,
+                    factory_builder=factory_builder,
+                ),
             )
             for spec in specs
         )
 
     def _build_term_fitness(
-        self, spec: ScenarioSpec, builder: SelectorBuilder
+        self,
+        spec: ScenarioSpec,
+        *,
+        selector_builder: SelectorBuilder | None,
+        factory_builder: AgentFactoryBuilder | None,
     ) -> Callable[[tuple[float, ...]], float]:
+        # Init refused a side under both seams, so exactly one builder is set.
         def fitness(genome: tuple[float, ...]) -> float:
-            selector = builder(genome)
+            selector = (
+                selector_builder(genome) if selector_builder is not None else None
+            )
+            factory = factory_builder(genome) if factory_builder is not None else None
             total = math.fsum(
-                spec.fitness(self._run_episode(spec, selector, seed))
+                spec.fitness(
+                    self._run_episode(spec, seed, selector=selector, factory=factory)
+                )
                 for seed in self._fitness_seeds
             )
             return total / len(self._fitness_seeds)
@@ -1055,7 +1117,12 @@ class ScenarioProvider:
         return fitness
 
     def _run_episode(
-        self, spec: ScenarioSpec, selector: IntentSelector, seed: int
+        self,
+        spec: ScenarioSpec,
+        seed: int,
+        *,
+        selector: IntentSelector | None,
+        factory: AgentFactory | None,
     ) -> EpisodeRollout:
         state = build_scenario_state(spec, seed=seed, game_map=self._game_map)
         env = TacticalRolloutEnv(
@@ -1066,10 +1133,11 @@ class ScenarioProvider:
             no_replay=True,
             rng_hash_policy=self._rng_hash_policy,
         )
-        return env.rollout_injected(state)
+        return env.rollout_injected(state, agent_factory=factory)
 
 
 __all__ = [
+    "AgentFactoryBuilder",
     "BODY_DISCOVERY_LATENCY",
     "FORCE_PARITY_ENDGAME",
     "KILL_WITH_WITNESS_NEARBY",

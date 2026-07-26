@@ -14,11 +14,13 @@ scenario runs end-to-end (double-run digest equal, fitness pressure visible).
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 
 import pytest
 
+from agents.memory.store import AgentMemory
+from engine.entities import PlayerId
 from engine.events import (
     KilledEvent,
     MeetingTriggeredEvent,
@@ -37,9 +39,14 @@ from observation.action_intent import (
     VentIntent,
     WaitIntent,
 )
+from observation.packet import ObservationPacket
+from observation.public_map import PublicMapView
+from orchestrator.game import AgentFactory
 from orchestrator.replay import _state_hash
 from training.bakeoff.es import ESConfig, evolve
 from training.coevo.driver import CoevoScenarioProvider
+from training.coevo.factory import build_coevo_factory
+from training.determinism import PolicyFrame
 from training.env import IntentSelector, MaskedDecision, TacticalRolloutEnv
 from training.rewards import TruncatedEpisodeError, compute_shaped_reward
 from training.rollout import EpisodeRollout
@@ -49,6 +56,7 @@ from training.scenarios import (
     KILL_WITH_WITNESS_NEARBY,
     SCENARIO_LIBRARY,
     VENT_UNSEEN_UNDER_PATROL,
+    AgentFactoryBuilder,
     ScenarioProvider,
     ScenarioSpec,
     build_scenario_state,
@@ -1001,6 +1009,29 @@ def test_provider_rejects_bad_configurations() -> None:
             fitness_seeds=(0,),
             scenarios={"IMPOSTOR": ()},  # type: ignore[dict-item]
         )
+    with pytest.raises(ValueError, match="unknown agent-factory-builder side"):
+        ScenarioProvider(
+            agent_factory_builders={
+                "IMPOSTOR": _tap_gate_factory_builder(  # type: ignore[dict-item]
+                    _MemoryTapPolicy()
+                )
+            },
+            fitness_seeds=(0,),
+        )
+    # A side under BOTH seams has two competing drivers for the same episodes.
+    with pytest.raises(
+        ValueError, match="both selector_builders and agent_factory_builders"
+    ):
+        ScenarioProvider(
+            selector_builders={"impostor": _impostor_gate_builder},
+            agent_factory_builders={
+                "impostor": _tap_gate_factory_builder(_MemoryTapPolicy())
+            },
+            fitness_seeds=(0,),
+        )
+    # ...and a provider with NEITHER seam could only ever be silently inert.
+    with pytest.raises(ValueError, match="at least one side"):
+        ScenarioProvider(fitness_seeds=(0,))
 
 
 def test_provider_terms_are_pure_and_genome_sensitive() -> None:
@@ -1017,6 +1048,120 @@ def test_provider_terms_are_pure_and_genome_sensitive() -> None:
     # full 2.0 needs the restraint the FSM lacks).
     assert engaged == 1.0
     assert held == 0.0
+
+
+class _MemoryTapPolicy:
+    """A minimal ``BakeoffPolicy``: delegate (or hold) and tap the memory input.
+
+    Records every ``AgentMemory`` object handed to :meth:`evaluate` (strong
+    references, so object identities can never be recycled) — the pin that the
+    factory seam feeds policies the inner agent's LIVE memory, not a fresh
+    per-call construction. ``hold=True`` freezes the impostor instead of
+    delegating, the behavioral lever the genome-sensitivity pin flips.
+    """
+
+    def __init__(self, *, hold: bool = False) -> None:
+        self._hold = hold
+        self.taps: list[tuple[PlayerId, AgentMemory]] = []
+
+    @property
+    def encoder_version(self) -> str:
+        return "impostor-memory-tap-test-v1"
+
+    def evaluate(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> PolicyFrame:
+        del public_map
+        self.taps.append((packet.agent_id, memory))
+        intent: ActionIntent = (
+            WaitIntent(actor=packet.agent_id, type="wait") if self._hold else fsm_intent
+        )
+        return PolicyFrame(
+            agent_id=packet.agent_id,
+            tick=packet.tick,
+            features=(),
+            logits=(),
+            intent=intent,
+        )
+
+    def choice_distribution(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+        memory: AgentMemory,
+        *,
+        fsm_intent: ActionIntent,
+    ) -> Mapping[str, float]:
+        del packet, public_map, memory, fsm_intent
+        return {"delegate": 1.0}
+
+
+def _tap_gate_factory_builder(tap: _MemoryTapPolicy) -> AgentFactoryBuilder:
+    """genome[0] > 0 runs the delegating tap; else a fresh holding policy."""
+
+    def build(genome: tuple[float, ...]) -> AgentFactory:
+        policy = tap if genome[0] > 0.0 else _MemoryTapPolicy(hold=True)
+        return build_coevo_factory(policy, None, game_map=_GAME_MAP)
+
+    return build
+
+
+def test_provider_agent_factory_builders_run_the_campaign_agents() -> None:
+    """The campaign-faithful path: factory-driven episodes feed LIVE memory.
+
+    An ``IntentSelector`` sees a ``MaskedDecision`` (packet + mask) only, so a
+    campaign policy whose features read the agent's own ``AgentMemory`` (the
+    v3 meeting-history / last-seen channels) cannot run through the selector
+    seam. ``agent_factory_builders`` routes scenario episodes through the
+    campaign's own wrappers instead (``build_coevo_factory``, the exact
+    factory the coevo rollouts build): the pin below shows every policy
+    decision received the inner agent's live memory — ONE object per agent
+    per episode, reused across that episode's decisions — while the genome
+    still gates behavior and the term stays pure.
+    """
+
+    tap = _MemoryTapPolicy()
+    provider = ScenarioProvider(
+        agent_factory_builders={"impostor": _tap_gate_factory_builder(tap)},
+        fitness_seeds=(0, 1),
+        scenarios={"impostor": (KILL_WITH_WITNESS_NEARBY,)},
+    )
+    seam: CoevoScenarioProvider = provider
+    terms = seam(0, "impostor")
+    assert [term.label for term in terms] == [
+        "kill-with-witness-nearby-then-survive-the-meeting"
+    ]
+    # The factory seam serves the side's budget exactly like the selector seam.
+    assert provider.games_per_evaluation("impostor") == 2
+    assert provider.games_per_evaluation("crew") == 0
+
+    engaged = terms[0].fitness((1.0,))
+    held = terms[0].fitness((-1.0,))
+    # The tap delegates to the FSM, so the factory path lands exactly on the
+    # pinned FSM baseline (the overkilling FSM keeps the kill credit only);
+    # holding scores nothing; repeat calls agree (the purity contract).
+    assert engaged == 1.0
+    assert held == 0.0
+    assert terms[0].fitness((1.0,)) == engaged
+
+    # The live-memory pin: the delegating tap drove 2 fitness calls x 2 seeds
+    # = 4 episodes, and every decision saw its agent's own live AgentMemory —
+    # one distinct object per episode (fresh agents per game), reused across
+    # all of that episode's decisions (never rebuilt per call).
+    assert tap.taps
+    by_agent: dict[PlayerId, list[AgentMemory]] = {}
+    for agent_id, memory in tap.taps:
+        assert isinstance(memory, AgentMemory)
+        by_agent.setdefault(agent_id, []).append(memory)
+    for memories in by_agent.values():
+        distinct = {id(memory) for memory in memories}
+        assert len(distinct) == 4
+        assert len(memories) > len(distinct)
 
 
 def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:
