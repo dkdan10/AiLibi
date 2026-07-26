@@ -685,14 +685,29 @@ capture stream segments as `[incumbent] + 6 offspring × 6 impostor generations`
 (37 distinct = 37 expected). Each generation's offspring were then re-scored against
 THAT generation's committed slate (`opponent_slate_shas` from the committed rows) over
 the campaign's fitness seeds, and the best non-champion taken as its runner-up.
-**Method validation: the recomputed ranking places the committed champion FIRST in all
-four generations where the champion updated (1, 2, 3, 9)**, and in the two non-updating
-generations (7, 8) the best offspring correctly fails to displace the incumbent — i.e.
-the re-score reproduces the driver's own selection wherever that is checkable. Caveat
-stated plainly: the re-score omits the conviction addend the driver's inner fitness
-carries (replicating it needs the serving wrapper), so it approximates the driver's
-internal ordering; the 4/4 agreement is the evidence that the approximation picks the
-right genomes. Artifacts: `training/artifacts/coevo/runnerups/run-02-utility-lambda4/`.
+**Re-scored on the driver's EXACT objective (session 4, second pass).** The first pass
+omitted the conviction addend the driver's inner fitness carries — a fair objection at
+review, since several runner-up margins are hundredths. The re-score therefore
+replicates `_play` exactly: the fake runner wrapped in `ConvictionServingMeetingRunner`,
+predictions folded into the episode trace, `inner_episode_fitness` recomposed with
+`conviction=` at the lineage's λ=4, averaged over each generation's committed slate
+**with multiplicity as drawn** × the campaign's fitness seeds
+(`runnerups/run-02-utility-lambda4/exact-rescore.json`).
+
+- **Method validation holds on the exact objective**: the champion ranks FIRST in all
+  four generations where it updated (1, 2, 3, 9); in the two non-updating generations
+  (7, 8) the incumbent is not among that generation's offspring, so the best offspring
+  is the K=2 candidate by construction.
+- **It also corrected one artifact.** Five of six runner-ups are confirmed
+  (`3a89655f…` g1, `2b40b2c1…` g2, `cb17deda…` g7, `f280962f…` g8, `bfd145cb…` g9); the
+  **gen-3 runner-up is `76400d72…`, not the `2bac4cfe…` the approximation picked** —
+  the two are separated by 0.06 fitness units, inside the noise the approximation
+  carried. `2bac4cfe…` is retained on disk marked `SUPERSEDED-`, and the corrected
+  genome is frozen and **running its own 6-seed leg**; §8 is unaffected because **both
+  promoted finalists (`bfd145cb…`, `3a89655f…`) are confirmed by the exact re-score**.
+  The evaluated-but-superseded arm's numbers stay in the table below, labelled.
+
+Artifacts: `training/artifacts/coevo/runnerups/run-02-utility-lambda4/`.
 
 **The leg** (6 runner-ups × seeds 4000–4002; pre-screens first, all PASS at 1.2562;
 every row validity PASS, stamp 3/3 uniform sha == digest):
@@ -729,7 +744,7 @@ evidence of a referee-passing policy.**
 | `f280962f…` (gen 8) | 4/6 = 0.667 | **PASS** / FAIL | the non-replicating PASS |
 | `cb17deda…` (gen 7) | 4/6 = 0.667 | FAIL / FAIL | |
 | `2b40b2c1…` (gen 2) | 4/6 = 0.667 | FAIL / FAIL | |
-| `2bac4cfe…` (gen 3) | 3/6 = 0.500 | FAIL / FAIL | |
+| `2bac4cfe…` (gen 3, **SUPERSEDED** — not the exact-objective runner-up) | 3/6 = 0.500 | FAIL / FAIL | replaced by `76400d72…`, leg running |
 
 **The K=2 verdict, stated against the finalist ladder it must be read with:** no
 candidate anywhere in this campaign passes the referee on 6 seeds — but **two runner-ups
