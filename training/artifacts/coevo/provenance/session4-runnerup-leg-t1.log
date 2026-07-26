@@ -1,0 +1,14 @@
+[run-02-utility-lambda4] backfill candidates: [(1, '3a89655f0ae7'), (2, '2b40b2c1f1e8'), (3, '2bac4cfe8b72'), (7, 'cb17deda3cf3'), (8, 'f280962f179f'), (9, 'bfd145cb4883')]
+[run-02-utility-lambda4] prescreen gen1 3a89655f0ae7: pred_flags=1.2562 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen2 2b40b2c1f1e8: pred_flags=1.2562 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen3 2bac4cfe8b72: pred_flags=1.2562 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen7 cb17deda3cf3: pred_flags=1.2300 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen8 f280962f179f: pred_flags=1.2300 pass=True recorded_fake=0
+[run-02-utility-lambda4] prescreen gen9 bfd145cb4883: pred_flags=1.2300 pass=True recorded_fake=0
+[run-02-utility-lambda4] rank 1: run-02-utility-lambda4-runnerup-gen8-f280962f179f sel=1052.77 win=0.6666666666666666
+[run-02-utility-lambda4] rank 2: run-02-utility-lambda4-runnerup-gen3-2bac4cfe8b72 sel=57.43 win=0.3333333333333333
+[run-02-utility-lambda4] rank 3: run-02-utility-lambda4-runnerup-gen9-bfd145cb4883 sel=40.67 win=1.0
+[run-02-utility-lambda4] rank 4: run-02-utility-lambda4-runnerup-gen1-3a89655f0ae7 sel=40.6 win=1.0
+[run-02-utility-lambda4] rank 5: run-02-utility-lambda4-runnerup-gen2-2b40b2c1f1e8 sel=36.5 win=0.6666666666666666
+[run-02-utility-lambda4] rank 6: run-02-utility-lambda4-runnerup-gen7-cb17deda3cf3 sel=21.17 win=1.0
+[run-02-utility-lambda4] BACKFILL LEG DONE 4000-4002

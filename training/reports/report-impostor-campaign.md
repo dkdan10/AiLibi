@@ -621,6 +621,53 @@ tranche-to-tranche exactly as §4.7 measured for the swap champions. The sweeps 
 arms — surfaces the family-wide deflection depression resolved in §5.8 (an earlier
 revision of this line called them "unremarkable ≈ corpus"; that was wrong).
 
+
+### 4.10 The K=2 runner-up leg — run-02 (session 4; 18 real games, tranche 1)
+
+Codex's round-4 P1 held that evaluating only each generation's CHAMPION could miss a
+runner-up that transfers differently on the real path. It does. This leg tests it on the
+finalist-bearing lineage.
+
+**Recovering the runner-ups.** Same public `scenario_provider` seam as F1, extended: the
+zero-valued capturing term sees every evaluated genome in evaluation order, so run-02's
+capture stream segments as `[incumbent] + 6 offspring × 6 impostor generations`
+(37 distinct = 37 expected). Each generation's offspring were then re-scored against
+THAT generation's committed slate (`opponent_slate_shas` from the committed rows) over
+the campaign's fitness seeds, and the best non-champion taken as its runner-up.
+**Method validation: the recomputed ranking places the committed champion FIRST in all
+four generations where the champion updated (1, 2, 3, 9)**, and in the two non-updating
+generations (7, 8) the best offspring correctly fails to displace the incumbent — i.e.
+the re-score reproduces the driver's own selection wherever that is checkable. Caveat
+stated plainly: the re-score omits the conviction addend the driver's inner fitness
+carries (replicating it needs the serving wrapper), so it approximates the driver's
+internal ordering; the 4/4 agreement is the evidence that the approximation picks the
+right genomes. Artifacts: `training/artifacts/coevo/runnerups/run-02-utility-lambda4/`.
+
+**The leg** (6 runner-ups × seeds 4000–4002; pre-screens first, all PASS at 1.2562;
+every row validity PASS, stamp 3/3 uniform sha == digest):
+
+| rank | runner-up | selection | referee | win | witnessed − floor | flags − floor | conversion − floor |
+|---|---|---|---|---|---|---|---|
+| **1** | **`f280962f…` (gen 8)** | **1052.77** | **PASS** | **0.667** | **+0.2388 PASS** | **+0.7091 PASS** | **+0.0969 PASS** |
+| 2 | `2bac4cfe…` (gen 3) | 57.43 | FAIL | 0.333 | +0.3507 PASS | −0.0076 FAIL | −0.1775 FAIL |
+| 3 | `bfd145cb…` (gen 9) | 40.67 | FAIL | **1.000** | +0.1199 PASS | +0.2727 PASS | −0.3477 FAIL |
+| 4 | `3a89655f…` (gen 1) | 40.60 | FAIL | **1.000** | +0.1661 PASS | −0.5076 FAIL | −0.8000 FAIL |
+| 5 | `2b40b2c1…` (gen 2) | 36.50 | FAIL | 0.667 | +0.2738 PASS | −0.0909 FAIL | −0.5423 FAIL |
+| 6 | `cb17deda…` (gen 7) | 21.17 | FAIL | **1.000** | +0.1090 PASS | −0.5076 FAIL | −0.8889 FAIL |
+
+**`f280962f…` is the first and only candidate of this entire campaign to PASS the
+referee** — all three supply floors cleared simultaneously, validity PASS, $0, with win
+0.667 ≥ the same-substrate baseline-6 FSM 0.300. Its selection score carries the
+library's +1000 referee bonus (52.77 watchability + 1000). It was never a champion,
+never frozen by the driver, and would never have been evaluated under the
+champion-slice coverage this report previously defended.
+
+**Status: tranche 2 (seeds 4003–4005) is RUNNING.** At n=3 with gauges that swing
+between tranches everywhere else in this campaign (§4.7), a single-tranche referee PASS
+is a lead, not a finalist claim; §8 is not re-ordered until the pooled 6-seed read
+lands. Three further runner-ups win 1.000 on their tranche — the runner-up slice is
+competitive across the board, not a one-genome fluke.
+
 <!-- all legs recorded -->
 
 ---
