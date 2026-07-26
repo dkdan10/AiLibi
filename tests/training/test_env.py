@@ -592,3 +592,106 @@ def test_action_mask_split_vocabulary_is_disjoint() -> None:
     for intent in mask.engine_legal:
         assert intent not in mask.illegal
     assert legal  # non-empty (WAIT is always legal)
+
+
+# --------------------------------------------------------------------------- #
+# The initial_state injection seam (Task 18.23)                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_injecting_the_seeded_state_matches_the_seeded_path_exactly() -> None:
+    """The seam changes nothing but the SOURCE of s0.
+
+    Injecting exactly the state ``seed_initial_state`` would have produced must
+    yield an episode identical to the default seeded no-replay path — frames,
+    hash chain, events, meetings, and the derived roster fields alike — so the
+    injection path provably shares the whole live-assembly machinery instead of
+    forking it.
+    """
+
+    env = _env(no_replay=True)
+    seeded_state = _base_state(load_canonical_map())
+    injected = env.rollout_injected(seeded_state)
+    seeded = env.rollout(0)
+    assert injected.state_hashes == seeded.state_hashes
+    assert injected.frames == seeded.frames
+    assert injected.events == seeded.events
+    assert injected.meetings == seeded.meetings
+    assert injected.descriptors == seeded.descriptors
+    assert injected.num_players == seeded.num_players
+    assert injected.num_impostors == seeded.num_impostors
+    assert injected.tasks_per_crewmate == seeded.tasks_per_crewmate
+
+
+def test_injected_mid_game_state_opens_the_frame_chain_at_its_tick() -> None:
+    state = replace(_base_state(load_canonical_map()), tick=17)
+    rollout = _env(no_replay=True).rollout_injected(state)
+    assert rollout.seed == 0
+    assert rollout.frames[0].kind == "initial"
+    assert rollout.frames[0].tick == 17
+    assert rollout.num_players == _NUM_PLAYERS
+    assert rollout.num_impostors == _NUM_IMPOSTORS
+    assert rollout.tasks_per_crewmate == _TASKS
+
+
+def test_rollout_injected_requires_no_replay() -> None:
+    env = _env()  # default: the recording path
+    state = _base_state(load_canonical_map())
+    with pytest.raises(ValueError, match="no_replay=True"):
+        env.rollout_injected(state)
+
+
+def test_rollout_injected_requires_tick_headroom() -> None:
+    state = replace(_base_state(load_canonical_map()), tick=40)
+    env = _env(no_replay=True, max_ticks=40)
+    with pytest.raises(ValueError, match="max_ticks"):
+        env.rollout_injected(state)
+
+
+def test_headless_game_refuses_initial_state_on_the_recording_path() -> None:
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+    with tempfile.TemporaryDirectory(prefix="ailibi-inject-") as tmp:
+        with pytest.raises(ValueError, match="no-replay training path"):
+            HeadlessGame(
+                seed=0,
+                game_map=game_map,
+                agent_factory=build_default_agent_factory(),
+                replay_path=Path(tmp) / "refused.jsonl",
+                num_players=_NUM_PLAYERS,
+                num_impostors=_NUM_IMPOSTORS,
+                tasks_per_crewmate=_TASKS,
+                initial_state=state,
+            )
+
+
+def test_headless_game_validates_injected_state_consistency() -> None:
+    """Every seed/roster/phase/map disagreement is a loud constructor error."""
+
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+
+    def _game(**overrides: object) -> HeadlessGame:
+        kwargs: dict[str, object] = {
+            "seed": 0,
+            "game_map": game_map,
+            "agent_factory": build_default_agent_factory(),
+            "replay_path": None,
+            "num_players": _NUM_PLAYERS,
+            "num_impostors": _NUM_IMPOSTORS,
+            "tasks_per_crewmate": _TASKS,
+            "initial_state": state,
+        }
+        kwargs.update(overrides)
+        return HeadlessGame(**kwargs)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="seed"):
+        _game(seed=1)
+    with pytest.raises(ValueError, match="num_players"):
+        _game(num_players=_NUM_PLAYERS - 1)
+    with pytest.raises(ValueError, match="impostors"):
+        _game(num_impostors=_NUM_IMPOSTORS + 1)
+    with pytest.raises(ValueError, match="PLAY"):
+        _game(initial_state=replace(state, phase="MEETING"))
+    with pytest.raises(ValueError, match="map"):
+        _game(initial_state=replace(state, map="some_other_map"))

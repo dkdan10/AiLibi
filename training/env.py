@@ -54,6 +54,13 @@ disk and assembling the episode from the live trajectory instead of a replay fil
 ``rng_state`` with a non-committed codec, so it is REFUSED unless ``no_replay`` is
 set — trajectories are identical under either mode, so training on the fast path
 transfers to the recording path exactly.
+
+Task 18.23 adds the scenario-staging integration on the same no-replay path:
+:meth:`TacticalRolloutEnv.rollout_injected` runs one episode from an injected
+mid-game ``WorldState`` (the ``HeadlessGame`` ``initial_state`` seam, bypassing
+``seed_initial_state``) and assembles it live — the skill-scenario library in
+:mod:`training.scenarios` builds those states and scores the episodes from
+tactical facts only.
 """
 
 from __future__ import annotations
@@ -726,10 +733,113 @@ class TacticalRolloutEnv:
                 "TacticalRolloutEnv reached MEETING_PHASE_REACHED with a meeting "
                 "runner installed; the always-installed-runner invariant is broken"
             )
-        return self._episode_from_unrecorded(result, seed)
+        return self._episode_from_unrecorded(
+            result,
+            seed,
+            num_players=self._num_players,
+            num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+        )
+
+    def rollout_injected(self, initial_state: WorldState) -> EpisodeRollout:
+        """Run one no-replay episode from an injected mid-game state (Task 18.23).
+
+        The env half of the scenario-staging seam: drives
+        :meth:`HeadlessGame.run_unrecorded` with ``initial_state`` injected
+        (bypassing ``seed_initial_state``) and assembles the live trajectory into
+        a typed :class:`~training.rollout.EpisodeRollout` exactly like
+        :meth:`rollout` in no-replay mode. Requires ``no_replay=True`` at
+        construction — an injected episode has no recorded state-hash chain, so
+        the recording path is structurally wrong for it and the mismatch fails
+        loud here rather than deep in reconstruction (AGENTS.md "no silent
+        fallbacks").
+
+        The roster (``num_players`` / ``num_impostors``) is derived from the
+        injected state itself, so the episode record is consistent with the
+        state by construction; the env's constructor roster knobs describe the
+        SEEDED path and are deliberately not consulted. ``tasks_per_crewmate``
+        has no seeder provenance for a mid-game state, so the record carries the
+        max per-living-crewmate instance count (0 when no living crewmate owns
+        one). The game seed is ``initial_state.seed`` — the scenario library
+        stamps it alongside the canonical ``EngineRng.from_seed(seed)`` rng
+        snapshot, so determinism is inherited from ``advance_tick`` purity.
+
+        Scenario episodes are truncated by construction (the injected tick plus
+        a short horizon), so they surface ``outcome="TICK_BUDGET"`` /
+        ``truncated=True`` records that the reward channel's terminal gate
+        refuses; an episode that does reach ``GAME_OVER`` inside its horizon
+        keeps its truthful terminal shape, and scenario fitness reads dense
+        tactical facts either way (:mod:`training.scenarios`), never
+        ``compute_shaped_reward``.
+        """
+
+        if not self._no_replay:
+            raise ValueError(
+                "rollout_injected() rides the no-replay live-assembly path "
+                "(Task 18.23): an injected episode has no recorded hash chain "
+                "to reconstruct, so the env must be constructed with "
+                "no_replay=True."
+            )
+        if initial_state.tick >= self._max_ticks:
+            raise ValueError(
+                f"injected initial_state starts at tick {initial_state.tick} "
+                f"but the env's tick budget is max_ticks={self._max_ticks}; the "
+                "episode could not advance a single tick. Raise max_ticks above "
+                "the staged tick plus the scenario horizon."
+            )
+        num_players = len(initial_state.players)
+        num_impostors = sum(
+            1 for player in initial_state.players.values() if player.role == "IMPOSTOR"
+        )
+        instances_per_crewmate = [
+            sum(1 for task in initial_state.tasks.values() if task.owner == pid)
+            for pid, player in initial_state.players.items()
+            if player.alive and player.role == "CREWMATE"
+        ]
+        tasks_per_crewmate = max(instances_per_crewmate, default=0)
+        factory = build_interposition_factory(
+            game_map=self._game_map, intent_selector=self._intent_selector
+        )
+        game = HeadlessGame(
+            seed=initial_state.seed,
+            game_map=self._game_map,
+            agent_factory=factory,
+            replay_path=None,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+            scheduler=TickScheduler(max_ticks=self._max_ticks),
+            meeting_runner=self._build_meeting_runner(),
+            rng_hash_policy=self._rng_hash_policy,
+            initial_state=initial_state,
+        )
+        # ``tasks_per_crewmate`` above only feeds ``seed_initial_state``, which
+        # the injected path bypasses; the episode record below carries the
+        # state-derived count instead.
+        result = game.run_unrecorded()
+        if result.outcome == "MEETING_PHASE_REACHED":
+            # Structurally unreachable: a runner is ALWAYS installed. Fail loud if
+            # the invariant is ever violated rather than silently truncate.
+            raise RuntimeError(
+                "TacticalRolloutEnv reached MEETING_PHASE_REACHED with a meeting "
+                "runner installed; the always-installed-runner invariant is broken"
+            )
+        return self._episode_from_unrecorded(
+            result,
+            initial_state.seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+        )
 
     def _episode_from_unrecorded(
-        self, result: UnrecordedGameResult, seed: int
+        self,
+        result: UnrecordedGameResult,
+        seed: int,
+        *,
+        num_players: int,
+        num_impostors: int,
+        tasks_per_crewmate: int,
     ) -> EpisodeRollout:
         """Assemble a typed :class:`EpisodeRollout` from a no-replay live trace.
 
@@ -774,7 +884,10 @@ class TacticalRolloutEnv:
         win_reason: str | None = None
         truncated = False
         outcome: EpisodeOutcome
-        final_tick = 0
+        # The staged tick for an injected episode (Task 18.23); 0 on the seeded
+        # default path, so a zero-step episode still reports a truthful final
+        # tick.
+        final_tick = initial_state.tick
 
         # The seeded pre-action state opens the frame chain (kind="initial"),
         # exactly like reconstruct_episode, so the potential series telescopes
@@ -922,9 +1035,9 @@ class TacticalRolloutEnv:
 
         return EpisodeRollout(
             seed=seed,
-            num_players=self._num_players,
-            num_impostors=self._num_impostors,
-            tasks_per_crewmate=self._tasks_per_crewmate,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
             episode_boundary=episode_boundary,
             truncated=truncated,
             outcome=outcome,
