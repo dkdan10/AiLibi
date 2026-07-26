@@ -19,6 +19,7 @@ tilde form:
 | `/Users/danielkeinan/ailibi-campaign-1824/realpath/<run>/` | `training/artifacts/coevo/realpath/<run>/` |
 | `/Users/danielkeinan/ailibi-campaign-1824/realpath-backfill/<run>/` | `training/artifacts/coevo/realpath-backfill/<run>/` |
 | `/Users/danielkeinan/ailibi-campaign-1824/realpath-runnerups/<run>/` | `training/artifacts/coevo/realpath-runnerups/<run>/` |
+| `/Users/danielkeinan/ailibi-campaign-1824/realpath-runnerups-gen3/<run>/` | `training/artifacts/coevo/realpath-runnerups-gen3/<run>/` |
 | `/Users/danielkeinan/ailibi-campaign-1824/realpath-ablation/<name>/` | `training/artifacts/coevo/realpath-ablation/<name>/` |
 | `/Users/danielkeinan/ailibi-campaign-1824/realpath-comparator/` | `training/artifacts/coevo/realpath-comparator/` |
 

@@ -186,11 +186,11 @@ in session 1 (§3).
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
 **The campaign's recording program is complete for every lineage's CHAMPION slice and,
-at K=2, for run-02 only (the §1/F10 provisional status)** — **20 legs / 135 real
+at K=2, for run-02 only (the §1/F10 provisional status)** — **22 legs / 141 real
 games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation + 3 FSM comparator + 36
-K=2 runner-up; five sha256 manifests
+K=2 runner-up + 6 gen-3 correction; seven sha256 manifests
 under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
-content-address all 135 — verified by line count),
+content-address all 141 — verified by line count),
 10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
 2 532 anchor-λ + 2 412 encoder-v3). **Remaining task work: the K=2 completion decision.** The
 contract's per-generation top-K is discharged for run-02 only; the other four lineages'
@@ -703,9 +703,12 @@ predictions folded into the episode trace, `inner_episode_fitness` recomposed wi
   **gen-3 runner-up is `76400d72…`, not the `2bac4cfe…` the approximation picked** —
   the two are separated by 0.06 fitness units, inside the noise the approximation
   carried. `2bac4cfe…` is retained on disk marked `SUPERSEDED-`, and the corrected
-  genome is frozen and **running its own 6-seed leg**; §8 is unaffected because **both
-  promoted finalists (`bfd145cb…`, `3a89655f…`) are confirmed by the exact re-score**.
-  The evaluated-but-superseded arm's numbers stay in the table below, labelled.
+  genome was frozen and ran its own 6-seed leg (artifacts under
+  `realpath-runnerups-gen3/`): **it pools to 5/6 = 0.833 — the 0.833 finalist band — so
+  it joins §8, while the superseded `2bac4cfe…` had pooled only 0.500.** The
+  approximation therefore did not just mis-name a slot, it under-rated it. Both
+  previously promoted finalists (`bfd145cb…`, `3a89655f…`) are confirmed unchanged by
+  the exact re-score. The superseded arm's numbers stay in the table below, labelled.
 
 Artifacts: `training/artifacts/coevo/runnerups/run-02-utility-lambda4/`.
 
@@ -744,7 +747,8 @@ evidence of a referee-passing policy.**
 | `f280962f…` (gen 8) | 4/6 = 0.667 | **PASS** / FAIL | the non-replicating PASS |
 | `cb17deda…` (gen 7) | 4/6 = 0.667 | FAIL / FAIL | |
 | `2b40b2c1…` (gen 2) | 4/6 = 0.667 | FAIL / FAIL | |
-| `2bac4cfe…` (gen 3, **SUPERSEDED** — not the exact-objective runner-up) | 3/6 = 0.500 | FAIL / FAIL | replaced by `76400d72…`, leg running |
+| **`76400d72…` (gen 3, the exact-objective runner-up)** | **5/6 = 0.833** | FAIL / FAIL | t1 flags +0.6869 PASS, conversion −0.0662; t2 win 1.000 |
+| `2bac4cfe…` (gen 3, **SUPERSEDED** — the approximation's pick, kept for the record) | 3/6 = 0.500 | FAIL / FAIL | replaced by `76400d72…` |
 
 **The K=2 verdict, stated against the finalist ladder it must be read with:** no
 candidate anywhere in this campaign passes the referee on 6 seeds — but **two runner-ups
@@ -1298,9 +1302,9 @@ and to any future free-policy campaign sizing.
 
 ## 8. Finalists for 18.26
 
-Named on the pooled 6-seed evidence of ALL TWENTY real-path-evaluated candidates
-(9 swap champions/exploiters + 5 back-filled intermediates + 6 K=2 runner-ups from
-run-02; §4.9/§4.10). No candidate passes the referee on 6 seeds; the ladder is ordered
+Named on the pooled 6-seed evidence of ALL TWENTY-ONE real-path-evaluated candidates
+(9 swap champions/exploiters + 5 back-filled intermediates + 6 K=2 runner-ups + the
+exact-objective gen-3 correction; §4.9/§4.10). No candidate passes the referee on 6 seeds; the ladder is ordered
 by pooled real-path win rate against the same-substrate baseline-6 FSM 0.300, with
 gauge profiles quoted per candidate in §4. Every conviction-meter read under §1.1's
 guard was clean, and no selection leans on conviction-influenced ordering.
@@ -1312,8 +1316,8 @@ guard was clean, and no selection leans on conviction-influenced ordering.
 | **3. `10c1f9f3…`** (λ=4 gen-3 swap champion) | `…/run-02-utility-lambda4/impostor/gen-3/…` | 5/6 = 0.833 | the λ-dial swap champion the lineage froze |
 | **4. `dff6e472…`** (λ=4 gen-1 intermediate) | `…/intermediates/run-02-utility-lambda4/gen-1/…` | 5/6 = 0.833 | largest utility flags clearance of the campaign on its t1 |
 | **5. `3a89655f…`** (λ=4 gen-1 **runner-up**) | `…/runnerups/run-02-utility-lambda4/gen-1/…` | 5/6 = 0.833 | third of the 0.833 band; same generation as finalist 4, different genome |
-| **6. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
-| **7. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
+| **7. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
+| **8. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
 
 Every entry is λ=4-lineage or anchor-seam utility-family. **This slate is PROVISIONAL
 (F10, and the status line at the head of this report):** this ladder is complete for run-02's K=2 slice and for every lineage's
@@ -1347,7 +1351,7 @@ verbatim as library output rather than rewritten, so an extract never disagrees 
 process that produced it) — **and all 135 raw replay files themselves, committed at
 their manifests' paths (audit sidecars excluded; no instrument reads them), so
 collaborators and CI can verify every manifest and 18.27 can re-read any arm's bytes
-from a fresh checkout**. The five roots / six manifests that content-address the
+from a fresh checkout**. The six roots / eight manifests that content-address the
 complete real-path corpus:
 
 | root under `training/artifacts/coevo/` | manifest | recordings |
@@ -1356,9 +1360,11 @@ complete real-path corpus:
 | `realpath-backfill/` | `recordings-manifest.sha256` | 30 — the 5 recovered per-generation champions |
 | `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, tranche 1 |
 | `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 18 — K=2 runner-ups, tranche 2 |
+| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 3 — exact-objective gen-3 runner-up, t1 |
+| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 3 — exact-objective gen-3 runner-up, t2 |
 | `realpath-ablation/ablation-run-04-encoder-v3/` | `recordings-manifest.sha256` | 6 — the registered off-menu ablation |
 | `realpath-comparator/` | `recordings-manifest.sha256` | 3 — same-seed scripted-FSM comparator |
-| | **total** | **135** |
+| | **total** | **141** |
 
 Verify every manifest from a fresh checkout:
 

@@ -1,0 +1,14 @@
+=== gen-3 corrected runner-up leg start Sun Jul 26 12:14:04 EDT 2026 ===
+--- START 4000,4001,4002 Sun Jul 26 12:14:04 EDT 2026
+[run-02-utility-lambda4] backfill candidates: [(3, '76400d720ca2')]
+[run-02-utility-lambda4] prescreen gen3 76400d720ca2: pred_flags=1.1490 pass=False recorded_fake=0
+[run-02-utility-lambda4] rank 1: run-02-utility-lambda4-runnerup-corrected-gen3-76400d720ca2 sel=39.6 win=0.6666666666666666
+[run-02-utility-lambda4] BACKFILL LEG DONE 4000-4002
+--- DONE 4000,4001,4002 Sun Jul 26 13:15:54 EDT 2026
+--- START 4003,4004,4005 Sun Jul 26 13:15:54 EDT 2026
+[run-02-utility-lambda4] backfill candidates: [(3, '76400d720ca2')]
+[run-02-utility-lambda4] prescreen gen3 76400d720ca2: pred_flags=1.1490 pass=False recorded_fake=0
+[run-02-utility-lambda4] rank 1: run-02-utility-lambda4-runnerup-corrected-gen3-76400d720ca2 sel=17.63 win=1.0
+[run-02-utility-lambda4] BACKFILL LEG DONE 4003-4005
+--- DONE 4003,4004,4005 Sun Jul 26 14:30:06 EDT 2026
+=== complete Sun Jul 26 14:30:06 EDT 2026 ===
