@@ -178,6 +178,20 @@ def test_injected_episode_carries_the_state_derived_roster() -> None:
     }
 
 
+def test_injected_descriptor_rates_normalize_over_the_captured_horizon() -> None:
+    # Rate descriptors divide by the CAPTURED horizon, not the absolute staged
+    # clock — otherwise equivalent traces would score different rates purely
+    # because of staged_tick. final_tick itself stays absolute.
+    rollout = _run(BODY_DISCOVERY_LATENCY, 7)
+    elapsed = rollout.final_tick - BODY_DISCOVERY_LATENCY.staged_tick
+    assert rollout.final_tick > BODY_DISCOVERY_LATENCY.staged_tick
+    assert rollout.descriptors.meeting_trigger_rate == len(rollout.meetings) / elapsed
+    assert (
+        rollout.descriptors.do_task_cadence
+        == rollout.descriptors.do_task_emissions / elapsed
+    )
+
+
 def test_scenario_episode_runs_on_the_training_fast_path() -> None:
     """The provider's fast-path opt-in changes bytes, never the trajectory."""
 
@@ -314,6 +328,15 @@ def test_scenario_spec_rejects_an_unknown_side() -> None:
     # scenario unservable by every provider lookup.
     with pytest.raises(ValueError, match="unknown scenario side"):
         replace(KILL_WITH_WITNESS_NEARBY, side="IMPOSTOR")  # type: ignore[arg-type]
+
+
+def test_build_rejects_a_missing_impostor_cooldown_entry() -> None:
+    # The seeder mints a cooldown entry for every impostor and resolve_kill
+    # reads a missing key as kill-ready — an accidental free kill no real
+    # game grants.
+    spec = _broken(KILL_WITH_WITNESS_NEARBY, lambda state: replace(state, cooldowns={}))
+    with pytest.raises(ValueError, match="no cooldown entry"):
+        build_scenario_state(spec, seed=7)
 
 
 # --------------------------------------------------------------------------- #
@@ -748,6 +771,19 @@ def test_provider_rejects_bad_configurations() -> None:
             scenarios={
                 "impostor": (KILL_WITH_WITNESS_NEARBY, KILL_WITH_WITNESS_NEARBY)
             },
+        )
+    # A mistyped / role-cased side key would never be looked up by the driver,
+    # silently disabling every scenario term for the real side.
+    with pytest.raises(ValueError, match="unknown selector-builder side"):
+        ScenarioProvider(
+            selector_builders={"IMPOSTOR": _impostor_gate_builder},  # type: ignore[dict-item]
+            fitness_seeds=(0,),
+        )
+    with pytest.raises(ValueError, match="unknown scenarios side"):
+        ScenarioProvider(
+            selector_builders={"impostor": _impostor_gate_builder},
+            fitness_seeds=(0,),
+            scenarios={"IMPOSTOR": ()},  # type: ignore[dict-item]
         )
 
 

@@ -816,6 +816,18 @@ def _validate_scenario_state(
                 "silently bench the impostor for a short drill's whole "
                 "horizon)"
             )
+    for player_id, player in state.players.items():
+        if (
+            player.alive
+            and player.role == "IMPOSTOR"
+            and player_id not in state.cooldowns
+        ):
+            _fail(
+                f"living impostor {player_id!r} has no cooldown entry: the "
+                "seeder mints one for every impostor and the engine reads a "
+                "missing key as kill-ready (resolve_kill's .get(actor, 0)) — "
+                "an accidental free kill no real game grants"
+            )
 
     if state.sabotage is not None and state.sabotage.active:
         if state.sabotage.kind not in game_map.sabotages:
@@ -891,6 +903,24 @@ class ScenarioProvider:
                 f"fitness_seeds must be unique, got {seeds!r}: a duplicate seed "
                 "silently double-weights that seed's episode in the scenario mean"
             )
+        # The driver only ever asks for the lowercase ``Side`` literals, so a
+        # mistyped / role-cased key (``"IMPOSTOR"``) would never be looked up —
+        # the provider would return () and a zero budget for the real side,
+        # silently disabling every scenario term for a whole campaign
+        # (AGENTS.md "no silent fallbacks").
+        for side in selector_builders:
+            if side not in _VALID_SIDES:
+                raise ValueError(
+                    f"unknown selector-builder side {side!r}; expected one of "
+                    f"{sorted(_VALID_SIDES)}"
+                )
+        if scenarios is not None:
+            for side in scenarios:
+                if side not in _VALID_SIDES:
+                    raise ValueError(
+                        f"unknown scenarios side {side!r}; expected one of "
+                        f"{sorted(_VALID_SIDES)}"
+                    )
         resolved: dict[Side, tuple[ScenarioSpec, ...]]
         if scenarios is None:
             sides: tuple[Side, ...] = ("impostor", "crew")

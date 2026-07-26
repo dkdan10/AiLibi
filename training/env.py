@@ -1035,11 +1035,17 @@ class TacticalRolloutEnv:
                 f"{result.outcome!r}"
             )
 
+        # Rate descriptors (meeting_trigger_rate, do_task_cadence) normalize
+        # over the CAPTURED horizon: an injected episode's clock starts at the
+        # staged tick, so the absolute final_tick would dilute its rates by
+        # ticks the episode never saw (Task 18.23). On the seeded default path
+        # the staged tick is 0, so this is the pre-18.23 value exactly;
+        # ``EpisodeRollout.final_tick`` below stays absolute.
         descriptors = _build_descriptors(
             events=events,
             meetings=meetings,
             do_task_emissions=do_task_emissions,
-            final_tick=final_tick,
+            final_tick=final_tick - initial_state.tick,
             roles=roles,
             outcome=outcome,
             winner=winner,
