@@ -59,13 +59,33 @@ conditioning is protocol, discharged in this report):
 1. **Roster guard:** every run is 9p2i (`tasks_per_crewmate=2`) — blockers (1) and (2)'s
    4p1i prohibitions are satisfied structurally; no 4p1i-scored anything appears anywhere
    in this campaign.
-2. **Meeting-count meter:** per generation the report quotes the predicted-meetings-per-
-   training-game proxy (Δ`conviction_uses` / games) beside the scripted-FSM anchor
-   (~3.6 meetings/game on 9p2i, the 18.18 probe's census). An entrant whose meter exceeds
-   the FSM anchor by ≥ 25% (the probe's materiality convention) without recorded-bytes
-   flag confirmation on its REAL-path recordings has its conviction credit flagged
-   SUSPECT in §4's selection reading, and selection falls back to conviction-free ordering
-   for that entrant.
+2. **Meeting-count meter — PER ENTRANT (revised session 4), not only per generation.**
+   The original guard read a generation-wide Δ`conviction_uses` / games proxy; that
+   aggregate pools the incumbent, six offspring and the payoff row, so one offspring
+   multiplying meetings could be diluted below the bar by its siblings (a fair objection
+   raised at review). The guard is therefore evaluated **per evaluated entrant** on the
+   deterministic 6-game fake set every candidate is pre-screened over — `meetings_scored / 6`
+   from each committed `prescreen-quotes*.json` is that entrant's own meeting-count
+   meter, immune to pooling:
+
+   | entrant | meetings/game | vs FSM census 3.63 |
+   |---|---|---|
+   | `6d327dcb…` (committed champion, both legs) | 4.17 | +14.9% |
+   | `43b113ec…` (v2 champion) | 4.00 | +10.2% |
+   | `9bc30c15…` (bc-anchor intermediate) | 3.67 | +1.0% |
+   | the λ=4 lineage — all 3 champions, 2 intermediates, 6 runner-ups | 3.50 | −3.6% |
+   | `a89be618…` (bc-anchor champion) | 3.33 | −8.3% |
+   | v3 arms + both encoder-ablation champions | 1.50–3.17 | −58.7% … −12.8% |
+
+   **Maximum across every entrant selection ever leaned on: 4.17 meetings/game = +14.9%,
+   against the 25% materiality bar of 4.54.** No entrant is flagged SUSPECT, and the
+   guard now binds at the granularity the blocker names. Scope stated honestly: this
+   covers every candidate that reached a real-path leg (i.e. every genome any selection
+   read depends on); the driver emits no per-genome metering for offspring that were
+   evaluated and discarded inside a generation, so those are covered only by the
+   generation-wide aggregate (§3, max +3.7%). An entrant exceeding the bar without
+   recorded-bytes flag confirmation would have its conviction credit flagged SUSPECT and
+   its ordering recomputed conviction-free; none did.
 3. **Selection pairing (blocker 4's shape):** no selection step (top-K choice for a real
    leg, finalist naming) leans on conviction-influenced ordering without a recorded-bytes
    floor read. The pre-screen verdict before every real spend is quoted as SPEND ADVICE
@@ -172,8 +192,15 @@ K=2 runner-up; five sha256 manifests
 under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
 content-address all 135 — verified by line count),
 10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
-2 532 anchor-λ + 2 412 encoder-v3). Remaining for the task: none — the close (18.28) waits on
-18.23/18.29 per the contract, and adoption/claims are 18.26/18.27's.
+2 532 anchor-λ + 2 412 encoder-v3). **Remaining task work: the K=2 completion decision.** The
+contract's per-generation top-K is discharged for run-02 only; the other four lineages'
+~40 runner-ups (~240 real games, 80–120 h) are unevaluated and §4.10 showed that slice
+promotes finalists. Until the owner either funds those legs or records acceptance of a
+run-02-complete slate, **18.24 is INCOMPLETE against its own contract wording and 18.26
+should not spend its finalist budget on §8's ladder** (F10). Everything else — rows,
+champion-slice legs, sweeps, ablations, comparator — is recorded across all five
+lineages; the close (18.28) additionally waits on 18.23/18.29 per the contract, and
+adoption/claims are 18.26/18.27's.
 
 Real-path legs completed / pending, ablations run, and the finalist reading are tracked in
 §4/§6/§8 as they land; the close (18.28) waits on 18.23 + 18.29 regardless.
@@ -220,8 +247,9 @@ Meters: conviction 2 717 / 52 481 (5.18%); games 2 358 / bound 3 816. Frozen cha
 swap 0 = `6d327dcb…` (**the committed champion itself** — three generations of ES at
 σ=0.15 never displaced it against the scripted crew), swap 1 crew `22c9707e…`, swap 2 =
 `8ac3652a…` (**displaced only under co-adapted crew opposition**), swap 3 crew
-`31ca14b5…`. Exploiter finds froze 6 members (5 impostor-family exploits of the crew
-champion at 19.5–21.0 vs bars 9.0–16.75; 1 crew-family exploit at 12.24 vs 12.17).
+`31ca14b5…`. Exploiter finds froze **7** members (6 impostor-family exploits of the crew
+champion at 19.5–21.0 vs bars 9.0–16.75; 1 crew-family exploit at 12.24 vs 12.17),
+counted from the committed hall indexes.
 
 **Cycling verdict (vs the pre-registered signature — flat anchor + oscillating
 co-matchup = Red-Queen; monotone anchor = progress):** the impostor side is NOT flat: the
@@ -252,8 +280,8 @@ surface, stated as such. The crew side reads as real progress (champion-side anc
 Meters: conviction 2 749 / 52 481 (5.24%); games 2 424 / 3 816. Frozen champions: swap 0
 `10c1f9f3…` (the lambda-4.0 seed WAS displaced in generation 1 — the λ=4 objective moved
 off the 18.5 fit immediately), swap 2 `2ca47451…`; crew `1baf6fef…` / `53d75516…`.
-Exploiter froze 9 members across the run — the densest exploit stream of the session
-(both directions).
+Exploiter froze **10** members across the run (4 impostor-family + 6 crew-family,
+from the hall indexes) — the densest exploit stream of the session, both directions.
 
 **Cycling verdict:** neither signature half fires — the impostor champion-side anchor is
 flat (net +0.05, max step 0.29) AND the co-matchup payoff is flat (net +0.06, one 0.65
@@ -1083,21 +1111,27 @@ made anyway per blocker 4), recordings + ranking + sweep + manifest at
 SAME-SEED REAL-PATH comparator**, recorded for this purpose (§5.9); the corpus is only
 the sweep anchor and is not used as the claim comparator:
 
-| arm (all on seeds 4000–4002, real path) | off-menu | rate |
-|---|---|---|
-| champion arm (v3, run-04 tranche 1) | 193 / 221 | **0.8733** |
-| ablated arm (v2 revert, this leg) | 222 / 365 | **0.6082** |
-| **comparator arm (scripted FSM, same seeds, recorded session 4)** | **0 / 149** | **0.0000** |
+**PER PAIR** — the §6.c procedure takes a particular enabling leg's champion against
+THAT leg's ablated champion, so the two swap champions are tested separately (an earlier
+revision pooled them into one synthetic arm, which is not the registered test):
 
-- (i) significance vs the same-seed comparator after ablation: **z = 12.63 — still
-  significant**, so (i) is NOT met.
-- (ii) recede-to-half: `|0.6082 − 0| = 0.6082` vs `½·|0.8733 − 0| = 0.4367` — **0.6082 >
-  0.4367, NOT met**. Denominator adequacy passes (365 ≥ ½ × 221).
+| pair | champion arm (v3) | ablated arm (v2) | comparator (FSM, same seeds) | (i) z vs comparator | (ii) recede-to-half | denominator OK |
+|---|---|---|---|---|---|---|
+| **gen 9** (`27f852fe…` vs `bfa51767…`) | 79/101 = 0.7822 | 136/186 = 0.7312 | 0/149 | **13.54** → not met | 0.7312 > ½·0.7822 = 0.3911 → **not met** | 186 ≥ 51 ✓ |
+| **gen 3** (`348df066…` vs `a4076d29…`) | 114/120 = 0.9500 | 86/179 = 0.4804 | 0/149 | **9.85** → not met | 0.4804 > ½·0.9500 = 0.4750 → **not met by 0.0054** | 179 ≥ 60 ✓ |
 
-(The verdict is unchanged from the first computation, which used the corpus anchor at
-`0/6 663`; correcting the provenance moved z from 64.69 to 12.63 and the half-threshold
-from 0.4406 to 0.4367, neither near a flip. Recorded here so the provenance rule is
-followed, not because the answer was in doubt.)
+**Verdict unchanged — neither pair recedes — but the per-pair split is materially more
+informative than the pooled read it replaces.** The gen-3 pair comes within 0.0054 of
+the recede-to-half threshold (its ablated champion halves the rate, 0.95 → 0.48) while
+the gen-9 pair barely moves (0.78 → 0.73); pooling averaged those into a single 0.6082
+and hid the difference. Read honestly: the encoder lever has a LARGE effect on one
+lineage member and almost none on the other, and on neither does the behavior clear the
+registered recede bar — so `off-menu` stays NOT-DEMONSTRATED, with the gen-3 near-miss
+recorded for 18.27 rather than smoothed away.
+
+(Provenance note: the first computation of this test used the corpus anchor `0/6 663`
+as the comparator and pooled both pairs; both defects are corrected above. The corpus
+run gave z = 64.69 and threshold 0.4406 — same verdict, wrong denominators.)
 
 **Verdict: the behavior does NOT recede when the registered lever is reverted.** The
 encoder is not the enabler; the free-policy ACTION SPACE is (the v2-reverted champion
