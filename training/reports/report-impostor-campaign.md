@@ -151,12 +151,15 @@ in session 1 (§3).
 |---|---|---|---|
 | 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 362 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | session 1 |
 
+| 4 | 2026-07-26 | Codex round 4: same-seed FSM comparator recorded (§5.9) + §6.3 recompute; the K=2 runner-up leg over run-02 (§4.10, 36 real games) — a runner-up ties the campaign's best win record, §8 re-ordered to 7 finalists, F10 rewritten as demonstrated incompleteness | session 4 |
 | 3 | 2026-07-25 | Codex rounds 1–2 absorbed: evidence committed in-repo (60+30 recordings + manifests), baseline-6 comparator corrected, per-tranche prescreen records (F9), the 5 intermediates recovered via the scenario seam (F1 resolved) + 30 back-fill games recorded and processed (§4.9); §8 finalists REVISED | session 3 |
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
-**The campaign's recording program is COMPLETE through session 3** — **16 legs / 96 real
-games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation; three sha256 manifests
-under `training/artifacts/coevo/realpath{,-backfill,-ablation}/` content-address all 96),
+**The campaign's recording program is COMPLETE through session 4** — **20 legs / 135 real
+games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation + 3 FSM comparator + 36
+K=2 runner-up; five sha256 manifests
+under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
+content-address all 135 — verified by line count),
 10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
 2 532 anchor-λ + 2 412 encoder-v3). Remaining for the task: none — the close (18.28) waits on
 18.23/18.29 per the contract, and adoption/claims are 18.26/18.27's.
@@ -662,11 +665,32 @@ library's +1000 referee bonus (52.77 watchability + 1000). It was never a champi
 never frozen by the driver, and would never have been evaluated under the
 champion-slice coverage this report previously defended.
 
-**Status: tranche 2 (seeds 4003–4005) is RUNNING.** At n=3 with gauges that swing
-between tranches everywhere else in this campaign (§4.7), a single-tranche referee PASS
-is a lead, not a finalist claim; §8 is not re-ordered until the pooled 6-seed read
-lands. Three further runner-ups win 1.000 on their tranche — the runner-up slice is
-competitive across the board, not a one-genome fluke.
+**Tranche 2 (seeds 4003–4005) — COMPLETE, and it corrects the headline.** The referee
+PASS did NOT replicate: `f280962f…` on fresh seeds reads flags 0.4000 (−0.6909 FAIL) and
+conversion 0.1250 (−0.8750 FAIL), referee FAIL, win 0.667 unchanged. The tranche-1 PASS
+was gauge noise of exactly the kind §4.7 documented for the swap champions — recorded
+here as the campaign's sharpest example: **a single-tranche referee PASS is not
+evidence of a referee-passing policy.**
+
+**Pooled 6-seed runner-up ladder (both tranches; every row validity PASS, stamp-proven):**
+
+| runner-up | pooled win | referee (t1 / t2) | note |
+|---|---|---|---|
+| **`bfd145cb…` (gen 9)** | **6/6 = 1.000** | FAIL / FAIL | ties the campaign's best win record |
+| **`3a89655f…` (gen 1)** | **5/6 = 0.833** | FAIL / FAIL | ties finalists 2–3 |
+| `f280962f…` (gen 8) | 4/6 = 0.667 | **PASS** / FAIL | the non-replicating PASS |
+| `cb17deda…` (gen 7) | 4/6 = 0.667 | FAIL / FAIL | |
+| `2b40b2c1…` (gen 2) | 4/6 = 0.667 | FAIL / FAIL | |
+| `2bac4cfe…` (gen 3) | 3/6 = 0.500 | FAIL / FAIL | |
+
+**The K=2 verdict, stated against the finalist ladder it must be read with:** no
+candidate anywhere in this campaign passes the referee on 6 seeds — but **two runner-ups
+land at or above existing finalist entries on the win axis** (`bfd145cb…` 1.000 ties
+`ea4bc955…` for the campaign best; `3a89655f…` 0.833 ties `10c1f9f3…` and `dff6e472…`).
+The champion-slice coverage this report previously defended is therefore **materially
+incomplete, demonstrated rather than hypothesised**: evaluating one lineage's runner-ups
+promoted two candidates into the finalist band. §8 is re-ordered accordingly and F10 is
+rewritten around this evidence.
 
 <!-- all legs recorded -->
 
@@ -1108,25 +1132,27 @@ and to any future free-policy campaign sizing.
   channels (witness / recency / meeting-history + per-target kill head; 1442 genes vs
   1049) are a net loss. Routed to 18.22's disposition and to free-policy campaign
   sizing — this campaign does not rule on the encoder, it reports the measurement.
-- **F10 — the campaign evaluated every generation's CHAMPION on the real path, not a
-  per-generation top-K; the gap is a scope decision, quantified.** The contract's
-  "per-generation real-path top-K re-ranks (18.17, ~2 h/gen)" reads K=2 per generation
-  (18.17 design B). What this campaign evaluated: all 14 distinct champions across 60
-  generations of 5 lineages (every swap champion, every distinct generation champion via
-  the F1 recovery, one exploiter) — the K=1 slice per generation plus K=2 at every swap
-  boundary. Completing K=2 for every generation of every lineage is ~46 further
-  candidates × 6 seeds ≈ 276 real games ≈ **90–140 h**, against the contract's own stated
-  operator envelope of ~40–50 h — an envelope that prices ONE lineage's per-generation
-  re-ranks (the planning audit's design-B line: "~40 h/utility-es run"), not five. The
-  campaign spent its breadth on 5 lineages instead; that trade is stated here rather
-  than claimed away. **This matters more than a bookkeeping gap**, and the campaign's own
-  evidence says so: fake-path fitness ordering predicted real-path outcomes POORLY (the
-  run-01 co-adapted champion out-scored the committed champion on fake fitness and lost
-  0.167 vs 0.500 on the real path; run-02's gen-2 intermediate out-won its own swap
-  champion), so a generation's fake-path runner-up could plausibly outrank its champion
-  on the real path. Routed to the owner/18.28: either accept the champion-slice coverage
-  as the campaign's scope, or fund the K=2 completion (~90–140 h) before 18.26's
-  finalist spend.
+- **F10 — champion-slice coverage is materially incomplete; DEMONSTRATED, and the
+  exposure is quantified.** The contract's "per-generation real-path top-K re-ranks"
+  reads K=2 per generation (18.17 design B). Through session 3 this campaign evaluated
+  the K=1 slice — all 14 distinct champions across 60 generations of 5 lineages — plus
+  K=2 at every swap boundary, and this report argued that slice was adequate. **That
+  argument is empirically dead.** Session 4 recovered and evaluated the K=2 runner-ups
+  for ONE lineage (run-02, the finalist-bearing λ=4 lineage; §4.10, 36 real games), and
+  two of its six runner-ups landed at or above existing finalist entries on the win
+  axis: `bfd145cb…` 6/6 = 1.000 (tying the campaign's best) and `3a89655f…` 5/6 = 0.833
+  (tying finalists 2–3). A third produced the campaign's only referee PASS on its first
+  tranche, which then failed to replicate — itself the sharpest available warning about
+  single-tranche gauge reads. **Exposure that remains:** the other four lineages'
+  runner-ups (~40 candidates) are unevaluated, so §8's ladder is complete for the
+  lineage that was probed and demonstrably incomplete for the rest. Completing them is
+  ~40 candidates × 6 seeds ≈ 240 real games ≈ 80–120 h at measured pace, against the
+  contract's stated ~40–50 h envelope (whose source line prices ONE lineage's
+  per-generation re-ranks, not five). **Routed to the owner/18.28 as a live decision
+  with evidence attached, not as a scope defence:** either fund the remaining
+  runner-up evaluation before 18.26's finalist spend, or accept a finalist slate known
+  to be complete only for run-02. The campaign's own fake→real ordering weakness
+  (§4.2/§4.9) is the mechanism, and §4.10 is the demonstration.
 - **F9 — the session-1 leg harness kept only one pre-screen record per run.** The
   operator harness wrote prescreen-quotes.json per invocation IN PLACE, so the
   tranche-2 write overwrote tranche 1's. No information was lost (the pre-screen
@@ -1165,27 +1191,33 @@ and to any future free-policy campaign sizing.
 
 ## 8. Finalists for 18.26
 
-Named on the pooled 6-seed evidence of ALL fourteen real-path-evaluated candidates
-(9 swap champions/exploiters + the 5 back-filled intermediates; §4.9 — the coverage
-achieved and its remaining gap to the contract's top-K wording are stated in F10). Every conviction-meter read under §1.1's guard was clean,
-and no selection leans on conviction-influenced ordering.
+Named on the pooled 6-seed evidence of ALL TWENTY real-path-evaluated candidates
+(9 swap champions/exploiters + 5 back-filled intermediates + 6 K=2 runner-ups from
+run-02; §4.9/§4.10). No candidate passes the referee on 6 seeds; the ladder is ordered
+by pooled real-path win rate against the same-substrate baseline-6 FSM 0.300, with
+gauge profiles quoted per candidate in §4. Every conviction-meter read under §1.1's
+guard was clean, and no selection leans on conviction-influenced ordering.
 
-| finalist | artifact | pooled real-path read | why 18.26 spends on it |
+| finalist | artifact | pooled win | why 18.26 spends on it |
 |---|---|---|---|
-| **1. `ea4bc955…`** (λ=4 lineage, gen-2 intermediate ≡ the λ=1 twin's swap-0 champion) | `training/artifacts/coevo/intermediates/run-02-utility-lambda4/gen-2/…` | win **6/6 = 1.000** — the campaign's only perfect real-path record; flags PASS on t1, gauge noise per §4.7 | the strongest impostor the campaign produced, found by BOTH the λ=4 trajectory and the λ=1 twin — the convergence point of the utility family under co-adaptive pressure |
-| **2. `10c1f9f3…`** (λ=4, gen-3 swap champion) | `…/run-02-utility-lambda4/impostor/gen-3/…` | win 5/6 = 0.833; flags at-the-floor on t1 | the λ-dial swap champion; with finalist 1 it brackets the λ=4 lineage's win/supply trade |
-| **3. `dff6e472…`** (λ=4, gen-1 intermediate) | `…/intermediates/run-02-utility-lambda4/gen-1/…` | win 5/6 = 0.833; the largest utility flags clearance of the campaign on t1 (+0.55) | the supply-richest of the win-leading candidates |
-| **4. `a89be618…`** (bc-anchor, gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | win 4/6 = 0.667; the closest single-tranche full-bar approach (−0.072 conversion, §4.4) | the refined-anchor seam's product |
-| **5. `6d327dcb…`** (the committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | win 6/12 = 0.500 over 12 games on 6 unique seeds | the incumbent reference arm 18.26 needs regardless |
+| **1a. `ea4bc955…`** (λ=4 gen-2 intermediate ≡ the λ=1 twin's swap-0 champion) | `training/artifacts/coevo/intermediates/run-02-utility-lambda4/gen-2/…` | **6/6 = 1.000** | perfect real-path record; found independently by the λ=4 trajectory and the λ=1 ablation twin — the utility family's convergence point under co-adaptive pressure |
+| **1b. `bfd145cb…`** (λ=4 gen-9 **runner-up**) | `…/runnerups/run-02-utility-lambda4/gen-9/…` | **6/6 = 1.000** | the other perfect record, and the proof that the K=2 slice carries finalist-grade candidates (§4.10); never a champion, recovered at review |
+| **3. `10c1f9f3…`** (λ=4 gen-3 swap champion) | `…/run-02-utility-lambda4/impostor/gen-3/…` | 5/6 = 0.833 | the λ-dial swap champion the lineage froze |
+| **4. `dff6e472…`** (λ=4 gen-1 intermediate) | `…/intermediates/run-02-utility-lambda4/gen-1/…` | 5/6 = 0.833 | largest utility flags clearance of the campaign on its t1 |
+| **5. `3a89655f…`** (λ=4 gen-1 **runner-up**) | `…/runnerups/run-02-utility-lambda4/gen-1/…` | 5/6 = 0.833 | third of the 0.833 band; same generation as finalist 4, different genome |
+| **6. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
+| **7. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
 
-All five wins clear the same-substrate baseline-6 FSM 0.300. Every finalist is
-λ=4-lineage or anchor-seam utility-family; the flip bar itself remains unpassed
-(no candidate passes all three supply gauges pooled). At ~5 h/finalist, 18.26's spend
-on 3–5 of these is the owner's call — the ladder above is the ordering evidence.
+Every entry is λ=4-lineage or anchor-seam utility-family. **Slate-completeness caveat
+(F10):** this ladder is complete for run-02's K=2 slice and for every lineage's
+champions; the other four lineages' runner-ups are unevaluated, and §4.10 shows that
+slice can carry finalist-grade candidates. 18.26's spend on the top N is the owner's
+call at ~5 h/finalist under the ratified 50-seed protocol.
+
 **Named non-finalist exhibit** (unchanged): `27f852fe…` (v3, gen 9) for the off-menu
 instrument's claim-grade denominators if 18.27 wants them.
 
-The back-fill legs landed (§4.9) and REVISED this list — the round-2 review push was
+The back-fill legs (§4.9) and the K=2 runner-up leg (§4.10) both REVISED this list — the round-2 review push was
 empirically right that intermediates could outrank the original finalists. **The list
 above is final for this campaign.**
 
