@@ -66,7 +66,7 @@ tactical facts only.
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
@@ -499,6 +499,7 @@ def build_interposition_factory(
     *,
     game_map: Map,
     intent_selector: IntentSelector | None = None,
+    emergency_uses_spent: Mapping[PlayerId, int] | None = None,
 ) -> AgentFactory:
     """Build the injected :data:`AgentFactory` (the ONLY interposition seam).
 
@@ -507,10 +508,18 @@ def build_interposition_factory(
     ``intent_selector=None`` (the default) the wrapper is a transparent FSM
     delegate — the scripted anchor — so a rollout is byte-identical to the
     production loop; a learned policy (15.10+) slots in as the selector.
+
+    ``emergency_uses_spent`` seeds each wrapper's mask-side emergency tracker
+    with already-spent button uses (Task 18.23): an injected mid-game state can
+    carry nonzero ``WorldState.emergency_uses``, and a tracker seeded to the
+    map-wide full allowance would advertise an engine-rejected emergency as
+    engine-legal, corrupting the mask contract. Default ``None`` (no spent
+    uses) is the seeded-game default, byte-identical to before.
     """
 
     sabotage_kinds = tuple(sorted(game_map.sabotages))
     emergency_uses = game_map.emergency.uses_per_player
+    spent = dict(emergency_uses_spent) if emergency_uses_spent is not None else {}
 
     def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
         policy: CrewmatePolicy | ImpostorPolicy
@@ -522,7 +531,7 @@ def build_interposition_factory(
         return _InterposedAgent(
             inner,
             sabotage_kinds=sabotage_kinds,
-            emergency_uses_per_player=emergency_uses,
+            emergency_uses_per_player=max(0, emergency_uses - spent.get(agent_id, 0)),
             intent_selector=intent_selector,
         )
 
@@ -797,8 +806,12 @@ class TacticalRolloutEnv:
             if player.alive and player.role == "CREWMATE"
         ]
         tasks_per_crewmate = max(instances_per_crewmate, default=0)
+        # Seed the mask-side emergency trackers with the staged state's spent
+        # uses, so the mask keeps mirroring engine legality mid-game.
         factory = build_interposition_factory(
-            game_map=self._game_map, intent_selector=self._intent_selector
+            game_map=self._game_map,
+            intent_selector=self._intent_selector,
+            emergency_uses_spent=initial_state.emergency_uses,
         )
         game = HeadlessGame(
             seed=initial_state.seed,

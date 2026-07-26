@@ -52,7 +52,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, get_args
 
 from engine.entities import (
     BodyState,
@@ -90,6 +90,12 @@ ScenarioStateBuilder: TypeAlias = Callable[[Map, int], WorldState]
 #: itself is responsible for delegating the other side's decisions to the FSM).
 SelectorBuilder: TypeAlias = Callable[[tuple[float, ...]], IntentSelector]
 
+# The runtime-valid side set, derived from the ``Side`` Literal so it never
+# drifts (the ``training.rewards._validate_side`` precedent): a side arriving
+# as a plain string from config/CLI must fail loud at spec construction, never
+# silently make the scenario unservable by every provider lookup.
+_VALID_SIDES: Final[frozenset[str]] = frozenset(get_args(Side))
+
 
 @dataclass(frozen=True)
 class ScenarioSpec:
@@ -121,6 +127,11 @@ class ScenarioSpec:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("ScenarioSpec.name must be non-empty")
+        if self.side not in _VALID_SIDES:
+            raise ValueError(
+                f"unknown scenario side {self.side!r}; expected one of "
+                f"{sorted(_VALID_SIDES)}"
+            )
         if self.staged_tick < 0:
             raise ValueError(f"staged_tick must be >= 0, got {self.staged_tick}")
         if self.horizon_ticks < 1:
@@ -287,18 +298,23 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
     ``kills`` comes from the standing impostor dense terms
     (:func:`training.rewards.side_specific_terms`, consumed as-is); the
     survival clause reads the meeting records: at least one meeting ROUTED BY
-    A CREWMATE, triggered AT OR AFTER the first kill's tick, concluded, and no
-    concluded meeting ejected an impostor. Both qualifiers are load-bearing:
-    the scrutiny must be the crew's doing, so an impostor cannot farm the
-    credit by self-reporting its own kill (the default fake meeting layer can
-    never eject, which would otherwise make "survived" collapse into "any
-    meeting concluded"), and it must FOLLOW the kill, so a button pressed
-    before the kill is not scrutiny of it (the ordering exploit: pre-kill
-    emergency + post-meeting kill would otherwise collect the full credit).
-    The survival credit is also gated on the kill — the drill is "kill, then
-    survive the scrutiny", not "hide through a meeting". Under an
-    ejection-capable meeting layer (:class:`ScenarioProvider`'s
-    ``meeting_runner_factory``) the no-ejection clause becomes fully live.
+    A CREWMATE, triggered on a STRICTLY LATER tick than the first kill,
+    concluded, and no concluded meeting ejected an impostor. Both qualifiers
+    are load-bearing: the scrutiny must be the crew's doing, so an impostor
+    cannot farm the credit by self-reporting its own kill (the default fake
+    meeting layer can never eject, which would otherwise make "survived"
+    collapse into "any meeting concluded"), and it must FOLLOW the kill — a
+    meeting triggered before OR ON the kill's tick was decided from packets
+    built before the kill resolved (intents are collected pre-tick), so it
+    cannot be scrutiny of it; the strict inequality closes both the pre-kill
+    button press and the same-action-batch variant. No qualifying case is
+    lost: a same-tick crew report of the fresh corpse is unreachable anyway
+    (the body is absent from the pre-kill observation packets the batch's
+    intents were chosen from). The survival credit is also gated on the kill —
+    the drill is "kill, then survive the scrutiny", not "hide through a
+    meeting". Under an ejection-capable meeting layer
+    (:class:`ScenarioProvider`'s ``meeting_runner_factory``) the no-ejection
+    clause becomes fully live.
     """
 
     terms = side_specific_terms(rollout, "IMPOSTOR")
@@ -309,7 +325,7 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
     first_kill_tick = min(kill_ticks) if kill_ticks else None
     concluded = [m for m in rollout.meetings if m.outcome is not None]
     crew_scrutiny_after_kill = first_kill_tick is not None and any(
-        meeting.tick >= first_kill_tick
+        meeting.tick > first_kill_tick
         and rollout.roles.get(meeting.triggered_by) == "CREWMATE"
         for meeting in concluded
     )
@@ -334,8 +350,8 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
     rewards=(
         "1.0 for landing at least one kill (the staged window: victim "
         "co-located, cooldown 0, a witness one room over) plus 1.0 for then "
-        "having at least one CREW-routed meeting, triggered at or after the "
-        "first kill's tick, conclude with no impostor ejected in any "
+        "having at least one CREW-routed meeting, triggered strictly after "
+        "the first kill's tick, conclude with no impostor ejected in any "
         "concluded meeting."
     ),
     does_not_reward=(
@@ -345,9 +361,9 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
         "suppression (the survival credit REQUIRES a crew-routed concluded "
         "meeting, so preventing one forfeits it); self-report spam (an "
         "impostor-routed meeting never carries the survival credit); "
-        "pre-kill meetings (a button pressed before the kill is not scrutiny "
-        "of it — killing after a meeting concludes earns no survival credit "
-        "from that meeting); surviving a meeting without the kill."
+        "pre-kill or same-tick meetings (a meeting triggered before or in the "
+        "kill's own action batch was decided from pre-kill observations and "
+        "is not scrutiny of it); surviving a meeting without the kill."
     ),
 )
 
@@ -737,6 +753,14 @@ def _validate_scenario_state(
         owner = state.players.get(task.owner)
         if owner is None:
             _fail(f"task {task.id!r} owned by unknown player {task.owner!r}")
+        elif owner.role != "CREWMATE":
+            _fail(
+                f"task {task.id!r} owned by impostor {task.owner!r}: no game "
+                "path mints impostor-owned instances (the seeder deals to "
+                "crew only; impostors get pretend task ids), and an "
+                "impostor-owned incomplete instance would permanently block "
+                "CREWMATE_TASKS"
+            )
         definition = game_map.tasks.get(task.map_task_id)
         if definition is None:
             _fail(f"task {task.id!r} references unknown map task")
@@ -783,8 +807,15 @@ def _validate_scenario_state(
                 f"cooldown key {player_id!r} is not a roster impostor (the "
                 "seeder discipline: only impostors carry kill cooldowns)"
             )
-        if cooldown < 0:
-            _fail(f"cooldown for {player_id!r} is negative")
+        if not 0 <= cooldown <= game_map.kill_cooldown_ticks:
+            _fail(
+                f"cooldown {cooldown} for {player_id!r} is outside "
+                f"[0, {game_map.kill_cooldown_ticks}]: the engine only ever "
+                "sets a cooldown to the map maximum and decrements it, so a "
+                "larger staged value is a state no game can produce (and can "
+                "silently bench the impostor for a short drill's whole "
+                "horizon)"
+            )
 
     if state.sabotage is not None and state.sabotage.active:
         if state.sabotage.kind not in game_map.sabotages:

@@ -32,6 +32,7 @@ from observation.action_intent import (
     ActionIntent,
     EmergencyMeetingIntent,
     KillIntent,
+    MoveIntent,
     ReportBodyIntent,
     VentIntent,
     WaitIntent,
@@ -274,6 +275,47 @@ def test_build_rejects_a_forked_task_key() -> None:
         build_scenario_state(spec, seed=7)
 
 
+def test_build_rejects_an_impossible_cooldown() -> None:
+    # The engine only ever sets a cooldown to the map maximum and decrements
+    # it; a larger staged value is a state no game can produce.
+    def overclock(state: WorldState) -> WorldState:
+        return replace(state, cooldowns={"p-4": _GAME_MAP.kill_cooldown_ticks + 1})
+
+    spec = _broken(KILL_WITH_WITNESS_NEARBY, overclock)
+    with pytest.raises(ValueError, match="outside"):
+        build_scenario_state(spec, seed=7)
+
+
+def test_build_rejects_impostor_owned_task_instances() -> None:
+    # The seeder deals instances to crew only and impostors get pretend task
+    # ids; an impostor-owned incomplete instance would permanently block
+    # CREWMATE_TASKS.
+    def deal_to_the_impostor(state: WorldState) -> WorldState:
+        tasks = dict(state.tasks)
+        definition = _GAME_MAP.tasks["log_findings"]
+        tasks["p-4:log_findings"] = replace(
+            tasks["p-1:empty_trash"],
+            id="p-4:log_findings",
+            owner="p-4",
+            map_task_id="log_findings",
+            room=definition.room,
+            required_ticks=definition.duration_ticks,
+        )
+        return replace(state, tasks=tasks)
+
+    spec = _broken(KILL_WITH_WITNESS_NEARBY, deal_to_the_impostor)
+    with pytest.raises(ValueError, match="impostor"):
+        build_scenario_state(spec, seed=7)
+
+
+def test_scenario_spec_rejects_an_unknown_side() -> None:
+    # A side arriving as a plain string from config/CLI (e.g. the Role-cased
+    # "IMPOSTOR") must fail loud at spec construction, not silently make the
+    # scenario unservable by every provider lookup.
+    with pytest.raises(ValueError, match="unknown scenario side"):
+        replace(KILL_WITH_WITNESS_NEARBY, side="IMPOSTOR")  # type: ignore[arg-type]
+
+
 # --------------------------------------------------------------------------- #
 # Per-scenario fitness: dense tactical facts, and the named non-rewards hold   #
 # --------------------------------------------------------------------------- #
@@ -387,6 +429,65 @@ def test_kill_with_witness_pre_kill_meeting_carries_no_survival_credit() -> None
     assert all(m.tick < min(kill_ticks) for m in crew_routed)
     # ...so the kill lands but the survival credit does not: pre-kill meetings
     # are not scrutiny of the kill.
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+
+
+def _same_batch_selector(decision: MaskedDecision) -> ActionIntent:
+    """Kill and button press land in the SAME action batch at tick 42.
+
+    The Codex round-2 exploit shape: intents are collected from pre-tick
+    packets, so p-6's button decision cannot have seen p-4's kill even though
+    the kill resolves first in the sorted batch — both stamp tick 42. The
+    impostor waits until tick 42 then kills; p-6 walks to CAFETERIA and
+    presses; every other crew decision suppresses reports/emergencies so no
+    later (legitimately qualifying) meeting muddies the pin.
+    """
+
+    packet = decision.packet
+    if packet.self_state.role == "IMPOSTOR":
+        if packet.tick >= 42:
+            for intent in decision.mask.engine_legal:
+                if isinstance(intent, KillIntent):
+                    return intent
+        return _wait(decision)
+    if packet.agent_id == "p-6":
+        emergency = EmergencyMeetingIntent(actor=packet.agent_id, type="emergency")
+        if decision.mask.is_engine_legal(emergency):
+            return emergency
+        if packet.self_state.room == "ENGINEERING":
+            return MoveIntent.model_validate(
+                {
+                    "type": "move",
+                    "actor": packet.agent_id,
+                    "payload": {"to_room": "EAST_HALL"},
+                }
+            )
+        if packet.self_state.room == "EAST_HALL":
+            return MoveIntent.model_validate(
+                {
+                    "type": "move",
+                    "actor": packet.agent_id,
+                    "payload": {"to_room": "CAFETERIA"},
+                }
+            )
+        return _wait(decision)
+    if isinstance(decision.fsm_intent, (EmergencyMeetingIntent, ReportBodyIntent)):
+        return _wait(decision)
+    return decision.fsm_intent
+
+
+def test_kill_with_witness_same_batch_meeting_carries_no_survival_credit() -> None:
+    rollout = _run(KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_same_batch_selector)
+    kill_ticks = [e.tick for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kill_ticks
+    concluded = [m for m in rollout.meetings if m.outcome is not None]
+    crew_routed = [
+        m for m in concluded if rollout.roles.get(m.triggered_by) == "CREWMATE"
+    ]
+    # The crew-routed meeting shares the first kill's tick — the same action
+    # batch, decided from pre-kill packets — so it is not post-kill scrutiny.
+    assert crew_routed
+    assert min(kill_ticks) == min(m.tick for m in crew_routed)
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 

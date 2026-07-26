@@ -695,3 +695,44 @@ def test_headless_game_validates_injected_state_consistency() -> None:
         _game(initial_state=replace(state, phase="MEETING"))
     with pytest.raises(ValueError, match="map"):
         _game(initial_state=replace(state, map="some_other_map"))
+
+
+def test_injected_state_seeds_the_emergency_mask_tracker() -> None:
+    """An injected state's spent button uses reach the mask (Task 18.23).
+
+    The mask's emergency tracker is policy-side (uses-remaining is not on the
+    observation surface), so a mid-game injected state with spent
+    ``emergency_uses`` must seed it — a tracker at the map-wide full allowance
+    would advertise an engine-rejected emergency as engine-legal and corrupt
+    the legal-action signal.
+    """
+
+    game_map = load_canonical_map()
+    cap = game_map.emergency.uses_per_player
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    emergency = EmergencyMeetingIntent(actor=crew_id, type="emergency")
+
+    def _first_mask_for(state: WorldState) -> ActionMask:
+        captured: dict[PlayerId, ActionMask] = {}
+
+        def capture(decision: MaskedDecision) -> ActionIntent:
+            if decision.packet.agent_id == crew_id and crew_id not in captured:
+                captured[crew_id] = decision.mask
+            return decision.fsm_intent
+
+        env = _env(no_replay=True, intent_selector=capture, max_ticks=12)
+        env.rollout_injected(state)
+        return captured[crew_id]
+
+    # All uses spent in the staged state: the mask must mark the emergency
+    # illegal, in agreement with the engine.
+    spent_state = replace(base, emergency_uses={crew_id: cap})
+    assert not _first_mask_for(spent_state).is_engine_legal(emergency)
+    assert _engine_rejects(spent_state, emergency, game_map)
+
+    # The unspent control: same staged shape, full allowance, mask legal.
+    assert _first_mask_for(base).is_engine_legal(emergency)
+    assert not _engine_rejects(base, emergency, game_map)
