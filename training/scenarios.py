@@ -282,17 +282,20 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
 
 
 def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
-    """kill landed (capped at one) + survived the CREW's meeting.
+    """kill landed (capped at one) + survived the CREW's POST-KILL meeting.
 
     ``kills`` comes from the standing impostor dense terms
     (:func:`training.rewards.side_specific_terms`, consumed as-is); the
     survival clause reads the meeting records: at least one meeting ROUTED BY
-    A CREWMATE concluded, and no concluded meeting ejected an impostor. The
-    crew-routed requirement is load-bearing: the scrutiny must be the crew's
-    doing, so an impostor cannot farm the credit by self-reporting its own
-    kill (the default fake meeting layer can never eject, which would
-    otherwise make "survived" collapse into "any meeting concluded"). The
-    survival credit is also gated on the kill — the drill is "kill, then
+    A CREWMATE, triggered AT OR AFTER the first kill's tick, concluded, and no
+    concluded meeting ejected an impostor. Both qualifiers are load-bearing:
+    the scrutiny must be the crew's doing, so an impostor cannot farm the
+    credit by self-reporting its own kill (the default fake meeting layer can
+    never eject, which would otherwise make "survived" collapse into "any
+    meeting concluded"), and it must FOLLOW the kill, so a button pressed
+    before the kill is not scrutiny of it (the ordering exploit: pre-kill
+    emergency + post-meeting kill would otherwise collect the full credit).
+    The survival credit is also gated on the kill — the drill is "kill, then
     survive the scrutiny", not "hide through a meeting". Under an
     ejection-capable meeting layer (:class:`ScenarioProvider`'s
     ``meeting_runner_factory``) the no-ejection clause becomes fully live.
@@ -300,16 +303,24 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
 
     terms = side_specific_terms(rollout, "IMPOSTOR")
     kill_landed = 1.0 if terms["kills"] >= 1.0 else 0.0
+    kill_ticks = [
+        event.tick for event in rollout.events if isinstance(event, KilledEvent)
+    ]
+    first_kill_tick = min(kill_ticks) if kill_ticks else None
     concluded = [m for m in rollout.meetings if m.outcome is not None]
-    crew_routed = any(
-        rollout.roles.get(meeting.triggered_by) == "CREWMATE" for meeting in concluded
+    crew_scrutiny_after_kill = first_kill_tick is not None and any(
+        meeting.tick >= first_kill_tick
+        and rollout.roles.get(meeting.triggered_by) == "CREWMATE"
+        for meeting in concluded
     )
     no_impostor_ejected = all(
         meeting.ejected_player_id is None
         or rollout.roles.get(meeting.ejected_player_id) != "IMPOSTOR"
         for meeting in concluded
     )
-    survived = 1.0 if kill_landed and crew_routed and no_impostor_ejected else 0.0
+    survived = (
+        1.0 if kill_landed and crew_scrutiny_after_kill and no_impostor_ejected else 0.0
+    )
     return kill_landed + survived
 
 
@@ -323,8 +334,9 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
     rewards=(
         "1.0 for landing at least one kill (the staged window: victim "
         "co-located, cooldown 0, a witness one room over) plus 1.0 for then "
-        "having at least one CREW-routed meeting conclude with no impostor "
-        "ejected in any concluded meeting."
+        "having at least one CREW-routed meeting, triggered at or after the "
+        "first kill's tick, conclude with no impostor ejected in any "
+        "concluded meeting."
     ),
     does_not_reward=(
         "un-witnessed-ness (the drill IS acting under nearby observation — "
@@ -333,7 +345,9 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
         "suppression (the survival credit REQUIRES a crew-routed concluded "
         "meeting, so preventing one forfeits it); self-report spam (an "
         "impostor-routed meeting never carries the survival credit); "
-        "surviving a meeting without the kill."
+        "pre-kill meetings (a button pressed before the kill is not scrutiny "
+        "of it — killing after a meeting concludes earns no survival credit "
+        "from that meeting); surviving a meeting without the kill."
     ),
 )
 

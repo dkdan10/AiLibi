@@ -350,6 +350,46 @@ def test_kill_with_witness_self_report_farm_earns_only_the_kill() -> None:
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 
+def _pre_kill_button_selector(decision: MaskedDecision) -> ActionIntent:
+    """p-1 presses the button before any kill; crew never report; FSM impostor.
+
+    The ordering exploit (Codex review on PR #313): a crew-routed meeting that
+    concluded BEFORE the kill satisfied an order-blind crew-routed check, so
+    killing right after the meeting collected the full survival credit with no
+    post-kill scrutiny at all.
+    """
+
+    if decision.packet.self_state.role == "IMPOSTOR":
+        return decision.fsm_intent
+    if decision.packet.agent_id == "p-1":
+        emergency = EmergencyMeetingIntent(
+            actor=decision.packet.agent_id, type="emergency"
+        )
+        if decision.mask.is_engine_legal(emergency):
+            return emergency
+    if isinstance(decision.fsm_intent, ReportBodyIntent):
+        return _wait(decision)
+    return decision.fsm_intent
+
+
+def test_kill_with_witness_pre_kill_meeting_carries_no_survival_credit() -> None:
+    rollout = _run(
+        KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_pre_kill_button_selector
+    )
+    kill_ticks = [e.tick for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kill_ticks, "the FSM impostor still takes the staged window"
+    concluded = [m for m in rollout.meetings if m.outcome is not None]
+    # Every crew-routed meeting concluded strictly BEFORE the first kill...
+    crew_routed = [
+        m for m in concluded if rollout.roles.get(m.triggered_by) == "CREWMATE"
+    ]
+    assert crew_routed
+    assert all(m.tick < min(kill_ticks) for m in crew_routed)
+    # ...so the kill lands but the survival credit does not: pre-kill meetings
+    # are not scrutiny of the kill.
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+
+
 def _scripted_vent_selector(decision: MaskedDecision) -> ActionIntent:
     """Impostor: always take the lexically-last engine-legal vent action.
 
