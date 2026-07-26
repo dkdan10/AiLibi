@@ -339,6 +339,20 @@ def test_build_rejects_a_missing_impostor_cooldown_entry() -> None:
         build_scenario_state(spec, seed=7)
 
 
+def test_build_rejects_fabricated_killer_provenance() -> None:
+    # resolve_kill only ever attributes a body to a roster impostor.
+    def crew_killer(state: WorldState) -> WorldState:
+        bodies = {
+            body_id: replace(body, killed_by="p-1")
+            for body_id, body in state.bodies.items()
+        }
+        return replace(state, bodies=bodies)
+
+    spec = _broken(BODY_DISCOVERY_LATENCY, crew_killer)
+    with pytest.raises(ValueError, match="not a roster impostor"):
+        build_scenario_state(spec, seed=7)
+
+
 def test_build_rejects_a_discovered_body() -> None:
     # The engine removes a reported body when its meeting applies, so a
     # PLAY-state body with discovered_by set has no game provenance — and
@@ -391,19 +405,42 @@ def test_scenario_episodes_score_dense_while_the_terminal_gate_refuses() -> None
         compute_shaped_reward(rollout, "CREWMATE")
 
 
-def test_kill_with_witness_fsm_lands_the_kill_and_survives() -> None:
+def test_kill_with_witness_fsm_overkills_and_keeps_only_the_kill_credit() -> None:
+    # The FSM impostor takes the staged window but keeps killing inside the
+    # horizon — exactly-one-kill forfeits its survival credit, so the scripted
+    # anchor caps at 1.0 and a restrained learned policy can beat it.
     rollout = _run(KILL_WITH_WITNESS_NEARBY, 7)
     kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
-    assert kills, "the staged window must be takeable (victim co-located, cd 0)"
-    concluded = [m for m in rollout.meetings if m.outcome is not None]
-    assert concluded, "the nearby witness must turn the kill into a meeting"
-    # The scrutiny is the CREW's doing (the survival credit's requirement)...
-    assert any(rollout.roles.get(m.triggered_by) == "CREWMATE" for m in concluded)
-    # ...and no concluded meeting ejected an impostor.
-    assert all(
-        m.ejected_player_id is None
-        or rollout.roles.get(m.ejected_player_id) != "IMPOSTOR"
-        for m in concluded
+    assert len(kills) >= 2
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+
+
+def _kill_once_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor takes the staged window at tick 40 and then holds still."""
+
+    packet = decision.packet
+    if packet.self_state.role != "IMPOSTOR":
+        return decision.fsm_intent
+    if packet.tick == KILL_WITH_WITNESS_NEARBY.staged_tick:
+        for intent in decision.mask.engine_legal:
+            if isinstance(intent, KillIntent):
+                return intent
+    return _wait(decision)
+
+
+def test_kill_with_witness_single_kill_then_survive_earns_full_credit() -> None:
+    # The drill's ideal: exactly one kill, the corpse crew-reported, the
+    # meeting concluded without ejecting an impostor — the full 2.0.
+    rollout = _run(KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_kill_once_selector)
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert len(kills) == 1
+    first = kills[0]
+    assert any(
+        isinstance(e, MeetingTriggeredEvent)
+        and e.trigger == "report"
+        and e.body_id == f"body-{first.target}-{first.tick}"
+        and rollout.roles.get(e.actor) == "CREWMATE"
+        for e in rollout.events
     )
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 2.0
 
@@ -584,6 +621,40 @@ def _unrelated_post_kill_meeting_selector(decision: MaskedDecision) -> ActionInt
     if isinstance(decision.fsm_intent, (EmergencyMeetingIntent, ReportBodyIntent)):
         return _wait(decision)
     return decision.fsm_intent
+
+
+def _serial_killer_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor kills whenever legal; crew stay pure FSM (they DO report).
+
+    The Codex round-5 exploit shape: with an at-least-one-kill gate, the
+    impostor could kill the staged victim, keep killing (silencing would-be
+    discoverers), and still collect the survival credit when some crew
+    reported the FIRST corpse around the massacre.
+    """
+
+    if decision.packet.self_state.role != "IMPOSTOR":
+        return decision.fsm_intent
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, KillIntent):
+            return intent
+    return _wait(decision)
+
+
+def test_kill_with_witness_second_kill_forfeits_the_survival_credit() -> None:
+    rollout = _run(KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_serial_killer_selector)
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert len(kills) >= 2, "the serial killer lands more than the staged kill"
+    # The FIRST corpse's crew report DID happen — the survival credit's other
+    # conditions hold — but the extra kills forfeit it.
+    first = kills[0]
+    assert any(
+        isinstance(e, MeetingTriggeredEvent)
+        and e.trigger == "report"
+        and e.body_id == f"body-{first.target}-{first.tick}"
+        and rollout.roles.get(e.actor) == "CREWMATE"
+        for e in rollout.events
+    )
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 
 def test_kill_with_witness_unrelated_post_kill_meeting_earns_nothing() -> None:
@@ -941,8 +1012,10 @@ def test_provider_terms_are_pure_and_genome_sensitive() -> None:
     held = term.fitness((-1.0,))
     assert term.fitness((1.0,)) == engaged
     assert provider(1, "impostor")[0].fitness((1.0,)) == engaged
-    # ...and the scenario carries real pressure: engaging beats holding still.
-    assert engaged == 2.0
+    # ...and the scenario carries real pressure: engaging beats holding still
+    # (the FSM delegate overkills, so it earns the kill credit only — the
+    # full 2.0 needs the restraint the FSM lacks).
+    assert engaged == 1.0
     assert held == 0.0
 
 
@@ -950,7 +1023,8 @@ def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:
     """The DoD leg: a tiny (1+2) ES over the kill-witness scenario term.
 
     Seeded at a holding genome (fitness 0), one mutation crosses the gate and
-    the champion climbs to the full 2.0 — scenario skill pressure flowing
+    the champion climbs to 1.0 (the FSM delegate lands the kill but overkills,
+    so the survival credit stays off) — scenario skill pressure flowing
     through the exact fitness callable the driver's seam would consume — and
     the double run is digest-identical (the purity obligation).
     """
@@ -966,6 +1040,6 @@ def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:
     )
     assert first.digest() == second.digest()
     assert first.num_evaluations == 3
-    assert first.fitness_trace == (0.0, 2.0)
-    assert first.champion_fitness == 2.0
+    assert first.fitness_trace == (0.0, 1.0)
+    assert first.champion_fitness == 1.0
     assert first.champion[0] > 0.0

@@ -258,11 +258,15 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
 
     The impostor (p-4) stands in LABS with the victim (p-5), kill off cooldown
     — the window is open NOW. The nearby witness (p-3) works MEDBAY, LABS's one
-    doorway neighbor: under the base ``same_room_and_adjacent`` visibility the
-    witness sees the scene, but kill witnesses are same-room only, so the kill
-    itself mints no crew testimony — what follows (the body find, the sighting
-    records, the meeting) is exactly the scrutiny the drill is about surviving.
-    The rest of the crew is spread mid-map, each with a live local task.
+    doorway neighbor. Under the Task 13.8 asymmetric visibility a crewmate at
+    base visibility sees SAME ROOM ONLY (only the impostor keeps the adjacent
+    sight edge), so the witness cannot literally watch the kill — "nearby"
+    is DISCOVERY pressure, not line of sight: one doorway from the scene, the
+    witness's patrol finds the corpse fast, and the scrutiny arrives as the
+    body's report meeting. (The impostor, by contrast, SEES the witness one
+    room over while choosing to kill — the staged information asymmetry is
+    the drill.) The rest of the crew is spread mid-map, each with a live
+    local task.
     """
 
     players = {
@@ -297,28 +301,29 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
 
     ``kills`` comes from the standing impostor dense terms
     (:func:`training.rewards.side_specific_terms`, consumed as-is); the
-    survival clause reads the typed events + meeting records: the FIRST
-    kill's body (the engine mints ``body-{victim}-{tick}``) was reported by a
-    CREWMATE, that meeting concluded, and no concluded meeting ejected an
-    impostor. Binding the credit to the staged kill's own corpse is
-    load-bearing three times over: an impostor cannot farm it by
-    self-reporting (the reporter must be crew), cannot collect it from an
-    UNRELATED post-kill meeting (a stray emergency or a later corpse's report
-    is not scrutiny of THIS kill — under the default fake layer, which never
-    ejects, that would hand the credit for free), and cannot collect it from
-    a pre-kill/same-batch meeting (a report of the corpse is only possible
-    after the body exists in an observation packet). The survival credit is
-    also gated on the kill — the drill is "kill, then survive the scrutiny",
-    not "hide through a meeting". Under an ejection-capable meeting layer
+    survival clause reads the typed events + meeting records: EXACTLY ONE
+    kill landed, its body (the engine mints ``body-{victim}-{tick}``) was
+    reported by a CREWMATE, that meeting concluded, and no concluded meeting
+    ejected an impostor. Each qualifier is load-bearing: an impostor cannot
+    farm the credit by self-reporting (the reporter must be crew), cannot
+    collect it from an UNRELATED post-kill meeting (a stray emergency or a
+    later corpse's report is not scrutiny of THIS kill — under the default
+    fake layer, which never ejects, that would hand the credit for free),
+    cannot collect it from a pre-kill/same-batch meeting (a report of the
+    corpse is only possible after the body exists in an observation packet),
+    and cannot KEEP it after a second kill (silencing the would-be
+    discoverer or thinning the electorate forfeits the credit rather than
+    merely failing to add). The survival credit is also gated on the kill —
+    the drill is "kill, then survive the scrutiny", not "hide through a
+    meeting". Under an ejection-capable meeting layer
     (:class:`ScenarioProvider`'s ``meeting_runner_factory``) the no-ejection
     clause becomes fully live.
     """
 
     terms = side_specific_terms(rollout, "IMPOSTOR")
     kill_landed = 1.0 if terms["kills"] >= 1.0 else 0.0
-    first_kill = next(
-        (event for event in rollout.events if isinstance(event, KilledEvent)), None
-    )
+    kill_events = [event for event in rollout.events if isinstance(event, KilledEvent)]
+    first_kill = kill_events[0] if kill_events else None
     concluded_ticks = {m.tick for m in rollout.meetings if m.outcome is not None}
     body_reported_by_crew = first_kill is not None and any(
         isinstance(event, MeetingTriggeredEvent)
@@ -334,8 +339,14 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
         for meeting in rollout.meetings
         if meeting.outcome is not None
     )
+    # EXACTLY one kill: a second kill (silencing the would-be discoverer,
+    # thinning the electorate) must forfeit the survival credit, not merely
+    # fail to add — otherwise a serial killer collects the full score while
+    # the staged first corpse is reported around it.
     survived = (
-        1.0 if kill_landed and body_reported_by_crew and no_impostor_ejected else 0.0
+        1.0
+        if len(kill_events) == 1 and body_reported_by_crew and no_impostor_ejected
+        else 0.0
     )
     return kill_landed + survived
 
@@ -349,20 +360,22 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
     fitness=_kill_with_witness_fitness,
     rewards=(
         "1.0 for landing at least one kill (the staged window: victim "
-        "co-located, cooldown 0, a witness one room over) plus 1.0 when the "
-        "first kill's own body is reported by a crewmate, that meeting "
-        "concludes, and no concluded meeting ejected an impostor."
+        "co-located, cooldown 0, a crew witness one doorway away) plus 1.0 "
+        "when EXACTLY one kill landed, its own body is reported by a "
+        "crewmate, that meeting concludes, and no concluded meeting ejected "
+        "an impostor."
     ),
     does_not_reward=(
-        "un-witnessed-ness (the drill IS acting under nearby observation — "
-        "contrast the standing unwitnessed_kills term); second kills (the kill "
-        "credit caps at one, so silencing the witness earns nothing); meeting "
-        "suppression (the survival credit REQUIRES the kill's own report "
-        "meeting to conclude, so preventing it forfeits the credit); "
-        "self-report spam (the reporter must be crew); unrelated meetings "
-        "(a pre-kill or post-kill emergency, or another corpse's report, is "
-        "not scrutiny of THIS kill and earns nothing); surviving a meeting "
-        "without the kill."
+        "un-witnessed-ness (the drill IS acting under nearby discovery "
+        "pressure — contrast the standing unwitnessed_kills term); second "
+        "kills (any kill beyond the first FORFEITS the survival credit, so "
+        "silencing the discoverer or thinning the electorate costs the "
+        "score, not just gains nothing); meeting suppression (the survival "
+        "credit REQUIRES the kill's own report meeting to conclude, so "
+        "preventing it forfeits the credit); self-report spam (the reporter "
+        "must be crew); unrelated meetings (a pre-kill or post-kill "
+        "emergency, or another corpse's report, is not scrutiny of THIS "
+        "kill and earns nothing); surviving a meeting without the kill."
     ),
 )
 
@@ -816,6 +829,18 @@ def _validate_scenario_state(
                 "when its meeting applies, so a discovered body in a PLAY "
                 "state has no game provenance — and visibility hides it, so a "
                 "discovery drill would silently floor"
+            )
+        killer = state.players.get(body.killed_by)
+        if killer is None or killer.role != "IMPOSTOR":
+            _fail(
+                f"body {body.id!r} was killed_by {body.killed_by!r}, which is "
+                "not a roster impostor: resolve_kill only ever attributes a "
+                "body to an impostor, so any other provenance is fabricated"
+            )
+        if body.killed_by == body.player_id:
+            _fail(
+                f"body {body.id!r} names its own victim as the killer (the "
+                "engine forbids self-kills)"
             )
 
     for player_id, used in state.emergency_uses.items():
