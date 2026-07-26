@@ -1254,12 +1254,19 @@ and to any future free-policy campaign sizing.
   axis: `bfd145cb…` 6/6 = 1.000 (tying the campaign's best) and `3a89655f…` 5/6 = 0.833
   (tying finalists 2–3). A third produced the campaign's only referee PASS on its first
   tranche, which then failed to replicate — itself the sharpest available warning about
-  single-tranche gauge reads. **Exposure that remains:** the other four lineages'
-  runner-ups (~40 candidates) are unevaluated, so §8's ladder is complete for the
-  lineage that was probed and demonstrably incomplete for the rest. Completing them is
-  ~40 candidates × 6 seeds ≈ 240 real games ≈ 80–120 h at measured pace, against the
-  contract's stated ~40–50 h envelope (whose source line prices ONE lineage's
-  per-generation re-ranks, not five). **Routed to the owner/18.28 as a live decision
+  single-tranche gauge reads. **Exposure re-derived from the committed rows (an earlier
+  revision of this finding DOUBLED it):** the four unprobed lineages hold **20**
+  runner-ups — one per impostor-moving generation, 6 + 6 + 6 in runs 01/03/04 and 2 in
+  run 05 — so completion is **120 real games ≈ 40–50 h** at measured pace, not the ~40
+  candidates / 240 games / 80–120 h previously stated. That lands inside the contract's
+  own ~40–50 h envelope and materially changed the fund-versus-accept calculus.
+  **OWNER DECISION (2026-07-26): Option B — fund the two UTILITY lineages (run-01,
+  run-03: 12 runner-ups, 72 games, ~24–30 h), skip run-04/run-05 on the evidence that
+  every one of their arms — 12 candidates over 6 seeds each, champions and back-filled
+  intermediates alike — wins 0.000 on the real path, so their σ-scale siblings cannot
+  plausibly reach the 0.833 band.** Those legs are running; §4.11 carries their result.
+  The residual gap after Option B is exactly the two free-policy lineages, skipped for a
+  stated reason rather than for cost. **Routed to the owner/18.28 as a live decision
   with evidence attached, not as a scope defence:** either fund the remaining
   runner-up evaluation before 18.26's finalist spend, or accept a finalist slate known
   to be complete only for run-02. The campaign's own fake→real ordering weakness
@@ -1319,11 +1326,28 @@ guard was clean, and no selection leans on conviction-influenced ordering.
 | **7. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
 | **8. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
 
-Every entry is λ=4-lineage or anchor-seam utility-family. **This slate is PROVISIONAL
-(F10, and the status line at the head of this report):** this ladder is complete for run-02's K=2 slice and for every lineage's
-champions; the other four lineages' runner-ups are unevaluated, and §4.10 shows that
-slice can carry finalist-grade candidates. 18.26's spend on the top N is the owner's
-call at ~5 h/finalist under the ratified 50-seed protocol.
+**The slate 18.26 should actually run — resolved here, not delegated.** 18.26's contract
+caps the justified slate at ~3–4 finalists (wall-clock scales with count at ~5 h each),
+so naming eight and leaving the cut to the operator would make its two instructions
+unsatisfiable. This campaign's ranked recommendation:
+
+| 18.26 slate | candidate | rationale for the cut |
+|---|---|---|
+| **1** | `ea4bc955…` | 6/6, and the convergence point two independent trajectories found |
+| **2** | `bfd145cb…` | the other 6/6, and the K=2 slice's proof case |
+| **3** | `6d327dcb…` (control) | the incumbent comparator 18.26 needs regardless of ranking |
+| **4 (if budget allows)** | `10c1f9f3…` | best of the 0.833 band: the only swap-frozen champion in it, so it carries the lineage's own selection signal |
+
+**Held in reserve, not recommended for the 50-seed spend:** `dff6e472…`, `3a89655f…`,
+`76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more
+50-seed arms buys resolution between candidates that already tie) and `a89be618…`
+(0.667, different lineage — its case is family diversity, which 18.27 can request
+explicitly if the reading needs it). All eight artifacts stay frozen and named so the
+reserve can be promoted without re-deriving anything.
+
+Every entry is λ=4-lineage or anchor-seam utility-family. **The slate is PROVISIONAL**
+(F10, and the status line at the head of this report): complete for run-02's K=2 slice
+and for every lineage's champions, with the remaining lineages' exposure stated there.
 
 **Named non-finalist exhibit** (unchanged): `27f852fe…` (v3, gen 9) for the off-menu
 instrument's claim-grade denominators if 18.27 wants them.
@@ -1348,7 +1372,7 @@ re-anchored baseline cells (`baseline-cells-corpus.json`), the leg/chain logs th
 pre-screen-before-spend ordering (`provenance/`), the as-recorded→repository path map
 for every `replay_set_dir`/`sample_dir` field (`PATHS.md` — those fields are left
 verbatim as library output rather than rewritten, so an extract never disagrees with the
-process that produced it) — **and all 135 raw replay files themselves, committed at
+process that produced it) — **and all 141 raw replay files themselves, committed at
 their manifests' paths (audit sidecars excluded; no instrument reads them), so
 collaborators and CI can verify every manifest and 18.27 can re-read any arm's bytes
 from a fresh checkout**. The six roots / eight manifests that content-address the
