@@ -62,9 +62,15 @@ from engine.entities import (
     TaskInstanceId,
     TaskState,
 )
-from engine.events import KilledEvent, VentEnteredEvent, VentExitedEvent
+from engine.events import (
+    KilledEvent,
+    MeetingTriggeredEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.rng import EngineRng, RngStateHashPolicy
 from engine.world import Map, WorldState, load_canonical_map
+from orchestrator.game import MeetingRunner
 from training.coevo.driver import CoevoScenarioTerm
 from training.coevo.hall_of_fame import Side
 from training.env import IntentSelector, TacticalRolloutEnv
@@ -231,6 +237,9 @@ _FORCE_PARITY_HORIZON: Final[int] = 24
 
 _BODY_DISCOVERY_TICK: Final[int] = 50
 _BODY_DISCOVERY_HORIZON: Final[int] = 20
+# The staged corpse: killed four ticks before the staged tick, id per the
+# engine's ``body-{victim}-{tick}`` minting convention (engine/rules.py).
+_BODY_DISCOVERY_BODY_ID: Final[str] = f"body-p-6-{_BODY_DISCOVERY_TICK - 4}"
 
 
 def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
@@ -273,25 +282,34 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
 
 
 def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
-    """kill landed (capped at one) + survived every concluded meeting.
+    """kill landed (capped at one) + survived the CREW's meeting.
 
     ``kills`` comes from the standing impostor dense terms
     (:func:`training.rewards.side_specific_terms`, consumed as-is); the
-    survival clause reads the meeting records: at least one meeting CONCLUDED
-    and none ejected an impostor. The survival credit is gated on the kill —
-    the drill is "kill, then survive the scrutiny", not "hide through a
-    meeting".
+    survival clause reads the meeting records: at least one meeting ROUTED BY
+    A CREWMATE concluded, and no concluded meeting ejected an impostor. The
+    crew-routed requirement is load-bearing: the scrutiny must be the crew's
+    doing, so an impostor cannot farm the credit by self-reporting its own
+    kill (the default fake meeting layer can never eject, which would
+    otherwise make "survived" collapse into "any meeting concluded"). The
+    survival credit is also gated on the kill — the drill is "kill, then
+    survive the scrutiny", not "hide through a meeting". Under an
+    ejection-capable meeting layer (:class:`ScenarioProvider`'s
+    ``meeting_runner_factory``) the no-ejection clause becomes fully live.
     """
 
     terms = side_specific_terms(rollout, "IMPOSTOR")
     kill_landed = 1.0 if terms["kills"] >= 1.0 else 0.0
     concluded = [m for m in rollout.meetings if m.outcome is not None]
-    survived_all = bool(concluded) and all(
+    crew_routed = any(
+        rollout.roles.get(meeting.triggered_by) == "CREWMATE" for meeting in concluded
+    )
+    no_impostor_ejected = all(
         meeting.ejected_player_id is None
         or rollout.roles.get(meeting.ejected_player_id) != "IMPOSTOR"
         for meeting in concluded
     )
-    survived = 1.0 if kill_landed and survived_all else 0.0
+    survived = 1.0 if kill_landed and crew_routed and no_impostor_ejected else 0.0
     return kill_landed + survived
 
 
@@ -305,14 +323,17 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
     rewards=(
         "1.0 for landing at least one kill (the staged window: victim "
         "co-located, cooldown 0, a witness one room over) plus 1.0 for then "
-        "having at least one meeting conclude with no impostor ejected."
+        "having at least one CREW-routed meeting conclude with no impostor "
+        "ejected in any concluded meeting."
     ),
     does_not_reward=(
         "un-witnessed-ness (the drill IS acting under nearby observation — "
         "contrast the standing unwitnessed_kills term); second kills (the kill "
         "credit caps at one, so silencing the witness earns nothing); meeting "
-        "suppression (the survival credit REQUIRES a concluded meeting, so "
-        "preventing one forfeits it); surviving a meeting without the kill."
+        "suppression (the survival credit REQUIRES a crew-routed concluded "
+        "meeting, so preventing one forfeits it); self-report spam (an "
+        "impostor-routed meeting never carries the survival credit); "
+        "surviving a meeting without the kill."
     ),
 )
 
@@ -355,13 +376,18 @@ def _build_vent_patrol_state(game_map: Map, seed: int) -> WorldState:
 
 
 def _vent_patrol_fitness(rollout: EpisodeRollout) -> float:
-    """a completed vent transit + no crew witness on any vent event.
+    """a vent-NETWORK transit + no crew witness on any vent event.
 
-    Reads the impostor-authored ``VentEntered``/``VentExited`` events; their
-    ``witnesses`` field is the engine's union of source- and destination-room
-    witnesses, filtered here to crew (a fellow impostor is no witness risk).
-    The unseen credit is conditional on an actual transit, so holding still is
-    worth exactly zero.
+    A transit is a ``VentExited`` whose source and destination VENTS DIFFER —
+    the actor actually moved through the network. The engine also accepts
+    exiting at the current vent, so an in-place enter/exit bob in the staged
+    empty room would otherwise satisfy an any-enter+any-exit reading and
+    collect the unseen credit for free; the source!=destination requirement
+    closes that hole. ``witnesses`` on the events is the engine's union of
+    source- and destination-room witnesses, filtered here to crew (a fellow
+    impostor is no witness risk); the unseen credit covers EVERY impostor
+    vent event and is conditional on the transit, so holding still — in a
+    room or inside a vent — is worth exactly zero.
     """
 
     vent_events = [
@@ -370,9 +396,12 @@ def _vent_patrol_fitness(rollout: EpisodeRollout) -> float:
         if isinstance(event, (VentEnteredEvent, VentExitedEvent))
         and rollout.roles.get(event.actor) == "IMPOSTOR"
     ]
-    entered = any(isinstance(event, VentEnteredEvent) for event in vent_events)
-    exited = any(isinstance(event, VentExitedEvent) for event in vent_events)
-    if not (entered and exited):
+    transited = any(
+        isinstance(event, VentExitedEvent)
+        and event.source_vent_id != event.destination_vent_id
+        for event in vent_events
+    )
+    if not transited:
         return 0.0
     crew_saw = any(
         rollout.roles.get(witness) == "CREWMATE"
@@ -390,15 +419,16 @@ VENT_UNSEEN_UNDER_PATROL: Final[ScenarioSpec] = ScenarioSpec(
     build_state=_build_vent_patrol_state,
     fitness=_vent_patrol_fitness,
     rewards=(
-        "1.0 for a completed vent transit (a VentEntered AND a VentExited "
-        "within the horizon) plus 1.0 when no crew witness appears on any "
-        "impostor vent event (source or destination room)."
+        "1.0 for a completed vent-network transit (a VentExited whose source "
+        "and destination vents differ) plus 1.0 when no crew witness appears "
+        "on any impostor vent event (source or destination room)."
     ),
     does_not_reward=(
         "kills (the cooldown is staged full — clearing the patrol by killing "
-        "it earns nothing); hiding in place (the unseen credit requires an "
-        "actual transit, so never venting scores zero); witness-free play "
-        "that never touches the vent network."
+        "it earns nothing); hiding in place (the unseen credit requires a "
+        "real transit, so never venting scores zero); in-place vent bobs "
+        "(entering and exiting the SAME vent is not a transit and scores "
+        "zero); witness-free play that never touches the vent network."
     ),
 )
 
@@ -491,9 +521,8 @@ def _build_body_discovery_state(game_map: Map, seed: int) -> WorldState:
     """
 
     victim = _player(5, "p-6", "CREWMATE", "STORAGE", alive=False)
-    kill_tick = _BODY_DISCOVERY_TICK - 4
     body = BodyState(
-        id=f"body-p-6-{kill_tick}",
+        id=_BODY_DISCOVERY_BODY_ID,
         player_id="p-6",
         room="STORAGE",
         position=victim.position,
@@ -528,22 +557,28 @@ def _build_body_discovery_state(game_map: Map, seed: int) -> WorldState:
 
 
 def _body_discovery_fitness(rollout: EpisodeRollout) -> float:
-    """1 - latency/horizon for the first crew-routed report meeting; else 0.
+    """1 - latency/horizon for the crew's report of THE STAGED BODY; else 0.
 
-    Latency is the first ``trigger == "report"`` meeting ROUTED BY A CREWMATE,
-    in ticks past the staged tick, normalized by the horizon. No such meeting
-    scores 0.0 — the definition's floor — so a crew that suppresses or simply
-    never produces the meeting can never outscore one that does (the FO-2
-    lesson, encoded rather than hoped for).
+    Latency is the first ``MeetingTriggeredEvent`` with ``trigger == "report"``
+    whose ``body_id`` IS the staged body's, routed by a crewmate, in ticks past
+    the staged tick, normalized by the horizon. The body-id filter is
+    load-bearing: a fresh in-episode kill mints a new body whose report is not
+    the staged discovery problem — without the filter, an easier-to-find fresh
+    corpse would substitute for the drill. No qualifying report scores 0.0 —
+    the definition's floor — so a crew that suppresses or simply never
+    produces the meeting can never outscore one that does (the FO-2 lesson,
+    encoded rather than hoped for).
     """
 
     first_tick = rollout.frames[0].tick
     report = next(
         (
-            meeting
-            for meeting in rollout.meetings
-            if meeting.trigger == "report"
-            and rollout.roles.get(meeting.triggered_by) == "CREWMATE"
+            event
+            for event in rollout.events
+            if isinstance(event, MeetingTriggeredEvent)
+            and event.trigger == "report"
+            and event.body_id == _BODY_DISCOVERY_BODY_ID
+            and rollout.roles.get(event.actor) == "CREWMATE"
         ),
         None,
     )
@@ -562,14 +597,16 @@ BODY_DISCOVERY_LATENCY: Final[ScenarioSpec] = ScenarioSpec(
     fitness=_body_discovery_fitness,
     rewards=(
         "max(0, 1 - latency/horizon) where latency is the tick delay from the "
-        "staged state to the first report-triggered meeting routed by a "
-        "crewmate — faster discovery of the staged body scores higher."
+        "staged state to the first report-triggered meeting of the STAGED "
+        "body, routed by a crewmate — faster discovery scores higher."
     ),
     does_not_reward=(
-        "meeting suppression (no crew-routed report meeting scores 0.0, the "
-        "floor — fewer meetings can never outscore discovery; the FO-2 "
-        "lesson); emergency-button meetings (button spam is not discovery); "
-        "impostor-routed reports (a self-report gains the crew nothing)."
+        "meeting suppression (no crew-routed report of the staged body scores "
+        "0.0, the floor — fewer meetings can never outscore discovery; the "
+        "FO-2 lesson); emergency-button meetings (button spam is not "
+        "discovery); impostor-routed reports (a self-report gains the crew "
+        "nothing); reports of OTHER bodies (a fresh in-episode kill's corpse "
+        "is not the staged discovery problem)."
     ),
 )
 
@@ -761,11 +798,14 @@ class ScenarioProvider:
     function of the flat genome: it builds the side's selector from the
     genome, replays the scenario's episodes fresh over the fixed
     ``fitness_seeds`` (every staged state carries the canonical
-    ``EngineRng.from_seed`` snapshot; the meeting layer is the env's forced
-    fake provider), and averages the per-episode dense fitness. No state
-    crosses calls, so the same genome always returns the same value — the only
-    way a provider could break the driver's pinned double-run digest is
-    ruled out by construction.
+    ``EngineRng.from_seed`` snapshot; the default meeting layer is the env's
+    forced fake provider), and averages the per-episode dense fitness. No
+    state crosses calls, so the same genome always returns the same value —
+    the only way a provider could break the driver's pinned double-run digest
+    is ruled out by construction. An injected ``meeting_runner_factory``
+    inherits that obligation: the runner it builds must itself be
+    deterministic (e.g. the surrogate / gated composed runner), never a live
+    LLM.
 
     **Budget (stated, per the task contract).** Scenario episodes sit OUTSIDE
     the driver's ``projected_game_bound`` ceiling guard, so this provider owns
@@ -779,9 +819,13 @@ class ScenarioProvider:
     ``selector_builders`` maps each side to a genome→selector factory; the
     built selector drives EVERY agent in the episode, so it is responsible for
     delegating decisions it does not own (typically the other side's, via
-    ``MaskedDecision.fsm_intent``). ``rng_hash_policy`` forwards the standard
-    training fast-path opt-in (trajectories — and therefore fitness — are
-    identical under either policy).
+    ``MaskedDecision.fsm_intent``). ``meeting_runner_factory`` installs an
+    ejection-capable meeting layer in the scenario episodes (the env's default
+    forced-fake layer resolves every meeting SKIPPED, so ejection-conditioned
+    fitness clauses only become fully live through this seam).
+    ``rng_hash_policy`` forwards the standard training fast-path opt-in
+    (trajectories — and therefore fitness — are identical under either
+    policy).
     """
 
     def __init__(
@@ -791,6 +835,7 @@ class ScenarioProvider:
         fitness_seeds: Sequence[int],
         scenarios: Mapping[Side, Sequence[ScenarioSpec]] | None = None,
         game_map: Map | None = None,
+        meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
         rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     ) -> None:
         seeds = tuple(fitness_seeds)
@@ -817,10 +862,18 @@ class ScenarioProvider:
                         f"scenario {spec.name!r} is a {spec.side!r}-side drill "
                         f"but was configured under side {side!r}"
                     )
+            names = [spec.name for spec in specs]
+            if len(set(names)) != len(names):
+                raise ValueError(
+                    f"duplicate scenario names for side {side!r}: {names!r} — a "
+                    "repeated scenario silently double-weights its term in the "
+                    "swap's ES fitness (labels ride campaign rows as provenance)"
+                )
         self._selector_builders = dict(selector_builders)
         self._fitness_seeds = seeds
         self._scenarios = resolved
         self._game_map = game_map if game_map is not None else load_canonical_map()
+        self._meeting_runner_factory = meeting_runner_factory
         self._rng_hash_policy = rng_hash_policy
 
     @property
@@ -875,6 +928,7 @@ class ScenarioProvider:
         env = TacticalRolloutEnv(
             game_map=self._game_map,
             intent_selector=selector,
+            meeting_runner_factory=self._meeting_runner_factory,
             max_ticks=spec.max_ticks,
             no_replay=True,
             rng_hash_policy=self._rng_hash_policy,

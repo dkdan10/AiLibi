@@ -19,11 +19,23 @@ from dataclasses import replace
 
 import pytest
 
-from engine.events import KilledEvent, VentEnteredEvent, VentExitedEvent
+from engine.events import (
+    KilledEvent,
+    MeetingTriggeredEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.rng import EngineRng, RngStateHashPolicy
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
-from observation.action_intent import ActionIntent, VentIntent, WaitIntent
+from observation.action_intent import (
+    ActionIntent,
+    EmergencyMeetingIntent,
+    KillIntent,
+    ReportBodyIntent,
+    VentIntent,
+    WaitIntent,
+)
 from orchestrator.replay import _state_hash
 from training.bakeoff.es import ESConfig, evolve
 from training.coevo.driver import CoevoScenarioProvider
@@ -287,6 +299,9 @@ def test_kill_with_witness_fsm_lands_the_kill_and_survives() -> None:
     assert kills, "the staged window must be takeable (victim co-located, cd 0)"
     concluded = [m for m in rollout.meetings if m.outcome is not None]
     assert concluded, "the nearby witness must turn the kill into a meeting"
+    # The scrutiny is the CREW's doing (the survival credit's requirement)...
+    assert any(rollout.roles.get(m.triggered_by) == "CREWMATE" for m in concluded)
+    # ...and no concluded meeting ejected an impostor.
     assert all(
         m.ejected_player_id is None
         or rollout.roles.get(m.ejected_player_id) != "IMPOSTOR"
@@ -301,6 +316,38 @@ def test_kill_with_witness_rewards_nothing_without_the_kill() -> None:
     rollout = _run(KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_impostor_wait_selector)
     assert not [e for e in rollout.events if isinstance(e, KilledEvent)]
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 0.0
+
+
+def _self_report_farm_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor kills whenever legal and reports its own corpse; crew hold.
+
+    The farm the crew-routed requirement exists to defeat: under the default
+    fake meeting layer no meeting can ever eject, so an any-meeting-concluded
+    reading of "survived" would hand this maximally blatant strategy the full
+    survival credit for free.
+    """
+
+    if decision.packet.self_state.role != "IMPOSTOR":
+        return _wait(decision)
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, KillIntent):
+            return intent
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, ReportBodyIntent):
+            return intent
+    return _wait(decision)
+
+
+def test_kill_with_witness_self_report_farm_earns_only_the_kill() -> None:
+    rollout = _run(
+        KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_self_report_farm_selector
+    )
+    concluded = [m for m in rollout.meetings if m.outcome is not None]
+    # Meetings DID conclude — but every one was impostor-routed, so the
+    # survival credit stays off: self-report spam cannot farm it.
+    assert concluded
+    assert all(rollout.roles.get(m.triggered_by) == "IMPOSTOR" for m in concluded)
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 
 def _scripted_vent_selector(decision: MaskedDecision) -> ActionIntent:
@@ -328,8 +375,11 @@ def test_vent_unseen_scripted_transit_earns_both_credits() -> None:
     vent_events = [
         e for e in rollout.events if isinstance(e, (VentEnteredEvent, VentExitedEvent))
     ]
-    assert any(isinstance(e, VentEnteredEvent) for e in vent_events)
-    assert any(isinstance(e, VentExitedEvent) for e in vent_events)
+    # A REAL network transit: an exit whose source and destination vents differ.
+    assert any(
+        isinstance(e, VentExitedEvent) and e.source_vent_id != e.destination_vent_id
+        for e in vent_events
+    )
     assert all(
         rollout.roles.get(witness) != "CREWMATE"
         for event in vent_events
@@ -345,6 +395,31 @@ def test_vent_unseen_rewards_nothing_for_holding_still() -> None:
     assert not [
         e for e in rollout.events if isinstance(e, (VentEnteredEvent, VentExitedEvent))
     ]
+    assert VENT_UNSEEN_UNDER_PATROL.fitness(rollout) == 0.0
+
+
+def _in_place_bob_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor endlessly enters/exits REACTOR_VENT without ever moving."""
+
+    if decision.packet.self_state.role != "IMPOSTOR":
+        return decision.fsm_intent
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, VentIntent) and intent.payload.vent_id == "REACTOR_VENT":
+            return intent
+    return _wait(decision)
+
+
+def test_vent_unseen_in_place_bob_is_not_a_transit() -> None:
+    # The engine accepts exiting at the CURRENT vent, so an enter/exit bob in
+    # the staged empty room emits VentEntered AND VentExited events with zero
+    # witnesses — the cheapest would-be maximizer. The transit definition
+    # (source vent != destination vent) pays it nothing.
+    rollout = _run(VENT_UNSEEN_UNDER_PATROL, 7, intent_selector=_in_place_bob_selector)
+    vent_events = [
+        e for e in rollout.events if isinstance(e, (VentEnteredEvent, VentExitedEvent))
+    ]
+    assert vent_events, "the bob really does emit vent events"
+    assert all(e.source_vent_id == e.destination_vent_id for e in vent_events)
     assert VENT_UNSEEN_UNDER_PATROL.fitness(rollout) == 0.0
 
 
@@ -372,22 +447,61 @@ def test_force_parity_reads_frames_never_the_winner_literal() -> None:
     assert FORCE_PARITY_ENDGAME.fitness(truncated) == 0.0
 
 
+def _staged_body_id() -> str:
+    state = build_scenario_state(BODY_DISCOVERY_LATENCY, seed=7)
+    return next(iter(state.bodies))
+
+
 def test_body_discovery_fsm_routes_the_report() -> None:
     rollout = _run(BODY_DISCOVERY_LATENCY, 7)
-    first_meeting = rollout.meetings[0]
-    assert first_meeting.trigger == "report"
-    assert rollout.roles.get(first_meeting.triggered_by) == "CREWMATE"
+    staged_report = next(
+        e
+        for e in rollout.events
+        if isinstance(e, MeetingTriggeredEvent)
+        and e.trigger == "report"
+        and e.body_id == _staged_body_id()
+    )
+    assert rollout.roles.get(staged_report.actor) == "CREWMATE"
     fitness = BODY_DISCOVERY_LATENCY.fitness(rollout)
     assert 0.0 < fitness <= 1.0
-    # The definition is exactly 1 - latency/horizon for that first report.
-    latency = first_meeting.tick - BODY_DISCOVERY_LATENCY.staged_tick
+    # The definition is exactly 1 - latency/horizon for THE STAGED BODY's
+    # crew-routed report.
+    latency = staged_report.tick - BODY_DISCOVERY_LATENCY.staged_tick
     assert fitness == 1.0 - latency / BODY_DISCOVERY_LATENCY.horizon_ticks
+
+
+def _avoid_staged_body_selector(decision: MaskedDecision) -> ActionIntent:
+    """Crew report any corpse EXCEPT the staged one; everything else is FSM."""
+
+    if decision.packet.self_state.role == "IMPOSTOR":
+        return decision.fsm_intent
+    if (
+        isinstance(decision.fsm_intent, ReportBodyIntent)
+        and decision.fsm_intent.payload.body_id == _staged_body_id()
+    ):
+        return _wait(decision)
+    return decision.fsm_intent
+
+
+def test_body_discovery_gives_no_credit_for_other_bodies() -> None:
+    # A fresh in-episode kill mints a new corpse; reporting IT is not the
+    # staged discovery problem — without the body-id filter an easier-to-find
+    # fresh body would substitute for the drill.
+    rollout = _run(
+        BODY_DISCOVERY_LATENCY, 7, intent_selector=_avoid_staged_body_selector
+    )
+    reports = [
+        e
+        for e in rollout.events
+        if isinstance(e, MeetingTriggeredEvent) and e.trigger == "report"
+    ]
+    assert reports, "a fresh-body report meeting does happen"
+    assert all(e.body_id != _staged_body_id() for e in reports)
+    assert BODY_DISCOVERY_LATENCY.fitness(rollout) == 0.0
 
 
 def _emergency_never_report_selector(decision: MaskedDecision) -> ActionIntent:
     """Crew spam the button when legal and never file a body report."""
-
-    from observation.action_intent import EmergencyMeetingIntent, ReportBodyIntent
 
     if decision.packet.self_state.role == "IMPOSTOR":
         return decision.fsm_intent
@@ -485,6 +599,14 @@ def test_provider_rejects_bad_configurations() -> None:
             selector_builders={"crew": _impostor_gate_builder},
             fitness_seeds=(0,),
             scenarios={"crew": (KILL_WITH_WITNESS_NEARBY,)},
+        )
+    with pytest.raises(ValueError, match="duplicate scenario names"):
+        ScenarioProvider(
+            selector_builders={"impostor": _impostor_gate_builder},
+            fitness_seeds=(0,),
+            scenarios={
+                "impostor": (KILL_WITH_WITNESS_NEARBY, KILL_WITH_WITNESS_NEARBY)
+            },
         )
 
 
