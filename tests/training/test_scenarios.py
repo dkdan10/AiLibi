@@ -339,6 +339,39 @@ def test_build_rejects_a_missing_impostor_cooldown_entry() -> None:
         build_scenario_state(spec, seed=7)
 
 
+def test_build_rejects_a_discovered_body() -> None:
+    # The engine removes a reported body when its meeting applies, so a
+    # PLAY-state body with discovered_by set has no game provenance — and
+    # visibility hides it, silently flooring a discovery drill.
+    def discover_the_body(state: WorldState) -> WorldState:
+        bodies = {
+            body_id: replace(body, discovered_by="p-1")
+            for body_id, body in state.bodies.items()
+        }
+        return replace(state, bodies=bodies)
+
+    spec = _broken(BODY_DISCOVERY_LATENCY, discover_the_body)
+    with pytest.raises(ValueError, match="already discovered"):
+        build_scenario_state(spec, seed=7)
+
+
+def test_build_rejects_out_of_range_emergency_uses() -> None:
+    # The engine counts button presses up from 0 to the map cap; a negative
+    # staged count would mint extra presses (and corrupt the mask tracker).
+    spec = _broken(
+        KILL_WITH_WITNESS_NEARBY,
+        lambda state: replace(state, emergency_uses={"p-1": -1}),
+    )
+    with pytest.raises(ValueError, match="outside"):
+        build_scenario_state(spec, seed=7)
+    spec = _broken(
+        KILL_WITH_WITNESS_NEARBY,
+        lambda state: replace(state, emergency_uses={"p-99": 1}),
+    )
+    with pytest.raises(ValueError, match="not a roster player"):
+        build_scenario_state(spec, seed=7)
+
+
 # --------------------------------------------------------------------------- #
 # Per-scenario fitness: dense tactical facts, and the named non-rewards hold   #
 # --------------------------------------------------------------------------- #
@@ -514,6 +547,66 @@ def test_kill_with_witness_same_batch_meeting_carries_no_survival_credit() -> No
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 
+def _unrelated_post_kill_meeting_selector(decision: MaskedDecision) -> ActionIntent:
+    """Crew press the button AFTER the kill but never report the body.
+
+    The Codex round-4 exploit shape: an order-only check accepted ANY
+    crew-routed post-kill meeting — a stray emergency included — so the
+    survival credit was collectable without the staged victim's body ever
+    being discovered.
+    """
+
+    packet = decision.packet
+    if packet.self_state.role == "IMPOSTOR":
+        return decision.fsm_intent
+    if packet.agent_id == "p-6":
+        if packet.tick >= 44:
+            emergency = EmergencyMeetingIntent(actor=packet.agent_id, type="emergency")
+            if decision.mask.is_engine_legal(emergency):
+                return emergency
+        if packet.self_state.room == "ENGINEERING":
+            return MoveIntent.model_validate(
+                {
+                    "type": "move",
+                    "actor": packet.agent_id,
+                    "payload": {"to_room": "EAST_HALL"},
+                }
+            )
+        if packet.self_state.room == "EAST_HALL":
+            return MoveIntent.model_validate(
+                {
+                    "type": "move",
+                    "actor": packet.agent_id,
+                    "payload": {"to_room": "CAFETERIA"},
+                }
+            )
+        return _wait(decision)
+    if isinstance(decision.fsm_intent, (EmergencyMeetingIntent, ReportBodyIntent)):
+        return _wait(decision)
+    return decision.fsm_intent
+
+
+def test_kill_with_witness_unrelated_post_kill_meeting_earns_nothing() -> None:
+    rollout = _run(
+        KILL_WITH_WITNESS_NEARBY,
+        7,
+        intent_selector=_unrelated_post_kill_meeting_selector,
+    )
+    kill_ticks = [e.tick for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kill_ticks
+    concluded = [m for m in rollout.meetings if m.outcome is not None]
+    # A crew-routed meeting concluded strictly AFTER the kill — but it is an
+    # emergency, not the staged kill's body report, so it is not scrutiny of
+    # THIS kill and the survival credit stays off.
+    assert any(
+        m.trigger == "emergency"
+        and rollout.roles.get(m.triggered_by) == "CREWMATE"
+        and m.tick > min(kill_ticks)
+        for m in concluded
+    )
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+
+
 def _scripted_vent_selector(decision: MaskedDecision) -> ActionIntent:
     """Impostor: always take the lexically-last engine-legal vent action.
 
@@ -571,6 +664,58 @@ def _in_place_bob_selector(decision: MaskedDecision) -> ActionIntent:
         if isinstance(intent, VentIntent) and intent.payload.vent_id == "REACTOR_VENT":
             return intent
     return _wait(decision)
+
+
+def _kill_then_vent_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor clears the patrol at tick 34, then vents through empty rooms.
+
+    The Codex round-4 exploit shape: the staged full cooldown only delays the
+    first kill window, so within the 12-tick horizon the impostor can walk to
+    ENGINEERING, kill the patrol when the cooldown expires, and transit the
+    now-empty vent network unseen — which must FORFEIT the drill, not max it.
+    """
+
+    packet = decision.packet
+    if packet.self_state.role != "IMPOSTOR":
+        return decision.fsm_intent
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, KillIntent):
+            return intent
+    if packet.tick < 34:
+        if packet.self_state.room == "REACTOR":
+            return MoveIntent.model_validate(
+                {
+                    "type": "move",
+                    "actor": packet.agent_id,
+                    "payload": {"to_room": "ENGINEERING"},
+                }
+            )
+        return _wait(decision)
+    vents = [
+        intent
+        for intent in decision.mask.engine_legal
+        if isinstance(intent, VentIntent)
+    ]
+    if vents:
+        return max(vents, key=lambda intent: intent.payload.vent_id)
+    return _wait(decision)
+
+
+def test_vent_unseen_any_kill_forfeits_the_drill() -> None:
+    rollout = _run(
+        VENT_UNSEEN_UNDER_PATROL, 7, intent_selector=_kill_then_vent_selector
+    )
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kills, "the horizon outlasts the staged cooldown, so the kill lands"
+    # A real network transit happened after the murder — the transit credit
+    # WOULD be satisfiable — but the kill forfeits the whole score before any
+    # witness accounting: clearing the patrol can never solve the stealth
+    # drill.
+    assert any(
+        isinstance(e, VentExitedEvent) and e.source_vent_id != e.destination_vent_id
+        for e in rollout.events
+    )
+    assert VENT_UNSEEN_UNDER_PATROL.fitness(rollout) == 0.0
 
 
 def test_vent_unseen_in_place_bob_is_not_a_transit() -> None:

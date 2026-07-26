@@ -796,6 +796,25 @@ class TacticalRolloutEnv:
                 "episode could not advance a single tick. Raise max_ticks above "
                 "the staged tick plus the scenario horizon."
             )
+        # The mask-side emergency trackers are seeded by SUBTRACTING the staged
+        # spent-use counts from the map allowance below, and the engine itself
+        # counts presses up from 0 — so an out-of-range counter (a negative
+        # value minting extra presses, or a roster-foreign key) is a state no
+        # game can produce and must fail loud here, not corrupt the mask.
+        uses_cap = self._game_map.emergency.uses_per_player
+        for player_id, used in initial_state.emergency_uses.items():
+            if player_id not in initial_state.players:
+                raise ValueError(
+                    f"injected initial_state carries an emergency_uses entry for "
+                    f"{player_id!r}, which is not on its roster"
+                )
+            if not 0 <= used <= uses_cap:
+                raise ValueError(
+                    f"injected initial_state has emergency_uses={used} for "
+                    f"{player_id!r}, outside [0, {uses_cap}]; the engine counts "
+                    "presses up from 0 to the map cap, so any other value has "
+                    "no game provenance"
+                )
         num_players = len(initial_state.players)
         num_impostors = sum(
             1 for player in initial_state.players.values() if player.role == "IMPOSTOR"

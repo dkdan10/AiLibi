@@ -736,3 +736,31 @@ def test_injected_state_seeds_the_emergency_mask_tracker() -> None:
     # The unspent control: same staged shape, full allowance, mask legal.
     assert _first_mask_for(base).is_engine_legal(emergency)
     assert not _engine_rejects(base, emergency, game_map)
+
+
+def test_rollout_injected_rejects_invalid_emergency_counters() -> None:
+    """Out-of-range / roster-foreign staged counters fail loud at the seam.
+
+    The mask trackers are seeded by subtracting the staged spent-use counts
+    from the map allowance, and the engine counts presses up from 0 — a
+    negative count would mint extra button presses, so it has no game
+    provenance and must never reach the factory.
+    """
+
+    game_map = load_canonical_map()
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    env = _env(no_replay=True)
+    with pytest.raises(ValueError, match="outside"):
+        env.rollout_injected(replace(base, emergency_uses={crew_id: -1}))
+    with pytest.raises(ValueError, match="outside"):
+        env.rollout_injected(
+            replace(
+                base,
+                emergency_uses={crew_id: game_map.emergency.uses_per_player + 1},
+            )
+        )
+    with pytest.raises(ValueError, match="not on its roster"):
+        env.rollout_injected(replace(base, emergency_uses={"p-99": 1}))
