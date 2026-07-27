@@ -1289,3 +1289,49 @@ class TestCommittedImpostorCampaignRows:
         # the crew-moving swap trains against (opponent_pool_size is the FROZEN
         # side's active pool for the moving side's generation).
         assert any(row.opponent_pool_size >= 30 for row in block5)
+
+
+def test_unloadable_impostor_family_is_refused(tmp_path: Path) -> None:
+    """A family the CONSUMER cannot rebuild is refused up front (Codex #314).
+
+    ``_load_candidate_policy`` sends every non-utility tag to
+    ``build_masked_mlp_policy``, which accepts only ``v2`` / ``v3``. Declaring
+    any other impostor family would freeze artifacts nothing can load — and the
+    campaign would only discover it after paying for every generation.
+    """
+
+    def build_v9(genome: tuple[float, ...]) -> BakeoffPolicy:
+        del genome
+        return cast(BakeoffPolicy, _StubPolicy("v9"))
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(build_policy=build_v9, encoder_version="v9", hidden=8),
+    )
+    with pytest.raises(ValueError, match="not one the consuming entry point"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_bad_stamp_tokens_are_refused_before_any_disk_mutation(tmp_path: Path) -> None:
+    """Stamp tokens are validated in the preflight, not at hall-build time.
+
+    ``LoadableArtifactMetadata`` would otherwise first reject a malformed
+    ``anchor_policy_label`` while the halls are being constructed — after the
+    work dir and campaign plan exist — leaving a half-started tree behind a
+    configuration typo (Codex on PR #314).
+    """
+
+    with pytest.raises(ValueError, match="MANIFEST-safe"):
+        run_alternating_freeze(
+            _make_config(
+                tmp_path / "a", impostor=_impostor_side(anchor_policy_label="a|b")
+            )
+        )
+    _assert_no_disk_mutation(tmp_path / "a")
+
+    with pytest.raises(ValueError, match="non-blank"):
+        run_alternating_freeze(
+            _make_config(tmp_path / "b", crew=_crew_side(anchor_policy_label="   "))
+        )
+    _assert_no_disk_mutation(tmp_path / "b")

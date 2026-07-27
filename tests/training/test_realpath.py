@@ -66,6 +66,7 @@ from training.realpath import (
     RealPathStampError,
     _build_agent_factory,
     _TimeoutMeetingRunner,
+    _genome_digest,
     candidates_from_champion_trace,
     run_realpath_rerank,
     tranche_key,
@@ -1061,3 +1062,109 @@ def test_tranche_key_matches_the_committed_artifact_names() -> None:
     assert tranche_key([4003]) == "4003"
     with pytest.raises(ValueError, match="no seeds"):
         tranche_key([])
+
+
+# --------------------------------------------------------------------------- #
+# 17. Review follow-ups (Codex on PR #314).                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_resume_re_records_an_unreadable_replay(tmp_path: Path) -> None:
+    """A half-written replay is a resume MISS, not a leg-killing exception.
+
+    An interrupted process leaves a partial line, and the committed reader
+    RAISES on it (``ValueError: invalid replay JSON at line N``) rather than
+    returning ``None``. That is precisely the state a resume exists to meet, so
+    the predicate must catch it and re-record — an exception here would abort
+    the leg the resume was supposed to rescue.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    replay = work_dir / "000-utility-es" / "replay-seed-1.jsonl"
+    # A truncated final line: valid rows, then a partial one (the classic
+    # interrupted-write signature).
+    with replay.open("a", encoding="utf-8") as handle:
+        handle.write('{"kind": "tic')
+    with pytest.raises(ValueError, match="invalid replay JSON"):
+        read_tactical_policy_stamp(replay)
+
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    seed_one, seed_two = result.top().seed_telemetry
+    assert seed_one.resumed is False
+    assert seed_one.attempts == 1
+    assert seed_two.resumed is True
+    assert result.top().stamp_verified_games == 2
+    events = [
+        json.loads(line)
+        for line in (work_dir / LEG_LOG_FILENAME).read_text().splitlines()
+    ]
+    reasons = [event["reason"] for event in events if event["event"] == "seed-rerecord"]
+    assert len(reasons) == 1
+    assert "unreadable" in reasons[0]
+
+
+def test_prescreen_must_cover_this_legs_candidates(tmp_path: Path) -> None:
+    """Quotes that do not name THIS leg's candidates are refused (18.31).
+
+    Ordering evidence naming the wrong candidates is worse than none: it reads
+    as proof that the recorded candidates were pre-screened when they were not.
+    Coverage is checked on the genome digest, and a quote whose label matches a
+    candidate must carry that candidate's digest.
+    """
+
+    def _run(quotes: list[PreScreenQuote], work: str) -> None:
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=tmp_path / work,
+            ranking_path=tmp_path / f"{work}.jsonl",
+            config=_config(),
+            prescreen=quotes,
+        )
+
+    # A quote for a DIFFERENT genome (the policy-es digest): no coverage.
+    foreign = PreScreenQuote(
+        label="policy-es",
+        weights_sha256=_genome_digest(_pol_weights()),
+        predicted_flags_per_meeting=1.0,
+        predicted_floors_pass=True,
+    )
+    with pytest.raises(ValueError, match="cover exactly this leg's candidates"):
+        _run([foreign], "a")
+
+    # THIS leg's label paired with another genome's digest: mispaired, not cover.
+    mispaired = PreScreenQuote(
+        label="utility-es",
+        weights_sha256=_genome_digest(_pol_weights()),
+        predicted_flags_per_meeting=1.0,
+        predicted_floors_pass=True,
+    )
+    with pytest.raises(ValueError, match="cover exactly this leg's candidates"):
+        _run([mispaired], "b")
+
+    # An extra quote beside a correct one is still not exact coverage.
+    with pytest.raises(ValueError, match="cover exactly this leg's candidates"):
+        _run([_quote(), foreign], "c")
+
+    # No recording, no record, and no ordering evidence was written for any of
+    # them — the refusal precedes the log.
+    for work in ("a", "b", "c"):
+        assert not (tmp_path / work / "prescreen-quotes-1-000.json").exists()
+        events = [
+            json.loads(line)
+            for line in (tmp_path / work / LEG_LOG_FILENAME).read_text().splitlines()
+        ]
+        assert [event["event"] for event in events] == ["leg-start", "leg-failed"]
+        assert not (tmp_path / work / "000-utility-es").exists()
+
+    # The matching quote set is accepted.
+    _run([_quote()], "ok")
+    assert (tmp_path / "ok" / "prescreen-quotes-1-000.json").exists()

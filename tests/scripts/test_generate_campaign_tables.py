@@ -320,3 +320,75 @@ def test_cli_refuses_to_check_and_render_at_once(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="VERIFIES a committed artifact"):
         gct.main(["stability", "--check", "--out", str(tmp_path / "out.md")])
+
+
+def _write_arm(
+    leg: Path, tranche: str, source_row: dict[str, object], **overrides: object
+) -> None:
+    """Write a one-row ranking file derived from a committed row."""
+
+    row = dict(source_row)
+    row.update(overrides)
+    leg.mkdir(parents=True, exist_ok=True)
+    (leg / f"ranking-{tranche}.jsonl").write_text(
+        json.dumps(row) + "\n", encoding="utf-8"
+    )
+
+
+def _committed_row(index: int = 0) -> dict[str, object]:
+    line = (
+        (_RUN_01_LEG / "ranking-4000-4002.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()[index]
+    )
+    row: dict[str, object] = json.loads(line)
+    return row
+
+
+def test_stability_refuses_mixed_tranche_pairs(tmp_path: Path) -> None:
+    """Every arm must share ONE tranche pair (Codex on PR #314).
+
+    Two arms each read twice is not a two-tranche measurement if they were read
+    on DIFFERENT pairs: the aggregate silently mixes comparisons while the table
+    presents it as one. The per-arm "exactly two reads" check cannot see this.
+    """
+
+    first, second = _committed_row(0), _committed_row(1)
+    root = tmp_path / "campaign"
+    _write_arm(root / "leg-a", "t1", first)
+    _write_arm(root / "leg-a", "t2", first)
+    _write_arm(root / "leg-b", "t2", second)
+    _write_arm(root / "leg-b", "t3", second)
+
+    with pytest.raises(SystemExit, match="do not share ONE tranche pair"):
+        gct.compute_stability(gct.find_ranking_files([root]))
+
+
+def test_stability_refuses_unequal_game_counts(tmp_path: Path) -> None:
+    """A win swing IN GAMES needs one denominator (Codex on PR #314).
+
+    Subtracting raw win counts across unequal totals would read identical 50%
+    rates over 2 and 4 games as a one-game swing.
+    """
+
+    row = _committed_row(0)
+    root = tmp_path / "campaign"
+    _write_arm(root / "leg-a", "t1", row, core_games_total=3)
+    _write_arm(root / "leg-a", "t2", row, core_games_total=4)
+
+    with pytest.raises(SystemExit, match="needs one denominator"):
+        gct.compute_stability(gct.find_ranking_files([root]))
+
+
+def test_stability_refuses_a_mixed_global_denominator(tmp_path: Path) -> None:
+    """Two internally-consistent arms of different sizes still cannot be pooled."""
+
+    first, second = _committed_row(0), _committed_row(1)
+    root = tmp_path / "campaign"
+    _write_arm(root / "leg-a", "t1", first, core_games_total=3)
+    _write_arm(root / "leg-a", "t2", first, core_games_total=3)
+    _write_arm(root / "leg-b", "t1", second, core_games_total=5)
+    _write_arm(root / "leg-b", "t2", second, core_games_total=5)
+
+    with pytest.raises(SystemExit, match="games per tranche"):
+        gct.compute_stability(gct.find_ranking_files([root]))

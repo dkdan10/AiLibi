@@ -262,6 +262,23 @@ COEVO_FREEZE_METHOD: Final[str] = "alternating-freeze-es"
 #: digest-inert for existing configurations.
 DEFAULT_RUN_LABEL: Final[str] = "coevo-campaign"
 
+#: The impostor encoder families the CONSUMING entry point can actually rebuild:
+#: ``scripts/run_tournament.py`` ``_load_candidate_policy`` sends the utility tag
+#: to ``build_utility_scorer_policy`` and EVERY other tag to
+#: ``build_masked_mlp_policy``, whose ``policy_es._encoder_for_version`` accepts
+#: only ``"v2"`` / ``"v3"``. A campaign pinning any other impostor family would
+#: freeze artifacts nothing can load — and would only discover it after paying
+#: for every generation (Codex review on PR #314), so the pin is refused up
+#: front. Restated here (the hall_of_fame restated-literal idiom) rather than
+#: importing a private symbol across the seam; ``training.realpath``'s
+#: ``_SUPPORTED_ENCODER_VERSIONS`` states the same set for the same reason. A
+#: new family extends BOTH lists and the builder dispatch — never just this one.
+_LOADABLE_IMPOSTOR_ENCODERS: Final[tuple[str, ...]] = (
+    _UTILITY_ENCODER_VERSION,
+    "v2",
+    "v3",
+)
+
 #: The stated fake-path game-count ceiling (the integration-risk guard): at the
 #: measured ~0.5 s/fake game this is a same-day run, never a week-long one. A
 #: configuration whose :func:`projected_game_bound` exceeds the configured
@@ -818,18 +835,23 @@ def _validate_side(
             f"the {expected_side} side config declares hidden={config.hidden!r}; "
             "a masked-MLP head width must be >= 1"
         )
-    if (
-        expected_side == "impostor"
-        and probe_encoder != _UTILITY_ENCODER_VERSION
-        and config.hidden is None
-    ):
-        raise ValueError(
-            f"the impostor family {probe_encoder!r} rebuilds through the "
-            "masked-MLP builder, so every artifact it freezes needs an integer "
-            "'hidden' in config.json; declare it on the side config (it is "
-            "NEVER re-derived from genome length — the 18.24 report §12 Errata "
-            "item 1 is the cost of guessing)"
-        )
+    if expected_side == "impostor":
+        if probe_encoder not in _LOADABLE_IMPOSTOR_ENCODERS:
+            raise ValueError(
+                f"the impostor family {probe_encoder!r} is not one the consuming "
+                f"entry point can rebuild (loadable: {_LOADABLE_IMPOSTOR_ENCODERS!r}); "
+                "every artifact this campaign froze would be unloadable through "
+                "_load_candidate_policy, discovered only after the generations "
+                "were paid for — refusing before the first game"
+            )
+        if probe_encoder != _UTILITY_ENCODER_VERSION and config.hidden is None:
+            raise ValueError(
+                f"the impostor family {probe_encoder!r} rebuilds through the "
+                "masked-MLP builder, so every artifact it freezes needs an integer "
+                "'hidden' in config.json; declare it on the side config (it is "
+                "NEVER re-derived from genome length — the 18.24 report §12 Errata "
+                "item 1 is the cost of guessing)"
+            )
     return initial
 
 
@@ -865,6 +887,34 @@ def _preflight_fresh_hall_root(hall_root: Path) -> None:
                     f"stray member artifacts {stray} exist without an index — a "
                     "dirty tree is never silently adopted"
                 )
+
+
+def _side_artifact_metadata(
+    config: CoevoCampaignConfig, side_config: CoevoSideConfig[Any]
+) -> LoadableArtifactMetadata:
+    """The side's stamp-grade freeze metadata (Task 18.31 fix 4).
+
+    ``encoder_version`` / ``hidden`` / ``anchor_policy`` come from the SIDE
+    CONFIG — the campaign's declared family — never from a genome length or a
+    builder probe. Every freeze on that side (swap champion, exploiter find,
+    MAP-Elites founder, and the per-generation champions written beside the
+    rows) therefore stamps the same, family-correct identity.
+
+    A module-level function so ``_validate_config`` can CONSTRUCT it as part of
+    the preflight: the model's own stamp-token rules (non-blank, MANIFEST-safe)
+    would otherwise first run while the halls are being built — after the work
+    dir and campaign plan already exist, leaving a half-started campaign tree
+    behind a configuration typo (Codex review on PR #314).
+    """
+
+    return LoadableArtifactMetadata(
+        run_label=config.run_label,
+        method=COEVO_FREEZE_METHOD,
+        encoder_version=side_config.encoder_version,
+        anchor_policy=side_config.anchor_policy_label,
+        hidden=side_config.hidden,
+        anchor_weight=side_config.anchor_weight,
+    )
 
 
 def _validate_config(
@@ -979,6 +1029,12 @@ def _validate_config(
     crew_initial = _validate_side(
         config.crew, expected_side="crew", master_seed=config.master_seed
     )
+    # Constructing BOTH sides' freeze metadata is the preflight for every stamp
+    # token the campaign will write (run label, anchor label, family): the model
+    # validates them here, before the work dir or plan exist, rather than at
+    # hall-creation time behind a half-built tree.
+    for side_config in (config.impostor, config.crew):
+        _side_artifact_metadata(config, side_config)
     return impostor_initial, crew_initial
 
 
@@ -1122,23 +1178,9 @@ class _CampaignEngine:
     def _artifact_metadata(
         self, side_config: CoevoSideConfig[Any]
     ) -> LoadableArtifactMetadata:
-        """The side's stamp-grade freeze metadata (Task 18.31 fix 4).
+        """This campaign's freeze metadata for one side (already preflighted)."""
 
-        ``encoder_version`` / ``hidden`` / ``anchor_policy`` come from the SIDE
-        CONFIG — the campaign's declared family — never from a genome length or
-        a builder probe. Every freeze on that side (swap champion, exploiter
-        find, MAP-Elites founder, and the per-generation champions written
-        beside the rows) therefore stamps the same, family-correct identity.
-        """
-
-        return LoadableArtifactMetadata(
-            run_label=self._config.run_label,
-            method=COEVO_FREEZE_METHOD,
-            encoder_version=side_config.encoder_version,
-            anchor_policy=side_config.anchor_policy_label,
-            hidden=side_config.hidden,
-            anchor_weight=side_config.anchor_weight,
-        )
+        return _side_artifact_metadata(self._config, side_config)
 
     def _persist_generation_champion(
         self,

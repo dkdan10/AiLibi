@@ -805,6 +805,41 @@ def write_prescreen_record(
     )
 
 
+def _validate_prescreen_coverage(
+    quotes: Sequence[PreScreenQuote], candidates: Sequence[RealPathCandidate]
+) -> None:
+    """Refuse pre-screen quotes that do not name THIS leg's candidates (18.31).
+
+    The ordering evidence is only worth what it names: a stale or partial quote
+    set proves that SOME advice preceded the spend, not that the candidates
+    consuming real-provider games were the ones pre-screened (Codex review on
+    PR #314). Coverage is checked on the genome DIGEST — the identity a quote
+    and a candidate actually share — and a quote whose label matches a
+    candidate's must carry that candidate's digest, so a relabelled or
+    mispaired quote cannot pass as coverage either.
+    """
+
+    quoted = {quote.weights_sha256 for quote in quotes}
+    expected = {_genome_digest(candidate.genome) for candidate in candidates}
+    if quoted != expected:
+        raise ValueError(
+            "pre-screen quotes must cover exactly this leg's candidates; "
+            f"missing {sorted(expected - quoted)}, extra {sorted(quoted - expected)} "
+            "(the blocker-4 evidence names the candidates the spend recorded)"
+        )
+    digest_by_label = {
+        candidate.label: _genome_digest(candidate.genome) for candidate in candidates
+    }
+    for quote in quotes:
+        expected_digest = digest_by_label.get(quote.label)
+        if expected_digest is not None and quote.weights_sha256 != expected_digest:
+            raise ValueError(
+                f"pre-screen quote {quote.label!r} carries weights_sha256 "
+                f"{quote.weights_sha256!r} but the candidate with that label is "
+                f"{expected_digest!r}; a mispaired quote is not coverage"
+            )
+
+
 def _write_prescreen_json(
     path: Path,
     *,
@@ -1063,7 +1098,15 @@ def _resume_skip_reason(
 
     if not replay_path.exists():
         return "no replay on disk"
-    stamp = read_tactical_policy_stamp(replay_path)
+    try:
+        stamp = read_tactical_policy_stamp(replay_path)
+    except Exception as exc:  # noqa: BLE001 - ANY unreadable replay re-records
+        # An interrupted process can leave a half-written line, and the reader
+        # raises on it (``ValueError: invalid replay JSON at line N``) or on the
+        # doubled-file pattern (``CorruptedFileError``). Those are the very
+        # states a resume exists to meet: an unreadable replay is a verification
+        # MISS, never a leg-killing exception (Codex review on PR #314).
+        return f"replay bytes are unreadable ({type(exc).__name__}: {exc})"
     if stamp is None:
         return (
             "no tactical policy stamp on the recorded bytes (no game_over row — "
@@ -1577,6 +1620,10 @@ def run_realpath_rerank(
     )
     try:
         if prescreen is not None:
+            # Coverage BEFORE the record and the log: evidence that names the
+            # wrong candidates is worse than no evidence, because it reads as
+            # proof (Codex review on PR #314).
+            _validate_prescreen_coverage(prescreen, candidates)
             for quote in prescreen:
                 leg_log.emit(
                     "prescreen-quote",

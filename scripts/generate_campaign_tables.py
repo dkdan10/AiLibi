@@ -467,6 +467,7 @@ class _Arm:
 
     leg: str
     weights_sha256: str
+    tranche_pair: tuple[str, str]
     first: Mapping[str, Any]
     second: Mapping[str, Any]
 
@@ -510,9 +511,21 @@ def _collect_arms(
             _Arm(
                 leg=leg,
                 weights_sha256=sha,
+                tranche_pair=(first_key, second_key),
                 first=reads[first_key],
                 second=reads[second_key],
             )
+        )
+    # ONE global tranche pair, not merely two reads per arm: a set where arm A
+    # was read on (t1, t2) and arm B on (t2, t3) yields an aggregate that mixes
+    # different comparisons while the table presents it as a single two-tranche
+    # measurement (Codex review on PR #314).
+    tranche_pairs = sorted({arm.tranche_pair for arm in arms})
+    if len(tranche_pairs) > 1:
+        raise SystemExit(
+            f"the arms do not share ONE tranche pair ({tranche_pairs}); a "
+            "stability table compares the SAME two tranches for every arm — "
+            "pass the roots (or the two tranches) you mean to compare"
         )
     return by_arm, arms
 
@@ -526,6 +539,16 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
     structurally unpassable (``>= 1.000``) conversion floor on at least one
     tranche, the mean absolute win-rate swing in games, how many arms swung a
     full game, and the referee PASS / retested / replicated census.
+
+    Three preconditions are ENFORCED rather than assumed, because violating any
+    of them yields a number that reads like a two-tranche measurement and is
+    not one: every arm shares ONE tranche pair, every arm's two tranches carry
+    the same game count, and that game count is the same across the whole set.
+    The ``mean_abs_win_swing_games_of_3`` key name records the 18.24
+    denominator (the committed artifact's schema, kept so the reproduction is
+    byte-exact); the uniformity check is what guarantees a run's denominator is
+    single and knowable, and the rendered table's row label states the unit
+    without hard-coding it.
     """
 
     by_arm, arms = _collect_arms(ranking_paths)
@@ -554,6 +577,7 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
 
     flag_swings: list[float] = []
     win_swings: list[float] = []
+    games_per_tranche: set[int] = set()
     impossible = 0
     swinging = 0
     for arm in arms:
@@ -577,6 +601,19 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
             for floor in conversion_floors
         ):
             impossible += 1
+        # A win swing is reported IN GAMES, so the two tranches must share a
+        # denominator: subtracting raw win counts across unequal game totals
+        # would read identical 50% rates over 2 and 4 games as a one-game swing
+        # (Codex review on PR #314).
+        games = [read["core_games_total"] for read in reads]
+        if games[0] != games[1]:
+            raise SystemExit(
+                f"{arm.leg}: genome {arm.weights_sha256} was recorded over "
+                f"{games[0]} and {games[1]} games on its two tranches; a win "
+                "swing in GAMES needs one denominator — re-record the short "
+                "tranche or compare tranches of equal size"
+            )
+        games_per_tranche.add(games[0])
         wins = [
             read["core_impostor_win_rate"] * read["core_games_total"] for read in reads
         ]
@@ -585,6 +622,12 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
         if swing >= _ONE_GAME:
             swinging += 1
 
+    if len(games_per_tranche) > 1:
+        raise SystemExit(
+            f"the arms were recorded over {sorted(games_per_tranche)} games per "
+            "tranche; a mean win swing IN GAMES needs one denominator across the "
+            "whole set — compare tranches of equal size"
+        )
     mean_flags = sum(flag_swings) / len(flag_swings)
     passes = [
         (key, tranche)

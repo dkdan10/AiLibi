@@ -1151,3 +1151,81 @@ def test_add_member_without_metadata_keeps_the_two_file_member(tmp_path: Path) -
         "weights.json",
         "weights.json.sha256",
     ]
+
+
+def test_artifact_metadata_round_trips_through_the_index(tmp_path: Path) -> None:
+    """A loadable pool STAYS loadable across a reload (Codex on PR #314).
+
+    The metadata is not a property of whoever opens the store — it is the
+    pool's own freeze identity. Without persistence a reloaded four-file pool
+    would silently start freezing two-file members, recreating the exact
+    missing-``stamp.json`` defect this task removes.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    hall.add_member(
+        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    index = json.loads((tmp_path / "impostor" / "hall_of_fame.json").read_text())
+    assert index["artifact_metadata"]["run_label"] == "run-01-utility-champion"
+
+    # Reloaded WITHOUT re-supplying it: the pool still knows its own identity.
+    reloaded = HallOfFame.load(tmp_path, "impostor")
+    assert reloaded.artifact_metadata == _metadata()
+    member = reloaded.add_member(
+        (0.3, 0.4), generation=2, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    assert sorted(
+        path.name for path in (tmp_path / "impostor" / member.path).iterdir()
+    ) == ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
+
+    # Re-supplying a DIFFERENT identity is loud drift, never a silent override.
+    with pytest.raises(ValueError, match="never silently overridden"):
+        HallOfFame.load(
+            tmp_path, "impostor", artifact_metadata=_metadata(run_label="other-run")
+        )
+    # Agreeing metadata is accepted.
+    assert (
+        HallOfFame.load(
+            tmp_path, "impostor", artifact_metadata=_metadata()
+        ).artifact_metadata
+        == _metadata()
+    )
+
+
+def test_weights_only_pool_index_bytes_are_unchanged(tmp_path: Path) -> None:
+    """A pool that declares no family records no metadata key (18.31).
+
+    The persistence is additive: a weights-only pool's ``hall_of_fame.json``
+    carries exactly the 18.20 key set, so committed pools reload untouched.
+    """
+
+    hall = HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(hall)
+    index = json.loads((tmp_path / "impostor" / "hall_of_fame.json").read_text())
+    assert set(index) == {"members", "side", "substrate_sha256"}
+    assert HallOfFame.load(tmp_path, "impostor").artifact_metadata is None
+
+
+def test_write_loadable_artifact_refuses_a_nonempty_dir(tmp_path: Path) -> None:
+    """A stray file in the target dir refuses the freeze (Codex on PR #314).
+
+    Exclusive opens alone only guard the four known filenames, so a stale or
+    unrelated file would be silently adopted into a five-file "artifact".
+    """
+
+    artifact_dir = tmp_path / "member"
+    artifact_dir.mkdir()
+    (artifact_dir / "stale-notes.txt").write_text("left over from an earlier pass")
+    with pytest.raises(FileExistsError, match="non-empty artifact dir"):
+        write_loadable_artifact(
+            artifact_dir,
+            (0.1, 0.2),
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
+    # Nothing was written beside the stray file.
+    assert sorted(path.name for path in artifact_dir.iterdir()) == ["stale-notes.txt"]

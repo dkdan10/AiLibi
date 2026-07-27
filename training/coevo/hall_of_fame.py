@@ -229,10 +229,12 @@ def write_loadable_artifact(
 
     Fails loud on: an empty genome; a stamp token that is blank or
     MANIFEST-unsafe; ``hidden < 1`` when declared; a ``config`` mapping that
-    carries any writer-owned key; and — via exclusive ``"x"`` opens — any
-    pre-existing file in ``artifact_dir`` (the no-clobber discipline: an
-    artifact is written once, never patched in place). Returns the
-    ``weights_sha256`` digest.
+    carries any writer-owned key; and any pre-existing CONTENT in
+    ``artifact_dir`` — not merely a collision with one of the four filenames.
+    An artifact directory holding a stray or stale file would otherwise be
+    silently adopted and freeze as a five-or-more-file bundle (Codex review on
+    PR #314); the no-clobber discipline is that an artifact dir is written once,
+    whole, never patched in place. Returns the ``weights_sha256`` digest.
     """
 
     if not genome:
@@ -269,6 +271,14 @@ def write_loadable_artifact(
         "weights_sha256": digest,
     }
 
+    if artifact_dir.exists():
+        existing = sorted(child.name for child in artifact_dir.iterdir())
+        if existing:
+            raise FileExistsError(
+                f"refusing to freeze into non-empty artifact dir {artifact_dir} "
+                f"(holds {existing}); a loadable artifact is written once and "
+                "whole, never merged into whatever is already there"
+            )
     artifact_dir.mkdir(parents=True, exist_ok=True)
     for filename, payload in (
         (_WEIGHTS_FILENAME, weights_json),
@@ -469,6 +479,11 @@ class HallOfFame:
         artifact (Task 18.31). ``None`` ⇒ the historic two-file member (weights
         + sidecar): the pool is still a valid genome store, but its members
         carry no stamp and do not load through ``_load_candidate_policy``.
+
+        The value is PERSISTED into ``hall_of_fame.json`` and restored by
+        :meth:`load`, so the two modes are a property of the POOL rather than of
+        whoever happens to open it — a reloaded loadable pool cannot silently
+        start freezing unstamped members.
         """
 
         return self._artifact_metadata
@@ -574,9 +589,13 @@ class HallOfFame:
         member's ``weights.json`` and double-checks the digest against BOTH the
         sidecar first token AND the index row.
 
-        ``artifact_metadata`` (Task 18.31) applies to members added AFTER the
-        reload; the verification passes read only the two weight files, so a
-        pool frozen either way reloads identically.
+        ``artifact_metadata`` (Task 18.31) is RESTORED from the index when the
+        pool recorded one, so a reloaded loadable pool keeps freezing loadable
+        members — reloading can never silently downgrade a four-file pool to
+        two-file adds (Codex review on PR #314). Passing it explicitly is
+        allowed only when it AGREES with the recorded one (a disagreement is
+        loud drift, never a silent override); a pool with no recorded metadata
+        adopts the passed one.
         """
 
         if side not in _SIDES:
@@ -604,6 +623,25 @@ class HallOfFame:
             raise ValueError(
                 f"hall of fame index at {index_path} has a malformed members list"
             )
+        raw_metadata = index.get("artifact_metadata")
+        resolved_metadata = artifact_metadata
+        if raw_metadata is not None:
+            if not isinstance(raw_metadata, dict):
+                raise ValueError(
+                    f"hall of fame index at {index_path} has a malformed "
+                    f"artifact_metadata block {raw_metadata!r} (expected an object)"
+                )
+            # Building the model runs the same fail-loud validation ``create``
+            # ran; a corrupted block is drift, not a reason to freeze unstamped.
+            recorded = LoadableArtifactMetadata(**raw_metadata)
+            if artifact_metadata is not None and artifact_metadata != recorded:
+                raise ValueError(
+                    f"hall of fame index at {index_path} records artifact "
+                    f"metadata {recorded.model_dump(mode='json')} but was loaded "
+                    f"with {artifact_metadata.model_dump(mode='json')}; the pool's "
+                    "own freeze identity is never silently overridden"
+                )
+            resolved_metadata = recorded
 
         # Pass 1: validate rows, self-check path, collect the declared path set.
         members: list[HallOfFameMember] = []
@@ -661,7 +699,7 @@ class HallOfFame:
             side_dir=side_dir,
             substrate_sha256=substrate_sha256,
             members=tuple(members),
-            artifact_metadata=artifact_metadata,
+            artifact_metadata=resolved_metadata,
         )
 
     # -- mutation ----------------------------------------------------------- #
@@ -903,13 +941,21 @@ class HallOfFame:
         top-level keys AND every descriptor mapping's keys, so the bytes are
         deterministic and every row carries the same key set (absent optionals
         serialise ``null``).
+
+        ``artifact_metadata`` is persisted ONLY when the pool declares one
+        (Task 18.31): a weights-only pool's index bytes are unchanged, and a
+        loadable pool carries its own freeze identity so a later
+        :meth:`load` cannot silently drop it and freeze a two-file member into
+        a four-file pool (Codex review on PR #314).
         """
 
-        index = {
+        index: dict[str, Any] = {
             "members": [member.model_dump(mode="json") for member in self._members],
             "side": self._side,
             "substrate_sha256": self._substrate_sha256,
         }
+        if self._artifact_metadata is not None:
+            index["artifact_metadata"] = self._artifact_metadata.model_dump(mode="json")
         self._index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
 
 
