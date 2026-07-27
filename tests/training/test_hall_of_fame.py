@@ -1229,3 +1229,60 @@ def test_write_loadable_artifact_refuses_a_nonempty_dir(tmp_path: Path) -> None:
         )
     # Nothing was written beside the stray file.
     assert sorted(path.name for path in artifact_dir.iterdir()) == ["stale-notes.txt"]
+
+
+def test_loading_a_loadable_pool_verifies_all_four_files(tmp_path: Path) -> None:
+    """A pool that advertises loadable members verifies four files, not two.
+
+    Restoring the metadata is a promise that every member loads through
+    ``_load_candidate_policy``; checking only weights + sidecar would hand back
+    a hall whose members fail at spend time instead of resume time (Codex on
+    PR #314). The module's eager two-pass posture is that corruption surfaces
+    at load.
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            (0.1, 0.2),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    # A member whose stamp.json was removed.
+    missing = tmp_path / "missing"
+    member = _fresh(missing)
+    (missing / "impostor" / member.path / "stamp.json").unlink()
+    with pytest.raises(ValueError, match="missing part of its loadable artifact"):
+        HallOfFame.load(missing, "impostor")
+
+    # A member stamped for a DIFFERENT family than the pool declares.
+    wrong_family = tmp_path / "family"
+    member = _fresh(wrong_family)
+    stamp_path = wrong_family / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["encoder_version"] = "v3"
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="a hall stays "):
+        HallOfFame.load(wrong_family, "impostor")
+
+    # A member whose stamp names another genome (the 17.14 conflation guard).
+    wrong_sha = tmp_path / "sha"
+    member = _fresh(wrong_sha)
+    stamp_path = wrong_sha / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["weights_sha256"] = "0" * 64
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="conflation guard"):
+        HallOfFame.load(wrong_sha, "impostor")
+
+    # A healthy loadable pool still reloads cleanly.
+    healthy = tmp_path / "healthy"
+    _fresh(healthy)
+    assert HallOfFame.load(healthy, "impostor").artifact_metadata == _metadata()

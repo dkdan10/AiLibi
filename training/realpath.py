@@ -637,6 +637,15 @@ class PreScreenQuote(BaseModel):
         ):
             if count is not None and count < 0:
                 raise ValueError(f"{name} must be >= 0; got {count!r}")
+        if self.note != PRESCREEN_ADVICE_NOTE:
+            # The disclaimer is the record's provenance guarantee, not a caption:
+            # a quote whose note called the prediction gating evidence would
+            # invert blocker 4 in the committed artifact (Codex review on
+            # PR #314). It is a constant the field carries, never caller text.
+            raise ValueError(
+                f"note must be exactly {PRESCREEN_ADVICE_NOTE!r} (a pre-screen is "
+                f"spend advice by contract); got {self.note!r}"
+            )
         return self
 
 
@@ -1734,7 +1743,22 @@ def run_realpath_rerank(
             for rank, i in enumerate(order, start=1)
         )
         ranking_path.parent.mkdir(parents=True, exist_ok=True)
-        ranking_path.write_text("".join(row.to_json_line() + "\n" for row in rows))
+        # EXCLUSIVE: a ranking is committed truth, written once. Before the
+        # resume path existed a re-run died at the candidate-dir mkdir long
+        # before reaching this line; ``resume=True`` makes a completed leg
+        # re-runnable, and a plain write would then silently REPLACE the
+        # recorded ranking with one whose telemetry says the games were skipped
+        # rather than played (Codex review on PR #314).
+        try:
+            with ranking_path.open("x", encoding="utf-8") as handle:
+                handle.write("".join(row.to_json_line() + "\n" for row in rows))
+        except FileExistsError as exc:
+            raise RealPathRerankError(
+                f"a committed ranking already exists at {ranking_path}; this leg "
+                "is already recorded and its rows are never rewritten (point "
+                "--ranking-path at a fresh file, or delete the stale one "
+                "deliberately)"
+            ) from exc
         for row in rows:
             leg_log.emit(
                 "rank",

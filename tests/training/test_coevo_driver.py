@@ -1322,10 +1322,17 @@ def test_bad_stamp_tokens_are_refused_before_any_disk_mutation(tmp_path: Path) -
     configuration typo (Codex on PR #314).
     """
 
+    # A custom anchor WITH a MANIFEST-unsafe label: the anchor identity rule is
+    # satisfied (anchor supplied, label named), so the token check is what must
+    # catch it — and it must do so before any mkdir.
+    stub_anchor = cast(BakeoffPolicy, object())
     with pytest.raises(ValueError, match="MANIFEST-safe"):
         run_alternating_freeze(
             _make_config(
-                tmp_path / "a", impostor=_impostor_side(anchor_policy_label="a|b")
+                tmp_path / "a",
+                impostor=_impostor_side(
+                    anchor_policy=stub_anchor, anchor_policy_label="a|b"
+                ),
             )
         )
     _assert_no_disk_mutation(tmp_path / "a")
@@ -1335,3 +1342,92 @@ def test_bad_stamp_tokens_are_refused_before_any_disk_mutation(tmp_path: Path) -
             _make_config(tmp_path / "b", crew=_crew_side(anchor_policy_label="   "))
         )
     _assert_no_disk_mutation(tmp_path / "b")
+
+
+def test_anchor_label_without_an_anchor_policy_is_refused(tmp_path: Path) -> None:
+    """The anchor identity is enforced in BOTH directions (Codex on PR #314).
+
+    Naming an anchor artifact while supplying none means the campaign trains
+    against the scripted FSM and every stamp claims otherwise — the mirror of
+    the custom-anchor-without-a-label case, and the same false provenance.
+    """
+
+    config = _make_config(
+        tmp_path, impostor=_impostor_side(anchor_policy_label="filtered-bc-anchor")
+    )
+    with pytest.raises(ValueError, match="supplies no anchor_policy"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_declared_hidden_is_proven_against_the_consuming_builder(
+    tmp_path: Path,
+) -> None:
+    """A mis-declared ``hidden`` is caught by the CONSUMER's own builder (18.31).
+
+    A width that is merely positive is not enough: if the side declares 4 while
+    ``build_policy`` captured 8, training and the encoder probe both succeed,
+    every artifact records 4, and ``_load_candidate_policy`` rebuilds with 4 and
+    rejects the genome length — after the campaign has run (Codex on PR #314).
+    The preflight therefore runs ``build_masked_mlp_policy`` at the declared
+    width over the real genome, which is exactly the reconstruction the frozen
+    artifact must survive.
+    """
+
+    from orchestrator.boundary import public_map_from_engine_map
+    from training.bakeoff.policy_es import (
+        TARGET_KILL_SLOTS,
+        build_masked_mlp_policy,
+        policy_genome_length,
+    )
+
+    from agents.tactical.features import TacticalFeatureEncoderV3
+    from engine.world import load_canonical_map
+
+    hidden = 8
+    genome_length = policy_genome_length(
+        public_map_from_engine_map(load_canonical_map()),
+        hidden=hidden,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=TARGET_KILL_SLOTS,
+    )
+
+    def build_v3(genome: tuple[float, ...]) -> BakeoffPolicy:
+        return build_masked_mlp_policy(
+            genome,
+            game_map=load_canonical_map(),
+            hidden=hidden,
+            encoder_version="v3",
+        )
+
+    # The honest declaration passes the preflight (it fails later, on the
+    # over-ceiling guard, which proves validation was cleared).
+    honest = _make_config(
+        tmp_path / "ok",
+        impostor=_impostor_side(
+            genome_length=genome_length,
+            build_policy=build_v3,
+            encoder_version="v3",
+            hidden=hidden,
+            initial_genome=(0.0,) * genome_length,
+        ),
+        game_ceiling=1,
+        allow_over_ceiling=False,
+    )
+    with pytest.raises(ValueError, match="exceeds the stated ceiling"):
+        run_alternating_freeze(honest)
+
+    # The mis-declared width is refused by the consuming builder itself.
+    wrong = _make_config(
+        tmp_path / "bad",
+        impostor=_impostor_side(
+            genome_length=genome_length,
+            build_policy=build_v3,
+            encoder_version="v3",
+            hidden=4,
+            initial_genome=(0.0,) * genome_length,
+        ),
+    )
+    with pytest.raises(ValueError, match="cannot rebuild"):
+        run_alternating_freeze(wrong)
+    _assert_no_disk_mutation(tmp_path / "bad")

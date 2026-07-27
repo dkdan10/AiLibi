@@ -690,9 +690,17 @@ class HallOfFame:
                 f"member paths {sorted(declared_paths)} at {side_dir}"
             )
 
-        # Pass 2: read + double-verify every member's genome digest.
+        # Pass 2: read + double-verify every member's genome digest, and — for a
+        # pool that advertises itself as LOADABLE — the stamp/config half of the
+        # artifact too. Restoring the metadata without checking the files it
+        # promises would hand back a hall whose members only fail at
+        # ``_load_candidate_policy``, long after resume time (Codex review on
+        # PR #314); the module's eager two-pass posture is that corruption
+        # surfaces HERE.
         for member in members:
             cls._verify_member_bytes(side_dir, member)
+            if resolved_metadata is not None:
+                cls._verify_member_stamp(side_dir, member, resolved_metadata)
 
         return cls(
             side=side,
@@ -932,6 +940,52 @@ class HallOfFame:
                 f"{member.weights_sha256}"
             )
         return weights_from_hex_json(raw)
+
+    @staticmethod
+    def _verify_member_stamp(
+        side_dir: Path, member: HallOfFameMember, metadata: LoadableArtifactMetadata
+    ) -> None:
+        """Verify the stamp/config half of a LOADABLE member's artifact (18.31).
+
+        A pool that records :class:`LoadableArtifactMetadata` promises every
+        member loads through ``_load_candidate_policy``. That promise rests on
+        four files, so a reload verifies four: ``stamp.json`` and
+        ``config.json`` must exist and parse, the stamp's ``weights_sha256``
+        must name THIS member (the 17.14 conflation guard), and its
+        ``encoder_version`` must match the pool's declared family — a member
+        stamped for another family is exactly the §12 Errata item-1 defect,
+        caught at resume time instead of at spend time.
+        """
+
+        member_dir = side_dir / member.path
+        try:
+            stamp = json.loads((member_dir / _STAMP_FILENAME).read_text())
+            config = json.loads((member_dir / _CONFIG_FILENAME).read_text())
+        except OSError as exc:
+            raise ValueError(
+                f"member {member.weights_sha256} is missing part of its loadable "
+                f"artifact under {member_dir} ({exc}); this pool records "
+                "artifact metadata, so every member is a four-file freeze"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"member {member.weights_sha256} has a malformed loadable "
+                f"artifact under {member_dir}: {exc}"
+            ) from exc
+        if stamp.get("weights_sha256") != member.weights_sha256:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} names weights_sha256 "
+                f"{stamp.get('weights_sha256')!r} but the index records "
+                f"{member.weights_sha256} (the 17.14 conflation guard)"
+            )
+        for source, name in ((stamp, _STAMP_FILENAME), (config, _CONFIG_FILENAME)):
+            recorded = source.get("encoder_version")
+            if recorded != metadata.encoder_version:
+                raise ValueError(
+                    f"{member_dir / name} records encoder_version {recorded!r} but "
+                    f"the pool declares {metadata.encoder_version!r}; a hall stays "
+                    "single-family per campaign"
+                )
 
     def _write_index(self) -> None:
         """Rewrite ``hall_of_fame.json`` as a pure function of the members.

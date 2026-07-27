@@ -197,6 +197,11 @@ from training.bakeoff.harness import (
 )
 from training.bakeoff.map_elites import load_archive_cell_genomes
 
+# The CONSUMER's masked-MLP builder (``_load_candidate_policy`` rebuilds through
+# exactly this): the preflight runs it at the declared ``hidden`` width so a
+# mis-declared width fails before the campaign, not after.
+from training.bakeoff.policy_es import build_masked_mlp_policy
+
 # The utility family's encoder tag names the ONE impostor family that rebuilds
 # without a ``hidden`` width (the same private-alias import realpath.py uses).
 from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
@@ -764,18 +769,33 @@ def _validate_side(
             "on the scripted FSM only); anchor_policy belongs to the impostor "
             "side config"
         )
+    # The anchor identity is enforced in BOTH directions (Codex review on
+    # PR #314): a custom anchor must be named, AND a name must correspond to a
+    # custom anchor. One-directional enforcement still permits a campaign that
+    # trains against the scripted FSM while every stamp claims some other
+    # artifact — the same mis-stamp defect, mirrored. A blank/unsafe label
+    # falls through to the stamp-token validation (which names the real
+    # problem) rather than being reported as a mismatched anchor.
     if config.anchor_policy is not None and (
         config.anchor_policy_label == DEFAULT_ANCHOR_POLICY
     ):
-        # A side bred against a FIXED alternative anchor artifact (the 18.5
-        # filtered-BC seam) whose stamp still says "fsm-default" mis-names the
-        # anchor in every artifact it freezes — the §12 Errata item-1 class of
-        # defect, caught here before any hall exists (Task 18.31).
         raise ValueError(
             f"the {expected_side} side config carries an anchor_policy but its "
             f"anchor_policy_label is still {DEFAULT_ANCHOR_POLICY!r}; name the "
             "anchor artifact so every frozen member's stamp records the anchor "
             "it was actually bred against"
+        )
+    if (
+        config.anchor_policy is None
+        and config.anchor_policy_label.strip()
+        and config.anchor_policy_label != DEFAULT_ANCHOR_POLICY
+    ):
+        raise ValueError(
+            f"the {expected_side} side config names anchor_policy_label "
+            f"{config.anchor_policy_label!r} but supplies no anchor_policy, so it "
+            f"trains against the scripted FSM; a stamp claiming another anchor "
+            f"is false provenance (use {DEFAULT_ANCHOR_POLICY!r}, or supply the "
+            "anchor artifact the label names)"
         )
 
     if config.initial_genome is not None:
@@ -852,6 +872,28 @@ def _validate_side(
                 "NEVER re-derived from genome length — the 18.24 report §12 Errata "
                 "item 1 is the cost of guessing)"
             )
+        if probe_encoder != _UTILITY_ENCODER_VERSION and config.hidden is not None:
+            # A DECLARED width that is not the width ``build_policy`` actually
+            # captured is a silent mis-stamp: training succeeds, every artifact
+            # records the wrong number, and ``_load_candidate_policy`` rebuilds
+            # with it and rejects the genome length — after the campaign ran
+            # (Codex review on PR #314). Proving it means running the CONSUMER's
+            # own builder at the declared width over the real genome, which is
+            # exactly the reconstruction the artifact will have to survive.
+            try:
+                build_masked_mlp_policy(
+                    initial,
+                    game_map=load_canonical_map(),
+                    hidden=config.hidden,
+                    encoder_version=probe_encoder,
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"the impostor side declares hidden={config.hidden} for family "
+                    f"{probe_encoder!r}, but the consuming builder cannot rebuild a "
+                    f"{len(initial)}-gene genome at that width ({exc}); every "
+                    "artifact this campaign froze would be unloadable"
+                ) from exc
     return initial
 
 

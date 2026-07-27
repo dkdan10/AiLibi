@@ -156,14 +156,10 @@ def test_stability_fails_loud_without_a_retest(tmp_path: Path) -> None:
 def test_stability_refuses_a_third_tranche_of_one_arm(tmp_path: Path) -> None:
     """Three reads of one arm are not a two-tranche comparison (18.31)."""
 
+    row = _committed_row(0)
     leg = tmp_path / "campaign" / "leg-01"
-    leg.mkdir(parents=True)
-    for source, name in (
-        ("ranking-4000-4002.jsonl", "ranking-4000-4002.jsonl"),
-        ("ranking-4003-4005.jsonl", "ranking-4003-4005.jsonl"),
-        ("ranking-4000-4002.jsonl", "ranking-4006-4008.jsonl"),
-    ):
-        shutil.copy(_RUN_01_LEG / source, leg / name)
+    for tranche, seeds in (("t1", (1, 2, 3)), ("t2", (4, 5, 6)), ("t3", (7, 8, 9))):
+        _write_arm(leg, tranche, row, seeds=seeds)
     with pytest.raises(SystemExit, match="exactly two independent tranches"):
         gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
 
@@ -323,11 +319,22 @@ def test_cli_refuses_to_check_and_render_at_once(tmp_path: Path) -> None:
 
 
 def _write_arm(
-    leg: Path, tranche: str, source_row: dict[str, object], **overrides: object
+    leg: Path,
+    tranche: str,
+    source_row: dict[str, object],
+    *,
+    seeds: tuple[int, ...],
+    **overrides: object,
 ) -> None:
-    """Write a one-row ranking file derived from a committed row."""
+    """Write a one-row ranking file derived from a committed row.
+
+    ``seeds`` is the tranche's real identity (the generator keys on the
+    recorded seeds, not the filename), so every synthetic tranche declares its
+    own seed set.
+    """
 
     row = dict(source_row)
+    row["seeds"] = list(seeds)
     row.update(overrides)
     leg.mkdir(parents=True, exist_ok=True)
     (leg / f"ranking-{tranche}.jsonl").write_text(
@@ -355,10 +362,10 @@ def test_stability_refuses_mixed_tranche_pairs(tmp_path: Path) -> None:
 
     first, second = _committed_row(0), _committed_row(1)
     root = tmp_path / "campaign"
-    _write_arm(root / "leg-a", "t1", first)
-    _write_arm(root / "leg-a", "t2", first)
-    _write_arm(root / "leg-b", "t2", second)
-    _write_arm(root / "leg-b", "t3", second)
+    _write_arm(root / "leg-a", "t1", first, seeds=(1, 2, 3))
+    _write_arm(root / "leg-a", "t2", first, seeds=(4, 5, 6))
+    _write_arm(root / "leg-b", "t2", second, seeds=(4, 5, 6))
+    _write_arm(root / "leg-b", "t3", second, seeds=(7, 8, 9))
 
     with pytest.raises(SystemExit, match="do not share ONE tranche pair"):
         gct.compute_stability(gct.find_ranking_files([root]))
@@ -373,8 +380,8 @@ def test_stability_refuses_unequal_game_counts(tmp_path: Path) -> None:
 
     row = _committed_row(0)
     root = tmp_path / "campaign"
-    _write_arm(root / "leg-a", "t1", row, core_games_total=3)
-    _write_arm(root / "leg-a", "t2", row, core_games_total=4)
+    _write_arm(root / "leg-a", "t1", row, seeds=(1, 2, 3), core_games_total=3)
+    _write_arm(root / "leg-a", "t2", row, seeds=(4, 5, 6), core_games_total=4)
 
     with pytest.raises(SystemExit, match="needs one denominator"):
         gct.compute_stability(gct.find_ranking_files([root]))
@@ -385,10 +392,89 @@ def test_stability_refuses_a_mixed_global_denominator(tmp_path: Path) -> None:
 
     first, second = _committed_row(0), _committed_row(1)
     root = tmp_path / "campaign"
-    _write_arm(root / "leg-a", "t1", first, core_games_total=3)
-    _write_arm(root / "leg-a", "t2", first, core_games_total=3)
-    _write_arm(root / "leg-b", "t1", second, core_games_total=5)
-    _write_arm(root / "leg-b", "t2", second, core_games_total=5)
+    _write_arm(root / "leg-a", "t1", first, seeds=(1, 2, 3), core_games_total=3)
+    _write_arm(root / "leg-a", "t2", first, seeds=(4, 5, 6), core_games_total=3)
+    _write_arm(root / "leg-b", "t1", second, seeds=(1, 2, 3), core_games_total=5)
+    _write_arm(root / "leg-b", "t2", second, seeds=(4, 5, 6), core_games_total=5)
 
     with pytest.raises(SystemExit, match="games per tranche"):
         gct.compute_stability(gct.find_ranking_files([root]))
+
+
+def test_tranche_identity_comes_from_the_recorded_seeds(tmp_path: Path) -> None:
+    """Two files over the SAME seeds are one draw, whatever they are named.
+
+    A filename suffix is a label an operator chose; the recorded ``seeds`` are
+    the experiment. Counting a mislabelled duplicate as a second independent
+    provider draw would manufacture a reliability result out of one recording
+    (Codex on PR #314).
+    """
+
+    row = _committed_row(0)
+    leg = tmp_path / "campaign" / "leg-01"
+    _write_arm(leg, "first-pass", row, seeds=(1, 2, 3))
+    _write_arm(leg, "second-pass", row, seeds=(1, 2, 3))
+
+    with pytest.raises(SystemExit, match="appears twice in tranche"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_ranking_file_mixing_seed_sets_is_refused(tmp_path: Path) -> None:
+    """One ranking file is one tranche; disagreeing rows are corruption."""
+
+    first, second = _committed_row(0), _committed_row(1)
+    first["seeds"] = [1, 2, 3]
+    second["seeds"] = [4, 5, 6]
+    leg = tmp_path / "campaign" / "leg-01"
+    leg.mkdir(parents=True)
+    (leg / "ranking-mixed.jsonl").write_text(
+        json.dumps(first) + "\n" + json.dumps(second) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="mixes seed sets"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_ranking_paths_are_sorted_regardless_of_root_order() -> None:
+    """Root order must not change the rendered bytes (Codex on PR #314).
+
+    Sorting each root's walk separately still let the caller's argument order
+    reorder the document, which is not the determinism the module documents.
+    """
+
+    roots = _default_roots()
+    forward = gct.find_ranking_files(roots)
+    reversed_order = gct.find_ranking_files(list(reversed(roots)))
+    assert forward == reversed_order == sorted(forward)
+
+
+def test_explicit_ranking_argument_order_does_not_change_the_bytes(
+    tmp_path: Path,
+) -> None:
+    """``--ranking a --ranking b`` renders the same bytes as ``b`` then ``a``."""
+
+    leg_paths = gct.find_ranking_files([_RUN_01_LEG])
+    assert len(leg_paths) == 2
+    forward, backward = tmp_path / "forward.md", tmp_path / "backward.md"
+    assert (
+        gct.main(
+            [
+                "legs",
+                *[arg for p in leg_paths for arg in ("--ranking", str(p))],
+                "--out",
+                str(forward),
+            ]
+        )
+        == 0
+    )
+    assert (
+        gct.main(
+            [
+                "legs",
+                *[arg for p in reversed(leg_paths) for arg in ("--ranking", str(p))],
+                "--out",
+                str(backward),
+            ]
+        )
+        == 0
+    )
+    assert forward.read_bytes() == backward.read_bytes()

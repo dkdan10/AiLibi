@@ -1168,3 +1168,69 @@ def test_prescreen_must_cover_this_legs_candidates(tmp_path: Path) -> None:
     # The matching quote set is accepted.
     _run([_quote()], "ok")
     assert (tmp_path / "ok" / "prescreen-quotes-1-000.json").exists()
+
+
+def test_a_committed_ranking_is_never_rewritten(tmp_path: Path) -> None:
+    """A recorded leg's ranking is write-once, even under resume (Codex #314).
+
+    Before the resume path existed, a re-run died at the candidate-dir mkdir
+    long before the ranking write. ``resume=True`` makes a completed leg
+    re-runnable, so a plain write would REPLACE the committed rows with ones
+    whose telemetry says the games were skipped rather than played — mutating
+    the campaign's recorded truth instead of completing it.
+    """
+
+    work_dir = tmp_path / "work"
+    ranking = tmp_path / "ranking.jsonl"
+    _record_two_seeds(work_dir, ranking)
+    original = ranking.read_bytes()
+
+    with pytest.raises(RealPathRerankError, match="already exists"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=ranking,
+            config=_config(),
+            resume=True,
+        )
+    assert ranking.read_bytes() == original
+
+    # A resume into a FRESH ranking path is the legitimate flow and still works.
+    resumed = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-resumed.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert all(entry.resumed for entry in resumed.top().seed_telemetry)
+
+
+def test_prescreen_note_is_the_committed_disclaimer(tmp_path: Path) -> None:
+    """``note`` is the record's blocker-4 guarantee, not caller caption text.
+
+    A quote whose note described the prediction as gating evidence would invert
+    blocker 4 inside the committed artifact (Codex on PR #314).
+    """
+
+    with pytest.raises(ValidationError, match="spend advice by contract"):
+        PreScreenQuote(
+            label="utility-es",
+            weights_sha256=_UTIL_DIGEST,
+            predicted_flags_per_meeting=1.0,
+            predicted_floors_pass=True,
+            note="gating read",
+        )
+    with pytest.raises(ValidationError, match="spend advice by contract"):
+        PreScreenQuote(
+            label="utility-es",
+            weights_sha256=_UTIL_DIGEST,
+            predicted_flags_per_meeting=1.0,
+            predicted_floors_pass=True,
+            note="",
+        )
+    # The default is the committed disclaimer, and it round-trips.
+    path = write_prescreen_record(tmp_path, seeds=[1], quotes=[_quote()])
+    assert json.loads(path.read_text())["quotes"][0]["note"] == PRESCREEN_ADVICE_NOTE

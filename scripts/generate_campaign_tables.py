@@ -435,16 +435,21 @@ def _sensitivity_cell(gauge: Mapping[str, Any]) -> str:
 
 
 def find_ranking_files(roots: Sequence[Path]) -> list[Path]:
-    """Every ``ranking-*.jsonl`` under the given roots, in sorted path order."""
+    """Every ``ranking-*.jsonl`` under the given roots, in sorted path order.
+
+    The WHOLE set is sorted, not each root's walk: sorting per root would make
+    the rendered bytes depend on the order the roots were typed, which is not
+    determinism (Codex review on PR #314).
+    """
 
     found: list[Path] = []
     for root in roots:
         if not root.is_dir():
             raise SystemExit(f"ranking root {root} is not a directory")
-        found.extend(sorted(root.rglob("ranking-*.jsonl")))
+        found.extend(root.rglob("ranking-*.jsonl"))
     if not found:
         raise SystemExit(f"no ranking-*.jsonl files under {[str(r) for r in roots]}")
-    return found
+    return sorted(found)
 
 
 def render_legs_document(ranking_paths: Sequence[Path]) -> str:
@@ -459,6 +464,28 @@ def render_legs_document(ranking_paths: Sequence[Path]) -> str:
 # --------------------------------------------------------------------------- #
 # Family 3 — the §4.0 measurement-stability table.                             #
 # --------------------------------------------------------------------------- #
+
+
+def _tranche_identity(ranking_path: Path) -> str:
+    """A tranche's identity is its RECORDED SEEDS, not its filename (18.31).
+
+    A filename suffix is a label an operator chose; the ``seeds`` on each row
+    are the experiment. Two differently-named files over the SAME seeds are one
+    provider draw counted twice — a false reliability result the stability
+    table would present as a retest (Codex review on PR #314). Keying on the
+    recorded seeds makes that collide into one tranche, where the duplicate
+    check catches it. Rows within one file must agree on their seed set; the
+    library writes one tranche per ranking file, so disagreement is corruption.
+    """
+
+    seed_sets = {tuple(row["seeds"]) for row in _read_jsonl(ranking_path)}
+    if len(seed_sets) != 1:
+        raise SystemExit(
+            f"{ranking_path} mixes seed sets {sorted(seed_sets)}; one ranking file "
+            "is one tranche, and its rows all record the same seeds"
+        )
+    (seeds,) = seed_sets
+    return "-".join(str(seed) for seed in seeds)
 
 
 @dataclass(frozen=True)
@@ -486,14 +513,15 @@ def _collect_arms(
     by_arm: dict[tuple[str, str], dict[str, Mapping[str, Any]]] = {}
     for path in ranking_paths:
         leg = path.parent.as_posix()
-        tranche = path.name.removeprefix("ranking-").removesuffix(".jsonl")
+        tranche = _tranche_identity(path)
         for row in _read_jsonl(path):
             key = (leg, row["weights_sha256"])
             reads = by_arm.setdefault(key, {})
             if tranche in reads:
                 raise SystemExit(
-                    f"{path}: genome {row['weights_sha256']} appears twice in one "
-                    "tranche of one leg; an arm is one (leg, genome) pair"
+                    f"{path}: genome {row['weights_sha256']} appears twice in "
+                    f"tranche {tranche} of one leg; an arm is one (leg, genome) "
+                    "pair read once per tranche"
                 )
             reads[tranche] = row
     arms: list[_Arm] = []
@@ -788,7 +816,9 @@ def _run_rows(args: argparse.Namespace) -> int:
 
 def _run_legs(args: argparse.Namespace) -> int:
     if args.ranking:
-        paths = [_resolve(Path(entry)) for entry in args.ranking]
+        # Sorted for the same reason find_ranking_files sorts: argument order
+        # must not change the rendered bytes.
+        paths = sorted(_resolve(Path(entry)) for entry in args.ranking)
     else:
         paths = find_ranking_files([_resolve(Path(args.leg_dir))])
     document = render_legs_document(paths)
