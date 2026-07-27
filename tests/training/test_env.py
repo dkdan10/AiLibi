@@ -790,6 +790,29 @@ def test_rollout_injected_accepts_an_explicit_agent_factory() -> None:
     assert explicit.meetings == default_episode.meetings
 
 
+def test_rollout_injected_refuses_a_supplied_factory_with_spent_emergencies() -> None:
+    """Staged spent button uses + an explicit factory fail loud (Task 18.23).
+
+    Only the interposition factory takes ``emergency_uses_spent``; a supplied
+    factory's wrappers seed every agent's tracker at the map-wide full
+    allowance, so its policies would be told an engine-rejected emergency
+    press is legal — a silently distorted episode rather than an error.
+    """
+
+    game_map = load_canonical_map()
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    state = replace(base, emergency_uses={**base.emergency_uses, crew_id: 1})
+    env = _env(no_replay=True)
+    factory = build_interposition_factory(game_map=game_map)
+    with pytest.raises(ValueError, match="spent emergency_uses"):
+        env.rollout_injected(state, agent_factory=factory)
+    # The all-zero staged shape stays fine through the same factory seam
+    # (pinned end-to-end by the explicit-factory equality test above).
+
+
 def test_rollout_injected_rejects_competing_agent_seams() -> None:
     """An explicit factory plus a constructor selector is refused, fail loud.
 

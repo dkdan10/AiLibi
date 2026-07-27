@@ -776,9 +776,11 @@ class TacticalRolloutEnv:
         ``AgentMemory`` (the v3 meeting-history / last-seen channels an
         :data:`IntentSelector` never sees). Mutually exclusive with a
         constructor ``intent_selector`` (fail loud rather than silently ignore
-        one seam), and a supplied factory owns its OWN mid-game trackers: the
-        interposition factory's mask-side emergency seeding applies only to
-        the default path.
+        one seam). A supplied factory builds its own mid-game trackers at the
+        map-wide full allowance — only the interposition factory takes the
+        staged spent-use counts — so a staged state with nonzero
+        ``emergency_uses`` REFUSES an explicit factory rather than silently
+        running agents whose legality model disagrees with the engine.
 
         The roster (``num_players`` / ``num_impostors``) is derived from the
         injected state itself, so the episode record is consistent with the
@@ -839,6 +841,19 @@ class TacticalRolloutEnv:
                     "presses up from 0 to the map cap, so any other value has "
                     "no game provenance"
                 )
+        if agent_factory is not None and any(
+            used > 0 for used in initial_state.emergency_uses.values()
+        ):
+            raise ValueError(
+                "rollout_injected() received an explicit agent_factory for a "
+                "staged state with spent emergency_uses: only the default "
+                "interposition factory seeds its mask trackers from the staged "
+                "counts, and a supplied factory (e.g. build_coevo_factory's "
+                "wrappers) starts every agent at the map-wide full allowance — "
+                "its policies would be told an engine-rejected emergency press "
+                "is legal, distorting the episode. Stage zero spent uses, or "
+                "drive the episode through the interposition seam."
+            )
         num_players = len(initial_state.players)
         num_impostors = sum(
             1 for player in initial_state.players.values() if player.role == "IMPOSTOR"

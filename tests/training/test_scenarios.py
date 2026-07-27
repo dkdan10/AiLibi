@@ -285,6 +285,17 @@ def test_build_rejects_an_instant_task_win() -> None:
         build_scenario_state(spec, seed=7)
 
 
+def test_build_rejects_an_empty_task_map() -> None:
+    # The seeder refuses tasks_per_crewmate < 1 and completed instances stay
+    # in the mapping, so no reachable game state carries zero task instances —
+    # and the engine's total-tasks > 0 guard would make CREWMATE_TASKS
+    # structurally unreachable, quietly deleting a crew win pressure from
+    # every episode staged on such a state.
+    spec = _broken(KILL_WITH_WITNESS_NEARBY, lambda state: replace(state, tasks={}))
+    with pytest.raises(ValueError, match="task map is empty"):
+        build_scenario_state(spec, seed=7)
+
+
 def test_build_rejects_a_forked_task_key() -> None:
     def fork_a_key(state: WorldState) -> WorldState:
         tasks = dict(state.tasks)
@@ -413,14 +424,18 @@ def test_scenario_episodes_score_dense_while_the_terminal_gate_refuses() -> None
         compute_shaped_reward(rollout, "CREWMATE")
 
 
-def test_kill_with_witness_fsm_overkills_and_keeps_only_the_kill_credit() -> None:
-    # The FSM impostor takes the staged window but keeps killing inside the
-    # horizon — exactly-one-kill forfeits its survival credit, so the scripted
-    # anchor caps at 1.0 and a restrained learned policy can beat it.
+def test_kill_with_witness_fsm_hunts_elsewhere_and_earns_nothing() -> None:
+    # The scripted FSM impostor never takes the staged LABS window at all — it
+    # walks next door and kills through MEDBAY instead. Under an any-kill
+    # reading that unstaged rampage COLLECTED the kill credit (the exploit the
+    # staged-kill qualifier closes); keyed on the staged victim in the staged
+    # room, the scripted anchor earns 0.0 and only actually running the drill
+    # scores.
     rollout = _run(KILL_WITH_WITNESS_NEARBY, 7)
     kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
     assert len(kills) >= 2
-    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+    assert all(k.target != "p-5" for k in kills)
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 0.0
 
 
 def _kill_once_selector(decision: MaskedDecision) -> ActionIntent:
@@ -461,6 +476,46 @@ def test_kill_with_witness_rewards_nothing_without_the_kill() -> None:
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 0.0
 
 
+def _snub_the_staged_victim_selector(decision: MaskedDecision) -> ActionIntent:
+    """Impostor refuses the staged LABS window, walks next door, kills there.
+
+    The unstaged-kill exploit (Codex review on PR #313): under an any-kill
+    reading, killing some OTHER crewmate in another room — none of the staged
+    witness pressure — earned the kill credit (and, once that corpse was
+    crew-reported, the survival credit too) in a scenario named for killing
+    with a witness nearby.
+    """
+
+    packet = decision.packet
+    if packet.self_state.role != "IMPOSTOR":
+        return decision.fsm_intent
+    for intent in decision.mask.engine_legal:
+        if isinstance(intent, KillIntent) and intent.payload.target != "p-5":
+            return intent
+    if packet.self_state.room == "LABS":
+        return MoveIntent.model_validate(
+            {
+                "type": "move",
+                "actor": packet.agent_id,
+                "payload": {"to_room": "MEDBAY"},
+            }
+        )
+    return _wait(decision)
+
+
+def test_kill_with_witness_pays_nothing_for_an_unstaged_kill() -> None:
+    # Both credits key on the staged opportunity (the staged victim, in the
+    # staged room), so routing around the witness pressure — a kill of anyone
+    # else, anywhere else — scores 0.0, reported corpse or not.
+    rollout = _run(
+        KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_snub_the_staged_victim_selector
+    )
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kills, "the impostor found a victim away from the staged window"
+    assert all(k.target != "p-5" for k in kills)
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 0.0
+
+
 def _self_report_farm_selector(decision: MaskedDecision) -> ActionIntent:
     """Impostor kills whenever legal and reports its own corpse; crew hold.
 
@@ -494,20 +549,25 @@ def test_kill_with_witness_self_report_farm_earns_only_the_kill() -> None:
 
 
 def _pre_kill_button_selector(decision: MaskedDecision) -> ActionIntent:
-    """p-1 presses the button before any kill; crew never report; FSM impostor.
+    """p-1 presses the button; the impostor lands the staged kill just after.
 
     The ordering exploit (Codex review on PR #313): a crew-routed meeting that
     concluded BEFORE the kill satisfied an order-blind crew-routed check, so
     killing right after the meeting collected the full survival credit with no
-    post-kill scrutiny at all.
+    post-kill scrutiny at all. The impostor holds through the staged tick (the
+    button meeting resolves first) and then takes the staged victim — still
+    co-located in the staged room — while the crew never file a report.
     """
 
-    if decision.packet.self_state.role == "IMPOSTOR":
-        return decision.fsm_intent
-    if decision.packet.agent_id == "p-1":
-        emergency = EmergencyMeetingIntent(
-            actor=decision.packet.agent_id, type="emergency"
-        )
+    packet = decision.packet
+    if packet.self_state.role == "IMPOSTOR":
+        if packet.tick > KILL_WITH_WITNESS_NEARBY.staged_tick:
+            for intent in decision.mask.engine_legal:
+                if isinstance(intent, KillIntent) and intent.payload.target == "p-5":
+                    return intent
+        return _wait(decision)
+    if packet.agent_id == "p-1":
+        emergency = EmergencyMeetingIntent(actor=packet.agent_id, type="emergency")
         if decision.mask.is_engine_legal(emergency):
             return emergency
     if isinstance(decision.fsm_intent, ReportBodyIntent):
@@ -519,8 +579,10 @@ def test_kill_with_witness_pre_kill_meeting_carries_no_survival_credit() -> None
     rollout = _run(
         KILL_WITH_WITNESS_NEARBY, 7, intent_selector=_pre_kill_button_selector
     )
-    kill_ticks = [e.tick for e in rollout.events if isinstance(e, KilledEvent)]
-    assert kill_ticks, "the FSM impostor still takes the staged window"
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert kills, "the impostor still lands the staged kill after the meeting"
+    assert all(k.target == "p-5" and k.room == "LABS" for k in kills)
+    kill_ticks = [k.tick for k in kills]
     concluded = [m for m in rollout.meetings if m.outcome is not None]
     # Every crew-routed meeting concluded strictly BEFORE the first kill...
     crew_routed = [
@@ -528,8 +590,8 @@ def test_kill_with_witness_pre_kill_meeting_carries_no_survival_credit() -> None
     ]
     assert crew_routed
     assert all(m.tick < min(kill_ticks) for m in crew_routed)
-    # ...so the kill lands but the survival credit does not: pre-kill meetings
-    # are not scrutiny of the kill.
+    # ...so the staged kill lands but the survival credit does not: pre-kill
+    # meetings are not scrutiny of the kill.
     assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
 
 
@@ -593,17 +655,21 @@ def test_kill_with_witness_same_batch_meeting_carries_no_survival_credit() -> No
 
 
 def _unrelated_post_kill_meeting_selector(decision: MaskedDecision) -> ActionIntent:
-    """Crew press the button AFTER the kill but never report the body.
+    """Crew press the button AFTER the staged kill but never report the body.
 
     The Codex round-4 exploit shape: an order-only check accepted ANY
     crew-routed post-kill meeting — a stray emergency included — so the
     survival credit was collectable without the staged victim's body ever
-    being discovered.
+    being discovered. The impostor takes the staged window and holds.
     """
 
     packet = decision.packet
     if packet.self_state.role == "IMPOSTOR":
-        return decision.fsm_intent
+        if packet.tick == KILL_WITH_WITNESS_NEARBY.staged_tick:
+            for intent in decision.mask.engine_legal:
+                if isinstance(intent, KillIntent):
+                    return intent
+        return _wait(decision)
     if packet.agent_id == "p-6":
         if packet.tick >= 44:
             emergency = EmergencyMeetingIntent(actor=packet.agent_id, type="emergency")
@@ -919,11 +985,20 @@ def test_body_discovery_gives_no_credit_for_button_meetings() -> None:
 
 
 def _impostor_gate_builder(genome: tuple[float, ...]) -> IntentSelector:
-    """genome[0] > 0 delegates the impostor to the FSM; else it holds still."""
+    """genome[0] > 0 takes the staged window then holds; else holds throughout.
+
+    (The scripted FSM is no baseline here: it hunts through MEDBAY instead of
+    taking the staged LABS kill, which the staged-kill qualifier scores 0.0.)
+    """
 
     def selector(decision: MaskedDecision) -> ActionIntent:
-        if decision.packet.self_state.role != "IMPOSTOR" or genome[0] > 0.0:
+        packet = decision.packet
+        if packet.self_state.role != "IMPOSTOR":
             return decision.fsm_intent
+        if genome[0] > 0.0 and packet.tick == KILL_WITH_WITNESS_NEARBY.staged_tick:
+            for intent in decision.mask.engine_legal:
+                if isinstance(intent, KillIntent):
+                    return intent
         return _wait(decision)
 
     return selector
@@ -1043,21 +1118,23 @@ def test_provider_terms_are_pure_and_genome_sensitive() -> None:
     held = term.fitness((-1.0,))
     assert term.fitness((1.0,)) == engaged
     assert provider(1, "impostor")[0].fitness((1.0,)) == engaged
-    # ...and the scenario carries real pressure: engaging beats holding still
-    # (the FSM delegate overkills, so it earns the kill credit only — the
-    # full 2.0 needs the restraint the FSM lacks).
-    assert engaged == 1.0
+    # ...and the scenario carries real pressure: taking the staged window
+    # (then holding through the corpse's report meeting) runs the whole
+    # drill, while holding still earns nothing.
+    assert engaged == 2.0
     assert held == 0.0
 
 
 class _MemoryTapPolicy:
-    """A minimal ``BakeoffPolicy``: delegate (or hold) and tap the memory input.
+    """A minimal ``BakeoffPolicy``: run the drill (or hold) and tap the memory.
 
     Records every ``AgentMemory`` object handed to :meth:`evaluate` (strong
     references, so object identities can never be recycled) — the pin that the
     factory seam feeds policies the inner agent's LIVE memory, not a fresh
-    per-call construction. ``hold=True`` freezes the impostor instead of
-    delegating, the behavioral lever the genome-sensitivity pin flips.
+    per-call construction. The default behavior takes the staged kill-witness
+    window and then holds (the whole drill); ``hold=True`` freezes the
+    impostor throughout, the behavioral lever the genome-sensitivity pin
+    flips.
     """
 
     def __init__(self, *, hold: bool = False) -> None:
@@ -1076,11 +1153,17 @@ class _MemoryTapPolicy:
         *,
         fsm_intent: ActionIntent,
     ) -> PolicyFrame:
-        del public_map
+        del public_map, fsm_intent
         self.taps.append((packet.agent_id, memory))
-        intent: ActionIntent = (
-            WaitIntent(actor=packet.agent_id, type="wait") if self._hold else fsm_intent
-        )
+        intent: ActionIntent = WaitIntent(actor=packet.agent_id, type="wait")
+        if not self._hold and packet.tick == KILL_WITH_WITNESS_NEARBY.staged_tick:
+            intent = KillIntent.model_validate(
+                {
+                    "type": "kill",
+                    "actor": packet.agent_id,
+                    "payload": {"target": "p-5"},
+                }
+            )
         return PolicyFrame(
             agent_id=packet.agent_id,
             tick=packet.tick,
@@ -1102,7 +1185,7 @@ class _MemoryTapPolicy:
 
 
 def _tap_gate_factory_builder(tap: _MemoryTapPolicy) -> AgentFactoryBuilder:
-    """genome[0] > 0 runs the delegating tap; else a fresh holding policy."""
+    """genome[0] > 0 runs the drill-running tap; else a fresh holding policy."""
 
     def build(genome: tuple[float, ...]) -> AgentFactory:
         policy = tap if genome[0] > 0.0 else _MemoryTapPolicy(hold=True)
@@ -1142,10 +1225,11 @@ def test_provider_agent_factory_builders_run_the_campaign_agents() -> None:
 
     engaged = terms[0].fitness((1.0,))
     held = terms[0].fitness((-1.0,))
-    # The tap delegates to the FSM, so the factory path lands exactly on the
-    # pinned FSM baseline (the overkilling FSM keeps the kill credit only);
-    # holding scores nothing; repeat calls agree (the purity contract).
-    assert engaged == 1.0
+    # The tap runs the whole drill (staged kill, then holds through the
+    # corpse's report meeting) — landing exactly on the selector path's
+    # pinned 2.0; holding scores nothing; repeat calls agree (the purity
+    # contract).
+    assert engaged == 2.0
     assert held == 0.0
     assert terms[0].fitness((1.0,)) == engaged
 
@@ -1168,10 +1252,10 @@ def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:
     """The DoD leg: a tiny (1+2) ES over the kill-witness scenario term.
 
     Seeded at a holding genome (fitness 0), one mutation crosses the gate and
-    the champion climbs to 1.0 (the FSM delegate lands the kill but overkills,
-    so the survival credit stays off) — scenario skill pressure flowing
-    through the exact fitness callable the driver's seam would consume — and
-    the double run is digest-identical (the purity obligation).
+    the champion climbs to 2.0 (takes the staged window, then survives the
+    corpse's crew report meeting) — scenario skill pressure flowing through
+    the exact fitness callable the driver's seam would consume — and the
+    double run is digest-identical (the purity obligation).
     """
 
     provider = _kill_witness_provider()
@@ -1185,6 +1269,6 @@ def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:
     )
     assert first.digest() == second.digest()
     assert first.num_evaluations == 3
-    assert first.fitness_trace == (0.0, 1.0)
-    assert first.champion_fitness == 1.0
+    assert first.fitness_trace == (0.0, 2.0)
+    assert first.champion_fitness == 2.0
     assert first.champion[0] > 0.0

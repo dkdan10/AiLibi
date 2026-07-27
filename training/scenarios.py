@@ -14,7 +14,7 @@ pressure exists without full games. Four load-bearing disciplines:
 * **Dense fitness from tactical facts only.** Scenario episodes are truncated by
   construction (a staged tick plus a short horizon), so they score through the
   dense channel — the typed event log, per-step frame scalars, meeting records,
-  and :func:`training.rewards.side_specific_terms` (consumed as-is) — NEVER
+  and the episode roster's roles — NEVER
   ``compute_shaped_reward``'s terminal gate, and never the ``winner`` literal:
   an episode that happens to reach ``GAME_OVER`` inside its horizon scores
   through the identical dense definition. Watchability quantities never appear
@@ -74,7 +74,6 @@ from orchestrator.game import AgentFactory, MeetingRunner
 from training.coevo.driver import CoevoScenarioTerm
 from training.coevo.hall_of_fame import Side
 from training.env import IntentSelector, TacticalRolloutEnv
-from training.rewards import side_specific_terms
 from training.rollout import EpisodeRollout
 
 #: A per-scenario dense fitness over one injected episode: tactical facts only
@@ -247,6 +246,11 @@ def _staged_state(
 
 _KILL_WITNESS_TICK: Final[int] = 40
 _KILL_WITNESS_HORIZON: Final[int] = 20
+# The staged opportunity the kill-witness fitness keys on: the co-located
+# victim in the kill room (a kill of anyone else, or of the staged victim
+# hunted down elsewhere, is not the drill and earns nothing).
+_KILL_WITNESS_VICTIM: Final[str] = "p-5"
+_KILL_WITNESS_ROOM: Final[str] = "LABS"
 
 _VENT_PATROL_TICK: Final[int] = 30
 _VENT_PATROL_HORIZON: Final[int] = 12
@@ -281,8 +285,10 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
         "p-1": _player(0, "p-1", "CREWMATE", "CAFETERIA"),
         "p-2": _player(1, "p-2", "CREWMATE", "ADMIN"),
         "p-3": _player(2, "p-3", "CREWMATE", "MEDBAY"),
-        "p-4": _player(3, "p-4", "IMPOSTOR", "LABS"),
-        "p-5": _player(4, "p-5", "CREWMATE", "LABS"),
+        "p-4": _player(3, "p-4", "IMPOSTOR", _KILL_WITNESS_ROOM),
+        _KILL_WITNESS_VICTIM: _player(
+            4, _KILL_WITNESS_VICTIM, "CREWMATE", _KILL_WITNESS_ROOM
+        ),
         "p-6": _player(5, "p-6", "CREWMATE", "ENGINEERING"),
     }
     tasks = dict(
@@ -290,7 +296,7 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
             _task_instance(game_map, "p-1", "empty_trash"),
             _task_instance(game_map, "p-2", "swipe_card"),
             _task_instance(game_map, "p-3", "submit_scan"),
-            _task_instance(game_map, "p-5", "analyze_specimen"),
+            _task_instance(game_map, _KILL_WITNESS_VICTIM, "analyze_specimen"),
             _task_instance(game_map, "p-6", "calibrate_distributor"),
         )
     )
@@ -305,38 +311,50 @@ def _build_kill_with_witness_state(game_map: Map, seed: int) -> WorldState:
 
 
 def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
-    """kill landed (capped at one) + survived THE KILL'S OWN report meeting.
+    """THE STAGED kill landed + survived that kill's own report meeting.
 
-    ``kills`` comes from the standing impostor dense terms
-    (:func:`training.rewards.side_specific_terms`, consumed as-is); the
-    survival clause reads the typed events + meeting records: EXACTLY ONE
-    kill landed, its body (the engine mints ``body-{victim}-{tick}``) was
-    reported by a CREWMATE, that meeting concluded, and no concluded meeting
-    ejected an impostor. Each qualifier is load-bearing: an impostor cannot
-    farm the credit by self-reporting (the reporter must be crew), cannot
-    collect it from an UNRELATED post-kill meeting (a stray emergency or a
-    later corpse's report is not scrutiny of THIS kill — under the default
-    fake layer, which never ejects, that would hand the credit for free),
-    cannot collect it from a pre-kill/same-batch meeting (a report of the
-    corpse is only possible after the body exists in an observation packet),
-    and cannot KEEP it after a second kill (silencing the would-be
-    discoverer or thinning the electorate forfeits the credit rather than
-    merely failing to add). The survival credit is also gated on the kill —
-    the drill is "kill, then survive the scrutiny", not "hide through a
+    Both credits key on the staged opportunity — a :class:`KilledEvent`
+    whose victim is ``_KILL_WITNESS_VICTIM`` in ``_KILL_WITNESS_ROOM`` (the
+    co-located victim, kill off cooldown, the witness one doorway away). A
+    kill of any OTHER crewmate, or of the staged victim hunted down
+    elsewhere, is a different (witness-free) drill and earns nothing — the
+    scenario is named for acting under nearby discovery pressure, and an
+    optimizer must not be able to route around that pressure while
+    collecting its score. The survival clause reads the typed events +
+    meeting records: EXACTLY ONE kill landed and it was the staged one, its
+    body (the engine mints ``body-{victim}-{tick}``) was reported by a
+    CREWMATE, that meeting concluded, and no concluded meeting ejected an
+    impostor. Each qualifier is load-bearing: an impostor cannot farm the
+    credit by self-reporting (the reporter must be crew), cannot collect it
+    from an UNRELATED post-kill meeting (a stray emergency or a later
+    corpse's report is not scrutiny of THIS kill — under the default fake
+    layer, which never ejects, that would hand the credit for free), cannot
+    collect it from a pre-kill/same-batch meeting (a report of the corpse
+    is only possible after the body exists in an observation packet), and
+    cannot KEEP it after a second kill (silencing the would-be discoverer
+    or thinning the electorate forfeits the credit rather than merely
+    failing to add). The survival credit is also gated on the kill — the
+    drill is "kill, then survive the scrutiny", not "hide through a
     meeting". Under an ejection-capable meeting layer
-    (:class:`ScenarioProvider`'s ``meeting_runner_factory``) the no-ejection
-    clause becomes fully live.
+    (:class:`ScenarioProvider`'s ``meeting_runner_factory``) the
+    no-ejection clause becomes fully live.
     """
 
-    terms = side_specific_terms(rollout, "IMPOSTOR")
-    kill_landed = 1.0 if terms["kills"] >= 1.0 else 0.0
     kill_events = [event for event in rollout.events if isinstance(event, KilledEvent)]
-    first_kill = kill_events[0] if kill_events else None
+    staged_kill = next(
+        (
+            event
+            for event in kill_events
+            if event.target == _KILL_WITNESS_VICTIM and event.room == _KILL_WITNESS_ROOM
+        ),
+        None,
+    )
+    kill_landed = 1.0 if staged_kill is not None else 0.0
     concluded_ticks = {m.tick for m in rollout.meetings if m.outcome is not None}
-    body_reported_by_crew = first_kill is not None and any(
+    body_reported_by_crew = staged_kill is not None and any(
         isinstance(event, MeetingTriggeredEvent)
         and event.trigger == "report"
-        and event.body_id == f"body-{first_kill.target}-{first_kill.tick}"
+        and event.body_id == f"body-{staged_kill.target}-{staged_kill.tick}"
         and rollout.roles.get(event.actor) == "CREWMATE"
         and event.tick in concluded_ticks
         for event in rollout.events
@@ -347,10 +365,11 @@ def _kill_with_witness_fitness(rollout: EpisodeRollout) -> float:
         for meeting in rollout.meetings
         if meeting.outcome is not None
     )
-    # EXACTLY one kill: a second kill (silencing the would-be discoverer,
-    # thinning the electorate) must forfeit the survival credit, not merely
-    # fail to add — otherwise a serial killer collects the full score while
-    # the staged first corpse is reported around it.
+    # EXACTLY one kill, and it is the staged one: a second kill (silencing
+    # the would-be discoverer, thinning the electorate) must forfeit the
+    # survival credit, not merely fail to add — otherwise a serial killer
+    # collects the full score while the staged first corpse is reported
+    # around it.
     survived = (
         1.0
         if len(kill_events) == 1 and body_reported_by_crew and no_impostor_ejected
@@ -367,23 +386,27 @@ KILL_WITH_WITNESS_NEARBY: Final[ScenarioSpec] = ScenarioSpec(
     build_state=_build_kill_with_witness_state,
     fitness=_kill_with_witness_fitness,
     rewards=(
-        "1.0 for landing at least one kill (the staged window: victim "
-        "co-located, cooldown 0, a crew witness one doorway away) plus 1.0 "
-        "when EXACTLY one kill landed, its own body is reported by a "
-        "crewmate, that meeting concludes, and no concluded meeting ejected "
-        "an impostor."
+        "1.0 for landing THE STAGED kill (the co-located victim, in the "
+        "staged kill room, cooldown 0, a crew witness one doorway away) "
+        "plus 1.0 when EXACTLY one kill landed and it was the staged one, "
+        "its own body is reported by a crewmate, that meeting concludes, "
+        "and no concluded meeting ejected an impostor."
     ),
     does_not_reward=(
         "un-witnessed-ness (the drill IS acting under nearby discovery "
-        "pressure — contrast the standing unwitnessed_kills term); second "
-        "kills (any kill beyond the first FORFEITS the survival credit, so "
-        "silencing the discoverer or thinning the electorate costs the "
-        "score, not just gains nothing); meeting suppression (the survival "
-        "credit REQUIRES the kill's own report meeting to conclude, so "
-        "preventing it forfeits the credit); self-report spam (the reporter "
-        "must be crew); unrelated meetings (a pre-kill or post-kill "
-        "emergency, or another corpse's report, is not scrutiny of THIS "
-        "kill and earns nothing); surviving a meeting without the kill."
+        "pressure — contrast the standing unwitnessed_kills term); "
+        "unstaged kills (killing any other crewmate, or hunting the staged "
+        "victim down elsewhere, routes around the witness pressure the "
+        "scenario is named for and earns NOTHING — both credits key on the "
+        "staged victim in the staged room); second kills (any kill beyond "
+        "the first FORFEITS the survival credit, so silencing the "
+        "discoverer or thinning the electorate costs the score, not just "
+        "gains nothing); meeting suppression (the survival credit REQUIRES "
+        "the kill's own report meeting to conclude, so preventing it "
+        "forfeits the credit); self-report spam (the reporter must be "
+        "crew); unrelated meetings (a pre-kill or post-kill emergency, or "
+        "another corpse's report, is not scrutiny of THIS kill and earns "
+        "nothing); surviving a meeting without the kill."
     ),
 )
 
@@ -819,7 +842,16 @@ def _validate_scenario_state(
                     f"{task.id!r} (violates the engine's dead-task invariant "
                     "and permanently blocks CREWMATE_TASKS)"
                 )
-    if state.tasks and incomplete == 0:
+    if not state.tasks:
+        _fail(
+            "staged task map is empty: the seeder refuses tasks_per_crewmate "
+            "< 1 and completed instances persist in the mapping, so no "
+            "reachable game state carries zero task instances — and the "
+            "engine's total-tasks > 0 guard (engine/win_conditions.py) makes "
+            "CREWMATE_TASKS structurally unreachable from one, silently "
+            "deleting a crew win pressure from every staged episode"
+        )
+    if incomplete == 0:
         _fail("all task instances completed (instant CREWMATE_TASKS game-over)")
 
     for body_id, body in state.bodies.items():
