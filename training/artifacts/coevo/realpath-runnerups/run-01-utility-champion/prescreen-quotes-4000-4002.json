@@ -1,0 +1,56 @@
+{
+  "11aa68637a8f12e53780db29cabffb7f88af437f0635db9af3aacdc1014260c4": {
+    "conviction_uses": 23,
+    "gen": 3,
+    "meetings_scored": 23,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.3951204258398506,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "1f5efd3c2f47462c4373ca2e051e12007d60aa9dfc222173821099cfa258c26f": {
+    "conviction_uses": 20,
+    "gen": 9,
+    "meetings_scored": 20,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.5077966242252456,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "609ea9ce9e878cded117da0b20a24ee6b4fbc47c66dec5344ded0defb581876c": {
+    "conviction_uses": 21,
+    "gen": 8,
+    "meetings_scored": 21,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.6109459748711092,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "6cf5ffb687746790b2124ff12de6cbbbc5dab7f61d9987cd6affcd9ad8abd580": {
+    "conviction_uses": 22,
+    "gen": 1,
+    "meetings_scored": 22,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.0585182663415167,
+    "predicted_floors_pass": false,
+    "recorded_flags_fake_substrate": 0
+  },
+  "7c093a035369826920ba9aea96a83d60cea8d595387bc72832c43dc18bd2daec": {
+    "conviction_uses": 23,
+    "gen": 2,
+    "meetings_scored": 23,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.3951204258398506,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "e531c1f9a704a5011b4ff0150e6f263422d5295c7954ed3b5165d2ad9d16ad26": {
+    "conviction_uses": 20,
+    "gen": 7,
+    "meetings_scored": 20,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.5077966242252456,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  }
+}
