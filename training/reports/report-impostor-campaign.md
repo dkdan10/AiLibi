@@ -14,8 +14,16 @@ report-goodhart-probe.md "Blockers" (the four named blockers, folded verbatim in
 **Date started:** 2026-07-23 (session 1). **Last evidence recorded:** 2026-07-26
 (session 4 — the review rounds produced the back-fill, the comparator arm, the encoder
 ablation, and the K=2 runner-up legs; see §2).
-**Status: CLOSED as a SCREENING campaign (2026-07-27).** The campaign delivers three
-things: five trained lineages with all artifacts frozen, a 141-game real-path recordings
+**Status: STOPPED, and NOT CONTRACT-COMPLETE (2026-07-27).** The contract's
+per-generation top-K re-ranks are complete for run-02 only, tranche-1-only for
+run-01/run-03, and absent for run-04/run-05. **This task therefore does NOT satisfy
+Task 18.24 as written, and "stopped" is an owner decision (2026-07-27) taken on the §4.0
+evidence — not a claim of completion.** Amending or discharging the contract clause is
+the owner's/18.28's call, recorded in F10; this report does not amend it unilaterally.
+**18.26 must not treat §8 as a contract-satisfying finalist slate** — it is a screening
+shortlist, and the decision to spend on it is downstream-owner territory. What the
+campaign DOES deliver: The campaign delivers three
+things: five trained lineages with all artifacts frozen, a 183-game real-path recordings
 corpus, and a RANKED SHORTLIST for 18.26 (§8). It deliberately delivers NO verdict on the
 §1.3 flip bar: §4.0 shows the real-path reads at n≤6 carry noise ~69% of the threshold
 being tested, so referee PASS/FAIL is not resolvable here and 18.26's 50-seed protocol is
@@ -189,11 +197,11 @@ in session 1 (§3).
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
 
 **The campaign's recording program is complete for every lineage's CHAMPION slice and,
-at K=2, for run-02 only (the §1/F10 provisional status)** — **22 legs / 141 real
+at K=2, for run-02 only (the §1/F10 provisional status)** — **183 real
 games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation + 3 FSM comparator + 36
 K=2 runner-up + 6 gen-3 correction; seven sha256 manifests
 under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
-content-address all 141 — verified by line count),
+content-address all 183 — counted from the manifests),
 10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
 2 532 anchor-λ + 2 412 encoder-v3). **Remaining task work: the K=2 completion decision.** The
 contract's per-generation top-K is discharged for run-02 only; the other four lineages'
@@ -809,6 +817,35 @@ incomplete, demonstrated rather than hypothesised**: evaluating one lineage's ru
 promoted two candidates into the finalist band. §8 is re-ordered accordingly and F10 is
 rewritten around this evidence.
 
+
+### 4.11 The Option B runner-up legs — run-01 and run-03 (session 5; 36 real games)
+
+Owner-funded extension of the K=2 slice to the two remaining UTILITY lineages (run-04/run-05 skipped on the evidence that all 12 of their arms win 0.000). Candidates recovered on the driver's exact objective, method validated 18/18 (§4.10). Tranche 2 was stopped under §4.0 — these are 3-seed screens.
+
+**run-01 (committed-champion lineage) — 6 runner-ups × 3 seeds (tranche 1; tranche 2 stopped under §4.0).** Every row: validity PASS, stamp 3/3 games, uniform, sha == computed digest.
+
+| gen | runner-up | selection | referee | win | witnessed − floor | flags − floor | conversion − floor |
+|---|---|---|---|---|---|---|---|
+| 7 | **`e531c1f9a704…`** | 1053.87 | **PASS** | 0.333 | +0.2161 PASS | +0.1591 PASS | +0.1245 PASS |
+| 9 | `1f5efd3c2f47…` | 67.33 | FAIL | 0.000 | +0.1804 PASS | -0.4242 FAIL | -0.3930 FAIL |
+| 2 | `7c093a035369…` | 62.70 | FAIL | 0.333 | +0.2161 PASS | -0.4909 FAIL | -0.5556 FAIL |
+| 8 | `609ea9ce9e87…` | 60.03 | FAIL | 0.333 | +0.1804 PASS | -0.2020 FAIL | -0.0789 FAIL |
+| 1 | `6cf5ffb68774…` | 38.47 | FAIL | 0.333 | +0.1804 PASS | -0.5909 FAIL | -0.4444 FAIL |
+| 3 | `11aa68637a8f…` | 30.93 | FAIL | 1.000 | +0.2518 PASS | -0.2020 FAIL | -0.5610 FAIL |
+
+**run-03 (bc-anchor lineage) — 6 runner-ups × 3 seeds (tranche 1; tranche 2 stopped under §4.0).** Every row: validity PASS, stamp 3/3 games, uniform, sha == computed digest.
+
+| gen | runner-up | selection | referee | win | witnessed − floor | flags − floor | conversion − floor |
+|---|---|---|---|---|---|---|---|
+| 8 | **`7f73929d5b91…`** | 1057.43 | **PASS** | 0.333 | +0.2661 PASS | +0.4805 PASS | +0.1733 PASS |
+| 7 | `f07bfa9fb89d…` | 67.40 | FAIL | 0.000 | +0.1804 PASS | -0.5909 FAIL | -0.5000 FAIL |
+| 3 | `b1c8f9147845…` | 58.87 | FAIL | 0.333 | +0.1969 PASS | -0.1909 FAIL | -0.0702 FAIL |
+| 1 | `98171e870e74…` | 56.47 | FAIL | 0.333 | +0.2661 PASS | -0.3409 FAIL | -0.2628 FAIL |
+| 2 | `62499b47ca73…` | 54.30 | FAIL | 0.333 | +0.2994 PASS | -0.2909 FAIL | -0.2107 FAIL |
+| 9 | `0c7a75b47b85…` | 52.00 | FAIL | 0.667 | +0.2994 PASS | +0.5341 PASS | -0.0517 FAIL |
+
+**Both lineages produced a referee-screening PASS, and both came from runner-ups** (`e531c1f9…` run-01 gen-7, `7f73929d…` run-03 gen-8) — the observation F13 rests on. Read under §4.0: at n=3 these are screens, the one prior PASS that was retested collapsed, and the ordering between adjacent rows sits inside measurement noise.
+
 <!-- all legs recorded -->
 
 ---
@@ -869,11 +906,10 @@ meetings per arm every rate cell is advisory-scale; z reads defer to 18.27 with 
 **The largest cell movement: off-menu rate 0.78 / 0.95 against a structural-0
 baseline** — the first free-policy recordings the instrument has ever scored.
 Classification discipline (per the 18.4 memo's clause (c)): this cell reads
-**NOT-DEMONSTRATED — established by RUNNING the registered ablation, not by assertion
-(§6.3)**. The memo registers `encoder-v3` as a training-time lever and prescribes the
-re-train-with-lever-reverted procedure; that ablation was run and the behavior does NOT
-recede (0.8811 → 0.6082; both criterion parts fail at adequate power). The enabler is
-therefore the free-policy ACTION SPACE, not the encoder — a free-policy agent can emit
+**an unruled SCREEN — the registered ablation was RUN (§6.3) and no recession was
+observed (0.8811 → 0.6082), but at n=3 inside §4.0's noise this report defers the
+clause-(c) classification and any causal attribution to 18.27.** The observation is
+consistent with the free-policy action space rather than the encoder being the enabler — a free-policy agent can emit
 any legal intent, and the v2-reverted champion still steps off-menu at 0.61. The utility lineage's structural 0 is quoted as the
 cross-family CONTEXT arm, not as a §6.c counterfactual. What 18.27 may rule on is the
 off-menu DISTRIBUTION (which kinds, which targets — preserved in the committed sweep
@@ -1099,6 +1135,20 @@ Classification of what this surfaces:
 No runner-up arm surfaces a candidate emergence behavior that a campaign lever could
 ablate, so the §6 ablation set is unchanged by these legs.
 
+
+### 5.11 Sweep — the Option B runner-up legs (36 real games; completeness fence PASSED)
+
+| cell | run-01 + run-03 runner-ups | corpus 9p2i |
+|---|---|---|
+| off-menu | 0/1425 (structural) | 0/6 663 |
+| meetings | 113 | 463 |
+| kills (crew-witnessed) | 151 (39) = 0.258 | 505 (12) = 0.024 |
+| effective deflection | 21/50 = 0.420 | 69/152 = 0.454 |
+| teammate accusations | 0/132 | 0/549 |
+| alibi survival | 14/17 = 0.824 | 59/77 = 0.766 |
+
+Nothing departs from ranges §5.8/§5.10 already classify: off-menu is the utility family's structural zero; the witnessed-kill elevation and deflection depression are the family-wide effects present on the un-levered control arm; teammate immunity holds. **No new candidate emergence behavior is surfaced, so the §6 ablation set is unchanged.** All cells are screens per §4.0.
+
 <!-- all sweeps recorded -->
 
 ---
@@ -1214,21 +1264,23 @@ correct remedy is re-recording seed 4005 — which was not done before the campa
 **Consequence, stated plainly:** this ablation's recede verdict is a **tranche-1 screen at
 n=3**, subject to §4.0 in full — the same instability that makes referee verdicts
 unresolvable at this sample size applies to the off-menu rates here. The gen-3 pair's
-0.0054 miss is far inside that noise. `off-menu` remains NOT-DEMONSTRATED, but the
-honest basis is "no evidence of recession at a sample size that cannot resolve it,"
-not "measured non-recession." 18.27 should treat it accordingly; a definitive read needs
-the 50-seed protocol.
+0.0054 miss is far inside that noise. **This report therefore does NOT rule on `off-menu`.** An earlier revision recorded
+it as NOT-DEMONSTRATED and attributed the behavior causally to the free-policy action
+space; both were over-readings of an n=3 screen that sits inside measured noise, and
+this task's contract says it reports and never rules. What is recorded here is the
+screen, its provenance, and the ablation's execution; **the clause-(c) classification
+and any causal attribution are deferred to 18.27**, which should resolve them against
+the 50-seed protocol rather than these bytes.
 
 (Provenance note: the first computation of this test used the corpus anchor `0/6 663`
 as the comparator and pooled both pairs; both defects are corrected above. The corpus
 run gave z = 64.69 and threshold 0.4406 — same verdict, wrong denominators.)
 
-**Verdict: the behavior does NOT recede when the registered lever is reverted.** The
-encoder is not the enabler; the free-policy ACTION SPACE is (the v2-reverted champion
-still steps off-menu at 0.61, and the independent v2 lineage run-05 reads 0.37). Per
-the memo's conjunctive discipline, clause (c) is unsatisfied → **off-menu reads
-NOT-DEMONSTRATED — now on run evidence rather than on the a-priori argument §5.1
-originally made.** 18.27 consumes this ablation record; the off-menu distribution
+**Screen result: no recession observed when the registered lever is reverted** — the
+v2-reverted champion still steps off-menu at 0.61, and the independent v2 lineage
+run-05 reads 0.37. That is consistent with the action space rather than the encoder
+being the enabler, but at n=3 inside §4.0's noise it does not establish either, and
+the classification is 18.27's to make (below). 18.27 consumes this ablation record; the off-menu distribution
 remains available as context, never as a lever-linked claim.
 
 **Secondary finding (F11).** The v2 revert TRAINS MARKEDLY BETTER at this budget:
@@ -1306,6 +1358,19 @@ and to any future free-policy campaign sizing.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F14 — the frozen campaign artifacts were not loadable by the task that consumes
+  them, and nobody would have found out until 18.26 tried.** `scripts/run_tournament.py
+  --candidate-artifact` requires four files (`weights.json`, its sha sidecar,
+  `stamp.json`, `config.json`); the driver's hall and every artifact this campaign froze
+  by hand carried only the first two, so the entire shortlist would have failed to load
+  at the first seed. Fixed here: a five-field `stamp.json` and a provenance `config.json`
+  are now written for all 21 frozen intermediates/runner-ups, and loadability is verified
+  end-to-end through the real entry point (`_load_candidate_policy` returns a policy +
+  stamp). Two routed consequences: (a) the driver/hall should emit loadable artifacts
+  natively rather than leaving the operator to hand-assemble them (§11); (b) **a
+  campaign's definition of done should include "the named finalists load through the
+  consuming task's entry point"** — a five-second check that would have caught this at
+  hour one instead of at hand-off.
 - **F13 — every referee PASS came from a RUNNER-UP; none from a champion. The most
   interesting result of the campaign, and it questions the training signal.** Across 14
   evaluated champions (5 lineages) there are ZERO referee passes; across 18 evaluated
@@ -1441,7 +1506,7 @@ unsatisfiable. This campaign's ranked recommendation:
 | **1** | `ea4bc955…` | 6/6, and the convergence point two independent trajectories found |
 | **2** | `bfd145cb…` | the other 6/6, and the K=2 slice's proof case |
 | **3** | `6d327dcb…` (control) | the incumbent comparator 18.26 needs regardless of ranking |
-| **4** | `e531c1f9…` or `7f73929d…` (a **runner-up** that screened referee-PASS) | §4.0/F13: all three referee PASSes in this campaign came from runner-ups and none from the 14 champions. Whether that is real or noise is exactly what 50 seeds would settle, and it is the most interesting open question the campaign produced |
+| **4** | `7f73929d…` (run-03 gen-8 **runner-up**) | §4.0/F13: all referee screening-PASSes came from runner-ups, none from the 14 champions — 50 seeds settles whether that is real. Chosen over the other PASS candidate (`e531c1f9…`, run-01 gen-7) because its gauge margins are larger on all three (W +0.266 vs +0.216, F +0.481 vs +0.159, C +0.173 vs +0.124) at the same win 0.333, so it is the stronger single test of F13 |
 
 **Held in reserve, not recommended for the 50-seed spend:** `dff6e472…`, `3a89655f…`,
 `76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more
@@ -1477,23 +1542,26 @@ re-anchored baseline cells (`baseline-cells-corpus.json`), the leg/chain logs th
 pre-screen-before-spend ordering (`provenance/`), the as-recorded→repository path map
 for every `replay_set_dir`/`sample_dir` field (`PATHS.md` — those fields are left
 verbatim as library output rather than rewritten, so an extract never disagrees with the
-process that produced it) — **and all 141 raw replay files themselves, committed at
+process that produced it) — **and all 183 raw replay files themselves, committed at
 their manifests' paths (audit sidecars excluded; no instrument reads them), so
 collaborators and CI can verify every manifest and 18.27 can re-read any arm's bytes
-from a fresh checkout**. The six roots / eight manifests that content-address the
-complete real-path corpus:
+from a fresh checkout**. The roots / 11 manifests that content-address the complete real-path corpus
+(counts below are machine-derived; run the verify command to reproduce them):
 
 | root under `training/artifacts/coevo/` | manifest | recordings |
 |---|---|---|
 | `realpath/` | `recordings-manifest.sha256` | 60 — swap-boundary legs (5 lineages × 2 tranches) |
-| `realpath-backfill/` | `recordings-manifest.sha256` | 30 — the 5 recovered per-generation champions |
-| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, tranche 1 |
-| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 18 — K=2 runner-ups, tranche 2 |
-| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 3 — exact-objective gen-3 runner-up, t1 |
-| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 3 — exact-objective gen-3 runner-up, t2 |
-| `realpath-ablation/ablation-run-04-encoder-v3/` | `recordings-manifest.sha256` | 6 — the registered off-menu ablation |
+| `realpath-ablation/ablation-run-04-encoder-v3/` | `recordings-manifest-4003-4005.sha256` | 6 — registered off-menu ablation, seeds 4003-4005 |
+| `realpath-ablation/ablation-run-04-encoder-v3/` | `recordings-manifest.sha256` | 6 — registered off-menu ablation |
+| `realpath-backfill/` | `recordings-manifest.sha256` | 30 — recovered per-generation champions |
 | `realpath-comparator/` | `recordings-manifest.sha256` | 3 — same-seed scripted-FSM comparator |
-| | **total** | **141** |
+| `realpath-runnerups/run-01-utility-champion/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, seeds 4000-4002 |
+| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, seeds 4000-4002 |
+| `realpath-runnerups/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 18 — K=2 runner-ups, seeds 4003-4005 |
+| `realpath-runnerups/run-03-utility-bcanchor/` | `recordings-manifest-4000-4002.sha256` | 18 — K=2 runner-ups, seeds 4000-4002 |
+| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4000-4002.sha256` | 3 — exact-objective gen-3 runner-up, seeds 4000-4002 |
+| `realpath-runnerups-gen3/run-02-utility-lambda4/` | `recordings-manifest-4003-4005.sha256` | 3 — exact-objective gen-3 runner-up, seeds 4003-4005 |
+| | **total (counted, not typed)** | **183 across 11 manifests** |
 
 Verify every manifest from a fresh checkout:
 
@@ -1592,7 +1660,8 @@ speculative. Recommended as ONE task before 18.25 records anything:
 | 1 | `run_realpath_rerank` has no resume — `force=False` raises `AlreadyExistsError`, so a re-run re-records everything and burns one retry per seed | a provider 503 at hour 40 destroyed **25 recorded games** (~3 h) | skip a (candidate, seed) whose replay exists AND whose read-back stamp `weights_sha256` equals the candidate's genome digest AND which reaches `GAME_OVER`. All three checks already exist in the codebase (`_verify_stamps`, the kill-craft completeness fence) — they are simply not wired to a resume path |
 | 2 | the driver persists no per-generation champion genomes (F1) | the entire F1 back-fill + K=2 recovery: **66 real games** and two scenario-seam recovery passes | persist each generation's champion, or expose the ES champion trace |
 | 3 | the pre-screen record is written in place, so tranche 2 overwrites tranche 1 (F9) | reconstruction of provenance under review | key the record by tranche/invocation |
-| 4 | report tables are hand-assembled from JSON that is already correct | **six** of this PR's review findings were transcription/arithmetic errors (a transposed table, a doubled cost estimate, four count errors) | generate every §3–§5 table from the committed artifacts; the stability table in §4.0 is the model — it is machine-computed |
+| 4 | frozen artifacts lack `stamp.json`/`config.json`, so the consuming task cannot load them (F14) | the entire shortlist was unloadable until caught at review | have `HallOfFame.add_member` (and any operator freeze path) write the loadable four-file artifact; add a DoD line requiring the finalists to load through `--candidate-artifact` |
+| 5 | report tables are hand-assembled from JSON that is already correct | **six** of this PR's review findings were transcription/arithmetic errors (a transposed table, a doubled cost estimate, four count errors) | generate every §3–§5 table from the committed artifacts; the stability table in §4.0 is the model — it is machine-computed |
 
 And one protocol precondition, which is free: **compute §4.0's stability table after the
 first retested candidate of any campaign** (F12). Had it been run at hour ~16 here it
