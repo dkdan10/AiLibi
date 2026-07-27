@@ -1,0 +1,64 @@
+{
+  "deterministic_per_candidate": true,
+  "note": "Reconstructed per-tranche record (2026-07-25): the session-1 leg harness wrote a single prescreen-quotes.json per run and the tranche-2 invocation overwrote the tranche-1 file in place (operator-harness deficiency, report finding F9). The pre-screen is DETERMINISTIC per candidate (same genome over the same cached fake recording set -> byte-identical verdict every invocation), so the per-tranche values below are equal by construction; each invocation ran BEFORE its tranche's real spend, evidenced by the invocation provenance (chain.log start lines / session task logs).",
+  "tranches": {
+    "tranche-4000-4002": {
+      "invocation": "session-1 operator leg, relaunched 2026-07-23 ~15:20 EDT after the F7 timeout repricing (task log bh9fbly0f)",
+      "quotes": {
+        "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474": {
+          "candidate": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+          "conversion_floor": 0.12384202469013898,
+          "conviction_uses": 15,
+          "meetings_scored": 15,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.6666666666666666,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 4.164196125096994,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        },
+        "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768": {
+          "candidate": "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768",
+          "conversion_floor": 0.09843710746008676,
+          "conviction_uses": 11,
+          "meetings_scored": 11,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 1.0,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 5.238903221002756,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        }
+      }
+    },
+    "tranche-4003-4005": {
+      "invocation": "overnight chain, START 2026-07-24 07:35:42 EDT (chain.log)",
+      "quotes": {
+        "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474": {
+          "candidate": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+          "conversion_floor": 0.12384202469013898,
+          "conviction_uses": 15,
+          "meetings_scored": 15,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 0.6666666666666666,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 4.164196125096994,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        },
+        "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768": {
+          "candidate": "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768",
+          "conversion_floor": 0.09843710746008676,
+          "conviction_uses": 11,
+          "meetings_scored": 11,
+          "note": "spend advice ONLY (blocker 4); fake substrate mints no flags \u2014 the recorded referee read is the re-rank row's watchability over the REAL bytes",
+          "predicted_converting_share": 1.0,
+          "predicted_flags_pass": true,
+          "predicted_flags_per_meeting": 5.238903221002756,
+          "predicted_floors_pass": true,
+          "recorded_flags_fake_substrate": 0
+        }
+      }
+    }
+  }
+}

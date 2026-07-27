@@ -1,0 +1,14 @@
+{
+  "arms_swinging_ge_one_game": 10,
+  "arms_with_both_tranches": 22,
+  "arms_with_impossible_conversion_floor": 12,
+  "combination_rule": "each (leg, genome) pair is ONE ARM: a policy recorded in two different lineage legs contributes independent provider draws and is counted twice. An earlier revision keyed by genome sha alone, which silently discarded the duplicate arm and made the result depend on filesystem traversal order (6d327dcb was recorded in both run-01 and run-03 on both tranches).",
+  "distinct_genomes": 21,
+  "flags_floor": 1.0909090909090908,
+  "mean_abs_flags_swing": 0.7415,
+  "mean_abs_win_swing_games_of_3": 0.55,
+  "noise_to_threshold_ratio": 0.6797,
+  "referee_passes_replicated": 0,
+  "referee_passes_retested": 1,
+  "referee_passes_total": 3
+}

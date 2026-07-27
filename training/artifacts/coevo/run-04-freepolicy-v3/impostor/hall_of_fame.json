@@ -1,0 +1,24 @@
+{
+  "members": [
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 9,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-9/27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+      "trained_against": "76a0e8c542a8bda8d87e5e1192403abf74385bc9b8ea1892e7c86cfe75644054",
+      "weights_sha256": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 3,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-3/348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768",
+      "trained_against": "76a0e8c542a8bda8d87e5e1192403abf74385bc9b8ea1892e7c86cfe75644054",
+      "weights_sha256": "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768"
+    }
+  ],
+  "side": "impostor",
+  "substrate_sha256": "e4547789167039aea0cecb7c48522eed6e09e0d7b8d27a970ccbc76b251dedf2"
+}

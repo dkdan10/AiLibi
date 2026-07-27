@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "ablation-run-02-anchor-lambda/impostor/gen-4/b83c09fd3eb367f0c34b7fa780431d04a8ea7de75910d4be08f9e3a44925cda0",
+  "genome_length": 19,
+  "side": "impostor",
+  "source_lineage": "ablation-run-02-anchor-lambda"
+}

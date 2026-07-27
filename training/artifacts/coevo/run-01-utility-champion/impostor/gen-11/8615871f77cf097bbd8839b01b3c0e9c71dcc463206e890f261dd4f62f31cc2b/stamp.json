@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "impostor-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-01-utility-champion-exploiter-probe-gen11",
+  "weights_sha256": "8615871f77cf097bbd8839b01b3c0e9c71dcc463206e890f261dd4f62f31cc2b"
+}

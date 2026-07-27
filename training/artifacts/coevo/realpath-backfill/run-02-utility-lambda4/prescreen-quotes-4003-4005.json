@@ -1,0 +1,20 @@
+{
+  "dff6e472e00a0c23498164cec78c96f7a9b1cf29e065c65dce60edcc54d9ec7f": {
+    "conviction_uses": 21,
+    "gen": 1,
+    "meetings_scored": 21,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.2299797946156628,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  },
+  "ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f": {
+    "conviction_uses": 21,
+    "gen": 2,
+    "meetings_scored": 21,
+    "note": "spend advice ONLY (blocker 4)",
+    "predicted_flags_per_meeting": 1.2562082796558902,
+    "predicted_floors_pass": true,
+    "recorded_flags_fake_substrate": 0
+  }
+}

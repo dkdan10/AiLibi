@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "impostor-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-01-utility-champion-runnerup-gen-2",
+  "weights_sha256": "7c093a035369826920ba9aea96a83d60cea8d595387bc72832c43dc18bd2daec"
+}

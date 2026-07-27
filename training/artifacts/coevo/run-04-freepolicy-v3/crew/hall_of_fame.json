@@ -1,0 +1,69 @@
+{
+  "members": [
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 8,
+      "origin": "exploiter-probe",
+      "path": "gen-8/0f0f16aa0743d768cd289a4dca6e0f83bdcf4741bf3660167c8f9e748ad68c93",
+      "trained_against": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+      "weights_sha256": "0f0f16aa0743d768cd289a4dca6e0f83bdcf4741bf3660167c8f9e748ad68c93"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 3,
+      "origin": "exploiter-probe",
+      "path": "gen-3/20a00ebb51026a62be9f0261bfe6c6e6c51524e29e919a9efbb3103ea3398acc",
+      "trained_against": "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768",
+      "weights_sha256": "20a00ebb51026a62be9f0261bfe6c6e6c51524e29e919a9efbb3103ea3398acc"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 6,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-6/43e5b8696e7710ce4377446a66bf57e18d86d7fb2d871b225cb1a652c58bb13f",
+      "trained_against": "348df066e0db6e255b4ce58eaffd0875771dedd1b1154d669111545674456768",
+      "weights_sha256": "43e5b8696e7710ce4377446a66bf57e18d86d7fb2d871b225cb1a652c58bb13f"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 1,
+      "origin": "exploiter-probe",
+      "path": "gen-1/76a0e8c542a8bda8d87e5e1192403abf74385bc9b8ea1892e7c86cfe75644054",
+      "trained_against": "b775a7e6fd9e74c9618df6d020798c4051e0815c96b633ebe847f1cc4f6858ff",
+      "weights_sha256": "76a0e8c542a8bda8d87e5e1192403abf74385bc9b8ea1892e7c86cfe75644054"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 12,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-12/9dc8432fe4fd69a2c5951887d83b82356d0e19609ced204afe07b10f72e715c9",
+      "trained_against": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+      "weights_sha256": "9dc8432fe4fd69a2c5951887d83b82356d0e19609ced204afe07b10f72e715c9"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 9,
+      "origin": "exploiter-probe",
+      "path": "gen-9/b953b0099267e40eb428e5208281f217bc151b2cfe3a7640e7a1ac6316bc064f",
+      "trained_against": "27f852fe0919bed6035ecd7317dea08f7a9b90c16ba1331336cb5df80df0a474",
+      "weights_sha256": "b953b0099267e40eb428e5208281f217bc151b2cfe3a7640e7a1ac6316bc064f"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 2,
+      "origin": "exploiter-probe",
+      "path": "gen-2/ba09557be65fa5f2bbfcdf28f41db103ab8798bfe764cfb9d2c4a15dfe166e94",
+      "trained_against": "ee28facfba05f0b016662dcfe528241cea20cca2e46248bad7022143f4486a9a",
+      "weights_sha256": "ba09557be65fa5f2bbfcdf28f41db103ab8798bfe764cfb9d2c4a15dfe166e94"
+    }
+  ],
+  "side": "crew",
+  "substrate_sha256": "e4547789167039aea0cecb7c48522eed6e09e0d7b8d27a970ccbc76b251dedf2"
+}

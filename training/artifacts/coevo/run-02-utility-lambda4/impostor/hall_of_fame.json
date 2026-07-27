@@ -1,0 +1,60 @@
+{
+  "members": [
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 3,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-3/10c1f9f3c0a263d9175f6e249b8083d6a24f2eb70238cb5bc623cc8ba47574e7",
+      "trained_against": "d15a5e12284a3bbac3971c63b9ddd81a4e95316c978afd54d69a0ef206bab8b4",
+      "weights_sha256": "10c1f9f3c0a263d9175f6e249b8083d6a24f2eb70238cb5bc623cc8ba47574e7"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 9,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-9/2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0",
+      "trained_against": "1baf6fefec590c1fef6e5570846b0633c4090391b7fb264f9324ab62238c06fa",
+      "weights_sha256": "2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 12,
+      "origin": "exploiter-probe",
+      "path": "gen-12/975048e7dcc56c2dce986a76fb89b5bcc61b881f9294c31954e88e49416afb18",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "975048e7dcc56c2dce986a76fb89b5bcc61b881f9294c31954e88e49416afb18"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 11,
+      "origin": "exploiter-probe",
+      "path": "gen-11/d00cd283a70af65db1bcac0f02bea1237554d372039a40659c98863f7f5caae2",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "d00cd283a70af65db1bcac0f02bea1237554d372039a40659c98863f7f5caae2"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 10,
+      "origin": "exploiter-probe",
+      "path": "gen-10/d2aba2ba32030da9a65b1c1f21fe00470f30c949edaca63f07b7833ba3197e04",
+      "trained_against": "53d755165fa0b2ca2a627ac053dd3048e4f584ebcd061331eb68fd33832e05db",
+      "weights_sha256": "d2aba2ba32030da9a65b1c1f21fe00470f30c949edaca63f07b7833ba3197e04"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 6,
+      "origin": "exploiter-probe",
+      "path": "gen-6/f9a26c912d34fd3e31dbbf541236f272eec9841a9c6ae9e4b437779d0672cdd6",
+      "trained_against": "1baf6fefec590c1fef6e5570846b0633c4090391b7fb264f9324ab62238c06fa",
+      "weights_sha256": "f9a26c912d34fd3e31dbbf541236f272eec9841a9c6ae9e4b437779d0672cdd6"
+    }
+  ],
+  "side": "impostor",
+  "substrate_sha256": "9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4"
+}

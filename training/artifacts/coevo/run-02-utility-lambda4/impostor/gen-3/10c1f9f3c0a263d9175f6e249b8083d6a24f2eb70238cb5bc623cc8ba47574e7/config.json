@@ -1,0 +1,11 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-02-utility-lambda4/impostor/gen-3/10c1f9f3c0a263d9175f6e249b8083d6a24f2eb70238cb5bc623cc8ba47574e7",
+  "generation": 3,
+  "genome_length": 19,
+  "hall_origin": "alternating-freeze-champion",
+  "source_lineage": "run-02-utility-lambda4",
+  "trained_against": "d15a5e12284a3bbac3971c63b9ddd81a4e95316c978afd54d69a0ef206bab8b4"
+}

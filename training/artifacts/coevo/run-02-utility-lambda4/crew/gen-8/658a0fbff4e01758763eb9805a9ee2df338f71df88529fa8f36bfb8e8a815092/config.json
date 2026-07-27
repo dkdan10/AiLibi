@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "run-02-utility-lambda4/crew/gen-8/658a0fbff4e01758763eb9805a9ee2df338f71df88529fa8f36bfb8e8a815092",
+  "genome_length": 27,
+  "side": "crew",
+  "source_lineage": "run-02-utility-lambda4"
+}

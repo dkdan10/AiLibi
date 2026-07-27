@@ -1,0 +1,11 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-01-utility-champion/impostor/gen-5/ec9de936c1f78996c072922e9c590fc6292949f5d8a20235319bdb044a00fd96",
+  "generation": 5,
+  "genome_length": 19,
+  "hall_origin": "exploiter-probe",
+  "source_lineage": "run-01-utility-champion",
+  "trained_against": "22c9707e0ddcea03f7f4ab1fbe179cc1be7d00bcba5df8eb9ce93b69d97e8971"
+}

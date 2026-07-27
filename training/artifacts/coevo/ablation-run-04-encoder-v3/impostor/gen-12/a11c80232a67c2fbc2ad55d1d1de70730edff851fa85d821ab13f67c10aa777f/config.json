@@ -1,0 +1,10 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "v2",
+  "entrant": "ablation-run-04-encoder-v3/impostor/gen-12/a11c80232a67c2fbc2ad55d1d1de70730edff851fa85d821ab13f67c10aa777f",
+  "genome_length": 1049,
+  "hidden": 8,
+  "side": "impostor",
+  "source_lineage": "ablation-run-04-encoder-v3"
+}
