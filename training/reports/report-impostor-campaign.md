@@ -1198,6 +1198,27 @@ lineage member and almost none on the other, and on neither does the behavior cl
 registered recede bar — so `off-menu` stays NOT-DEMONSTRATED, with the gen-3 near-miss
 recorded for 18.27 rather than smoothed away.
 
+
+**Tranche 2 (seeds 4003–4005) — RECORDED, but VALIDITY-FAILED; the recede verdict above
+therefore rests on tranche 1 only.** The §6.c procedure calls for the ablated champion on
+the champion arm's full seed list, so tranche 2 was recorded (6 games, committed at
+`realpath-ablation/…/recordings-4003-4005/` with its ranking and manifest). It **fails
+`cost_and_provenance_exact`**: on seed 4005 both arms logged one `(deadline_default)`
+turn — an agent turn that exceeded its deadline and recorded the no-statement fallback —
+making the model set inconsistent across games
+(`('(deadline_default)', 'Qwen/Qwen3.6-27B')` vs `('Qwen/Qwen3.6-27B',)`). That is a
+provider-latency artifact, the validity gate catching it is the gate working, and the
+correct remedy is re-recording seed 4005 — which was not done before the campaign closed
+(§4.0). The bytes are committed as validity-failed evidence rather than discarded.
+
+**Consequence, stated plainly:** this ablation's recede verdict is a **tranche-1 screen at
+n=3**, subject to §4.0 in full — the same instability that makes referee verdicts
+unresolvable at this sample size applies to the off-menu rates here. The gen-3 pair's
+0.0054 miss is far inside that noise. `off-menu` remains NOT-DEMONSTRATED, but the
+honest basis is "no evidence of recession at a sample size that cannot resolve it,"
+not "measured non-recession." 18.27 should treat it accordingly; a definitive read needs
+the 50-seed protocol.
+
 (Provenance note: the first computation of this test used the corpus anchor `0/6 663`
 as the comparator and pooled both pairs; both defects are corrected above. The corpus
 run gave z = 64.69 and threshold 0.4406 — same verdict, wrong denominators.)
