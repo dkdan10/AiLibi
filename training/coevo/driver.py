@@ -129,6 +129,23 @@ otherwise fail only deep in the encoder), and a hall/side stays SINGLE-FAMILY
 per campaign. HoF rows deliberately carry no encoder stamp — the campaign
 config and the campaign rows carry it instead.
 
+Campaign ergonomics (Task 18.31, from the 18.24 campaign's operational cost
+evidence — report-impostor-campaign.md §11): every generation's champion is
+persisted the moment it exists, as a four-file LOADABLE artifact under
+``<work_dir>/gen-champions/gen-<N>/<sha>/`` (fix 2 — §11 defect 2 / F1 cost 66
+real games and two recovery passes to re-breed intermediates the driver had
+already computed), and every freeze path — swap champion, exploiter find,
+MAP-Elites founder, per-generation champion — writes ``stamp.json`` +
+``config.json`` beside the weights through
+:func:`training.coevo.hall_of_fame.write_loadable_artifact` (fix 4 — §11 defect
+4 / F14: the whole 18.24 shortlist was unloadable through
+``scripts/run_tournament.py``'s ``_load_candidate_policy`` until review caught
+it). ``encoder_version`` / ``hidden`` are DISPATCHED FROM THE SIDE CONFIG, never
+re-derived from genome length (§12 Errata item 1 is the mis-stamp that rule
+kills). Both are strictly ADDITIVE and DIGEST-INERT: no campaign row field
+moves, so the 18.21 double-run row digest is unchanged; the work-dir
+no-clobber preflight extends to the new artifacts.
+
 Deterministic end-to-end on the fake/surrogate path: every RNG stream derives
 from ``master_seed`` via :func:`training.bakeoff.es.derive_stream_seed`, all
 iteration is over sorted structures, and two identical runs emit identical
@@ -179,16 +196,23 @@ from training.bakeoff.harness import (
     inner_episode_fitness,
 )
 from training.bakeoff.map_elites import load_archive_cell_genomes
+
+# The utility family's encoder tag names the ONE impostor family that rebuilds
+# without a ``hidden`` width (the same private-alias import realpath.py uses).
+from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
 from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX
 from training.coevo.hall_of_fame import (
+    DEFAULT_ANCHOR_POLICY,
     DEFAULT_COEVO_ARTIFACT_ROOT,
     DEFAULT_EXPLORATION_FLOOR,
     TRAINED_AGAINST_FSM,
     HallOfFame,
+    LoadableArtifactMetadata,
     OpponentStalenessCap,
     OpponentStalenessLedger,
     Side,
     sample_opponents,
+    write_loadable_artifact,
 )
 from training.coevo.rollout import CoevoRolloutResult, rollout_coevo
 from training.composed_runner import (
@@ -222,6 +246,22 @@ SWAP_CHAMPION_ORIGIN: Final[str] = "alternating-freeze-champion"
 #: ``origin`` for an exploiter-probe find frozen mid-swap by this driver.
 EXPLOITER_ORIGIN: Final[str] = "exploiter-probe"
 
+#: ``origin`` for a PER-GENERATION champion persisted beside the campaign rows
+#: (Task 18.31 fix 2). These are NOT hall members — they are the intermediate
+#: genomes the 18.24 campaign had to re-breed and hand-stamp after the fact
+#: (report §11 defect 2 / F1: 66 real games and two recovery passes), persisted
+#: here as loadable artifacts the moment they exist.
+GENERATION_CHAMPION_ORIGIN: Final[str] = "generation-champion"
+
+#: The ``stamp.json`` ``method`` every driver freeze records — the training
+#: method that produced the genome (the committed 18.24 members' value).
+COEVO_FREEZE_METHOD: Final[str] = "alternating-freeze-es"
+
+#: The default stamp-grade run label. A real campaign names its run (e.g.
+#: ``"run-01-utility-champion"``); the default keeps the field additive and
+#: digest-inert for existing configurations.
+DEFAULT_RUN_LABEL: Final[str] = "coevo-campaign"
+
 #: The stated fake-path game-count ceiling (the integration-risk guard): at the
 #: measured ~0.5 s/fake game this is a same-day run, never a week-long one. A
 #: configuration whose :func:`projected_game_bound` exceeds the configured
@@ -245,6 +285,12 @@ CAMPAIGN_ROWS_FILENAME: Final[str] = "campaign-rows.jsonl"
 
 #: The up-front budget log lands here under ``work_dir``.
 CAMPAIGN_PLAN_FILENAME: Final[str] = "campaign-plan.json"
+
+#: Per-generation champions land under ``<work_dir>/gen-champions/gen-<N>/<sha>/``
+#: as four-file loadable artifacts (Task 18.31 fix 2) — BESIDE the rows file,
+#: never inside it: the row schema, and therefore
+#: :meth:`CoevoCampaignResult.digest`, does not move.
+GEN_CHAMPIONS_DIRNAME: Final[str] = "gen-champions"
 
 # Deterministic stream tags for ``derive_stream_seed`` (arbitrary fixed ints;
 # distinct tags can never collide by construction of the stream derivation).
@@ -359,6 +405,17 @@ class CoevoSideConfig(Generic[PolicyT]):
     ``cells/`` tree, exactly what ``ingest_map_elites_founders`` takes)
     ingests MAP-Elites cells as behaviorally diverse founders through the
     substrate-fenced ingest BEFORE any pool build or sampling.
+
+    Two ADDITIVE, default-valued, DIGEST-INERT stamp-metadata fields (Task
+    18.31 — they ride no campaign row, so the row digest cannot move):
+    ``hidden`` is the masked-MLP head width every freeze on this side stamps
+    into its ``config.json`` (REQUIRED for a non-utility impostor family — the
+    consumer rebuilds through it, and re-deriving it from genome length is
+    exactly the ambiguity the 18.24 report's §12 Errata item 1 records the cost
+    of), and ``anchor_policy_label`` NAMES the anchor artifact in the stamp
+    (``fsm-default`` = the scripted FSM proposal; a side that actually carries
+    an ``anchor_policy`` must name it, else every frozen member mis-stamps its
+    anchor).
     """
 
     side: Side
@@ -373,6 +430,8 @@ class CoevoSideConfig(Generic[PolicyT]):
     initial_genome: tuple[float, ...] | None = None
     anchor_policy: BakeoffPolicy | None = None
     founder_cells_dir: Path | None = None
+    hidden: int | None = None
+    anchor_policy_label: str = DEFAULT_ANCHOR_POLICY
 
 
 @dataclass(frozen=True)
@@ -392,6 +451,11 @@ class CoevoCampaignConfig:
     exception, never as a whole-campaign PFSP bypass. ``meeting_runner_factory``
     (the generic future-GO-verdict-runner slot) and ``composed`` (the gated
     18.29 adoption) are mutually exclusive; both serve TRAINING games only.
+
+    ``run_label`` (Task 18.31) is the ADDITIVE, default-valued, DIGEST-INERT
+    stamp-grade run name every frozen artifact records (``policy_id`` /
+    ``campaign`` / ``entrant`` / ``source_lineage``) — the provenance the 18.24
+    record had to be reconstructed with by hand. It rides no campaign row.
     """
 
     work_dir: Path
@@ -421,6 +485,7 @@ class CoevoCampaignConfig:
     scenario_provider: CoevoScenarioProvider | None = None
     game_ceiling: int = DEFAULT_GAME_CEILING
     allow_over_ceiling: bool = False
+    run_label: str = DEFAULT_RUN_LABEL
 
     @property
     def resolved_hall_root(self) -> Path:
@@ -532,7 +597,12 @@ class CoevoCampaignRow(BaseModel):
 
 @dataclass(frozen=True)
 class CoevoCampaignResult:
-    """The finished campaign: rows + grown halls + the double-run digest pin."""
+    """The finished campaign: rows + grown halls + the double-run digest pin.
+
+    ``gen_champions_dir`` (Task 18.31) locates the per-generation champion
+    artifacts written beside ``rows_path``; it names a location only, so
+    :meth:`digest` — computed over the row bytes alone — is unaffected.
+    """
 
     rows: tuple[CoevoCampaignRow, ...]
     impostor_hall: HallOfFame
@@ -542,6 +612,7 @@ class CoevoCampaignResult:
     total_games: int
     projected_game_bound: int
     rows_path: Path
+    gen_champions_dir: Path
 
     def digest(self) -> str:
         """SHA-256 over the emitted row bytes — the determinism pin."""
@@ -676,6 +747,19 @@ def _validate_side(
             "on the scripted FSM only); anchor_policy belongs to the impostor "
             "side config"
         )
+    if config.anchor_policy is not None and (
+        config.anchor_policy_label == DEFAULT_ANCHOR_POLICY
+    ):
+        # A side bred against a FIXED alternative anchor artifact (the 18.5
+        # filtered-BC seam) whose stamp still says "fsm-default" mis-names the
+        # anchor in every artifact it freezes — the §12 Errata item-1 class of
+        # defect, caught here before any hall exists (Task 18.31).
+        raise ValueError(
+            f"the {expected_side} side config carries an anchor_policy but its "
+            f"anchor_policy_label is still {DEFAULT_ANCHOR_POLICY!r}; name the "
+            "anchor artifact so every frozen member's stamp records the anchor "
+            "it was actually bred against"
+        )
 
     if config.initial_genome is not None:
         initial = tuple(float(gene) for gene in config.initial_genome)
@@ -722,6 +806,29 @@ def _validate_side(
             f"the impostor side built a crew policy (encoder_version="
             f"{probe_encoder!r}); crew encoder tags never belong in the "
             "impostor slot (the 18.19 conflation guard)"
+        )
+    # The freeze-stamp family rule (Task 18.31), checked AFTER the family pin so
+    # a drifted pin still reports itself first. Every impostor family except the
+    # utility scorer rebuilds through ``build_masked_mlp_policy``, whose
+    # ``hidden`` width the consumer reads from the artifact's config.json
+    # (``scripts/run_tournament.py`` ``_read_candidate_hidden``): a side that
+    # freezes without declaring it produces unloadable artifacts.
+    if config.hidden is not None and config.hidden < 1:
+        raise ValueError(
+            f"the {expected_side} side config declares hidden={config.hidden!r}; "
+            "a masked-MLP head width must be >= 1"
+        )
+    if (
+        expected_side == "impostor"
+        and probe_encoder != _UTILITY_ENCODER_VERSION
+        and config.hidden is None
+    ):
+        raise ValueError(
+            f"the impostor family {probe_encoder!r} rebuilds through the "
+            "masked-MLP builder, so every artifact it freezes needs an integer "
+            "'hidden' in config.json; declare it on the side config (it is "
+            "NEVER re-derived from genome length — the 18.24 report §12 Errata "
+            "item 1 is the cost of guessing)"
         )
     return initial
 
@@ -840,11 +947,31 @@ def _validate_config(
             "runner seam beside it would be ambiguous about which served "
             "training games"
         )
+    if not config.run_label.strip():
+        raise ValueError(f"run_label must be non-blank; got {config.run_label!r}")
+    for forbidden, human in (("|", "pipe"), ("\n", "newline"), ("\r", "CR")):
+        if forbidden in config.run_label:
+            # The label rides every frozen artifact's stamp, whose fields are
+            # MANIFEST-safe by contract; a bad label must fail before any hall.
+            raise ValueError(
+                f"run_label must be MANIFEST-safe (no {human}); got "
+                f"{config.run_label!r}"
+            )
     rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
     if rows_path.exists():
         raise FileExistsError(
             f"campaign rows already exist at {rows_path}; the driver never "
             "clobbers a recorded campaign (pick a fresh work_dir)"
+        )
+    gen_champions_dir = config.work_dir / GEN_CHAMPIONS_DIRNAME
+    if gen_champions_dir.exists():
+        # The standing work-dir no-clobber discipline, extended to the 18.31
+        # per-generation champion artifacts: they are campaign evidence, so a
+        # second run never writes into a recorded tree.
+        raise FileExistsError(
+            f"per-generation champion artifacts already exist at "
+            f"{gen_champions_dir}; the driver never clobbers a recorded "
+            "campaign (pick a fresh work_dir)"
         )
     impostor_initial = _validate_side(
         config.impostor, expected_side="impostor", master_seed=config.master_seed
@@ -959,6 +1086,7 @@ class _CampaignEngine:
         _preflight_fresh_hall_root(hall_root)
         config.work_dir.mkdir(parents=True, exist_ok=True)
         self._rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
+        self._gen_champions_dir = config.work_dir / GEN_CHAMPIONS_DIRNAME
         self._write_plan()
         self._states: dict[Side, _SideState] = {}
         for side, side_config, initial in (
@@ -966,7 +1094,10 @@ class _CampaignEngine:
             ("crew", config.crew, crew_initial),
         ):
             hall = HallOfFame.create(
-                hall_root, cast(Side, side), substrate_sha256=config.substrate_sha256
+                hall_root,
+                cast(Side, side),
+                substrate_sha256=config.substrate_sha256,
+                artifact_metadata=self._artifact_metadata(side_config),
             )
             if side_config.founder_cells_dir is not None:
                 hall.ingest_map_elites_founders(side_config.founder_cells_dir)
@@ -987,6 +1118,85 @@ class _CampaignEngine:
         self._rollout_counter = 0
 
     # -- plumbing ------------------------------------------------------------ #
+
+    def _artifact_metadata(
+        self, side_config: CoevoSideConfig[Any]
+    ) -> LoadableArtifactMetadata:
+        """The side's stamp-grade freeze metadata (Task 18.31 fix 4).
+
+        ``encoder_version`` / ``hidden`` / ``anchor_policy`` come from the SIDE
+        CONFIG — the campaign's declared family — never from a genome length or
+        a builder probe. Every freeze on that side (swap champion, exploiter
+        find, MAP-Elites founder, and the per-generation champions written
+        beside the rows) therefore stamps the same, family-correct identity.
+        """
+
+        return LoadableArtifactMetadata(
+            run_label=self._config.run_label,
+            method=COEVO_FREEZE_METHOD,
+            encoder_version=side_config.encoder_version,
+            anchor_policy=side_config.anchor_policy_label,
+            hidden=side_config.hidden,
+            anchor_weight=side_config.anchor_weight,
+        )
+
+    def _persist_generation_champion(
+        self,
+        *,
+        moving: _SideState,
+        swap_index: int,
+        generation_in_swap: int,
+        global_generation: int,
+        champion_sha: str,
+        trained_against: str,
+        champion_updated: bool,
+    ) -> Path:
+        """Freeze THIS generation's champion beside the rows (Task 18.31 fix 2).
+
+        The 18.24 campaign persisted only swap champions and exploiter finds, so
+        its intermediate generations had to be re-bred and hand-stamped later —
+        66 real games and two recovery passes (report §11 defect 2 / F1). Every
+        generation's champion now lands as a four-file loadable artifact under
+        ``<work_dir>/gen-champions/gen-<N>/<sha>/`` the moment it exists.
+
+        Strictly ADDITIVE and DIGEST-INERT: no campaign row field changes, the
+        rows file is untouched, and the write happens after the ES step has
+        already produced the champion. The per-generation dir name is the global
+        generation, and exactly one side moves per generation, so two artifacts
+        can never contend for one path.
+        """
+
+        metadata = self._artifact_metadata(moving.config)
+        relative = f"{GEN_CHAMPIONS_DIRNAME}/gen-{global_generation}/{champion_sha}"
+        provenance = metadata.provenance(
+            side=moving.side,
+            generation=global_generation,
+            origin=GENERATION_CHAMPION_ORIGIN,
+            trained_against=trained_against,
+            path=relative,
+        )
+        provenance["swap_index"] = swap_index
+        provenance["generation_in_swap"] = generation_in_swap + 1
+        provenance["champion_updated"] = champion_updated
+        artifact_dir = self._config.work_dir / relative
+        written = write_loadable_artifact(
+            artifact_dir,
+            moving.champion,
+            policy_id=metadata.policy_id_for(
+                origin=GENERATION_CHAMPION_ORIGIN, generation=global_generation
+            ),
+            method=metadata.method,
+            encoder_version=metadata.encoder_version,
+            anchor_policy=metadata.anchor_policy,
+            hidden=metadata.hidden,
+            config=provenance,
+        )
+        if written != champion_sha:  # pragma: no cover - same bytes, same digest
+            raise RuntimeError(
+                f"persisted generation champion digest {written} != the row's "
+                f"champion sha {champion_sha}"
+            )
+        return artifact_dir
 
     def _write_plan(self) -> None:
         """Log the up-front budget (the 'compute and log' half of the guard)."""
@@ -1221,6 +1431,7 @@ class _CampaignEngine:
             total_games=self._games_total,
             projected_game_bound=self._bound,
             rows_path=self._rows_path,
+            gen_champions_dir=self._gen_champions_dir,
         )
 
     def _run_swap(
@@ -1451,6 +1662,23 @@ class _CampaignEngine:
             for sha, _, _ in distinct_entries
             if sha != TRAINED_AGAINST_FSM
         }
+        # The generation's dominant opponent, by the SAME draw-multiplicity rule
+        # the swap freeze uses (ties break to the lexically smallest sha), so a
+        # persisted generation champion names the opponent that dominated its
+        # training signal — the FSM sentinel in cold-start/empty-pool mode.
+        generation_multiplicities = {
+            sha: multiplicity
+            for sha, multiplicity, _ in distinct_entries
+            if sha != TRAINED_AGAINST_FSM
+        }
+        generation_trained_against = (
+            min(
+                generation_multiplicities,
+                key=lambda sha: (-generation_multiplicities[sha], sha),
+            )
+            if generation_multiplicities
+            else TRAINED_AGAINST_FSM
+        )
 
         # 4. The ES step vs the slate (distinct opponents weighted by draw
         #    multiplicity — arithmetically the slate mean with replacement).
@@ -1505,6 +1733,18 @@ class _CampaignEngine:
         )
         moving.champion = es_result.champion
         champion_sha = _genome_sha(moving.champion)
+        # Fix 2: persist THIS generation's champion beside the rows, before the
+        # benchmark/exploiter games spend anything further — an interrupted
+        # campaign keeps every genome it has already bred.
+        self._persist_generation_champion(
+            moving=moving,
+            swap_index=swap_index,
+            generation_in_swap=generation_in_swap,
+            global_generation=global_generation,
+            champion_sha=champion_sha,
+            trained_against=generation_trained_against,
+            champion_updated=moving.champion != previous_champion,
+        )
         moving_anchor_ce_mean = (
             gen_imp_trace.mean_anchor_ce()
             if moving.side == "impostor"
@@ -1688,10 +1928,14 @@ __all__ = [
     "CAMPAIGN_PLAN_FILENAME",
     "CAMPAIGN_ROWS_FILENAME",
     "COEVO_CAMPAIGN_ROW_SCHEMA_VERSION",
+    "COEVO_FREEZE_METHOD",
     "COMPOSED_ARTIFACT_DIR",
     "DEFAULT_GAME_CEILING",
     "DEFAULT_OPPONENT_STALENESS_CAP",
+    "DEFAULT_RUN_LABEL",
     "EXPLOITER_ORIGIN",
+    "GEN_CHAMPIONS_DIRNAME",
+    "GENERATION_CHAMPION_ORIGIN",
     "SWAP_CHAMPION_ORIGIN",
     "CoevoCampaignConfig",
     "CoevoCampaignResult",

@@ -35,7 +35,17 @@ the definition-of-done contract of :mod:`training.coevo.driver`:
   build or sampling, and the exploiter probe's found exploits join the frozen
   side's hall with honest provenance;
 * wrong-family/misconfigured campaigns fail loud at validation time, BEFORE
-  any hall exists on disk.
+  any hall exists on disk;
+* (Task 18.31) every GENERATION's champion is persisted beside the rows as a
+  four-file loadable artifact and every hall freeze writes one too — both
+  provably digest-inert (the double-run row digest is asserted again against
+  the same fixture, and no row field was added), both byte-deterministic across
+  two runs, and both loading END TO END through
+  ``scripts/run_tournament.py``'s ``_load_candidate_policy``; the work-dir
+  no-clobber discipline covers the new artifacts, and a side that would freeze
+  a MIS-STAMPED artifact (a masked-MLP family with no declared ``hidden``, an
+  alternative anchor with no stamp label, a blank/unsafe run label) is refused
+  before any hall exists.
 
 Every fixture-pinned count below (games, hall sizes, exploiter outcomes) was
 obtained by running the code under the fixed seeds and then hard-pinned here
@@ -48,7 +58,8 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import replace
+import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
@@ -73,7 +84,9 @@ from training.bakeoff.map_elites import (
 from training.bakeoff.utility_es import build_utility_scorer_policy
 from training.coevo.driver import (
     COEVO_CAMPAIGN_ROW_SCHEMA_VERSION,
+    COEVO_FREEZE_METHOD,
     EXPLOITER_ORIGIN,
+    GENERATION_CHAMPION_ORIGIN,
     SWAP_CHAMPION_ORIGIN,
     CoevoCampaignConfig,
     CoevoCampaignResult,
@@ -94,6 +107,15 @@ from training.coevo.hall_of_fame import (
 from training.conviction.model import ConvictionStalenessCap, ConvictionUseCounter
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import CrewOptionScorer, CrewTrackPolicy, build_crew_scorer
+
+# ``scripts/`` is a bare-module namespace: the 18.31 loadable-freeze pin needs
+# the CONSUMING entry point ``run_tournament._load_candidate_policy``, so put
+# ``scripts/`` on sys.path the way tests/scripts/conftest.py does.
+_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import run_tournament  # noqa: E402
 
 # The two committed cheap linear families (the shared artifact/weights layout):
 # the 19-gene utility scorer (impostor encoder v1) and the 27-gene owned-task
@@ -702,8 +724,222 @@ def test_founders_seed_the_pool_and_exploits_join_the_hall(tmp_path: Path) -> No
     assert exploits[0].trained_against == row.champion_weights_sha256
     assert exploits[0].generation == 1
 
+    # Task 18.31: EVERY freeze path on this hall — MAP-Elites founders included —
+    # writes the four-file loadable artifact with the side's declared family.
+    for member in impostor_hall.members:
+        member_dir = tmp_path / "halls" / "impostor" / member.path
+        assert _artifact_files(member_dir) == _LOADABLE_FILES
+        assert (
+            json.loads((member_dir / "stamp.json").read_text())["encoder_version"]
+            == _IMPOSTOR_ENCODER
+        )
+        policy, _ = run_tournament._load_candidate_policy(member_dir)
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+
     crew_hall = HallOfFame.load(tmp_path / "halls", "crew")
     assert [member.origin for member in crew_hall.members] == [SWAP_CHAMPION_ORIGIN]
+
+
+# --------------------------------------------------------------------------- #
+# Campaign ergonomics (Task 18.31): per-generation champions + loadable freezes.#
+# --------------------------------------------------------------------------- #
+
+
+def _artifact_files(artifact_dir: Path) -> list[str]:
+    return sorted(path.name for path in artifact_dir.iterdir())
+
+
+_LOADABLE_FILES = ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
+
+
+def test_every_generation_champion_is_persisted_as_a_loadable_artifact(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """Each generation's champion lands beside the rows, loadable (18.31 fix 2).
+
+    The 18.24 campaign persisted swap champions and exploiter finds only, so its
+    intermediate generations had to be re-bred and hand-stamped: 66 real games
+    and two recovery passes (report §11 defect 2 / F1). Every row now has its
+    genome on disk under ``gen-champions/gen-<N>/<sha>/`` as the four-file
+    artifact, keyed by the row's OWN ``champion_weights_sha256``, and it loads
+    through the consuming entry point.
+    """
+
+    first, _, _ = baseline_runs
+    gen_dir = first.gen_champions_dir
+    assert gen_dir.is_dir()
+    assert sorted(child.name for child in gen_dir.iterdir()) == sorted(
+        f"gen-{row.generation_index}" for row in first.rows
+    )
+    for row in first.rows:
+        artifact_dir = (
+            gen_dir / f"gen-{row.generation_index}" / (row.champion_weights_sha256)
+        )
+        assert _artifact_files(artifact_dir) == _LOADABLE_FILES
+        stamp = json.loads((artifact_dir / "stamp.json").read_text())
+        assert stamp["weights_sha256"] == row.champion_weights_sha256
+        assert stamp["encoder_version"] == row.moving_encoder_version
+        assert stamp["method"] == COEVO_FREEZE_METHOD
+        assert stamp["policy_id"].endswith(
+            f"-{GENERATION_CHAMPION_ORIGIN}-gen{row.generation_index}"
+        )
+        config = json.loads((artifact_dir / "config.json").read_text())
+        assert config["side"] == row.moving_side
+        assert config["swap_index"] == row.swap_index
+        assert config["generation_in_swap"] == row.generation_in_swap
+        assert config["champion_updated"] == row.champion_updated
+        assert config["hall_origin"] == GENERATION_CHAMPION_ORIGIN
+        # The impostor family is the utility scorer here, so no hidden width
+        # is declared — and none is invented.
+        assert "hidden" not in config
+
+    # The impostor-moving generations load END TO END through the consuming
+    # entry point (the §11 defect-4 / F14 invariant this task satisfies).
+    impostor_rows = [row for row in first.rows if row.moving_side == "impostor"]
+    assert impostor_rows
+    for row in impostor_rows:
+        artifact_dir = (
+            gen_dir / f"gen-{row.generation_index}" / (row.champion_weights_sha256)
+        )
+        policy, stamp_model = run_tournament._load_candidate_policy(artifact_dir)
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+        assert stamp_model.weights_sha256 == row.champion_weights_sha256
+
+
+def test_generation_champion_artifacts_are_digest_inert_and_deterministic(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """The persistence moved no row byte, and its own bytes reproduce (18.31).
+
+    The 18.21 double-run digest pin is asserted again HERE against the same
+    fixture (rows are the digest's only input, and no row field was added), and
+    the new artifacts are themselves a pure function of the campaign: two
+    independent runs write byte-identical trees under different work dirs.
+    """
+
+    first, second, _ = baseline_runs
+    assert first.digest() == second.digest()
+    assert first.rows_path.read_bytes() == second.rows_path.read_bytes()
+    # No row carries a persistence field — the schema is unchanged.
+    assert not {
+        key
+        for key in first.rows[0].model_dump()
+        if "champion_path" in key or "gen_champion" in key
+    }
+
+    first_files = sorted(
+        path.relative_to(first.gen_champions_dir)
+        for path in first.gen_champions_dir.rglob("*")
+        if path.is_file()
+    )
+    second_files = sorted(
+        path.relative_to(second.gen_champions_dir)
+        for path in second.gen_champions_dir.rglob("*")
+        if path.is_file()
+    )
+    assert first_files == second_files
+    assert first_files
+    for relative in first_files:
+        assert (first.gen_champions_dir / relative).read_bytes() == (
+            second.gen_champions_dir / relative
+        ).read_bytes()
+
+
+def test_hall_freezes_are_loadable_four_file_artifacts(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """Every driver hall freeze writes the four-file artifact (18.31 fix 4).
+
+    Swap champions and exploiter finds alike: the campaign's own halls now hold
+    artifacts that load through ``_load_candidate_policy`` with no hand-stamping
+    pass, with ``encoder_version`` taken from the SIDE CONFIG (never re-derived
+    from genome length — §12 Errata item 1).
+    """
+
+    first, _, base = baseline_runs
+    hall_root = base / "halls"
+    for side, encoder in (("impostor", _IMPOSTOR_ENCODER), ("crew", _CREW_ENCODER)):
+        hall = HallOfFame.load(hall_root, cast(Side, side))
+        assert hall.members
+        for member in hall.members:
+            member_dir = hall_root / side / member.path
+            assert _artifact_files(member_dir) == _LOADABLE_FILES
+            stamp = json.loads((member_dir / "stamp.json").read_text())
+            assert stamp["encoder_version"] == encoder
+            assert stamp["weights_sha256"] == member.weights_sha256
+            config = json.loads((member_dir / "config.json").read_text())
+            assert config["hall_origin"] == member.origin
+            assert config["trained_against"] == member.trained_against
+            assert config["side"] == side
+
+    # The impostor members are the ones the consuming entry point loads (a crew
+    # artifact belongs to --crew-artifact — the standing 18.19 guard).
+    impostor_hall = HallOfFame.load(hall_root, "impostor")
+    for member in impostor_hall.members:
+        policy, stamp_model = run_tournament._load_candidate_policy(
+            hall_root / "impostor" / member.path
+        )
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+        assert stamp_model.weights_sha256 == member.weights_sha256
+    assert first.total_games == _BASELINE_GAMES
+
+
+def test_existing_generation_champions_dir_is_refused(tmp_path: Path) -> None:
+    """The work-dir no-clobber discipline extends to the new artifacts (18.31)."""
+
+    config = _make_config(tmp_path)
+    (config.work_dir / "gen-champions").mkdir(parents=True)
+    with pytest.raises(FileExistsError, match="per-generation champion artifacts"):
+        run_alternating_freeze(config)
+    assert not (tmp_path / "halls").exists()
+
+
+@dataclass(frozen=True)
+class _StubPolicy:
+    """A build_policy result carrying only the family tag the pin reads."""
+
+    encoder_version: str
+
+
+def test_masked_mlp_side_without_hidden_fails_loud(tmp_path: Path) -> None:
+    """A non-utility impostor family must DECLARE its head width (18.31).
+
+    ``_load_candidate_policy`` reads ``hidden`` from the artifact's config.json
+    to rebuild a masked-MLP family; a side that freezes without declaring it
+    produces unloadable artifacts — the §12 Errata item-1 failure. It is refused
+    before any hall exists, and the width is never guessed from genome length.
+    """
+
+    def build_v2(genome: tuple[float, ...]) -> BakeoffPolicy:
+        del genome
+        return cast(BakeoffPolicy, _StubPolicy("v2"))
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(build_policy=build_v2, encoder_version="v2"),
+    )
+    with pytest.raises(ValueError, match="needs an integer 'hidden'"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_anchor_policy_without_a_stamp_label_fails_loud(tmp_path: Path) -> None:
+    """A side bred on an alternative anchor must NAME it in the stamp (18.31)."""
+
+    stub_anchor = cast(BakeoffPolicy, object())
+    config = _make_config(tmp_path, impostor=_impostor_side(anchor_policy=stub_anchor))
+    with pytest.raises(ValueError, match="anchor_policy_label is still"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_blank_run_label_is_refused(tmp_path: Path) -> None:
+    """The stamp-grade run label rides every artifact, so it is validated (18.31)."""
+
+    with pytest.raises(ValueError, match="run_label must be non-blank"):
+        run_alternating_freeze(_make_config(tmp_path / "a", run_label="   "))
+    with pytest.raises(ValueError, match="run_label must be MANIFEST-safe"):
+        run_alternating_freeze(_make_config(tmp_path / "b", run_label="a|b"))
 
 
 # --------------------------------------------------------------------------- #

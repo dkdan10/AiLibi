@@ -10,6 +10,14 @@ The tests pin the DoD contracts: K×N recording + scoring into ranking rows, the
 stamp read back FROM BYTES, a hung meeting failing its seed loudly within the
 timeout, the retry budget re-recording after a timeout, jsonl round-trip, the
 champion-trace helper, and fail-loud input validation.
+
+Task 18.31 adds two blocks, both driven by the 18.24 campaign's incurred costs
+(training/reports/report-impostor-campaign.md §11): the RESUME predicate pinned
+in BOTH directions (a verified element is skipped; a stamp-sha mismatch, a
+truncated recording, a completeness-fence failure, a missing replay, and a
+``TICK_BUDGET_REACHED`` element each re-record), and the native
+pre-screen-record + append-only leg-log writers that make the blocker-4
+ordering evidence a library artifact instead of a shell redirection.
 """
 
 from __future__ import annotations
@@ -39,12 +47,19 @@ from orchestrator.replay import read_tactical_policy_stamp
 from training.bakeoff.es import ESResult
 from training.bakeoff.harness import load_candidate_weights
 from training.realpath import (
+    LEG_LOG_FILENAME,
     MODE_CHAMPION_TRACE,
     MODE_TOP_K,
+    PRESCREEN_ADVICE_NOTE,
+    PRESCREEN_SCHEMA_VERSION,
     SCHEMA_VERSION,
+    PreScreenQuote,
+    PreScreenRecord,
     RealPathCandidate,
+    RealPathLegLog,
     RealPathMeetingTimeoutError,
     RealPathRerankConfig,
+    RealPathRerankError,
     RealPathRerankResult,
     RealPathRerankRow,
     RealPathSeedExhaustedError,
@@ -53,6 +68,8 @@ from training.realpath import (
     _TimeoutMeetingRunner,
     candidates_from_champion_trace,
     run_realpath_rerank,
+    tranche_key,
+    write_prescreen_record,
 )
 
 # --------------------------------------------------------------------------- #
@@ -655,3 +672,392 @@ def test_v3_candidate_validates_and_rebuilds() -> None:
     )
     factory = _build_agent_factory(candidate, game_map=game_map)
     assert callable(factory)
+
+
+# --------------------------------------------------------------------------- #
+# 15. RESUME — the conjunctive predicate, pinned in BOTH directions (18.31).   #
+# --------------------------------------------------------------------------- #
+
+
+def _record_two_seeds(work_dir: Path, ranking_path: Path) -> RealPathRerankResult:
+    """One completed leg over seeds 1 and 2 — the substrate every resume reads."""
+
+    return run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=ranking_path,
+        config=_config(),
+    )
+
+
+def test_resume_skips_only_verified_complete_elements(tmp_path: Path) -> None:
+    """A resume skips the verified elements and re-records everything else.
+
+    The 18.24 campaign lost 25 recorded games to a provider 503 at hour 40
+    because a re-run re-records everything (report §11 defect 1). With
+    ``resume=True`` a pre-existing (candidate, seed) whose replay carries the
+    candidate's own read-back stamp AND passes the byte-completeness fence is
+    skipped (``attempts=0``, ``resumed=True``); the row still proves provenance
+    over the SAME bytes.
+    """
+
+    work_dir = tmp_path / "work"
+    first = _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    assert [entry.resumed for entry in first.top().seed_telemetry] == [False, False]
+    recorded = {
+        seed: (work_dir / "000-utility-es" / f"replay-seed-{seed}.jsonl").read_bytes()
+        for seed in (1, 2)
+    }
+
+    resumed = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    row = resumed.top()
+    assert [entry.resumed for entry in row.seed_telemetry] == [True, True]
+    assert [entry.attempts for entry in row.seed_telemetry] == [0, 0]
+    assert [entry.error_types for entry in row.seed_telemetry] == [(), ()]
+    # Nothing was re-recorded: the committed row stands on the ORIGINAL bytes.
+    for seed, payload in recorded.items():
+        assert (
+            work_dir / "000-utility-es" / f"replay-seed-{seed}.jsonl"
+        ).read_bytes() == payload
+    assert row.stamp_verified_games == 2
+    assert row.stamp.weights_sha256 == _UTIL_DIGEST
+
+
+@pytest.mark.parametrize("miss", ["missing", "stamp-sha", "truncated", "trailing-rows"])
+def test_resume_refuses_to_skip_on_any_verification_miss(
+    tmp_path: Path, miss: str
+) -> None:
+    """ANY miss re-records — the predicate is conjunctive (18.31 fix 1).
+
+    Four ways an element fails verification, one per case: the replay is gone;
+    its read-back ``weights_sha256`` names a different genome (a foreign or
+    superseded recording); its bytes are truncated before the ``game_over`` row;
+    and — the case the first three do not reach — the stamp reads back
+    correctly but the byte-completeness fence rejects rows recorded AFTER the
+    terminal GAME_OVER tick. Each re-records seed 1 while seed 2 is still
+    skipped, so the pin is "exactly the verified elements", not "all or none".
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    replay = work_dir / "000-utility-es" / "replay-seed-1.jsonl"
+
+    if miss == "missing":
+        replay.unlink()
+    elif miss == "stamp-sha":
+        replay.write_text(replay.read_text().replace(_UTIL_DIGEST, "0" * 64))
+    elif miss == "truncated":
+        lines = replay.read_text().splitlines()
+        replay.write_text("\n".join(lines[:-1]) + "\n")
+    else:
+        rows = [json.loads(line) for line in replay.read_text().splitlines()]
+        ticks = [row for row in rows if row["kind"] == "tick"]
+        trailing = dict(ticks[-1])
+        trailing["tick"] = max(row["tick"] for row in ticks) + 5
+        # The stamp still reads back (the game_over row is untouched) — only the
+        # dir-scoped completeness fence can catch this one.
+        with replay.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(trailing) + "\n")
+        assert read_tactical_policy_stamp(replay) is not None
+
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    seed_one, seed_two = result.top().seed_telemetry
+    assert seed_one.seed == 1
+    assert seed_one.resumed is False
+    assert seed_one.attempts == 1
+    assert seed_two.seed == 2
+    assert seed_two.resumed is True
+    # The re-record repaired the element: the row proves both seeds again.
+    assert result.top().stamp_verified_games == 2
+    assert read_tactical_policy_stamp(replay) is not None
+
+    # The leg log states WHY it re-recorded rather than skipping.
+    events = [
+        json.loads(line)
+        for line in (work_dir / LEG_LOG_FILENAME).read_text().splitlines()
+    ]
+    rerecords = [event for event in events if event["event"] == "seed-rerecord"]
+    assert [event["seed"] for event in rerecords] == [1]
+    assert rerecords[0]["reason"]
+
+
+def test_tick_budget_element_is_never_resumable(tmp_path: Path) -> None:
+    """A ``TICK_BUDGET_REACHED`` replay re-records, deliberately (18.31).
+
+    A capped game writes no ``game_over`` row by design, so it carries no stamp
+    bytes: nothing on disk can prove which genome produced it. The predicate's
+    second check therefore refuses it every time — the deliberate disposition
+    the resume rule states rather than leaving anyone to re-derive.
+    """
+
+    # max_ticks=15 caps seed 1 and leaves seed 2 decisive (the 18.17 fixture).
+    work_dir = tmp_path / "work"
+    first = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(max_ticks=15, max_attempts=3),
+    )
+    capped, decisive = first.top().seed_telemetry
+    assert capped.tick_budget_reached is True
+    assert decisive.tick_budget_reached is False
+
+    resumed = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(max_ticks=15, max_attempts=3),
+        resume=True,
+    )
+    capped_again, decisive_again = resumed.top().seed_telemetry
+    assert capped_again.resumed is False
+    assert capped_again.attempts == 1
+    assert capped_again.tick_budget_reached is True
+    assert decisive_again.resumed is True
+
+
+def test_resume_refuses_replays_outside_the_tranche(tmp_path: Path) -> None:
+    """A foreign replay in the candidate dir is refused, never folded (18.31).
+
+    The scoring gates fold the whole DIRECTORY, so a leftover replay from
+    another tranche would silently enter this invocation's committed row.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    candidate_dir = work_dir / "000-utility-es"
+    (candidate_dir / "replay-seed-99.jsonl").write_text(
+        (candidate_dir / "replay-seed-1.jsonl").read_text()
+    )
+
+    with pytest.raises(RealPathRerankError, match="outside this tranche"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+
+
+def test_without_resume_a_recorded_candidate_dir_still_fails_loud(
+    tmp_path: Path,
+) -> None:
+    """The default keeps the write-once discipline exactly as before (18.31)."""
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    with pytest.raises(FileExistsError):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# 16. Native pre-screen records + the append-only leg log (18.31 fix 3).       #
+# --------------------------------------------------------------------------- #
+
+
+def _quote(label: str = "utility-es") -> PreScreenQuote:
+    return PreScreenQuote(
+        label=label,
+        weights_sha256=_UTIL_DIGEST,
+        predicted_flags_per_meeting=1.6109,
+        predicted_floors_pass=True,
+        generation=3,
+        meetings_scored=20,
+        conviction_uses=20,
+        recorded_flags_fake_substrate=0.0,
+    )
+
+
+def test_prescreen_records_are_tranche_and_invocation_keyed(tmp_path: Path) -> None:
+    """A second tranche (or re-run) never overwrites the first's record (18.31).
+
+    Report §11 defect 3 / F9: the 18.24 pre-screen record was written IN PLACE,
+    so tranche 2 overwrote tranche 1 and the provenance had to be reconstructed
+    under review. The writer now allocates by exclusive creation.
+    """
+
+    first = write_prescreen_record(
+        tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()]
+    )
+    assert first.name == "prescreen-quotes-4000-4002-000.json"
+    second = write_prescreen_record(
+        tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()]
+    )
+    assert second.name == "prescreen-quotes-4000-4002-001.json"
+    other_tranche = write_prescreen_record(
+        tmp_path, seeds=[4003, 4004, 4005], quotes=[_quote()]
+    )
+    assert other_tranche.name == "prescreen-quotes-4003-4005-000.json"
+    assert first.read_bytes() != b""
+
+    record = PreScreenRecord.model_validate(json.loads(first.read_text()))
+    assert record.schema_version == PRESCREEN_SCHEMA_VERSION
+    assert record.tranche == "4000-4002"
+    assert record.invocation == "000"
+    assert record.seeds == (4000, 4001, 4002)
+    assert record.quotes[0].note == PRESCREEN_ADVICE_NOTE
+    assert record.quotes[0].predicted_floors_pass is True
+
+    # An explicit invocation writes exactly that file and never clobbers.
+    explicit = write_prescreen_record(
+        tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()], invocation="zzz"
+    )
+    assert explicit.name == "prescreen-quotes-4000-4002-zzz.json"
+    with pytest.raises(FileExistsError):
+        write_prescreen_record(
+            tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()], invocation="zzz"
+        )
+
+
+def test_prescreen_quote_validation_fails_loud() -> None:
+    with pytest.raises(ValidationError):
+        PreScreenQuote(
+            label="  ",
+            weights_sha256=_UTIL_DIGEST,
+            predicted_flags_per_meeting=1.0,
+            predicted_floors_pass=True,
+        )
+    with pytest.raises(ValidationError):
+        PreScreenQuote(
+            label="u",
+            weights_sha256="not-a-sha",
+            predicted_flags_per_meeting=1.0,
+            predicted_floors_pass=True,
+        )
+    with pytest.raises(ValidationError):
+        PreScreenQuote(
+            label="u",
+            weights_sha256=_UTIL_DIGEST,
+            predicted_flags_per_meeting=float("nan"),
+            predicted_floors_pass=True,
+        )
+    with pytest.raises(ValidationError):
+        PreScreenRecord(
+            tranche="1", invocation="000", seeds=(1,), recorded_at="now", quotes=()
+        )
+
+
+def test_leg_log_is_native_append_only_and_orders_prescreen_before_spend(
+    tmp_path: Path,
+) -> None:
+    """The library writes its own ordering evidence (18.31 fix 3 / §12 item 10).
+
+    Session 5 of the 18.24 campaign recorded 36 real games with NO chain log, so
+    "pre-screen quoted before any spend" rested on operator testimony. The leg
+    now stamps an invocation manifest and appends every event itself: the
+    pre-screen events precede the first ``seed-recorded`` event, sequence
+    numbers are monotone per invocation, and a second invocation APPENDS to the
+    same log under its own invocation key.
+    """
+
+    work_dir = tmp_path / "work"
+    run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+        prescreen=[_quote()],
+    )
+    log_path = work_dir / LEG_LOG_FILENAME
+    events = [json.loads(line) for line in log_path.read_text().splitlines()]
+    assert all(event["tranche"] == "1-2" for event in events)
+    assert all(event["invocation"] == "000" for event in events)
+    assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
+    kinds = [event["event"] for event in events]
+    assert kinds[0] == "leg-start"
+    assert kinds[-1] == "leg-done"
+    assert kinds.index("prescreen-quote") < kinds.index("seed-recorded")
+    assert kinds.index("prescreen-record") < kinds.index("seed-recorded")
+    assert "rank" in kinds
+
+    # The invocation manifest carries the seeds/candidates/knobs and the stamp.
+    manifest = json.loads((work_dir / "leg-1-2-000.json").read_text())
+    assert manifest["seeds"] == [1, 2]
+    assert manifest["tranche"] == "1-2"
+    assert manifest["invocation"] == "000"
+    assert manifest["resume"] is False
+    assert manifest["candidates"][0]["weights_sha256"] == _UTIL_DIGEST
+    assert manifest["started_at"]
+
+    # A second invocation appends under a fresh key; the first's bytes survive.
+    before = log_path.read_text()
+    run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    after = log_path.read_text()
+    assert after.startswith(before)
+    second_events = [json.loads(line) for line in after[len(before) :].splitlines()]
+    assert {event["invocation"] for event in second_events} == {"001"}
+    assert (work_dir / "leg-1-2-001.json").exists()
+
+
+def test_leg_log_records_a_failed_leg(tmp_path: Path) -> None:
+    """A leg that dies mid-recording leaves its own record on disk (18.31)."""
+
+    def hang_factory() -> MeetingRunner:
+        return _HangRunner()
+
+    work_dir = tmp_path / "work"
+    with pytest.raises(RealPathSeedExhaustedError):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(meeting_timeout_seconds=0.3, max_attempts=1),
+            meeting_runner_factory=hang_factory,
+        )
+    events = [
+        json.loads(line)
+        for line in (work_dir / LEG_LOG_FILENAME).read_text().splitlines()
+    ]
+    failure = events[-1]
+    assert failure["event"] == "leg-failed"
+    assert failure["error"] == "RealPathSeedExhaustedError"
+    assert "seed 1" in failure["message"]
+
+
+def test_leg_log_refuses_a_reserved_field() -> None:
+    """The log owns its ordering keys; a caller field shadowing one fails loud."""
+
+    log = RealPathLegLog(Path("unused.jsonl"), tranche="1-2", invocation="000")
+    with pytest.raises(ValueError, match="reserved keys"):
+        log.emit("probe", seq=7)
+
+
+def test_tranche_key_matches_the_committed_artifact_names() -> None:
+    assert tranche_key([4000, 4001, 4002]) == "4000-4002"
+    assert tranche_key([4003]) == "4003"
+    with pytest.raises(ValueError, match="no seeds"):
+        tranche_key([])

@@ -20,13 +20,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from agents.tactical.features import weights_to_hex_json
+from agents.tactical.features import TacticalFeatureEncoderV3, weights_to_hex_json
+from engine.world import load_canonical_map
+from training.bakeoff.harness import load_candidate_weights
 from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
     ArchiveCell,
@@ -35,22 +38,41 @@ from training.bakeoff.map_elites import (
     map_elites_budget,
     write_archive_cell_artifacts,
 )
+from training.bakeoff.policy_es import TARGET_KILL_SLOTS, policy_genome_length
 from training.coevo.hall_of_fame import (
     MAP_ELITES_FOUNDER_ORIGIN,
     TRAINED_AGAINST_FSM,
     HallOfFame,
     HallOfFameMember,
+    LoadableArtifactMetadata,
     OpponentStalenessCap,
     OpponentStalenessExceededError,
     OpponentStalenessLedger,
     sample_opponents,
+    write_loadable_artifact,
 )
+
+# ``scripts/`` is a bare-module namespace (no ``__init__.py``): the loadable-
+# freeze pin (Task 18.31) needs the CONSUMING entry point
+# ``run_tournament._load_candidate_policy``, so put ``scripts/`` on sys.path the
+# way tests/scripts/conftest.py and scripts/measure_baseline.py:76-78 do.
+_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import run_tournament  # noqa: E402
 
 # A valid 64-lowercase-hex substrate for store-fidelity tests that do not need
 # the real corpus substrate (founder tests use ``bakeoff_substrate_sha()``).
 _SUBSTRATE = "ab" * 32
 # A stand-in opposing-side sha for a champion bred against a frozen member.
 _OPPONENT_SHA = "cd" * 32
+
+# The two impostor families the 18.31 loadable-freeze pin exercises: the
+# committed 19-gene utility scorer and the 18.22 encoder-v3 masked MLP.
+_UTILITY_ARTIFACT = Path("training/artifacts/impostor/utility-es")
+_UTILITY_ENCODER = "impostor-option-features-v1"
+_V3_HIDDEN = 8
 
 
 def _synthetic_archive() -> dict[tuple[int, int, int], ArchiveCell]:
@@ -833,3 +855,299 @@ def test_staleness_ledger_sha_keying_and_register() -> None:
 
     with pytest.raises(ValidationError):
         OpponentStalenessCap(max_generations=0, unit="generations")
+
+
+# --------------------------------------------------------------------------- #
+# The four-file loadable freeze (Task 18.31).                                  #
+# --------------------------------------------------------------------------- #
+#
+# These extend the module's cheap-fixture doctrine one step: the loadability
+# pin needs the CONSUMER (``scripts/run_tournament.py`` ``_load_candidate_policy``,
+# imported through the established bare-module bootstrap — the same one
+# tests/scripts/conftest.py and scripts/measure_baseline.py:76-78 use), and a
+# genome each policy family actually accepts. Still no game rollouts: loading a
+# policy rebuilds an object, it plays nothing.
+
+
+def _v3_genome_length() -> int:
+    """The 18.22 encoder-v3 + per-target-head family's exact genome length."""
+
+    from orchestrator.boundary import public_map_from_engine_map
+
+    return policy_genome_length(
+        public_map_from_engine_map(load_canonical_map()),
+        hidden=_V3_HIDDEN,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=TARGET_KILL_SLOTS,
+    )
+
+
+def _metadata(**overrides: object) -> LoadableArtifactMetadata:
+    base: dict[str, object] = {
+        "run_label": "run-01-utility-champion",
+        "method": "alternating-freeze-es",
+        "encoder_version": _UTILITY_ENCODER,
+    }
+    base.update(overrides)
+    return LoadableArtifactMetadata(**base)  # type: ignore[arg-type]
+
+
+def test_write_loadable_artifact_writes_the_four_committed_files(
+    tmp_path: Path,
+) -> None:
+    """The writer emits weights + sidecar + five-field stamp + config (18.31).
+
+    Byte conventions are the committed ones: float-hex weights with a trailing
+    newline, a ``<digest>  weights.json`` sidecar, and 2-space key-sorted JSON.
+    The stamp carries EXACTLY the five ``TacticalPolicyStamp`` fields with
+    ``weights_sha256`` computed from the bytes just written; ``config.json``
+    carries the declared family plus the caller's provenance.
+    """
+
+    genome = (0.25, -0.5, 0.75)
+    artifact_dir = tmp_path / "member"
+    digest = write_loadable_artifact(
+        artifact_dir,
+        genome,
+        policy_id="coevo-run-01-swap-champion-gen3",
+        method="alternating-freeze-es",
+        encoder_version=_UTILITY_ENCODER,
+        config={"campaign": "task-18.31", "trained_against": TRAINED_AGAINST_FSM},
+    )
+
+    weights_bytes = (artifact_dir / "weights.json").read_bytes()
+    assert weights_bytes == (weights_to_hex_json(genome) + "\n").encode("utf-8")
+    assert digest == hashlib.sha256(weights_bytes).hexdigest()
+    assert (artifact_dir / "weights.json.sha256").read_text() == (
+        f"{digest}  weights.json\n"
+    )
+
+    stamp_text = (artifact_dir / "stamp.json").read_text()
+    assert stamp_text.endswith("\n")
+    stamp = json.loads(stamp_text)
+    assert set(stamp) == {
+        "anchor_policy",
+        "encoder_version",
+        "method",
+        "policy_id",
+        "weights_sha256",
+    }
+    assert stamp["weights_sha256"] == digest
+    assert stamp["anchor_policy"] == "fsm-default"
+    assert stamp["encoder_version"] == _UTILITY_ENCODER
+
+    config = json.loads((artifact_dir / "config.json").read_text())
+    assert config["encoder_version"] == _UTILITY_ENCODER
+    assert config["genome_length"] == 3
+    assert "hidden" not in config  # never a zero-ghost for a no-hidden family
+    assert config["campaign"] == "task-18.31"
+    assert config["trained_against"] == TRAINED_AGAINST_FSM
+
+
+def test_loadable_artifact_loads_through_candidate_policy_both_families(
+    tmp_path: Path,
+) -> None:
+    """Both impostor families load END TO END through ``_load_candidate_policy``.
+
+    The §11 defect-4 / F14 pin: the 18.24 shortlist could not load through its
+    consuming entry point at all. A utility genome and a v3 masked-MLP genome —
+    the two shapes the campaign froze — now rebuild through the committed
+    loader with the stamp the writer wrote, and the loader's own 17.14
+    conflation guard (stamp sha == sidecar digest) passes by construction.
+    ``hidden`` comes from ``config.json``, which is exactly what the v3 family
+    needs and what §12 Errata item 1 records the absence of.
+    """
+
+    utility_dir = tmp_path / "utility"
+    utility_digest = write_loadable_artifact(
+        utility_dir,
+        load_candidate_weights(_UTILITY_ARTIFACT),
+        policy_id="coevo-utility-champion",
+        method="alternating-freeze-es",
+        encoder_version=_UTILITY_ENCODER,
+    )
+    utility_policy, utility_stamp = run_tournament._load_candidate_policy(utility_dir)
+    assert utility_policy.encoder_version == _UTILITY_ENCODER
+    assert utility_stamp.weights_sha256 == utility_digest
+    assert utility_stamp.policy_id == "coevo-utility-champion"
+
+    v3_dir = tmp_path / "v3"
+    v3_digest = write_loadable_artifact(
+        v3_dir,
+        (0.0,) * _v3_genome_length(),
+        policy_id="coevo-freepolicy-v3-gen1",
+        method="alternating-freeze-es",
+        encoder_version="v3",
+        hidden=_V3_HIDDEN,
+    )
+    assert json.loads((v3_dir / "config.json").read_text())["hidden"] == _V3_HIDDEN
+    v3_policy, v3_stamp = run_tournament._load_candidate_policy(v3_dir)
+    assert v3_policy.encoder_version == "v3"
+    assert v3_stamp.weights_sha256 == v3_digest
+    assert v3_stamp.encoder_version == "v3"
+
+
+def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
+    """Empty genome, bad stamp token, bad hidden, owned config key, clobber."""
+
+    with pytest.raises(ValueError, match="empty genome"):
+        write_loadable_artifact(
+            tmp_path / "a",
+            (),
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=8,
+        )
+    with pytest.raises(ValueError, match="non-blank"):
+        write_loadable_artifact(
+            tmp_path / "b", (0.1,), policy_id="  ", method="m", encoder_version="v2"
+        )
+    with pytest.raises(ValueError, match="MANIFEST-safe"):
+        write_loadable_artifact(
+            tmp_path / "c", (0.1,), policy_id="a|b", method="m", encoder_version="v2"
+        )
+    with pytest.raises(ValueError, match="hidden must be >= 1"):
+        write_loadable_artifact(
+            tmp_path / "d",
+            (0.1,),
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=0,
+        )
+    with pytest.raises(ValueError, match="owned by write_loadable_artifact"):
+        write_loadable_artifact(
+            tmp_path / "e",
+            (0.1,),
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=8,
+            config={"hidden": 4},
+        )
+    # No partial artifact survives any of the refusals above.
+    for name in ("a", "b", "c", "d", "e"):
+        assert not (tmp_path / name).exists() or not list((tmp_path / name).iterdir())
+
+    # And the writer never clobbers: a second write into the same dir raises.
+    write_loadable_artifact(
+        tmp_path / "f",
+        (0.1,),
+        policy_id="p",
+        method="m",
+        encoder_version=_UTILITY_ENCODER,
+    )
+    with pytest.raises(FileExistsError):
+        write_loadable_artifact(
+            tmp_path / "f",
+            (0.2,),
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
+
+
+def test_loadable_artifact_metadata_validation() -> None:
+    """The per-hall metadata rejects a stamp it could not honestly write."""
+
+    with pytest.raises(ValidationError):
+        _metadata(run_label="   ")
+    with pytest.raises(ValidationError):
+        _metadata(method="a|b")
+    with pytest.raises(ValidationError):
+        _metadata(hidden=0)
+    with pytest.raises(ValidationError):
+        _metadata(anchor_weight=float("inf"))
+
+    metadata = _metadata(hidden=8, encoder_version="v3", anchor_weight=4.0)
+    assert (
+        metadata.policy_id_for(origin="exploiter-probe", generation=10)
+        == "coevo-run-01-utility-champion-exploiter-probe-gen10"
+    )
+    provenance = metadata.provenance(
+        side="impostor",
+        generation=10,
+        origin="exploiter-probe",
+        trained_against=_OPPONENT_SHA,
+        path="gen-10/" + _OPPONENT_SHA,
+    )
+    assert provenance["campaign"] == "run-01-utility-champion"
+    assert provenance["entrant"] == (
+        f"run-01-utility-champion/impostor/gen-10/{_OPPONENT_SHA}"
+    )
+    assert provenance["anchor_weight"] == 4.0
+    # The writer owns these; the metadata never smuggles them in as provenance.
+    assert not {"encoder_version", "genome_length", "hidden"} & set(provenance)
+
+
+def test_add_member_with_metadata_freezes_a_loadable_artifact(tmp_path: Path) -> None:
+    """Every hall freeze writes the four-file artifact and it LOADS (18.31).
+
+    The pool's stamp metadata is a campaign constant (single-side,
+    single-family), so ``add_member`` composes each member's ``policy_id`` and
+    provenance from it — and the frozen member loads through the consuming
+    entry point without a hand-stamping pass.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path,
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(anchor_weight=1.0),
+    )
+    assert hall.artifact_metadata is not None
+    member = hall.add_member(
+        load_candidate_weights(_UTILITY_ARTIFACT),
+        generation=9,
+        origin="alternating-freeze-champion",
+        trained_against=_OPPONENT_SHA,
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    assert sorted(path.name for path in member_dir.iterdir()) == [
+        "config.json",
+        "stamp.json",
+        "weights.json",
+        "weights.json.sha256",
+    ]
+    stamp = json.loads((member_dir / "stamp.json").read_text())
+    assert stamp["weights_sha256"] == member.weights_sha256
+    assert stamp["policy_id"] == (
+        "coevo-run-01-utility-champion-alternating-freeze-champion-gen9"
+    )
+    config = json.loads((member_dir / "config.json").read_text())
+    assert config["hall_origin"] == "alternating-freeze-champion"
+    assert config["trained_against"] == _OPPONENT_SHA
+    assert config["generation"] == 9
+    assert config["side"] == "impostor"
+
+    policy, loaded_stamp = run_tournament._load_candidate_policy(member_dir)
+    assert policy.encoder_version == _UTILITY_ENCODER
+    assert loaded_stamp.weights_sha256 == member.weights_sha256
+
+    # The index + reload contract is untouched by the extra files.
+    reloaded = HallOfFame.load(tmp_path, "impostor")
+    assert reloaded.members == hall.members
+    assert reloaded.load_member_genome(member.weights_sha256) == load_candidate_weights(
+        _UTILITY_ARTIFACT
+    )
+
+
+def test_add_member_without_metadata_keeps_the_two_file_member(tmp_path: Path) -> None:
+    """A pool created without stamp metadata freezes exactly as before (18.31).
+
+    The back-compat pin: the 18.20 store is a genome store first, and a caller
+    that declares no family gets the historic weights-only member rather than a
+    guessed stamp.
+    """
+
+    hall = HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
+    assert hall.artifact_metadata is None
+    member = hall.add_member(
+        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    assert sorted(path.name for path in member_dir.iterdir()) == [
+        "weights.json",
+        "weights.json.sha256",
+    ]
