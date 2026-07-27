@@ -30,7 +30,21 @@ accumulating hall, and if the report judges full-pool continuity load-bearing th
 routed amendment, never a silent driver edit. Crew mechanics the driver pins:
 `first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
 anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
-`encoder_version` (the 18.19 conflation guard, enforced both directions). Report mirrors 18.24 (rows, cycling detector, floor
+`encoder_version` (the 18.19 conflation guard, enforced both directions). Scenario
+adoption (18.23, merged d63ffab) is available to this campaign but honestly thin on the
+crew side: the library holds exactly ONE crew scenario (`body-discovery-latency`, max
+1.0) — meaningful crew scenario pressure beyond discovery latency means AUTHORING new
+crew specs, which is new work, not configuration. If adopted: pass
+`ScenarioProvider(agent_factory_builders=..., fitness_seeds=..., meeting_runner_factory=...,
+rng_hash_policy=...)` as the driver's `scenario_provider`, and use the AGENT-FACTORY seam
+(genome → `build_coevo_factory`) — the selector seam drives EVERY seat including the
+opponents under an unenforced delegation convention and is never a campaign
+configuration. Terms add AFTER the slate mean, so row fitness scalars stop being
+comparable to pre-scenario rows; the provider's `games_per_evaluation` budget is advisory
+only (nothing meters it — quote it in the report); and under the default forced-fake
+meeting layer the kill-witness survival clause is vacuous while force-parity gains an
+unnamed crew-ejection channel only an ejection-capable runner (the composed runner, under
+its GO gate) makes live — name whichever applies in the report. Report mirrors 18.24 (rows, cycling detector, floor
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.

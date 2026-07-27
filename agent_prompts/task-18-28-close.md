@@ -58,7 +58,11 @@ outstanding re-anchor this close owns (the 18.13 verification flagged it): the c
 cells (R1 eject-decided share, the genuine-class successor, roll-call coverage,
 whereabouts-lie mints, ejection accuracy, impostor win) were never re-anchored on the
 restored baseline-6 corpus denominator — this close's §0 pre-registration derives its bands
-from the baseline-6 corpus, computing the anchors fresh. The Phase-19 hand-off section
+from the baseline-6 corpus, computing the anchors fresh. Scenario accounting (the 18.23
+hand-off): campaign rows carry `scenario_labels` but no per-term values — fitness is not
+decomposable post-hoc — so wherever a campaign adopted scenarios the close states the
+provider config (scenario set, seeds, meeting layer) and quotes `games_per_evaluation`
+beside `projected_game_bound`, or the phase's game accounting under-counts. The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
@@ -69,8 +73,9 @@ for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
 hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
 `composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
-than design, and the silently-overwritable `campaign-plan.json`) as review inputs, not as
-contracts.
+than design, the silently-overwritable `campaign-plan.json`, and the scenario selector seam's
+unenforced delegation convention — a selector-built agent drives every seat, opponents
+included) as review inputs, not as contracts.
 
 ## Integration risk
 

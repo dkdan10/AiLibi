@@ -71,7 +71,7 @@ unchanged.
    finding (findings-not-failures).
 5. **Architecture: the menu-bounded champion ships; encoder work rides the co-evolution
    wave.** First-principles action primitives are REJECTED (the masked intent space already
-   spans them — `training/env.py:239-361`; the gap is perception, not actions). Encoder v3 +
+   spans them — `training/env.py:246-368` (post-18.23 anchor); the gap is perception, not actions). Encoder v3 +
    within-kind target resolution (18.22) advance the free-policy family only inside the
    co-evolution wave, where opponent pressure punishes tells, with the off-menu instrument
    (18.3) watching its recordings.
@@ -1731,7 +1731,21 @@ accumulating hall, and if the report judges full-pool continuity load-bearing th
 routed amendment, never a silent driver edit. Crew mechanics the driver pins:
 `first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
 anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
-`encoder_version` (the 18.19 conflation guard, enforced both directions). Report mirrors 18.24 (rows, cycling detector, floor
+`encoder_version` (the 18.19 conflation guard, enforced both directions). Scenario
+adoption (18.23, merged d63ffab) is available to this campaign but honestly thin on the
+crew side: the library holds exactly ONE crew scenario (`body-discovery-latency`, max
+1.0) — meaningful crew scenario pressure beyond discovery latency means AUTHORING new
+crew specs, which is new work, not configuration. If adopted: pass
+`ScenarioProvider(agent_factory_builders=..., fitness_seeds=..., meeting_runner_factory=...,
+rng_hash_policy=...)` as the driver's `scenario_provider`, and use the AGENT-FACTORY seam
+(genome → `build_coevo_factory`) — the selector seam drives EVERY seat including the
+opponents under an unenforced delegation convention and is never a campaign
+configuration. Terms add AFTER the slate mean, so row fitness scalars stop being
+comparable to pre-scenario rows; the provider's `games_per_evaluation` budget is advisory
+only (nothing meters it — quote it in the report); and under the default forced-fake
+meeting layer the kill-witness survival clause is vacuous while force-parity gains an
+unnamed crew-ejection channel only an ejection-capable runner (the composed runner, under
+its GO gate) makes live — name whichever applies in the report. Report mirrors 18.24 (rows, cycling detector, floor
 sensitivity, emergence sweeps — crew-side instruments emphasized: roll-call coverage,
 conversion, counter-adaptation evidence against the specific impostor champions). Crew
 champion adoption is NOT this task's call: candidates route to 18.26/18.27 evidence.
@@ -1933,7 +1947,11 @@ outstanding re-anchor this close owns (the 18.13 verification flagged it): the c
 cells (R1 eject-decided share, the genuine-class successor, roll-call coverage,
 whereabouts-lie mints, ejection accuracy, impostor win) were never re-anchored on the
 restored baseline-6 corpus denominator — this close's §0 pre-registration derives its bands
-from the baseline-6 corpus, computing the anchors fresh. The Phase-19 hand-off section
+from the baseline-6 corpus, computing the anchors fresh. Scenario accounting (the 18.23
+hand-off): campaign rows carry `scenario_labels` but no per-term values — fitness is not
+decomposable post-hoc — so wherever a campaign adopted scenarios the close states the
+provider config (scenario set, seeds, meeting layer) and quotes `games_per_evaluation`
+beside `projected_game_bound`, or the phase's game accounting under-counts. The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
@@ -1944,8 +1962,9 @@ for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
 hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
 `composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
-than design, and the silently-overwritable `campaign-plan.json`) as review inputs, not as
-contracts.
+than design, the silently-overwritable `campaign-plan.json`, and the scenario selector seam's
+unenforced delegation convention — a selector-built agent drives every seat, opponents
+included) as review inputs, not as contracts.
 
 **Integration risk:**
 
