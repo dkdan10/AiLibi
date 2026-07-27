@@ -198,8 +198,9 @@ in session 1 (§3).
 
 **The campaign's recording program is complete for every lineage's CHAMPION slice and,
 at K=2, for run-02 only (the §1/F10 provisional status)** — **183 real
-games** (60 swap-boundary + 30 back-fill + 6 encoder-ablation + 3 FSM comparator + 36
-K=2 runner-up + 6 gen-3 correction; seven sha256 manifests
+games** (60 swap-boundary + 30 per-generation back-fill + 36 run-02 K=2 runner-up + 6 gen-3
+correction + 36 Option B runner-up (run-01/run-03) + 12 encoder-ablation + 3 FSM
+comparator = 183; eleven sha256 manifests
 under `training/artifacts/coevo/realpath{,-backfill,-ablation,-comparator,-runnerups}/`
 content-address all 183 — counted from the manifests),
 10 362 campaign fake-path games + **7 344 ablation-twin games** (2 400 conviction-term +
@@ -418,15 +419,23 @@ The campaign evaluated candidates on 6 real seeds (two tranches of 3). Twenty-on
 candidates were recorded on BOTH tranches, which makes the stability of these
 measurements directly checkable — the same policy, two independent 3-seed draws:
 
-| stability check (n = 21 candidates, both tranches) | value |
+| stability check — **22 ARMS** (21 distinct genomes) recorded on both tranches | value |
 |---|---|
-| mean absolute swing in `flags_per_meeting` between tranches | **0.7535** |
+| mean absolute swing in `flags_per_meeting` between tranches | **0.7415** |
 | the floor that quantity is tested against | 1.0909 |
-| **noise as a fraction of the threshold** | **69%** |
-| candidates whose derived conversion floor hit 1.000 (structurally unpassable) on ≥1 tranche | **11 of 21** |
-| mean absolute win-rate swing, in games out of 3 | 0.52 |
-| candidates swinging ≥ 1 game in win rate between tranches | **9 of 21** |
+| **noise as a fraction of the threshold** | **68%** |
+| arms whose derived conversion floor hit 1.000 (structurally unpassable) on ≥1 tranche | **12 of 22** |
+| mean absolute win-rate swing, in games out of 3 | 0.55 |
+| arms swinging ≥ 1 game in win rate between tranches | **10 of 22** |
 | referee PASSes recorded / retested / replicated | **3 / 1 / 0** |
+
+**Combination rule** (stated because it changes the numbers): each `(leg, genome)` pair is
+ONE ARM — a policy recorded in two different lineage legs contributes independent provider
+draws and is counted twice. `6d327dcb…` was recorded in both run-01 and run-03 on both
+tranches, so it is 4 reads, not 2. An earlier revision keyed by genome sha alone, which
+silently dropped the duplicate arm and made the headline depend on filesystem traversal
+order; the machine-readable artifact is
+`training/artifacts/coevo/measurement-stability.json`.
 
 Three consequences, stated plainly:
 
@@ -1245,8 +1254,9 @@ the recede-to-half threshold (its ablated champion halves the rate, 0.95 → 0.4
 the gen-9 pair barely moves (0.78 → 0.73); pooling averaged those into a single 0.6082
 and hid the difference. Read honestly: the encoder lever has a LARGE effect on one
 lineage member and almost none on the other, and on neither does the behavior clear the
-registered recede bar — so `off-menu` stays NOT-DEMONSTRATED, with the gen-3 near-miss
-recorded for 18.27 rather than smoothed away.
+registered recede bar. **This report does not classify `off-menu`** — the screen, the
+gen-3 near-miss and the provenance are recorded, and clause-(c) classification plus any
+causal attribution are deferred to 18.27 (§5.1/§6.3).
 
 
 **Tranche 2 (seeds 4003–4005) — RECORDED, but VALIDITY-FAILED; the recede verdict above
@@ -1425,11 +1435,13 @@ and to any future free-policy campaign sizing.
   run 05 — so completion is **120 real games ≈ 40–50 h** at measured pace, not the ~40
   candidates / 240 games / 80–120 h previously stated. That lands inside the contract's
   own ~40–50 h envelope and materially changed the fund-versus-accept calculus.
-  **OWNER DECISION (2026-07-26): Option B — fund the two UTILITY lineages (run-01,
-  run-03: 12 runner-ups, 72 games, ~24–30 h), skip run-04/run-05 on the evidence that
-  every one of their arms — 12 candidates over 6 seeds each, champions and back-filled
-  intermediates alike — wins 0.000 on the real path, so their σ-scale siblings cannot
-  plausibly reach the 0.833 band.** Those legs are running; §4.11 carries their result.
+  **OWNER DECISION (2026-07-26), SUPERSEDED (2026-07-27):** Option B funded the two
+  UTILITY lineages (run-01, run-03: 12 runner-ups, planned 72 games over two tranches),
+  skipping run-04/run-05 on the evidence that all 12 of their arms win 0.000. **Final
+  outcome: tranche 1 ran (36 games, §4.11); tranche 2 was STOPPED on 2026-07-27 under
+  §4.0** — a second tranche at n=3 would have added measurements that demonstrably do not
+  replicate. So those 12 runner-ups carry 3-seed screens, not 6-seed reads, and §8 marks
+  the resulting coverage split explicitly.
   The residual gap after Option B is exactly the two free-policy lineages, skipped for a
   stated reason rather than for cost. **Routed to the owner/18.28 as a live decision
   with evidence attached, not as a scope defence:** either fund the remaining
@@ -1519,8 +1531,18 @@ unsatisfiable. This campaign's ranked recommendation:
 | **3** | `6d327dcb…` (control) | the incumbent comparator 18.26 needs regardless of ranking |
 | **4** | `7f73929d…` (run-03 gen-8 **runner-up**, **3-seed screen only**) | §4.0/F13: all referee screening-PASSes came from runner-ups, none from the 14 champions — 50 seeds settles whether that is real. Chosen over the other PASS candidate (`e531c1f9…`, run-01 gen-7) because its gauge margins are larger on all three (W +0.266 vs +0.216, F +0.481 vs +0.159, C +0.173 vs +0.124) at the same win 0.333, so it is the stronger single test of F13 |
 
+**Slot 4's criterion is explicitly NOT win rate.** On the 3-seed Option B screens the
+highest win came from `11aa6863…` (run-01 gen-3 runner-up, 3/3) — higher than slot 4's
+`7f73929d…` (1/3). Slot 4 is chosen to test **F13**, which is a claim about the referee
+gauges, not about winning: `7f73929d…` is the only Option B candidate that screened a
+referee PASS with all three gauges clear. Ranking by win rate at n=3 would substitute a
+noisier statistic (§4.0: 10 of 22 arms swing a full game) for the specific hypothesis the
+slot exists to test. `11aa6863…` is therefore listed in the reserve below with its 3/3
+noted, and if 18.26 prefers a win-rate-led fourth arm it is the candidate to promote.
+
 **Held in reserve, not recommended for the 50-seed spend:** `dff6e472…`, `3a89655f…`,
-`76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more
+`11aa6863…` (run-01 gen-3 runner-up, 3/3 on its 3-seed screen — the win-rate-led
+alternative for slot 4), `76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more
 50-seed arms buys resolution between candidates that already tie) and `a89be618…`
 (0.667, different lineage — its case is family diversity, which 18.27 can request
 explicitly if the reading needs it). All eight artifacts stay frozen and named so the

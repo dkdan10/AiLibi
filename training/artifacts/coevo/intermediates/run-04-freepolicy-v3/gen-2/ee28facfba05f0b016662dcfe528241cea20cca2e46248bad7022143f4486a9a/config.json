@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "intermediates/run-04-freepolicy-v3/gen-2/ee28facfba05f0b016662dcfe528241cea20cca2e46248bad7022143f4486a9a",
+  "genome_length": 1442,
+  "side": "impostor",
+  "source_lineage": "intermediates"
+}

@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "run-04-freepolicy-v3/crew/gen-9/b953b0099267e40eb428e5208281f217bc151b2cfe3a7640e7a1ac6316bc064f",
+  "genome_length": 27,
+  "side": "crew",
+  "source_lineage": "run-04-freepolicy-v3"
+}

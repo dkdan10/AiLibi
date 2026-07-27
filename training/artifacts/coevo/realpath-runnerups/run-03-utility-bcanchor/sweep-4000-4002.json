@@ -1,45 +1,46 @@
 [
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {
@@ -240,45 +241,46 @@
   },
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {
@@ -484,45 +486,46 @@
   },
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {
@@ -722,45 +725,46 @@
   },
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {
@@ -959,45 +963,46 @@
   },
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {
@@ -1196,45 +1201,46 @@
   },
   {
     "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
       "alibi_survival_rate": [
-        11,
-        14
+        59,
+        77
       ],
-      "crew_mean_conditional_entropy": 0.9176435717876024,
+      "crew_mean_conditional_entropy": 0.869323712309377,
       "crew_witnessed_kill_rate": [
-        20,
-        599
+        12,
+        505
       ],
       "effective_deflection_rate": [
-        47,
-        196
+        69,
+        152
       ],
       "false_vouch_corroboration_rate": [
-        13,
-        46
+        31,
+        176
       ],
       "false_vouch_saw_player_rate": [
-        34,
-        149
+        74,
+        602
       ],
       "frame_attempt_rate": [
-        415,
-        541
+        437,
+        463
       ],
       "frame_conversion_rate": [
-        5,
-        415
+        23,
+        437
       ],
-      "impostor_mean_conditional_entropy": 0.712621088564195,
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
       "off_menu_rate": [
         0,
-        7693
+        6663
       ],
       "teammate_accusation_rate": [
         0,
-        455
+        549
       ],
-      "witnessed_point_biserial_within_one_hop": 0.27899083053626106
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
     },
     "byte_complete": true,
     "deception": {

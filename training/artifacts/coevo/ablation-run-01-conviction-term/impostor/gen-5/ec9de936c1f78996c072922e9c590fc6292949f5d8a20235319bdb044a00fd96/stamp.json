@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "impostor-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-ablation-run-01-conviction-term-impostor-impostor/gen-5",
+  "weights_sha256": "ec9de936c1f78996c072922e9c590fc6292949f5d8a20235319bdb044a00fd96"
+}
