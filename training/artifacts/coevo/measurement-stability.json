@@ -1,0 +1,12 @@
+{
+  "candidates_both_tranches": 21,
+  "mean_abs_flags_swing": 0.7535,
+  "flags_floor": 1.0909090909090908,
+  "noise_to_threshold_ratio": 0.6907,
+  "candidates_with_impossible_conversion_floor_on_a_tranche": 11,
+  "mean_abs_win_swing_games_of_3": 0.52,
+  "candidates_swinging_ge_one_game": 9,
+  "referee_passes_total": 3,
+  "referee_passes_retested": 1,
+  "referee_passes_replicated": 0
+}

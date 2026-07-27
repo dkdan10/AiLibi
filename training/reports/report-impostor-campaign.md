@@ -14,15 +14,17 @@ report-goodhart-probe.md "Blockers" (the four named blockers, folded verbatim in
 **Date started:** 2026-07-23 (session 1). **Last evidence recorded:** 2026-07-26
 (session 4 — the review rounds produced the back-fill, the comparator arm, the encoder
 ablation, and the K=2 runner-up legs; see §2).
-**Status: PROVISIONAL — the per-generation top-K (K=2) coverage the contract asks for is
-COMPLETE FOR ONE LINEAGE ONLY (run-02).** All rows, swap-boundary legs, per-generation
-CHAMPION legs, sweeps and ablations are recorded across all five lineages; the K=2
-runner-up slice is recorded for run-02 only, and §4.10 demonstrated that slice can carry
-finalist-grade candidates (two entered §8). The other four lineages' ~40 runner-ups are
-unevaluated, so **§8's finalist slate is provisional and this campaign should not be
-consumed as a complete per-generation top-K selection** — F10 states the exposure and
-routes the decision (fund the remaining ~240 games, or accept a run-02-complete slate)
-to the owner/18.28 BEFORE 18.26's finalist spend. Claims are 18.27's, adoption is
+**Status: CLOSED as a SCREENING campaign (2026-07-27).** The campaign delivers three
+things: five trained lineages with all artifacts frozen, a 141-game real-path recordings
+corpus, and a RANKED SHORTLIST for 18.26 (§8). It deliberately delivers NO verdict on the
+§1.3 flip bar: §4.0 shows the real-path reads at n≤6 carry noise ~69% of the threshold
+being tested, so referee PASS/FAIL is not resolvable here and 18.26's 50-seed protocol is
+the instrument that settles it. Per-generation K=2 coverage is complete for run-02 and
+partial for run-01/run-03 (their tranche-1 legs completed; tranche-2 legs were stopped
+under §4.0's finding rather than spending 4 more hours on measurements that do not
+replicate — owner decision, 2026-07-27). run-04/run-05's runner-ups were skipped on the
+evidence that all 12 of their evaluated arms win 0.000.
+Claims are 18.27's, adoption is
 18.26/18.27's, the close is 18.28's. §2 is the session ledger; every row, leg, and sweep
 states its session.
 
@@ -181,6 +183,7 @@ in session 1 (§3).
 |---|---|---|---|
 | 1 | 2026-07-23 | Protocol fixed (§1); five fake-path lineage runs recorded, 10 362 games, all COMPLETE (§3); the conviction-term ablation twin run (§6.1); leg 04 tranche 1 recorded + ranked + swept (§4.1/§5.1, under the F7 impaired-status window); leg 01 tranche 1 launched | session 1 |
 
+| 5 | 2026-07-27 | Round-7 fixes; Option B legs (run-01 + run-03 tranche 1, 36 games, three referee PASSes — all from runner-ups); **§4.0 stability check computed → the referee is not resolvable at n≤6**; remaining tranche-2 legs STOPPED by owner decision; report recast as a screening campaign; F12/F13 + §11 routed | this session |
 | 4 | 2026-07-26 | Codex round 4: same-seed FSM comparator recorded (§5.9) + §6.3 recompute; the K=2 runner-up leg over run-02 (§4.10, 36 real games) — a runner-up ties the campaign's best win record, §8 re-ordered to 7 finalists, F10 rewritten as demonstrated incompleteness | session 4 |
 | 3 | 2026-07-25 | Codex rounds 1–2 absorbed: evidence committed in-repo (60+30 recordings + manifests), baseline-6 comparator corrected, per-tranche prescreen records (F9), the 5 intermediates recovered via the scenario seam (F1 resolved) + 30 back-fill games recorded and processed (§4.9); §8 finalists REVISED | session 3 |
 | 2 | 2026-07-24 | Overnight detached chain + processing: legs 03/05 t1 + ALL tranche-2s recorded, ranked, swept (§4.4–4.8, §5.4–5.7); deflection candidate resolved NOT-SUSTAINED; F8; finalists named and confirmed (§8) | this session |
@@ -396,6 +399,53 @@ founders (F2), exercised end-to-end here.
   longer-horizon session.
 
 ---
+
+
+## 4.0 MEASUREMENT RELIABILITY — read this before any §4 number
+
+**Every real-path read in this report is a SCREEN, not a verdict.** This section is the
+campaign's most important methodological finding and it re-frames everything below it.
+
+The campaign evaluated candidates on 6 real seeds (two tranches of 3). Twenty-one
+candidates were recorded on BOTH tranches, which makes the stability of these
+measurements directly checkable — the same policy, two independent 3-seed draws:
+
+| stability check (n = 21 candidates, both tranches) | value |
+|---|---|
+| mean absolute swing in `flags_per_meeting` between tranches | **0.7535** |
+| the floor that quantity is tested against | 1.0909 |
+| **noise as a fraction of the threshold** | **69%** |
+| candidates whose derived conversion floor hit 1.000 (structurally unpassable) on ≥1 tranche | **11 of 21** |
+| mean absolute win-rate swing, in games out of 3 | 0.52 |
+| candidates swinging ≥ 1 game in win rate between tranches | **9 of 21** |
+| referee PASSes recorded / retested / replicated | **3 / 1 / 0** |
+
+Three consequences, stated plainly:
+
+1. **The referee verdict is not resolvable at this sample size.** Measurement noise is
+   ~69% of the threshold being tested. Three candidates passed the referee on a tranche;
+   exactly one was retested and it failed completely (`f280962f…`: flags 1.80 → 0.40).
+   No referee PASS in this campaign has replicated.
+2. **The population-relative conversion floor amplifies that noise into an impossible
+   bar.** `floor = 0.474 × (0.503 / measured_flags)` is correct doctrine at corpus scale
+   (150 games) — starved supply should raise the bar — but at n=3 a single flag moves
+   the requirement from ~0.35 to 1.000. Eleven of twenty-one candidates faced an
+   unpassable conversion bar on at least one tranche for that mechanical reason alone.
+3. **The finalist ordering is noise-dominated except at the extremes.** Pooled win rates
+   move in 1/6 steps; 9 of 21 candidates swung by a full game between tranches. The
+   separation between the 0.833 band and the 0.667 band is one game.
+
+**Therefore this report does not claim, and must not be read as claiming, that any
+candidate passes or fails the §1.3 flip bar.** §8 is a RANKED SHORTLIST for 18.26's
+50-seed protocol, which is the instrument that can settle it. Every "PASS"/"FAIL" in
+§4 is a screening observation at n≤6 and is labelled as such.
+
+**Why this section exists at all** (recorded so the next campaign does not repeat it):
+the first non-replication — `f280962f…` collapsing on fresh seeds — was read at the time
+as "that candidate was noise" rather than "this measurement is noise," and recording
+continued for roughly another day before the stability table above was computed. The
+check is cheap, mechanical, and should be run after the FIRST retest of any campaign,
+not after the fortieth hour. Routed to 18.25 as a protocol precondition (F12).
 
 ## 4. Real-path re-rank legs (18.17 machinery; 17.14 table discipline)
 
@@ -1235,6 +1285,35 @@ and to any future free-policy campaign sizing.
   healthy provider status before folding this repricing into 18.25's duration honesty;
   the recordings themselves stay valid regardless (the validity gate checks model +
   cost, never latency).
+- **F13 — every referee PASS came from a RUNNER-UP; none from a champion. The most
+  interesting result of the campaign, and it questions the training signal.** Across 14
+  evaluated champions (5 lineages) there are ZERO referee passes; across 18 evaluated
+  runner-ups (3 lineages) there are THREE — one in every lineage probed. Two further
+  signals point the same way: the run-01 co-adapted champion had HIGHER fake-path fitness
+  than the committed champion and won 0.167 vs 0.500 on the real path, and the encoder
+  ablation twin trained to 3.8× the fitness of its v3 counterpart (11.61 vs 3.06) while
+  both won 0.000 real. **Mechanism hypothesis** (untested, and this report does not rule
+  on it): the ES selects on shaped reward, which buys winning play; the referee rewards
+  evidence supply; if the optimizer trades supply for wins, the runner-up is simply one
+  step less far along that trade — every one of the three passes has win 0.333, sitting
+  exactly at the FSM line. **Competing hypothesis**: at n≤6 the referee is noise (§4.0)
+  and 3 passes from 18 draws is chance. The two make opposite predictions and 18.26's
+  50 seeds distinguish them cheaply — hence the shortlist's slot 4. If the runner-up
+  effect is real it means the campaign's selection rule is picking the wrong policies,
+  which is a Phase-18-level finding, not a task-level one.
+- **F12 — run the replication check FIRST, not last (protocol precondition for 18.25).**
+  The stability table in §4.0 costs nothing — it is a re-read of committed rankings — and
+  it invalidates the referee verdicts this campaign spent ~40 h producing. It was computed
+  only after the fortieth hour. **18.25 must compute it after its FIRST retested
+  candidate**, and must not proceed to a full campaign at a seed budget whose noise
+  exceeds ~25% of the thresholds being tested. Related machinery amendments, all
+  demonstrated by cost here and all routed to a pre-18.25 task: (a) the re-rank library
+  has no verified RESUME — a provider 503 at hour 40 destroyed 25 recorded games that a
+  stamp-verified skip would have preserved; (b) the driver persists no per-generation
+  genomes (F1, cost: the whole back-fill); (c) the pre-screen record is overwritten in
+  place (F9); (d) **the report's tables should be GENERATED from the committed artifacts,
+  not hand-assembled** — six of this PR's review findings were transcription or
+  arithmetic errors in prose whose underlying JSON was already correct.
 - **F11 — encoder v3 cost more than it bought at this budget.** The
   `ablation:off-menu/encoder-v3` twin (§6.3), which is run-04's config with the encoder
   reverted to v2 under the identical master seed, reached champion fitness 11.61 vs
@@ -1307,7 +1386,7 @@ and to any future free-policy campaign sizing.
 
 ---
 
-## 8. Finalists for 18.26
+## 8. Ranked shortlist for 18.26 (a screen, not a verdict)
 
 Named on the pooled 6-seed evidence of ALL TWENTY-ONE real-path-evaluated candidates
 (9 swap champions/exploiters + 5 back-filled intermediates + 6 K=2 runner-ups + the
@@ -1326,6 +1405,11 @@ guard was clean, and no selection leans on conviction-influenced ordering.
 | **7. `a89be618…`** (bc-anchor gen-9 swap champion) | `…/run-03-utility-bcanchor/impostor/gen-9/…` | 4/6 = 0.667 | the refined-anchor seam's product; closest single-tranche full-bar approach (§4.4) |
 | **8. `6d327dcb…`** (committed champion — control) | `…/run-01-utility-champion/impostor/gen-3/…` | 6/12 = 0.500 (12 games, 6 unique seeds) | the incumbent reference arm 18.26 needs regardless |
 
+**Read §4.0 first: these orderings are screens at n≤6, and the gaps between adjacent
+entries are within measurement noise.** The value of this list is that it narrows 21
+evaluated policies to a handful worth 50-seed evaluation — not that it ranks them
+reliably.
+
 **The slate 18.26 should actually run — resolved here, not delegated.** 18.26's contract
 caps the justified slate at ~3–4 finalists (wall-clock scales with count at ~5 h each),
 so naming eight and leaving the cut to the operator would make its two instructions
@@ -1336,7 +1420,7 @@ unsatisfiable. This campaign's ranked recommendation:
 | **1** | `ea4bc955…` | 6/6, and the convergence point two independent trajectories found |
 | **2** | `bfd145cb…` | the other 6/6, and the K=2 slice's proof case |
 | **3** | `6d327dcb…` (control) | the incumbent comparator 18.26 needs regardless of ranking |
-| **4 (if budget allows)** | `10c1f9f3…` | best of the 0.833 band: the only swap-frozen champion in it, so it carries the lineage's own selection signal |
+| **4** | `e531c1f9…` or `7f73929d…` (a **runner-up** that screened referee-PASS) | §4.0/F13: all three referee PASSes in this campaign came from runner-ups and none from the 14 champions. Whether that is real or noise is exactly what 50 seeds would settle, and it is the most interesting open question the campaign produced |
 
 **Held in reserve, not recommended for the 50-seed spend:** `dff6e472…`, `3a89655f…`,
 `76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more
@@ -1475,3 +1559,20 @@ AILIBI_SEED_MAX_ATTEMPTS=8` + `FEATHERLESS_API_KEY`, then `run_realpath_rerank`
   selection-evidence base. This report never rules.
 - **18.28 (the close):** carries §7's routed findings; the composed-provenance-validity
   open item rides the close either way.
+
+## 11. Routed to a pre-18.25 machinery task (the campaign's operational cost evidence)
+
+18.25 is another 30–40 h operator campaign against the same machinery. Four defects cost
+this campaign measurable time; each is small to fix and each is demonstrated, not
+speculative. Recommended as ONE task before 18.25 records anything:
+
+| # | defect | cost incurred here | fix |
+|---|---|---|---|
+| 1 | `run_realpath_rerank` has no resume — `force=False` raises `AlreadyExistsError`, so a re-run re-records everything and burns one retry per seed | a provider 503 at hour 40 destroyed **25 recorded games** (~3 h) | skip a (candidate, seed) whose replay exists AND whose read-back stamp `weights_sha256` equals the candidate's genome digest AND which reaches `GAME_OVER`. All three checks already exist in the codebase (`_verify_stamps`, the kill-craft completeness fence) — they are simply not wired to a resume path |
+| 2 | the driver persists no per-generation champion genomes (F1) | the entire F1 back-fill + K=2 recovery: **66 real games** and two scenario-seam recovery passes | persist each generation's champion, or expose the ES champion trace |
+| 3 | the pre-screen record is written in place, so tranche 2 overwrites tranche 1 (F9) | reconstruction of provenance under review | key the record by tranche/invocation |
+| 4 | report tables are hand-assembled from JSON that is already correct | **six** of this PR's review findings were transcription/arithmetic errors (a transposed table, a doubled cost estimate, four count errors) | generate every §3–§5 table from the committed artifacts; the stability table in §4.0 is the model — it is machine-computed |
+
+And one protocol precondition, which is free: **compute §4.0's stability table after the
+first retested candidate of any campaign** (F12). Had it been run at hour ~16 here it
+would have re-framed the remaining ~24 h of recording before they were spent.
