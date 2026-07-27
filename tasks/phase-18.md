@@ -138,10 +138,11 @@ Wave 3 (co-evolution):
   (18.19, 18.30) -> 18.22 encoder v3 + within-kind target resolution
   (18.16, 18.21, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22, 18.30) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
-  18.24 -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
+  (18.24, 18.31) -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
   (18.16, 18.18) -> 18.29 composed meeting-outcome runner (amendment, 2026-07-22)
   18.16 -> 18.30 the live conviction serving path (amendment, 2026-07-22)
+  18.24 -> 18.31 pre-18.25 campaign ergonomics (amendment, 2026-07-27)
 
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
@@ -151,7 +152,7 @@ Wave 4 (selection + close):
 ```
 
 Critical path: 18.7 → 18.10 → 18.11 → 18.12 → 18.13 → 18.15 → 18.16 → 18.19 → 18.20 →
-18.21 → 18.24 → 18.26 → 18.27 → 18.28 (18.7 and 18.10 entered the head via the
+18.21 → 18.24 → 18.31 → 18.25 → 18.26 → 18.27 → 18.28 (18.7 and 18.10 entered the head via the
 `orchestrator/game.py`/`orchestrator/replay.py` serialization edges — dispatch 18.7 first).
 The day-one frontier is nine roots (18.1–18.3, 18.5, 18.6, 18.7, 18.8, 18.9, 18.17);
 nothing outside
@@ -186,7 +187,9 @@ graduation reclassification) then 18.19 (dual-stamp coherence), all dep-ordered;
 the dep edge is this file's serialization) then 18.12 (registry graduation) then 18.22 (the
 concluded-hook payload) then 18.23 (the `initial_state` seam) then 18.28 (FLIP-path default
 selector), all dep-ordered; `eval/balance_eval.py` 18.7 only; `training/env.py` 18.23; `agents/tactical/features.py` 18.22;
-`training/coevo/` is 18.19/18.20/18.21 in dep order with per-task module files;
+`training/coevo/` is 18.19/18.20/18.21 then 18.31 (the persistence/freeze-writer
+amendments), in dep order with per-task module files; `training/realpath.py` is 18.17 then 18.22 (the
+sanctioned reload ripple) then 18.31 (the resume path), dep-ordered;
 `tasks/phase-18.md` is 18.11 (surgery) then 18.27 (ruling banner) then 18.28 (close banner),
 all dep-ordered; `agent_prompts/` surgery 18.11.
 
@@ -1709,11 +1712,31 @@ driver, real re-ranks) — expect integration findings. The discipline: a defect
 mid-campaign becomes a routed contract or an in-report finding; the campaign never patches
 machinery silently (merge-equals-done applies to the tools it runs on).
 
+**Post-merge record (2026-07-27, coordination).** Merged b19b952 as **STOPPED, NOT
+CONTRACT-COMPLETE** — an owner decision on the report's §4.0 evidence (real-path reads at
+n≤6 carry noise ≈68% of the tested threshold; no referee PASS replicated), ratified by
+the merge per the standing convention. Coverage as ratified: the champion slice complete
+(14 champions, 6 seeds), K=2 complete for run-02 only, run-01/run-03 runner-ups at
+3-seed screens (tranche 2 stopped 2026-07-27 under §4.0), run-04/run-05 runner-ups
+skipped on the all-arms-win-0.000 evidence. The contract-discharge ruling (owner
+adjudication, 2026-07-27): ACCEPTED AS-IS — no further n≤6 spend; the residual (run-04's
+6 + run-05's 2 runner-ups) is an UNEVALUATED, UN-RECOVERED residual: those genomes are
+not frozen anywhere in the tree — recovering them takes an F1-style scenario-seam pass,
+after which they freeze and are evaluated at n=50 (400 games) or not at all (the 48-game
+6-seed completion price is superseded with the rest of the n≤6 program); quoted by the
+close from F10 (NEVER from the report's superseded §2 remaining-work paragraph). §8 is a
+screening shortlist; 18.26's ratified slate is its 4-arm cut. A six-lens post-merge
+verification recomputed every table from committed bytes
+(all reproduce except the cells §12 corrects; report §12 Errata records the corrections, including the two
+repaired run-04 intermediate stamps and the session-5 provenance-log gap). The campaign's
+machinery findings route to 18.31 (pre-18.25 ergonomics); no candidate passed the §1.3
+flip bar at the screening budget — the finding, not a failure.
+
 **Ready-to-paste prompt:** `agent_prompts/task-18-24-impostor-campaign.md`
 
 ### Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h real-path legs)
 **Branch:** `phase-18-crew-campaign`
-**Depends on:** 18.24
+**Depends on:** 18.24, 18.31
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Complexity:** Integration
 
@@ -1724,11 +1747,22 @@ interrupt-preserving constraint kept (the 15.22 guard — starvation stays unrea
 real-path re-ranks per generation. Reachability honesty (the merged driver, 316d4e5): the
 frozen-champion half of that shape is direct, the hall half is NOT — there is no seam for
 adopting 18.24's committed hall as this campaign's opponent pool; the impostor side enters
-via `impostor.initial_genome` seeded from a committed 18.24 champion (re-frozen as a fresh
-lineage in this campaign's own hall; founders are substrate-fenced MAP-Elites cells only),
-so the counter-adaptation reading is against the champion lineage plus this campaign's own
-accumulating hall, and if the report judges full-pool continuity load-bearing that is a
-routed amendment, never a silent driver edit. Crew mechanics the driver pins:
+via `impostor.initial_genome` seeded from a committed 18.24 CANDIDATE (re-frozen as a
+fresh lineage in this campaign's own hall), so the counter-adaptation reading is against
+that lineage plus this campaign's own accumulating hall, and if the report judges
+full-pool continuity load-bearing that is a routed amendment, never a silent driver edit.
+Name the seed artifact by exact path: the strongest 18.24 arms live under
+`training/artifacts/coevo/intermediates/` and `…/runnerups/` (e.g. `ea4bc955…` at
+intermediates/run-02-utility-lambda4/gen-2, `bfd145cb…` — never a champion — at
+runnerups/run-02-utility-lambda4/gen-9), NOT only under `<run>/impostor/`; all load
+through the four-file artifact (verified post-merge). Founder honesty (the campaign's F2,
+sharpened by the slate): the committed MAP-Elites founder pool is v2 free-policy
+(1049-gene) — a utility-family (19-gene) impostor side CANNOT ingest it (the driver's
+genome-length reload check), so `founder_cells_dir` stays unset for a utility-family
+side and its opponent pool starts EMPTY, accumulating swap-frozen members + exploiter
+finds only; if pool diversity proves load-bearing mid-campaign, the routed conditional
+is a utility-family founder-persistence run (18.6-shaped), recorded in 18.28's deferred
+ledger — never an improvised ingest. Crew mechanics the driver pins:
 `first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
 anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
 `encoder_version` (the 18.19 conflation guard, enforced both directions). Scenario
@@ -1766,6 +1800,7 @@ sessions, checkpoint-push per generation.
 - [ ] The campaign report carries the full row/benchmark/meter discipline, the counter-adaptation reading (does trained crew close the frozen champion's win edge, and through which instrument channels), and the real-path re-rank tables with stamp proofs.
 - [ ] Every candidate emergence behavior this campaign surfaces carries its 18.4-named ablation run and provenance in the report (the 18.24 discipline, crew side).
 - [ ] The gate-validity discipline holds throughout (no starvation-family candidate survives selection; validity-gate columns quoted per entrant), and crew finalists (if any clear the bars) are named for 18.26.
+- [ ] The 18.24 protocol preconditions hold: the §4.0-style stability table is computed after the FIRST retested candidate (and the campaign does not proceed at a seed budget whose measured noise exceeds 25% of any threshold it tests — F12); every frozen artifact this campaign names for 18.26 loads through the consuming entry point (`--crew-artifact` / `--candidate-artifact`) before hand-off (F14); every session's chain/leg log is committed under the provenance root (the blocker-4 ordering evidence — the 18.24 session-5 gap is the cautionary case).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1778,7 +1813,18 @@ sessions, checkpoint-push per generation.
 
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
-answer it with the campaign's real re-rank data and say so explicitly either way. Stamp
+answer it with the campaign's real re-rank data and say so explicitly either way. The
+18.24 evidence is on this campaign's side here: the run-01 same-seed `conviction=None`
+twin reproduced the impostor champion lineage sha-for-sha while CREW selection diverged —
+the term's selection-relevant effect is crew-side, exactly where this campaign wants it
+(quote the committed twin artifacts, not the report prose — report §12 Errata lists the
+prose defects). Runbook corrections measured by 18.24 (F7): one real-path leg at a time,
+`meeting_timeout_seconds=900`, 3-seed tranches — but those numbers were measured under a
+partially-impaired provider window, so re-measure at healthy status before repricing this
+campaign's duration; sweep legs follow the recording-dir convention (`roster.json`
+present, audit sidecars out — the campaign's F5). Founder-game pricing (F3) is moot while
+founders cannot load (see the founder-honesty block above); run-05's 2×2 reduced shape is
+the sizing precedent if any free-policy side runs. Stamp
 obligation (routed by the 18.19 verification): the committed measurement-tier
 `training/artifacts/crew/` dirs carry NO `stamp.json`, so the `--crew-artifact` arm fails
 loud on them BY DESIGN — every crew artifact this campaign freezes carries the five-field
@@ -1810,6 +1856,33 @@ impostor champion, dual-stamped. Full 17.14 discipline: stamp proofs, validity g
 sensitivity with rare-event z beside every verdict, the committed jsonl + report tables
 18.27 reads.
 
+The 18.24 hand-off, ratified at its merge (b19b952; quote committed artifacts, never the
+report prose — report §12 Errata lists the known prose defects): **the impostor slate is
+§8's 4-arm cut** — `ea4bc955…` (intermediates/run-02-utility-lambda4/gen-2), `bfd145cb…`
+(runnerups/run-02-utility-lambda4/gen-9), `6d327dcb…` (the incumbent control,
+run-01-utility-champion/impostor/gen-3), and `7f73929d…`
+(runnerups/run-03-utility-bcanchor/gen-8, the F13 test arm). The reserve are NOT
+finalists; promoting one is an owner note in this task's PR, and promoting the
+win-rate-led alternative `11aa6863…` over `7f73929d…` CHANGES WHAT SLOT 4 TESTS (it swaps
+the F13 gauge-hypothesis arm for a win-rate arm) — record it as such if done. The cap
+(~3–4) reads over the impostor report; crew finalists from 18.25, if any, take their own
+owner-justified slots. Evidence honesty: the screening coverage is UNEQUAL (21 candidates
+at 6 seeds, 12 at 3) — slots 1–3 rest on 6-seed screens, slot 4 on a 3-seed screen, and
+per §4.0 all screening gaps are within noise; the 18.24 §5.9 3-game comparator does NOT
+discharge this task's same-seed FSM comparator row, which is recorded fresh at n=50.
+Loadability at hour one: all four arms load through `--candidate-artifact` before the
+first seed (verified post-merge; re-verify at run time — the five-second F14 check).
+TWO PRE-REGISTERED CELLS, stated before any seed runs: (1) the noise precondition — a
+split-half stability read at this task's n, per tested gauge; a gauge whose measured
+noise exceeds 25% of its threshold reads **UNRESOLVABLE** (a third verdict outcome beside
+PASS/FAIL — findings-not-failures; the §4.0 lesson priced at 40 h), and only gauges
+clearing the precondition feed 18.27's axis-1 ruling; (2) the F13 cell — champions
+(`6d327dcb…`, `ea4bc955…`) vs runner-ups (`bfd145cb…`, `7f73929d…`) on the referee
+gauges: hypothesis A (the ES trades evidence-supply for wins; runner-ups sit one step
+less far along the trade — predicts the runner-ups' gauge margins PERSIST at n=50),
+hypothesis B (n≤6 referee reads are noise — predicts the champion/runner-up gauge gap
+VANISHES at n=50). The cell reports; 18.27 rules.
+
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
 - tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
@@ -1819,8 +1892,9 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 - replays/samples/ + replays/ml_corpus/ (working recordings stay out of the tree)
 
 **Definition of done:**
-- [ ] Every finalist recorded 50/50 on the real path, stamp-proven (uniform, sha==sidecar), validity PASS, $0, with the same-substrate FSM comparator row recorded on the same seeds; the evidence table carries win edge, referee verdict, and per-gauge floor sensitivity with the statistical reads.
+- [ ] Every finalist recorded 50/50 on the real path, stamp-proven (uniform, sha==sidecar), validity PASS, $0, with the same-substrate FSM comparator row recorded on the same seeds; the evidence table carries win edge, referee verdict (domain PASS / FAIL / UNRESOLVABLE per the pre-registered noise precondition), and per-gauge floor sensitivity with the statistical reads.
 - [ ] The emergence instruments are computed over every finalist's recordings and quoted beside the selection cells (18.27's second axis reads from here).
+- [ ] Both pre-registered cells are reported as registered: the per-gauge split-half stability read with the ≤25% noise-vs-threshold statement quoted beside every gauge verdict, and the F13 champions-vs-runner-ups cell with both hypotheses' predictions stated verbatim before the first seed and the measured answer beside them (the ruling stays 18.27's).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1833,7 +1907,9 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 
 The 17.14 §6 recipe generalizes; the new leg is the dual-stamped crew-vs-champion cell —
 plan its seeds so the crew finalist's two opponents are same-seed comparable. Wall-clock
-scales with finalist count: cap the slate at what the campaign reports justify (~3–4).
+scales with finalist count: cap each campaign's slate at what its own report justifies —
+the impostor slate is the ratified 4-arm cut, and any crew arms take their own
+owner-justified slots beyond it.
 
 **Integration risk:**
 
@@ -1862,6 +1938,23 @@ NO-FLIP. **Axis 2 — emergence:** every pre-registered instrument read against 
 selected-for), each claim ruled EMERGENT / NOT-DEMONSTRATED with the evidence quoted. A
 crew-adoption question, if the crew evidence supports one, is put to the owner here as its
 own slot — never folded silently into either axis.
+
+Inherited from the 18.24 merge (quote committed artifacts; report §12 Errata names the
+prose defects): (a) **the F13 ruling is THIS reading's** — 18.26's pre-registered
+champions-vs-runner-ups cell measures it, and this memo rules which hypothesis stands; if
+the runner-up effect is real (the ES trading evidence-supply for wins), that is a
+Phase-18-level finding about the selection rule whose FIX is a routed next-campaign/
+Phase-19 contract, never a retrofit into this phase. (b) **F6 bounds attribution**: the
+run-01 same-seed `conviction=None` twin reproduced the impostor champion lineage
+sha-for-sha, so no axis-2 emergence claim may attribute an impostor-side selection effect
+to the conviction term on that lineage (the term's demonstrated selection effect is
+crew-side). (c) **F11 is a measurement, not a ruling**: encoder v3 trained 3.8× worse
+than its v2 ablation twin at the 12-generation budget — input to the reading, with the
+disposition routed to the close's hand-off ledger. (d) The named non-finalist exhibit
+`27f852fe…` (v3 gen-9 hall champion) stands ready if the off-menu instrument's
+claim-grade denominators are wanted. (e) Any UNRESOLVABLE gauge verdict from 18.26 reads
+exactly that in axis 1 — the bar stays as ratified, unresolvability is reported, and
+re-pricing the bar remains an owner decision outside this memo.
 
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
@@ -1951,7 +2044,20 @@ from the baseline-6 corpus, computing the anchors fresh. Scenario accounting (th
 hand-off): campaign rows carry `scenario_labels` but no per-term values — fitness is not
 decomposable post-hoc — so wherever a campaign adopted scenarios the close states the
 provider config (scenario set, seeds, meeting layer) and quotes `games_per_evaluation`
-beside `projected_game_bound`, or the phase's game accounting under-counts. The Phase-19 hand-off section
+beside `projected_game_bound`, or the phase's game accounting under-counts. The 18.24
+inheritance this close quotes (from F10 and the §12 Errata, never the superseded §2
+remaining-work paragraph): the residual as corrected — run-04's 6 + run-05's 2 runner-ups
+unevaluated AND un-recovered (no frozen artifacts exist — recovery is an F1-style
+scenario-seam pass, then evaluation at n=50 = 400 games, or nothing); run-01/run-03's 12
+runner-ups at 3-seed screens; the decision trail (Option B
+2026-07-26 → tranche-2 stop 2026-07-27 → merge-ratified STOPPED, NOT CONTRACT-COMPLETE);
+the session-5 provenance-log gap (36 Option B games carry no in-repo
+pre-screen-ordering evidence — an honest caveat on blocker (4)'s discharge, not a
+retro-manufacturable record); and two deferred-ledger entries — the encoder-v3
+disposition (F11: a from-scratch v3 ES at the 12-generation budget is a net loss; routes
+to Phase-19/free-policy campaign sizing) and the conditional utility-family
+founder-persistence run (18.6-shaped; live only if 18.25 finds opponent-pool diversity
+load-bearing). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
@@ -2127,3 +2233,111 @@ already encodes GO/NO-GO); the loops' change is passing the loaded term, not new
 - `training.conviction.serving.LiveConvictionFeatureError`
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-30-conviction-serving.md`
+
+---
+
+## Amendment (2026-07-27) — pre-18.25 campaign ergonomics
+
+Authored by coordination after the 18.24 close-out adjudication (owner-ratified at the
+#312 merge): the campaign's §11 table demonstrates five machinery defects by incurred
+cost — 25 real games lost to no-resume, 66 real games spent recovering unpersisted
+genomes, an overwritten pre-screen record, a shortlist that could not load through its
+consumer, and six review findings that were transcription errors in hand-assembled
+tables — and 18.25 is another 30–40 h operator campaign against the same machinery. One
+small task fixes all five (plus the session-5 lesson: leg logs become native) before
+18.25 records anything. 18.25's dependency line gains 18.31; the DAG, critical path, and
+collision discipline are amended above. Locked decisions unchanged.
+
+### Task 18.31 — Campaign ergonomics: resume, persistence, loadable freezes, generated tables
+**Branch:** `phase-18-campaign-ergonomics`
+**Depends on:** 18.24
+**Section refs:** training/reports/report-impostor-campaign.md §11 (the five demonstrated defects + costs), F1/F9/F12/F14 + §12 Errata items 1 and 10 (the mis-stamp and log-gap lessons); training/realpath.py:702, 873 (`_verify_stamps`, `run_realpath_rerank`); training/coevo/hall_of_fame.py:242, 397 (`create`, `add_member`); training/coevo/driver.py (the freeze/persistence sites); scripts/run_tournament.py:560 (`_load_candidate_policy` — the consuming entry point, NOT edited)
+**Complexity:** Integration
+
+The routed machinery task the 18.24 campaign's operational evidence demands (the
+integration-risk discipline working as designed: mid-campaign defects became a routed
+contract, never silent patches). Six fixes, each small, each priced by incurred cost:
+(1) RESUME for `run_realpath_rerank` — skip a (candidate, seed) element whose replay
+already exists AND whose read-back stamp `weights_sha256` equals the candidate's genome
+digest AND whose recording reaches GAME_OVER with the byte-completeness fence green; the
+skip predicate is CONJUNCTIVE and any miss re-records (all three checks exist in the
+tree — they are simply not wired to a resume path). (2) Per-generation champion-genome
+persistence in the driver — each generation's champion persisted beside the campaign
+rows (or the ES champion trace exposed), ADDITIVE AND DIGEST-INERT: the row digest
+covers row JSON lines only and must not move; the work-dir no-clobber discipline extends
+to the new artifacts. (3) Tranche/invocation-keyed pre-screen records — a native writer
+for pre-screen quote records (keyed by tranche/invocation, never in-place overwrite),
+plus a native append-only leg log written by the leg library itself (the blocker-4
+ordering evidence stops depending on operator shell redirection — the 18.24 session-5
+gap is the demonstration). (4) Natively loadable freezes — `HallOfFame.add_member` and
+every driver freeze path write the four-file loadable artifact (`weights.json`, sha
+sidecar, five-field `stamp.json`, provenance `config.json`), with `encoder_version`/
+`hidden` dispatched from the side config per family (the §12 Errata item-1 mis-stamp is
+the failure this kills), loadable through `_load_candidate_policy` end-to-end. (5) A
+deterministic table generator rendering the campaign-report table families (§3 row
+tables, §4 leg tables, the §4.0 stability table) from committed artifacts. (6) The free
+protocol precondition documented at the seam: the stability-table computation runs from
+the generator against any two-tranche ranking set (what F12 tells every future campaign
+to do after its first retest).
+
+**Files in scope:**
+- training/realpath.py (the resume path + the native pre-screen/leg-log writers)
+- training/coevo/driver.py (the champion-persistence artifact ONLY)
+- training/coevo/hall_of_fame.py (the loadable-freeze writer)
+- scripts/generate_campaign_tables.py (new — the table/stability generator CLI)
+- tests/training/test_realpath.py + tests/training/test_coevo_driver.py + tests/training/test_hall_of_fame.py + tests/scripts/test_generate_campaign_tables.py (the fixes' pins)
+
+**Files NOT in scope:**
+- training/coevo/factory.py + rollout.py (untouched)
+- training/artifacts/coevo/ (the 18.24 record is frozen history — the generator READS it as its test fixture, never rewrites it)
+- scripts/run_tournament.py (the consuming entry point is the invariant this task satisfies, never the thing it edits)
+- training/reports/ (18.24's report is a merged record; its §12 Errata is the correction channel)
+
+**Definition of done:**
+- [ ] An interrupted re-rank resumes: a leg with pre-existing (candidate, seed) replays skips exactly the verified-complete elements and re-records everything else, refusing to skip on ANY verification miss (stamp-sha mismatch, non-GAME_OVER, completeness-fence fail) — fixture-pinned in both directions; the driver persists every generation's champion digest-inertly (the 18.21 double-run row-digest pin passes unchanged) under the standing no-clobber discipline; pre-screen records and leg logs write natively, tranche/invocation-keyed, append-only.
+- [ ] Every hall/driver freeze writes the four-file artifact with family-correct `encoder_version`/`hidden` and loads through `_load_candidate_policy` end-to-end in a test (both families: a utility-genome and a v3 masked-MLP fixture); the table generator reproduces the committed `measurement-stability.json` numbers from the committed ranking artifacts and renders the row/leg table families deterministically (same bytes twice).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The resume rule is conjunctive on purpose — a skip on any weaker predicate silently
+converts a corrupted or foreign replay into "already done"; when in doubt, re-record (the
+cost asymmetry is ~8 minutes vs a poisoned evidence table). Two dispositions the rule
+must state: a `TICK_BUDGET_REACHED` replay has no GAME_OVER row by design and is
+therefore NEVER skippable — it re-records, deliberately; and the completeness fence is
+dir-scoped (`compute_kill_craft_report`), so per-(candidate, seed) verification is
+reached via per-seed staging or a roster-first write order — sanctioned here — never by
+editing `eval/kill_craft.py` (out of scope). The driver persistence writes
+beside the rows file (e.g. a `gen-champions/` dir under the work dir), inheriting the
+work-dir no-clobber preflight; 18.21's double-run digest test is the guard that row
+emission never moved. The freeze writer needs `hidden` and a stamp-grade run label that
+`CoevoSideConfig`/`CoevoCampaignConfig` do not yet carry — additive, default-valued,
+digest-inert config-metadata fields are SANCTIONED for exactly this (the frozen-machinery
+rule bends for declared additive metadata, never for behavior); take
+`encoder_version`/`hidden` from config — never re-derive from genome length (length
+collisions between future families are exactly the ambiguity stamps exist to remove). The stability
+generator's numbers must reproduce the committed `measurement-stability.json` from the
+committed `realpath*/` ranking files — that reproduction IS its acceptance fixture, free
+and already in-tree.
+
+**Integration risk:**
+
+`training/coevo/driver.py` and `hall_of_fame.py` are proven-frozen machinery with
+determinism digests and 29/22-test suites — every existing test must pass unchanged, and
+the persistence/freeze additions must be provably inert to rows, digests, and existing
+artifact bytes (the 18.24 record under `training/artifacts/coevo/` is a frozen fixture:
+`git status` clean over it after the full suite is part of the review bar). The resume
+path touches the same library 18.25's legs will run within days — the conjunctive
+predicate's false-positive direction (skipping something unverified) is the only truly
+dangerous failure mode; bias every ambiguity toward re-recording.
+
+**Public types introduced:**
+- `training.coevo.hall_of_fame.write_loadable_artifact`
+
+**Ready-to-paste prompt:** `agent_prompts/task-18-31-campaign-ergonomics.md`

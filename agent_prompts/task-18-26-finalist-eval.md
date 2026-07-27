@@ -24,6 +24,33 @@ impostor champion, dual-stamped. Full 17.14 discipline: stamp proofs, validity g
 sensitivity with rare-event z beside every verdict, the committed jsonl + report tables
 18.27 reads.
 
+The 18.24 hand-off, ratified at its merge (b19b952; quote committed artifacts, never the
+report prose — report §12 Errata lists the known prose defects): **the impostor slate is
+§8's 4-arm cut** — `ea4bc955…` (intermediates/run-02-utility-lambda4/gen-2), `bfd145cb…`
+(runnerups/run-02-utility-lambda4/gen-9), `6d327dcb…` (the incumbent control,
+run-01-utility-champion/impostor/gen-3), and `7f73929d…`
+(runnerups/run-03-utility-bcanchor/gen-8, the F13 test arm). The reserve are NOT
+finalists; promoting one is an owner note in this task's PR, and promoting the
+win-rate-led alternative `11aa6863…` over `7f73929d…` CHANGES WHAT SLOT 4 TESTS (it swaps
+the F13 gauge-hypothesis arm for a win-rate arm) — record it as such if done. The cap
+(~3–4) reads over the impostor report; crew finalists from 18.25, if any, take their own
+owner-justified slots. Evidence honesty: the screening coverage is UNEQUAL (21 candidates
+at 6 seeds, 12 at 3) — slots 1–3 rest on 6-seed screens, slot 4 on a 3-seed screen, and
+per §4.0 all screening gaps are within noise; the 18.24 §5.9 3-game comparator does NOT
+discharge this task's same-seed FSM comparator row, which is recorded fresh at n=50.
+Loadability at hour one: all four arms load through `--candidate-artifact` before the
+first seed (verified post-merge; re-verify at run time — the five-second F14 check).
+TWO PRE-REGISTERED CELLS, stated before any seed runs: (1) the noise precondition — a
+split-half stability read at this task's n, per tested gauge; a gauge whose measured
+noise exceeds 25% of its threshold reads **UNRESOLVABLE** (a third verdict outcome beside
+PASS/FAIL — findings-not-failures; the §4.0 lesson priced at 40 h), and only gauges
+clearing the precondition feed 18.27's axis-1 ruling; (2) the F13 cell — champions
+(`6d327dcb…`, `ea4bc955…`) vs runner-ups (`bfd145cb…`, `7f73929d…`) on the referee
+gauges: hypothesis A (the ES trades evidence-supply for wins; runner-ups sit one step
+less far along the trade — predicts the runner-ups' gauge margins PERSIST at n=50),
+hypothesis B (n≤6 referee reads are noise — predicts the champion/runner-up gauge gap
+VANISHES at n=50). The cell reports; 18.27 rules.
+
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
 - tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
@@ -33,8 +60,9 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 - replays/samples/ + replays/ml_corpus/ (working recordings stay out of the tree)
 
 **Definition of done:**
-- [ ] Every finalist recorded 50/50 on the real path, stamp-proven (uniform, sha==sidecar), validity PASS, $0, with the same-substrate FSM comparator row recorded on the same seeds; the evidence table carries win edge, referee verdict, and per-gauge floor sensitivity with the statistical reads.
+- [ ] Every finalist recorded 50/50 on the real path, stamp-proven (uniform, sha==sidecar), validity PASS, $0, with the same-substrate FSM comparator row recorded on the same seeds; the evidence table carries win edge, referee verdict (domain PASS / FAIL / UNRESOLVABLE per the pre-registered noise precondition), and per-gauge floor sensitivity with the statistical reads.
 - [ ] The emergence instruments are computed over every finalist's recordings and quoted beside the selection cells (18.27's second axis reads from here).
+- [ ] Both pre-registered cells are reported as registered: the per-gauge split-half stability read with the ≤25% noise-vs-threshold statement quoted beside every gauge verdict, and the F13 champions-vs-runner-ups cell with both hypotheses' predictions stated verbatim before the first seed and the measured answer beside them (the ruling stays 18.27's).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -47,7 +75,9 @@ sensitivity with rare-event z beside every verdict, the committed jsonl + report
 
 The 17.14 §6 recipe generalizes; the new leg is the dual-stamped crew-vs-champion cell —
 plan its seeds so the crew finalist's two opponents are same-seed comparable. Wall-clock
-scales with finalist count: cap the slate at what the campaign reports justify (~3–4).
+scales with finalist count: cap each campaign's slate at what its own report justifies —
+the impostor slate is the ratified 4-arm cut, and any crew arms take their own
+owner-justified slots beyond it.
 
 ## Integration risk
 
@@ -58,6 +88,7 @@ re-recorded here, never quoted from the old report. The contract makes that a Do
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
@@ -76,7 +107,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
-- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
 - `uv run python -c "import training.anchor_study"`

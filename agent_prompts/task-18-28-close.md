@@ -62,7 +62,20 @@ from the baseline-6 corpus, computing the anchors fresh. Scenario accounting (th
 hand-off): campaign rows carry `scenario_labels` but no per-term values — fitness is not
 decomposable post-hoc — so wherever a campaign adopted scenarios the close states the
 provider config (scenario set, seeds, meeting layer) and quotes `games_per_evaluation`
-beside `projected_game_bound`, or the phase's game accounting under-counts. The Phase-19 hand-off section
+beside `projected_game_bound`, or the phase's game accounting under-counts. The 18.24
+inheritance this close quotes (from F10 and the §12 Errata, never the superseded §2
+remaining-work paragraph): the residual as corrected — run-04's 6 + run-05's 2 runner-ups
+unevaluated AND un-recovered (no frozen artifacts exist — recovery is an F1-style
+scenario-seam pass, then evaluation at n=50 = 400 games, or nothing); run-01/run-03's 12
+runner-ups at 3-seed screens; the decision trail (Option B
+2026-07-26 → tranche-2 stop 2026-07-27 → merge-ratified STOPPED, NOT CONTRACT-COMPLETE);
+the session-5 provenance-log gap (36 Option B games carry no in-repo
+pre-screen-ordering evidence — an honest caveat on blocker (4)'s discharge, not a
+retro-manufacturable record); and two deferred-ledger entries — the encoder-v3
+disposition (F11: a from-scratch v3 ES at the 12-generation budget is a net loss; routes
+to Phase-19/free-policy campaign sizing) and the conditional utility-family
+founder-persistence run (18.6-shaped; live only if 18.25 finds opponent-pool diversity
+load-bearing). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
@@ -100,12 +113,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.off_menu"`
 - `uv run python -c "import eval.kill_craft"`
 - `uv run python -c "import eval.deception_instruments"`
+- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import agents.tactical.features"`
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
-- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
 - `uv run python -c "import training.anchor_study"`

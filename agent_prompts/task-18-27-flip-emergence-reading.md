@@ -30,6 +30,23 @@ selected-for), each claim ruled EMERGENT / NOT-DEMONSTRATED with the evidence qu
 crew-adoption question, if the crew evidence supports one, is put to the owner here as its
 own slot — never folded silently into either axis.
 
+Inherited from the 18.24 merge (quote committed artifacts; report §12 Errata names the
+prose defects): (a) **the F13 ruling is THIS reading's** — 18.26's pre-registered
+champions-vs-runner-ups cell measures it, and this memo rules which hypothesis stands; if
+the runner-up effect is real (the ES trading evidence-supply for wins), that is a
+Phase-18-level finding about the selection rule whose FIX is a routed next-campaign/
+Phase-19 contract, never a retrofit into this phase. (b) **F6 bounds attribution**: the
+run-01 same-seed `conviction=None` twin reproduced the impostor champion lineage
+sha-for-sha, so no axis-2 emergence claim may attribute an impostor-side selection effect
+to the conviction term on that lineage (the term's demonstrated selection effect is
+crew-side). (c) **F11 is a measurement, not a ruling**: encoder v3 trained 3.8× worse
+than its v2 ablation twin at the 12-generation budget — input to the reading, with the
+disposition routed to the close's hand-off ledger. (d) The named non-finalist exhibit
+`27f852fe…` (v3 gen-9 hall champion) stands ready if the off-menu instrument's
+claim-grade denominators are wanted. (e) Any UNRESOLVABLE gauge verdict from 18.26 reads
+exactly that in axis 1 — the bar stays as ratified, unresolvability is reported, and
+re-pricing the bar remains an owner decision outside this memo.
+
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
 - agents/tactical/learned/; (PASS branch only: the artifact-surface productization swap — the default-selector files flip at 18.28's record)
@@ -67,6 +84,7 @@ open on the held axis, the 17.14 PENDING pattern).
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
@@ -85,7 +103,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
-- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
 - `uv run python -c "import training.anchor_study"`

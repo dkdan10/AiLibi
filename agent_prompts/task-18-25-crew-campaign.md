@@ -12,7 +12,7 @@ Implement Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h r
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-crew-campaign`
-**Depends on:** 18.24
+**Depends on:** 18.24, 18.31
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Complexity:** Integration
 
@@ -23,11 +23,22 @@ interrupt-preserving constraint kept (the 15.22 guard — starvation stays unrea
 real-path re-ranks per generation. Reachability honesty (the merged driver, 316d4e5): the
 frozen-champion half of that shape is direct, the hall half is NOT — there is no seam for
 adopting 18.24's committed hall as this campaign's opponent pool; the impostor side enters
-via `impostor.initial_genome` seeded from a committed 18.24 champion (re-frozen as a fresh
-lineage in this campaign's own hall; founders are substrate-fenced MAP-Elites cells only),
-so the counter-adaptation reading is against the champion lineage plus this campaign's own
-accumulating hall, and if the report judges full-pool continuity load-bearing that is a
-routed amendment, never a silent driver edit. Crew mechanics the driver pins:
+via `impostor.initial_genome` seeded from a committed 18.24 CANDIDATE (re-frozen as a
+fresh lineage in this campaign's own hall), so the counter-adaptation reading is against
+that lineage plus this campaign's own accumulating hall, and if the report judges
+full-pool continuity load-bearing that is a routed amendment, never a silent driver edit.
+Name the seed artifact by exact path: the strongest 18.24 arms live under
+`training/artifacts/coevo/intermediates/` and `…/runnerups/` (e.g. `ea4bc955…` at
+intermediates/run-02-utility-lambda4/gen-2, `bfd145cb…` — never a champion — at
+runnerups/run-02-utility-lambda4/gen-9), NOT only under `<run>/impostor/`; all load
+through the four-file artifact (verified post-merge). Founder honesty (the campaign's F2,
+sharpened by the slate): the committed MAP-Elites founder pool is v2 free-policy
+(1049-gene) — a utility-family (19-gene) impostor side CANNOT ingest it (the driver's
+genome-length reload check), so `founder_cells_dir` stays unset for a utility-family
+side and its opponent pool starts EMPTY, accumulating swap-frozen members + exploiter
+finds only; if pool diversity proves load-bearing mid-campaign, the routed conditional
+is a utility-family founder-persistence run (18.6-shaped), recorded in 18.28's deferred
+ledger — never an improvised ingest. Crew mechanics the driver pins:
 `first_side="crew"`; the crew side config structurally REJECTS `anchor_policy` (crew
 anchor-CE is FSM-fixed by construction); the crew builder must emit a `crew-`-prefixed
 `encoder_version` (the 18.19 conflation guard, enforced both directions). Scenario
@@ -65,6 +76,7 @@ sessions, checkpoint-push per generation.
 - [ ] The campaign report carries the full row/benchmark/meter discipline, the counter-adaptation reading (does trained crew close the frozen champion's win edge, and through which instrument channels), and the real-path re-rank tables with stamp proofs.
 - [ ] Every candidate emergence behavior this campaign surfaces carries its 18.4-named ablation run and provenance in the report (the 18.24 discipline, crew side).
 - [ ] The gate-validity discipline holds throughout (no starvation-family candidate survives selection; validity-gate columns quoted per entrant), and crew finalists (if any clear the bars) are named for 18.26.
+- [ ] The 18.24 protocol preconditions hold: the §4.0-style stability table is computed after the FIRST retested candidate (and the campaign does not proceed at a seed budget whose measured noise exceeds 25% of any threshold it tests — F12); every frozen artifact this campaign names for 18.26 loads through the consuming entry point (`--crew-artifact` / `--candidate-artifact`) before hand-off (F14); every session's chain/leg log is committed under the provenance root (the blocker-4 ordering evidence — the 18.24 session-5 gap is the cautionary case).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -77,7 +89,18 @@ sessions, checkpoint-push per generation.
 
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
-answer it with the campaign's real re-rank data and say so explicitly either way. Stamp
+answer it with the campaign's real re-rank data and say so explicitly either way. The
+18.24 evidence is on this campaign's side here: the run-01 same-seed `conviction=None`
+twin reproduced the impostor champion lineage sha-for-sha while CREW selection diverged —
+the term's selection-relevant effect is crew-side, exactly where this campaign wants it
+(quote the committed twin artifacts, not the report prose — report §12 Errata lists the
+prose defects). Runbook corrections measured by 18.24 (F7): one real-path leg at a time,
+`meeting_timeout_seconds=900`, 3-seed tranches — but those numbers were measured under a
+partially-impaired provider window, so re-measure at healthy status before repricing this
+campaign's duration; sweep legs follow the recording-dir convention (`roster.json`
+present, audit sidecars out — the campaign's F5). Founder-game pricing (F3) is moot while
+founders cannot load (see the founder-honesty block above); run-05's 2×2 reduced shape is
+the sizing precedent if any free-policy side runs. Stamp
 obligation (routed by the 18.19 verification): the committed measurement-tier
 `training/artifacts/crew/` dirs carry NO `stamp.json`, so the `--crew-artifact` arm fails
 loud on them BY DESIGN — every crew artifact this campaign freezes carries the five-field
@@ -92,6 +115,7 @@ until routed.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.conviction.serving"`
 - `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.conviction.model"`
@@ -110,7 +134,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.coevo.factory"`
 - `uv run python -c "import training.coevo.rollout"`
 - `uv run python -c "import training.coevo.driver"`
-- `uv run python -c "import training.coevo.hall_of_fame"`
 - `uv run python -c "import training.bakeoff.map_elites"`
 - `uv run python -c "import training.realpath"`
 - `uv run python -c "import training.anchor_study"`

@@ -1699,3 +1699,65 @@ speculative. Recommended as ONE task before 18.25 records anything:
 And one protocol precondition, which is free: **compute §4.0's stability table after the
 first retested candidate of any campaign** (F12). Had it been run at hour ~16 here it
 would have re-framed the remaining ~24 h of recording before they were spent.
+
+---
+
+## 12. Errata (coordination, 2026-07-27 — post-merge verification; additive, no in-place rewrites)
+
+A six-lens verification at merged `b19b952` recomputed every §3/§4/§8 table, the §4.0
+stability table, the §9 manifest census, and the meters from the committed artifacts.
+**Everything numerical reproduces exactly except the items below; none overturns a
+conclusion.** Downstream readers (18.25/18.26/18.27/18.28) quote the committed artifacts,
+not the prose these errata correct. Item 1 includes the only repairs applied to committed
+bytes; all other artifacts are untouched.
+
+1. **F14's population + two actively wrong stamps (REPAIRED this commit).** The frozen
+   intermediates/runner-up population is **24 stamped dirs (23 unique genomes)**, not
+   "all 21"; a second stamping pass wrote 3 of them, and its two run-04 v3 intermediates
+   (`b775a7e6…`, `ee28facf…`) were stamped `impostor-option-features-v1` for 1442-gene v3
+   genomes — unloadable through `_load_candidate_policy` (genome-length refusal) until
+   this errata's repair (`encoder_version: "v3"`, `hidden: 8` in stamp+config, and their
+   tier-named `source_lineage: "intermediates"` corrected to `run-04-freepolicy-v3`; both
+   now load as `MaskedMlpPolicy`). The `runnerups-gen3/` duplicate of `76400d72…` carried
+   `anchor_weight: 1.0` + self-referential `source_lineage` — corrected to `4.0` /
+   `run-02-utility-lambda4` (the lineage's λ; the `runnerups/` copy was already correct).
+   Neither repaired genome is in §8's slate or reserve except `76400d72…` (reserve), whose
+   weights bytes were never wrong.
+2. **§4.0 consequence 2:** "Eleven of twenty-one" → **12 of 21** distinct genomes face an
+   unpassable conversion floor (the printed 11 reproduces only under the sha-keyed
+   traversal bug §4.0 itself says it fixed). Consequence 3's 9-of-21 is correct.
+3. **Head + §4.0 prose "~69%"** → **68%** (0.6797), matching the section's own table.
+4. **§1.1 per-entrant meter table:** its coverage sentence ("every candidate that reached
+   a real-path leg") is false as committed — the 12 session-5 Option B entrants (five
+   reading 3.83, the campaign's third-highest tier) and 3 others are absent, and the λ=4
+   row miscounts (2 champions on record, not 3; the 7th runner-up `76400d72…` reads 3.33,
+   not 3.50). The guard conclusions survive on the full committed record: global max is
+   `6d327dcb…` at 4.17 = +14.9%, nothing approaches the 4.54 (+25%) bar.
+5. **§2 "Remaining task work" (≈lines 207–212) is a superseded revision** — it still
+   carries the doubled exposure ("~40 runner-ups / ~240 games / 80–120 h") that F10
+   explicitly corrected, and predates the committed §4.11 Option B legs. **F10 governs.**
+6. **F10 "60 generations"** → the committed record is 52 rows (4×12 + 2×2).
+7. **§4.10 "pre-screens first, all PASS at 1.2562"** → gens 1–3 read 1.2562, gens 7–9
+   read **1.2300** (all six PASS); the gen-3 correction leg's own pre-screen
+   (`76400d72…`: 1.1490, **pass=False**) is quoted nowhere in §4.10.
+8. **§3's free-policy-v3 meter band "0.5–1.4"** covers impostor-moving generations only;
+   under the section's own uniform formula run-04's crew-moving gens reach **1.63**. The
+   umbrella "0.5–3.8" and the max-3.76 guard read are unaffected.
+9. **§8's numbered ladder skips rank 6:** `76400d72…` (pooled 5/6), which §4.10 says
+   "joins §8", appears only in the reserve prose — a row was cut without renumbering.
+10. **Session-5 provenance gap (recorded, not repairable):** no chain/leg log exists for
+    the 36 Option B games, so §1.2's "every §4 leg quotes the pre-screen verdict…" and
+    §9's blanket log-coverage sentence are in fact **sessions 1–4 scoped**; the Option B
+    `prescreen-quotes-4000-4002.json` files are committed but carry no invocation
+    stamps, so pre-screen-before-spend ordering for session 5 rests on operator
+    testimony only. Routed: the pre-18.25 machinery task makes leg-log writing native.
+11. **§4.9:** `dff6e472…` t1 conversion −0.1602 → **−0.1601** (last digit).
+12. **Head "Last evidence recorded: 2026-07-26"** → session 5's 36 games were recorded
+    2026-07-27 (§2's own ledger).
+13. **§11 "Four defects cost this campaign measurable time"** → **five** (the table's
+    five rows govern; the routed 18.31 contract counts five).
+14. **§10's 18.25 line ("trains against the frozen impostor champions in
+    `training/artifacts/coevo/<run>/impostor/`")** is stale against the ratified 18.25
+    contract: the seed is a committed CANDIDATE, and the strongest arms live under
+    `intermediates/` and `runnerups/` (e.g. `bfd145cb…` was never a champion) — all
+    loadable through the four-file artifact.

@@ -1,6 +1,6 @@
 {
   "anchor_policy": "fsm-default",
-  "encoder_version": "impostor-option-features-v1",
+  "encoder_version": "v3",
   "method": "alternating-freeze-es",
   "policy_id": "coevo-intermediates-impostor-run-04-freepolicy-v3/gen-1",
   "weights_sha256": "b775a7e6fd9e74c9618df6d020798c4051e0815c96b633ebe847f1cc4f6858ff"
