@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "v2",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-05-freepolicy-v2-founders-map-elites-founder-gen0",
+  "weights_sha256": "026f222d15f4fe65566bad3d2b6fbe211f5deea537c280aa58ec890731e78a51"
+}

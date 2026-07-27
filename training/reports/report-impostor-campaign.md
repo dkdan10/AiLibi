@@ -1474,9 +1474,20 @@ and to any future free-policy campaign sizing.
 
 ## 8. Ranked shortlist for 18.26 (a screen, not a verdict)
 
-Named on the pooled 6-seed evidence of ALL TWENTY-ONE real-path-evaluated candidates
-(9 swap champions/exploiters + 5 back-filled intermediates + 6 K=2 runner-ups + the
-exact-objective gen-3 correction; §4.9/§4.10). No candidate passes the referee on 6 seeds; the ladder is ordered
+Named across the **33 non-ablation candidates** this campaign evaluated on the real
+path — but **their evidence is NOT uniform, and 18.26 must not treat it as such**:
+
+| coverage | candidates | which |
+|---|---|---|
+| **both tranches (6 seeds)** | **21** | all swap champions/exploiters, the 5 back-filled per-generation champions, run-02's 6 K=2 runner-ups + the exact-objective gen-3 correction |
+| **tranche 1 only (3 seeds)** | **12** | the Option B legs — run-01's and run-03's K=2 runner-ups (§4.11), whose tranche 2 was stopped under §4.0 |
+
+Slots 1–3 below rest on 6-seed evidence; **slot 4 (`7f73929d…`) is a 3-seed screen from
+the tranche-1-only group** and is proposed precisely because it tests F13, not because
+its evidence is comparable to the others'. Ranking is by pooled real-path win rate
+against the same-substrate baseline-6 FSM 0.300, with gauge profiles in §4 — and per
+§4.0 the gaps between adjacent entries are inside measurement noise in every case.
+No candidate passes the referee on 6 seeds; the ladder is ordered
 by pooled real-path win rate against the same-substrate baseline-6 FSM 0.300, with
 gauge profiles quoted per candidate in §4. Every conviction-meter read under §1.1's
 guard was clean, and no selection leans on conviction-influenced ordering.
@@ -1506,7 +1517,7 @@ unsatisfiable. This campaign's ranked recommendation:
 | **1** | `ea4bc955…` | 6/6, and the convergence point two independent trajectories found |
 | **2** | `bfd145cb…` | the other 6/6, and the K=2 slice's proof case |
 | **3** | `6d327dcb…` (control) | the incumbent comparator 18.26 needs regardless of ranking |
-| **4** | `7f73929d…` (run-03 gen-8 **runner-up**) | §4.0/F13: all referee screening-PASSes came from runner-ups, none from the 14 champions — 50 seeds settles whether that is real. Chosen over the other PASS candidate (`e531c1f9…`, run-01 gen-7) because its gauge margins are larger on all three (W +0.266 vs +0.216, F +0.481 vs +0.159, C +0.173 vs +0.124) at the same win 0.333, so it is the stronger single test of F13 |
+| **4** | `7f73929d…` (run-03 gen-8 **runner-up**, **3-seed screen only**) | §4.0/F13: all referee screening-PASSes came from runner-ups, none from the 14 champions — 50 seeds settles whether that is real. Chosen over the other PASS candidate (`e531c1f9…`, run-01 gen-7) because its gauge margins are larger on all three (W +0.266 vs +0.216, F +0.481 vs +0.159, C +0.173 vs +0.124) at the same win 0.333, so it is the stronger single test of F13 |
 
 **Held in reserve, not recommended for the 50-seed spend:** `dff6e472…`, `3a89655f…`,
 `76400d72…` (the rest of the 0.833 band — mutually near-identical evidence; three more

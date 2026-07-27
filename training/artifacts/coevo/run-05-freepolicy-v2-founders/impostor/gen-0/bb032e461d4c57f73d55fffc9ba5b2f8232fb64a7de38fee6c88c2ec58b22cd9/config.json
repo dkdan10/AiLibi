@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "v2",
+  "entrant": "run-05-freepolicy-v2-founders/impostor/gen-0/bb032e461d4c57f73d55fffc9ba5b2f8232fb64a7de38fee6c88c2ec58b22cd9",
+  "generation": 0,
+  "genome_length": 1049,
+  "hall_origin": "map-elites-founder",
+  "hidden": 8,
+  "source_lineage": "run-05-freepolicy-v2-founders",
+  "trained_against": "scripted-fsm"
+}
