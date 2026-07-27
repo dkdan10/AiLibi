@@ -59,6 +59,7 @@ from training.scenarios import (
     AgentFactoryBuilder,
     ScenarioProvider,
     ScenarioSpec,
+    SelectorBuilder,
     build_scenario_state,
     scenario_by_name,
 )
@@ -1246,6 +1247,60 @@ def test_provider_agent_factory_builders_run_the_campaign_agents() -> None:
         distinct = {id(memory) for memory in memories}
         assert len(distinct) == 4
         assert len(memories) > len(distinct)
+
+
+def _one_shot_builder_with_ledger(builds: list[int]) -> SelectorBuilder:
+    """A deliberately STATEFUL product: each built selector fires only once.
+
+    An engaged selector takes the staged window once in its LIFETIME (the
+    ``fired`` closure flag), so a single instance reused across seed episodes
+    would hold still in every episode after the first. The ledger records one
+    entry per build call.
+    """
+
+    def build(genome: tuple[float, ...]) -> IntentSelector:
+        builds.append(1)
+        fired = [False]
+
+        def selector(decision: MaskedDecision) -> ActionIntent:
+            packet = decision.packet
+            if packet.self_state.role != "IMPOSTOR":
+                return decision.fsm_intent
+            if (
+                genome[0] > 0.0
+                and not fired[0]
+                and packet.tick == KILL_WITH_WITNESS_NEARBY.staged_tick
+            ):
+                for intent in decision.mask.engine_legal:
+                    if isinstance(intent, KillIntent):
+                        fired[0] = True
+                        return intent
+            return _wait(decision)
+
+        return selector
+
+    return build
+
+
+def test_provider_rebuilds_the_policy_for_every_seed_episode() -> None:
+    """A stateful builder product cannot leak state across seed episodes.
+
+    The builder types cannot enforce stateless products (Codex round-8), so
+    the provider rebuilds the selector/factory from the genome per seed
+    episode: were one one-shot instance shared across both seeds, the second
+    episode would hold still and the mean would drop to 1.0 — instead every
+    episode runs the full drill and the ledger shows one build per seed.
+    """
+
+    builds: list[int] = []
+    provider = ScenarioProvider(
+        selector_builders={"impostor": _one_shot_builder_with_ledger(builds)},
+        fitness_seeds=(0, 1),
+        scenarios={"impostor": (KILL_WITH_WITNESS_NEARBY,)},
+    )
+    term = provider(0, "impostor")[0]
+    assert term.fitness((1.0,)) == 2.0
+    assert len(builds) == 2
 
 
 def test_miniature_es_leg_runs_end_to_end_on_one_scenario() -> None:

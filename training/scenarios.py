@@ -950,9 +950,11 @@ class ScenarioProvider:
     inert.
 
     **Purity (the ES contract).** Each term's fitness is a pure deterministic
-    function of the flat genome: it builds the side's selector from the
-    genome, replays the scenario's episodes fresh over the fixed
-    ``fitness_seeds`` (every staged state carries the canonical
+    function of the flat genome: it REBUILDS the side's selector/factory from
+    the genome for every seed episode (the builder types cannot enforce
+    stateless products, so a fresh build per episode structurally prevents
+    state leaking across seeds), replays the scenario's episodes fresh over
+    the fixed ``fitness_seeds`` (every staged state carries the canonical
     ``EngineRng.from_seed`` snapshot; the default meeting layer is the env's
     forced fake provider), and averages the per-episode dense fitness. No
     state crosses calls, so the same genome always returns the same value —
@@ -1133,17 +1135,24 @@ class ScenarioProvider:
         factory_builder: AgentFactoryBuilder | None,
     ) -> Callable[[tuple[float, ...]], float]:
         # Init refused a side under both seams, so exactly one builder is set.
-        def fitness(genome: tuple[float, ...]) -> float:
+        def run_seed(genome: tuple[float, ...], seed: int) -> float:
+            # Rebuilt from the genome FOR EACH seed episode: the builder types
+            # cannot enforce that their products are stateless, so a stateful
+            # selector/policy reused across seeds would leak counters, caches,
+            # or recurrent state from one episode into the next — making a
+            # seed's result depend on evaluation order instead of only
+            # (scenario, seed, genome). A fresh build per episode closes that
+            # structurally.
             selector = (
                 selector_builder(genome) if selector_builder is not None else None
             )
             factory = factory_builder(genome) if factory_builder is not None else None
-            total = math.fsum(
-                spec.fitness(
-                    self._run_episode(spec, seed, selector=selector, factory=factory)
-                )
-                for seed in self._fitness_seeds
+            return spec.fitness(
+                self._run_episode(spec, seed, selector=selector, factory=factory)
             )
+
+        def fitness(genome: tuple[float, ...]) -> float:
+            total = math.fsum(run_seed(genome, seed) for seed in self._fitness_seeds)
             return total / len(self._fitness_seeds)
 
         return fitness

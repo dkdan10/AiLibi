@@ -790,6 +790,26 @@ def test_rollout_injected_accepts_an_explicit_agent_factory() -> None:
     assert explicit.meetings == default_episode.meetings
 
 
+def test_build_interposition_factory_rejects_out_of_range_spent_counts() -> None:
+    """The exported factory validates spent-use counts itself (fail loud).
+
+    ``rollout_injected`` validates its own staged state, but the factory is a
+    public seam that accepts the mapping independently — and its tracker
+    seeding subtracts from the map allowance, so a too-large count would
+    silently clamp to zero remaining and a negative one would mint extra
+    presses, corrupting every mask instead of failing at construction.
+    """
+
+    game_map = load_canonical_map()
+    cap = game_map.emergency.uses_per_player
+    with pytest.raises(ValueError, match="outside"):
+        build_interposition_factory(game_map=game_map, emergency_uses_spent={"p-1": -1})
+    with pytest.raises(ValueError, match="outside"):
+        build_interposition_factory(
+            game_map=game_map, emergency_uses_spent={"p-1": cap + 1}
+        )
+
+
 def test_rollout_injected_refuses_a_supplied_factory_with_spent_emergencies() -> None:
     """Staged spent button uses + an explicit factory fail loud (Task 18.23).
 

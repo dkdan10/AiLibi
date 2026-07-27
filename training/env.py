@@ -514,12 +514,27 @@ def build_interposition_factory(
     carry nonzero ``WorldState.emergency_uses``, and a tracker seeded to the
     map-wide full allowance would advertise an engine-rejected emergency as
     engine-legal, corrupting the mask contract. Default ``None`` (no spent
-    uses) is the seeded-game default, byte-identical to before.
+    uses) is the seeded-game default, byte-identical to before. Counts outside
+    ``[0, uses_per_player]`` fail loud HERE, at construction: the tracker
+    seeding below subtracts them from the map allowance, so a too-large count
+    would silently clamp to zero remaining and a negative one would mint extra
+    presses — corrupting every mask the factory's agents build, whether the
+    mapping arrived through :meth:`TacticalRolloutEnv.rollout_injected` (which
+    also validates its staged state) or directly from a caller's config.
     """
 
     sabotage_kinds = tuple(sorted(game_map.sabotages))
     emergency_uses = game_map.emergency.uses_per_player
     spent = dict(emergency_uses_spent) if emergency_uses_spent is not None else {}
+    for player_id, used in spent.items():
+        if not 0 <= used <= emergency_uses:
+            raise ValueError(
+                f"emergency_uses_spent has {used} for {player_id!r}, outside "
+                f"[0, {emergency_uses}]; the engine counts presses up from 0 "
+                "to the map cap, so any other value has no game provenance "
+                "(a negative count would mint extra button presses, a "
+                "too-large one would silently zero the tracker)"
+            )
 
     def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
         policy: CrewmatePolicy | ImpostorPolicy
