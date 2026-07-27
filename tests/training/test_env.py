@@ -592,3 +592,262 @@ def test_action_mask_split_vocabulary_is_disjoint() -> None:
     for intent in mask.engine_legal:
         assert intent not in mask.illegal
     assert legal  # non-empty (WAIT is always legal)
+
+
+# --------------------------------------------------------------------------- #
+# The initial_state injection seam (Task 18.23)                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_injecting_the_seeded_state_matches_the_seeded_path_exactly() -> None:
+    """The seam changes nothing but the SOURCE of s0.
+
+    Injecting exactly the state ``seed_initial_state`` would have produced must
+    yield an episode identical to the default seeded no-replay path — frames,
+    hash chain, events, meetings, and the derived roster fields alike — so the
+    injection path provably shares the whole live-assembly machinery instead of
+    forking it.
+    """
+
+    env = _env(no_replay=True)
+    seeded_state = _base_state(load_canonical_map())
+    injected = env.rollout_injected(seeded_state)
+    seeded = env.rollout(0)
+    assert injected.state_hashes == seeded.state_hashes
+    assert injected.frames == seeded.frames
+    assert injected.events == seeded.events
+    assert injected.meetings == seeded.meetings
+    assert injected.descriptors == seeded.descriptors
+    assert injected.num_players == seeded.num_players
+    assert injected.num_impostors == seeded.num_impostors
+    assert injected.tasks_per_crewmate == seeded.tasks_per_crewmate
+
+
+def test_injected_mid_game_state_opens_the_frame_chain_at_its_tick() -> None:
+    state = replace(_base_state(load_canonical_map()), tick=17)
+    rollout = _env(no_replay=True).rollout_injected(state)
+    assert rollout.seed == 0
+    assert rollout.frames[0].kind == "initial"
+    assert rollout.frames[0].tick == 17
+    assert rollout.num_players == _NUM_PLAYERS
+    assert rollout.num_impostors == _NUM_IMPOSTORS
+    assert rollout.tasks_per_crewmate == _TASKS
+
+
+def test_rollout_injected_requires_no_replay() -> None:
+    env = _env()  # default: the recording path
+    state = _base_state(load_canonical_map())
+    with pytest.raises(ValueError, match="no_replay=True"):
+        env.rollout_injected(state)
+
+
+def test_rollout_injected_requires_tick_headroom() -> None:
+    state = replace(_base_state(load_canonical_map()), tick=40)
+    env = _env(no_replay=True, max_ticks=40)
+    with pytest.raises(ValueError, match="max_ticks"):
+        env.rollout_injected(state)
+
+
+def test_headless_game_refuses_initial_state_on_the_recording_path() -> None:
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+    with tempfile.TemporaryDirectory(prefix="ailibi-inject-") as tmp:
+        with pytest.raises(ValueError, match="no-replay training path"):
+            HeadlessGame(
+                seed=0,
+                game_map=game_map,
+                agent_factory=build_default_agent_factory(),
+                replay_path=Path(tmp) / "refused.jsonl",
+                num_players=_NUM_PLAYERS,
+                num_impostors=_NUM_IMPOSTORS,
+                tasks_per_crewmate=_TASKS,
+                initial_state=state,
+            )
+
+
+def test_headless_game_validates_injected_state_consistency() -> None:
+    """Every seed/roster/phase/map disagreement is a loud constructor error."""
+
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+
+    def _game(**overrides: object) -> HeadlessGame:
+        kwargs: dict[str, object] = {
+            "seed": 0,
+            "game_map": game_map,
+            "agent_factory": build_default_agent_factory(),
+            "replay_path": None,
+            "num_players": _NUM_PLAYERS,
+            "num_impostors": _NUM_IMPOSTORS,
+            "tasks_per_crewmate": _TASKS,
+            "initial_state": state,
+        }
+        kwargs.update(overrides)
+        return HeadlessGame(**kwargs)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="seed"):
+        _game(seed=1)
+    with pytest.raises(ValueError, match="num_players"):
+        _game(num_players=_NUM_PLAYERS - 1)
+    with pytest.raises(ValueError, match="impostors"):
+        _game(num_impostors=_NUM_IMPOSTORS + 1)
+    with pytest.raises(ValueError, match="PLAY"):
+        _game(initial_state=replace(state, phase="MEETING"))
+    with pytest.raises(ValueError, match="map"):
+        _game(initial_state=replace(state, map="some_other_map"))
+
+
+def test_injected_state_seeds_the_emergency_mask_tracker() -> None:
+    """An injected state's spent button uses reach the mask (Task 18.23).
+
+    The mask's emergency tracker is policy-side (uses-remaining is not on the
+    observation surface), so a mid-game injected state with spent
+    ``emergency_uses`` must seed it — a tracker at the map-wide full allowance
+    would advertise an engine-rejected emergency as engine-legal and corrupt
+    the legal-action signal.
+    """
+
+    game_map = load_canonical_map()
+    cap = game_map.emergency.uses_per_player
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    emergency = EmergencyMeetingIntent(actor=crew_id, type="emergency")
+
+    def _first_mask_for(state: WorldState) -> ActionMask:
+        captured: dict[PlayerId, ActionMask] = {}
+
+        def capture(decision: MaskedDecision) -> ActionIntent:
+            if decision.packet.agent_id == crew_id and crew_id not in captured:
+                captured[crew_id] = decision.mask
+            return decision.fsm_intent
+
+        env = _env(no_replay=True, intent_selector=capture, max_ticks=12)
+        env.rollout_injected(state)
+        return captured[crew_id]
+
+    # All uses spent in the staged state: the mask must mark the emergency
+    # illegal, in agreement with the engine.
+    spent_state = replace(base, emergency_uses={crew_id: cap})
+    assert not _first_mask_for(spent_state).is_engine_legal(emergency)
+    assert _engine_rejects(spent_state, emergency, game_map)
+
+    # The unspent control: same staged shape, full allowance, mask legal.
+    assert _first_mask_for(base).is_engine_legal(emergency)
+    assert not _engine_rejects(base, emergency, game_map)
+
+
+def test_rollout_injected_rejects_invalid_emergency_counters() -> None:
+    """Out-of-range / roster-foreign staged counters fail loud at the seam.
+
+    The mask trackers are seeded by subtracting the staged spent-use counts
+    from the map allowance, and the engine counts presses up from 0 — a
+    negative count would mint extra button presses, so it has no game
+    provenance and must never reach the factory.
+    """
+
+    game_map = load_canonical_map()
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    env = _env(no_replay=True)
+    with pytest.raises(ValueError, match="outside"):
+        env.rollout_injected(replace(base, emergency_uses={crew_id: -1}))
+    with pytest.raises(ValueError, match="outside"):
+        env.rollout_injected(
+            replace(
+                base,
+                emergency_uses={crew_id: game_map.emergency.uses_per_player + 1},
+            )
+        )
+    with pytest.raises(ValueError, match="not on its roster"):
+        env.rollout_injected(replace(base, emergency_uses={"p-99": 1}))
+
+
+def test_rollout_injected_accepts_an_explicit_agent_factory() -> None:
+    """The campaign-agent seam: an explicit factory replaces the default one.
+
+    ``agent_factory`` swaps WHO builds the agents (e.g. the coevo factory's
+    memory-aware wrappers), never the machinery around them — so handing the
+    seam the exact factory the default path would have built must reproduce
+    the default injected episode byte-for-byte.
+    """
+
+    game_map = load_canonical_map()
+    state = replace(_base_state(game_map), tick=10)
+    default_episode = _env(no_replay=True).rollout_injected(state)
+    factory = build_interposition_factory(
+        game_map=game_map,
+        intent_selector=None,
+        emergency_uses_spent=state.emergency_uses,
+    )
+    explicit = _env(no_replay=True).rollout_injected(state, agent_factory=factory)
+    assert explicit.state_hashes == default_episode.state_hashes
+    assert explicit.frames == default_episode.frames
+    assert explicit.events == default_episode.events
+    assert explicit.meetings == default_episode.meetings
+
+
+def test_build_interposition_factory_rejects_out_of_range_spent_counts() -> None:
+    """The exported factory validates spent-use counts itself (fail loud).
+
+    ``rollout_injected`` validates its own staged state, but the factory is a
+    public seam that accepts the mapping independently — and its tracker
+    seeding subtracts from the map allowance, so a too-large count would
+    silently clamp to zero remaining and a negative one would mint extra
+    presses, corrupting every mask instead of failing at construction.
+    """
+
+    game_map = load_canonical_map()
+    cap = game_map.emergency.uses_per_player
+    with pytest.raises(ValueError, match="outside"):
+        build_interposition_factory(game_map=game_map, emergency_uses_spent={"p-1": -1})
+    with pytest.raises(ValueError, match="outside"):
+        build_interposition_factory(
+            game_map=game_map, emergency_uses_spent={"p-1": cap + 1}
+        )
+
+
+def test_rollout_injected_refuses_a_supplied_factory_with_spent_emergencies() -> None:
+    """Staged spent button uses + an explicit factory fail loud (Task 18.23).
+
+    Only the interposition factory takes ``emergency_uses_spent``; a supplied
+    factory's wrappers seed every agent's tracker at the map-wide full
+    allowance, so its policies would be told an engine-rejected emergency
+    press is legal — a silently distorted episode rather than an error.
+    """
+
+    game_map = load_canonical_map()
+    base = replace(_base_state(game_map), tick=10)
+    crew_id = next(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )
+    state = replace(base, emergency_uses={**base.emergency_uses, crew_id: 1})
+    env = _env(no_replay=True)
+    factory = build_interposition_factory(game_map=game_map)
+    with pytest.raises(ValueError, match="spent emergency_uses"):
+        env.rollout_injected(state, agent_factory=factory)
+    # The all-zero staged shape stays fine through the same factory seam
+    # (pinned end-to-end by the explicit-factory equality test above).
+
+
+def test_rollout_injected_rejects_competing_agent_seams() -> None:
+    """An explicit factory plus a constructor selector is refused, fail loud.
+
+    Both claim the whole agent seam; silently ignoring either would run a
+    different episode than the caller configured (AGENTS.md no silent
+    fallbacks).
+    """
+
+    game_map = load_canonical_map()
+    state = _base_state(game_map)
+
+    def delegate(decision: MaskedDecision) -> ActionIntent:
+        return decision.fsm_intent
+
+    env = _env(no_replay=True, intent_selector=delegate)
+    factory = build_interposition_factory(game_map=game_map)
+    with pytest.raises(ValueError, match="competing agent seams"):
+        env.rollout_injected(state, agent_factory=factory)

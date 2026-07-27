@@ -1438,6 +1438,7 @@ class HeadlessGame:
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
         rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
+        initial_state: WorldState | None = None,
     ) -> None:
         # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
         # game through :meth:`run_unrecorded` writing NOTHING to disk (no
@@ -1474,6 +1475,65 @@ class HeadlessGame:
                 "record, so a crew_tactical_policy_stamp has nothing to attribute; "
                 "drop the stamp, or pass a replay_path to record and stamp the game."
             )
+        # The scenario-staging injection seam (Task 18.23): an explicit
+        # ``initial_state`` bypasses ``seed_initial_state`` on the NO-REPLAY
+        # training path only. Default ``None`` = absent = the seeded default,
+        # byte-identical to today's path on every entry point. The guards below
+        # fail loud (AGENTS.md "no silent fallbacks") on every construction that
+        # could silently mis-attribute or mis-record an injected episode:
+        #   1. a replay-WRITING construction is refused — replay reconstruction
+        #      re-seeds from the seed and verifies every recorded state_hash
+        #      against that walk, a chain an injected mid-game episode does not
+        #      have, so a recorded injected game would be unreconstructable;
+        #   2. the injected state must actually be runnable by ``_run_loop``
+        #      (``phase == "PLAY"``) on this game's map;
+        #   3. the seed / roster constructor parameters ride every consumer
+        #      (``_game_id``, the training env's episode record), so a state
+        #      whose own ``seed`` / roster disagrees with them is a caller bug,
+        #      never silently re-labeled.
+        if initial_state is not None:
+            if records_replay:
+                raise ValueError(
+                    "an injected initial_state rides the no-replay training path "
+                    "only (Task 18.23): replay reconstruction verifies recorded "
+                    "state hashes an injected episode does not have. Pass "
+                    "replay_path=None to inject, or drop initial_state to record "
+                    "the seeded default."
+                )
+            if initial_state.phase != "PLAY":
+                raise ValueError(
+                    "an injected initial_state must be a runnable PLAY-phase "
+                    f"state, got phase={initial_state.phase!r}"
+                )
+            if initial_state.map != game_map.id:
+                raise ValueError(
+                    f"injected initial_state is for map {initial_state.map!r} but "
+                    f"this game runs {game_map.id!r}"
+                )
+            if initial_state.seed != seed:
+                raise ValueError(
+                    f"injected initial_state carries seed {initial_state.seed} but "
+                    f"the game was constructed with seed {seed}; the constructor "
+                    "seed keys every consumer (game id, episode records), so the "
+                    "two must agree"
+                )
+            if len(initial_state.players) != num_players:
+                raise ValueError(
+                    f"injected initial_state has {len(initial_state.players)} "
+                    f"players but the game was constructed with "
+                    f"num_players={num_players}"
+                )
+            state_impostors = sum(
+                1
+                for player in initial_state.players.values()
+                if player.role == "IMPOSTOR"
+            )
+            if state_impostors != num_impostors:
+                raise ValueError(
+                    f"injected initial_state has {state_impostors} impostors but "
+                    f"the game was constructed with num_impostors={num_impostors}"
+                )
+        self._initial_state = initial_state
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
@@ -1638,13 +1698,19 @@ class HeadlessGame:
                 "and requires replay_path=None; a recording game uses run()."
             )
 
-        state = seed_initial_state(
-            seed=self._seed,
-            game_map=self._game_map,
-            num_players=self._num_players,
-            num_impostors=self._num_impostors,
-            tasks_per_crewmate=self._tasks_per_crewmate,
-        )
+        # The Task 18.23 injection seam: an explicit initial_state (validated at
+        # construction) replaces the seeded default. With the seam unused this
+        # branch is the pre-18.23 seeding, byte-identical.
+        if self._initial_state is not None:
+            state = self._initial_state
+        else:
+            state = seed_initial_state(
+                seed=self._seed,
+                game_map=self._game_map,
+                num_players=self._num_players,
+                num_impostors=self._num_impostors,
+                tasks_per_crewmate=self._tasks_per_crewmate,
+            )
         initial_state = state
         observation_service = ObservationService(
             game_map=self._game_map,

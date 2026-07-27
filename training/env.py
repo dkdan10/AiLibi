@@ -54,12 +54,19 @@ disk and assembling the episode from the live trajectory instead of a replay fil
 ``rng_state`` with a non-committed codec, so it is REFUSED unless ``no_replay`` is
 set — trajectories are identical under either mode, so training on the fast path
 transfers to the recording path exactly.
+
+Task 18.23 adds the scenario-staging integration on the same no-replay path:
+:meth:`TacticalRolloutEnv.rollout_injected` runs one episode from an injected
+mid-game ``WorldState`` (the ``HeadlessGame`` ``initial_state`` seam, bypassing
+``seed_initial_state``) and assembles it live — the skill-scenario library in
+:mod:`training.scenarios` builds those states and scores the episodes from
+tactical facts only.
 """
 
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
@@ -492,6 +499,7 @@ def build_interposition_factory(
     *,
     game_map: Map,
     intent_selector: IntentSelector | None = None,
+    emergency_uses_spent: Mapping[PlayerId, int] | None = None,
 ) -> AgentFactory:
     """Build the injected :data:`AgentFactory` (the ONLY interposition seam).
 
@@ -500,10 +508,33 @@ def build_interposition_factory(
     ``intent_selector=None`` (the default) the wrapper is a transparent FSM
     delegate — the scripted anchor — so a rollout is byte-identical to the
     production loop; a learned policy (15.10+) slots in as the selector.
+
+    ``emergency_uses_spent`` seeds each wrapper's mask-side emergency tracker
+    with already-spent button uses (Task 18.23): an injected mid-game state can
+    carry nonzero ``WorldState.emergency_uses``, and a tracker seeded to the
+    map-wide full allowance would advertise an engine-rejected emergency as
+    engine-legal, corrupting the mask contract. Default ``None`` (no spent
+    uses) is the seeded-game default, byte-identical to before. Counts outside
+    ``[0, uses_per_player]`` fail loud HERE, at construction: the tracker
+    seeding below subtracts them from the map allowance, so a too-large count
+    would silently clamp to zero remaining and a negative one would mint extra
+    presses — corrupting every mask the factory's agents build, whether the
+    mapping arrived through :meth:`TacticalRolloutEnv.rollout_injected` (which
+    also validates its staged state) or directly from a caller's config.
     """
 
     sabotage_kinds = tuple(sorted(game_map.sabotages))
     emergency_uses = game_map.emergency.uses_per_player
+    spent = dict(emergency_uses_spent) if emergency_uses_spent is not None else {}
+    for player_id, used in spent.items():
+        if not 0 <= used <= emergency_uses:
+            raise ValueError(
+                f"emergency_uses_spent has {used} for {player_id!r}, outside "
+                f"[0, {emergency_uses}]; the engine counts presses up from 0 "
+                "to the map cap, so any other value has no game provenance "
+                "(a negative count would mint extra button presses, a "
+                "too-large one would silently zero the tracker)"
+            )
 
     def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
         policy: CrewmatePolicy | ImpostorPolicy
@@ -515,7 +546,7 @@ def build_interposition_factory(
         return _InterposedAgent(
             inner,
             sabotage_kinds=sabotage_kinds,
-            emergency_uses_per_player=emergency_uses,
+            emergency_uses_per_player=max(0, emergency_uses - spent.get(agent_id, 0)),
             intent_selector=intent_selector,
         )
 
@@ -726,10 +757,182 @@ class TacticalRolloutEnv:
                 "TacticalRolloutEnv reached MEETING_PHASE_REACHED with a meeting "
                 "runner installed; the always-installed-runner invariant is broken"
             )
-        return self._episode_from_unrecorded(result, seed)
+        return self._episode_from_unrecorded(
+            result,
+            seed,
+            num_players=self._num_players,
+            num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+        )
+
+    def rollout_injected(
+        self,
+        initial_state: WorldState,
+        *,
+        agent_factory: AgentFactory | None = None,
+    ) -> EpisodeRollout:
+        """Run one no-replay episode from an injected mid-game state (Task 18.23).
+
+        The env half of the scenario-staging seam: drives
+        :meth:`HeadlessGame.run_unrecorded` with ``initial_state`` injected
+        (bypassing ``seed_initial_state``) and assembles the live trajectory into
+        a typed :class:`~training.rollout.EpisodeRollout` exactly like
+        :meth:`rollout` in no-replay mode. Requires ``no_replay=True`` at
+        construction — an injected episode has no recorded state-hash chain, so
+        the recording path is structurally wrong for it and the mismatch fails
+        loud here rather than deep in reconstruction (AGENTS.md "no silent
+        fallbacks").
+
+        ``agent_factory`` (default ``None`` = the env's interposition factory
+        with the constructor's ``intent_selector``) lets a scenario episode run
+        the campaign's OWN memory-aware agents — e.g. the factory
+        ``training.coevo.factory.build_coevo_factory`` builds over the sides'
+        learned policies, whose wrappers read the inner agent's live
+        ``AgentMemory`` (the v3 meeting-history / last-seen channels an
+        :data:`IntentSelector` never sees). Mutually exclusive with a
+        constructor ``intent_selector`` (fail loud rather than silently ignore
+        one seam). A supplied factory builds its own mid-game trackers at the
+        map-wide full allowance — only the interposition factory takes the
+        staged spent-use counts — so a staged state with nonzero
+        ``emergency_uses`` REFUSES an explicit factory rather than silently
+        running agents whose legality model disagrees with the engine.
+
+        The roster (``num_players`` / ``num_impostors``) is derived from the
+        injected state itself, so the episode record is consistent with the
+        state by construction; the env's constructor roster knobs describe the
+        SEEDED path and are deliberately not consulted. ``tasks_per_crewmate``
+        has no seeder provenance for a mid-game state, so the record carries the
+        max per-living-crewmate instance count (0 when no living crewmate owns
+        one). The game seed is ``initial_state.seed`` — the scenario library
+        stamps it alongside the canonical ``EngineRng.from_seed(seed)`` rng
+        snapshot, so determinism is inherited from ``advance_tick`` purity.
+
+        Scenario episodes are truncated by construction (the injected tick plus
+        a short horizon), so they surface ``outcome="TICK_BUDGET"`` /
+        ``truncated=True`` records that the reward channel's terminal gate
+        refuses; an episode that does reach ``GAME_OVER`` inside its horizon
+        keeps its truthful terminal shape, and scenario fitness reads dense
+        tactical facts either way (:mod:`training.scenarios`), never
+        ``compute_shaped_reward``.
+        """
+
+        if not self._no_replay:
+            raise ValueError(
+                "rollout_injected() rides the no-replay live-assembly path "
+                "(Task 18.23): an injected episode has no recorded hash chain "
+                "to reconstruct, so the env must be constructed with "
+                "no_replay=True."
+            )
+        if agent_factory is not None and self._intent_selector is not None:
+            raise ValueError(
+                "rollout_injected() received an explicit agent_factory but the "
+                "env was constructed with an intent_selector; the two are "
+                "competing agent seams, so pass exactly one (drop the selector "
+                "to drive the episode through the supplied factory)."
+            )
+        if initial_state.tick >= self._max_ticks:
+            raise ValueError(
+                f"injected initial_state starts at tick {initial_state.tick} "
+                f"but the env's tick budget is max_ticks={self._max_ticks}; the "
+                "episode could not advance a single tick. Raise max_ticks above "
+                "the staged tick plus the scenario horizon."
+            )
+        # The mask-side emergency trackers are seeded by SUBTRACTING the staged
+        # spent-use counts from the map allowance below, and the engine itself
+        # counts presses up from 0 — so an out-of-range counter (a negative
+        # value minting extra presses, or a roster-foreign key) is a state no
+        # game can produce and must fail loud here, not corrupt the mask.
+        uses_cap = self._game_map.emergency.uses_per_player
+        for player_id, used in initial_state.emergency_uses.items():
+            if player_id not in initial_state.players:
+                raise ValueError(
+                    f"injected initial_state carries an emergency_uses entry for "
+                    f"{player_id!r}, which is not on its roster"
+                )
+            if not 0 <= used <= uses_cap:
+                raise ValueError(
+                    f"injected initial_state has emergency_uses={used} for "
+                    f"{player_id!r}, outside [0, {uses_cap}]; the engine counts "
+                    "presses up from 0 to the map cap, so any other value has "
+                    "no game provenance"
+                )
+        if agent_factory is not None and any(
+            used > 0 for used in initial_state.emergency_uses.values()
+        ):
+            raise ValueError(
+                "rollout_injected() received an explicit agent_factory for a "
+                "staged state with spent emergency_uses: only the default "
+                "interposition factory seeds its mask trackers from the staged "
+                "counts, and a supplied factory (e.g. build_coevo_factory's "
+                "wrappers) starts every agent at the map-wide full allowance — "
+                "its policies would be told an engine-rejected emergency press "
+                "is legal, distorting the episode. Stage zero spent uses, or "
+                "drive the episode through the interposition seam."
+            )
+        num_players = len(initial_state.players)
+        num_impostors = sum(
+            1 for player in initial_state.players.values() if player.role == "IMPOSTOR"
+        )
+        instances_per_crewmate = [
+            sum(1 for task in initial_state.tasks.values() if task.owner == pid)
+            for pid, player in initial_state.players.items()
+            if player.alive and player.role == "CREWMATE"
+        ]
+        tasks_per_crewmate = max(instances_per_crewmate, default=0)
+        # Default path: the interposition factory, its mask-side emergency
+        # trackers seeded with the staged state's spent uses so the mask keeps
+        # mirroring engine legality mid-game. A supplied factory replaces the
+        # whole agent seam (the campaign's memory-aware wrappers) and owns its
+        # own trackers.
+        factory = (
+            agent_factory
+            if agent_factory is not None
+            else build_interposition_factory(
+                game_map=self._game_map,
+                intent_selector=self._intent_selector,
+                emergency_uses_spent=initial_state.emergency_uses,
+            )
+        )
+        game = HeadlessGame(
+            seed=initial_state.seed,
+            game_map=self._game_map,
+            agent_factory=factory,
+            replay_path=None,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+            scheduler=TickScheduler(max_ticks=self._max_ticks),
+            meeting_runner=self._build_meeting_runner(),
+            rng_hash_policy=self._rng_hash_policy,
+            initial_state=initial_state,
+        )
+        # ``tasks_per_crewmate`` above only feeds ``seed_initial_state``, which
+        # the injected path bypasses; the episode record below carries the
+        # state-derived count instead.
+        result = game.run_unrecorded()
+        if result.outcome == "MEETING_PHASE_REACHED":
+            # Structurally unreachable: a runner is ALWAYS installed. Fail loud if
+            # the invariant is ever violated rather than silently truncate.
+            raise RuntimeError(
+                "TacticalRolloutEnv reached MEETING_PHASE_REACHED with a meeting "
+                "runner installed; the always-installed-runner invariant is broken"
+            )
+        return self._episode_from_unrecorded(
+            result,
+            initial_state.seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+        )
 
     def _episode_from_unrecorded(
-        self, result: UnrecordedGameResult, seed: int
+        self,
+        result: UnrecordedGameResult,
+        seed: int,
+        *,
+        num_players: int,
+        num_impostors: int,
+        tasks_per_crewmate: int,
     ) -> EpisodeRollout:
         """Assemble a typed :class:`EpisodeRollout` from a no-replay live trace.
 
@@ -774,7 +977,10 @@ class TacticalRolloutEnv:
         win_reason: str | None = None
         truncated = False
         outcome: EpisodeOutcome
-        final_tick = 0
+        # The staged tick for an injected episode (Task 18.23); 0 on the seeded
+        # default path, so a zero-step episode still reports a truthful final
+        # tick.
+        final_tick = initial_state.tick
 
         # The seeded pre-action state opens the frame chain (kind="initial"),
         # exactly like reconstruct_episode, so the potential series telescopes
@@ -909,11 +1115,17 @@ class TacticalRolloutEnv:
                 f"{result.outcome!r}"
             )
 
+        # Rate descriptors (meeting_trigger_rate, do_task_cadence) normalize
+        # over the CAPTURED horizon: an injected episode's clock starts at the
+        # staged tick, so the absolute final_tick would dilute its rates by
+        # ticks the episode never saw (Task 18.23). On the seeded default path
+        # the staged tick is 0, so this is the pre-18.23 value exactly;
+        # ``EpisodeRollout.final_tick`` below stays absolute.
         descriptors = _build_descriptors(
             events=events,
             meetings=meetings,
             do_task_emissions=do_task_emissions,
-            final_tick=final_tick,
+            final_tick=final_tick - initial_state.tick,
             roles=roles,
             outcome=outcome,
             winner=winner,
@@ -922,9 +1134,9 @@ class TacticalRolloutEnv:
 
         return EpisodeRollout(
             seed=seed,
-            num_players=self._num_players,
-            num_impostors=self._num_impostors,
-            tasks_per_crewmate=self._tasks_per_crewmate,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
             episode_boundary=episode_boundary,
             truncated=truncated,
             outcome=outcome,
