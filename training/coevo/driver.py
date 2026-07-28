@@ -216,6 +216,7 @@ from training.coevo.hall_of_fame import (
     OpponentStalenessCap,
     OpponentStalenessLedger,
     Side,
+    _entry_exists,
     _refuse_unwritable_genome,
     sample_opponents,
     write_loadable_artifact,
@@ -994,12 +995,12 @@ def _preflight_fresh_hall_root(hall_root: Path) -> None:
     for side in ("impostor", "crew"):
         side_dir = hall_root / side
         index_path = side_dir / "hall_of_fame.json"
-        if index_path.exists():
+        if _entry_exists(index_path):
             raise FileExistsError(
                 f"a hall of fame already exists at {index_path}; the campaign "
                 "never clobbers a committed pool (pick a fresh hall_root)"
             )
-        if side_dir.exists():
+        if _entry_exists(side_dir):
             stray = sorted(
                 child.name
                 for child in side_dir.iterdir()
@@ -1140,14 +1141,14 @@ def _validate_config(
     # fixing only the one that was reported would leave the identical defect one
     # line away, which is the pattern the last three rounds have been about.
     rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
-    if rows_path.exists() or rows_path.is_symlink():
+    if _entry_exists(rows_path):
         raise FileExistsError(
             f"campaign rows already exist at {rows_path}; the driver never "
             "clobbers a recorded campaign (pick a fresh work_dir). A dangling "
             "symlink counts: it is a directory entry the later write collides on"
         )
     gen_champions_dir = config.work_dir / GEN_CHAMPIONS_DIRNAME
-    if gen_champions_dir.exists() or gen_champions_dir.is_symlink():
+    if _entry_exists(gen_champions_dir):
         # The standing work-dir no-clobber discipline, extended to the 18.31
         # per-generation champion artifacts: they are campaign evidence, so a
         # second run never writes into a recorded tree.

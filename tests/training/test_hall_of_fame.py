@@ -48,6 +48,7 @@ from training.bakeoff.map_elites import (
     write_archive_cell_artifacts,
 )
 from training.bakeoff.policy_es import TARGET_KILL_SLOTS, policy_genome_length
+from training.coevo import hall_of_fame
 from training.coevo.hall_of_fame import (
     MAP_ELITES_FOUNDER_ORIGIN,
     TRAINED_AGAINST_FSM,
@@ -1463,6 +1464,28 @@ def test_a_dangling_loadable_sidecar_is_still_pool_evidence(tmp_path: Path) -> N
         index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
         with pytest.raises(ValueError, match="metadata block is missing or null"):
             HallOfFame.load(root, "impostor")
+
+
+def test_the_side_family_registry_is_immutable(tmp_path: Path) -> None:
+    """``Final`` prevents rebinding, not mutation (Codex review on PR #314).
+
+    A module-level ``dict`` let any code add or replace an allowed side/family
+    mapping and change loadability validation globally for every hall created or
+    loaded afterwards — validation owned by mutable module state rather than by
+    the state passed in. This is the round-6 module-level-mutable-state finding
+    reappearing in a registry I added in round 14.
+    """
+
+    with pytest.raises(TypeError):
+        hall_of_fame._SIDE_ENCODERS["crew"] = frozenset({"v3"})  # type: ignore[index]
+    with pytest.raises(AttributeError):
+        hall_of_fame._SIDE_ENCODERS.clear()  # type: ignore[attr-defined]
+
+    # And the refusal it backs still holds afterwards.
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.create(
+            tmp_path, "crew", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+        )
 
 
 def test_a_pool_may_not_declare_the_other_sides_encoder_family(

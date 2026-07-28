@@ -2222,36 +2222,136 @@ def test_resume_refuses_a_changed_per_game_cost_cap(
         )
 
 
-def test_a_custom_runner_records_no_game_budget(tmp_path: Path) -> None:
-    """No over-reach: a custom runner never builds that budget (Codex #314).
+def test_a_custom_runner_records_no_default_runner_inputs() -> None:
+    """The default-runner block is present or absent WHOLE (Codex on PR #314).
 
-    ``run_tournament_eval`` resolves a ``GameBudget`` only in its
-    default-meeting-runner branch, so recording the cap for a caller that
-    supplies its own runner would refuse a resume over a knob the recorder never
-    read — the round-9 over-refusal in new clothes.
+    ``run_tournament_eval`` installs a supplied ``meeting_runner_factory``
+    directly and only otherwise calls ``build_default_meeting_runner`` /
+    ``_resolve_game_budget`` — so every input those two read is consulted on one
+    branch and not the other. Recording any of them for a custom runner refuses
+    a resume over a knob the recorder never read (the round-9 over-refusal), and
+    worse, an unparseable one blocks such a leg from starting at all.
+
+    Rounds 14, 15 and 16 each filed one field of this block. Asserting the whole
+    block moves together is what makes a seventeenth field impossible to get
+    wrong.
     """
 
-    identity = realpath._recording_backend_identity(
-        custom_runner=True,
-        runner_identity="stub-runner",
-        game_map=load_canonical_map(),
-        num_players=4,
-        environment={"AILIBI_LLM_PROVIDER": "fake", "AILIBI_MAX_COST_USD": "9.99"},
-    )
-    assert identity[realpath._GAME_BUDGET_KEY] is None
+    def _identity(custom: bool, **env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=custom,
+            runner_identity="stub-runner" if custom else None,
+            game_map=load_canonical_map(),
+            num_players=4,
+            environment=env,
+        )
 
-    default_runner = realpath._recording_backend_identity(
-        custom_runner=False,
-        runner_identity=None,
-        game_map=load_canonical_map(),
-        num_players=4,
-        environment={"AILIBI_LLM_PROVIDER": "fake", "AILIBI_MAX_COST_USD": "9.99"},
+    hostile = {
+        "AILIBI_LLM_PROVIDER": "totally-unknown",
+        "AILIBI_MAX_COST_USD": "not-a-number",
+        "AILIBI_PROMPT_SET": "no-such-set",
+    }
+    custom = _identity(True, **hostile)
+    # Not merely equal-valued: ABSENT. Every one of these would otherwise have
+    # raised on the hostile values above, so a custom-runner leg could not start.
+    assert set(custom) == {
+        "custom_meeting_runner",
+        "meeting_runner_identity",
+        "game_map_sha256",
+    }
+    assert _identity(True, AILIBI_LLM_PROVIDER="fake") == _identity(
+        True, AILIBI_LLM_PROVIDER="anthropic", AILIBI_LLM_MEETING_MODEL="m"
     )
-    assert default_runner[realpath._GAME_BUDGET_KEY] == {
+
+    # The DEFAULT runner carries the whole block and still reads every knob —
+    # this narrowing must not reopen the round-6 finding that backend is protocol.
+    default = _identity(False, AILIBI_LLM_PROVIDER="fake", AILIBI_MAX_COST_USD="9.99")
+    assert default[realpath._GAME_BUDGET_KEY] == {
         "max_cost_usd": 9.99,
         "max_input_tokens": 1_000_000,
         "max_output_tokens": 200_000,
     }
+    for key in (
+        realpath._PROMPT_SET_KEY,
+        realpath._ROLL_CALL_KEY,
+        realpath._PROMPT_VERSIONS_KEY,
+        "provider",
+    ):
+        assert key in default
+    assert _identity(False, AILIBI_LLM_PROVIDER="fake") != _identity(
+        False, AILIBI_LLM_PROVIDER="anthropic"
+    )
+    with pytest.raises(RealPathRerankError, match="unknown AILIBI_LLM_PROVIDER"):
+        _identity(False, AILIBI_LLM_PROVIDER="totally-unknown")
+
+
+def test_the_recording_identity_covers_every_env_input_on_the_path() -> None:
+    """The ENUMERATION pin: the domain is checked, not just today's members.
+
+    Six rounds each added one field to the recording identity because each round
+    fixed the witness it was handed. This re-reads the modules the default
+    recording path actually calls and asserts that every ``AILIBI_*`` knob they
+    read is accounted for — so the NEXT knob fails the suite here instead of
+    arriving as a review finding.
+    """
+
+    import importlib
+    import re
+
+    found: set[str] = set()
+    for module_name in realpath.RECORDING_ENV_SOURCE_MODULES:
+        source = Path(importlib.import_module(module_name).__file__ or "").read_text(
+            encoding="utf-8"
+        )
+        found.update(re.findall(r'"(AILIBI_[A-Z0-9_]+)"', source))
+
+    missing = sorted(found - realpath.RECORDING_ENV_INPUTS)
+    assert not missing, (
+        f"the recording path reads {missing}, which the identity does not "
+        "account for. Add it to _default_runner_inputs AND to "
+        "RECORDING_ENV_INPUTS — a knob the identity misses is a resume that "
+        "adopts bytes recorded under different settings."
+    )
+    stale = sorted(realpath.RECORDING_ENV_INPUTS - found)
+    assert not stale, f"RECORDING_ENV_INPUTS names knobs nothing reads: {stale}"
+
+    # And the enumeration is actually WIRED: every knob moves the identity of a
+    # default-runner leg. Each is exercised under a base env where it is READ —
+    # an Ollama knob does not move a Featherless leg, and asserting otherwise
+    # would re-pin the round-9 over-refusal this identity was narrowed to avoid.
+    ollama = {"AILIBI_LLM_PROVIDER": "ollama"}
+    featherless = {"AILIBI_LLM_PROVIDER": "featherless"}
+    roll_call_capable = {
+        "AILIBI_LLM_PROVIDER": "fake",
+        "AILIBI_PROMPT_SET": "qwen3_6_27b",
+    }
+    cases: tuple[tuple[str, dict[str, str], str], ...] = (
+        ("AILIBI_LLM_PROVIDER", ollama, "featherless"),
+        ("AILIBI_LLM_MEETING_MODEL", ollama, "some-model"),
+        ("AILIBI_LLM_TRIGGER_MODEL", ollama, "other-model"),
+        ("AILIBI_OLLAMA_HOST", ollama, "elsewhere:11434"),
+        ("AILIBI_OLLAMA_SEED", ollama, "77"),
+        ("AILIBI_OLLAMA_NUM_CTX", ollama, "4096"),
+        ("AILIBI_FEATHERLESS_BASE_URL", featherless, "https://elsewhere.example"),
+        ("AILIBI_PROMPT_SET", ollama, "qwen3_32b"),
+        ("AILIBI_IMPOSTOR_ROLL_CALL", roll_call_capable, "1"),
+        ("AILIBI_MAX_COST_USD", ollama, "9.99"),
+    )
+    assert {knob for knob, _, _ in cases} == realpath.RECORDING_ENV_INPUTS
+
+    def _identity(env: dict[str, str]) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=False,
+            runner_identity=None,
+            game_map=load_canonical_map(),
+            num_players=4,
+            environment=env,
+        )
+
+    for knob, base, value in cases:
+        assert _identity({**base, knob: value}) != _identity(base), (
+            f"{knob} is enumerated but does not move the recording identity"
+        )
 
 
 def test_resume_refuses_a_manifest_dir_that_escapes_the_work_root(
@@ -2680,6 +2780,124 @@ def test_a_custom_runner_records_no_default_provider_settings(
     )
     with pytest.raises(RealPathRerankError, match="unknown AILIBI_LLM_PROVIDER"):
         _default(AILIBI_LLM_PROVIDER="totally-unknown")
+
+
+def test_tranche_keys_are_injective_over_seed_sets() -> None:
+    """The key IS the lookup, so it must be a function of the SET (Codex #314).
+
+    It keys the flock, manifest discovery, directory ownership and the drift
+    check. The endpoint-only form collided two ways: gapped lists sharing
+    endpoints, and the same set in a different ORDER. The docstring's excuse —
+    that the manifest records the exact seeds — was false, because finding the
+    manifest is what the key is for.
+    """
+
+    # Contiguous names are byte-unchanged: every committed and fixture name.
+    assert tranche_key([7]) == "7"
+    assert tranche_key([1, 2]) == "1-2"
+    assert tranche_key([4000, 4001, 4002]) == "4000-4002"
+
+    # A function of the SET, not the caller's order.
+    assert tranche_key([1, 2, 3]) == tranche_key([3, 2, 1]) == "1-3"
+
+    # Injective across the shapes that previously collided.
+    sets = ([4000, 4001, 4003], [4000, 4002, 4003], [4000, 4001, 4002, 4003])
+    keys = [tranche_key(list(seeds)) for seeds in sets]
+    assert len(set(keys)) == len(keys), keys
+
+    # Full digest, never a prefix — round 12's rule, since any prefix is the
+    # same collision bargain at a different probability.
+    gapped = tranche_key([4000, 4001, 4003])
+    assert len(gapped.removeprefix("4000-4003-")) == 64
+
+    # And it stays a usable filename token.
+    for seeds in ([1, 2], [4000, 4001, 4003], [-3, -1]):
+        realpath._validate_invocation_token(tranche_key(list(seeds)))
+
+
+def test_a_symlinked_replay_is_refused_before_it_is_read_or_written(
+    tmp_path: Path,
+) -> None:
+    """The recorder creates real files, never links (Codex on PR #314).
+
+    A dangling ``replay-seed-N.jsonl`` symlink read as simply missing, so the
+    element re-recorded — and ``ReplayLog``'s lazy append then followed the link
+    and created the replay at the external target, putting this leg's evidence
+    outside the candidate directory it claimed and later scored through it.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    candidate_dir = next(work_dir.glob("000-*"))
+    outside = tmp_path / "outside.jsonl"
+    replay = candidate_dir / "replay-seed-1.jsonl"
+    replay.unlink()
+    replay.symlink_to(outside)
+    assert not replay.exists() and replay.is_symlink()
+
+    with pytest.raises(RealPathRerankError, match="is a SYMLINK"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+    # Nothing was written through the link.
+    assert not outside.exists()
+
+
+def test_a_stale_same_tranche_claim_is_still_a_reservation(tmp_path: Path) -> None:
+    """A claim binds a directory to ``(tranche, label)`` (Codex on PR #314).
+
+    Excluding the caller's whole tranche let a later fresh leg with a DISTINCT
+    label but a colliding slug take a reservation an earlier manifest had
+    published and never created (a leg that failed before recording). A resume
+    of the original label then resolved its stale manifest to that same
+    directory, passed the whole-stamp check, and ranked the newer candidate's
+    games under the old name.
+
+    Both directions are pinned here, because the two loose readings of this rule
+    are each a defect this PR shipped once.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # An earlier leg on THIS tranche claimed 000-arm-a for label "arm a" and
+    # never created it. ``_safe_slug`` maps "arm a" and "arm-a" onto one slug.
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {"tranche": "1-2", "candidates": [{"label": "arm a", "dir": "000-arm-a"}]}
+        ),
+        encoding="utf-8",
+    )
+    assert not (work_dir / "000-arm-a").exists()
+
+    result = run_realpath_rerank(
+        [_util_candidate(label="arm-a")],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+    )
+    assert result.rows
+    # It stepped aside: the reservation is untouched and the new label recorded
+    # somewhere else entirely.
+    assert not (work_dir / "000-arm-a").exists()
+    assert (work_dir / "001-arm-a").is_dir()
+
+    # The OPPOSITE reading must not creep back: a fresh re-run of the SAME
+    # (tranche, label) whose directory exists still collides rather than
+    # stepping aside to a second copy (the round-11 defect).
+    with pytest.raises(FileExistsError):
+        run_realpath_rerank(
+            [_util_candidate(label="arm-a")],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+        )
 
 
 def test_ranking_path_may_not_name_another_legs_claimed_directory(

@@ -213,10 +213,28 @@ _LOADABLE_ENCODERS: Final[frozenset[str]] = _WIDTH_BEARING_ENCODERS | frozenset(
 #: the ``crew-option-features-*`` namespace and the impostor loader on the rest,
 #: so the split is the consuming entry point's, not a convention this module
 #: invented (Task 18.31).
-_SIDE_ENCODERS: Final[dict[str, frozenset[str]]] = {
-    "crew": frozenset({"crew-option-features-v1", "crew-option-features-v2"}),
-    "impostor": _WIDTH_BEARING_ENCODERS | frozenset({"impostor-option-features-v1"}),
-}
+_SIDE_ENCODERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "crew": frozenset({"crew-option-features-v1", "crew-option-features-v2"}),
+        "impostor": _WIDTH_BEARING_ENCODERS
+        | frozenset({"impostor-option-features-v1"}),
+    }
+)
+
+
+def _entry_exists(path: Path) -> bool:
+    """True iff a directory ENTRY exists at ``path`` — resolvable or not (18.31).
+
+    ``Path.exists()`` FOLLOWS symlinks, so it answers "does this resolve?" when
+    every no-clobber check here is asking "is there something at this name?". A
+    dangling link reads as absent, the check passes, and the collision arrives
+    later — after a generation of paid games, or as a silently downgraded freeze
+    format. Three review rounds filed one call site of this each before it was
+    written down once (Codex reviews on PR #314). ``training.coevo.driver``
+    imports this rather than restating it.
+    """
+
+    return path.exists() or path.is_symlink()
 
 
 def _refuse_side_family_mismatch(*, side: str, encoder_version: str) -> None:
@@ -496,7 +514,7 @@ def write_loadable_artifact(
         "weights_sha256": digest,
     }
 
-    if artifact_dir.exists():
+    if _entry_exists(artifact_dir):
         existing = sorted(child.name for child in artifact_dir.iterdir())
         if existing:
             raise FileExistsError(
@@ -838,12 +856,12 @@ class HallOfFame:
             )
         side_dir = root / side
         index_path = side_dir / _INDEX_FILENAME
-        if index_path.exists():
+        if _entry_exists(index_path):
             raise FileExistsError(
                 f"a hall of fame already exists at {index_path}; create never "
                 "clobbers a committed pool (load it instead)"
             )
-        if side_dir.exists():
+        if _entry_exists(side_dir):
             stray = sorted(
                 child.name
                 for child in side_dir.iterdir()
@@ -972,8 +990,7 @@ class HallOfFame:
                     # through a broken link instead of a deleted file (Codex
                     # review on PR #314). Presence here is about the directory
                     # ENTRY, so a dangling link is evidence too.
-                    (side_dir / entry["path"] / name).exists()
-                    or (side_dir / entry["path"] / name).is_symlink()
+                    _entry_exists(side_dir / entry["path"] / name)
                     for name in (_STAMP_FILENAME, _CONFIG_FILENAME)
                 )
             )
@@ -1112,7 +1129,7 @@ class HallOfFame:
             )
         path = f"gen-{generation}/{digest}"
         member_dir = self._side_dir / path
-        if member_dir.exists():
+        if _entry_exists(member_dir):
             raise ValueError(
                 f"member dir {member_dir} already exists on disk but is not in the "
                 "index — refusing to overwrite (on-disk drift)"

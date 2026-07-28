@@ -312,6 +312,46 @@ _GAME_BUDGET_KEY: Final[str] = "game_budget"
 #: provenance the runner stamps, not the selector that routes to it (18.31).
 _PROMPT_VERSIONS_KEY: Final[str] = "prompt_versions"
 
+#: EVERY ``AILIBI_*`` environment input the recording path can read, enumerated
+#: (Task 18.31). This is the domain :func:`_default_runner_inputs` must cover,
+#: stated as data so a test can check the coverage mechanically instead of a
+#: reviewer noticing the next omission.
+#:
+#: Derived by reading the two functions ``run_tournament_eval`` calls when no
+#: ``meeting_runner_factory`` is supplied:
+#:
+#: * ``build_default_meeting_runner`` -> ``llm.provider.build_default_client``
+#:   (the provider selector and its per-provider model/host/seed/ctx settings)
+#:   and the prompt loader (``AILIBI_PROMPT_SET``, ``AILIBI_IMPOSTOR_ROLL_CALL``);
+#: * ``eval.balance_eval._resolve_game_budget`` (``AILIBI_MAX_COST_USD``).
+#:
+#: ``ANTHROPIC_API_KEY`` / ``FEATHERLESS_API_KEY`` are deliberately ABSENT: a
+#: credential is not a recording protocol, and this mapping is written to disk.
+RECORDING_ENV_INPUTS: Final[frozenset[str]] = frozenset(
+    {
+        "AILIBI_LLM_PROVIDER",
+        "AILIBI_LLM_MEETING_MODEL",
+        "AILIBI_LLM_TRIGGER_MODEL",
+        "AILIBI_OLLAMA_HOST",
+        "AILIBI_OLLAMA_SEED",
+        "AILIBI_OLLAMA_NUM_CTX",
+        "AILIBI_FEATHERLESS_BASE_URL",
+        "AILIBI_PROMPT_SET",
+        "AILIBI_IMPOSTOR_ROLL_CALL",
+        "AILIBI_MAX_COST_USD",
+    }
+)
+
+#: The modules the enumeration above was read FROM. The coverage pin re-reads
+#: them, so a new knob added to any of them fails the suite.
+RECORDING_ENV_SOURCE_MODULES: Final[tuple[str, ...]] = (
+    "llm.provider",
+    "llm.ollama_client",
+    "llm.featherless_client",
+    "eval.balance_eval",
+    "agents.strategic.prompts.loader",
+)
+
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
 #: not identity: genome lengths collide across encoder families.
@@ -849,19 +889,49 @@ def _utc_now() -> str:
 
 
 def tranche_key(seeds: Sequence[int]) -> str:
-    """The committed tranche key for a seed list (``4000-4002``; ``4000`` if one).
+    """An INJECTIVE key for a seed set (``4000-4002``; ``4000`` if one).
 
-    Mirrors the 18.24 artifact names (``ranking-4000-4002.jsonl``). The key is
-    the FIRST and LAST seed in the caller's order, so a non-contiguous tranche
-    keys on its endpoints; the exact seed list is recorded in the leg manifest
-    and the pre-screen record, so nothing is lost by the abbreviation.
+    This value keys the tranche flock, manifest discovery, directory ownership
+    and the resume drift check, so two different experiments sharing a key are
+    treated as one: a fresh run publishes a manifest and then collides with the
+    other's directories, and a resume rejects its replay set as foreign.
+
+    The endpoint-only form it replaced was not injective in two ways, and the
+    docstring's excuse — that the exact seed list is recorded in the manifest,
+    "so nothing is lost by the abbreviation" — was false, because the key IS the
+    lookup that finds the manifest (Codex review on PR #314):
+
+    * non-contiguous lists collided on their endpoints (``[4000, 4001, 4003]``
+      and ``[4000, 4002, 4003]`` both keyed ``4000-4003``);
+    * the key read the caller's ORDER, so ``[1, 2, 3]`` and ``[3, 2, 1]`` — one
+      seed set recorded twice — keyed ``1-3`` and ``3-1`` and took two different
+      locks. ``generate_campaign_tables`` already canonicalises the seed set as
+      the experiment, so the recorder was the looser of the two halves.
+
+    Canonical (sorted) throughout, and a contiguous run still renders exactly as
+    before — every committed and fixture name is unchanged — while a gapped set
+    carries a digest of its full membership. A contiguous key can never collide
+    with a gapped one (the suffix), two contiguous keys with equal endpoints are
+    the same set, and two gapped ones differ in the digest.
     """
 
     if not seeds:
         raise ValueError("cannot key a tranche with no seeds")
-    if len(seeds) == 1:
-        return str(seeds[0])
-    return f"{seeds[0]}-{seeds[-1]}"
+    canonical = sorted(seeds)
+    first, last = canonical[0], canonical[-1]
+    if len(canonical) == 1:
+        return str(first)
+    if canonical == list(range(first, last + 1)):
+        return f"{first}-{last}"
+    # The FULL digest, not a prefix. Round 12 removed a truncated digest from
+    # policy_id on the grounds that any prefix is the same collision bargain at
+    # a different probability, and this key has the same job — disambiguating
+    # sets that would otherwise be treated as one experiment. A long filename is
+    # a smaller cost than a probabilistic key.
+    digest = hashlib.sha256(
+        json.dumps(canonical, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"{first}-{last}-{digest}"
 
 
 def _invocation_path(directory: Path, stem: str, tranche: str, ordinal: int) -> Path:
@@ -1245,6 +1315,40 @@ def _drop_audit_sidecars(directory: Path) -> None:
         sidecar.unlink()
 
 
+def _entry_exists(path: Path) -> bool:
+    """True iff a directory ENTRY exists at ``path`` — resolvable or not (18.31).
+
+    ``Path.exists()`` FOLLOWS symlinks, so it answers "does this resolve?" when
+    every no-clobber and free-name check here is asking "is there something at
+    this name?". A dangling link reads as absent and the collision arrives later,
+    after the spend. Three separate review rounds filed one call site of this
+    each (the ranking preflight, the driver's campaign artifacts, the hall's
+    loadable sidecars) before it was written down once (Codex reviews, PR #314).
+    """
+
+    return path.exists() or path.is_symlink()
+
+
+def _refuse_symlinked_recording_entry(path: Path, *, what: str) -> None:
+    """The recorder creates real files and directories, never links (18.31).
+
+    A symlink standing where recorded evidence belongs is a corrupted work tree,
+    and following it writes this leg's replays — and its ``force=True``
+    re-records — through to wherever the link points, outside the candidate
+    directory the leg claimed and scored (Codex review on PR #314). The same
+    rule already governs recorded candidate DIRECTORIES; this is it stated once
+    for both.
+    """
+
+    if path.is_symlink():
+        raise RealPathRerankError(
+            f"{what} {path} is a SYMLINK. The recorder only ever creates real "
+            "files and directories, so a link standing in for one is a "
+            "corrupted work tree — following it would read and write evidence "
+            "outside the directory this leg claimed"
+        )
+
+
 def _completeness_fence_failure(
     replay_path: Path, *, config: RealPathRerankConfig
 ) -> str | None:
@@ -1301,7 +1405,7 @@ def _resume_skip_reason(
     invocation's recording happened.
     """
 
-    if not replay_path.exists():
+    if not _entry_exists(replay_path):
         return "no replay on disk"
     try:
         stamp = read_tactical_policy_stamp(replay_path)
@@ -1500,63 +1604,48 @@ def _refuse_protocol_drift(
             )
 
 
-def _dirs_claimed_by_other_tranches(work_dir: Path, *, tranche: str) -> set[str]:
-    """Every candidate directory another tranche's manifest already claims (18.31).
+def _claimed_candidate_dirs(work_dir: Path) -> dict[str, tuple[str, str]]:
+    """Every candidate directory a leg manifest CLAIMS -> ``(tranche, label)``.
 
     A manifest is the durable record of which directories a leg owns, so it is
-    what makes a claim survive the allocating process. A FRESH leg's enumerated
-    ``NNN-<slug>`` name is unconditional, so two non-resume legs on different
-    tranches in one work dir both name ``000-<slug>``: one creates it, the other
-    fails — but only AFTER publishing a manifest that points at the shared
-    directory, so every later resume of the loser resolves back to it and
-    rejects the winner's replays as foreign. Legitimate cross-tranche
-    concurrency was then unrecoverable without editing the manifest by hand
-    (Codex review on PR #314).
+    what makes a claim survive the allocating process — and a claim covers a
+    directory that need not exist yet (a leg can publish its manifest and then
+    fail before recording).
 
-    Reading the claims lets a fresh leg step aside from ANOTHER tranche's
-    directory while still refusing one of its own — which is the write-once
-    rule, and must not be weakened into "pick the next free name".
+    The claim is keyed by ``(tranche, label)`` rather than reduced to a bare set
+    of names, because the two consumers ask different questions and getting that
+    wrong has produced a finding in BOTH directions:
+
+    * an ALLOCATOR asks "may this candidate occupy this directory?" — yes only
+      when the claim is its own ``(tranche, label)``. Reading it as "ignore my
+      whole tranche" let a later fresh leg with a distinct label but a colliding
+      slug take a stale reservation, after which a resume of the original label
+      resolved to the same directory and ranked the newer candidate's games
+      under the old name (Codex review on PR #314). Reading it as "step aside
+      from every claim" is the opposite error: a same-label re-run would quietly
+      record a second copy instead of colliding, which is the round-11 defect.
+    * a RANKING DESTINATION asks "is this directory spoken for?" — any claim at
+      all disqualifies it, with no exemption.
     """
 
-    claimed: set[str] = set()
+    claimed: dict[str, tuple[str, str]] = {}
     for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # A partial manifest names no directories this allocator can trust;
-            # the drift check reports it on the tranche that owns it.
+            # A partial manifest names nothing this can trust; the tranche that
+            # owns it reports it through the drift check.
             continue
-        if manifest.get("tranche") == tranche:
-            continue
+        tranche = manifest.get("tranche")
         for entry in manifest.get("candidates", []):
-            recorded_dir = entry.get("dir")
-            if isinstance(recorded_dir, str) and recorded_dir:
-                claimed.add(recorded_dir)
-    return claimed
-
-
-def _all_claimed_candidate_dirs(work_dir: Path) -> set[str]:
-    """Every candidate directory ANY leg manifest in this work dir claims (18.31).
-
-    :func:`_dirs_claimed_by_other_tranches` deliberately excludes the caller's
-    own tranche, because an allocator must be free to reuse its own recorded
-    directories. A ranking DESTINATION has no such exemption: this tranche's own
-    prior invocation can have claimed a label no longer on the slate, and that
-    directory is still reserved (Codex review on PR #314).
-    """
-
-    claimed: set[str] = set()
-    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
-        try:
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            # A partial manifest names nothing this check can trust; the tranche
-            # that owns it reports it through the drift check.
-            continue
-        for entry in manifest.get("candidates", []):
-            recorded_dir = entry.get("dir")
-            if isinstance(recorded_dir, str) and recorded_dir:
-                claimed.add(recorded_dir)
+            recorded_dir, label = entry.get("dir"), entry.get("label")
+            if (
+                isinstance(recorded_dir, str)
+                and recorded_dir
+                and isinstance(tranche, str)
+                and isinstance(label, str)
+            ):
+                claimed[recorded_dir] = (tranche, label)
     return claimed
 
 
@@ -1600,14 +1689,9 @@ def _refuse_escaping_recorded_dir(
             "this leg is refused rather than followed"
         )
     joined = work_dir / recorded_dir
-    if joined.is_symlink():
-        raise RealPathRerankError(
-            f"{manifest} records candidate dir {recorded_dir!r}, but "
-            f"{joined} is a SYMLINK. The recorder only ever creates real "
-            "directories, so a link standing in for one is a corrupted work "
-            "tree — following it would record (and re-record with force=True) "
-            "through whatever it points at"
-        )
+    _refuse_symlinked_recording_entry(
+        joined, what=f"the candidate dir {recorded_dir!r} recorded by {manifest},"
+    )
     try:
         resolved_dir = joined.resolve()
         work_root = work_dir.resolve()
@@ -1682,7 +1766,7 @@ def _fresh_candidate_dir(
     slug = _safe_slug(label)
     for ordinal in range(index, index + _MAX_INVOCATIONS):
         candidate_dir = work_dir / f"{ordinal:03d}-{slug}"
-        if not candidate_dir.exists() and candidate_dir not in reserved:
+        if not _entry_exists(candidate_dir) and candidate_dir not in reserved:
             return candidate_dir
     raise RealPathRerankError(
         f"no free recording directory for candidate {label!r} under {work_dir} "
@@ -1726,14 +1810,25 @@ def _resolve_candidate_dirs(
         for index, candidate in enumerate(candidates)
     )
     if not resume:
-        # A fresh leg keeps the historic enumerated name, EXCEPT where another
-        # tranche's manifest already claims it. Stepping aside there is what
-        # makes legitimate cross-tranche concurrency work; the write-once rule
-        # is untouched, because a directory this tranche owns (or an unclaimed
-        # one that merely exists) still collides at ``mkdir`` and refuses. In a
-        # clean work dir — the normal case — nothing moves (Codex on PR #314).
-        claimed = _dirs_claimed_by_other_tranches(work_dir, tranche=tranche)
-        if not claimed:
+        # A fresh leg keeps the historic enumerated name EXCEPT where a manifest
+        # claims it for a DIFFERENT ``(tranche, label)``. That predicate is the
+        # whole rule, and both looser readings are defects this PR has already
+        # shipped once each: "step aside from other tranches only" let a stale
+        # same-tranche reservation be taken by a colliding slug under another
+        # label, and "step aside from every claim" degrades write-once into
+        # "pick the next free name" so a re-run silently records a second copy
+        # (Codex reviews on PR #314). On-disk existence is deliberately NOT a
+        # reason to move: a directory this (tranche, label) already recorded
+        # into must still collide at ``mkdir``. In a clean work dir nothing
+        # moves.
+        claimed = _claimed_candidate_dirs(work_dir)
+        mine = {
+            name
+            for name, owner in claimed.items()
+            if owner in {(tranche, candidate.label) for candidate in candidates}
+        }
+        reserved_elsewhere = set(claimed) - mine
+        if not reserved_elsewhere:
             return enumerated
         stepped_aside: list[Path] = []
         taken: set[Path] = set()
@@ -1742,14 +1837,9 @@ def _resolve_candidate_dirs(
         ):
             slug = _safe_slug(candidate.label)
             chosen = default
-            # Step over names ANOTHER tranche owns — and only those. On-disk
-            # existence is deliberately NOT a reason to move: a directory this
-            # tranche already recorded into must still collide at ``mkdir``, or
-            # the write-once rule silently degrades into "pick the next free
-            # name" and a re-run quietly records a second copy of the leg.
             for ordinal in range(index, index + _MAX_INVOCATIONS):
                 chosen = work_dir / f"{ordinal:03d}-{slug}"
-                if chosen.name not in claimed and chosen not in taken:
+                if chosen.name not in reserved_elsewhere and chosen not in taken:
                     break
             else:  # pragma: no cover - 1000 claimed ordinals is a runaway
                 raise RealPathRerankError(
@@ -1859,77 +1949,72 @@ def _recording_backend_identity(
     identity: dict[str, object] = {
         "custom_meeting_runner": custom_runner,
         "meeting_runner_identity": runner_identity,
-        # The MAP is part of the protocol and is a caller argument, not a config
-        # field: replays recorded on one topology are not interchangeable with
-        # another's (Codex review on PR #314). Hashed rather than embedded so
-        # the manifest stays small and the comparison stays exact.
+        # The MAP is read on BOTH branches: ``run_tournament_eval`` builds every
+        # HeadlessGame with it regardless of which meeting runner is installed.
+        # Hashed rather than embedded so the manifest stays small.
         "game_map_sha256": _map_digest(game_map),
-        _PROMPT_SET_KEY: resolve_prompt_set(env=env),
-        # The prompt SET name alone does not determine the rendered bytes. The
-        # 18.10 impostor-answer lever swaps the impostor-report and
-        # accusation-round templates WITHIN a set and makes
-        # ``prompt_versions_for_set`` stamp the variant versions, so a leg
-        # resumed after the lever flipped would skip seeds recorded under one
-        # template family and record the rest under another — one committed row
-        # spanning two prompt protocols, with nothing in it saying so (Codex
-        # review on PR #314). Verified on ``qwen3_6_27b``: flipping the lever
-        # moves ``impostor_report`` and ``accusation_round`` to their
-        # ``_roll_call`` variants.
-        _ROLL_CALL_KEY: impostor_roll_call_enabled(env),
-        # The per-game BUDGET the recorder would be built with. It is not a
-        # ``RealPathRerankConfig`` field and it does not ride the provider
-        # settings, so a resume across a changed ``AILIBI_MAX_COST_USD`` adopted
-        # seeds recorded under the old cap and recorded the rest under the new
-        # one: a higher cap lets later meeting calls through, so the two halves
-        # of one committed row came from games that could end differently
-        # (Codex review on PR #314).
-        _GAME_BUDGET_KEY: _effective_game_budget(
-            num_players=num_players, custom_runner=custom_runner, env=env
-        ),
-        # The RESOLVED prompt versions, not just the two routing inputs above.
-        # ``prompt_set`` + the roll-call lever select WHICH registry entry is
-        # read; the registry itself can be bumped within a set, so a resume
-        # after that bump saw an unchanged identity, skipped seeds rendered from
-        # the old templates and recorded the rest from the new ones — one row
-        # across two prompt protocols (Codex review on PR #314). Round 10 added
-        # the lever and stopped at the routing input; this records the
-        # provenance the runner itself stamps, which is the thing that actually
-        # moves with the rendered bytes.
-        _PROMPT_VERSIONS_KEY: dict(prompt_versions_for_set(env=env)),
-        # The default-runner provider settings, and ONLY for a default runner.
-        # ``run_tournament_eval`` installs a supplied ``meeting_runner_factory``
-        # directly and never calls ``build_default_meeting_runner``, so those
-        # knobs are unread: recording them refused an otherwise valid
-        # custom-runner resume over a changed model or host, and an unknown
-        # ambient ``AILIBI_LLM_PROVIDER`` blocked such a leg from starting at
-        # all even though nothing would have constructed a client (Codex review
-        # on PR #314). ``meeting_runner_identity`` is what identifies a custom
-        # runner, and it is mandatory for exactly this reason.
-        **({} if custom_runner else _effective_backend_config(env)),
+        # Everything else the recording path reads is read INSIDE
+        # ``build_default_meeting_runner`` / ``_resolve_game_budget``, which
+        # ``run_tournament_eval`` calls only when no ``meeting_runner_factory``
+        # was supplied — so for a custom runner none of it is consulted and
+        # ``meeting_runner_identity`` (mandatory since round 8) is the identity.
+        **({} if custom_runner else _default_runner_inputs(num_players, env)),
     }
     return identity
 
 
-def _effective_game_budget(
-    *, num_players: int, custom_runner: bool, env: Mapping[str, str]
-) -> dict[str, float | int] | None:
-    """The per-game budget ``run_tournament_eval`` would build (Task 18.31).
+def _default_runner_inputs(
+    num_players: int, env: Mapping[str, str]
+) -> dict[str, object]:
+    """Everything the DEFAULT recording path reads, enumerated in one place.
 
-    Mirrors that function's OWN dispatch rather than re-deriving the numbers:
-    it builds a budget through :func:`eval.balance_eval._resolve_game_budget`
-    only in the default-meeting-runner branch, so a caller supplying its own
-    ``meeting_runner_factory`` never reads the cap at all and records ``None``.
-    Recording it unconditionally would repeat the round-9 mistake in the other
-    direction — refusing a resume over a knob the recorder never consulted.
+    Fifteen review rounds added six fields to the recording identity one at a
+    time — the backend config, the map, the prompt set, the 18.10 lever, the
+    per-game budget, the resolved prompt versions — because each round fixed the
+    witness it was handed instead of asking what the recorder actually reads.
+    This function is that question answered once.
 
-    The token caps are a pure function of ``num_players`` (already compared as
-    protocol), but they are recorded alongside the USD cap because this value is
-    meant to be *what the recorder was constructed with*, not a re-derivation a
-    future reader has to trust.
+    ``run_tournament_eval`` installs a supplied ``meeting_runner_factory``
+    directly; ONLY when none is given does it call
+    :func:`~orchestrator.game.build_default_meeting_runner` (which builds the
+    LLM client and binds the prompt renderers) and
+    :func:`~eval.balance_eval._resolve_game_budget`. Every environment input
+    below is consumed inside one of those two calls, which is why the whole
+    block is default-runner-only rather than field-by-field.
+
+    :data:`RECORDING_ENV_INPUTS` names the same domain as data, and
+    ``test_the_recording_identity_covers_every_env_input_on_the_path`` fails if
+    the recording path grows a knob this function does not account for — so the
+    next input is caught by the suite rather than by a sixteenth review round.
     """
 
-    if custom_runner:
-        return None
+    return {
+        _PROMPT_SET_KEY: resolve_prompt_set(env=env),
+        # The 18.10 impostor-answer lever swaps the impostor-report and
+        # accusation-round templates WITHIN a set, so the set name alone does
+        # not determine the rendered bytes.
+        _ROLL_CALL_KEY: impostor_roll_call_enabled(env),
+        # The RESOLVED versions, not just the two selectors above: the registry
+        # can be bumped inside a set with neither selector moving, and these are
+        # the bytes the runner itself stamps.
+        _PROMPT_VERSIONS_KEY: dict(prompt_versions_for_set(env=env)),
+        _GAME_BUDGET_KEY: _effective_game_budget(num_players=num_players, env=env),
+        **_effective_backend_config(env),
+    }
+
+
+def _effective_game_budget(
+    *, num_players: int, env: Mapping[str, str]
+) -> dict[str, float | int]:
+    """The per-game budget ``run_tournament_eval`` would build (Task 18.31).
+
+    Mirrors that function's own construction through
+    :func:`eval.balance_eval._resolve_game_budget` rather than re-deriving the
+    numbers, so the identity cannot drift from what recording does. Reached only
+    from :func:`_default_runner_inputs`, i.e. only on the branch that builds a
+    budget at all.
+    """
+
     snapshot = _resolve_game_budget(num_players=num_players, env=env).snapshot()
     return {
         "max_cost_usd": snapshot.max_cost_usd,
@@ -2330,7 +2415,7 @@ def _refuse_library_owned_ranking_path(
     # review on PR #314). Every manifest is read, this leg's included: a prior
     # invocation of this same tranche can have claimed a label no longer on the
     # slate.
-    claimed = _all_claimed_candidate_dirs(work_dir)
+    claimed = _claimed_candidate_dirs(work_dir)
     if name in claimed:
         raise RealPathRerankError(
             f"ranking_path {ranking_path} names a candidate recording directory "
@@ -2414,6 +2499,7 @@ def _record_or_resume_seed(
     """
 
     replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
+    _refuse_symlinked_recording_entry(replay_path, what="the replay for this seed,")
     force_first_attempt = False
     if resume:
         start = time.monotonic()
@@ -2438,7 +2524,7 @@ def _record_or_resume_seed(
             )
             return resumed
         # Any miss re-records, over whatever bytes are there.
-        force_first_attempt = replay_path.exists()
+        force_first_attempt = _entry_exists(replay_path)
         leg_log.emit(
             "seed-rerecord",
             label=candidate.label,
@@ -2505,6 +2591,7 @@ def _record_seed(
     last_exc: BaseException | None = None
     start = time.monotonic()
     replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
+    _refuse_symlinked_recording_entry(replay_path, what="the replay for this seed,")
     for attempt in range(1, config.max_attempts + 1):
         runner_factory = _timeout_runner_factory(
             base_meeting_runner_factory,
@@ -2838,7 +2925,7 @@ def run_realpath_rerank(
     # permanently unpublishable (Codex review on PR #314). ``is_symlink()`` is
     # the ``lexists`` half: every pre-existing entry is refused up front,
     # whether or not it resolves.
-    if ranking_path.exists() or ranking_path.is_symlink():
+    if _entry_exists(ranking_path):
         raise RealPathRerankError(
             f"a committed ranking already exists at {ranking_path}; this leg is "
             "already recorded and its rows are never rewritten — refusing before "

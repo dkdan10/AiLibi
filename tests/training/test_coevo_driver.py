@@ -99,6 +99,7 @@ from training.coevo.driver import (
 )
 from training.coevo.hall_of_fame import (
     MAP_ELITES_FOUNDER_ORIGIN,
+    _entry_exists,
     TRAINED_AGAINST_FSM,
     HallOfFame,
     OpponentStalenessCap,
@@ -900,10 +901,14 @@ def test_existing_generation_champions_dir_is_refused(tmp_path: Path) -> None:
 def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None:
     """Presence is about the directory ENTRY (Codex review on PR #314).
 
-    ``Path.exists()`` follows symlinks, so a DANGLING entry at either no-clobber
+    ``Path.exists()`` follows symlinks, so a DANGLING entry at any no-clobber
     path read as absent: the campaign built its plan and halls and ran a whole
     generation of paid ES games before ``mkdir`` hit the symlink and raised,
     leaving a spent generation and a tree the create-only retry cannot reuse.
+
+    Every no-clobber check in the campaign path now goes through the shared
+    ``_entry_exists`` helper, so this pin covers the rule rather than the two
+    call sites that happened to be reported.
     """
 
     for name, message in (
@@ -919,6 +924,12 @@ def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None
             run_alternating_freeze(config)
         # Refused before the plan: no halls, so no paid generation was spent.
         assert not (tmp_path / name / "halls").exists()
+
+    # The hall's own no-clobber checks share the helper, so a dangling side dir
+    # is a collision there too rather than an invitation to initialise over it.
+    from training.coevo import hall_of_fame as hof_module
+
+    assert _entry_exists is hof_module._entry_exists
 
 
 @dataclass(frozen=True)
