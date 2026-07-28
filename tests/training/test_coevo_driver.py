@@ -784,7 +784,7 @@ def test_every_generation_champion_is_persisted_as_a_loadable_artifact(
         # origin and generation, so two artifacts never share one (Codex #314).
         assert stamp["policy_id"].endswith(
             f"-{row.moving_side}-{GENERATION_CHAMPION_ORIGIN}"
-            f"-gen{row.generation_index}-{row.champion_weights_sha256[:8]}"
+            f"-gen{row.generation_index}-{row.champion_weights_sha256}"
         )
         config = json.loads((artifact_dir / "config.json").read_text())
         assert config["side"] == row.moving_side

@@ -145,11 +145,6 @@ _WRITER_OWNED_CONFIG_KEYS: Final[tuple[str, ...]] = (
     "hidden",
 )
 
-#: How many leading hex chars of the weights digest ride the ``policy_id``. The
-#: stamp carries the FULL digest in ``weights_sha256``; this half is a readable
-#: per-member discriminator, so a short prefix is enough (Task 18.31).
-_POLICY_ID_SHA_CHARS: Final[int] = 8
-
 # A 64-lowercase-hex sha256 digest — the member identity + on-disk dir name.
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 
@@ -280,6 +275,42 @@ def _refuse_unloadable_family(*, encoder_version: str, hidden: int | None) -> No
         )
 
 
+def _refuse_unwritable_genome(
+    genome: Sequence[float],
+    *,
+    encoder_version: str,
+    hidden: int | None,
+    where: str,
+) -> None:
+    """Every genome check :func:`write_loadable_artifact` performs, callable early.
+
+    Shared so a BATCH writer can run the whole check set before its first
+    mutation. ``HallOfFame.ingest_map_elites_founders`` is all-or-nothing, but
+    these refusals used to fire from inside its ``add_member`` loop, so a bad
+    founder at position N aborted after 1..N-1 were already written and indexed
+    (Codex review on PR #314). ``where`` names the offending input, since a
+    batch caller needs to know WHICH genome failed.
+    """
+
+    nonfinite = sorted(
+        index for index, gene in enumerate(genome) if not math.isfinite(gene)
+    )
+    if nonfinite:
+        shown = nonfinite[:8]
+        raise ValueError(
+            f"{where} carries non-finite genes at indices {shown}"
+            + (
+                f" (+{len(nonfinite) - len(shown)} more)"
+                if len(nonfinite) > len(shown)
+                else ""
+            )
+            + f", e.g. {genome[nonfinite[0]]!r}; the float-hex encoding round-trips "
+            "these silently, so the artifact would load and then propagate "
+            "non-finite values through every evaluation it seeds"
+        )
+    _refuse_unrebuildable_genome(genome, encoder_version=encoder_version, hidden=hidden)
+
+
 def _refuse_unrebuildable_genome(
     genome: Sequence[float], *, encoder_version: str, hidden: int | None
 ) -> None:
@@ -370,31 +401,6 @@ def write_loadable_artifact(
 
     if not genome:
         raise ValueError("cannot freeze an empty genome as a loadable artifact")
-    # NON-FINITE genes survive the whole pipeline silently: ``weights_to_hex_json``
-    # writes the bare tokens ``"nan"`` / ``"inf"``, ``weights_from_hex_json``
-    # rehydrates them without complaint, and every builder accepts them — so the
-    # artifact is CERTIFIED loadable by the reconstruction guard below while its
-    # policy propagates non-finite logits into whatever it is evaluated against
-    # (Codex review on PR #314). The driver already treats non-finite initial
-    # genes as corrupted input; a freeze is the same claim about the same floats,
-    # so it gets the same answer. Checked before any reconstruction or
-    # filesystem mutation.
-    nonfinite = sorted(
-        index for index, gene in enumerate(genome) if not math.isfinite(gene)
-    )
-    if nonfinite:
-        shown = nonfinite[:8]
-        raise ValueError(
-            f"genome carries non-finite genes at indices {shown}"
-            + (
-                f" (+{len(nonfinite) - len(shown)} more)"
-                if len(nonfinite) > len(shown)
-                else ""
-            )
-            + f", e.g. {genome[nonfinite[0]]!r}; the float-hex encoding round-trips "
-            "these silently, so the artifact would load and then propagate "
-            "non-finite values through every evaluation it seeds"
-        )
     for name, token in (
         ("policy_id", policy_id),
         ("method", method),
@@ -422,7 +428,9 @@ def write_loadable_artifact(
     # in round 8 on the grounds that the builder import was too costly for this
     # module; that was wrong on the facts — the import is clean, adds no cycle,
     # and ``uv run lint-imports`` keeps all four contracts.
-    _refuse_unrebuildable_genome(genome, encoder_version=encoder_version, hidden=hidden)
+    _refuse_unwritable_genome(
+        genome, encoder_version=encoder_version, hidden=hidden, where="this genome"
+    )
     provenance = dict(config) if config is not None else {}
     clashing = sorted(key for key in _WRITER_OWNED_CONFIG_KEYS if key in provenance)
     if clashing:
@@ -589,7 +597,7 @@ class LoadableArtifactMetadata(BaseModel):
 
         return (
             f"{self.policy_id_prefix}-{self.run_label}-{side}-{origin}"
-            f"-gen{generation}-{weights_sha256[:_POLICY_ID_SHA_CHARS]}"
+            f"-gen{generation}-{weights_sha256}"
         )
 
     def provenance(
@@ -1134,6 +1142,22 @@ class HallOfFame:
                     "write (all-or-nothing)"
                 )
             batch[digest] = cell_key
+            # A loadable hall freezes every founder through
+            # ``write_loadable_artifact``, which refuses non-finite genes and
+            # genomes the declared family cannot rebuild. Those refusals used to
+            # fire from inside the ``add_member`` loop below, so a bad founder
+            # at position N aborted AFTER 1..N-1 were written and indexed —
+            # breaking this method's all-or-nothing guarantee and leaving the
+            # driver a partially-populated hall that its create-only retry path
+            # refuses (Codex review on PR #314). Preflighted here, with the
+            # digest checks, so the whole ingest is refused before any write.
+            if self._artifact_metadata is not None:
+                _refuse_unwritable_genome(
+                    archive[cell_key].genome,
+                    encoder_version=self._artifact_metadata.encoder_version,
+                    hidden=self._artifact_metadata.hidden,
+                    where=f"cell {cell_key}",
+                )
 
         founders: list[HallOfFameMember] = []
         for cell_key in sorted(archive):

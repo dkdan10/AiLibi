@@ -92,13 +92,31 @@ DEFAULT_RANKING_ROOTS: Final[tuple[Path, ...]] = (
 )
 
 #: The §4.0 combination rule, stated in the artifact because it CHANGES the
-#: numbers. Emitted verbatim so the artifact carries its own definition.
+#: numbers. Emitted verbatim so the artifact carries its own definition. This is
+#: the FROZEN sentence: it is a key of the committed
+#: ``measurement-stability.json``, so its bytes are fixed by the reproduction
+#: requirement. It is exactly true whenever ``(leg, genome)`` and
+#: ``(leg, genome, label)`` partition the arms identically, which holds for the
+#: entire committed corpus (verified: zero ``(leg, genome)`` pairs carry two
+#: labels).
 COMBINATION_RULE: Final[str] = (
     "each (leg, genome) pair is ONE ARM: a policy recorded in two different "
     "lineage legs contributes independent provider draws and is counted twice. "
     "An earlier revision keyed by genome sha alone, which silently discarded "
     "the duplicate arm and made the result depend on filesystem traversal order "
     "(6d327dcb was recorded in both run-01 and run-03 on both tranches)."
+)
+
+#: The clause appended when a set DOES carry one genome under two labels in a
+#: single leg. The recorder emits such rankings deliberately (the 18.17
+#: tie-break fixture), and the arm key has carried the label since round 6 — so
+#: for those sets the frozen sentence above would understate the keying, and the
+#: artifact would be computed under a rule it does not state (Codex review on
+#: PR #314). Never reached by the committed corpus, so the frozen bytes stand.
+COMBINATION_RULE_LABEL_CLAUSE: Final[str] = (
+    " This set additionally records one genome under several labels within a "
+    "single leg, so the arm key is the (leg, genome, LABEL) triple: two labels "
+    "are two candidates and are counted separately."
 )
 
 #: The five ``TacticalPolicyStamp`` fields that together ARE a policy identity.
@@ -815,6 +833,23 @@ def _collect_arms(
                 second=reads[second_key],
             )
         )
+    # The emitted combination rule must describe the fold that actually ran.
+    # :data:`COMBINATION_RULE` says each ``(leg, genome)`` pair is ONE arm, but
+    # since round 6 the key also carries the LABEL — because the recorder
+    # legitimately emits one genome under two labels, and refusing such a set
+    # was itself a round-6 finding. On a set where labels DISCRIMINATE, the
+    # frozen sentence is therefore false about its own artifact (Codex review on
+    # PR #314).
+    #
+    # Refusing is not available: it would re-break the round-6 finding by
+    # rejecting a ranking this PR's own recorder emits. Rewriting the frozen
+    # sentence is not available either: it is a key of the committed
+    # ``measurement-stability.json`` this generator reproduces byte-for-byte,
+    # and ``training/artifacts/`` is read-only fixture here. So the artifact
+    # self-describes ACCURATELY in both cases: when the two keyings partition
+    # identically — which they do for the whole committed corpus, verified — the
+    # frozen sentence is exactly true and is emitted unchanged; when they do
+    # not, the label clause is emitted alongside it.
     # ONE global tranche pair, not merely two reads per arm: a set where arm A
     # was read on (t1, t2) and arm B on (t2, t3) yields an aggregate that mixes
     # different comparisons while the table presents it as a single two-tranche
@@ -841,6 +876,35 @@ def _collect_arms(
                 "seed is the same game counted on both sides"
             )
     return by_arm, arms
+
+
+def _combination_rule(by_arm: Mapping[tuple[str, str, str], object]) -> str:
+    """The combination rule THIS artifact was actually computed under (18.31).
+
+    :data:`COMBINATION_RULE` says each ``(leg, genome)`` pair is one arm, but
+    since round 6 the key also carries the LABEL — because the recorder
+    legitimately emits one genome under two labels, and refusing such a set was
+    itself a round-6 finding. On a set where labels DISCRIMINATE, the frozen
+    sentence understates the keying and the artifact would be computed under a
+    rule it does not state (Codex review on PR #314).
+
+    Neither obvious remedy is available. Refusing would re-break the round-6
+    finding by rejecting a ranking this PR's own recorder emits. Rewriting the
+    frozen sentence would break the byte reproduction of the committed
+    ``measurement-stability.json``, of which it is a key, and
+    ``training/artifacts/`` is read-only fixture to this task. So the artifact
+    self-describes accurately in BOTH cases: where the two keyings partition
+    identically the frozen sentence is exactly true and is emitted unchanged —
+    which is every arm of the committed corpus, verified — and where they do not,
+    the label clause is appended.
+    """
+
+    labels_per_genome: dict[tuple[str, str], set[str]] = {}
+    for leg, sha, label in by_arm:
+        labels_per_genome.setdefault((leg, sha), set()).add(label)
+    if any(len(labels) > 1 for labels in labels_per_genome.values()):
+        return COMBINATION_RULE + COMBINATION_RULE_LABEL_CLAUSE
+    return COMBINATION_RULE
 
 
 def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
@@ -960,7 +1024,7 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
         "arms_swinging_ge_one_game": swinging,
         "arms_with_both_tranches": len(arms),
         "arms_with_impossible_conversion_floor": impossible,
-        "combination_rule": COMBINATION_RULE,
+        "combination_rule": _combination_rule(by_arm),
         "distinct_genomes": len({arm.weights_sha256 for arm in arms}),
         "flags_floor": flags_floor,
         "mean_abs_flags_swing": round(mean_flags, 4),
@@ -1035,12 +1099,47 @@ def stability_json(stability: Mapping[str, Any]) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _emit(text: str, out: Path | None) -> None:
+def _emit(text: str, out: Path | None, *, inputs: Sequence[Path] = ()) -> None:
+    """Write ``text`` to ``out`` (or stdout), never over an artifact it READ.
+
+    This generator is read-only history to ``training/artifacts/`` and
+    ``training/reports/`` — the module docstring says so — but nothing enforced
+    it: ``rows --out`` naming its own ``--rows-path``, ``legs --out`` naming one
+    of its ranking files, or a stability output naming an input ranking would
+    render the source and then overwrite that committed JSON/JSONL evidence
+    with Markdown, returning 0 (Codex review on PR #314). A tool whose whole
+    premise is reproducing committed bytes must not be able to destroy them.
+    """
+
     if out is None:
         sys.stdout.write(text)
         return
+    aliased = sorted(
+        {source.as_posix() for source in inputs if _same_file(source, out)}
+    )
+    if aliased:
+        raise SystemExit(
+            f"refusing to write {out}: it is an INPUT this render just read "
+            f"({aliased}). This generator reproduces committed artifacts and "
+            "never overwrites them — point --out at a separate path."
+        )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
+
+
+def _same_file(left: Path, right: Path) -> bool:
+    """True iff two paths name one file, resolving links and ``..`` segments.
+
+    ``Path.samefile`` needs both to exist; an output that does not exist yet is
+    the normal case, so fall back to comparing fully-resolved paths.
+    """
+
+    try:
+        if left.exists() and right.exists():
+            return left.samefile(right)
+    except OSError:  # pragma: no cover - unreadable path is not an alias
+        return False
+    return left.resolve() == right.resolve()
 
 
 def _resolve(path: Path) -> Path:
@@ -1070,7 +1169,8 @@ def _run_stability(args: argparse.Namespace) -> int:
                 "artifacts (Markdown and JSON), so one would overwrite the other. "
                 "Give them separate paths."
             )
-    stability = compute_stability(find_ranking_files(roots))
+    ranking_files = find_ranking_files(roots)
+    stability = compute_stability(ranking_files)
     if args.check is not None:
         committed_path = _resolve(Path(args.check))
         # read_BYTES, not read_text: text mode applies universal-newline
@@ -1116,19 +1216,27 @@ def _run_stability(args: argparse.Namespace) -> int:
         )
         return 0
     if args.json_out is not None:
-        _emit(stability_json(stability), _resolve(Path(args.json_out)))
+        _emit(
+            stability_json(stability),
+            _resolve(Path(args.json_out)),
+            inputs=ranking_files,
+        )
     _emit(
         render_stability_table(stability),
         None if args.out is None else _resolve(Path(args.out)),
+        inputs=ranking_files,
     )
     return 0
 
 
 def _run_rows(args: argparse.Namespace) -> int:
-    document = render_rows_document(
-        _resolve(Path(args.rows_path)), labels=args.label or []
+    rows_path = _resolve(Path(args.rows_path))
+    document = render_rows_document(rows_path, labels=args.label or [])
+    _emit(
+        document,
+        None if args.out is None else _resolve(Path(args.out)),
+        inputs=[rows_path],
     )
-    _emit(document, None if args.out is None else _resolve(Path(args.out)))
     return 0
 
 
@@ -1140,7 +1248,11 @@ def _run_legs(args: argparse.Namespace) -> int:
     else:
         paths = find_ranking_files([_resolve(Path(args.leg_dir))])
     document = render_legs_document(paths)
-    _emit(document, None if args.out is None else _resolve(Path(args.out)))
+    _emit(
+        document,
+        None if args.out is None else _resolve(Path(args.out)),
+        inputs=paths,
+    )
     return 0
 
 

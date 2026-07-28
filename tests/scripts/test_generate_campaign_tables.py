@@ -605,6 +605,99 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     assert gct.main(["stability", "--check"]) == 0
 
 
+def test_the_emitted_rule_describes_the_fold_that_ran(tmp_path: Path) -> None:
+    """The artifact's self-description matches its arm key (Codex on PR #314).
+
+    ``COMBINATION_RULE`` says each ``(leg, genome)`` pair is ONE arm, but the key
+    has carried the LABEL since round 6 — because refusing a same-genome /
+    two-label ranking was itself a round-6 finding. On such a set the frozen
+    sentence understates the keying.
+
+    Neither refusing (re-breaks round 6) nor rewriting the frozen sentence
+    (breaks the committed artifact's byte reproduction, of which it is a key) is
+    available, so the artifact self-describes accurately in both cases.
+    """
+
+    row = _committed_row(0)
+    twin = _committed_row(0)
+    twin["label"] = "a-second-label-over-one-genome"
+
+    leg = tmp_path / "labelled" / "leg-01"
+    for tranche, seeds in (("t1", (1, 2, 3)), ("t2", (4, 5, 6))):
+        rows = []
+        for rank, source in enumerate((row, twin), start=1):
+            entry = dict(source)
+            entry["seeds"] = list(seeds)
+            entry["rank"] = rank
+            rows.append(entry)
+        leg.mkdir(parents=True, exist_ok=True)
+        (leg / f"ranking-{tranche}.jsonl").write_text(
+            "".join(json.dumps(entry) + "\n" for entry in rows), encoding="utf-8"
+        )
+
+    labelled = gct.compute_stability(gct.find_ranking_files([tmp_path / "labelled"]))
+    # Two labels over one genome ARE two arms (the round-6 finding) …
+    assert labelled["arms_with_both_tranches"] == 2
+    assert labelled["distinct_genomes"] == 1
+    # … and the emitted rule SAYS so, rather than claiming the (leg, genome)
+    # keying it was not computed under.
+    assert labelled["combination_rule"] == (
+        gct.COMBINATION_RULE + gct.COMBINATION_RULE_LABEL_CLAUSE
+    )
+    assert "(leg, genome, LABEL)" in labelled["combination_rule"]
+
+    # And where the two keyings agree — every arm of the committed corpus — the
+    # frozen sentence is emitted unchanged, so the artifact still reproduces.
+    committed = gct.compute_stability(gct.find_ranking_files(_default_roots()))
+    assert committed["combination_rule"] == gct.COMBINATION_RULE
+    assert gct.main(["stability", "--check"]) == 0
+
+
+def test_the_generator_never_overwrites_an_artifact_it_read(tmp_path: Path) -> None:
+    """A read-only generator must not be able to destroy its own inputs (#314).
+
+    ``rows --out`` naming its ``--rows-path``, ``legs --out`` naming a ranking
+    file, or a stability output naming an input ranking would render the source
+    and then replace that committed JSON/JSONL evidence with generated Markdown,
+    returning 0.
+    """
+
+    # rows: --out aliasing --rows-path.
+    rows_copy = tmp_path / "rows.jsonl"
+    rows_copy.write_bytes(_CAMPAIGN_ROWS.read_bytes())
+    before = rows_copy.read_bytes()
+    with pytest.raises(SystemExit, match="it is an INPUT this render just read"):
+        gct.main(["rows", "--rows-path", str(rows_copy), "--out", str(rows_copy)])
+    assert rows_copy.read_bytes() == before
+
+    # legs: --out aliasing one of the ranking files it renders.
+    leg = tmp_path / "leg"
+    leg.mkdir()
+    for name in ("ranking-4000-4002.jsonl", "ranking-4003-4005.jsonl"):
+        (leg / name).write_bytes((_RUN_01_LEG / name).read_bytes())
+    target = leg / "ranking-4003-4005.jsonl"
+    original = target.read_bytes()
+    with pytest.raises(SystemExit, match="it is an INPUT this render just read"):
+        gct.main(["legs", "--leg-dir", str(leg), "--out", str(target)])
+    assert target.read_bytes() == original
+
+    # stability: --json-out aliasing an input ranking (via a ``..`` detour, so
+    # the check is on the RESOLVED path rather than the string).
+    detour = leg / "sub" / ".." / "ranking-4000-4002.jsonl"
+    (leg / "sub").mkdir()
+    kept = (leg / "ranking-4000-4002.jsonl").read_bytes()
+    with pytest.raises(SystemExit, match="it is an INPUT this render just read"):
+        gct.main(
+            ["stability", "--ranking-root", str(tmp_path), "--json-out", str(detour)]
+        )
+    assert (leg / "ranking-4000-4002.jsonl").read_bytes() == kept
+
+    # A separate path still writes.
+    out = tmp_path / "elsewhere.md"
+    assert gct.main(["rows", "--rows-path", str(rows_copy), "--out", str(out)]) == 0
+    assert out.read_text(encoding="utf-8").startswith("## Campaign rows")
+
+
 def test_stability_refuses_one_path_for_both_artifacts(tmp_path: Path) -> None:
     """``--out`` and ``--json-out`` emit DIFFERENT artifacts (Codex on PR #314).
 

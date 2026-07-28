@@ -2073,6 +2073,48 @@ def _publish_ranking(ranking_path: Path, payload: str) -> None:
                     raise
 
 
+def _refuse_library_owned_ranking_path(ranking_path: Path, *, work_dir: Path) -> None:
+    """Refuse a ranking path this leg will itself create as a work artifact (18.31).
+
+    The existence preflight above runs before the leg has written anything, so
+    ``ranking_path = work_dir/leg-log.jsonl`` passes it — and then the leg log,
+    the manifest or the pre-screen record creates that path, and
+    :func:`_publish_ranking`'s exclusive ``os.link`` fails AFTER every paid game
+    (Codex review on PR #314). The failure mode is the one every preflight here
+    exists to prevent: a 30-40 h leg that can never commit its ranking.
+
+    Refuses by NAME rather than by predicting which invocation ordinal a
+    pre-screen record will take: the whole ``<stem>-*`` namespace is
+    library-owned, so a ranking must not live in it regardless of which file the
+    leg happens to allocate. A ranking outside ``work_dir`` is unaffected, which
+    is the normal arrangement.
+    """
+
+    try:
+        inside = ranking_path.resolve().parent == work_dir.resolve()
+    except OSError:  # pragma: no cover - unresolvable path fails elsewhere
+        return
+    if not inside:
+        return
+    name = ranking_path.name
+    if name == LEG_LOG_FILENAME or any(
+        name.startswith(f"{stem}-")
+        for stem in (
+            LEG_MANIFEST_FILENAME_STEM,
+            PRESCREEN_FILENAME_STEM,
+            TRANCHE_CLAIM_FILENAME_STEM,
+        )
+    ):
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} is in the work dir's library-owned "
+            f"namespace ({LEG_LOG_FILENAME}, {LEG_MANIFEST_FILENAME_STEM}-*, "
+            f"{PRESCREEN_FILENAME_STEM}-*, {TRANCHE_CLAIM_FILENAME_STEM}-*). This "
+            "leg creates those itself, so the ranking publish would fail its "
+            "exclusive link AFTER every paid game — refusing before any game is "
+            "spent (point --ranking-path outside the work dir)"
+        )
+
+
 def _refuse_unpublishable_ranking_dir(ranking_path: Path) -> None:
     """Preflight that this filesystem can publish a ranking (18.31).
 
@@ -2553,6 +2595,7 @@ def run_realpath_rerank(
             "already recorded and its rows are never rewritten — refusing before "
             "any game is spent (point --ranking-path at a fresh file)"
         )
+    _refuse_library_owned_ranking_path(ranking_path, work_dir=work_dir)
     _refuse_unpublishable_ranking_dir(ranking_path)
 
     # A resume adopts BYTES RECORDED UNDER A PREVIOUS PROTOCOL, so the previous

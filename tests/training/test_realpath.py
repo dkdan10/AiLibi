@@ -2000,6 +2000,47 @@ def test_explicit_invocation_ids_cannot_escape_the_work_dir(tmp_path: Path) -> N
     assert path.parent == directory
 
 
+def test_ranking_path_may_not_be_a_library_owned_work_dir_file(
+    tmp_path: Path,
+) -> None:
+    """A ranking must not name a file the leg itself creates (Codex on PR #314).
+
+    The existence preflight runs before the leg has written anything, so
+    ``work_dir/leg-log.jsonl`` passes it — and then the leg log creates that
+    path, and ``_publish_ranking``'s exclusive link fails AFTER every paid game.
+    The failure mode every preflight here exists to prevent: a leg that can
+    never commit its ranking.
+    """
+
+    work_dir = tmp_path / "work"
+    for name in (
+        LEG_LOG_FILENAME,
+        f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json",
+        f"{realpath.PRESCREEN_FILENAME_STEM}-1-2-000.json",
+        f"{realpath.TRANCHE_CLAIM_FILENAME_STEM}-1-2.lock",
+    ):
+        with pytest.raises(RealPathRerankError, match="library-owned namespace"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=work_dir / name,
+                config=_config(),
+            )
+    # Refused BEFORE any game: no work dir contents at all.
+    assert not work_dir.exists() or list(work_dir.iterdir()) == []
+
+    # A ranking OUTSIDE the work dir is the normal arrangement and is fine, as
+    # is an unrelated name inside it.
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=work_dir / "ranking-1-2.jsonl",
+        config=_config(),
+    ).rows
+
+
 def test_the_allocation_claim_is_held_across_resolution(tmp_path: Path) -> None:
     """The allocation lock is work-dir-wide, and blocking rather than refusing.
 

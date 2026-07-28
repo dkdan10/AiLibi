@@ -119,6 +119,29 @@ def _synthetic_archive() -> dict[tuple[int, int, int], ArchiveCell]:
     return archive
 
 
+def _persist_two_cell_archive(
+    artifact_dir: Path, first: tuple[float, ...], second: tuple[float, ...]
+) -> Path:
+    """Persist a TWO-cell archive whose sorted cell-key order is (first, second).
+
+    Ingestion walks ``sorted(archive)``, so putting the offending genome second
+    is what makes a per-member refusal visible as a partial mutation.
+    """
+
+    specs = [
+        ({"kill_count": 0.0, "witness_exposure_rate": 0.0, "vent_usage": 0.0}, first),
+        ({"kill_count": 5.0, "witness_exposure_rate": 0.9, "vent_usage": 7.0}, second),
+    ]
+    archive: dict[tuple[int, int, int], ArchiveCell] = {}
+    for index, (descriptors, genome) in enumerate(specs):
+        cell_key = BEHAVIOR_DESCRIPTOR_CONFIGURATION.bin_values(descriptors)
+        archive[cell_key] = ArchiveCell(
+            genome=genome, fitness=float(index + 1), descriptors=descriptors
+        )
+    assert sorted(archive) == list(archive), "cell-key order must match spec order"
+    return _persist_archive(archive, artifact_dir)
+
+
 def _persist_archive(
     archive: dict[tuple[int, int, int], ArchiveCell], artifact_dir: Path
 ) -> Path:
@@ -1173,7 +1196,9 @@ def test_loadable_artifact_metadata_validation() -> None:
             generation=10,
             weights_sha256="6d327dcb" + "0" * 56,
         )
-        == "coevo-run-01-utility-champion-impostor-exploiter-probe-gen10-6d327dcb"
+        == "coevo-run-01-utility-champion-impostor-exploiter-probe-gen10-"
+        + "6d327dcb"
+        + "0" * 56
     )
 
     # Two founders sharing origin AND generation no longer collide, and the two
@@ -1236,9 +1261,11 @@ def test_add_member_with_metadata_freezes_a_loadable_artifact(tmp_path: Path) ->
     ]
     stamp = json.loads((member_dir / "stamp.json").read_text())
     assert stamp["weights_sha256"] == member.weights_sha256
+    # The FULL digest, not a prefix: an 8-char prefix is 32 bits, so two
+    # members could collide on it and re-acquire the ambiguity this removes.
     assert stamp["policy_id"] == (
         "coevo-run-01-utility-champion-impostor-alternating-freeze-champion-gen9"
-        f"-{member.weights_sha256[:8]}"
+        f"-{member.weights_sha256}"
     )
     config = json.loads((member_dir / "config.json").read_text())
     assert config["hall_origin"] == "alternating-freeze-champion"
@@ -1749,6 +1776,45 @@ def test_the_public_writer_refuses_an_unloadable_family(
         )
     # Refused BEFORE anything was published.
     assert not artifact_dir.exists()
+
+
+def test_founder_ingest_preflights_every_genome_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """A bad founder at position N must not leave 1..N-1 written (Codex #314).
+
+    ``ingest_map_elites_founders`` is all-or-nothing, but the loadable-freeze
+    refusals (non-finite genes, a genome the declared family cannot rebuild)
+    used to fire from inside its ``add_member`` loop — so the hall ended up
+    partially populated, and the driver's create-only retry path refuses that.
+    The genome checks now run with the digest checks, before the first write.
+    """
+
+    good = _rebuildable_genome(_UTILITY_ENCODER)
+    for bad, match in (
+        ((float("nan"),) + good[1:], "non-finite genes"),
+        (good + (0.0,), "does not rebuild"),
+    ):
+        root = tmp_path / f"pool-{match.split()[0]}"
+        cells = tmp_path / f"cells-{match.split()[0]}"
+        # Sorted cell-key order puts the BAD cell second, so a per-member
+        # refusal would fire only after the first founder was written.
+        _persist_two_cell_archive(cells, good, bad)
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=bakeoff_substrate_sha(),
+            artifact_metadata=_metadata(),
+        )
+        with pytest.raises(ValueError, match=match):
+            hall.ingest_map_elites_founders(cells)
+        # NOTHING was written: no members indexed, no member dirs on disk.
+        assert hall.members == ()
+        assert HallOfFame.load(root, "impostor").members == ()
+        assert (
+            sorted(path.name for path in (root / "impostor").iterdir() if path.is_dir())
+            == []
+        )
 
 
 def test_a_non_finite_genome_is_refused_before_anything_is_written(
