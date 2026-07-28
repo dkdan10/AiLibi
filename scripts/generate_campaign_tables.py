@@ -394,14 +394,19 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
             f"{ranking_path}: ranks are {ranks}, not a contiguous 1..{len(rows)} "
             "sequence; a leg table is one total order over the leg's candidates"
         )
-    for field in ("weights_sha256", "label"):
-        seen = [row[field] for row in rows]
-        duplicated = sorted({value for value in seen if seen.count(value) > 1})
-        if duplicated:
-            raise SystemExit(
-                f"{ranking_path}: {field} {duplicated} appears more than once; "
-                "each candidate holds exactly one rank in a leg"
-            )
+    # LABELS are the candidate identity, not digests. ``run_realpath_rerank``
+    # deliberately permits one genome under two labels (the 18.17 tie-break
+    # fixture, pinned by ``test_prescreen_coverage_is_by_candidate_identity_not_
+    # digest_set``), so rejecting a repeated ``weights_sha256`` here refused a
+    # ranking the recorder legitimately emits — this generator's own PR
+    # contradicting itself (Codex review on PR #314).
+    labels = [row["label"] for row in rows]
+    duplicated = sorted({value for value in labels if labels.count(value) > 1})
+    if duplicated:
+        raise SystemExit(
+            f"{ranking_path}: label {duplicated} appears more than once; "
+            "each candidate holds exactly one rank in a leg"
+        )
     for field in _LEG_LEVEL_FIELDS:
         values = {json.dumps(row[field], sort_keys=True) for row in rows}
         if len(values) != 1:
@@ -552,7 +557,7 @@ def render_legs_document(ranking_paths: Sequence[Path]) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _tranche_identity(ranking_path: Path) -> str:
+def _tranche_identity(ranking_path: Path) -> tuple[str, frozenset[int]]:
     """A tranche's identity is its RECORDED SEEDS, not its filename (18.31).
 
     A filename suffix is a label an operator chose; the ``seeds`` on each row
@@ -576,31 +581,11 @@ def _tranche_identity(ranking_path: Path) -> str:
     # CANONICAL (sorted): the seed SET is the experiment, so [1,2,3] and [3,2,1]
     # are one tranche recorded twice, not two independent draws (Codex review on
     # PR #314). Recording order is a detail of how the leg was invoked.
-    identity = "-".join(str(seed) for seed in seeds)
-    # The identity string is lossy (negative seeds render as ``-3--2--1``), so
-    # the structured set is registered here and looked up by the disjointness
-    # guard rather than parsed back out of the display form.
-    _TRANCHE_SEEDS[identity] = frozenset(seeds)
-    return identity
-
-
-#: Tranche identity (a display string) -> its canonical seed SET. The identity
-#: is built for humans and artifact names, so it is lossy: negative seeds encode
-#: as ``-3--2--1`` and cannot be split back apart. Structured data is retained
-#: here instead of reparsing the string (Codex review on PR #314).
-_TRANCHE_SEEDS: Final[dict[str, frozenset[int]]] = {}
-
-
-def _tranche_seeds(tranche: str) -> frozenset[int]:
-    """The canonical seed set behind a tranche identity, as recorded not reparsed."""
-
-    try:
-        return _TRANCHE_SEEDS[tranche]
-    except KeyError as exc:  # pragma: no cover - defensive; identity is registered
-        raise SystemExit(
-            f"tranche {tranche!r} has no recorded seed set; identities are "
-            "registered when a ranking file is read"
-        ) from exc
+    # The identity string is LOSSY (negative seeds render as ``-3--2--1``, which
+    # no split can invert), so the structured set is returned alongside it and
+    # threaded through the fold rather than re-derived from the display form or
+    # parked in module state (Codex review on PR #314).
+    return "-".join(str(seed) for seed in seeds), frozenset(seeds)
 
 
 @dataclass(frozen=True)
@@ -616,7 +601,7 @@ class _Arm:
 
 def _collect_arms(
     ranking_paths: Sequence[Path],
-) -> tuple[dict[tuple[str, str], dict[str, Mapping[str, Any]]], list[_Arm]]:
+) -> tuple[dict[tuple[str, str, str], dict[str, Mapping[str, Any]]], list[_Arm]]:
     """Group ranking rows by ``(leg dir, genome sha)`` -> tranche -> row.
 
     The tranche key is the ranking file's own suffix, so two files in one leg
@@ -625,12 +610,16 @@ def _collect_arms(
     fails loud rather than silently picking two of them.
     """
 
-    by_arm: dict[tuple[str, str], dict[str, Mapping[str, Any]]] = {}
+    by_arm: dict[tuple[str, str, str], dict[str, Mapping[str, Any]]] = {}
+    tranche_seeds: dict[str, frozenset[int]] = {}
     for path in ranking_paths:
         leg = path.parent.as_posix()
-        tranche = _tranche_identity(path)
+        tranche, seeds = _tranche_identity(path)
+        tranche_seeds[tranche] = seeds
         for row in read_validated_ranking(path):
-            key = (leg, row["weights_sha256"])
+            # The LABEL rides the arm key: one genome under two labels is two
+            # candidates, and collapsing them would pair the wrong reads.
+            key = (leg, row["weights_sha256"], row["label"])
             reads = by_arm.setdefault(key, {})
             if tranche in reads:
                 raise SystemExit(
@@ -640,7 +629,7 @@ def _collect_arms(
                 )
             reads[tranche] = row
     arms: list[_Arm] = []
-    for (leg, sha), reads in sorted(by_arm.items()):
+    for (leg, sha, label), reads in sorted(by_arm.items()):
         if len(reads) < 2:
             continue
         if len(reads) > 2:
@@ -707,7 +696,7 @@ def _collect_arms(
     # independent draws or they are not a retest (Codex review on PR #314).
     if tranche_pairs:
         ((first_key, second_key),) = tranche_pairs
-        overlap = sorted(_tranche_seeds(first_key) & _tranche_seeds(second_key))
+        overlap = sorted(tranche_seeds[first_key] & tranche_seeds[second_key])
         if overlap:
             raise SystemExit(
                 f"tranches {first_key} and {second_key} share seeds {overlap}; a "

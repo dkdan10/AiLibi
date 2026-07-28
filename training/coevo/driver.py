@@ -284,6 +284,17 @@ _LOADABLE_IMPOSTOR_ENCODERS: Final[tuple[str, ...]] = (
     "v3",
 )
 
+#: The CREW families ``scripts/run_tournament.py``'s ``_load_crew_artifact_policy``
+#: can rebuild — the same rule as the impostor list above, which the round-4
+#: crew guard left unstated: the 18.19 namespace check only proves a tag starts
+#: with ``crew-``, so ``crew-option-features-v9`` passed it and froze artifacts
+#: nothing can load (Codex review on PR #314). Restated literals, per the
+#: hall_of_fame idiom; a new crew family extends this AND the loader dispatch.
+_LOADABLE_CREW_ENCODERS: Final[tuple[str, ...]] = (
+    "crew-option-features-v1",
+    "crew-option-features-v2",
+)
+
 #: The stated fake-path game-count ceiling (the integration-risk guard): at the
 #: measured ~0.5 s/fake game this is a same-day run, never a week-long one. A
 #: configuration whose :func:`projected_game_bound` exceeds the configured
@@ -854,6 +865,20 @@ def _validate_side(
         raise ValueError(
             f"the {expected_side} side config declares hidden={config.hidden!r}; "
             "a masked-MLP head width must be >= 1"
+        )
+    if expected_side == "crew" and probe_encoder not in _LOADABLE_CREW_ENCODERS:
+        # The same consumer-loadability preflight the impostor side gets. The
+        # crew loader (`scripts/run_tournament.py` `_load_crew_artifact_policy`)
+        # dispatches on the stamp and rebuilds only these two families, so any
+        # other `crew-*` tag passes the 18.19 namespace guard and still freezes
+        # artifacts nothing can load — discovered after the campaign ran
+        # (Codex review on PR #314).
+        raise ValueError(
+            f"the crew family {probe_encoder!r} is not one the consuming entry "
+            f"point can rebuild (loadable: {_LOADABLE_CREW_ENCODERS!r}); every "
+            "artifact this campaign froze would be unloadable through "
+            "_load_crew_artifact_policy, discovered only after the generations "
+            "were paid for — refusing before the first game"
         )
     if expected_side == "crew" and config.hidden is not None:
         # The crew scorer rebuilds through ``build_crew_scorer``, which takes NO

@@ -757,3 +757,64 @@ def test_check_compares_raw_bytes_not_newline_normalized_text(
     assert artifact.read_text() == committed
     assert artifact.read_bytes() != committed.encode("utf-8")
     assert gct.main(["stability", "--check", str(artifact)]) == 1
+
+
+def test_one_genome_under_two_labels_is_a_valid_ranking(tmp_path: Path) -> None:
+    """Two labels over ONE genome is output the recorder legitimately emits.
+
+    ``run_realpath_rerank`` permits it (the 18.17 tie-break fixture, pinned by
+    ``test_prescreen_coverage_is_by_candidate_identity_not_digest_set``), so
+    round 4's duplicate-``weights_sha256`` refusal made this generator reject a
+    ranking this PR's own recorder produces (Codex on PR #314). Labels are the
+    candidate identity; digests are not.
+    """
+
+    first, second = _committed_row(0), _committed_row(0)
+    second["rank"] = 2
+    second["label"] = "arm-b"
+    path = tmp_path / "ranking-tie.jsonl"
+    path.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n", "utf-8")
+    rows = gct.read_validated_ranking(path)
+    assert [row["label"] for row in rows] == [first["label"], "arm-b"]
+    assert len({row["weights_sha256"] for row in rows}) == 1
+    # It renders, and both candidates keep their own row.
+    assert len(gct.render_leg_tables(path)) > 0
+
+
+def test_same_genome_two_labels_are_two_arms(tmp_path: Path) -> None:
+    """Arm identity carries the LABEL, so tie-break candidates do not collapse."""
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    for tranche, seeds in (("a", (1, 2, 3)), ("b", (4, 5, 6))):
+        first = dict(row, seeds=list(seeds), rank=1)
+        second = dict(row, seeds=list(seeds), rank=2, label="arm-b")
+        leg.mkdir(parents=True, exist_ok=True)
+        (leg / f"ranking-{tranche}.jsonl").write_text(
+            json.dumps(first) + "\n" + json.dumps(second) + "\n", encoding="utf-8"
+        )
+    stability = gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+    # Two labels over one genome = two arms, one distinct genome.
+    assert stability["arms_with_both_tranches"] == 2
+    assert stability["distinct_genomes"] == 1
+
+
+def test_stability_is_pure_across_independent_invocations(tmp_path: Path) -> None:
+    """No process-wide state leaks between folds (Codex on PR #314).
+
+    The tranche seed sets were briefly kept in a module-level registry that
+    ``_tranche_identity`` mutated on every read. They are now threaded through
+    the fold, so an unrelated invocation cannot influence a later one.
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(1, 2, 3))
+    _write_arm(leg, "b", row, seeds=(4, 5, 6))
+    paths = gct.find_ranking_files([tmp_path / "campaign"])
+
+    first = gct.compute_stability(paths)
+    # An unrelated fold in between must not change the next result.
+    gct.compute_stability(gct.find_ranking_files(_default_roots()))
+    assert gct.compute_stability(paths) == first
+    assert not hasattr(gct, "_TRANCHE_SEEDS")

@@ -1395,12 +1395,22 @@ def test_resume_refuses_a_replay_whose_policy_identity_differs(
     work_dir = tmp_path / "work"
     _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
 
-    # Same genome, same digest, different declared identity.
+    # Resume into the SAME work dir: the recorded replays must actually be on
+    # disk for the predicate to inspect, or this test passes with the whole
+    # comparison deleted (my first version resumed into a fresh dir, where every
+    # seed re-records because there is nothing there — Codex on PR #314).
+    candidate_dir = work_dir / "000-utility-es"
+    assert sorted(p.name for p in candidate_dir.glob("replay-seed-*.jsonl")) == [
+        "replay-seed-1.jsonl",
+        "replay-seed-2.jsonl",
+    ]
+
+    # Same genome, same digest, same label, different declared identity.
     renamed = _util_candidate().model_copy(update={"policy_id": "some-other-policy-id"})
     result = run_realpath_rerank(
         [renamed],
         seeds=[1, 2],
-        work_dir=tmp_path / "work-2",
+        work_dir=work_dir,
         ranking_path=tmp_path / "ranking-2.jsonl",
         config=_config(),
         resume=True,
@@ -1513,3 +1523,66 @@ def test_an_unpublishable_ranking_filesystem_is_refused_before_any_game(
         )
     # Refused in the preflight: no work dir, no games.
     assert not (tmp_path / "work").exists()
+
+
+def test_resume_finds_recordings_after_the_slate_narrows(tmp_path: Path) -> None:
+    """A NARROWED slate must still find each label's original directory.
+
+    ``_refuse_protocol_drift`` deliberately permits narrowing — re-running the
+    candidates a 503 interrupted is the normal resume. But directories were
+    named from ``enumerate(candidates)``, so narrowing ``[A, B]`` to ``[B]``
+    renumbered ``001-b`` to ``000-b``: the resume looked straight past every
+    verified recording it exists to reuse and re-recorded the whole leg (Codex
+    on PR #314). Dirs are now resolved by LABEL under resume.
+    """
+
+    work_dir = tmp_path / "work"
+    first = run_realpath_rerank(
+        [_util_candidate("arm-a"), _util_candidate("arm-b")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+    )
+    assert first.rows
+    assert (work_dir / "000-arm-a").is_dir()
+    assert (work_dir / "001-arm-b").is_dir()
+
+    # Narrow to the SECOND candidate only; index 0 now, dir still 001-arm-b.
+    result = run_realpath_rerank(
+        [_util_candidate("arm-b")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in result.top().seed_telemetry] == [True]
+    # No renumbered duplicate was created.
+    assert not (work_dir / "000-arm-b").exists()
+
+
+def test_resume_refuses_a_changed_recording_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The PROVIDER is part of the recording protocol (Codex on PR #314).
+
+    ``RealPathRerankConfig`` describes the game, not the backend, so a
+    provider/model swap left ``wanted_config`` identical: existing seeds were
+    skipped while missing ones recorded through the new provider, committing
+    ONE row whose seeds came from two different recorders.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    monkeypatch.setenv("AILIBI_LLM_MEETING_MODEL", "some-other-model")
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )

@@ -239,6 +239,17 @@ LEG_MANIFEST_FILENAME_STEM: Final[str] = "leg"
 #: keyed by ``(tranche, invocation)``.
 LEG_LOG_FILENAME: Final[str] = "leg-log.jsonl"
 
+#: The environment variables that pick the RECORDING BACKEND. They are not on
+#: :class:`RealPathRerankConfig` (the config describes the game, not the
+#: provider), so a resume that compared only the config would skip seeds
+#: recorded against one provider/model and record the rest against another,
+#: committing ONE row that mixes two recording protocols (Codex on PR #314).
+_PROVIDER_ENV_VARS: Final[tuple[str, ...]] = (
+    "AILIBI_LLM_PROVIDER",
+    "AILIBI_LLM_MEETING_MODEL",
+    "AILIBI_LLM_TRIGGER_MODEL",
+)
+
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
 #: not identity: genome lengths collide across encoder families.
@@ -903,6 +914,7 @@ def _open_leg_manifest(
     candidates: Sequence[RealPathCandidate],
     config: RealPathRerankConfig,
     ranking_path: Path,
+    backend: Mapping[str, object],
 ) -> tuple[str, Path]:
     """Allocate this leg's invocation id by exclusively creating its manifest.
 
@@ -915,6 +927,7 @@ def _open_leg_manifest(
     for ordinal in range(_MAX_INVOCATIONS):
         path = _invocation_path(work_dir, LEG_MANIFEST_FILENAME_STEM, tranche, ordinal)
         manifest = {
+            "backend": dict(backend),
             "candidates": [
                 {
                     "encoder_version": candidate.encoder_version,
@@ -1223,6 +1236,7 @@ def _refuse_protocol_drift(
     tranche: str,
     config: RealPathRerankConfig,
     candidates: Sequence[RealPathCandidate],
+    backend: Mapping[str, object],
 ) -> None:
     """Refuse a resume whose recording protocol differs from the prior leg (18.31).
 
@@ -1279,6 +1293,20 @@ def _refuse_protocol_drift(
                 "a fresh work dir instead of adopting bytes from another "
                 "experiment"
             )
+        # The RECORDER, not just the game. A provider/model swap (or a stub
+        # runner standing in for the real path) produces bytes that are not
+        # interchangeable with the originals, and none of it rides the config
+        # (Codex review on PR #314). A manifest predating this field records
+        # ``None`` and is treated as unknown-and-therefore-unsafe.
+        recorded_backend = manifest.get("backend")
+        if recorded_backend != dict(backend):
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche against a different "
+                f"recording backend ({recorded_backend!r} vs {dict(backend)!r}). "
+                "The existing replays came from that provider/runner; adopting "
+                "them here would commit one row whose seeds were recorded against "
+                "two different backends"
+            )
         recorded_slate = {
             entry["label"]: [
                 entry["weights_sha256"],
@@ -1299,6 +1327,67 @@ def _refuse_protocol_drift(
                 "is not an identity, and adopting those replays would rank one "
                 "policy under another's name"
             )
+
+
+def _resolve_candidate_dir(
+    work_dir: Path, *, index: int, label: str, resume: bool
+) -> Path:
+    """This candidate's recording dir, found by LABEL when resuming (18.31).
+
+    Non-resume runs keep the historic ``<index>-<slug>`` name exactly. Under
+    ``resume`` the index is the wrong key: ``_refuse_protocol_drift``
+    deliberately permits a NARROWED slate (re-running the two candidates a 503
+    interrupted is the normal case), and narrowing ``[A, B, C]`` to ``[B, C]``
+    renumbers ``001-B``/``002-C`` into ``000-B``/``001-C``. The resume would
+    then look straight past every verified recording it exists to reuse and
+    re-record the whole leg — 30-40 h repeated (Codex review on PR #314).
+
+    So a resume looks for an EXISTING ``*-<slug>`` dir and uses it wherever it
+    sits, falling back to the enumerated name when the label has no recordings
+    yet (a candidate added to the slate). Two dirs for one slug is unresolvable
+    ambiguity about which holds the real bytes, and fails loud.
+    """
+
+    enumerated = work_dir / f"{index:03d}-{_safe_slug(label)}"
+    if not resume:
+        return enumerated
+    slug = _safe_slug(label)
+    existing = sorted(
+        path
+        for path in work_dir.glob(f"*-{slug}")
+        if path.is_dir() and path.name[3:] == f"-{slug}"
+    )
+    if len(existing) > 1:
+        raise RealPathRerankError(
+            f"resume found {len(existing)} recording dirs for candidate {label!r} "
+            f"({[p.name for p in existing]}); which one holds this candidate's "
+            "bytes is unresolvable — re-record the leg into a fresh work dir"
+        )
+    return existing[0] if existing else enumerated
+
+
+def _recording_backend_identity(
+    *, custom_runner: bool, environment: Mapping[str, str] | None = None
+) -> dict[str, object]:
+    """The serialisable identity of WHAT RECORDED the bytes (18.31).
+
+    ``RealPathRerankConfig`` describes the GAME — roster, budgets, baseline —
+    and deliberately says nothing about the provider behind the meetings. But a
+    replay recorded against one provider/model is not interchangeable with one
+    recorded against another, so a resume must compare this too or it will
+    silently commit a row whose seeds came from two different backends.
+
+    ``custom_runner`` records whether the caller supplied its own
+    ``meeting_runner_factory``: a stub runner and the real provider path are
+    different recorders even when every environment variable matches, and a
+    callable has no stable serialisable identity beyond its presence.
+    """
+
+    env = os.environ if environment is None else environment
+    identity: dict[str, object] = {"custom_meeting_runner": custom_runner}
+    for name in _PROVIDER_ENV_VARS:
+        identity[name] = env.get(name)
+    return identity
 
 
 def _publish_ranking(ranking_path: Path, payload: str) -> None:
@@ -1846,9 +1935,16 @@ def run_realpath_rerank(
     # round 4 pins protocol agreement across tranches) one that looks
     # protocol-consistent while it is not (Codex review on PR #314).
     tranche = tranche_key(seeds_tuple)
+    backend = _recording_backend_identity(
+        custom_runner=meeting_runner_factory is not None
+    )
     if resume:
         _refuse_protocol_drift(
-            work_dir, tranche=tranche, config=resolved_config, candidates=candidates
+            work_dir,
+            tranche=tranche,
+            config=resolved_config,
+            candidates=candidates,
+            backend=backend,
         )
     invocation, manifest_path = _open_leg_manifest(
         work_dir,
@@ -1859,6 +1955,7 @@ def run_realpath_rerank(
         candidates=candidates,
         config=resolved_config,
         ranking_path=ranking_path,
+        backend=backend,
     )
     leg_log = RealPathLegLog(
         work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
@@ -1903,7 +2000,9 @@ def run_realpath_rerank(
             stamp = _candidate_stamp(candidate)
             digest = stamp.weights_sha256
             agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
-            candidate_dir = work_dir / f"{index:03d}-{_safe_slug(candidate.label)}"
+            candidate_dir = _resolve_candidate_dir(
+                work_dir, index=index, label=candidate.label, resume=resume
+            )
             candidate_dir.mkdir(parents=True, exist_ok=resume)
             if resume:
                 _refuse_foreign_replays(

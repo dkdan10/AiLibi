@@ -1463,3 +1463,39 @@ def test_crew_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="crew family .* takes no hidden width"):
         run_alternating_freeze(config)
     _assert_no_disk_mutation(tmp_path)
+
+
+def test_crew_family_must_be_one_the_consumer_can_rebuild(tmp_path: Path) -> None:
+    """The crew side gets the SAME loadability preflight the impostor side has.
+
+    The 18.19 namespace guard only proves a tag starts with ``crew-``, so an
+    arbitrary ``crew-option-features-v9`` passed validation and froze artifacts
+    ``_load_crew_artifact_policy`` cannot rebuild — discovered only after the
+    campaign was paid for (Codex on PR #314).
+    """
+
+    class _ExoticCrewPolicy:
+        """A crew policy in the ``crew-*`` namespace that no loader can rebuild."""
+
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+            self.encoder_version = "crew-option-features-v9"
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+    def _exotic_crew_builder(genome: tuple[float, ...]) -> object:
+        return _ExoticCrewPolicy(_crew_builder(genome))
+
+    config = _make_config(
+        tmp_path,
+        crew=_crew_side(
+            build_policy=_exotic_crew_builder,
+            encoder_version="crew-option-features-v9",
+        ),
+    )
+    with pytest.raises(
+        ValueError, match="not one the consuming entry point can rebuild"
+    ):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
