@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "ablation-run-c1-conviction-term",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "ablation-run-c1-conviction-term/impostor/gen-7/8bd92b7e4f5c3dbf59a81648f64e8f8485a4578c6410f7d7c12161c117878963",
+  "generation": 7,
+  "genome_length": 19,
+  "hall_origin": "exploiter-probe",
+  "side": "impostor",
+  "source_lineage": "ablation-run-c1-conviction-term",
+  "trained_against": "cab1c0a3f61e70f544a0ec71d02035013d12fd145590d8bcf342a97a46accf42"
+}

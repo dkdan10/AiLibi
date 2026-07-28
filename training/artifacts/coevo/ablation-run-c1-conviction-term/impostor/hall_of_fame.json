@@ -1,0 +1,69 @@
+{
+  "artifact_metadata": {
+    "anchor_policy": "fsm-default",
+    "anchor_weight": 4.0,
+    "encoder_version": "impostor-option-features-v1",
+    "hidden": null,
+    "method": "alternating-freeze-es",
+    "policy_id_prefix": "coevo",
+    "run_label": "ablation-run-c1-conviction-term"
+  },
+  "members": [
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 2,
+      "origin": "exploiter-probe",
+      "path": "gen-2/00716018dd5e9b90357183e47b3647722a75041218a9002fac80c8c2b6c0b6fd",
+      "trained_against": "a1fc26cc530534320ddeb7e750d5b4809310a67b1be34e5a9ce4abf44420ce42",
+      "weights_sha256": "00716018dd5e9b90357183e47b3647722a75041218a9002fac80c8c2b6c0b6fd"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 3,
+      "origin": "exploiter-probe",
+      "path": "gen-3/5faa43e93122eb95060eaf2153486e7775adc1a2569e18c7e4236268b3f67056",
+      "trained_against": "72adb41c9286d61d5a81ea4ed2bd347c0d7da52ad89ae6497f1dcbf2237ca4e5",
+      "weights_sha256": "5faa43e93122eb95060eaf2153486e7775adc1a2569e18c7e4236268b3f67056"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 6,
+      "origin": "alternating-freeze-champion",
+      "path": "gen-6/7ddc3709188f2bb335ef4f19542e72be9154164c04a071729f573c27c9291e02",
+      "trained_against": "72adb41c9286d61d5a81ea4ed2bd347c0d7da52ad89ae6497f1dcbf2237ca4e5",
+      "weights_sha256": "7ddc3709188f2bb335ef4f19542e72be9154164c04a071729f573c27c9291e02"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 7,
+      "origin": "exploiter-probe",
+      "path": "gen-7/8bd92b7e4f5c3dbf59a81648f64e8f8485a4578c6410f7d7c12161c117878963",
+      "trained_against": "cab1c0a3f61e70f544a0ec71d02035013d12fd145590d8bcf342a97a46accf42",
+      "weights_sha256": "8bd92b7e4f5c3dbf59a81648f64e8f8485a4578c6410f7d7c12161c117878963"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 1,
+      "origin": "exploiter-probe",
+      "path": "gen-1/d8afecd74e2a8aa048c561e569409d5e6a9c0c0d77eb97fca4997b198f85a92f",
+      "trained_against": "5eb3f040225411fa8ffdde37496979b6472b90f3920f28c6922ae316d6f226e5",
+      "weights_sha256": "d8afecd74e2a8aa048c561e569409d5e6a9c0c0d77eb97fca4997b198f85a92f"
+    },
+    {
+      "cell_key": null,
+      "descriptors": null,
+      "generation": 8,
+      "origin": "exploiter-probe",
+      "path": "gen-8/ec0b220e391512d87c043f9dc0ec5daeaf0b74258f6fc108017ad5088efa05a0",
+      "trained_against": "b9235fafa9fd33af719b47d520d91045586d73ccde66dc413cd1d5616e83b75e",
+      "weights_sha256": "ec0b220e391512d87c043f9dc0ec5daeaf0b74258f6fc108017ad5088efa05a0"
+    }
+  ],
+  "side": "impostor",
+  "substrate_sha256": "9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4"
+}

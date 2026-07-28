@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "ablation-run-c1-conviction-term",
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "ablation-run-c1-conviction-term/crew/gen-9/a0ab72e26d40e289fc64c719d079e070ece960956d73bf4eae230f7c8fa7fbd3",
+  "generation": 9,
+  "genome_length": 27,
+  "hall_origin": "alternating-freeze-champion",
+  "side": "crew",
+  "source_lineage": "ablation-run-c1-conviction-term",
+  "trained_against": "7ddc3709188f2bb335ef4f19542e72be9154164c04a071729f573c27c9291e02"
+}

@@ -348,7 +348,33 @@ NOT satisfiable at this campaign's n=3 budget (§4.0), so the "conviction term p
 meeting-seeking crew" claim reads **NOT-DEMONSTRATED at this budget** with the ablation
 direction recorded — the 18.26/50-seed protocol is the venue for the claim-grade read.
 
-### 6.2 ablation:run-c1/conviction-term — RECORDING (same-shape twin of run-c1)
+### 6.2 ablation:run-c1/conviction-term (session 2 — COMPLETE, 2432-game twin)
+
+Config byte-identical to run-c1 (same `master_seed=182501`) with `conviction=None`.
+Committed twin: `training/artifacts/coevo/ablation-run-c1-conviction-term/` +
+`gen-champions/ablation-run-c1-conviction-term/`; twin digest `43570747…`. Lineage diff
+(quoted from committed artifacts):
+
+| lineage point | run-c1 (term ON) | twin (term OFF) | verdict |
+|---|---|---|---|
+| crew swap-0 champion (gen-3) | `72adb41c…` | identical | SAME |
+| crew exploiter finds, gens 5–6 | **none passed the bar** | `d007fc37…`, `2530b11d…` | **DIVERGES** |
+| impostor swap-1 champion (gen-6) | `0ca3a382…` | `7ddc3709…` | **DIVERGES** |
+| crew swap-2 champion (gen-9) | `0bf179b7…` | `a0ab72e2…` | **DIVERGES** |
+
+**Reading.** The complement of §6.1: on the meeting-RICH owned-task base (conviction
+served from gen-1: 165/297/459 uses across swap 0), the crew's own first-swap selection
+is term-INSENSITIVE — the supply addend did not reorder an already-meeting-seeking top.
+The term's first selection-relevant effect is on the EXPLOITER channel: crew-side
+exploiter probes climb `crew_inner_episode_fitness`, which carries the term when
+configured, and with the term ON no crew exploiter cleared the freeze bar during the
+impostor's swap while with it OFF two did — changing the impostor's opponent pool
+mid-swap, diverging the impostor swap-1 champion, and cascading into a different crew
+swap-2 champion. Paired reading of §6.1 + §6.2: the conviction term's selection effect
+is crew-side in BOTH campaigns (F6 extended), but its locus depends on the base — it
+reorders crew selection directly where meetings are scarce (v1) and acts through the
+exploiter/opponent-pool channel where meetings are already rich (v2). Emergence-claim
+status: same as §6.1 — ablation limb recorded, claim NOT-DEMONSTRATED at this budget.
 
 ## 7. Findings (integration findings + routed items; never silent patches)
 
