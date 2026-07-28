@@ -1140,6 +1140,39 @@ def _validate_config(
     # ``is_symlink()`` is the other half of it. Both no-clobber checks get it:
     # fixing only the one that was reported would leave the identical defect one
     # line away, which is the pattern the last three rounds have been about.
+    # The work dir and the hall root are DISJOINT trees. ``HallOfFame.load``
+    # reads every ``gen-*`` child of a side dir as a generation bucket, and the
+    # 18.31 champion artifacts land at ``<work_dir>/gen-champions/gen-<N>/<sha>``
+    # — so a work dir resolving to ``<hall_root>/impostor`` (or ``/crew``) grows
+    # a ``gen-champions`` directory INSIDE that side's hall. Nothing catches it
+    # on the way in: the fresh-root preflight runs before the work dir is made,
+    # and ``create`` runs before the first champion is frozen, so both see a
+    # clean side dir. The campaign then spends every game and the next ``load``
+    # rejects the hall as drifted — the failure lands after the spend, which is
+    # the one place this module never puts one (Codex review on PR #314).
+    #
+    # Containment is checked BOTH ways. A work dir above the hall root is the
+    # same collision seen from the other end: the halls are then created inside
+    # the tree whose ``gen-champions`` sibling this driver writes.
+    work_dir = config.work_dir.resolve()
+    hall_root_resolved = config.resolved_hall_root.resolve()
+    if work_dir == hall_root_resolved or work_dir.is_relative_to(hall_root_resolved):
+        raise ValueError(
+            f"work_dir {config.work_dir} is inside the hall root "
+            f"{config.resolved_hall_root}; the per-generation champion artifacts "
+            f"are written to <work_dir>/{GEN_CHAMPIONS_DIRNAME}/gen-<N>/<sha>, and "
+            "a hall side dir reads every gen-* child as a generation bucket — the "
+            "campaign would spend every game and only then fail to reload its own "
+            "hall (give the campaign a work_dir outside the hall root)"
+        )
+    if hall_root_resolved.is_relative_to(work_dir):
+        raise ValueError(
+            f"hall_root {config.resolved_hall_root} is inside work_dir "
+            f"{config.work_dir}; the campaign writes its rows, plan and "
+            f"{GEN_CHAMPIONS_DIRNAME} tree into the work dir, so nesting the halls "
+            "there makes one tree's evidence the other's stray files (give the "
+            "campaign a hall_root outside the work dir)"
+        )
     rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
     if _entry_exists(rows_path):
         raise FileExistsError(

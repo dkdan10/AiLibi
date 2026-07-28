@@ -440,6 +440,19 @@ _PRE_RECORDER_IDENTITY_SCHEMAS: Final[frozenset[str]] = frozenset(
 )
 _RECORDER_IDENTITY_SCHEMA: Final[str] = "realpath-rerank-v2"
 
+#: Every ranking schema this generator knows how to READ. The membership test
+#: above answers "does this file carry the recorder identity?", and answering it
+#: with "anything that is not v1" made every unknown string — a future
+#: ``-v3`` with re-specified fields, or a plain typo — read as current: the
+#: generator would check the two identity fields exist and then interpret every
+#: other field under v2 semantics, emitting authoritative tables from a schema
+#: whose meanings it had never validated (Codex review on PR #314). A schema is
+#: supported when it is named here, and refusing an unknown one costs a one-line
+#: addition on the day a v3 is actually specified.
+_SUPPORTED_RANKING_SCHEMAS: Final[frozenset[str]] = _PRE_RECORDER_IDENTITY_SCHEMAS | {
+    _RECORDER_IDENTITY_SCHEMA
+}
+
 #: The leg-level fields ONE ranking file's rows must agree on — the protocol,
 #: the seed set (one ranking file is one tranche), the schema generation, and
 #: the recorder identity when the schema carries it.
@@ -523,6 +536,21 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
                 f"{ranking_path}: rows disagree on the leg-level field {field!r} "
                 f"({sorted(values)}); one leg table describes ONE experiment"
             )
+    # The schema itself, now that every row is known to declare the same one.
+    # This is the precondition for reading ANY other field: every check below
+    # interprets the rows under this generator's understanding of the format, so
+    # a schema it does not know is a file it must not render (Codex review on
+    # PR #314).
+    declared_schema = str(rows[0]["schema_version"])
+    if declared_schema not in _SUPPORTED_RANKING_SCHEMAS:
+        raise SystemExit(
+            f"{ranking_path}: rows declare schema_version {declared_schema!r}, "
+            f"which this generator does not support (known: "
+            f"{sorted(_SUPPORTED_RANKING_SCHEMAS)}). An unrecognised schema is "
+            "refused rather than read under the newest one's field meanings — "
+            "regenerate the table with the matching generator, or teach this one "
+            "the schema"
+        )
     # The recorder identity, once the schema generation says the rows carry it.
     # Keying on the row's OWN declared ``schema_version`` is what keeps this
     # honest for the frozen ``-v1`` corpus: absence is then a recorded fact

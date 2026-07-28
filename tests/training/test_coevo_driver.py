@@ -898,6 +898,46 @@ def test_existing_generation_champions_dir_is_refused(tmp_path: Path) -> None:
     assert not (tmp_path / "halls").exists()
 
 
+def test_the_work_dir_and_the_hall_root_may_not_overlap(tmp_path: Path) -> None:
+    """The champion tree may not land inside a hall (Codex review on PR #314).
+
+    ``HallOfFame.load`` reads every ``gen-*`` child of a side dir as a generation
+    bucket, and the 18.31 champion artifacts are written to
+    ``<work_dir>/gen-champions/gen-<N>/<sha>``. A work dir pointed at
+    ``<hall_root>/impostor`` therefore grew a ``gen-champions`` directory inside
+    that hall — and nothing on the way in saw it, because the fresh-root
+    preflight runs before the work dir is created and ``create`` runs before the
+    first champion is frozen. The campaign spent every paid game and only the
+    NEXT load failed, on a hall the campaign had corrupted itself.
+
+    Pinned in both directions and demonstrated, not just asserted: the second
+    half shows the load that the accepted configuration would have broken.
+    """
+
+    for side in ("impostor", "crew"):
+        config = _make_config(
+            tmp_path / side, work_dir=tmp_path / side / "halls" / side
+        )
+        with pytest.raises(ValueError, match="is inside the hall root"):
+            run_alternating_freeze(config)
+        assert not (tmp_path / side / "halls").exists()
+
+    nested = _make_config(
+        tmp_path / "nested", hall_root=tmp_path / "nested" / "work" / "halls"
+    )
+    with pytest.raises(ValueError, match="is inside work_dir"):
+        run_alternating_freeze(nested)
+
+    # The harm, shown directly: a gen-champions tree inside a side dir is what
+    # the refusal above prevents, and it is fatal to the hall that holds it.
+    hall_root = tmp_path / "harm" / "halls"
+    hall = HallOfFame.create(hall_root, "impostor", substrate_sha256=_SUBSTRATE)
+    assert HallOfFame.load(hall_root, "impostor").members == hall.members
+    (hall_root / "impostor" / "gen-champions" / "gen-1" / "abc").mkdir(parents=True)
+    with pytest.raises(ValueError):
+        HallOfFame.load(hall_root, "impostor")
+
+
 def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None:
     """Presence is about the directory ENTRY (Codex review on PR #314).
 

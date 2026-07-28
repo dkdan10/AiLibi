@@ -22,15 +22,17 @@ ordering evidence a library artifact instead of a shell redirection.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import fcntl
 import json
 import os
 import shutil
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 from pydantic import ValidationError
@@ -2062,10 +2064,22 @@ def test_ranking_path_may_not_name_a_candidate_directory(tmp_path: Path) -> None
     stems and stopped there, so ``work/000-utility-es`` passed: the leg created
     it as a directory, recorded every paid game into it, and the ranking publish
     then tried to hard-link onto a directory.
+
+    Round 18 adds the FOUR-digit ordinals. ``f"{ordinal:03d}"`` sets a minimum
+    width, not a maximum, and the allocator's walk runs to ``index + 1000``, so
+    ``1000-utility-es`` is a directory this code really creates — and a preflight
+    that matched a three-character stem let exactly that name through to the same
+    post-spend link failure it exists to prevent.
     """
 
     work_dir = tmp_path / "work"
-    for name in ("000-utility-es", "001-utility-es", "007-utility-es"):
+    for name in (
+        "000-utility-es",
+        "001-utility-es",
+        "007-utility-es",
+        "1000-utility-es",
+        "12-utility-es",
+    ):
         with pytest.raises(RealPathRerankError, match="candidate recording directory"):
             run_realpath_rerank(
                 [_util_candidate()],
@@ -2285,35 +2299,248 @@ def test_a_custom_runner_records_no_default_runner_inputs() -> None:
         _identity(False, AILIBI_LLM_PROVIDER="totally-unknown")
 
 
+#: Where an ``AILIBI_*`` name has to appear for the scan below to call it a READ.
+#: The recording path's lookups all go through a mapping the module calls some
+#: variant of "environment" (``os.environ``, an injected ``env``), which is the
+#: 16.8 injected-environment idiom this repository follows everywhere.
+_ENV_LOOKUP_RECEIVERS = frozenset({"environ", "environment", "env", "_env"})
+
+
+class _ScannedModule(NamedTuple):
+    """One closure module's parsed source plus its ``from X import Y`` map."""
+
+    tree: ast.Module
+    aliases: dict[str, tuple[str, str]]
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _first_party_packages() -> frozenset[str]:
+    """Top-level importable packages in the repo, minus the test tree."""
+
+    return frozenset(
+        entry.name
+        for entry in _repo_root().iterdir()
+        if entry.is_dir() and (entry / "__init__.py").exists()
+    ) - {"tests"}
+
+
+def _module_source(module: str) -> Path | None:
+    parts = module.split(".")
+    root = _repo_root()
+    for candidate in (
+        root.joinpath(*parts).with_suffix(".py"),
+        root.joinpath(*parts, "__init__.py"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _dotted(node: ast.expr) -> str:
+    """``a.b.c`` for a Name/Attribute chain, ``""`` for anything else."""
+
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    return ""
+
+
+def _imports_of(
+    module: str, path: Path, tree: ast.Module
+) -> tuple[set[str], dict[str, tuple[str, str]]]:
+    """First-party modules this one imports, and its ``name -> (module, attr)`` map."""
+
+    package = module if path.name == "__init__.py" else module.rsplit(".", 1)[0]
+    first_party = _first_party_packages()
+    targets: set[str] = set()
+    aliases: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".")
+                parts = parts[: len(parts) - (node.level - 1)]
+                target = ".".join(parts) + (f".{node.module}" if node.module else "")
+            else:
+                target = node.module or ""
+            targets.add(target)
+            for alias in node.names:
+                # ``from pkg import module`` and ``from module import NAME`` are
+                # the same syntax; record both readings and let the resolution
+                # below pick whichever exists.
+                targets.add(f"{target}.{alias.name}")
+                aliases[alias.asname or alias.name] = (target, alias.name)
+    return {m for m in targets if m and m.split(".")[0] in first_party}, aliases
+
+
+def _first_party_import_closure(roots: Sequence[str]) -> dict[str, _ScannedModule]:
+    """Every first-party module reachable from ``roots`` by import, parsed.
+
+    A source-level walk rather than an ``importlib`` one: it needs no import side
+    effects, and it sees the imports as WRITTEN, which is what a reviewer reading
+    the recording path would follow.
+    """
+
+    scanned: dict[str, _ScannedModule] = {}
+    queue = list(roots)
+    while queue:
+        module = queue.pop()
+        if module in scanned:
+            continue
+        path = _module_source(module)
+        if path is None:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        children, aliases = _imports_of(module, path, tree)
+        scanned[module] = _ScannedModule(tree=tree, aliases=aliases)
+        queue.extend(child for child in children if child not in scanned)
+    return scanned
+
+
+def _env_name_constants(tree: ast.Module) -> dict[str, str]:
+    """``NAME -> "AILIBI_..."`` for this module's env-name constants."""
+
+    constants: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        elif (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            target, value = node.targets[0].id, node.value
+        else:
+            continue
+        if (
+            isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and value.value.startswith("AILIBI_")
+        ):
+            constants[target] = value.value
+    return constants
+
+
+def _env_names_mentioned(closure: Mapping[str, _ScannedModule]) -> set[str]:
+    """Every ``AILIBI_*`` string literal anywhere in the closure's source."""
+
+    return {
+        node.value
+        for scanned in closure.values()
+        for node in ast.walk(scanned.tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("AILIBI_")
+    }
+
+
+def _env_names_read(closure: Mapping[str, _ScannedModule]) -> set[str]:
+    """Every ``AILIBI_*`` name the closure passes to an environment lookup.
+
+    Mention is not reading: this repository keeps a retired lever's env-var
+    constant alive so replay can still stamp the flag, and those constants are
+    defined and exported but never looked up. Keying on the LOOKUP is what tells
+    a live protocol input apart from a retired one.
+    """
+
+    constants = {name: _env_name_constants(m.tree) for name, m in closure.items()}
+
+    def resolve(module: str, node: ast.expr) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            local = constants[module].get(node.id)
+            if local is not None:
+                return local
+            source = closure[module].aliases.get(node.id)
+            if source is not None:
+                origin, attribute = source
+                return constants.get(origin, {}).get(attribute)
+        return None
+
+    read: set[str] = set()
+    for module, scanned in closure.items():
+        for node in ast.walk(scanned.tree):
+            key: ast.expr | None = None
+            if isinstance(node, ast.Subscript):
+                if _dotted(node.value).rpartition(".")[2] in _ENV_LOOKUP_RECEIVERS:
+                    key = node.slice
+            elif isinstance(node, ast.Call):
+                function = node.func
+                if isinstance(function, ast.Attribute) and function.attr == "get":
+                    receiver = _dotted(function.value).rpartition(".")[2]
+                    if receiver in _ENV_LOOKUP_RECEIVERS and node.args:
+                        key = node.args[0]
+                elif _dotted(function).rpartition(".")[2] == "getenv" and node.args:
+                    key = node.args[0]
+            if key is None:
+                continue
+            name = resolve(module, key)
+            if name is not None and name.startswith("AILIBI_"):
+                read.add(name)
+    return read
+
+
 def test_the_recording_identity_covers_every_env_input_on_the_path() -> None:
     """The ENUMERATION pin: the domain is checked, not just today's members.
 
     Six rounds each added one field to the recording identity because each round
-    fixed the witness it was handed. This re-reads the modules the default
-    recording path actually calls and asserts that every ``AILIBI_*`` knob they
-    read is accounted for — so the NEXT knob fails the suite here instead of
-    arriving as a review finding.
+    fixed the witness it was handed, so round 16 replaced the witnesses with an
+    enumeration — and round 17 then found the enumeration itself incomplete. The
+    scan is therefore DERIVED, not listed: it walks the first-party import
+    closure of :data:`RECORDING_ENV_CALL_ROOTS` and reads every module in it, so
+    a knob added under either root fails here whether or not anyone remembered to
+    name its module (Codex review on PR #314).
+
+    Two questions, because they fail differently:
+
+    * SOUNDNESS — every knob that reaches an environment lookup in the closure is
+      in ``RECORDING_ENV_INPUTS``, and vice versa. This is the identity's actual
+      obligation.
+    * ACCOUNTING — every ``AILIBI_*`` name MENTIONED anywhere in the closure is
+      either a recording input or a retired always-on lever
+      (``SUBSTRATE_FLAG_KEYS``). This is the backstop for the lookup analysis
+      itself: a knob read through a receiver the analysis does not recognise
+      still has to be named somewhere, and lands here as unaccounted-for.
     """
 
-    import importlib
-    import re
+    from orchestrator.replay import SUBSTRATE_FLAG_KEYS
 
-    found: set[str] = set()
-    for module_name in realpath.RECORDING_ENV_SOURCE_MODULES:
-        source = Path(importlib.import_module(module_name).__file__ or "").read_text(
-            encoding="utf-8"
-        )
-        found.update(re.findall(r'"(AILIBI_[A-Z0-9_]+)"', source))
+    closure = _first_party_import_closure(realpath.RECORDING_ENV_CALL_ROOTS)
+    # The closure is a real transitive walk, not the roots plus a step.
+    assert len(closure) > 20, f"suspiciously shallow closure: {sorted(closure)}"
+    assert {"llm.provider", "agents.strategic.prompts.loader"} <= set(closure), (
+        "the closure lost the provider selector or the prompt loader, which are "
+        f"the modules the identity is built from: {sorted(closure)}"
+    )
 
-    missing = sorted(found - realpath.RECORDING_ENV_INPUTS)
+    read = _env_names_read(closure)
+    missing = sorted(read - realpath.RECORDING_ENV_INPUTS)
     assert not missing, (
         f"the recording path reads {missing}, which the identity does not "
         "account for. Add it to _default_runner_inputs AND to "
         "RECORDING_ENV_INPUTS — a knob the identity misses is a resume that "
         "adopts bytes recorded under different settings."
     )
-    stale = sorted(realpath.RECORDING_ENV_INPUTS - found)
+    stale = sorted(realpath.RECORDING_ENV_INPUTS - read)
     assert not stale, f"RECORDING_ENV_INPUTS names knobs nothing reads: {stale}"
+
+    retired = {f"AILIBI_{key.upper()}" for key in SUBSTRATE_FLAG_KEYS}
+    unaccounted = sorted(
+        _env_names_mentioned(closure) - realpath.RECORDING_ENV_INPUTS - retired
+    )
+    assert not unaccounted, (
+        f"the recording path names {unaccounted}, which is neither a declared "
+        "recording input nor a retired always-on lever. If it is read, add it to "
+        "RECORDING_ENV_INPUTS and _default_runner_inputs; if it is a graduated "
+        "lever, it belongs in orchestrator.replay's substrate flag keys."
+    )
 
     # And the enumeration is actually WIRED: every knob moves the identity of a
     # default-runner leg. Each is exercised under a base env where it is READ —
@@ -2815,6 +3042,75 @@ def test_a_claim_is_matched_to_the_candidate_being_allocated(tmp_path: Path) -> 
     # slate order — the other label steps aside.
     assert placed["arm a"] == "000-arm-a"
     assert placed["arm-a"] != "000-arm-a"
+
+
+def test_a_reused_label_may_not_inherit_a_reservation(tmp_path: Path) -> None:
+    """A reservation is the CANDIDATE's, not the label's (Codex review on PR #314).
+
+    Round 17 let a candidate reclaim the directory a prior manifest reserved for
+    its ``(tranche, label)``. If the first leg published its manifest and died
+    before ``mkdir``, a later FRESH leg reusing the label for a different genome
+    inherited that reservation and recorded the new bytes into it — leaving the
+    tranche with two manifests that disagree about the label, which
+    ``_refuse_protocol_drift`` reads as drift forever after. The refusal lands
+    before any allocation, so nothing is recorded and nothing is claimed.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    original = _util_candidate(label="arm-a")
+    moved = original.model_copy(
+        update={"genome": tuple(original.genome[:-1]) + (original.genome[-1] + 1.0,)}
+    )
+    assert realpath._genome_digest(moved.genome) != realpath._genome_digest(
+        original.genome
+    )
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {
+                "tranche": "1-2",
+                "candidates": [
+                    {
+                        "label": "arm-a",
+                        "dir": "000-arm-a",
+                        "weights_sha256": realpath._genome_digest(original.genome),
+                        "encoder_version": original.encoder_version,
+                        "hidden": original.hidden,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RealPathRerankError, match="A label is not an identity"):
+        run_realpath_rerank(
+            [moved],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(),
+        )
+    # Nothing was allocated: the reserved directory is still unmade, and no
+    # second manifest exists to poison the tranche's future resumes.
+    assert not (work_dir / "000-arm-a").exists()
+    assert (
+        len(list(work_dir.glob(f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-*.json")))
+        == 1
+    )
+    # And the allocator itself refuses the inheritance even reached directly —
+    # the refusal above is the fail-loud seam, this is the rule underneath it.
+    resolved = realpath._resolve_candidate_dirs(
+        work_dir, tranche="1-2", candidates=[moved], resume=False
+    )
+    assert resolved[0].name != "000-arm-a"
+    # The UNCHANGED candidate still reclaims its own reservation (round 17).
+    assert (
+        realpath._resolve_candidate_dirs(
+            work_dir, tranche="1-2", candidates=[original], resume=False
+        )[0].name
+        == "000-arm-a"
+    )
 
 
 def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:

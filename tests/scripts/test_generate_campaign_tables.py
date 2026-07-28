@@ -627,16 +627,31 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     with pytest.raises(SystemExit, match="different schema_version"):
         gct.compute_stability(gct.find_ranking_files([tmp_path / "mixed"]))
 
-    # A FUTURE schema is required to carry the identity too: the legacy set is
-    # closed, so a generation that forgot the fields is refused rather than
-    # read as pre-18.31. (A ``>=`` string compare would have got this backwards
-    # — ``"...-v10"`` sorts below ``"...-v2"``.)
-    future = _v2_row(schema_version="realpath-rerank-v10")
-    del future["game_map_sha256"]
-    leg = tmp_path / "future" / "leg-01"
-    _write_arm(leg, "t1", future, seeds=(1, 2, 3))
-    with pytest.raises(SystemExit, match="a ranking row names the recorder"):
-        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+    # A FUTURE schema is refused OUTRIGHT (Codex round 18), which supersedes the
+    # narrower round-8 rule that it merely had to carry the recorder identity.
+    # "Anything that is not v1 is current" meant an unknown string — a real v3
+    # with re-specified fields, or a typo — passed the identity check and then
+    # had every OTHER field read under v2 semantics, so the generator could emit
+    # an authoritative table from a format it had never validated. Carrying the
+    # two identity fields is not evidence about the rest of the schema.
+    for unknown in ("realpath-rerank-v10", "realpath-rerank-v3", "realpath-rerank-v2 "):
+        leg = tmp_path / f"future-{unknown.strip()}" / "leg-01"
+        _write_arm(leg, "t1", _v2_row(schema_version=unknown), seeds=(1, 2, 3))
+        with pytest.raises(SystemExit, match="does not support"):
+            gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # Both supported schemas still read. The v1 corpus is the frozen 18.24
+    # record; refusing it would break the acceptance fixture this generator is
+    # measured by.
+    for supported in (gct._RECORDER_IDENTITY_SCHEMA, "realpath-rerank-v1"):
+        leg = tmp_path / f"ok-{supported}" / "leg-01"
+        row = (
+            _v2_row()
+            if supported == gct._RECORDER_IDENTITY_SCHEMA
+            else _committed_row(0)
+        )
+        _write_arm(leg, "t1", row, seeds=(1, 2, 3))
+        assert gct.read_validated_ranking(leg / "ranking-t1.jsonl")
 
     # Agreeing ``-v2`` reads fold normally, and so does the frozen ``-v1`` pair.
     leg = tmp_path / "agree" / "leg-01"

@@ -109,7 +109,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -327,6 +327,11 @@ _PROMPT_VERSIONS_KEY: Final[str] = "prompt_versions"
 #:
 #: ``ANTHROPIC_API_KEY`` / ``FEATHERLESS_API_KEY`` are deliberately ABSENT: a
 #: credential is not a recording protocol, and this mapping is written to disk.
+#:
+#: The pin does not take this list on trust: it re-derives the same set from the
+#: import closure of :data:`RECORDING_ENV_CALL_ROOTS` and asserts equality in
+#: BOTH directions, so a knob added anywhere under either root fails the suite
+#: here and a knob named here that nothing reads fails it too.
 RECORDING_ENV_INPUTS: Final[frozenset[str]] = frozenset(
     {
         "AILIBI_LLM_PROVIDER",
@@ -342,20 +347,24 @@ RECORDING_ENV_INPUTS: Final[frozenset[str]] = frozenset(
     }
 )
 
-#: The modules the enumeration above was read FROM. The coverage pin re-reads
-#: them, so a new knob added to any of them fails the suite.
-RECORDING_ENV_SOURCE_MODULES: Final[tuple[str, ...]] = (
-    # BOTH call roots first, then what they reach. Listing only the transitive
-    # providers left the guarantee hollow: a knob read directly inside
-    # ``build_default_meeting_runner`` would change the recorder while the scan
-    # and this enumeration both stayed green (Codex review on PR #314). It reads
-    # none today — the point is that the pin would not notice if it did.
+#: The two CALL ROOTS of the default recording path. The coverage pin derives
+#: the first-party import closure of these and scans every module in it, so the
+#: set of scanned modules is computed rather than maintained.
+#:
+#: This replaced a hand-written list of six modules, which was the wrong shape
+#: twice over (Codex review on PR #314). It had already been incomplete once —
+#: round 17 found both call roots missing from it — and even complete it could
+#: only ever describe the imports of the day: the moment either root reached a
+#: new helper that read a knob, the scan would not visit that helper and the pin
+#: would stay green while the backend digest omitted a real protocol input. The
+#: closure is what "on the path" actually means, so the pin computes it.
+RECORDING_ENV_CALL_ROOTS: Final[tuple[str, ...]] = (
+    # ``run_tournament_eval`` with no ``meeting_runner_factory`` reaches the
+    # provider selector and the prompt loader through the game, and the per-game
+    # budget through the balance-eval resolver. Everything else the recorder
+    # consults is downstream of one of these two.
     "orchestrator.game",
     "eval.balance_eval",
-    "llm.provider",
-    "llm.ollama_client",
-    "llm.featherless_client",
-    "agents.strategic.prompts.loader",
 )
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
@@ -1625,31 +1634,49 @@ def _refuse_protocol_drift(
             )
 
 
-def _claimed_candidate_dirs(work_dir: Path) -> dict[str, tuple[str, str]]:
-    """Every candidate directory a leg manifest CLAIMS -> ``(tranche, label)``.
+class _DirClaim(NamedTuple):
+    """One leg manifest's reservation of one candidate directory.
+
+    ``identity`` is the ``(digest, encoder_version, hidden)`` triple the manifest
+    recorded for the label, or ``None`` for a manifest written before this task
+    added those fields — see :func:`_recorded_identity`.
+    """
+
+    tranche: str
+    label: str
+    identity: tuple[str, str, int | None] | None
+
+
+def _claimed_candidate_dirs(work_dir: Path) -> dict[str, _DirClaim]:
+    """Every candidate directory a leg manifest CLAIMS -> :class:`_DirClaim`.
 
     A manifest is the durable record of which directories a leg owns, so it is
     what makes a claim survive the allocating process — and a claim covers a
     directory that need not exist yet (a leg can publish its manifest and then
     fail before recording).
 
-    The claim is keyed by ``(tranche, label)`` rather than reduced to a bare set
-    of names, because the two consumers ask different questions and getting that
-    wrong has produced a finding in BOTH directions:
+    The claim carries the claimant rather than reducing to a bare set of names,
+    because the two consumers ask different questions and getting that wrong has
+    produced a finding in BOTH directions:
 
     * an ALLOCATOR asks "may this candidate occupy this directory?" — yes only
-      when the claim is its own ``(tranche, label)``. Reading it as "ignore my
-      whole tranche" let a later fresh leg with a distinct label but a colliding
-      slug take a stale reservation, after which a resume of the original label
-      resolved to the same directory and ranked the newer candidate's games
-      under the old name (Codex review on PR #314). Reading it as "step aside
-      from every claim" is the opposite error: a same-label re-run would quietly
-      record a second copy instead of colliding, which is the round-11 defect.
+      when the claim is its own, matched on tranche, label AND identity. Reading
+      it as "ignore my whole tranche" let a later fresh leg with a distinct label
+      but a colliding slug take a stale reservation, after which a resume of the
+      original label resolved to the same directory and ranked the newer
+      candidate's games under the old name (Codex review on PR #314). Reading it
+      as "step aside from every claim" is the opposite error: a same-label re-run
+      would quietly record a second copy instead of colliding, which is the
+      round-11 defect. Matching on ``(tranche, label)`` and stopping there is a
+      third: a label reused for different bytes then inherited the reservation
+      (round 18) — ``_refuse_reused_label_identity`` refuses that case outright,
+      and the identity in the claim is what keeps the allocator from depending on
+      that refusal having run.
     * a RANKING DESTINATION asks "is this directory spoken for?" — any claim at
       all disqualifies it, with no exemption.
     """
 
-    claimed: dict[str, tuple[str, str]] = {}
+    claimed: dict[str, _DirClaim] = {}
     for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -1666,8 +1693,126 @@ def _claimed_candidate_dirs(work_dir: Path) -> dict[str, tuple[str, str]]:
                 and isinstance(tranche, str)
                 and isinstance(label, str)
             ):
-                claimed[recorded_dir] = (tranche, label)
+                claimed[recorded_dir] = _DirClaim(
+                    tranche=tranche,
+                    label=label,
+                    identity=_recorded_identity(entry),
+                )
     return claimed
+
+
+def _candidate_identity(candidate: RealPathCandidate) -> tuple[str, str, int | None]:
+    """What makes a candidate THIS candidate: bytes, family, width.
+
+    The same triple ``_refuse_protocol_drift`` compares, so a reservation and a
+    resume agree on what "the same candidate" means.
+    """
+
+    return (
+        _genome_digest(candidate.genome),
+        candidate.encoder_version,
+        candidate.hidden,
+    )
+
+
+def _claim_belongs_to(
+    claim: _DirClaim, *, tranche: str, candidate: RealPathCandidate
+) -> bool:
+    """Is this reservation THIS candidate's, to reclaim or to record into?
+
+    Tranche and label first, then identity. A claim with no recorded identity
+    (an older manifest) speaks for the label only, so it still belongs to the
+    label — refusing to reclaim it would re-open the round-17 leak, where a
+    candidate could never reach its own reserved directory and leaked a fresh one
+    on every retry.
+    """
+
+    if claim.tranche != tranche or claim.label != candidate.label:
+        return False
+    return claim.identity is None or claim.identity == _candidate_identity(candidate)
+
+
+def _recorded_identity(
+    entry: Mapping[str, object],
+) -> tuple[str, str, int | None] | None:
+    """One manifest candidate entry's identity triple, or ``None`` if it has none.
+
+    ``None`` is a recorded fact about an OLDER manifest — one written before this
+    task added the identity fields — not a shrug. Callers treat it as "this claim
+    speaks for the label only", which is exactly what such a manifest asserts.
+
+    Absence is decided by the KEYS, not by their values: the utility family takes
+    no ``hidden`` width and records ``null`` for it, so reading a null width as
+    "no identity here" would have exempted every utility candidate from the very
+    check this exists for.
+    """
+
+    if not {"weights_sha256", "encoder_version", "hidden"} <= set(entry):
+        return None
+    digest = entry["weights_sha256"]
+    family = entry["encoder_version"]
+    hidden = entry["hidden"]
+    if not isinstance(digest, str) or not isinstance(family, str):
+        return None
+    if hidden is None:
+        return (digest, family, None)
+    if isinstance(hidden, int) and not isinstance(hidden, bool):
+        return (digest, family, hidden)
+    return None
+
+
+def _refuse_reused_label_identity(
+    work_dir: Path, *, tranche: str, candidates: Sequence[RealPathCandidate]
+) -> None:
+    """A label may not come back wearing different bytes (18.31).
+
+    ``_refuse_protocol_drift`` enforces this for a RESUME. A fresh leg needs it
+    too, and for a sharper reason than symmetry: the fresh-leg allocator lets a
+    candidate reclaim the directory a prior manifest reserved for its label, and
+    round 17 keyed that reclaim on ``(tranche, label)`` alone. So a leg that
+    published its manifest and died before ``mkdir``, followed by a fresh leg
+    that reused the label for a different genome or encoder family, recorded the
+    new candidate into the old candidate's reservation (Codex review on PR #314).
+
+    The damage outlives that leg. The work dir is then left holding two manifests
+    for one tranche that disagree about what ``label`` is, and
+    ``_refuse_protocol_drift`` reads EVERY prior manifest — so every later resume
+    of that tranche is refused forever, on evidence that has to be deleted by
+    hand. Stepping the new candidate aside to a different directory would not
+    have helped: the contradiction is between the manifests, not between the
+    directories.
+
+    Refused here, before any allocation, so nothing is recorded and nothing is
+    claimed. Re-running a label against new bytes is a new experiment: give it a
+    fresh work dir, or a label of its own.
+    """
+
+    wanted = {
+        candidate.label: _candidate_identity(candidate) for candidate in candidates
+    }
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # Unreadable manifests are the drift check's to report, with its
+            # message; duplicating the refusal here would only change which
+            # error a resume sees first.
+            continue
+        for entry in manifest.get("candidates", []):
+            label = entry.get("label")
+            recorded = _recorded_identity(entry)
+            if not isinstance(label, str) or recorded is None:
+                continue
+            if label in wanted and wanted[label] != recorded:
+                raise RealPathRerankError(
+                    f"a prior leg manifest ({path}) records candidate label "
+                    f"{label!r} in this tranche with identity {recorded!r}, but "
+                    f"this invocation supplies {wanted[label]!r}. A label is not "
+                    "an identity: recording new bytes under a reserved label "
+                    "leaves this tranche with two manifests that disagree about "
+                    "it, and every later resume refuses on that disagreement — "
+                    "use a fresh work dir, or a distinct label"
+                )
 
 
 def _refuse_escaping_recorded_dir(
@@ -1860,8 +2005,8 @@ def _resolve_candidate_dirs(
             # only says who may not have a directory, never who may.
             owned = sorted(
                 name
-                for name, owner in claimed.items()
-                if owner == (tranche, candidate.label)
+                for name, claim in claimed.items()
+                if _claim_belongs_to(claim, tranche=tranche, candidate=candidate)
             )
             if owned:
                 chosen = work_dir / owned[0]
@@ -1880,10 +2025,12 @@ def _resolve_candidate_dirs(
             # write-once continues to collide at ``mkdir``.
             for ordinal in range(index, index + _MAX_INVOCATIONS):
                 chosen = work_dir / f"{ordinal:03d}-{slug}"
-                owner = claimed.get(chosen.name)
+                claim = claimed.get(chosen.name)
                 if chosen in taken:
                     continue
-                if owner is None or owner == (tranche, candidate.label):
+                if claim is None or _claim_belongs_to(
+                    claim, tranche=tranche, candidate=candidate
+                ):
                     break
             else:  # pragma: no cover - 1000 claimed ordinals is a runaway
                 raise RealPathRerankError(
@@ -2438,8 +2585,19 @@ def _refuse_library_owned_ranking_path(
     # reach is refused rather than only the first.
     slugs = {_safe_slug(candidate.label) for candidate in candidates}
     stem_name, _, suffix_slug = name.partition("-")
+    # ANY numeric ordinal, not a three-digit one. ``f"{ordinal:03d}"`` is a
+    # minimum width, not a maximum: the enumerated name for candidate 1000 is
+    # ``1000-<slug>``, and the fresh-leg walk runs to ``index + 1000``, so a
+    # four-digit ordinal is a name this allocator really produces. Pinning the
+    # length to 3 let ``--ranking-path <work>/1000-arm-a`` through, after which
+    # the leg created that path as a directory, recorded every paid seed into it,
+    # and the publish failed its hard link on a directory — the exact failure
+    # this preflight exists to prevent, one digit out of range (Codex review on
+    # PR #314). Refusing every numeric stem is the conservative direction: the
+    # cost is a rejected ranking name inside the work dir, which the leg has no
+    # business writing anyway.
     looks_like_candidate_dir = (
-        len(stem_name) == 3 and stem_name.isdigit() and suffix_slug in slugs
+        stem_name.isascii() and stem_name.isdigit() and suffix_slug in slugs
     )
     if looks_like_candidate_dir:
         raise RealPathRerankError(
@@ -3074,6 +3232,18 @@ def run_realpath_rerank(
                     "replay and re-record the whole leg. Record custom-map legs "
                     "without resume, or extend the fence to accept a map"
                 )
+        else:
+            # A FRESH leg gets the slate half of the drift check. The resume path
+            # already refuses a label whose bytes moved; the fresh path needs it
+            # because its allocator RECLAIMS the directory a prior manifest
+            # reserved for the label, so a reused label would record new bytes
+            # into the old candidate's reservation and strand the tranche
+            # (Codex review on PR #314). Only the slate: a fresh leg is entitled
+            # to a different config, mode and backend — that is what makes it
+            # fresh — and it takes a new directory rather than adopting bytes.
+            _refuse_reused_label_identity(
+                work_dir, tranche=tranche, candidates=candidates
+            )
         # The manifest IS the fresh leg's reservation, so it is published while
         # the allocation claim is still held (Codex review on PR #314).
         opened: list[tuple[str, Path]] = []
