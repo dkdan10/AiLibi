@@ -92,6 +92,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -248,6 +249,11 @@ _PROVIDER_ENV_VARS: Final[tuple[str, ...]] = (
     "AILIBI_LLM_PROVIDER",
     "AILIBI_LLM_MEETING_MODEL",
     "AILIBI_LLM_TRIGGER_MODEL",
+    # ``build_default_meeting_runner`` resolves this to pick the rendered
+    # templates AND the recorded prompt versions (``orchestrator/game.py``), so
+    # two prompt sets are two recording protocols even on one provider/model
+    # (Codex review on PR #314).
+    "AILIBI_PROMPT_SET",
 )
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
@@ -1334,14 +1340,20 @@ def _refuse_protocol_drift(
             )
 
 
-def _recorded_candidate_dirs(work_dir: Path, *, tranche: str) -> dict[str, str]:
-    """``label -> recorded dir name`` from this tranche's prior manifests (18.31).
+def _recorded_candidate_dirs(
+    work_dir: Path, *, tranche: str
+) -> tuple[dict[str, str], set[str]]:
+    """This tranche's prior ``label -> dir`` mapping, and every label it ever saw.
 
     Manifests are read newest-last, so the most recent invocation's directory
-    wins for any label recorded more than once.
+    wins for any label recorded more than once. The label SET is returned
+    separately because it is complete even for legacy manifests written before
+    the ``dir`` field existed — and knowing a label was never recorded is what
+    proves a candidate is new.
     """
 
     recorded: dict[str, str] = {}
+    seen: set[str] = set()
     for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json")):
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -1351,10 +1363,33 @@ def _recorded_candidate_dirs(work_dir: Path, *, tranche: str) -> dict[str, str]:
             # under resume; skipping keeps this helper total.
             continue
         for entry in manifest.get("candidates", []):
+            label = entry.get("label")
+            if not isinstance(label, str):
+                continue
+            seen.add(label)
             recorded_dir = entry.get("dir")
             if isinstance(recorded_dir, str) and recorded_dir:
-                recorded[entry["label"]] = recorded_dir
-    return recorded
+                recorded[label] = recorded_dir
+    return recorded, seen
+
+
+def _fresh_candidate_dir(work_dir: Path, *, index: int, label: str) -> Path:
+    """An UNUSED dir for a candidate with no prior recordings (18.31).
+
+    The enumerated name may already belong to another label (slugs collide, and
+    a narrowed slate renumbers), so the ordinal is bumped until the path is
+    free. A new candidate must never inherit another candidate's bytes.
+    """
+
+    slug = _safe_slug(label)
+    for ordinal in range(index, index + _MAX_INVOCATIONS):
+        candidate_dir = work_dir / f"{ordinal:03d}-{slug}"
+        if not candidate_dir.exists():
+            return candidate_dir
+    raise RealPathRerankError(
+        f"no free recording directory for candidate {label!r} under {work_dir} "
+        f"after {_MAX_INVOCATIONS} attempts; that is a runaway, not a campaign"
+    )
 
 
 def _resolve_candidate_dirs(
@@ -1395,32 +1430,56 @@ def _resolve_candidate_dirs(
     if not resume:
         return enumerated
 
-    recorded = _recorded_candidate_dirs(work_dir, tranche=tranche)
+    recorded, seen_labels = _recorded_candidate_dirs(work_dir, tranche=tranche)
     resolved: list[Path] = []
-    for fallback, candidate in zip(enumerated, candidates, strict=True):
+    for index, candidate in enumerate(candidates):
         name = recorded.get(candidate.label)
         if name is not None:
             resolved.append(work_dir / name)
             continue
+        if candidate.label not in seen_labels:
+            # NEW to this tranche. It must never adopt an existing directory:
+            # ``_safe_slug`` is many-to-one, so a unique slug match can belong
+            # to a DIFFERENT label, and ``_resume_skip_reason`` cannot catch
+            # that when both carry the same genome and stamp — which this
+            # module explicitly permits. The row would then credit this
+            # candidate with another's games (Codex review on PR #314).
+            resolved.append(
+                _fresh_candidate_dir(work_dir, index=index, label=candidate.label)
+            )
+            continue
+        # Recorded before, but by a manifest predating the ``dir`` field. The
+        # slug walk is the only route left, and it is trusted ONLY when nothing
+        # about it is ambiguous.
         slug = _safe_slug(candidate.label)
+        colliding = sorted(other for other in seen_labels if _safe_slug(other) == slug)
         existing = sorted(
             path
             for path in work_dir.glob(f"*-{slug}")
             if path.is_dir() and path.name[3:] == f"-{slug}"
         )
-        if len(existing) > 1:
+        if len(existing) > 1 or len(colliding) > 1:
             raise RealPathRerankError(
                 f"resume cannot place candidate {candidate.label!r}: no manifest "
-                f"records its directory and {len(existing)} dirs share its slug "
-                f"({[p.name for p in existing]}); which one holds this candidate's "
-                "bytes is unresolvable — re-record the leg into a fresh work dir"
+                f"records its directory, and its slug {slug!r} is shared by "
+                f"labels {colliding} across dirs {[p.name for p in existing]}; "
+                "which one holds this candidate's bytes is unresolvable — "
+                "re-record the leg into a fresh work dir"
             )
-        resolved.append(existing[0] if existing else fallback)
+        resolved.append(
+            existing[0]
+            if existing
+            else _fresh_candidate_dir(work_dir, index=index, label=candidate.label)
+        )
     return tuple(resolved)
 
 
 def _recording_backend_identity(
-    *, custom_runner: bool, environment: Mapping[str, str] | None = None
+    *,
+    custom_runner: bool,
+    runner_identity: str | None = None,
+    game_map: Map,
+    environment: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """The serialisable identity of WHAT RECORDED the bytes (18.31).
 
@@ -1437,10 +1496,55 @@ def _recording_backend_identity(
     """
 
     env = os.environ if environment is None else environment
-    identity: dict[str, object] = {"custom_meeting_runner": custom_runner}
+    identity: dict[str, object] = {
+        "custom_meeting_runner": custom_runner,
+        "meeting_runner_identity": runner_identity,
+        # The MAP is part of the protocol and is a caller argument, not a config
+        # field: replays recorded on one topology are not interchangeable with
+        # another's (Codex review on PR #314). Hashed rather than embedded so
+        # the manifest stays small and the comparison stays exact.
+        "game_map_sha256": _map_digest(game_map),
+    }
     for name in _PROVIDER_ENV_VARS:
         identity[name] = env.get(name)
     return identity
+
+
+def _normalize_for_digest(value: object) -> object:
+    """Recursively canonicalise a dumped model into JSON-serialisable data.
+
+    ``Map`` holds its rooms / vents / tasks / sabotages in ``MappingProxyType``
+    (the engine's immutability convention), which pydantic's JSON serializer
+    refuses outright, so the dump is normalised here instead: mappings become
+    key-sorted dicts, sequences become lists, and anything else becomes its
+    ``str`` — enough for an IDENTITY, which is all this is used for.
+    """
+
+    if isinstance(value, MappingProxyType | dict):
+        return {
+            str(key): _normalize_for_digest(item)
+            for key, item in sorted(value.items(), key=lambda kv: str(kv[0]))
+        }
+    if isinstance(value, list | tuple):
+        return [_normalize_for_digest(item) for item in value]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
+
+
+def _map_digest(game_map: Map) -> str:
+    """A deterministic identity for the resolved map (18.31).
+
+    The MAP is part of the recording protocol and arrives as a caller argument
+    rather than a :class:`RealPathRerankConfig` field, so a resume that compared
+    only the config could adopt seeds recorded on one topology and record the
+    rest on another — one committed row combining two different games, with
+    nothing in it saying so (Codex review on PR #314).
+    """
+
+    dumped = game_map.model_dump(warnings=False)
+    payload = json.dumps(_normalize_for_digest(dumped), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _publish_ranking(ranking_path: Path, payload: str) -> None:
@@ -1887,6 +1991,7 @@ def run_realpath_rerank(
     config: RealPathRerankConfig | None = None,
     game_map: Map | None = None,
     meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
+    meeting_runner_identity: str | None = None,
     mode: str = MODE_TOP_K,
     resume: bool = False,
     prescreen: Sequence[PreScreenQuote] | None = None,
@@ -1989,8 +2094,22 @@ def run_realpath_rerank(
     # protocol-consistent while it is not (Codex review on PR #314).
     tranche = tranche_key(seeds_tuple)
     backend = _recording_backend_identity(
-        custom_runner=meeting_runner_factory is not None
+        custom_runner=meeting_runner_factory is not None,
+        runner_identity=meeting_runner_identity,
+        game_map=resolved_map,
     )
+    # A callable has no stable serialisable identity, so two DIFFERENT stubs,
+    # composed runners or provider wrappers both reduce to ``True`` and compare
+    # equal. A resume would then adopt seeds recorded by one runner and record
+    # the rest through another, contaminating a single committed row. The
+    # caller must name the runner for a resumable leg (Codex review on PR #314).
+    if resume and meeting_runner_factory is not None and not meeting_runner_identity:
+        raise RealPathRerankError(
+            "resume with a custom meeting_runner_factory needs "
+            "meeting_runner_identity: a callable cannot be compared across "
+            "invocations, so without a stable name this resume could adopt "
+            "bytes recorded by a different runner"
+        )
     if resume:
         _refuse_protocol_drift(
             work_dir,

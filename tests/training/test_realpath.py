@@ -1640,3 +1640,135 @@ def test_resume_places_labels_whose_slugs_collide(tmp_path: Path) -> None:
         resume=True,
     )
     assert [entry.resumed for entry in narrowed.top().seed_telemetry] == [True]
+
+
+def test_a_new_label_never_adopts_a_colliding_slugs_recordings(
+    tmp_path: Path,
+) -> None:
+    """A label the manifest never saw must get a FRESH dir (Codex on PR #314).
+
+    ``_safe_slug`` is many-to-one, so a NEW label can share a slug with exactly
+    one old one. Selecting that unique match silently credits this candidate
+    with another's games — and ``_resume_skip_reason`` cannot catch it, because
+    the two labels may legitimately carry the same genome and stamp (this
+    module permits exactly that). The manifest is the authority: a label absent
+    from it is new, and new candidates never inherit bytes.
+    """
+
+    work_dir = tmp_path / "work"
+    run_realpath_rerank(
+        [_util_candidate("arm a")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+    )
+    assert sorted(p.name for p in work_dir.iterdir() if p.is_dir()) == ["000-arm-a"]
+
+    # A DIFFERENT label whose slug collides with the recorded one.
+    result = run_realpath_rerank(
+        [_util_candidate("arm-a")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in result.top().seed_telemetry] == [False]
+    # It recorded into its OWN directory, leaving the original untouched.
+    assert sorted(p.name for p in work_dir.iterdir() if p.is_dir()) == [
+        "000-arm-a",
+        "001-arm-a",
+    ]
+
+
+def test_resume_refuses_a_changed_prompt_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``AILIBI_PROMPT_SET`` selects templates AND recorded prompt versions.
+
+    ``build_default_meeting_runner`` resolves it, so two prompt sets are two
+    recording protocols on one provider and model (Codex on PR #314).
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    monkeypatch.setenv("AILIBI_PROMPT_SET", "some-other-set")
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+
+
+def test_resume_refuses_a_changed_game_map(tmp_path: Path) -> None:
+    """The MAP is part of the protocol and is a caller argument, not a config field.
+
+    Adopting seeds recorded on one topology while recording the rest on another
+    yields one row combining two different games, with nothing in it saying so
+    (Codex on PR #314).
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    altered = load_canonical_map().model_copy(update={"name": "A Different Map"})
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            game_map=altered,
+            resume=True,
+        )
+
+
+def test_resume_with_a_custom_runner_requires_an_identity(tmp_path: Path) -> None:
+    """A callable cannot be compared across invocations (Codex on PR #314).
+
+    Every custom factory reduced to the same ``True``, so two DIFFERENT stubs or
+    provider wrappers compared equal and a resume could adopt bytes recorded by
+    one runner while recording the rest through another. A resumable leg must
+    name its runner.
+    """
+
+    def runner_factory() -> MeetingRunner:
+        return build_default_meeting_runner()
+
+    work_dir = tmp_path / "work"
+    run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+        meeting_runner_factory=runner_factory,
+        meeting_runner_identity="stub-v1",
+    )
+    with pytest.raises(RealPathRerankError, match="needs meeting_runner_identity"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            meeting_runner_factory=runner_factory,
+            resume=True,
+        )
+    # A DIFFERENT named runner is refused as a backend change.
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-3.jsonl",
+            config=_config(),
+            meeting_runner_factory=runner_factory,
+            meeting_runner_identity="stub-v2",
+            resume=True,
+        )

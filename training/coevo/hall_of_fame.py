@@ -59,6 +59,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
+import shutil
+import os
 import math
 import random
 import re
@@ -290,15 +293,38 @@ def write_loadable_artifact(
                 f"(holds {existing}); a loadable artifact is written once and "
                 "whole, never merged into whatever is already there"
             )
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    for filename, payload in (
-        (_WEIGHTS_FILENAME, weights_json),
-        (f"{_WEIGHTS_FILENAME}.sha256", f"{digest}  {_WEIGHTS_FILENAME}\n"),
-        (_STAMP_FILENAME, json.dumps(stamp, indent=2, sort_keys=True) + "\n"),
-        (_CONFIG_FILENAME, json.dumps(provenance, indent=2, sort_keys=True) + "\n"),
-    ):
-        with (artifact_dir / filename).open("x", encoding="utf-8") as handle:
-            handle.write(payload)
+    # ATOMIC, all four files or none. Writing them straight into the
+    # destination leaves a NON-EMPTY partial artifact if the process stops or
+    # an I/O error lands mid-way — and a retry then hits the non-empty-dir
+    # refusal above while ``add_member`` has not indexed the member, so the
+    # campaign cannot recover without a manual delete (Codex review on
+    # PR #314). Staged in a sibling dir on the same filesystem and renamed;
+    # ``os.rename`` onto a directory path fails if the destination exists, so
+    # write-once survives.
+    artifact_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{artifact_dir.name}.", dir=artifact_dir.parent)
+    )
+    try:
+        for filename, payload in (
+            (_WEIGHTS_FILENAME, weights_json),
+            (f"{_WEIGHTS_FILENAME}.sha256", f"{digest}  {_WEIGHTS_FILENAME}\n"),
+            (_STAMP_FILENAME, json.dumps(stamp, indent=2, sort_keys=True) + "\n"),
+            (_CONFIG_FILENAME, json.dumps(provenance, indent=2, sort_keys=True) + "\n"),
+        ):
+            with (staging / filename).open("x", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+        try:
+            os.rename(staging, artifact_dir)
+        except OSError as exc:
+            raise FileExistsError(
+                f"refusing to publish over {artifact_dir} ({exc}); a loadable "
+                "artifact is written once and whole"
+            ) from exc
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return digest
 
 

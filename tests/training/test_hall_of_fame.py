@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -1488,3 +1489,58 @@ def test_loadable_reload_verifies_config_provenance_against_the_member_row(
     root = tmp_path / "ok"
     _fresh(root)
     assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()
+
+
+def test_a_failed_freeze_leaves_no_partial_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The four-file freeze publishes atomically (Codex on PR #314).
+
+    Writing straight into the destination left a NON-EMPTY partial artifact on
+    any mid-way failure; the retry then hit the non-empty-dir refusal while
+    ``add_member`` had not indexed the member, so the campaign could not
+    recover without a manual delete. Staged and renamed, the destination is
+    either absent or complete.
+    """
+
+    artifact_dir = tmp_path / "pool" / "gen-1" / "abc"
+    real_fsync = os.fsync
+    calls = {"n": 0}
+
+    def _fail_on_third(fd: int) -> None:
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise OSError("disk full")
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", _fail_on_third)
+    with pytest.raises(OSError, match="disk full"):
+        write_loadable_artifact(
+            artifact_dir,
+            (0.1, 0.2),
+            policy_id="p",
+            method="m",
+            encoder_version="v3",
+            hidden=8,
+        )
+    monkeypatch.undo()
+
+    # Nothing partial was published, and no staging dir was left behind.
+    assert not artifact_dir.exists()
+    assert list((tmp_path / "pool" / "gen-1").iterdir()) == []
+
+    # The retry now succeeds, which is the whole point.
+    write_loadable_artifact(
+        artifact_dir,
+        (0.1, 0.2),
+        policy_id="p",
+        method="m",
+        encoder_version="v3",
+        hidden=8,
+    )
+    assert sorted(p.name for p in artifact_dir.iterdir()) == [
+        "config.json",
+        "stamp.json",
+        "weights.json",
+        "weights.json.sha256",
+    ]
