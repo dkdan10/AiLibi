@@ -3285,6 +3285,28 @@ def test_a_tranche_may_not_repeat_a_seed() -> None:
     assert realpath.tranche_key([1, 2, 4]).startswith("1-4-")
 
 
+def test_keying_a_large_tranche_stays_linear() -> None:
+    """Both halves of the key must be cheap (Codex review on PR #314).
+
+    Round 21 removed the span materialisation and my own duplicate check
+    replaced it with a quadratic scan — ``list(seeds).count(seed)`` per seed, so
+    a 100k-seed tranche did ~10^10 comparisons and hung just as thoroughly. A
+    wall-clock bound is the only assertion that catches either shape.
+    """
+
+    import time
+
+    seeds = list(range(0, 200_000, 2))  # 100k seeds, sparse
+    started = time.monotonic()
+    key = realpath.tranche_key(seeds)
+    elapsed = time.monotonic() - started
+    assert key.startswith("0-199998-") and len(key.split("-")[-1]) == 64
+    assert elapsed < 5.0, f"tranche_key took {elapsed:.1f}s on 100k seeds"
+    # And a duplicate in a large tranche is still reported, by name.
+    with pytest.raises(ValueError, match=r"repeated seeds \[8\]"):
+        realpath.tranche_key([*seeds, 8])
+
+
 def test_the_default_backend_ignores_a_runner_identity(tmp_path: Path) -> None:
     """A field outside the block it belongs to (Codex review on PR #314).
 
@@ -3489,6 +3511,124 @@ def test_a_sparse_tranche_keys_without_materializing_the_span() -> None:
     # and fixture names depend on.
     assert realpath.tranche_key([1, 2]) == "1-2"
     assert realpath.tranche_key(list(range(4000, 4010))) == "4000-4009"
+
+
+def test_a_resume_honours_another_tranches_reservation(tmp_path: Path) -> None:
+    """The resume allocator asked the FILESYSTEM, not the claims (Codex #314, P1).
+
+    ``_fresh_candidate_dir`` serves a resume adding a label with no prior
+    recording, and it treated a path as free whenever no directory entry
+    existed. So a tranche that published a manifest and was interrupted before
+    ``mkdir`` could have its reserved directory taken by a resume of ANOTHER
+    tranche whose new label happened to share the slug — after which the first
+    tranche cannot recover and either leg may adopt or overwrite the other's
+    evidence. The fresh allocator has honoured claims since round 16; this path
+    was the same question asked from the other side.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # Tranche 1-2 reserved 000-arm-a and never created it.
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {"tranche": "1-2", "candidates": [_claim_entry("arm-a", "000-arm-a")]}
+        ),
+        encoding="utf-8",
+    )
+    assert not (work_dir / "000-arm-a").exists()
+
+    other = _util_candidate(label="arm a")  # same slug, different label
+    chosen = realpath._fresh_candidate_dir(
+        work_dir, index=0, tranche="9-9", candidate=other, reserved=set()
+    )
+    assert chosen.name != "000-arm-a", "took another tranche's reservation"
+
+    # NO OVER-REACH: the OWNER still gets its own reservation back.
+    mine = _util_candidate(label="arm-a")
+    assert (
+        realpath._fresh_candidate_dir(
+            work_dir, index=0, tranche="1-2", candidate=mine, reserved=set()
+        ).name
+        == "000-arm-a"
+    )
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        ([("arm-a", "000-arm-a"), ("arm-a", "001-arm-a")], "twice"),
+        ([("arm-a", "000-arm-a"), ("arm b", "000-arm-a")], "exactly one candidate"),
+    ],
+    ids=["one-label-two-dirs", "two-labels-one-dir"],
+)
+def test_an_ambiguous_manifest_mapping_is_refused(
+    tmp_path: Path, entries: list[tuple[str, str]], expected: str
+) -> None:
+    """A manifest's candidate map is a BIJECTION (Codex review on PR #314, P1).
+
+    Assigning by iteration order let a corrupted manifest naming one label twice
+    pick a winner silently, and the resume then adopted — and could skip — that
+    directory while the durable claim named two possible homes for the bytes.
+    The mirror case is the one-directory-two-candidates contamination this
+    module refuses everywhere else.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {
+                "tranche": "1-2",
+                "candidates": [
+                    _claim_entry(label, directory) for label, directory in entries
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RealPathRerankError, match=expected):
+        realpath._recorded_candidate_dirs(work_dir, tranche="1-2")
+
+
+def test_a_linked_roster_is_refused_before_any_seed(tmp_path: Path) -> None:
+    """``roster.json`` is a recording entry too (Codex review on PR #314, P1).
+
+    ``_write_roster_json`` calls ``write_text`` unconditionally at the end of
+    the seed loop, so a linked entry in an adopted directory follows a symlink
+    out of the work dir, or truncates a shared inode — modifying another
+    campaign while corrupting the provenance the scoring gates read. The
+    round-21 sole-owner rule covered replays, directories and the leg log; this
+    was the one entry the leg WRITES that it did not cover.
+    """
+
+    foreign = tmp_path / "other" / "roster.json"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text('{"num_players": 99}', encoding="utf-8")
+
+    for kind in ("symlink", "hardlink"):
+        # A REAL recorded leg, so the resume genuinely resolves to this
+        # directory through its own manifest — the path the defect lives on.
+        work_dir = tmp_path / kind / "work"
+        _record_two_seeds(work_dir, tmp_path / f"{kind}-first.jsonl")
+        roster = work_dir / "000-utility-es" / "roster.json"
+        assert roster.is_file()
+        roster.unlink()
+        if kind == "symlink":
+            roster.symlink_to(foreign)
+        else:
+            os.link(foreign, roster)
+
+        with pytest.raises(RealPathRerankError, match="roster descriptor"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=tmp_path / f"{kind}.jsonl",
+                config=_config(),
+                resume=True,
+            )
+        # The foreign roster is untouched — refused before any seed was spent.
+        assert foreign.read_text(encoding="utf-8") == '{"num_players": 99}'
 
 
 def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:

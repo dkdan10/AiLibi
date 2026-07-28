@@ -987,6 +987,74 @@ def test_ranking_rows_refuse_type_invalid_values(
         assert gct.read_validated_ranking(path)
 
 
+@pytest.mark.parametrize("token", ["1e400", "-1e400", "1e999"])
+def test_overflowing_numeric_tokens_are_refused(tmp_path: Path, token: str) -> None:
+    """``parse_constant`` never sees an overflow (Codex review on PR #314).
+
+    ``1e400`` is a standards-compliant JSON number; Python converts it to ``inf``
+    inside the float conversion without invoking the constant hook, and strict
+    pydantic still admits it for an unconstrained float. So the round-21 fix
+    covered the literal spelling and left the overflow — the decoded VALUES have
+    to be walked, which is the only check that catches both.
+    """
+
+    rows = _CAMPAIGN_ROWS.read_text(encoding="utf-8").splitlines()[:2]
+    first = json.loads(rows[0])
+    first["champion_fitness"] = "__SENTINEL__"
+    forged = tmp_path / "rows.jsonl"
+    forged.write_text(
+        json.dumps(first).replace('"__SENTINEL__"', token) + "\n" + rows[1] + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="non-finite numbers"):
+        gct.render_rows_document(forged, labels=["run-01"])
+
+    # NESTED too — the walk is over the whole decoded row, not its top level.
+    nested = json.loads(rows[0])
+    nested["opponent_payoffs"] = {"deadbeef": "__SENTINEL__"}
+    deep = tmp_path / "deep.jsonl"
+    deep.write_text(
+        json.dumps(nested).replace('"__SENTINEL__"', token) + "\n" + rows[1] + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="non-finite numbers"):
+        gct.render_rows_document(deep, labels=["run-01"])
+
+    # NO OVER-REACH: the committed stream still parses and renders.
+    assert gct.render_rows_document(_CAMPAIGN_ROWS, labels=["run-01"])
+
+
+def test_v1_rows_carrying_a_recorder_identity_are_compared(tmp_path: Path) -> None:
+    """PRESENCE is evidence, and evidence gets compared (Codex #314, P1).
+
+    ``_recorder_identity_fields`` returned ``()`` for the whole ``-v1`` schema,
+    so a v1 file that nonetheless carried `recording_backend_sha256` /
+    `game_map_sha256` had those values accepted and never checked. Two v1
+    tranches naming different recorders then produced a clean stability artifact
+    reporting a known provider/map change as measurement noise.
+
+    Absence stays a recorded fact about the frozen corpus — that is the round-9
+    PARTIAL accept and it is unchanged.
+    """
+
+    leg = tmp_path / "campaign" / "leg-01"
+    carried = _committed_row(0) | {
+        "recording_backend_sha256": "a" * 64,
+        "game_map_sha256": "c" * 64,
+    }
+    drifted = carried | {"recording_backend_sha256": "d" * 64}
+    _write_arm(leg, "t1", carried, seeds=(1, 2, 3))
+    _write_arm(leg, "t2", drifted, seeds=(4, 5, 6))
+    with pytest.raises(SystemExit, match="not provider/seed noise"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+    # NO OVER-REACH: the frozen corpus carries NO identity on v1 and still reads,
+    # and its absence is not treated as a disagreement.
+    for path in gct.find_ranking_files(_default_roots()):
+        assert gct.read_validated_ranking(path)
+    assert gct.compute_stability(gct.find_ranking_files(_default_roots()))
+
+
 @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
 def test_non_finite_json_constants_are_refused(tmp_path: Path, constant: str) -> None:
     """``json.loads`` accepts them; JSON does not (Codex review on PR #314).

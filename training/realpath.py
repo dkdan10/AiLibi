@@ -103,6 +103,7 @@ import re
 import sys
 import tempfile
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -954,7 +955,12 @@ def tranche_key(seeds: Sequence[int]) -> str:
     # for a seed set the recorder can never execute (Codex review on PR #314).
     # A duplicate is also meaningless to every consumer of the key: the tranche
     # IS the seed set, and a set has no multiplicities.
-    duplicates = sorted({seed for seed in seeds if list(seeds).count(seed) > 1})
+    # ONE pass. The first version rebuilt ``list(seeds)`` and scanned it once per
+    # seed — quadratic, so a 100k-seed tranche did ~10^10 comparisons and hung,
+    # which is the same failure mode as the span materialisation this check was
+    # added beside and I reintroduced it in the fix (Codex review on PR #314).
+    counted = Counter(seeds)
+    duplicates = sorted(seed for seed, count in counted.items() if count > 1)
     if duplicates:
         raise ValueError(
             f"cannot key a tranche with repeated seeds {duplicates}; a tranche "
@@ -2025,6 +2031,8 @@ def _recorded_candidate_dirs(
             # manifest before this runs, so an unreadable one cannot reach here
             # under resume; skipping keeps this helper total.
             continue
+        by_label: dict[str, str] = {}
+        by_dir: dict[str, str] = {}
         for entry in manifest.get("candidates", []):
             # The SAME validating readers the claim scan uses. Skipping a
             # malformed ``label`` or ``dir`` here recorded the label as "seen"
@@ -2041,12 +2049,40 @@ def _recorded_candidate_dirs(
             _refuse_escaping_recorded_dir(
                 recorded_dir, work_dir=work_dir, manifest=path
             )
+            # A manifest's candidate map is a BIJECTION — the recorder writes one
+            # directory per label and one label per directory. Assigning by
+            # iteration order let a corrupted manifest naming a label twice pick
+            # a winner silently, and the resume then adopted (and could skip)
+            # that directory while the durable claim named two possible homes for
+            # the candidate's bytes. The mirror case, two labels claiming one
+            # directory, is the one-directory-two-candidates contamination this
+            # module refuses everywhere else (Codex review on PR #314).
+            if label in by_label and by_label[label] != recorded_dir:
+                raise RealPathRerankError(
+                    f"{path} records candidate label {label!r} twice, naming both "
+                    f"{by_label[label]!r} and {recorded_dir!r}; a manifest maps "
+                    "one label to one directory, and evidence naming two is "
+                    "corrupted rather than resolvable by iteration order"
+                )
+            if recorded_dir in by_dir and by_dir[recorded_dir] != label:
+                raise RealPathRerankError(
+                    f"{path} claims directory {recorded_dir!r} for both "
+                    f"{by_dir[recorded_dir]!r} and {label!r}; a directory holds "
+                    "exactly one candidate's bytes"
+                )
+            by_label[label] = recorded_dir
+            by_dir[recorded_dir] = label
             recorded[label] = recorded_dir
     return recorded, seen
 
 
 def _fresh_candidate_dir(
-    work_dir: Path, *, index: int, label: str, reserved: set[Path]
+    work_dir: Path,
+    *,
+    index: int,
+    tranche: str,
+    candidate: RealPathCandidate,
+    reserved: set[Path],
 ) -> Path:
     """An UNUSED dir for a candidate with no prior recordings (18.31).
 
@@ -2062,10 +2098,28 @@ def _fresh_candidate_dir(
     evidence after its metrics were computed (Codex review on PR #314).
     """
 
+    label = candidate.label
     slug = _safe_slug(label)
+    # A RESERVATION counts as occupied, not just a directory entry. This helper
+    # asked the filesystem alone, so a resume adding a new label whose slug
+    # collides could take a directory another tranche's manifest had claimed and
+    # not yet created — after which that tranche cannot recover and either leg
+    # may adopt or overwrite the other's evidence (Codex review on PR #314). The
+    # fresh allocator has honoured claims since round 16; this path is the same
+    # question asked from the resume side, and it was still answering it with
+    # ``_entry_exists``.
+    claimed = _claimed_candidate_dirs(work_dir)
     for ordinal in range(index, index + _MAX_INVOCATIONS):
         candidate_dir = work_dir / f"{ordinal:03d}-{slug}"
-        if not _entry_exists(candidate_dir) and candidate_dir not in reserved:
+        if _entry_exists(candidate_dir) or candidate_dir in reserved:
+            continue
+        claim = claimed.get(candidate_dir.name)
+        # Only a claim that is exactly this candidate's may be occupied — the
+        # same predicate the fresh allocator uses, so the two paths cannot drift
+        # about what "mine" means.
+        if claim is None or _claim_belongs_to(
+            claim, tranche=tranche, candidate=candidate
+        ):
             return candidate_dir
     raise RealPathRerankError(
         f"no free recording directory for candidate {label!r} under {work_dir} "
@@ -2194,7 +2248,11 @@ def _resolve_candidate_dirs(
             # module explicitly permits. The row would then credit this
             # candidate with another's games (Codex review on PR #314).
             fresh = _fresh_candidate_dir(
-                work_dir, index=index, label=candidate.label, reserved=reserved
+                work_dir,
+                index=index,
+                tranche=tranche,
+                candidate=candidate,
+                reserved=reserved,
             )
             reserved.add(fresh)
             resolved.append(fresh)
@@ -2221,7 +2279,11 @@ def _resolve_candidate_dirs(
             existing[0]
             if existing
             else _fresh_candidate_dir(
-                work_dir, index=index, label=candidate.label, reserved=reserved
+                work_dir,
+                index=index,
+                tranche=tranche,
+                candidate=candidate,
+                reserved=reserved,
             )
         )
         reserved.add(chosen)
@@ -3496,6 +3558,19 @@ def run_realpath_rerank(
                     _refuse_foreign_replays(
                         candidate_dir, seeds=seeds_tuple, label=candidate.label
                     )
+                # ``roster.json`` is a recording entry too, and it was the one
+                # this leg WRITES that the no-links rule did not cover.
+                # ``_write_roster_json`` calls ``write_text`` unconditionally at
+                # the end of the seed loop, so a linked entry in an adopted
+                # directory would follow a symlink out of the work dir, or
+                # truncate a shared inode — modifying another campaign while
+                # corrupting the very provenance the scoring gates read (Codex
+                # review on PR #314). Checked BEFORE any seed is recorded, so
+                # the refusal costs nothing already spent.
+                _refuse_symlinked_recording_entry(
+                    candidate_dir / _ROSTER_FILENAME,
+                    what=f"the roster descriptor for candidate {candidate.label!r},",
+                )
                 leg_log.emit(
                     "candidate-start",
                     dir=str(candidate_dir),

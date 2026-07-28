@@ -156,6 +156,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import math
 import re
 from collections import Counter
@@ -1211,17 +1212,26 @@ def _validate_config(
     # path that walks through a file this driver is about to create is refused on
     # the second question even when it passes the first.
     hall_root_resolved = config.resolved_hall_root.resolve()
+    # ABSOLUTE-but-not-resolved on both sides. The lexical comparison was made
+    # between whatever spellings the caller happened to use, so a relative
+    # ``work_dir`` against an absolute ``hall_root`` compared a relative tuple
+    # with an absolute one and never matched — the traversal slipped through on
+    # a mixed spelling (Codex review on PR #314). ``absolute()`` normalises the
+    # basis WITHOUT collapsing ``..``, which is the whole point: resolving would
+    # throw away the component the check is looking for.
     written_parts = config.resolved_hall_root.parts
     for owned in WORK_DIR_OWNED_NAMES:
         owned_path = (config.work_dir / owned).resolve()
-        # LEXICAL prefix on the path AS WRITTEN — is ``work_dir/<owned>`` a
-        # component this hall root walks THROUGH? Not "does the name appear
-        # anywhere in the path", which would refuse an unrelated ancestor
-        # directory that merely shares the name.
-        owned_written = (config.work_dir / owned).parts
-        traverses = (
-            len(written_parts) > len(owned_written)
-            and written_parts[: len(owned_written)] == owned_written
+        # Does this hall root walk THROUGH ``work_dir/<owned>``? Each PROPER
+        # PREFIX of the path as written is normalised on its own and compared to
+        # the owned target. Normalising per prefix is what makes the two
+        # spellings comparable — ``absolute()`` alone leaves a relative
+        # ``work_dir`` carrying ``..`` segments that never match an absolute
+        # hall root, and normalising the WHOLE path would collapse the very
+        # ``..`` the check is looking for (Codex review on PR #314).
+        traverses = any(
+            Path(os.path.abspath(Path(*written_parts[:depth]))) == owned_path
+            for depth in range(1, len(written_parts))
         )
         if (
             traverses

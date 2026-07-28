@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -204,6 +205,19 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             raise SystemExit(f"{path}:{number} {exc}") from exc
         if not isinstance(row, dict):
             raise SystemExit(f"{path}:{number} is not a JSON object")
+        # The constant hook above is not sufficient on its own: a
+        # STANDARDS-COMPLIANT numeric token such as ``1e400`` overflows to
+        # ``inf`` inside the float conversion without ever reaching
+        # ``parse_constant``, and strict pydantic still admits it for an
+        # unconstrained float field (Codex review on PR #314). The two together
+        # cover the literal spelling and the overflow; neither covers both.
+        nonfinite = sorted(_nonfinite_paths(row))
+        if nonfinite:
+            raise SystemExit(
+                f"{path}:{number} carries non-finite numbers at {nonfinite}; a "
+                "measurement artifact holds finite values, and a non-finite one "
+                "silently poisons every average and comparison it enters"
+            )
         rows.append(row)
     if not rows:
         raise SystemExit(f"{path} holds no rows")
@@ -218,6 +232,26 @@ def _refuse_json_constant(constant: str) -> float:
         "artifact holds finite numbers, and a non-finite one silently poisons "
         "every average and comparison it enters"
     )
+
+
+def _nonfinite_paths(value: Any, trail: str = "") -> list[str]:
+    """Every dotted path in a decoded row whose value is a non-finite float."""
+
+    if isinstance(value, float):
+        return [] if math.isfinite(value) else [trail or "<root>"]
+    if isinstance(value, dict):
+        return [
+            found
+            for key, item in value.items()
+            for found in _nonfinite_paths(item, f"{trail}.{key}" if trail else str(key))
+        ]
+    if isinstance(value, list):
+        return [
+            found
+            for index, item in enumerate(value)
+            for found in _nonfinite_paths(item, f"{trail}[{index}]")
+        ]
+    return []
 
 
 def _file_identity(path: Path) -> tuple[int, int]:
@@ -544,9 +578,21 @@ def _recorder_identity_fields(rows: Sequence[Mapping[str, Any]]) -> tuple[str, .
     ``schema_version``, so rank 1 speaks for the file.
     """
 
-    if not rows or str(rows[0]["schema_version"]) in _PRE_RECORDER_IDENTITY_SCHEMAS:
+    if not rows:
         return ()
-    return _RECORDER_IDENTITY_FIELDS
+    if str(rows[0]["schema_version"]) not in _PRE_RECORDER_IDENTITY_SCHEMAS:
+        return _RECORDER_IDENTITY_FIELDS
+    # A ``-v1`` file that nonetheless CARRIES the identity is compared on it.
+    # Returning ``()`` for the whole schema meant those values were accepted and
+    # never checked, so two v1 tranches naming different recorders produced a
+    # clean stability artifact that reported a known provider/map change as
+    # measurement noise (Codex review on PR #314). Absence stays a recorded fact
+    # about the frozen corpus; PRESENCE is evidence, and evidence gets compared.
+    return tuple(
+        field
+        for field in _RECORDER_IDENTITY_FIELDS
+        if any(row.get(field) is not None for row in rows)
+    )
 
 
 def _stamp_proof(row: Mapping[str, Any]) -> str:

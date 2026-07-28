@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -1011,6 +1012,22 @@ def test_the_hall_root_may_not_be_a_driver_owned_path(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="which this driver writes itself"):
         run_alternating_freeze(traversing)
     assert not (trav_root / "work").exists()
+
+    # MIXED SPELLINGS: a relative work_dir against an absolute hall_root
+    # compared a relative parts tuple with an absolute one and never matched, so
+    # the traversal slipped through (Codex review on PR #314). Both sides are
+    # normalised to an absolute-but-not-resolved basis — resolving would discard
+    # the very component the check looks for.
+    mixed_root = tmp_path / "mixed"
+    (mixed_root / "work").mkdir(parents=True)
+    relative_work = Path(os.path.relpath(mixed_root / "work", Path.cwd()))
+    mixed = _make_config(
+        mixed_root,
+        work_dir=relative_work,
+        hall_root=(mixed_root / "work" / CAMPAIGN_PLAN_FILENAME / ".." / "halls"),
+    )
+    with pytest.raises(ValueError, match="which this driver writes itself"):
+        run_alternating_freeze(mixed)
 
     # NO OVER-REACH: a sibling under the work dir is still fine, and a hall root
     # merely PREFIXED by an owned name is a different path. An unrelated ANCESTOR
