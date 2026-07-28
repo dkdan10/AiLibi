@@ -27,7 +27,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
@@ -635,7 +635,12 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     # had every OTHER field read under v2 semantics, so the generator could emit
     # an authoritative table from a format it had never validated. Carrying the
     # two identity fields is not evidence about the rest of the schema.
-    for unknown in ("realpath-rerank-v10", "realpath-rerank-v3", "realpath-rerank-v2 "):
+    #
+    # ``-v3`` was one of the stand-ins here until Task 18.32 actually specified
+    # it (the crew arm), which is the whole point of the closed whitelist: a
+    # schema becomes readable on the day it is specified and taught to this
+    # generator, by a one-line addition — never by sorting above ``-v2``.
+    for unknown in ("realpath-rerank-v10", "realpath-rerank-v4", "realpath-rerank-v2 "):
         leg = tmp_path / f"future-{unknown.strip()}" / "leg-01"
         _write_arm(leg, "t1", _v2_row(schema_version=unknown), seeds=(1, 2, 3))
         with pytest.raises(SystemExit, match="does not support"):
@@ -660,6 +665,137 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     _write_arm(leg, "t2", _v2_row(), seeds=(4, 5, 6))
     assert len(gct.compute_stability(gct.find_ranking_files([tmp_path / "agree"]))) >= 1
     assert gct.main(["stability", "--check"]) == 0
+
+
+#: The frozen impostor opponent a synthetic ``-v3`` crew leg was played against.
+_OPPONENT_DIGEST: Final[str] = "e" * 64
+
+
+def _opponent_stamp(weights_sha256: str = _OPPONENT_DIGEST) -> dict[str, str]:
+    """The five-field stamp of the frozen opponent holding the impostor slot."""
+
+    return {
+        "policy_id": "frozen-utility-es",
+        "method": "utility-scorer-es",
+        "encoder_version": "impostor-option-features-v1",
+        "weights_sha256": weights_sha256,
+        "anchor_policy": "fsm-default",
+    }
+
+
+def _v3_crew_row(*, index: int = 0, **overrides: object) -> dict[str, object]:
+    """A ``-v3`` CREW row (Task 18.32), shaped as ``run_realpath_rerank`` writes one.
+
+    The two identities sit in their own slots: ``crew_stamp`` names the ranked
+    candidate (so it carries the row's own ``weights_sha256``) and ``stamp``
+    names the FROZEN OPPONENT holding the impostor slot, whose digest is
+    deliberately NOT this row's.
+    """
+
+    row = _v2_row(index=index)
+    seeds = row["seeds"]
+    assert isinstance(seeds, list)
+    weights_sha256 = row["weights_sha256"]
+    assert isinstance(weights_sha256, str)
+    row["schema_version"] = gct._CREW_ARM_SCHEMA
+    row["stamp"] = _opponent_stamp()
+    row["stamp_verified_games"] = len(seeds)
+    row["crew_stamp"] = {
+        "policy_id": "crew-owned-tasks-es",
+        "method": "crew-option-scorer-es",
+        "encoder_version": "crew-option-features-v2",
+        "weights_sha256": weights_sha256,
+        "anchor_policy": "fsm-default",
+    }
+    row["crew_stamp_verified_games"] = len(seeds)
+    row["crew_stamp_uniform"] = True
+    row["crew_stamp_equals_computed_digest"] = True
+    row["opponent_weights_sha256"] = _OPPONENT_DIGEST
+    row["opponent_stamp"] = _opponent_stamp()
+    row.update(overrides)
+    return row
+
+
+def test_the_crew_arm_schema_is_read_as_its_own_generation(tmp_path: Path) -> None:
+    """``-v3`` crew rankings render and fold; ``-v2`` may not wear their fields.
+
+    Task 18.32 added the crew arm as an ADDITIVE generation, so this generator
+    reads it — but only where the row declares it. The crew fields are optional
+    on the recorder's row model (that is what makes them additive), so a ``-v2``
+    row carrying a ``crew_stamp`` would validate cleanly and then be rendered as
+    a crew arm by a file that claims to predate the crew arm entirely.
+
+    The arm identity is the CANDIDATE's stamp. On a crew row that is
+    ``crew_stamp``; ``stamp`` there names the frozen opponent, which is
+    leg-level and identical for every candidate — so keying on it would collapse
+    a whole leg into one arm and certify agreement about the opponent while the
+    ranked policies differed.
+    """
+
+    leg = tmp_path / "crew" / "leg-01"
+    _write_arm(leg, "t1", _v3_crew_row(), seeds=(1, 2, 3))
+    rows = gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+    assert rows[0]["schema_version"] == "realpath-rerank-v3"
+    # The rendered proof cell describes the CANDIDATE's side, not the opponent's.
+    tables = "\n".join(gct.render_leg_tables(leg / "ranking-t1.jsonl"))
+    assert "3/3 games stamped, uniform, sha == computed digest" in tables
+
+    # Two agreeing crew tranches fold into a stability arm.
+    _write_arm(leg, "t2", _v3_crew_row(), seeds=(4, 5, 6))
+    stability = gct.compute_stability(gct.find_ranking_files([tmp_path / "crew"]))
+    assert stability["arms_with_both_tranches"] == 1
+
+    # A swing in the FROZEN OPPONENT measures the opponent, not the candidate.
+    drifted = tmp_path / "drifted" / "leg-01"
+    other = _opponent_stamp("f" * 64)
+    _write_arm(drifted, "t1", _v3_crew_row(), seeds=(1, 2, 3))
+    _write_arm(
+        drifted,
+        "t2",
+        _v3_crew_row(
+            opponent_stamp=other, opponent_weights_sha256="f" * 64, stamp=other
+        ),
+        seeds=(4, 5, 6),
+    )
+    with pytest.raises(SystemExit, match="measures the opponent"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "drifted"]))
+
+    # One leg names ONE opponent: two rows of a ranking disagreeing is not a leg.
+    split = tmp_path / "split" / "leg-01"
+    split.mkdir(parents=True)
+    first = _v3_crew_row()
+    first["seeds"] = [1, 2, 3]
+    first["rank"] = 1
+    second = _v3_crew_row(index=1, opponent_weights_sha256="f" * 64)
+    second["seeds"] = [1, 2, 3]
+    second["rank"] = 2
+    second["opponent_stamp"] = other
+    (split / "ranking-t1.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in (first, second)), encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="disagree on the frozen opponent"):
+        gct.read_validated_ranking(split / "ranking-t1.jsonl")
+
+    # A pre-crew schema may not wear the crew arm's fields.
+    for stale in (gct._RECORDER_IDENTITY_SCHEMA, "realpath-rerank-v1"):
+        worn = tmp_path / f"worn-{stale}" / "leg-01"
+        _write_arm(worn, "t1", _v3_crew_row(schema_version=stale), seeds=(1, 2, 3))
+        with pytest.raises(SystemExit, match="carries the crew-arm fields"):
+            gct.read_validated_ranking(worn / "ranking-t1.jsonl")
+
+    # A crew row whose CANDIDATE stamp names other bytes is the 17.14 defect —
+    # and it is the crew stamp, not the opponent's, that has to name them.
+    conflated = tmp_path / "conflated" / "leg-01"
+    stamp = _v3_crew_row()["crew_stamp"]
+    assert isinstance(stamp, dict)
+    _write_arm(
+        conflated,
+        "t1",
+        _v3_crew_row(crew_stamp={**stamp, "weights_sha256": "b" * 64}),
+        seeds=(1, 2, 3),
+    )
+    with pytest.raises(SystemExit, match="17.14 conflation guard"):
+        gct.read_validated_ranking(conflated / "ranking-t1.jsonl")
 
 
 def test_the_emitted_rule_describes_the_fold_that_ran(tmp_path: Path) -> None:
