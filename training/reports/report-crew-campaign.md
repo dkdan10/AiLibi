@@ -315,7 +315,40 @@ starvation-family exclusion demands.
 
 <!-- all sweeps recorded -->
 
-## 6. Counterfactual ablations (the 18.4-named discipline) — PENDING
+## 6. Counterfactual ablations (the 18.4-named discipline)
+
+### 6.1 ablation:run-c2/conviction-term (session 2 — COMPLETE, 2574-game twin)
+
+Config byte-identical to run-c2 (same `master_seed=182502`, same budgets/seeds) with
+`conviction=None`. Committed twin: `training/artifacts/coevo/
+ablation-run-c2-conviction-term/` (hall + `campaign-rows.jsonl` + `campaign-plan.json`)
++ `gen-champions/ablation-run-c2-conviction-term/`. Byte-level lineage diff (quoted from
+committed artifacts):
+
+| lineage point | run-c2 (term ON) | twin (term OFF) | verdict |
+|---|---|---|---|
+| crew gen-1/gen-2 champions | `888046d0…`, `bd7770af…` | identical | SAME |
+| crew swap-0 champion (gen-3) | `7fa59718…` | `fc43ba4e…` | **DIVERGES** |
+| crew swap-2 champion (gen-9) | `515fc066…` | `b07c2a3a…` | **DIVERGES** |
+| every crew hall member gen ≥ 3 | — | — | **all differ** |
+| impostor swap-1 champion (gens 4–6) | `1577942b…` | identical | SAME |
+| impostor swap-3 champion (gen-12) | `105f7a88…` | `aa337c7e…` | **DIVERGES** |
+
+**Reading.** The divergence onset is dose-aligned: run-c2's conviction meter served 0 /
+1 / 24 uses across gens 1–3 (§3.2), and crew selection is sha-identical exactly while
+the term is unserved (gens 1–2), diverging at the FIRST generation with real meeting
+service (gen-3) and at every crew freeze after. The impostor lineage is initially
+robust to the divergent crew opponent (swap-1 champion identical) and diverges only by
+gen-12 — the term's selection-relevant effect is CREW-SIDE and propagates to the
+impostor through co-evolution, extending 18.24's F6 (which found the same crew-side
+locus from the impostor-first direction). Emergence-claim status per the 18.4 four-part
+discipline: this is the counterfactual-ablation limb (c) — the enabling lever is
+selection-relevant; but limb (a), the |z| ≥ 1.96 instrument delta on the real path, is
+NOT satisfiable at this campaign's n=3 budget (§4.0), so the "conviction term produces
+meeting-seeking crew" claim reads **NOT-DEMONSTRATED at this budget** with the ablation
+direction recorded — the 18.26/50-seed protocol is the venue for the claim-grade read.
+
+### 6.2 ablation:run-c1/conviction-term — RECORDING (same-shape twin of run-c1)
 
 ## 7. Findings (integration findings + routed items; never silent patches)
 
