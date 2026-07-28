@@ -2782,6 +2782,104 @@ def test_a_custom_runner_records_no_default_provider_settings(
         _default(AILIBI_LLM_PROVIDER="totally-unknown")
 
 
+def test_a_claim_is_matched_to_the_candidate_being_allocated(tmp_path: Path) -> None:
+    """Per-CANDIDATE, not per-slate (Codex review on PR #314).
+
+    A slate-wide "is this claim one of ours?" exemption reads a reservation for
+    label A as available to label B whenever both are on the slate and share a
+    slug. A reordered slate then hands A's reserved directory to B and moves A
+    elsewhere — defeating the (tranche, label) rule this is the implementation
+    of, and leaving later retries following the reassigned mapping.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {"tranche": "1-2", "candidates": [{"label": "arm a", "dir": "000-arm-a"}]}
+        ),
+        encoding="utf-8",
+    )
+
+    # Both labels share the slug "arm-a", and the RESERVED label is second.
+    resolved = realpath._resolve_candidate_dirs(
+        work_dir,
+        tranche="1-2",
+        candidates=[_util_candidate(label="arm-a"), _util_candidate(label="arm a")],
+        resume=False,
+    )
+    placed = dict(
+        zip(["arm-a", "arm a"], [path.name for path in resolved], strict=True)
+    )
+    # The reservation belongs to "arm a" and must go to "arm a", whatever the
+    # slate order — the other label steps aside.
+    assert placed["arm a"] == "000-arm-a"
+    assert placed["arm-a"] != "000-arm-a"
+
+
+def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:
+    """Append mode follows a symlink (Codex review on PR #314).
+
+    The round-16 no-links rule covered candidate directories and replays; the
+    log that is supposed to BE this library's own ordering evidence was the one
+    entry it did not cover, so every event would be written into whatever the
+    link points at, outside the claimed work dir.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    outside = tmp_path / "someone-elses.jsonl"
+    outside.write_text("untouched\n", encoding="utf-8")
+    (work_dir / realpath.LEG_LOG_FILENAME).symlink_to(outside)
+
+    log = realpath.RealPathLegLog(
+        work_dir / realpath.LEG_LOG_FILENAME, tranche="1-2", invocation="000"
+    )
+    with pytest.raises(RealPathRerankError, match="is a SYMLINK"):
+        log.emit("leg-start")
+    assert outside.read_text(encoding="utf-8") == "untouched\n"
+
+    # A REAL file still appends — this log is append-only by design.
+    plain = realpath.RealPathLegLog(
+        work_dir / "plain-log.jsonl", tranche="1-2", invocation="000"
+    )
+    plain.emit("leg-start")
+    plain.emit("leg-done")
+    assert len((work_dir / "plain-log.jsonl").read_text().splitlines()) == 2
+
+
+def test_a_prescreen_rate_may_not_be_negative() -> None:
+    """A per-meeting rate is non-negative (Codex review on PR #314).
+
+    Finiteness alone let a negative rate be persisted and logged as blocker-4
+    spend advice, where it reads as a validated quote discouraging real-path
+    spend. A negative event rate is not a measurement.
+    """
+
+    for field in ("predicted_flags_per_meeting", "recorded_flags_fake_substrate"):
+        payload: dict[str, object] = {
+            "label": "arm-a",
+            "weights_sha256": "a" * 64,
+            "predicted_flags_per_meeting": 1.0,
+            "predicted_floors_pass": True,
+        }
+        payload[field] = -1.0
+        with pytest.raises(ValueError, match="per-meeting rate"):
+            realpath.PreScreenQuote(**payload)  # type: ignore[arg-type]
+
+    # Zero is a real measurement and still validates.
+    assert (
+        realpath.PreScreenQuote(
+            label="arm-a",
+            weights_sha256="a" * 64,
+            predicted_flags_per_meeting=0.0,
+            predicted_floors_pass=False,
+            recorded_flags_fake_substrate=0.0,
+        ).predicted_flags_per_meeting
+        == 0.0
+    )
+
+
 def test_tranche_keys_are_injective_over_seed_sets() -> None:
     """The key IS the lookup, so it must be a function of the SET (Codex #314).
 

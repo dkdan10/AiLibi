@@ -929,6 +929,24 @@ def _collect_arms(
                 "stability swing compares two INDEPENDENT draws, and a shared "
                 "seed is the same game counted on both sides"
             )
+        # The pair is chosen from the PAIRED arms, so a third tranche carrying
+        # only single-read arms is invisible to the check above — and the
+        # ``referee_passes_total`` fold walks all of ``by_arm``, so its PASS
+        # counts could come from a tranche absent from every swing in the table
+        # (Codex review on PR #314). Single-read arms from the compared pair are
+        # legitimate and still counted; a read from anywhere else is not part of
+        # this experiment.
+        pair = {first_key, second_key}
+        foreign = sorted(
+            {tranche for reads in by_arm.values() for tranche in reads} - pair
+        )
+        if foreign:
+            raise SystemExit(
+                f"the ranking set carries tranche(s) {foreign} outside the "
+                f"compared pair ({first_key}, {second_key}); their rows would "
+                "enter the totals while appearing in no swing — pass only the "
+                "roots for the two tranches you mean to compare"
+            )
     return by_arm, arms
 
 

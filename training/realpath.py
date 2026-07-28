@@ -345,10 +345,16 @@ RECORDING_ENV_INPUTS: Final[frozenset[str]] = frozenset(
 #: The modules the enumeration above was read FROM. The coverage pin re-reads
 #: them, so a new knob added to any of them fails the suite.
 RECORDING_ENV_SOURCE_MODULES: Final[tuple[str, ...]] = (
+    # BOTH call roots first, then what they reach. Listing only the transitive
+    # providers left the guarantee hollow: a knob read directly inside
+    # ``build_default_meeting_runner`` would change the recorder while the scan
+    # and this enumeration both stayed green (Codex review on PR #314). It reads
+    # none today — the point is that the pin would not notice if it did.
+    "orchestrator.game",
+    "eval.balance_eval",
     "llm.provider",
     "llm.ollama_client",
     "llm.featherless_client",
-    "eval.balance_eval",
     "agents.strategic.prompts.loader",
 )
 
@@ -771,8 +777,15 @@ class PreScreenQuote(BaseModel):
             ("predicted_flags_per_meeting", self.predicted_flags_per_meeting),
             ("recorded_flags_fake_substrate", self.recorded_flags_fake_substrate),
         ):
-            if value is not None and not math.isfinite(value):
-                raise ValueError(f"{name} must be finite; got {value!r}")
+            # Both are counts PER MEETING. Finiteness alone let a negative rate
+            # be persisted and logged as blocker-4 spend advice, where it reads
+            # as a validated quote discouraging real-path spend (Codex review on
+            # PR #314). A negative event rate is not a measurement.
+            if value is not None and not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(
+                    f"{name} is a per-meeting rate: it must be finite and "
+                    f">= 0; got {value!r}"
+                )
         for name, count in (
             ("meetings_scored", self.meetings_scored),
             ("conviction_uses", self.conviction_uses),
@@ -878,6 +891,14 @@ class RealPathLegLog:
             **fields,
         }
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        # Append mode FOLLOWS a symlink, so a corrupted work tree would write
+        # every "native" ordering event outside the claimed work dir — into
+        # whatever the link points at. The round-16 symlink rule covered
+        # candidate directories and replays; the log that is supposed to be this
+        # library's own evidence was the one entry it did not cover (Codex
+        # review on PR #314). A real existing file still appends, which is the
+        # append-only continuation this log depends on.
+        _refuse_symlinked_recording_entry(self._path, what="the leg log,")
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
 
@@ -1822,13 +1843,7 @@ def _resolve_candidate_dirs(
         # into must still collide at ``mkdir``. In a clean work dir nothing
         # moves.
         claimed = _claimed_candidate_dirs(work_dir)
-        mine = {
-            name
-            for name, owner in claimed.items()
-            if owner in {(tranche, candidate.label) for candidate in candidates}
-        }
-        reserved_elsewhere = set(claimed) - mine
-        if not reserved_elsewhere:
+        if not claimed:
             return enumerated
         stepped_aside: list[Path] = []
         taken: set[Path] = set()
@@ -1837,9 +1852,38 @@ def _resolve_candidate_dirs(
         ):
             slug = _safe_slug(candidate.label)
             chosen = default
+            # A candidate RECLAIMS its own reservation before walking. The
+            # enumerated walk starts at the candidate's slate INDEX, so a label
+            # reserved at ``000-`` but sitting second on the slate could never
+            # reach its own directory and would leak a fresh one on every
+            # retry — the reservation rule has to hold in both directions or it
+            # only says who may not have a directory, never who may.
+            owned = sorted(
+                name
+                for name, owner in claimed.items()
+                if owner == (tranche, candidate.label)
+            )
+            if owned:
+                chosen = work_dir / owned[0]
+                if chosen not in taken:
+                    taken.add(chosen)
+                    stepped_aside.append(chosen)
+                    continue
+            # Per-CANDIDATE, not per-slate. A slate-wide "is this claim one of
+            # ours?" exemption reads a reservation for label A as available to
+            # label B whenever both are on the slate and share a slug, so a
+            # reordered slate hands A's reserved directory to B and moves A
+            # elsewhere — defeating the very (tranche, label) rule this is the
+            # implementation of (Codex review on PR #314). A directory is
+            # acceptable only if unclaimed, or claimed by exactly the candidate
+            # being placed. On-disk existence is still not a reason to move, so
+            # write-once continues to collide at ``mkdir``.
             for ordinal in range(index, index + _MAX_INVOCATIONS):
                 chosen = work_dir / f"{ordinal:03d}-{slug}"
-                if chosen.name not in reserved_elsewhere and chosen not in taken:
+                owner = claimed.get(chosen.name)
+                if chosen in taken:
+                    continue
+                if owner is None or owner == (tranche, candidate.label):
                     break
             else:  # pragma: no cover - 1000 claimed ordinals is a runaway
                 raise RealPathRerankError(

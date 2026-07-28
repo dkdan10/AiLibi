@@ -157,6 +157,47 @@ def test_stability_fails_loud_without_a_retest(tmp_path: Path) -> None:
         gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
 
 
+def test_stability_refuses_unpaired_rows_from_a_third_tranche(tmp_path: Path) -> None:
+    """The pair is chosen from PAIRED arms, so a third tranche can hide (Codex #314).
+
+    An arm read on T1/T2 plus a different, single-read arm on T3 leaves
+    ``tranche_pairs`` holding only (T1, T2) — the set looks like a clean
+    two-tranche experiment. But the ``referee_passes_total`` fold walks every
+    read, so the T3 row's PASS count enters the published totals while appearing
+    in no swing in the table.
+    """
+
+    row = _committed_row(0)
+    other = _committed_row(1)
+    leg = tmp_path / "campaign" / "leg-01"
+    _write_arm(leg, "t1", row, seeds=(1, 2, 3))
+    _write_arm(leg, "t2", row, seeds=(4, 5, 6))
+    # A DIFFERENT arm, read once, on a tranche outside the pair.
+    _write_arm(leg, "t3", other, seeds=(7, 8, 9))
+
+    with pytest.raises(SystemExit, match="outside the compared pair"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+    # No over-reach: a single-read arm on one of the COMPARED tranches is
+    # legitimate — it is what referee_passes_total vs _retested distinguishes —
+    # and must still be accepted.
+    # t1 ranks BOTH candidates; t2 re-reads only the first. So the second arm
+    # is single-read on a compared tranche — legitimate, and exactly what
+    # referee_passes_total vs _retested distinguishes.
+    kept = tmp_path / "kept" / "leg-01"
+    kept.mkdir(parents=True)
+    both = [
+        {**row, "seeds": [1, 2, 3], "rank": 1},
+        {**other, "seeds": [1, 2, 3], "rank": 2},
+    ]
+    (kept / "ranking-t1.jsonl").write_text(
+        "".join(json.dumps(entry) + "\n" for entry in both), encoding="utf-8"
+    )
+    _write_arm(kept, "t2", row, seeds=(4, 5, 6))
+    stability = gct.compute_stability(gct.find_ranking_files([tmp_path / "kept"]))
+    assert stability["arms_with_both_tranches"] == 1
+
+
 def test_stability_refuses_a_third_tranche_of_one_arm(tmp_path: Path) -> None:
     """Three reads of one arm are not a two-tranche comparison (18.31)."""
 
