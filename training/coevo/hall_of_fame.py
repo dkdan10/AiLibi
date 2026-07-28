@@ -966,7 +966,14 @@ class HallOfFame:
                 if isinstance(entry, dict)
                 and isinstance(entry.get("path"), str)
                 and any(
+                    # ``exists()`` follows symlinks, so a DANGLING stamp/config
+                    # sidecar read as absent and the pool was classified legacy
+                    # — the very downgrade this scan exists to prevent, reached
+                    # through a broken link instead of a deleted file (Codex
+                    # review on PR #314). Presence here is about the directory
+                    # ENTRY, so a dangling link is evidence too.
                     (side_dir / entry["path"] / name).exists()
+                    or (side_dir / entry["path"] / name).is_symlink()
                     for name in (_STAMP_FILENAME, _CONFIG_FILENAME)
                 )
             )

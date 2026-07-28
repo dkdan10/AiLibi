@@ -1429,6 +1429,42 @@ def test_a_residual_config_json_is_loadable_pool_evidence(tmp_path: Path) -> Non
     assert HallOfFame.load(plain, "impostor").artifact_metadata is None
 
 
+def test_a_dangling_loadable_sidecar_is_still_pool_evidence(tmp_path: Path) -> None:
+    """Presence is about the directory ENTRY (Codex review on PR #314).
+
+    My round-14 scan used ``.exists()``, which follows symlinks, so a corruption
+    leaving a DANGLING ``stamp.json``/``config.json`` read as a legacy
+    weights-only pool — the same downgrade the scan exists to prevent, reached
+    through a broken link instead of a deleted file.
+    """
+
+    for casualty in ("stamp.json", "config.json"):
+        root = tmp_path / casualty
+        hall = HallOfFame.create(
+            root, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+        )
+        member = hall.add_member(
+            _rebuildable_genome(_UTILITY_ENCODER),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+        member_dir = root / "impostor" / member.path
+        # Both sidecars gone as FILES; the reported one left as a broken link.
+        for name in ("stamp.json", "config.json"):
+            (member_dir / name).unlink()
+        (member_dir / casualty).symlink_to(member_dir / "gone.json")
+        assert not (member_dir / casualty).exists()
+        assert (member_dir / casualty).is_symlink()
+
+        index_path = root / "impostor" / "hall_of_fame.json"
+        index: dict[str, Any] = json.loads(index_path.read_text())
+        del index["artifact_metadata"]
+        index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="metadata block is missing or null"):
+            HallOfFame.load(root, "impostor")
+
+
 def test_a_pool_may_not_declare_the_other_sides_encoder_family(
     tmp_path: Path,
 ) -> None:

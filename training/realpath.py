@@ -170,6 +170,7 @@ from orchestrator.game import (
     MeetingArtifacts,
     MeetingRunner,
     build_default_meeting_runner,
+    prompt_versions_for_set,
 )
 from orchestrator.replay import TacticalPolicyStamp, read_tactical_policy_stamp
 from training.bakeoff.es import ESResult
@@ -306,6 +307,10 @@ _ROLL_CALL_KEY: Final[str] = "impostor_roll_call"
 #: caller supplies its own meeting runner, since ``run_tournament_eval`` then
 #: never builds one (Task 18.31).
 _GAME_BUDGET_KEY: Final[str] = "game_budget"
+
+#: The RESOLVED prompt-version mapping on the recording-backend identity — the
+#: provenance the runner stamps, not the selector that routes to it (18.31).
+_PROMPT_VERSIONS_KEY: Final[str] = "prompt_versions"
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
@@ -1530,6 +1535,31 @@ def _dirs_claimed_by_other_tranches(work_dir: Path, *, tranche: str) -> set[str]
     return claimed
 
 
+def _all_claimed_candidate_dirs(work_dir: Path) -> set[str]:
+    """Every candidate directory ANY leg manifest in this work dir claims (18.31).
+
+    :func:`_dirs_claimed_by_other_tranches` deliberately excludes the caller's
+    own tranche, because an allocator must be free to reuse its own recorded
+    directories. A ranking DESTINATION has no such exemption: this tranche's own
+    prior invocation can have claimed a label no longer on the slate, and that
+    directory is still reserved (Codex review on PR #314).
+    """
+
+    claimed: set[str] = set()
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # A partial manifest names nothing this check can trust; the tranche
+            # that owns it reports it through the drift check.
+            continue
+        for entry in manifest.get("candidates", []):
+            recorded_dir = entry.get("dir")
+            if isinstance(recorded_dir, str) and recorded_dir:
+                claimed.add(recorded_dir)
+    return claimed
+
+
 def _refuse_escaping_recorded_dir(
     recorded_dir: str, *, work_dir: Path, manifest: Path
 ) -> None:
@@ -1856,7 +1886,26 @@ def _recording_backend_identity(
         _GAME_BUDGET_KEY: _effective_game_budget(
             num_players=num_players, custom_runner=custom_runner, env=env
         ),
-        **_effective_backend_config(env),
+        # The RESOLVED prompt versions, not just the two routing inputs above.
+        # ``prompt_set`` + the roll-call lever select WHICH registry entry is
+        # read; the registry itself can be bumped within a set, so a resume
+        # after that bump saw an unchanged identity, skipped seeds rendered from
+        # the old templates and recorded the rest from the new ones — one row
+        # across two prompt protocols (Codex review on PR #314). Round 10 added
+        # the lever and stopped at the routing input; this records the
+        # provenance the runner itself stamps, which is the thing that actually
+        # moves with the rendered bytes.
+        _PROMPT_VERSIONS_KEY: dict(prompt_versions_for_set(env=env)),
+        # The default-runner provider settings, and ONLY for a default runner.
+        # ``run_tournament_eval`` installs a supplied ``meeting_runner_factory``
+        # directly and never calls ``build_default_meeting_runner``, so those
+        # knobs are unread: recording them refused an otherwise valid
+        # custom-runner resume over a changed model or host, and an unknown
+        # ambient ``AILIBI_LLM_PROVIDER`` blocked such a leg from starting at
+        # all even though nothing would have constructed a client (Codex review
+        # on PR #314). ``meeting_runner_identity`` is what identifies a custom
+        # runner, and it is mandatory for exactly this reason.
+        **({} if custom_runner else _effective_backend_config(env)),
     }
     return identity
 
@@ -2270,6 +2319,26 @@ def _refuse_library_owned_ranking_path(
             "that path as a DIRECTORY and records into it, so the ranking publish "
             "would fail its link after every paid game — refusing before any game "
             "is spent (point --ranking-path outside the work dir)"
+        )
+    # And a directory ANOTHER leg's manifest already claims, whose slug need not
+    # appear in this slate at all. Deriving the refused names from this leg's
+    # candidates covers only what THIS leg will create; a manifest claim is a
+    # reservation on a directory that may not exist yet, so the name passed here
+    # and the leg spent every game before either the publish collided with the
+    # other tranche's newly created directory, or it published a FILE into the
+    # reserved path and left that tranche permanently unable to resume (Codex
+    # review on PR #314). Every manifest is read, this leg's included: a prior
+    # invocation of this same tranche can have claimed a label no longer on the
+    # slate.
+    claimed = _all_claimed_candidate_dirs(work_dir)
+    if name in claimed:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} names a candidate recording directory "
+            f"already CLAIMED by a leg manifest in {work_dir} (claimed: "
+            f"{sorted(claimed)}); that directory is reserved for a recording, so "
+            "publishing a ranking there would either collide after every paid "
+            "game or strand the leg that owns it — refusing before any game is "
+            "spent (point --ranking-path outside the work dir)"
         )
     if name == LEG_LOG_FILENAME or any(
         name.startswith(f"{stem}-")

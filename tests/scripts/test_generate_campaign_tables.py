@@ -839,6 +839,70 @@ def test_no_output_may_land_under_a_frozen_evidence_root(tmp_path: Path) -> None
     assert outside.read_text(encoding="utf-8").startswith("| stability check")
 
 
+def test_rows_refuse_a_foreign_schema_version(tmp_path: Path) -> None:
+    """The CLI promises ``coevo-campaign-v1``; nothing checked it (Codex #314).
+
+    A later schema can keep these field names and change what they mean, so an
+    unchecked stream renders an authoritative-looking table that is simply
+    wrong — the transcription-error class this tool exists to remove.
+    """
+
+    rows = [
+        json.loads(line)
+        for line in _CAMPAIGN_ROWS.read_text(encoding="utf-8").splitlines()[:3]
+    ]
+    assert {row["schema_version"] for row in rows} == {gct.CAMPAIGN_ROWS_SCHEMA}
+
+    forged = tmp_path / "rows.jsonl"
+    bumped = [{**row, "schema_version": "coevo-campaign-v99"} for row in rows]
+    forged.write_text(
+        "".join(json.dumps(row) + "\n" for row in bumped), encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="coevo-campaign-v99"):
+        gct.render_rows_document(forged, labels=["run-01"])
+
+    # EVERY row, not just the first: a concatenated mixed-schema stream must not
+    # be judged by its opening line.
+    mixed = tmp_path / "mixed.jsonl"
+    mixed.write_text(
+        json.dumps(rows[0]) + "\n" + json.dumps(bumped[1]) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="coevo-campaign-v99"):
+        gct.render_rows_document(mixed, labels=["run-01"])
+
+
+def test_no_output_may_be_a_hard_link(tmp_path: Path) -> None:
+    """Containment cannot see through a hard link (Codex review on PR #314).
+
+    A second name OUTSIDE the frozen roots shares a frozen artifact's inode, so
+    the resolved path is legitimately outside and the write truncates the shared
+    bytes anyway. Resolution answers "where is this name?", which is the wrong
+    question for a link that has no separate bytes to protect.
+    """
+
+    # A COPY of the frozen artifact, never the artifact itself. This pin exists
+    # because a missing guard TRUNCATES the linked bytes — so pointing it at the
+    # committed record would destroy that record the moment the guard regressed.
+    # (It did, exactly once, during this fix's own mutation check.)
+    stand_in = tmp_path / "frozen-stand-in.json"
+    stand_in.write_bytes(_STABILITY_ARTIFACT.read_bytes())
+    original = stand_in.read_bytes()
+
+    link = tmp_path / "outside-the-frozen-roots.md"
+    link.hardlink_to(stand_in)
+    assert link.stat().st_nlink > 1
+
+    with pytest.raises(SystemExit, match="hard link"):
+        gct.main(["stability", "--out", str(link)])
+    assert stand_in.read_bytes() == original
+    assert _STABILITY_ARTIFACT.read_bytes() == original
+
+    # No over-reach: an ordinary singly-linked path still renders.
+    plain = tmp_path / "plain.md"
+    assert gct.main(["stability", "--out", str(plain)]) == 0
+    assert plain.read_text(encoding="utf-8").startswith("| stability check")
+
+
 def test_a_ranking_row_must_carry_the_complete_stamp(tmp_path: Path) -> None:
     """An incomplete stamp can no longer certify its own agreement (Codex #314).
 

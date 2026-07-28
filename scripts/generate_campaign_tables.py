@@ -119,6 +119,10 @@ COMBINATION_RULE_LABEL_CLAUSE: Final[str] = (
     "are two candidates and are counted separately."
 )
 
+#: The campaign-row schema this renderer reads. A stream declaring anything else
+#: is refused rather than rendered from fields nobody has checked (Task 18.31).
+CAMPAIGN_ROWS_SCHEMA: Final[str] = "coevo-campaign-v1"
+
 #: The five ``TacticalPolicyStamp`` fields that together ARE a policy identity.
 #: The resume predicate compares all five; an arm's two reads must too.
 _STAMP_IDENTITY_FIELDS: Final[tuple[str, ...]] = (
@@ -265,6 +269,28 @@ def split_run_segments(
     loud rather than being rendered as a run.
     """
 
+    # The SCHEMA, before any field is read. The leg reader has pinned its row
+    # schema since round 9, but this renderer took the CLI's promise of
+    # ``coevo-campaign-v1`` on trust and read the fields directly: a later
+    # generation that keeps the names and changes the semantics would render an
+    # authoritative-looking table that is simply wrong, which is the
+    # transcription-error class this whole tool exists to remove (Codex review
+    # on PR #314). Every row is checked, not just the first, so a concatenated
+    # mixed-schema stream is refused rather than judged by its opening line.
+    drifted = sorted(
+        {
+            str(row.get("schema_version"))
+            for row in rows
+            if row.get("schema_version") != CAMPAIGN_ROWS_SCHEMA
+        }
+    )
+    if drifted:
+        raise SystemExit(
+            f"campaign rows declare schema_version {drifted}, but this renderer "
+            f"reads {CAMPAIGN_ROWS_SCHEMA!r}. A later schema can keep these field "
+            "names and change what they mean, so the table is refused rather "
+            "than rendered from fields nobody has checked"
+        )
     if rows and rows[0].get("generation_index") != 1:
         raise SystemExit(
             "the row stream does not begin at generation_index 1 "
@@ -1186,7 +1212,27 @@ def _refuse_output_under_frozen_root(out: Path) -> None:
     # through it (a relative path is repo-root-relative here, not CWD-relative),
     # and re-applying it means this guard does not depend on each caller having
     # remembered to.
-    resolved = _resolve(out).resolve()
+    # A HARD LINK defeats containment by construction: a second name outside the
+    # frozen roots shares the frozen file's inode, so the resolved path is
+    # legitimately outside and ``write_text`` truncates the shared data anyway
+    # (Codex review on PR #314). Resolution answers "where is this name?", and
+    # that is the wrong question for a link that has no separate bytes to
+    # protect. Any existing multiply-linked output is refused: this generator
+    # writes fresh renders, so a target already sharing its inode with something
+    # else is never a path it should truncate.
+    target = _resolve(out)
+    try:
+        links = target.stat().st_nlink if target.is_file() else 1
+    except OSError:  # pragma: no cover - unstattable path fails at write
+        links = 1
+    if links > 1:
+        raise SystemExit(
+            f"refusing to write {out}: it is a hard link ({links} names share "
+            "its inode), so writing it would truncate whatever else points at "
+            "those bytes — including a frozen artifact this containment check "
+            "cannot see through the link. Render to a fresh path."
+        )
+    resolved = target.resolve()
     for root in FROZEN_EVIDENCE_ROOTS:
         frozen = (_REPO_ROOT / root).resolve()
         if resolved == frozen or resolved.is_relative_to(frozen):

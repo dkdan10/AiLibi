@@ -897,6 +897,30 @@ def test_existing_generation_champions_dir_is_refused(tmp_path: Path) -> None:
     assert not (tmp_path / "halls").exists()
 
 
+def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None:
+    """Presence is about the directory ENTRY (Codex review on PR #314).
+
+    ``Path.exists()`` follows symlinks, so a DANGLING entry at either no-clobber
+    path read as absent: the campaign built its plan and halls and ran a whole
+    generation of paid ES games before ``mkdir`` hit the symlink and raised,
+    leaving a spent generation and a tree the create-only retry cannot reuse.
+    """
+
+    for name, message in (
+        ("gen-champions", "per-generation champion artifacts"),
+        ("campaign-rows.jsonl", "campaign rows already exist"),
+    ):
+        config = _make_config(tmp_path / name)
+        config.work_dir.mkdir(parents=True, exist_ok=True)
+        dangling = config.work_dir / name
+        dangling.symlink_to(tmp_path / "nowhere")
+        assert not dangling.exists() and dangling.is_symlink()
+        with pytest.raises(FileExistsError, match=message):
+            run_alternating_freeze(config)
+        # Refused before the plan: no halls, so no paid generation was spent.
+        assert not (tmp_path / name / "halls").exists()
+
+
 @dataclass(frozen=True)
 class _StubPolicy:
     """A build_policy result carrying only the family tag the pin reads."""

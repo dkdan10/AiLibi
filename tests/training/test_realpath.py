@@ -38,6 +38,8 @@ from pydantic import ValidationError
 from agents.base import AgentInterface
 from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
+from agents.strategic.prompts.loader import resolve_prompt_set
+from orchestrator.game import PROMPT_VERSION_SETS
 from eval.balance_eval import _resolve_game_budget
 from llm.budget import BudgetExceededError
 from meetings.manager import MeetingTrigger
@@ -1629,7 +1631,9 @@ def test_resume_refuses_a_changed_recording_backend(
     work_dir = tmp_path / "work"
     _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
 
-    monkeypatch.setenv(knob, "anthropic" if knob == "AILIBI_LLM_PROVIDER" else "9b-alt")
+    monkeypatch.setenv(
+        knob, "anthropic" if knob == "AILIBI_LLM_PROVIDER" else "qwen3_32b"
+    )
     with pytest.raises(RealPathRerankError, match="different recording backend"):
         run_realpath_rerank(
             [_util_candidate()],
@@ -1767,11 +1771,20 @@ def test_the_prompt_variant_lever_rides_the_backend_identity() -> None:
     assert _identity(
         AILIBI_PROMPT_SET="qwen3_6_27b", AILIBI_IMPOSTOR_ROLL_CALL="1"
     ) != _identity(AILIBI_PROMPT_SET="qwen3_6_27b")
-    # It rides EVERY provider, like the prompt set itself.
+    # It rides EVERY provider, like the prompt set itself. Pinned on the
+    # variant-capable set: since the identity now carries the RESOLVED prompt
+    # versions, turning the lever on for a set with no variant registry is a
+    # config error that fails loud here — the same refusal the runner would
+    # give — rather than a boolean nobody can act on (Codex on PR #314).
     for provider in ("fake", "ollama", "featherless", "anthropic"):
         assert _identity(
-            AILIBI_LLM_PROVIDER=provider, AILIBI_IMPOSTOR_ROLL_CALL="1"
-        ) != _identity(AILIBI_LLM_PROVIDER=provider)
+            AILIBI_LLM_PROVIDER=provider,
+            AILIBI_PROMPT_SET="qwen3_6_27b",
+            AILIBI_IMPOSTOR_ROLL_CALL="1",
+        ) != _identity(AILIBI_LLM_PROVIDER=provider, AILIBI_PROMPT_SET="qwen3_6_27b")
+    # And the lever on a set with NO variant registry is refused, not recorded.
+    with pytest.raises(ValueError, match="impostor-answer variant registry"):
+        _identity(AILIBI_PROMPT_SET="qwen3_5_9b", AILIBI_IMPOSTOR_ROLL_CALL="1")
 
 
 def test_concurrent_tranches_never_share_a_candidate_directory(
@@ -2459,7 +2472,7 @@ def test_backend_identity_pins_only_the_selected_providers_settings() -> None:
     # the recorded prompt versions regardless of who serves the tokens.
     for provider in ("fake", "ollama", "featherless", "anthropic"):
         assert _identity(
-            AILIBI_LLM_PROVIDER=provider, AILIBI_PROMPT_SET="9b-alt"
+            AILIBI_LLM_PROVIDER=provider, AILIBI_PROMPT_SET="qwen3_32b"
         ) != _identity(AILIBI_LLM_PROVIDER=provider)
 
     # An unbuildable provider is refused here, before any seed is recorded,
@@ -2583,7 +2596,7 @@ def test_resume_refuses_a_changed_prompt_set(
 
     work_dir = tmp_path / "work"
     _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
-    monkeypatch.setenv("AILIBI_PROMPT_SET", "some-other-set")
+    monkeypatch.setenv("AILIBI_PROMPT_SET", "qwen3_32b")
     with pytest.raises(RealPathRerankError, match="different recording backend"):
         run_realpath_rerank(
             [_util_candidate()],
@@ -2593,6 +2606,126 @@ def test_resume_refuses_a_changed_prompt_set(
             config=_config(),
             resume=True,
         )
+
+
+def test_resume_refuses_a_bumped_prompt_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The RESOLVED versions are the provenance, not the selector (Codex #314).
+
+    ``prompt_set`` + the roll-call lever select which registry entry is read;
+    bumping the registry WITHIN a set changes the rendered bytes while both
+    routing inputs stay put, so the identity was unchanged and a resume skipped
+    seeds rendered from the old templates while recording the rest from the new.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    active = resolve_prompt_set(env=dict(os.environ))
+    bumped = {**PROMPT_VERSION_SETS[active], "crewmate_report": "crewmate_report.v99"}
+    monkeypatch.setitem(PROMPT_VERSION_SETS, active, bumped)
+
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+
+
+def test_a_custom_runner_records_no_default_provider_settings(
+    tmp_path: Path,
+) -> None:
+    """A supplied runner never reads the provider knobs (Codex on PR #314).
+
+    ``run_tournament_eval`` installs it directly and never calls
+    ``build_default_meeting_runner``, so recording the selected provider/model
+    refused an otherwise valid custom-runner resume — and an unknown ambient
+    ``AILIBI_LLM_PROVIDER`` blocked such a leg from starting at all, even though
+    nothing would have constructed a client from it.
+    """
+
+    def _identity(**env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=True,
+            runner_identity="stub-runner",
+            game_map=load_canonical_map(),
+            num_players=4,
+            environment=env,
+        )
+
+    assert _identity(AILIBI_LLM_PROVIDER="fake") == _identity(
+        AILIBI_LLM_PROVIDER="anthropic", AILIBI_MEETING_MODEL="some-model"
+    )
+    # An unknown ambient provider no longer blocks a leg that never reads it.
+    assert _identity(AILIBI_LLM_PROVIDER="totally-unknown")["custom_meeting_runner"]
+
+    # The DEFAULT runner still pins every one of those knobs — this narrowing
+    # must not reopen the round-6 finding that the backend is protocol.
+    def _default(**env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=False,
+            runner_identity=None,
+            game_map=load_canonical_map(),
+            num_players=4,
+            environment=env,
+        )
+
+    assert _default(AILIBI_LLM_PROVIDER="fake") != _default(
+        AILIBI_LLM_PROVIDER="anthropic"
+    )
+    with pytest.raises(RealPathRerankError, match="unknown AILIBI_LLM_PROVIDER"):
+        _default(AILIBI_LLM_PROVIDER="totally-unknown")
+
+
+def test_ranking_path_may_not_name_another_legs_claimed_directory(
+    tmp_path: Path,
+) -> None:
+    """A manifest CLAIM reserves a directory that need not exist yet (Codex #314).
+
+    The slate-derived check covers only what THIS leg will create, so a name
+    another tranche's manifest already claims — whose slug is not in this slate
+    — passed. The leg then spent every game before the publish collided with
+    that tranche's directory, or published a FILE into the reserved path and
+    left the owning tranche permanently unable to resume.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-9-9-000.json").write_text(
+        json.dumps(
+            {
+                "tranche": "9-9",
+                "candidates": [{"label": "other-arm", "dir": "000-other-arm"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not (work_dir / "000-other-arm").exists()
+
+    with pytest.raises(RealPathRerankError, match="already CLAIMED"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=work_dir / "000-other-arm",
+            config=_config(),
+        )
+    # Refused before any game, and the other tranche's reservation is untouched.
+    assert not (work_dir / "000-other-arm").exists()
+
+    # An unclaimed top-level name still records (the round-13 no-over-reach).
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=work_dir / "ranking-1-2.jsonl",
+        config=_config(),
+    ).rows
 
 
 def test_resume_refuses_a_changed_game_map(tmp_path: Path) -> None:

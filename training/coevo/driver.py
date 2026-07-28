@@ -1131,14 +1131,23 @@ def _validate_config(
                 f"run_label must be MANIFEST-safe (no {human}); got "
                 f"{config.run_label!r}"
             )
+    # ``exists()`` FOLLOWS symlinks, so a DANGLING entry at either path read as
+    # absent here and the campaign ran its first generation of paid ES games
+    # before ``mkdir`` hit the symlink and raised — leaving a spent generation
+    # and a tree the create-only retry path cannot reuse (Codex review on
+    # PR #314). Presence is a question about the DIRECTORY ENTRY, so
+    # ``is_symlink()`` is the other half of it. Both no-clobber checks get it:
+    # fixing only the one that was reported would leave the identical defect one
+    # line away, which is the pattern the last three rounds have been about.
     rows_path = config.work_dir / CAMPAIGN_ROWS_FILENAME
-    if rows_path.exists():
+    if rows_path.exists() or rows_path.is_symlink():
         raise FileExistsError(
             f"campaign rows already exist at {rows_path}; the driver never "
-            "clobbers a recorded campaign (pick a fresh work_dir)"
+            "clobbers a recorded campaign (pick a fresh work_dir). A dangling "
+            "symlink counts: it is a directory entry the later write collides on"
         )
     gen_champions_dir = config.work_dir / GEN_CHAMPIONS_DIRNAME
-    if gen_champions_dir.exists():
+    if gen_champions_dir.exists() or gen_champions_dir.is_symlink():
         # The standing work-dir no-clobber discipline, extended to the 18.31
         # per-generation champion artifacts: they are campaign evidence, so a
         # second run never writes into a recorded tree.
