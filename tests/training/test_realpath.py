@@ -1234,3 +1234,62 @@ def test_prescreen_note_is_the_committed_disclaimer(tmp_path: Path) -> None:
     # The default is the committed disclaimer, and it round-trips.
     path = write_prescreen_record(tmp_path, seeds=[1], quotes=[_quote()])
     assert json.loads(path.read_text())["quotes"][0]["note"] == PRESCREEN_ADVICE_NOTE
+
+
+def test_existing_ranking_is_refused_before_any_game(tmp_path: Path) -> None:
+    """The ranking-path collision is caught in the PREFLIGHT, not after spend.
+
+    The exclusive open at the end is race protection; on its own it would let a
+    simple operator path typo burn a 30–40 h leg before failing (Codex on
+    PR #314). Both checks stand — this one saves the budget.
+    """
+
+    work_dir = tmp_path / "work"
+    ranking = tmp_path / "ranking.jsonl"
+    ranking.write_text("{}\n")
+
+    with pytest.raises(RealPathRerankError, match="before any game is spent"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=ranking,
+            config=_config(),
+        )
+    # Nothing was recorded, and the leg never even opened its invocation stamp.
+    assert not work_dir.exists()
+    assert ranking.read_text() == "{}\n"
+
+
+def test_prescreen_coverage_is_by_candidate_identity_not_digest_set(
+    tmp_path: Path,
+) -> None:
+    """Two labels over ONE genome need two quotes (Codex on PR #314).
+
+    A leg may legitimately carry the same policy under two labels — the 18.17
+    tie-break fixture does exactly that. Comparing digest SETS let a single
+    quote cover both, leaving a candidate that consumed real games unnamed in
+    the ordering evidence.
+    """
+
+    candidates = [_util_candidate("arm-a"), _util_candidate("arm-b")]
+    with pytest.raises(ValueError, match="missing \\['arm-b'\\]"):
+        run_realpath_rerank(
+            candidates,
+            seeds=[1],
+            work_dir=tmp_path / "one",
+            ranking_path=tmp_path / "one.jsonl",
+            config=_config(),
+            prescreen=[_quote("arm-a")],
+        )
+
+    # Naming both is coverage, even though they share a genome digest.
+    result = run_realpath_rerank(
+        candidates,
+        seeds=[1],
+        work_dir=tmp_path / "two",
+        ranking_path=tmp_path / "two.jsonl",
+        config=_config(),
+        prescreen=[_quote("arm-a"), _quote("arm-b")],
+    )
+    assert {row.label for row in result.rows} == {"arm-a", "arm-b"}

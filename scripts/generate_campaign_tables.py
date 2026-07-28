@@ -236,6 +236,21 @@ def split_run_segments(
         if row.get("generation_index") == 1:
             segments.append([])
         segments[-1].append(row)
+    # Each segment must run 1, 2, … consecutively. Without this a run that lost
+    # its generation-1 row (or any missing / duplicated / reordered row) is
+    # silently merged into the preceding segment, and the rendered counts, swap
+    # totals and game totals come out plausible but wrong — the exact
+    # transcription-error class this generator exists to remove (Codex review on
+    # PR #314).
+    for index, segment in enumerate(segments, start=1):
+        actual = [row.get("generation_index") for row in segment]
+        expected = list(range(1, len(segment) + 1))
+        if actual != expected:
+            raise SystemExit(
+                f"segment {index} has generation indices {actual}, not the "
+                f"consecutive {expected}; a row is missing, duplicated, or "
+                "reordered — refusing to render a plausible-but-wrong table"
+            )
     return segments
 
 
@@ -359,6 +374,29 @@ def render_leg_tables(ranking_path: Path) -> list[str]:
         ],
     )
 
+    # The heading describes the LEG, so every row must agree on the leg-level
+    # fields it quotes. Taking them from rank 1 alone would let a corrupted or
+    # concatenated file render one authoritative-looking table whose heading
+    # describes the first candidate while the metrics below came from another
+    # experiment (Codex review on PR #314).
+    for field in (
+        "seeds",
+        "num_players",
+        "num_impostors",
+        "tasks_per_crewmate",
+        "baseline_id",
+        "mode",
+        "max_attempts",
+        "max_ticks",
+        "meeting_timeout_seconds",
+    ):
+        values = {json.dumps(row[field], sort_keys=True) for row in rows}
+        if len(values) != 1:
+            raise SystemExit(
+                f"{ranking_path}: rows disagree on the leg-level field {field!r} "
+                f"({sorted(values)}); one leg table describes ONE experiment"
+            )
+
     gauge_names = tuple(
         gauge["name"] for gauge in rows[0]["watchability"]["supply_gauges"]
     )
@@ -478,13 +516,16 @@ def _tranche_identity(ranking_path: Path) -> str:
     library writes one tranche per ranking file, so disagreement is corruption.
     """
 
-    seed_sets = {tuple(row["seeds"]) for row in _read_jsonl(ranking_path)}
+    seed_sets = {tuple(sorted(row["seeds"])) for row in _read_jsonl(ranking_path)}
     if len(seed_sets) != 1:
         raise SystemExit(
             f"{ranking_path} mixes seed sets {sorted(seed_sets)}; one ranking file "
             "is one tranche, and its rows all record the same seeds"
         )
     (seeds,) = seed_sets
+    # CANONICAL (sorted): the seed SET is the experiment, so [1,2,3] and [3,2,1]
+    # are one tranche recorded twice, not two independent draws (Codex review on
+    # PR #314). Recording order is a detail of how the leg was invoked.
     return "-".join(str(seed) for seed in seeds)
 
 
@@ -535,6 +576,19 @@ def _collect_arms(
                 "the two roots you mean to compare"
             )
         first_key, second_key = sorted(reads)
+        # An arm is ONE policy read twice. Identical float bytes under two
+        # different stamped families are two policies whose layouts happen to
+        # collide — precisely the ambiguity the artifact stamps exist to remove
+        # — so a swing between them measures nothing (Codex review on PR #314).
+        families = {
+            reads[key]["stamp"]["encoder_version"] for key in (first_key, second_key)
+        }
+        if len(families) != 1:
+            raise SystemExit(
+                f"{leg}: genome {sha} is stamped {sorted(families)} across its two "
+                "tranches; the same bytes under two families are two policies, not "
+                "one arm read twice"
+            )
         arms.append(
             _Arm(
                 leg=leg,

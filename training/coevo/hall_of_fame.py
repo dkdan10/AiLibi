@@ -104,6 +104,17 @@ _CONFIG_FILENAME: Final[str] = "config.json"
 #: artifact carries). The 18.5 filtered-BC seam names its artifact instead.
 DEFAULT_ANCHOR_POLICY: Final[str] = "fsm-default"
 
+#: The five ``TacticalPolicyStamp`` fields a loadable ``stamp.json`` carries —
+#: the exact set ``scripts/run_tournament.py`` ``_read_candidate_stamp``
+#: requires, restated here so a reload can verify the WHOLE stamp.
+_STAMP_FIELDS: Final[tuple[str, ...]] = (
+    "anchor_policy",
+    "encoder_version",
+    "method",
+    "policy_id",
+    "weights_sha256",
+)
+
 #: Keys :func:`write_loadable_artifact` OWNS in ``config.json`` — derived from
 #: the genome + the declared family, never accepted from a caller's provenance
 #: mapping (a caller-supplied duplicate is a fail-loud contradiction, not a
@@ -972,10 +983,28 @@ class HallOfFame:
                 f"member {member.weights_sha256} has a malformed loadable "
                 f"artifact under {member_dir}: {exc}"
             ) from exc
-        if stamp.get("weights_sha256") != member.weights_sha256:
+        # The WHOLE five-field stamp: a member missing ``method`` (or any other
+        # field) is rejected by ``_read_candidate_stamp`` downstream, so an
+        # eager load that checked only the sha would still defer the corruption
+        # to spend time (Codex review on PR #314).
+        missing = sorted(field for field in _STAMP_FIELDS if field not in stamp)
+        if missing:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} is missing stamp fields {missing}; "
+                f"a loadable freeze carries all five ({list(_STAMP_FIELDS)})"
+            )
+        for field in _STAMP_FIELDS:
+            value = stamp[field]
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{member_dir / _STAMP_FILENAME} field {field!r} is "
+                    f"{value!r}; every stamp field is a string"
+                )
+            _validate_stamp_token(f"{field} in {member_dir / _STAMP_FILENAME}", value)
+        if stamp["weights_sha256"] != member.weights_sha256:
             raise ValueError(
                 f"{member_dir / _STAMP_FILENAME} names weights_sha256 "
-                f"{stamp.get('weights_sha256')!r} but the index records "
+                f"{stamp['weights_sha256']!r} but the index records "
                 f"{member.weights_sha256} (the 17.14 conflation guard)"
             )
         for source, name in ((stamp, _STAMP_FILENAME), (config, _CONFIG_FILENAME)):
@@ -986,6 +1015,16 @@ class HallOfFame:
                     f"the pool declares {metadata.encoder_version!r}; a hall stays "
                     "single-family per campaign"
                 )
+        # The family-specific reconstruction field: a masked-MLP consumer reads
+        # ``hidden`` from config.json, so a missing or drifted width is exactly
+        # as unloadable as a wrong encoder tag.
+        recorded_hidden = config.get("hidden")
+        if recorded_hidden != metadata.hidden:
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} records hidden "
+                f"{recorded_hidden!r} but the pool declares {metadata.hidden!r}; "
+                "the consumer rebuilds the policy at that width"
+            )
 
     def _write_index(self) -> None:
         """Rewrite ``hall_of_fame.json`` as a pure function of the members.

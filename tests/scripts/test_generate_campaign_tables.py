@@ -478,3 +478,78 @@ def test_explicit_ranking_argument_order_does_not_change_the_bytes(
         == 0
     )
     assert forward.read_bytes() == backward.read_bytes()
+
+
+def test_reordered_seed_lists_are_one_tranche(tmp_path: Path) -> None:
+    """The seed SET is the experiment; recording order is not (Codex #314).
+
+    ``[1, 2, 3]`` and ``[3, 2, 1]`` are one tranche recorded twice, so the
+    seed-derived identity is canonicalised before use — otherwise the new guard
+    could still be walked around by a reordered list.
+    """
+
+    row = _committed_row(0)
+    leg = tmp_path / "campaign" / "leg-01"
+    _write_arm(leg, "forward", row, seeds=(1, 2, 3))
+    _write_arm(leg, "reversed", row, seeds=(3, 2, 1))
+
+    with pytest.raises(SystemExit, match="appears twice in tranche"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_stability_refuses_encoder_family_drift_within_an_arm(tmp_path: Path) -> None:
+    """One arm is ONE policy read twice (Codex on PR #314).
+
+    Identical float bytes stamped for two different families are two policies
+    whose layouts collide — the exact ambiguity the artifact stamps remove — so
+    a "swing" between them measures nothing.
+    """
+
+    first, second = _committed_row(0), _committed_row(0)
+    drifted_stamp = dict(second["stamp"])  # type: ignore[call-overload]
+    drifted_stamp["encoder_version"] = "v3"
+    second["stamp"] = drifted_stamp
+    leg = tmp_path / "campaign" / "leg-01"
+    _write_arm(leg, "t1", first, seeds=(1, 2, 3))
+    _write_arm(leg, "t2", second, seeds=(4, 5, 6))
+
+    with pytest.raises(SystemExit, match="two families are two policies"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_rows_split_refuses_a_gap_inside_a_segment(tmp_path: Path) -> None:
+    """A missing or reordered row must not be absorbed into a segment.
+
+    Only checking that a segment STARTS at 1 let a run that lost its
+    generation-1 row merge into its predecessor, making every rendered count,
+    swap total and game total plausible but wrong (Codex on PR #314).
+    """
+
+    rows = [
+        json.loads(line)
+        for line in _CAMPAIGN_ROWS.read_text(encoding="utf-8").splitlines()[:12]
+    ]
+    gapped = tmp_path / "gapped.jsonl"
+    # Drop generation 5 from an otherwise well-formed run.
+    kept = [row for row in rows if row["generation_index"] != 5]
+    gapped.write_text("".join(json.dumps(row) + "\n" for row in kept), encoding="utf-8")
+    with pytest.raises(SystemExit, match="not the consecutive"):
+        gct.render_rows_document(gapped, labels=[])
+
+
+def test_leg_rows_must_agree_on_the_leg_level_fields(tmp_path: Path) -> None:
+    """One leg table describes ONE experiment (Codex on PR #314).
+
+    The heading quotes seeds/roster/baseline/mode/budget from rank 1; a
+    concatenated file would otherwise render an authoritative-looking table
+    whose heading describes only the first candidate.
+    """
+
+    first, second = _committed_row(0), _committed_row(1)
+    second["baseline_id"] = "baseline-5"
+    mixed = tmp_path / "ranking-mixed.jsonl"
+    mixed.write_text(
+        json.dumps(first) + "\n" + json.dumps(second) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="disagree on the leg-level field"):
+        gct.render_leg_tables(mixed)

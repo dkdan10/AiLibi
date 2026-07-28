@@ -1286,3 +1286,66 @@ def test_loading_a_loadable_pool_verifies_all_four_files(tmp_path: Path) -> None
     healthy = tmp_path / "healthy"
     _fresh(healthy)
     assert HallOfFame.load(healthy, "impostor").artifact_metadata == _metadata()
+
+
+def test_loadable_reload_verifies_the_whole_stamp_and_the_width(
+    tmp_path: Path,
+) -> None:
+    """The eager load checks all five stamp fields AND the rebuild width (18.31).
+
+    Checking only the sha and the family still let a member missing ``method``,
+    or carrying a drifted ``hidden``, pass reload and fail later inside
+    ``_load_candidate_policy`` — deferring artifact corruption to the campaign
+    path the eager pass exists to protect (Codex on PR #314).
+    """
+
+    def _fresh(root: Path, **overrides: object) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(**overrides),
+        )
+        return hall.add_member(
+            (0.1, 0.2),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    # A stamp missing a required field.
+    root = tmp_path / "field"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    del stamp["method"]
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="missing stamp fields"):
+        HallOfFame.load(root, "impostor")
+
+    # A stamp field that is blank (the committed reader would reject it).
+    root = tmp_path / "blank"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["policy_id"] = "   "
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="non-blank stamp token"):
+        HallOfFame.load(root, "impostor")
+
+    # A config whose rebuild width drifted from the pool's declared one.
+    root = tmp_path / "width"
+    member = _fresh(root, encoder_version="v3", hidden=8)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["hidden"] = 4
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="records hidden"):
+        HallOfFame.load(root, "impostor")
+
+    # A v3 pool with an intact artifact still reloads.
+    root = tmp_path / "ok"
+    _fresh(root, encoder_version="v3", hidden=8)
+    reloaded = HallOfFame.load(root, "impostor")
+    assert reloaded.artifact_metadata is not None
+    assert reloaded.artifact_metadata.hidden == 8

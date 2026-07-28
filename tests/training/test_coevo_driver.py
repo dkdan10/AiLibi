@@ -1431,3 +1431,18 @@ def test_declared_hidden_is_proven_against_the_consuming_builder(
     with pytest.raises(ValueError, match="cannot rebuild"):
         run_alternating_freeze(wrong)
     _assert_no_disk_mutation(tmp_path / "bad")
+
+
+def test_utility_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
+    """The utility scorer takes no head width, so declaring one is refused.
+
+    The consumer ignores ``hidden`` for this family, so such artifacts still
+    load — but every ``config.json`` would falsely claim a masked-MLP width.
+    ``RealPathCandidate`` rejects the same combination for the same family
+    (Codex on PR #314).
+    """
+
+    config = _make_config(tmp_path, impostor=_impostor_side(hidden=8))
+    with pytest.raises(ValueError, match="takes no hidden width"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)

@@ -822,31 +822,37 @@ def _validate_prescreen_coverage(
     The ordering evidence is only worth what it names: a stale or partial quote
     set proves that SOME advice preceded the spend, not that the candidates
     consuming real-provider games were the ones pre-screened (Codex review on
-    PR #314). Coverage is checked on the genome DIGEST — the identity a quote
-    and a candidate actually share — and a quote whose label matches a
-    candidate's must carry that candidate's digest, so a relabelled or
-    mispaired quote cannot pass as coverage either.
+    PR #314). Coverage is therefore the full ``label -> digest`` MAPPING, not a
+    digest set: a leg may legitimately carry two labels over one genome (the
+    same policy re-entered under two names), and comparing sets would let one
+    quote cover both — leaving a candidate that consumed real games unnamed.
     """
 
-    quoted = {quote.weights_sha256 for quote in quotes}
-    expected = {_genome_digest(candidate.genome) for candidate in candidates}
-    if quoted != expected:
-        raise ValueError(
-            "pre-screen quotes must cover exactly this leg's candidates; "
-            f"missing {sorted(expected - quoted)}, extra {sorted(quoted - expected)} "
-            "(the blocker-4 evidence names the candidates the spend recorded)"
-        )
-    digest_by_label = {
+    expected = {
         candidate.label: _genome_digest(candidate.genome) for candidate in candidates
     }
+    quoted: dict[str, str] = {}
     for quote in quotes:
-        expected_digest = digest_by_label.get(quote.label)
-        if expected_digest is not None and quote.weights_sha256 != expected_digest:
+        if quote.label in quoted:  # pragma: no cover - PreScreenRecord re-checks
             raise ValueError(
-                f"pre-screen quote {quote.label!r} carries weights_sha256 "
-                f"{quote.weights_sha256!r} but the candidate with that label is "
-                f"{expected_digest!r}; a mispaired quote is not coverage"
+                f"pre-screen quotes must name each candidate once; {quote.label!r} "
+                "is quoted twice"
             )
+        quoted[quote.label] = quote.weights_sha256
+    if quoted != expected:
+        missing = sorted(set(expected) - set(quoted))
+        extra = sorted(set(quoted) - set(expected))
+        mispaired = sorted(
+            f"{label} quoted {quoted[label]} != candidate {expected[label]}"
+            for label in set(expected) & set(quoted)
+            if quoted[label] != expected[label]
+        )
+        raise ValueError(
+            "pre-screen quotes must cover exactly this leg's candidates "
+            f"(label -> digest); missing {missing}, extra {extra}, "
+            f"mispaired {mispaired} (the blocker-4 evidence names the candidates "
+            "the spend recorded)"
+        )
 
 
 def _write_prescreen_json(
@@ -1599,6 +1605,18 @@ def run_realpath_rerank(
             f"baseline {resolved_config.baseline_id!r} has no supply-floor "
             f"block for roster {roster_key!r} (known: {sorted(baseline_floors)}); "
             "refusing to record"
+        )
+
+    # The ranking path is preflighted HERE, before the first game: the
+    # exclusive open at the end is race protection, but on its own it would let
+    # an operator's path typo burn a whole 30–40 h leg before failing (Codex
+    # review on PR #314). Both checks stand — this one saves the budget, that
+    # one closes the window between them.
+    if ranking_path.exists():
+        raise RealPathRerankError(
+            f"a committed ranking already exists at {ranking_path}; this leg is "
+            "already recorded and its rows are never rewritten — refusing before "
+            "any game is spent (point --ranking-path at a fresh file)"
         )
 
     # The leg's own invocation stamp + append-only log, opened AFTER every

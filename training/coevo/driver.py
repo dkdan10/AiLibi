@@ -864,6 +864,16 @@ def _validate_side(
                 "_load_candidate_policy, discovered only after the generations "
                 "were paid for — refusing before the first game"
             )
+        if probe_encoder == _UTILITY_ENCODER_VERSION and config.hidden is not None:
+            # The utility scorer takes NO head width, so a declared one would
+            # put a false masked-MLP width into every artifact's config.json.
+            # ``RealPathCandidate`` rejects the same combination for the same
+            # family (Codex review on PR #314).
+            raise ValueError(
+                f"the utility family ({_UTILITY_ENCODER_VERSION!r}) takes no hidden "
+                f"width; got hidden={config.hidden!r}. Declaring one would stamp "
+                "every frozen artifact with a width its family does not have"
+            )
         if probe_encoder != _UTILITY_ENCODER_VERSION and config.hidden is None:
             raise ValueError(
                 f"the impostor family {probe_encoder!r} rebuilds through the "
