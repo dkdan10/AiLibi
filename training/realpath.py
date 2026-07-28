@@ -83,6 +83,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import re
 import sys
 import tempfile
@@ -1176,6 +1177,51 @@ def _refuse_foreign_replays(
         )
 
 
+def _publish_ranking(ranking_path: Path, payload: str) -> None:
+    """Publish the ranking bytes ATOMICALLY and write-once (18.31).
+
+    A bare ``open("x")`` creates the file and only then writes it, so an
+    interrupt (or a failing write) between the two leaves an empty or partial
+    ranking on disk. That file is indistinguishable from a committed one to
+    everything downstream: the resume preflight rejects the leg as already
+    recorded — refusing a resume whose verified replays are still there — and a
+    reader folds truncated rows as though they were the whole leg (Codex review
+    on PR #314). Round 3's preflight is what made that half-written file
+    reachable, so the fix belongs here rather than in the preflight.
+
+    The complete bytes are staged in the DESTINATION directory (same
+    filesystem, so the link below cannot cross devices), flushed through to
+    disk, and then published with :func:`os.link` — one syscall that is both
+    atomic and exclusive, failing with ``FileExistsError`` if the ranking
+    already exists. ``os.replace`` would be atomic but would silently CLOBBER a
+    committed ranking, which is the defect round 2 caught. The stage file is
+    removed on every path, so a crash leaves at most a ``.tmp`` nobody reads.
+    """
+
+    stage: Path | None = None
+    try:
+        handle_fd, stage_name = tempfile.mkstemp(
+            dir=ranking_path.parent, prefix=f".{ranking_path.name}.", suffix=".tmp"
+        )
+        stage = Path(stage_name)
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(stage, ranking_path)
+        except FileExistsError as exc:
+            raise RealPathRerankError(
+                f"a committed ranking already exists at {ranking_path}; this leg "
+                "is already recorded and its rows are never rewritten (point "
+                "--ranking-path at a fresh file, or delete the stale one "
+                "deliberately)"
+            ) from exc
+    finally:
+        if stage is not None:
+            stage.unlink(missing_ok=True)
+
+
 def _record_or_resume_seed(
     *,
     seed: int,
@@ -1761,22 +1807,9 @@ def run_realpath_rerank(
             for rank, i in enumerate(order, start=1)
         )
         ranking_path.parent.mkdir(parents=True, exist_ok=True)
-        # EXCLUSIVE: a ranking is committed truth, written once. Before the
-        # resume path existed a re-run died at the candidate-dir mkdir long
-        # before reaching this line; ``resume=True`` makes a completed leg
-        # re-runnable, and a plain write would then silently REPLACE the
-        # recorded ranking with one whose telemetry says the games were skipped
-        # rather than played (Codex review on PR #314).
-        try:
-            with ranking_path.open("x", encoding="utf-8") as handle:
-                handle.write("".join(row.to_json_line() + "\n" for row in rows))
-        except FileExistsError as exc:
-            raise RealPathRerankError(
-                f"a committed ranking already exists at {ranking_path}; this leg "
-                "is already recorded and its rows are never rewritten (point "
-                "--ranking-path at a fresh file, or delete the stale one "
-                "deliberately)"
-            ) from exc
+        _publish_ranking(
+            ranking_path, "".join(row.to_json_line() + "\n" for row in rows)
+        )
         for row in rows:
             leg_log.emit(
                 "rank",

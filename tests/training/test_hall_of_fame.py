@@ -1349,3 +1349,63 @@ def test_loadable_reload_verifies_the_whole_stamp_and_the_width(
     reloaded = HallOfFame.load(root, "impostor")
     assert reloaded.artifact_metadata is not None
     assert reloaded.artifact_metadata.hidden == 8
+
+
+def test_loadable_reload_verifies_stamp_IDENTITY_not_just_syntax(
+    tmp_path: Path,
+) -> None:
+    """A syntactically valid but WRONG stamp is false provenance (Codex on PR #314).
+
+    Round 3 checked that ``method`` / ``anchor_policy`` / ``policy_id`` were
+    present, string-typed and MANIFEST-safe — but never that they were the
+    values this pool's own metadata reconstructs. So a member re-stamped for
+    another campaign, method or anchor reloaded cleanly and carried that false
+    provenance into every recording it seeded: the §12 Errata item-1 defect
+    wearing a valid name. The pool metadata plus the member row determine all
+    three exactly, so there is no reason to accept a mismatch.
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            (0.1, 0.2),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    for field, forged in (
+        ("method", "some-other-method"),
+        ("anchor_policy", "some-other-anchor"),
+        ("policy_id", "coevo-other-run-champion-gen1"),
+    ):
+        root = tmp_path / field
+        member = _fresh(root)
+        stamp_path = root / "impostor" / member.path / "stamp.json"
+        stamp = json.loads(stamp_path.read_text())
+        assert stamp[field] != forged
+        stamp[field] = forged
+        stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match=f"records {field} "):
+            HallOfFame.load(root, "impostor")
+
+    # A member whose policy_id names the WRONG generation is caught too: the
+    # id encodes (run, origin, generation), so drift there mislabels the row.
+    root = tmp_path / "generation"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["policy_id"] = stamp["policy_id"].replace("gen1", "gen7")
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="records policy_id "):
+        HallOfFame.load(root, "impostor")
+
+    # An untampered pool still reloads.
+    root = tmp_path / "ok"
+    _fresh(root)
+    assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()

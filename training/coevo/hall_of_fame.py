@@ -1015,6 +1015,29 @@ class HallOfFame:
                     f"the pool declares {metadata.encoder_version!r}; a hall stays "
                     "single-family per campaign"
                 )
+        # IDENTITY, not just syntax. The pool's metadata plus the member's own
+        # row reconstruct every remaining stamp field exactly, so checking only
+        # that they are MANIFEST-safe strings would accept a member re-stamped
+        # for another campaign, method, or anchor and let it carry that false
+        # provenance into every recording it seeds — the §12 Errata item-1
+        # defect wearing a syntactically valid name (Codex review on PR #314).
+        for field, expected in (
+            ("method", metadata.method),
+            ("anchor_policy", metadata.anchor_policy),
+            (
+                "policy_id",
+                metadata.policy_id_for(
+                    origin=member.origin, generation=member.generation
+                ),
+            ),
+        ):
+            if stamp[field] != expected:
+                raise ValueError(
+                    f"{member_dir / _STAMP_FILENAME} records {field} "
+                    f"{stamp[field]!r} but this pool's member reconstructs to "
+                    f"{expected!r}; a member's stamp names the campaign that bred "
+                    "it, and false provenance is never loaded"
+                )
         # The family-specific reconstruction field: a masked-MLP consumer reads
         # ``hidden`` from config.json, so a missing or drifted width is exactly
         # as unloadable as a wrong encoder tag.

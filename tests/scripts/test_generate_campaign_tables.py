@@ -553,3 +553,120 @@ def test_leg_rows_must_agree_on_the_leg_level_fields(tmp_path: Path) -> None:
     )
     with pytest.raises(SystemExit, match="disagree on the leg-level field"):
         gct.render_leg_tables(mixed)
+
+
+def test_stability_refuses_overlapping_tranche_seed_sets(tmp_path: Path) -> None:
+    """Two tranches must be DISJOINT draws, not merely distinct ones (Codex on PR #314).
+
+    Canonicalising on the seed set makes ``(1, 2, 3)`` and ``(3, 4, 5)`` two
+    identities, so the round-3 guard passes them — but they share seed 3, whose
+    single game is then counted on BOTH sides of every swing. A shared seed
+    reports agreement the pair never independently observed, in the table whose
+    whole job is to say how independent the measurements are.
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(1, 2, 3))
+    _write_arm(leg, "b", row, seeds=(3, 4, 5))
+    with pytest.raises(SystemExit, match=r"share seeds \[3\]"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_disjoint_tranches_over_the_same_arm_are_accepted(tmp_path: Path) -> None:
+    """The disjointness guard rejects only the overlap, not two honest draws."""
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(1, 2, 3))
+    _write_arm(leg, "b", row, seeds=(4, 5, 6))
+    stability = gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+    assert stability["arms_with_both_tranches"] == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("baseline_id", "some-other-baseline"),
+        ("mode", "champion-trace"),
+        ("max_ticks", 99999),
+        ("num_players", 10),
+        ("meeting_timeout_seconds", 12.5),
+        ("max_attempts", 7),
+    ],
+)
+def test_stability_refuses_protocol_drift_across_an_arms_reads(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """An arm is one policy under ONE protocol, read twice (Codex on PR #314).
+
+    Round 3 required the two reads to share an encoder FAMILY, which says the
+    bytes are the same policy but nothing about the experiment around them. A
+    changed roster / baseline / mode / budget between the reads makes the swing
+    a measured effect of that change, which the table would then publish as
+    measurement instability.
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    # The override must actually MOVE the field, or this case asserts nothing:
+    # `num_players` is already 9 in the committed row, so an unchecked 9 here
+    # silently tested a matching pair and still "passed" the raises-check.
+    assert row[field] != value, f"{field} override matches the committed value"
+    _write_arm(leg, "a", row, seeds=(1, 2, 3))
+    _write_arm(leg, "b", row, seeds=(4, 5, 6), **{field: value})
+    with pytest.raises(SystemExit, match=f"different {field} across tranches"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_check_rejects_byte_drift_that_every_value_survives(tmp_path: Path) -> None:
+    """``--check`` enforces BYTE reproduction, not value equality (Codex on PR #314).
+
+    The PR's accepted invariant is that ``--json-out`` over the committed
+    artifact is a no-op diff. A decoded comparison passes through key
+    reordering, indent drift and numeric respelling, so the check would keep
+    reporting "reproduces exactly" while regenerating the file changed it.
+    """
+
+    committed = gct.stability_json(
+        gct.compute_stability(gct.find_ranking_files(_default_roots()))
+    )
+    reformatted = json.dumps(json.loads(committed), indent=4, sort_keys=True) + "\n"
+    assert json.loads(reformatted) == json.loads(committed)  # every VALUE agrees
+    artifact = tmp_path / "measurement-stability.json"
+    artifact.write_text(reformatted, encoding="utf-8")
+    assert gct.main(["stability", "--check", str(artifact)]) == 1
+
+
+def test_check_passes_on_the_committed_artifact_bytes() -> None:
+    """The tightened check still accepts the committed artifact unchanged."""
+
+    assert gct.main(["stability", "--check", str(gct.DEFAULT_STABILITY_ARTIFACT)]) == 0
+
+
+def test_leg_tables_refuse_a_non_contiguous_rank_sequence(tmp_path: Path) -> None:
+    """Ranks must be exactly ``1..N`` (Codex on PR #314).
+
+    Sorting by ``rank`` renders an authoritative-looking table out of a
+    duplicated or truncated file, with repeated or missing positions. This
+    generator exists to remove hand-assembly errors, not to reproduce them
+    faster.
+    """
+
+    first, second = _committed_row(0), _committed_row(1)
+    second["rank"] = 3
+    path = tmp_path / "ranking-gap.jsonl"
+    path.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n", "utf-8")
+    with pytest.raises(SystemExit, match="not a contiguous 1..2 sequence"):
+        gct.render_leg_tables(path)
+
+
+def test_leg_tables_refuse_a_duplicated_candidate(tmp_path: Path) -> None:
+    """One candidate holds exactly one rank — a concatenated file is refused."""
+
+    first, second = _committed_row(0), _committed_row(0)
+    second["rank"] = 2
+    path = tmp_path / "ranking-dup.jsonl"
+    path.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n", "utf-8")
+    with pytest.raises(SystemExit, match="appears more than once"):
+        gct.render_leg_tables(path)

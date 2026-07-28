@@ -1446,3 +1446,20 @@ def test_utility_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="takes no hidden width"):
         run_alternating_freeze(config)
     _assert_no_disk_mutation(tmp_path)
+
+
+def test_crew_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
+    """The crew scorer takes no head width either (Codex on PR #314).
+
+    The round-3 family rules were written inside the ``impostor`` branch, so a
+    crew side declaring ``hidden`` passed validation and stamped that width into
+    every crew freeze's ``config.json``. Crew artifacts rebuild through
+    ``build_crew_scorer``, which has no width input — exactly the false
+    masked-MLP provenance the utility-family guard rejects, reachable on the
+    other side.
+    """
+
+    config = _make_config(tmp_path, crew=_crew_side(hidden=8))
+    with pytest.raises(ValueError, match="crew family .* takes no hidden width"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)

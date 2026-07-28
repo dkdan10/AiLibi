@@ -855,6 +855,18 @@ def _validate_side(
             f"the {expected_side} side config declares hidden={config.hidden!r}; "
             "a masked-MLP head width must be >= 1"
         )
+    if expected_side == "crew" and config.hidden is not None:
+        # The crew scorer rebuilds through ``build_crew_scorer``, which takes NO
+        # head width, so a declared one would stamp every crew freeze's
+        # config.json with a masked-MLP width its family does not have — the
+        # same false provenance the utility-family guard below rejects, and it
+        # was reachable because the family rules sat inside the impostor branch
+        # (Codex review on PR #314).
+        raise ValueError(
+            f"the crew family ({probe_encoder!r}) takes no hidden width; got "
+            f"hidden={config.hidden!r}. Declaring one would stamp every frozen "
+            "crew artifact with a width its builder does not have"
+        )
     if expected_side == "impostor":
         if probe_encoder not in _LOADABLE_IMPOSTOR_ENCODERS:
             raise ValueError(

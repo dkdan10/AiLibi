@@ -1293,3 +1293,52 @@ def test_prescreen_coverage_is_by_candidate_identity_not_digest_set(
         prescreen=[_quote("arm-a"), _quote("arm-b")],
     )
     assert {row.label for row in result.rows} == {"arm-a", "arm-b"}
+
+
+def test_a_partially_written_ranking_does_not_block_a_resume(tmp_path: Path) -> None:
+    """A ranking is published ATOMICALLY, so an interrupt leaves no half-file.
+
+    Round 2 made the ranking write exclusive and round 3 rejected an existing
+    one in the preflight — which together made a NEW state reachable: a crash
+    between ``open("x")`` creating the file and the write completing left an
+    empty or partial ranking that the preflight then read as committed truth,
+    refusing a resume whose verified replays were still on disk (Codex on
+    PR #314). Publishing through a staged file + ``os.link`` means the path
+    either does not exist or holds every row.
+    """
+
+    work_dir = tmp_path / "work"
+    ranking = tmp_path / "ranking-1.jsonl"
+    _record_two_seeds(work_dir, ranking)
+    complete = ranking.read_text(encoding="utf-8")
+
+    # No stage file survives a successful publish.
+    assert sorted(p.name for p in tmp_path.iterdir() if p.is_file()) == [ranking.name]
+
+    # The failure the atomic publish exists to prevent: a zero-byte create.
+    truncated = tmp_path / "ranking-truncated.jsonl"
+    truncated.write_text("", encoding="utf-8")
+    assert truncated.read_text(encoding="utf-8") != complete
+    with pytest.raises(RealPathRerankError, match="already exists"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=tmp_path / "work-2",
+            ranking_path=truncated,
+            config=_config(),
+        )
+
+
+def test_ranking_publish_is_atomic_and_still_write_once(tmp_path: Path) -> None:
+    """The staged publish keeps write-once semantics: an existing file is never clobbered."""
+
+    from training.realpath import _publish_ranking
+
+    target = tmp_path / "ranking.jsonl"
+    _publish_ranking(target, '{"rank": 1}\n')
+    assert target.read_text(encoding="utf-8") == '{"rank": 1}\n'
+    with pytest.raises(RealPathRerankError, match="already exists"):
+        _publish_ranking(target, '{"rank": 2}\n')
+    # The committed bytes are untouched, and no stage file is left behind.
+    assert target.read_text(encoding="utf-8") == '{"rank": 1}\n'
+    assert [p.name for p in tmp_path.iterdir()] == [target.name]

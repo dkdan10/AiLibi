@@ -333,6 +333,26 @@ _RANKING_HEADERS: Final[tuple[str, ...]] = (
 )
 
 
+#: The PROTOCOL a leg ran under — everything that defines the experiment except
+#: which seeds it drew. Two reads of one genome are comparable only if all of
+#: these agree: a swing across a changed roster, baseline, mode or budget
+#: measures the change, not provider noise.
+_LEG_PROTOCOL_FIELDS: Final[tuple[str, ...]] = (
+    "num_players",
+    "num_impostors",
+    "tasks_per_crewmate",
+    "baseline_id",
+    "mode",
+    "max_attempts",
+    "max_ticks",
+    "meeting_timeout_seconds",
+)
+
+#: The leg-level fields ONE ranking file's rows must agree on — the protocol
+#: plus the seed set (one ranking file is one tranche).
+_LEG_LEVEL_FIELDS: Final[tuple[str, ...]] = ("seeds", *_LEG_PROTOCOL_FIELDS)
+
+
 def _stamp_proof(row: Mapping[str, Any]) -> str:
     """The 17.14 stamp-proof cell, rendered from the row's own proof fields."""
 
@@ -350,6 +370,26 @@ def render_leg_tables(ranking_path: Path) -> list[str]:
     """The candidate legend + ranking + floor-sensitivity tables for one tranche."""
 
     rows = sorted(_read_jsonl(ranking_path), key=lambda row: row["rank"])
+    # A leg table asserts a TOTAL ORDER over the leg's candidates. Sorting by
+    # ``rank`` alone renders an authoritative-looking table out of a duplicated,
+    # concatenated or truncated file — repeated positions, gaps, or one
+    # candidate appearing twice — and this generator exists to remove exactly
+    # that class of hand-assembly error, not to reproduce it faster (Codex
+    # review on PR #314).
+    ranks = [row["rank"] for row in rows]
+    if ranks != list(range(1, len(rows) + 1)):
+        raise SystemExit(
+            f"{ranking_path}: ranks are {ranks}, not a contiguous 1..{len(rows)} "
+            "sequence; a leg table is one total order over the leg's candidates"
+        )
+    for field in ("weights_sha256", "label"):
+        seen = [row[field] for row in rows]
+        duplicated = sorted({value for value in seen if seen.count(value) > 1})
+        if duplicated:
+            raise SystemExit(
+                f"{ranking_path}: {field} {duplicated} appears more than once; "
+                "each candidate holds exactly one rank in a leg"
+            )
     legend = _table(
         ("candidate", "label", "weights_sha256"),
         [
@@ -379,17 +419,7 @@ def render_leg_tables(ranking_path: Path) -> list[str]:
     # concatenated file render one authoritative-looking table whose heading
     # describes the first candidate while the metrics below came from another
     # experiment (Codex review on PR #314).
-    for field in (
-        "seeds",
-        "num_players",
-        "num_impostors",
-        "tasks_per_crewmate",
-        "baseline_id",
-        "mode",
-        "max_attempts",
-        "max_ticks",
-        "meeting_timeout_seconds",
-    ):
+    for field in _LEG_LEVEL_FIELDS:
         values = {json.dumps(row[field], sort_keys=True) for row in rows}
         if len(values) != 1:
             raise SystemExit(
@@ -529,6 +559,12 @@ def _tranche_identity(ranking_path: Path) -> str:
     return "-".join(str(seed) for seed in seeds)
 
 
+def _tranche_seeds(tranche: str) -> set[int]:
+    """The seed set behind a tranche identity built by :func:`_tranche_identity`."""
+
+    return {int(token) for token in tranche.split("-")}
+
+
 @dataclass(frozen=True)
 class _Arm:
     """One ``(leg, genome)`` arm's two tranche reads (the §4.0 combination rule)."""
@@ -589,6 +625,23 @@ def _collect_arms(
                 "tranches; the same bytes under two families are two policies, not "
                 "one arm read twice"
             )
+        # Same policy, same PROTOCOL. A swing is only provider/seed noise if
+        # nothing else about the experiment moved: a changed roster, baseline,
+        # mode or budget between the two reads makes the difference a measured
+        # effect of that change, which this table would then report as
+        # measurement instability (Codex review on PR #314).
+        for field in _LEG_PROTOCOL_FIELDS:
+            values = {
+                json.dumps(reads[key][field], sort_keys=True)
+                for key in (first_key, second_key)
+            }
+            if len(values) != 1:
+                raise SystemExit(
+                    f"{leg}: genome {sha} was recorded under different {field} "
+                    f"across tranches {first_key} and {second_key} "
+                    f"({sorted(values)}); a stability swing compares one policy "
+                    "under ONE protocol, twice"
+                )
         arms.append(
             _Arm(
                 leg=leg,
@@ -609,6 +662,20 @@ def _collect_arms(
             "stability table compares the SAME two tranches for every arm — "
             "pass the roots (or the two tranches) you mean to compare"
         )
+    # DISJOINT, not merely distinct. Canonicalising on the seed set makes
+    # (1,2,3) and (3,4,5) two identities, but they share seed 3: that game is
+    # then counted on BOTH sides of every swing, so a shared-seed pair reports
+    # agreement it did not independently observe. Two tranches are two
+    # independent draws or they are not a retest (Codex review on PR #314).
+    if tranche_pairs:
+        ((first_key, second_key),) = tranche_pairs
+        overlap = sorted(_tranche_seeds(first_key) & _tranche_seeds(second_key))
+        if overlap:
+            raise SystemExit(
+                f"tranches {first_key} and {second_key} share seeds {overlap}; a "
+                "stability swing compares two INDEPENDENT draws, and a shared "
+                "seed is the same game counted on both sides"
+            )
     return by_arm, arms
 
 
@@ -829,24 +896,39 @@ def _run_stability(args: argparse.Namespace) -> int:
     stability = compute_stability(find_ranking_files(roots))
     if args.check is not None:
         committed_path = _resolve(Path(args.check))
-        committed = json.loads(committed_path.read_text(encoding="utf-8"))
-        drift = sorted(
-            key
-            for key in set(stability) | set(committed)
-            if stability.get(key) != committed.get(key)
-        )
-        if drift:
+        committed_bytes = committed_path.read_text(encoding="utf-8")
+        generated_bytes = stability_json(stability)
+        # BYTES, not decoded values. ``--json-out`` over this same artifact must
+        # be a no-op diff, and a value-only comparison passes through key
+        # reordering, indent/newline drift and numeric respelling (1 vs 1.0) —
+        # so the check would go on reporting "reproduces exactly" while
+        # regenerating the file changed it (Codex review on PR #314). The
+        # decoded diff is still printed, because it names WHICH number moved
+        # when the mismatch is semantic rather than formatting.
+        if generated_bytes != committed_bytes:
+            committed = json.loads(committed_bytes)
+            drift = sorted(
+                key
+                for key in set(stability) | set(committed)
+                if stability.get(key) != committed.get(key)
+            )
             for key in drift:
                 sys.stderr.write(
                     f"{key}: computed {stability.get(key)!r} != committed "
                     f"{committed.get(key)!r}\n"
+                )
+            if not drift:
+                sys.stderr.write(
+                    "every value matches, but the committed BYTES differ "
+                    "(key order, indentation, or trailing newline); regenerate "
+                    "with --json-out so the artifact is what this generator emits\n"
                 )
             sys.stderr.write(
                 f"{committed_path} does not reproduce from {[str(r) for r in roots]}\n"
             )
             return 1
         sys.stdout.write(
-            f"{committed_path.as_posix()} reproduces exactly "
+            f"{committed_path.as_posix()} reproduces exactly, byte for byte "
             f"({stability['arms_with_both_tranches']} arms, "
             f"{stability['distinct_genomes']} distinct genomes).\n"
         )
