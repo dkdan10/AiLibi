@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "crew-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-c2-crew-general-crew-generation-champion-gen3-7fa59718d8810a3c26214309eaf6b637a1afc66dc3ea923ab887152f4e985acd",
+  "weights_sha256": "7fa59718d8810a3c26214309eaf6b637a1afc66dc3ea923ab887152f4e985acd"
+}

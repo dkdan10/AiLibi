@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "run-c2-crew-general",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-c2-crew-general/impostor/gen-1/c5671ccab33bb27393e37ae3879b062e6199011688140f9329007e66afe07b8f",
+  "generation": 1,
+  "genome_length": 19,
+  "hall_origin": "exploiter-probe",
+  "side": "impostor",
+  "source_lineage": "run-c2-crew-general",
+  "trained_against": "888046d082daf62853c9d10d25dde04e20691c042dcd6a6609492d554ed569bf"
+}
