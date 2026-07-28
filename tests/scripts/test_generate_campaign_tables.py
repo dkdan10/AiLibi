@@ -786,6 +786,59 @@ def test_stability_refuses_one_path_for_both_artifacts(tmp_path: Path) -> None:
     )
 
 
+def test_no_output_may_land_under_a_frozen_evidence_root(tmp_path: Path) -> None:
+    """Containment, not just aliasing, is the rule (Codex review on PR #314).
+
+    My round-12 alias check protects only the files THIS invocation read, so an
+    output naming an unrelated committed artifact — the stability record itself,
+    say — overwrote frozen evidence and returned 0, in a tool whose module
+    docstring and ``_emit`` both call those roots read-only history.
+    """
+
+    for frozen_root in gct.FROZEN_EVIDENCE_ROOTS:
+        target = gct._REPO_ROOT / frozen_root / "__round14_probe.md"
+        assert not target.exists()
+        try:
+            with pytest.raises(SystemExit, match="read-only history"):
+                gct.main(["stability", "--out", str(target)])
+            assert not target.exists()
+        finally:
+            # This pin writes into the REPO if the guard regresses, so it clears
+            # up after itself rather than leaving the working tree dirty for
+            # whoever runs the suite next.
+            target.unlink(missing_ok=True)
+
+    # The committed artifact this generator reproduces is itself protected, and
+    # is byte-identical afterwards.
+    committed = gct._REPO_ROOT / gct.DEFAULT_STABILITY_ARTIFACT
+    original = committed.read_bytes()
+    with pytest.raises(SystemExit, match="read-only history"):
+        gct.main(["stability", "--json-out", str(committed)])
+    assert committed.read_bytes() == original
+
+    # A `..` segment cannot walk back in.
+    with pytest.raises(SystemExit, match="read-only history"):
+        gct.main(
+            [
+                "stability",
+                "--out",
+                str(
+                    gct._REPO_ROOT
+                    / "training"
+                    / "artifacts"
+                    / ".."
+                    / "artifacts"
+                    / "escaped.md"
+                ),
+            ]
+        )
+
+    # No over-reach: rendering anywhere else still works.
+    outside = tmp_path / "rendered.md"
+    assert gct.main(["stability", "--out", str(outside)]) == 0
+    assert outside.read_text(encoding="utf-8").startswith("| stability check")
+
+
 def test_a_ranking_row_must_carry_the_complete_stamp(tmp_path: Path) -> None:
     """An incomplete stamp can no longer certify its own agreement (Codex #314).
 

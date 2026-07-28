@@ -1392,6 +1392,89 @@ def test_a_loadable_pool_with_no_metadata_block_is_refused(tmp_path: Path) -> No
     assert HallOfFame.load(plain, "impostor").artifact_metadata is None
 
 
+def test_a_residual_config_json_is_loadable_pool_evidence(tmp_path: Path) -> None:
+    """``config.json`` alone still proves the pool was loadable (Codex #314).
+
+    My round-13 guard scanned for ``stamp.json`` only, so a corruption that
+    removes the stamps but leaves the config sidecars read as a legacy
+    weights-only pool: the next ``add_member`` wrote two files and silently
+    converted a corrupted loadable pool into a mixed-format one. Neither file is
+    ever written by the two-file path, so EITHER one is evidence.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    member = hall.add_member(
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    (member_dir / "stamp.json").unlink()
+    assert (member_dir / "config.json").exists()
+
+    index_path = tmp_path / "impostor" / "hall_of_fame.json"
+    index: dict[str, Any] = json.loads(index_path.read_text())
+    del index["artifact_metadata"]
+    index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="metadata block is missing or null"):
+        HallOfFame.load(tmp_path, "impostor")
+
+    # Still no over-reach: a pool carrying NEITHER file is genuinely legacy.
+    plain = tmp_path / "plain"
+    weights_only = HallOfFame.create(plain, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(weights_only)
+    assert HallOfFame.load(plain, "impostor").artifact_metadata is None
+
+
+def test_a_pool_may_not_declare_the_other_sides_encoder_family(
+    tmp_path: Path,
+) -> None:
+    """A freeze family belongs to a SIDE (Codex review on PR #314).
+
+    ``_refuse_unloadable_family`` proves SOME consumer can rebuild the family
+    and says nothing about which, so a crew hall could carry impostor ``v3``
+    metadata: every freeze would be proven against the impostor builder and then
+    rejected by ``_load_candidate_policy`` when read back as a crew candidate.
+    """
+
+    impostor_meta = _metadata()
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.create(
+            tmp_path / "a",
+            "crew",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=impostor_meta,
+        )
+    # Refused BEFORE anything durable: no index was committed, so a corrected
+    # retry is not blocked by create's own no-clobber guard.
+    assert not (tmp_path / "a" / "crew" / "hall_of_fame.json").exists()
+
+    # The same declaration on its OWN side is fine — no over-reach.
+    hall = HallOfFame.create(
+        tmp_path / "b",
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=impostor_meta,
+    )
+    assert hall.artifact_metadata is not None
+
+    # And a hand-edited index carrying the mismatch is refused on the way back
+    # in, or the refusal is only as durable as the process that wrote it.
+    index_path = tmp_path / "b" / "impostor" / "hall_of_fame.json"
+    index: dict[str, Any] = json.loads(index_path.read_text())
+    index["side"] = "crew"
+    crew_dir = tmp_path / "b" / "crew"
+    crew_dir.mkdir(parents=True)
+    (crew_dir / "hall_of_fame.json").write_text(
+        json.dumps(index, indent=2, sort_keys=True) + "\n"
+    )
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.load(tmp_path / "b", "crew")
+
+
 def test_weights_only_pool_index_bytes_are_unchanged(tmp_path: Path) -> None:
     """A pool that declares no family records no metadata key (18.31).
 

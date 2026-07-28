@@ -302,6 +302,11 @@ _PROMPT_SET_KEY: Final[str] = "prompt_set"
 #: set name does not cover (Codex review on PR #314).
 _ROLL_CALL_KEY: Final[str] = "impostor_roll_call"
 
+#: The per-game budget key on the recording-backend identity. ``None`` when the
+#: caller supplies its own meeting runner, since ``run_tournament_eval`` then
+#: never builds one (Task 18.31).
+_GAME_BUDGET_KEY: Final[str] = "game_budget"
+
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
 #: not identity: genome lengths collide across encoder families.
@@ -1525,8 +1530,10 @@ def _dirs_claimed_by_other_tranches(work_dir: Path, *, tranche: str) -> set[str]
     return claimed
 
 
-def _refuse_escaping_recorded_dir(recorded_dir: str, *, manifest: Path) -> None:
-    """A manifest's ``dir`` is a BASENAME under the work dir, never a path (18.31).
+def _refuse_escaping_recorded_dir(
+    recorded_dir: str, *, work_dir: Path, manifest: Path
+) -> None:
+    """A manifest's ``dir`` is a REAL directory under the work dir (18.31).
 
     ``_resolve_candidate_dirs`` joins this string onto ``work_dir`` and the
     resume then records into the result. A corrupted or hand-edited manifest
@@ -1535,6 +1542,17 @@ def _refuse_escaping_recorded_dir(recorded_dir: str, *, manifest: Path) -> None:
     another campaign's replay evidence (Codex review on PR #314). The recorder
     only ever writes ``NNN-<slug>``, so anything else is a manifest this leg
     must not act on.
+
+    A LEXICAL check is not enough on its own, and that was the gap: a single
+    component such as ``001-candidate`` satisfies every test below while being
+    a SYMLINK onto another campaign's recording directory. The resume then
+    follows it through ``mkdir(parents=True, exist_ok=True)`` — which succeeds
+    on a link to an existing directory — and records straight through it, so the
+    same evidence destruction arrives by a different route (Codex review on
+    PR #314). Containment is therefore checked on the RESOLVED path, and a
+    symlink is refused outright: the recorder creates real directories, so a
+    link standing where one belongs is a corrupted work tree, never something to
+    follow.
     """
 
     candidate = Path(recorded_dir)
@@ -1550,6 +1568,31 @@ def _refuse_escaping_recorded_dir(recorded_dir: str, *, manifest: Path) -> None:
             "single path component under the work dir; a resume joins that onto "
             "work_dir and records into it, so a manifest naming a path outside "
             "this leg is refused rather than followed"
+        )
+    joined = work_dir / recorded_dir
+    if joined.is_symlink():
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, but "
+            f"{joined} is a SYMLINK. The recorder only ever creates real "
+            "directories, so a link standing in for one is a corrupted work "
+            "tree — following it would record (and re-record with force=True) "
+            "through whatever it points at"
+        )
+    try:
+        resolved_dir = joined.resolve()
+        work_root = work_dir.resolve()
+    except OSError as exc:  # pragma: no cover - unresolvable path fails later
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which cannot be "
+            f"resolved under {work_dir} ({exc}); a resume records into that path, "
+            "so an unresolvable one is refused rather than followed"
+        ) from exc
+    if resolved_dir.parent != work_root:
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which resolves to "
+            f"{resolved_dir} — outside the work root {work_root}. A resume records "
+            "into the resolved path, so evidence belonging to another campaign is "
+            "refused rather than written through"
         )
 
 
@@ -1582,7 +1625,9 @@ def _recorded_candidate_dirs(
             seen.add(label)
             recorded_dir = entry.get("dir")
             if isinstance(recorded_dir, str) and recorded_dir:
-                _refuse_escaping_recorded_dir(recorded_dir, manifest=path)
+                _refuse_escaping_recorded_dir(
+                    recorded_dir, work_dir=work_dir, manifest=path
+                )
                 recorded[label] = recorded_dir
     return recorded, seen
 
@@ -1737,15 +1782,24 @@ def _resolve_candidate_dirs(
         )
         reserved.add(chosen)
         resolved.append(chosen)
-    # Two labels must never land on one directory, by any route.
-    if len(set(resolved)) != len(resolved):
-        collisions = sorted(
-            {path.name for path in resolved if resolved.count(path) > 1}
-        )
-        raise RealPathRerankError(
-            f"resume resolved two candidates onto the same recording dir(s) "
-            f"{collisions}; a directory holds exactly one candidate's bytes"
-        )
+    # Two labels must never land on one directory, by any route — and "the same
+    # directory" is a question about the FILESYSTEM, not about path strings.
+    # Comparing the joined paths alone let two distinct names reach one
+    # directory through a link, which is the same one-directory-two-candidates
+    # contamination this check exists to refuse (Codex review on PR #314).
+    # Checked on both forms: the resolved comparison is the real invariant, and
+    # the literal one still reports the clearer message when the names match.
+    for form, describe in (
+        (resolved, "path"),
+        ([p.resolve() for p in resolved], "resolved path"),
+    ):
+        if len(set(form)) != len(form):
+            collisions = sorted({str(path) for path in form if form.count(path) > 1})
+            raise RealPathRerankError(
+                f"resume resolved two candidates onto the same recording dir(s) "
+                f"by {describe} {collisions}; a directory holds exactly one "
+                "candidate's bytes"
+            )
     return tuple(resolved)
 
 
@@ -1754,6 +1808,7 @@ def _recording_backend_identity(
     custom_runner: bool,
     runner_identity: str | None = None,
     game_map: Map,
+    num_players: int,
     environment: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """The serialisable identity of WHAT RECORDED the bytes (18.31).
@@ -1791,9 +1846,47 @@ def _recording_backend_identity(
         # moves ``impostor_report`` and ``accusation_round`` to their
         # ``_roll_call`` variants.
         _ROLL_CALL_KEY: impostor_roll_call_enabled(env),
+        # The per-game BUDGET the recorder would be built with. It is not a
+        # ``RealPathRerankConfig`` field and it does not ride the provider
+        # settings, so a resume across a changed ``AILIBI_MAX_COST_USD`` adopted
+        # seeds recorded under the old cap and recorded the rest under the new
+        # one: a higher cap lets later meeting calls through, so the two halves
+        # of one committed row came from games that could end differently
+        # (Codex review on PR #314).
+        _GAME_BUDGET_KEY: _effective_game_budget(
+            num_players=num_players, custom_runner=custom_runner, env=env
+        ),
         **_effective_backend_config(env),
     }
     return identity
+
+
+def _effective_game_budget(
+    *, num_players: int, custom_runner: bool, env: Mapping[str, str]
+) -> dict[str, float | int] | None:
+    """The per-game budget ``run_tournament_eval`` would build (Task 18.31).
+
+    Mirrors that function's OWN dispatch rather than re-deriving the numbers:
+    it builds a budget through :func:`eval.balance_eval._resolve_game_budget`
+    only in the default-meeting-runner branch, so a caller supplying its own
+    ``meeting_runner_factory`` never reads the cap at all and records ``None``.
+    Recording it unconditionally would repeat the round-9 mistake in the other
+    direction — refusing a resume over a knob the recorder never consulted.
+
+    The token caps are a pure function of ``num_players`` (already compared as
+    protocol), but they are recorded alongside the USD cap because this value is
+    meant to be *what the recorder was constructed with*, not a re-derivation a
+    future reader has to trust.
+    """
+
+    if custom_runner:
+        return None
+    snapshot = _resolve_game_budget(num_players=num_players, env=env).snapshot()
+    return {
+        "max_cost_usd": snapshot.max_cost_usd,
+        "max_input_tokens": snapshot.max_input_tokens,
+        "max_output_tokens": snapshot.max_output_tokens,
+    }
 
 
 def _effective_backend_config(env: Mapping[str, str]) -> dict[str, object]:
@@ -2122,11 +2215,40 @@ def _refuse_library_owned_ranking_path(
     """
 
     try:
-        inside = ranking_path.resolve().parent == work_dir.resolve()
+        resolved = ranking_path.resolve()
+        work_root = work_dir.resolve()
     except OSError:  # pragma: no cover - unresolvable path fails elsewhere
         return
-    if not inside:
+    # The WORK DIR ITSELF. The old containment test compared the ranking's
+    # PARENT against the work root, and the work root's parent is its own
+    # parent — so ``--ranking-path <work_dir>`` read as "outside the work dir"
+    # and returned. The leg then recorded every paid game and ``_publish_ranking``
+    # tried to hard-link onto the work directory (Codex review on PR #314).
+    if resolved == work_root:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} IS the work dir; the leg creates and "
+            "records into that directory, so the ranking publish would fail its "
+            "link after every paid game — refusing before any game is spent "
+            "(point --ranking-path at a file, outside the work dir)"
+        )
+    if not resolved.is_relative_to(work_root):
         return
+    if resolved.parent != work_root:
+        # NESTED below the work dir. Same blind spot, opposite direction: the
+        # parent-equality test read ``work/001-x/ranking.jsonl`` as outside, and
+        # ``_refuse_unpublishable_ranking_dir`` then MKDIRS the ranking's parent
+        # as its link probe — creating the very directory candidate 1 must
+        # reserve. Candidate 0 spends every paid seed and candidate 1 then fails
+        # its exclusive ``mkdir`` (Codex review on PR #314). The whole subtree
+        # below the work root is the leg's to allocate, so nothing there is a
+        # ranking destination.
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} is NESTED inside the work dir "
+            f"({work_root}); the leg allocates that whole subtree for candidate "
+            "recording directories, and the link preflight would create this "
+            "path's parent before any candidate could reserve it — refusing "
+            "before any game is spent (point --ranking-path outside the work dir)"
+        )
     name = ranking_path.name
     # A candidate RECORDING DIR is library-owned too, and its name is not in the
     # stem namespace: ``000-utility-es`` passed the check below, the leg then
@@ -2641,11 +2763,19 @@ def run_realpath_rerank(
     # an operator's path typo burn a whole 30–40 h leg before failing (Codex
     # review on PR #314). Both checks stand — this one saves the budget, that
     # one closes the window between them.
-    if ranking_path.exists():
+    # ``exists()`` FOLLOWS symlinks, so a DANGLING ranking-path symlink read as
+    # absent here — and ``_publish_ranking``'s ``os.link`` then saw the directory
+    # ENTRY and raised ``FileExistsError`` after every paid game, leaving the leg
+    # permanently unpublishable (Codex review on PR #314). ``is_symlink()`` is
+    # the ``lexists`` half: every pre-existing entry is refused up front,
+    # whether or not it resolves.
+    if ranking_path.exists() or ranking_path.is_symlink():
         raise RealPathRerankError(
             f"a committed ranking already exists at {ranking_path}; this leg is "
             "already recorded and its rows are never rewritten — refusing before "
-            "any game is spent (point --ranking-path at a fresh file)"
+            "any game is spent (point --ranking-path at a fresh file). A dangling "
+            "symlink counts: os.link refuses any existing directory entry, so it "
+            "would fail the publish after the whole spend"
         )
     _refuse_library_owned_ranking_path(
         ranking_path, work_dir=work_dir, candidates=candidates
@@ -2691,6 +2821,7 @@ def run_realpath_rerank(
         custom_runner=meeting_runner_factory is not None,
         runner_identity=meeting_runner_identity,
         game_map=resolved_map,
+        num_players=resolved_config.num_players,
     )
     # A callable has no stable serialisable identity, so two DIFFERENT stubs,
     # composed runners or provider wrappers both reduce to ``True`` and compare

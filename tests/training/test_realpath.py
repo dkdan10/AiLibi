@@ -1749,7 +1749,7 @@ def test_the_prompt_variant_lever_rides_the_backend_identity() -> None:
 
     def _identity(**env: str) -> dict[str, object]:
         return realpath._recording_backend_identity(
-            custom_runner=False, game_map=game_map, environment=env
+            custom_runner=False, game_map=game_map, num_players=4, environment=env
         )
 
     # The lever genuinely changes the RECORDED prompt versions on a
@@ -2072,6 +2072,175 @@ def test_ranking_path_may_not_name_a_candidate_directory(tmp_path: Path) -> None
     ).rows
 
 
+def test_resume_refuses_a_symlinked_recorded_dir(tmp_path: Path) -> None:
+    """A single COMPONENT can still point anywhere (Codex review on PR #314).
+
+    My round-13 guard was lexical, so ``001-candidate`` satisfied every test
+    while being a symlink onto another campaign's recording directory: the
+    resume followed it through ``mkdir(exist_ok=True)`` — which succeeds on a
+    link to an existing dir — and recorded straight through it, so the same
+    evidence destruction arrived by a different route.
+    """
+
+    work_dir = tmp_path / "work"
+    victim = tmp_path / "other-campaign" / "candidate"
+    victim.mkdir(parents=True)
+    (victim / "sentinel.jsonl").write_text("untouched", encoding="utf-8")
+
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    manifest = next(work_dir.glob("leg-1-2-*.json"))
+    payload = json.loads(manifest.read_text())
+    recorded = payload["candidates"][0]["dir"]
+    shutil.rmtree(work_dir / recorded)
+    (work_dir / recorded).symlink_to(victim, target_is_directory=True)
+    manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(RealPathRerankError, match="is a SYMLINK"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+    assert sorted(p.name for p in victim.iterdir()) == ["sentinel.jsonl"]
+    assert (victim / "sentinel.jsonl").read_text(encoding="utf-8") == "untouched"
+
+
+def test_ranking_path_may_not_be_the_work_dir_or_nested_inside_it(
+    tmp_path: Path,
+) -> None:
+    """Both blind spots of the parent-equality containment test (Codex #314).
+
+    The old check compared the ranking's PARENT against the work root, so the
+    work dir ITSELF read as outside (its parent is its own parent), and so did
+    anything nested BELOW the root. The first records the whole leg and then
+    tries to hard-link onto a directory; the second is worse, because
+    ``_refuse_unpublishable_ranking_dir`` mkdirs the ranking's parent as its
+    link probe — creating the very directory candidate 1 must reserve, so
+    candidate 0 spends every paid seed before candidate 1 fails its mkdir.
+    """
+
+    work_dir = tmp_path / "work"
+    with pytest.raises(RealPathRerankError, match="IS the work dir"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=work_dir,
+            config=_config(),
+        )
+    for nested in ("001-utility-es/ranking.jsonl", "deeper/still/ranking.jsonl"):
+        with pytest.raises(RealPathRerankError, match="NESTED inside the work dir"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=work_dir / nested,
+                config=_config(),
+            )
+    # Refused before ANY filesystem mutation — the link probe never ran, so the
+    # candidate directory it would have created is absent.
+    assert not work_dir.exists() or list(work_dir.iterdir()) == []
+
+    # A top-level name inside the work dir is still fine (round-13 no-over-reach).
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=work_dir / "ranking-1-2.jsonl",
+        config=_config(),
+    ).rows
+
+
+def test_a_dangling_ranking_symlink_is_refused_before_the_spend(
+    tmp_path: Path,
+) -> None:
+    """``exists()`` follows links; ``os.link`` does not (Codex on PR #314).
+
+    A dangling ``ranking_path`` symlink read as absent in the preflight, so the
+    leg recorded every paid game — and the publish then saw the directory ENTRY
+    and raised ``FileExistsError``, leaving the leg unpublishable after the full
+    spend and every retry bouncing off the same entry.
+    """
+
+    work_dir = tmp_path / "work"
+    dangling = tmp_path / "ranking.jsonl"
+    dangling.symlink_to(tmp_path / "nowhere.jsonl")
+    assert not dangling.exists() and dangling.is_symlink()
+
+    with pytest.raises(RealPathRerankError, match="already exists"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=dangling,
+            config=_config(),
+        )
+    assert not work_dir.exists() or list(work_dir.iterdir()) == []
+
+
+def test_resume_refuses_a_changed_per_game_cost_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The game BUDGET is recording protocol (Codex review on PR #314).
+
+    ``run_tournament_eval`` builds every default-runner game with a budget whose
+    USD cap comes from ``AILIBI_MAX_COST_USD``, and that rode neither the config
+    nor the provider settings. A resume across a changed cap adopted seeds
+    recorded under the old limit and recorded the rest under the new one — a
+    higher cap lets later meeting calls through, so one committed row combines
+    games that could end differently.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    monkeypatch.setenv("AILIBI_MAX_COST_USD", "9.99")
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+
+
+def test_a_custom_runner_records_no_game_budget(tmp_path: Path) -> None:
+    """No over-reach: a custom runner never builds that budget (Codex #314).
+
+    ``run_tournament_eval`` resolves a ``GameBudget`` only in its
+    default-meeting-runner branch, so recording the cap for a caller that
+    supplies its own runner would refuse a resume over a knob the recorder never
+    read — the round-9 over-refusal in new clothes.
+    """
+
+    identity = realpath._recording_backend_identity(
+        custom_runner=True,
+        runner_identity="stub-runner",
+        game_map=load_canonical_map(),
+        num_players=4,
+        environment={"AILIBI_LLM_PROVIDER": "fake", "AILIBI_MAX_COST_USD": "9.99"},
+    )
+    assert identity[realpath._GAME_BUDGET_KEY] is None
+
+    default_runner = realpath._recording_backend_identity(
+        custom_runner=False,
+        runner_identity=None,
+        game_map=load_canonical_map(),
+        num_players=4,
+        environment={"AILIBI_LLM_PROVIDER": "fake", "AILIBI_MAX_COST_USD": "9.99"},
+    )
+    assert default_runner[realpath._GAME_BUDGET_KEY] == {
+        "max_cost_usd": 9.99,
+        "max_input_tokens": 1_000_000,
+        "max_output_tokens": 200_000,
+    }
+
+
 def test_resume_refuses_a_manifest_dir_that_escapes_the_work_root(
     tmp_path: Path,
 ) -> None:
@@ -2229,7 +2398,7 @@ def test_backend_identity_pins_only_the_selected_providers_settings() -> None:
 
     def _identity(**env: str) -> dict[str, object]:
         return realpath._recording_backend_identity(
-            custom_runner=False, game_map=game_map, environment=env
+            custom_runner=False, game_map=game_map, num_players=4, environment=env
         )
 
     # IRRELEVANT knobs, per provider: changing one must not move the identity.
@@ -2619,7 +2788,7 @@ def test_every_effective_backend_knob_rides_the_resume_identity(knob: str) -> No
 
     def _identity(**env: str) -> dict[str, object]:
         return realpath._recording_backend_identity(
-            custom_runner=False, game_map=game_map, environment=env
+            custom_runner=False, game_map=game_map, num_players=4, environment=env
         )
 
     value = "7" if knob.endswith(("SEED", "NUM_CTX")) else "some-other-endpoint:1234"

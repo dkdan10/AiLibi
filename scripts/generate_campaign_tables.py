@@ -1151,8 +1151,52 @@ def _emit(text: str, out: Path | None, *, inputs: Sequence[Path] = ()) -> None:
             f"({aliased}). This generator reproduces committed artifacts and "
             "never overwrites them — point --out at a separate path."
         )
+    _refuse_output_under_frozen_root(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
+
+
+#: The roots this generator treats as read-only history. Stated as data because
+#: the module docstring and :func:`_emit` both make the claim in prose, and a
+#: claim nothing enforces is the defect round 12 filed against this same tool.
+FROZEN_EVIDENCE_ROOTS: Final[tuple[Path, ...]] = (
+    Path("training/artifacts"),
+    Path("training/reports"),
+)
+
+
+def _refuse_output_under_frozen_root(out: Path) -> None:
+    """Refuse an output ANYWHERE under the frozen evidence roots (Task 18.31).
+
+    The round-12 alias check protects only the files THIS invocation read, so
+    ``rows --out training/artifacts/coevo/measurement-stability.json`` — an
+    artifact this render never opened — overwrote committed evidence and
+    returned 0 (Codex review on PR #314). Containment is the real rule: the task
+    contract makes ``training/artifacts/coevo/`` a frozen record this PR
+    reproduces byte-for-byte, and both the module docstring and :func:`_emit`
+    already claim the same for the report root. Enforcing the claim the code
+    makes is not a new policy; leaving it unenforced was the bug.
+
+    Resolved before comparison, so ``..`` segments and symlinks cannot walk back
+    into a protected root. Rendering INTO the repo is otherwise unaffected —
+    only these two subtrees are refused.
+    """
+
+    # ``_resolve`` first, not a bare ``.resolve()``: every CLI path already goes
+    # through it (a relative path is repo-root-relative here, not CWD-relative),
+    # and re-applying it means this guard does not depend on each caller having
+    # remembered to.
+    resolved = _resolve(out).resolve()
+    for root in FROZEN_EVIDENCE_ROOTS:
+        frozen = (_REPO_ROOT / root).resolve()
+        if resolved == frozen or resolved.is_relative_to(frozen):
+            raise SystemExit(
+                f"refusing to write {out}: it is inside {root.as_posix()}/, which "
+                "this generator treats as read-only history — it reproduces those "
+                "committed bytes and never writes them. Render to a path outside "
+                f"{'/, '.join(r.as_posix() for r in FROZEN_EVIDENCE_ROOTS)}/ and "
+                "copy deliberately if the record really is meant to change."
+            )
 
 
 def _same_file(left: Path, right: Path) -> bool:

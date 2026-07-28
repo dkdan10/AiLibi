@@ -209,6 +209,48 @@ _LOADABLE_ENCODERS: Final[frozenset[str]] = _WIDTH_BEARING_ENCODERS | frozenset(
 )
 
 
+#: Which loadable families belong to which SIDE. The crew loader dispatches on
+#: the ``crew-option-features-*`` namespace and the impostor loader on the rest,
+#: so the split is the consuming entry point's, not a convention this module
+#: invented (Task 18.31).
+_SIDE_ENCODERS: Final[dict[str, frozenset[str]]] = {
+    "crew": frozenset({"crew-option-features-v1", "crew-option-features-v2"}),
+    "impostor": _WIDTH_BEARING_ENCODERS | frozenset({"impostor-option-features-v1"}),
+}
+
+
+def _refuse_side_family_mismatch(*, side: str, encoder_version: str) -> None:
+    """A pool's freeze family must belong to the pool's SIDE (Task 18.31).
+
+    :func:`_refuse_unloadable_family` proves the family is one SOME consumer can
+    rebuild; it says nothing about WHICH. Nothing related ``side`` to
+    ``artifact_metadata.encoder_version``, so a crew hall could be created
+    carrying impostor ``v3`` metadata: ``add_member`` then rebuilt the genome
+    against the impostor builder, passed, and published a four-file artifact
+    that ``scripts/run_tournament.py`` rejects when it loads that member as a
+    CREW candidate (Codex review on PR #314). The artifact is proven loadable
+    against the wrong side's loader, which is exactly the 18.19 conflation this
+    freeze format exists to make impossible.
+
+    Checked before the empty index is committed, so a mismatched declaration
+    costs nothing — the round-10 lesson about refusing before anything durable
+    is written.
+    """
+
+    allowed = _SIDE_ENCODERS.get(side)
+    if allowed is None:  # pragma: no cover - callers validate side first
+        return
+    if encoder_version not in allowed:
+        raise ValueError(
+            f"the {side} hall declares artifact encoder_version "
+            f"{encoder_version!r}, which belongs to the other side (loadable "
+            f"{side} families: {sorted(allowed)}). Every freeze on this pool "
+            "would be proven against the wrong loader and rejected by "
+            "_load_candidate_policy when read back as a "
+            f"{side} candidate"
+        )
+
+
 def _validate_stamp_token(name: str, value: str) -> None:
     """Fail loud on a stamp string the committed stamp reader would reject.
 
@@ -790,6 +832,10 @@ class HallOfFame:
                 f"substrate_sha256 must be exactly 64 lowercase hex chars; got "
                 f"{substrate_sha256!r}"
             )
+        if artifact_metadata is not None:
+            _refuse_side_family_mismatch(
+                side=side, encoder_version=artifact_metadata.encoder_version
+            )
         side_dir = root / side
         index_path = side_dir / _INDEX_FILENAME
         if index_path.exists():
@@ -906,23 +952,42 @@ class HallOfFame:
         # identity (Codex review on PR #314). The members themselves say which
         # kind of pool this is, so ask them.
         if resolved_metadata is None:
+            # EITHER loadable-only file is evidence. Scanning for stamp.json
+            # alone left a corruption that removes the stamps but keeps the
+            # config.json sidecars reading as a legacy weights-only pool, so the
+            # next add_member wrote two files and silently converted a corrupted
+            # loadable pool into a mixed-format one — the very outcome this
+            # guard was added to prevent, one file short (Codex review on
+            # PR #314). Neither file is ever written by the two-file path, so
+            # either one present means this pool was loadable.
             stamped = sorted(
                 entry["path"]
                 for entry in raw_members
                 if isinstance(entry, dict)
                 and isinstance(entry.get("path"), str)
-                and (side_dir / entry["path"] / _STAMP_FILENAME).exists()
+                and any(
+                    (side_dir / entry["path"] / name).exists()
+                    for name in (_STAMP_FILENAME, _CONFIG_FILENAME)
+                )
             )
             if stamped:
                 raise ValueError(
                     f"hall of fame index at {index_path} declares no "
                     f"artifact_metadata, but member(s) {stamped[:3]} carry a "
-                    f"{_STAMP_FILENAME} on disk: this is a LOADABLE pool whose "
-                    "metadata block is missing or null. Loading it would skip "
-                    "every four-file verification and downgrade the next freeze "
-                    "to two files — repair the index rather than losing the "
-                    "pool's freeze identity"
+                    f"{_STAMP_FILENAME} or {_CONFIG_FILENAME} on disk: this is a "
+                    "LOADABLE pool whose metadata block is missing or null. "
+                    "Loading it would skip every four-file verification and "
+                    "downgrade the next freeze to two files — repair the index "
+                    "rather than losing the pool's freeze identity"
                 )
+        else:
+            # A hand-edited or drifted index can declare the OTHER side's family
+            # just as a caller could; ``create`` refuses that, and reading it
+            # back must too, or the refusal is only as durable as the process
+            # that wrote it (Codex review on PR #314).
+            _refuse_side_family_mismatch(
+                side=side, encoder_version=resolved_metadata.encoder_version
+            )
 
         # Pass 1: validate rows, self-check path, collect the declared path set.
         members: list[HallOfFameMember] = []
