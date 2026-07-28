@@ -239,6 +239,22 @@ LEG_MANIFEST_FILENAME_STEM: Final[str] = "leg"
 #: keyed by ``(tranche, invocation)``.
 LEG_LOG_FILENAME: Final[str] = "leg-log.jsonl"
 
+#: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
+#: compares before adopting a recording as this candidate's. The digest alone is
+#: not identity: genome lengths collide across encoder families.
+_STAMP_COMPARISON_FIELDS: Final[tuple[str, ...]] = (
+    "weights_sha256",
+    "encoder_version",
+    "policy_id",
+    "method",
+    "anchor_policy",
+)
+
+#: The per-game audit sidecar suffix ``HeadlessGame`` writes beside each replay.
+#: It matches the ``replay-seed-*.jsonl`` glob, so every seed walk must exclude
+#: it explicitly (Codex review on PR #314).
+_AUDIT_SIDECAR_SUFFIX: Final[str] = ".audit.jsonl"
+
 #: The invocation-ordinal ceiling. 1000 invocations of ONE tranche into ONE
 #: work dir is a runaway, not a campaign: refuse rather than spin.
 _MAX_INVOCATIONS: Final[int] = 1000
@@ -1052,10 +1068,12 @@ def _drop_audit_sidecars(directory: Path) -> None:
     """Drop the per-game ``*.audit.jsonl`` sidecars (mirrors harness.py:993-998).
 
     The referee / validity / core seed glob (``replay-seed-*.jsonl``) trips on
-    them, so they must go before scoring.
+    them, so they must go before scoring. :func:`_refuse_foreign_replays` runs
+    BEFORE any recording, so it excludes the same suffix itself rather than
+    relying on this having run.
     """
 
-    for sidecar in directory.glob("*.audit.jsonl"):
+    for sidecar in directory.glob(f"*{_AUDIT_SIDECAR_SUFFIX}"):
         sidecar.unlink()
 
 
@@ -1091,7 +1109,10 @@ def _completeness_fence_failure(
 
 
 def _resume_skip_reason(
-    replay_path: Path, *, expected_digest: str, config: RealPathRerankConfig
+    replay_path: Path,
+    *,
+    expected_stamp: TacticalPolicyStamp,
+    config: RealPathRerankConfig,
 ) -> str | None:
     """``None`` iff this (candidate, seed) element may be SKIPPED (Task 18.31).
 
@@ -1100,9 +1121,9 @@ def _resume_skip_reason(
 
     1. **the replay exists** on disk at all;
     2. **its stamp reads back from the bytes** (never echoed from the launch
-       config — the 17.14 discipline) and its ``weights_sha256`` equals the
-       candidate's COMPUTED genome digest, so a foreign or superseded genome's
-       recording can never be adopted as this candidate's;
+       config — the 17.14 discipline) and equals the candidate's WHOLE computed
+       stamp — all five fields, not the genome digest alone — so a foreign or
+       superseded policy IDENTITY can never be adopted as this candidate's;
     3. **the byte-completeness fence is green** for that recording.
 
     Check 2 is also what makes a ``TICK_BUDGET_REACHED`` replay unskippable:
@@ -1128,11 +1149,21 @@ def _resume_skip_reason(
             "no tactical policy stamp on the recorded bytes (no game_over row — "
             "a TICK_BUDGET_REACHED, truncated, or parse-folded recording)"
         )
-    if stamp.weights_sha256 != expected_digest:
-        return (
-            f"read-back weights_sha256 {stamp.weights_sha256!r} != computed "
-            f"genome digest {expected_digest!r}"
-        )
+    # The WHOLE stamp, not just the digest. Identical genome bytes under a
+    # different ``encoder_version`` / ``policy_id`` / ``method`` /
+    # ``anchor_policy`` are a DIFFERENT policy: skipping such a replay would
+    # attribute the previous identity's games to this candidate, and
+    # ``_verify_stamps`` would not catch it (it checks the digest and
+    # cross-seed uniformity, both of which hold when every seed carries the
+    # same old identity). Genome lengths collide across encoder families —
+    # §12 Errata item 1 is that exact mis-attribution (Codex review on PR #314).
+    for field in _STAMP_COMPARISON_FIELDS:
+        recorded = getattr(stamp, field)
+        expected = getattr(expected_stamp, field)
+        if recorded != expected:
+            return (
+                f"read-back stamp {field} {recorded!r} != this candidate's {expected!r}"
+            )
     fence = _completeness_fence_failure(replay_path, config=config)
     if fence is not None:
         return f"byte-completeness fence failed ({fence})"
@@ -1163,10 +1194,19 @@ def _refuse_foreign_replays(
     """
 
     requested = set(seeds)
+    # The ``*.audit.jsonl`` sidecars ``HeadlessGame`` writes beside each replay
+    # MATCH this glob (``replay-seed-1.audit.jsonl`` globs, and ``_replay_seed``
+    # cannot parse ``1.audit``), so without this exclusion every interrupted leg
+    # aborted here as though it held a foreign tranche — the ordinary
+    # interruption state defeating the resume path outright (Codex review on
+    # PR #314). ``_drop_audit_sidecars`` only runs AFTER a candidate's whole
+    # seed loop, so a COMPLETED leg has none and my resume fixtures never saw
+    # one; only the interrupted case this feature exists for does.
     foreign = sorted(
         path.name
         for path in candidate_dir.glob("replay-seed-*.jsonl")
-        if _replay_seed(path) not in requested
+        if not path.name.endswith(_AUDIT_SIDECAR_SUFFIX)
+        and _replay_seed(path) not in requested
     )
     if foreign:
         raise RealPathRerankError(
@@ -1175,6 +1215,90 @@ def _refuse_foreign_replays(
             f"whole directory, so those bytes would silently enter the row for "
             f"seeds {list(seeds)}"
         )
+
+
+def _refuse_protocol_drift(
+    work_dir: Path,
+    *,
+    tranche: str,
+    config: RealPathRerankConfig,
+    candidates: Sequence[RealPathCandidate],
+) -> None:
+    """Refuse a resume whose recording protocol differs from the prior leg (18.31).
+
+    A resume ADOPTS bytes recorded by an earlier invocation. Those bytes were
+    produced under that invocation's roster, baseline, tick budget, meeting
+    timeout and retry budget; this invocation's row will report ITS OWN config
+    for every element, skipped or recorded alike. If the two disagree the row
+    is a fabrication — it attributes old bytes to new settings — and nothing
+    downstream can detect it, because the row records only one config.
+
+    Every invocation already stamps ``config`` and its candidate slate into
+    ``leg-<tranche>-<invocation>.json``; this reads the prior manifests for the
+    SAME tranche and refuses on any difference. The candidate slate is compared
+    by ``label -> (digest, encoder_version, hidden)``: a resume may legitimately
+    narrow the slate (re-running the two candidates a 503 interrupted), so a
+    prior manifest covering MORE candidates is fine — but a label whose genome
+    or family moved is a different candidate wearing an old name.
+    """
+
+    prior = sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json"))
+    if not prior:
+        return
+    wanted_config = config.model_dump(mode="json")
+    wanted_slate = {
+        candidate.label: [
+            _genome_digest(candidate.genome),
+            candidate.encoder_version,
+            candidate.hidden,
+        ]
+        for candidate in candidates
+    }
+    for path in prior:
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RealPathRerankError(
+                f"resume cannot read the prior leg manifest {path} ({exc}); it "
+                "records the protocol the existing recordings were made under, "
+                "and a resume that cannot verify that protocol is a resume that "
+                "cannot safely adopt those bytes"
+            ) from exc
+        recorded_config = manifest.get("config")
+        if recorded_config != wanted_config:
+            drift = sorted(
+                key
+                for key in set(wanted_config) | set(recorded_config or {})
+                if wanted_config.get(key) != (recorded_config or {}).get(key)
+            )
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche under a different "
+                f"protocol (differing: {drift}). The existing replays were made "
+                "under those settings, but this invocation's rows would report "
+                "the new ones for every skipped element — re-record the leg into "
+                "a fresh work dir instead of adopting bytes from another "
+                "experiment"
+            )
+        recorded_slate = {
+            entry["label"]: [
+                entry["weights_sha256"],
+                entry["encoder_version"],
+                entry["hidden"],
+            ]
+            for entry in manifest.get("candidates", [])
+        }
+        moved = sorted(
+            label
+            for label, identity in wanted_slate.items()
+            if label in recorded_slate and recorded_slate[label] != identity
+        )
+        if moved:
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded candidate label(s) {moved} with a "
+                "different genome digest, encoder family, or hidden width; a label "
+                "is not an identity, and adopting those replays would rank one "
+                "policy under another's name"
+            )
 
 
 def _publish_ranking(ranking_path: Path, payload: str) -> None:
@@ -1195,10 +1319,15 @@ def _publish_ranking(ranking_path: Path, payload: str) -> None:
     atomic and exclusive, failing with ``FileExistsError`` if the ranking
     already exists. ``os.replace`` would be atomic but would silently CLOBBER a
     committed ranking, which is the defect round 2 caught. The stage file is
-    removed on every path, so a crash leaves at most a ``.tmp`` nobody reads.
+    removed on every path, so a crash leaves at most a ``.tmp`` nobody reads —
+    but ONCE THE LINK SUCCEEDS the ranking is committed, and no cleanup failure
+    is allowed to turn that into a reported leg failure (Codex review on
+    PR #314): the caller would emit ``leg-failed``, drop its rank events, and
+    every retry would then bounce off the ranking it had actually written.
     """
 
     stage: Path | None = None
+    published = False
     try:
         handle_fd, stage_name = tempfile.mkstemp(
             dir=ranking_path.parent, prefix=f".{ranking_path.name}.", suffix=".tmp"
@@ -1217,9 +1346,51 @@ def _publish_ranking(ranking_path: Path, payload: str) -> None:
                 "--ranking-path at a fresh file, or delete the stale one "
                 "deliberately)"
             ) from exc
+        published = True
     finally:
         if stage is not None:
-            stage.unlink(missing_ok=True)
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError:
+                # A leftover stage file is litter; a leg reported as failed after
+                # its ranking was committed is unrecoverable. Only re-raise when
+                # nothing was published.
+                if not published:
+                    raise
+
+
+def _refuse_unpublishable_ranking_dir(ranking_path: Path) -> None:
+    """Preflight that this filesystem can publish a ranking (18.31).
+
+    :func:`_publish_ranking` commits through :func:`os.link`, which some
+    filesystems (exFAT, several FUSE and network mounts) do not implement. That
+    would raise only AFTER every paid game of a 30–40 h leg, and a resume would
+    hit the identical wall — so the leg could never produce its committed
+    ranking (Codex review on PR #314). Probing costs two temp files and runs
+    beside the other budget-saving preflights.
+    """
+
+    ranking_path.parent.mkdir(parents=True, exist_ok=True)
+    probe_fd, probe_name = tempfile.mkstemp(
+        dir=ranking_path.parent,
+        prefix=f".{ranking_path.name}.linkprobe.",
+        suffix=".tmp",
+    )
+    os.close(probe_fd)
+    probe = Path(probe_name)
+    target = probe.with_suffix(".linked")
+    try:
+        os.link(probe, target)
+    except OSError as exc:
+        raise RealPathRerankError(
+            f"the filesystem holding {ranking_path.parent} cannot publish hard "
+            f"links ({type(exc).__name__}: {exc}), so a committed ranking could "
+            "never be written there atomically — refusing before any game is "
+            "spent (point --ranking-path at a filesystem that supports link(2))"
+        ) from exc
+    finally:
+        target.unlink(missing_ok=True)
+        probe.unlink(missing_ok=True)
 
 
 def _record_or_resume_seed(
@@ -1247,7 +1418,7 @@ def _record_or_resume_seed(
     force_first_attempt = False
     if resume:
         start = time.monotonic()
-        reason = _resume_skip_reason(replay_path, expected_digest=digest, config=config)
+        reason = _resume_skip_reason(replay_path, expected_stamp=stamp, config=config)
         if reason is None:
             resumed = RealPathSeedTelemetry(
                 seed=seed,
@@ -1664,12 +1835,21 @@ def run_realpath_rerank(
             "already recorded and its rows are never rewritten — refusing before "
             "any game is spent (point --ranking-path at a fresh file)"
         )
+    _refuse_unpublishable_ranking_dir(ranking_path)
 
-    # The leg's own invocation stamp + append-only log, opened AFTER every
-    # preflight (so a refused configuration still leaves work_dir untouched)
-    # and BEFORE any recording (so the pre-screen quotes are provably logged
-    # before the first game's spend — the blocker-4 ordering evidence).
+    # A resume adopts BYTES RECORDED UNDER A PREVIOUS PROTOCOL, so the previous
+    # protocol must be the one being asked for. Every earlier invocation stamped
+    # its full config into a manifest; without comparing them, a resume with a
+    # changed roster / baseline / tick budget / timeout / retry budget skips the
+    # old recordings and ``_build_row`` then reports the NEW settings as though
+    # they produced those bytes — a contaminated committed row, and (since
+    # round 4 pins protocol agreement across tranches) one that looks
+    # protocol-consistent while it is not (Codex review on PR #314).
     tranche = tranche_key(seeds_tuple)
+    if resume:
+        _refuse_protocol_drift(
+            work_dir, tranche=tranche, config=resolved_config, candidates=candidates
+        )
     invocation, manifest_path = _open_leg_manifest(
         work_dir,
         tranche=tranche,

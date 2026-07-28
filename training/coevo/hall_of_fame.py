@@ -709,9 +709,11 @@ class HallOfFame:
         # PR #314); the module's eager two-pass posture is that corruption
         # surfaces HERE.
         for member in members:
-            cls._verify_member_bytes(side_dir, member)
+            genome = cls._verify_member_bytes(side_dir, member)
             if resolved_metadata is not None:
-                cls._verify_member_stamp(side_dir, member, resolved_metadata)
+                cls._verify_member_stamp(
+                    side_dir, member, resolved_metadata, side=side, genome=genome
+                )
 
         return cls(
             side=side,
@@ -954,7 +956,12 @@ class HallOfFame:
 
     @staticmethod
     def _verify_member_stamp(
-        side_dir: Path, member: HallOfFameMember, metadata: LoadableArtifactMetadata
+        side_dir: Path,
+        member: HallOfFameMember,
+        metadata: LoadableArtifactMetadata,
+        *,
+        side: Side,
+        genome: Sequence[float],
     ) -> None:
         """Verify the stamp/config half of a LOADABLE member's artifact (18.31).
 
@@ -992,6 +999,17 @@ class HallOfFame:
             raise ValueError(
                 f"{member_dir / _STAMP_FILENAME} is missing stamp fields {missing}; "
                 f"a loadable freeze carries all five ({list(_STAMP_FIELDS)})"
+            )
+        # EXACTLY the five, not merely at least them: the consumer parses this
+        # file through ``TacticalPolicyStamp``, which is ``extra="forbid"``, so
+        # a stamp with a sixth key is one this verifier would call loadable and
+        # ``_load_candidate_policy`` would reject (Codex review on PR #314).
+        unexpected = sorted(set(stamp) - set(_STAMP_FIELDS))
+        if unexpected:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} carries unexpected stamp fields "
+                f"{unexpected}; the consuming reader forbids extras, so this "
+                "artifact would not load"
             )
         for field in _STAMP_FIELDS:
             value = stamp[field]
@@ -1047,6 +1065,38 @@ class HallOfFame:
                 f"{member_dir / _CONFIG_FILENAME} records hidden "
                 f"{recorded_hidden!r} but the pool declares {metadata.hidden!r}; "
                 "the consumer rebuilds the policy at that width"
+            )
+        # config.json's PROVENANCE half, reconstructed the same way stamp.json's
+        # is. ``genome_length`` follows from the weights this reload already
+        # verified byte-for-byte, and every remaining key is a pure function of
+        # the pool metadata plus the member's own index row — so accepting a
+        # mismatch would leave a member whose campaign, generation, lineage or
+        # trained-against opponent is whatever a tamper wrote, on an artifact
+        # this pool certifies as loadable (Codex review on PR #314).
+        expected_config: dict[str, object] = {
+            "genome_length": len(genome),
+            **metadata.provenance(
+                side=side,
+                generation=member.generation,
+                origin=member.origin,
+                trained_against=member.trained_against,
+                path=member.path,
+            ),
+        }
+        drifted = sorted(
+            key
+            for key, expected in expected_config.items()
+            if config.get(key) != expected
+        )
+        if drifted:
+            detail = ", ".join(
+                f"{key}={config.get(key)!r} (expected {expected_config[key]!r})"
+                for key in drifted
+            )
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} provenance disagrees with this "
+                f"pool's member row: {detail}; a frozen artifact's provenance is "
+                "reconstructible, so a mismatch is false history, not a variant"
             )
 
     def _write_index(self) -> None:

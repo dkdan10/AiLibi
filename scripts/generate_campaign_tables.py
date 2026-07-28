@@ -366,16 +366,28 @@ def _stamp_proof(row: Mapping[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def render_leg_tables(ranking_path: Path) -> list[str]:
-    """The candidate legend + ranking + floor-sensitivity tables for one tranche."""
+def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
+    """Read one ranking file, refusing any file that is not ONE coherent leg.
+
+    Shared by the leg renderer AND the stability fold. The stability path used
+    to read rows directly, so a file with duplicated ranks or candidates — or
+    rows recorded under mixed leg settings — could still produce an
+    authoritative stability artifact as long as each genome had a matching read
+    in the other tranche (Codex review on PR #314). The integrity of a ranking
+    file is a property of the file, not of the table being rendered from it.
+
+    Rows come back sorted by rank, having been checked for: a contiguous
+    ``1..N`` rank sequence; no repeated ``weights_sha256`` or ``label``; and
+    agreement across every leg-level field, since one ranking file is one
+    tranche of one experiment.
+    """
 
     rows = sorted(_read_jsonl(ranking_path), key=lambda row: row["rank"])
-    # A leg table asserts a TOTAL ORDER over the leg's candidates. Sorting by
-    # ``rank`` alone renders an authoritative-looking table out of a duplicated,
-    # concatenated or truncated file — repeated positions, gaps, or one
-    # candidate appearing twice — and this generator exists to remove exactly
-    # that class of hand-assembly error, not to reproduce it faster (Codex
-    # review on PR #314).
+    # A leg file asserts a TOTAL ORDER over the leg's candidates. Sorting by
+    # ``rank`` alone accepts a duplicated, concatenated or truncated file —
+    # repeated positions, gaps, or one candidate appearing twice — and this
+    # generator exists to remove exactly that class of hand-assembly error, not
+    # to reproduce it faster.
     ranks = [row["rank"] for row in rows]
     if ranks != list(range(1, len(rows) + 1)):
         raise SystemExit(
@@ -390,6 +402,20 @@ def render_leg_tables(ranking_path: Path) -> list[str]:
                 f"{ranking_path}: {field} {duplicated} appears more than once; "
                 "each candidate holds exactly one rank in a leg"
             )
+    for field in _LEG_LEVEL_FIELDS:
+        values = {json.dumps(row[field], sort_keys=True) for row in rows}
+        if len(values) != 1:
+            raise SystemExit(
+                f"{ranking_path}: rows disagree on the leg-level field {field!r} "
+                f"({sorted(values)}); one leg table describes ONE experiment"
+            )
+    return rows
+
+
+def render_leg_tables(ranking_path: Path) -> list[str]:
+    """The candidate legend + ranking + floor-sensitivity tables for one tranche."""
+
+    rows = read_validated_ranking(ranking_path)
     legend = _table(
         ("candidate", "label", "weights_sha256"),
         [
@@ -419,14 +445,6 @@ def render_leg_tables(ranking_path: Path) -> list[str]:
     # concatenated file render one authoritative-looking table whose heading
     # describes the first candidate while the metrics below came from another
     # experiment (Codex review on PR #314).
-    for field in _LEG_LEVEL_FIELDS:
-        values = {json.dumps(row[field], sort_keys=True) for row in rows}
-        if len(values) != 1:
-            raise SystemExit(
-                f"{ranking_path}: rows disagree on the leg-level field {field!r} "
-                f"({sorted(values)}); one leg table describes ONE experiment"
-            )
-
     gauge_names = tuple(
         gauge["name"] for gauge in rows[0]["watchability"]["supply_gauges"]
     )
@@ -546,7 +564,9 @@ def _tranche_identity(ranking_path: Path) -> str:
     library writes one tranche per ranking file, so disagreement is corruption.
     """
 
-    seed_sets = {tuple(sorted(row["seeds"])) for row in _read_jsonl(ranking_path)}
+    seed_sets = {
+        tuple(sorted(row["seeds"])) for row in read_validated_ranking(ranking_path)
+    }
     if len(seed_sets) != 1:
         raise SystemExit(
             f"{ranking_path} mixes seed sets {sorted(seed_sets)}; one ranking file "
@@ -556,13 +576,31 @@ def _tranche_identity(ranking_path: Path) -> str:
     # CANONICAL (sorted): the seed SET is the experiment, so [1,2,3] and [3,2,1]
     # are one tranche recorded twice, not two independent draws (Codex review on
     # PR #314). Recording order is a detail of how the leg was invoked.
-    return "-".join(str(seed) for seed in seeds)
+    identity = "-".join(str(seed) for seed in seeds)
+    # The identity string is lossy (negative seeds render as ``-3--2--1``), so
+    # the structured set is registered here and looked up by the disjointness
+    # guard rather than parsed back out of the display form.
+    _TRANCHE_SEEDS[identity] = frozenset(seeds)
+    return identity
 
 
-def _tranche_seeds(tranche: str) -> set[int]:
-    """The seed set behind a tranche identity built by :func:`_tranche_identity`."""
+#: Tranche identity (a display string) -> its canonical seed SET. The identity
+#: is built for humans and artifact names, so it is lossy: negative seeds encode
+#: as ``-3--2--1`` and cannot be split back apart. Structured data is retained
+#: here instead of reparsing the string (Codex review on PR #314).
+_TRANCHE_SEEDS: Final[dict[str, frozenset[int]]] = {}
 
-    return {int(token) for token in tranche.split("-")}
+
+def _tranche_seeds(tranche: str) -> frozenset[int]:
+    """The canonical seed set behind a tranche identity, as recorded not reparsed."""
+
+    try:
+        return _TRANCHE_SEEDS[tranche]
+    except KeyError as exc:  # pragma: no cover - defensive; identity is registered
+        raise SystemExit(
+            f"tranche {tranche!r} has no recorded seed set; identities are "
+            "registered when a ranking file is read"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -591,7 +629,7 @@ def _collect_arms(
     for path in ranking_paths:
         leg = path.parent.as_posix()
         tranche = _tranche_identity(path)
-        for row in _read_jsonl(path):
+        for row in read_validated_ranking(path):
             key = (leg, row["weights_sha256"])
             reads = by_arm.setdefault(key, {})
             if tranche in reads:
@@ -896,8 +934,13 @@ def _run_stability(args: argparse.Namespace) -> int:
     stability = compute_stability(find_ranking_files(roots))
     if args.check is not None:
         committed_path = _resolve(Path(args.check))
-        committed_bytes = committed_path.read_text(encoding="utf-8")
-        generated_bytes = stability_json(stability)
+        # read_BYTES, not read_text: text mode applies universal-newline
+        # translation, so a CRLF or mixed-ending artifact decodes equal to the
+        # generator's LF-only string while its bytes differ — and `--json-out`
+        # would then rewrite the file this check just called reproducible,
+        # defeating the very invariant round 4 added (Codex review on PR #314).
+        committed_raw = committed_path.read_bytes()
+        generated_raw = stability_json(stability).encode("utf-8")
         # BYTES, not decoded values. ``--json-out`` over this same artifact must
         # be a no-op diff, and a value-only comparison passes through key
         # reordering, indent/newline drift and numeric respelling (1 vs 1.0) —
@@ -905,8 +948,8 @@ def _run_stability(args: argparse.Namespace) -> int:
         # regenerating the file changed it (Codex review on PR #314). The
         # decoded diff is still printed, because it names WHICH number moved
         # when the mismatch is semantic rather than formatting.
-        if generated_bytes != committed_bytes:
-            committed = json.loads(committed_bytes)
+        if generated_raw != committed_raw:
+            committed = json.loads(committed_raw)
             drift = sorted(
                 key
                 for key in set(stability) | set(committed)

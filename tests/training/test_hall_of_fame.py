@@ -1409,3 +1409,82 @@ def test_loadable_reload_verifies_stamp_IDENTITY_not_just_syntax(
     root = tmp_path / "ok"
     _fresh(root)
     assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()
+
+
+def test_loadable_reload_refuses_a_stamp_the_consumer_would_refuse(
+    tmp_path: Path,
+) -> None:
+    """The stamp key set must EQUAL the five, not merely contain them.
+
+    ``_load_candidate_policy`` parses the same file through
+    ``TacticalPolicyStamp``, which is ``extra="forbid"``. A subset check let the
+    eager verifier certify a member as loadable that the consuming entry point
+    rejects — and this task's whole invariant is that the consumer can load
+    every freeze (Codex on PR #314).
+    """
+
+    hall = HallOfFame.create(
+        tmp_path / "pool",
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(),
+    )
+    member = hall.add_member(
+        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    stamp_path = tmp_path / "pool" / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["surprise_field"] = "valid-looking"
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="unexpected stamp fields"):
+        HallOfFame.load(tmp_path / "pool", "impostor")
+
+
+def test_loadable_reload_verifies_config_provenance_against_the_member_row(
+    tmp_path: Path,
+) -> None:
+    """config.json's provenance half is reconstructible, so a mismatch is false history.
+
+    Round 4 verified only ``encoder_version`` and ``hidden`` from config.json,
+    leaving ``genome_length``, ``campaign``, ``generation``, ``hall_origin``,
+    ``trained_against``, ``entrant`` and ``source_lineage`` unverified — every
+    one of them derivable from the verified weights plus the member row (Codex
+    on PR #314).
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            (0.1, 0.2),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    for field, forged in (
+        ("genome_length", 99),
+        ("campaign", "some-other-campaign"),
+        ("generation", 7),
+        ("hall_origin", "some-other-origin"),
+        ("trained_against", "b" * 64),
+        ("entrant", "some-other-entrant"),
+        ("source_lineage", "some-other-lineage"),
+    ):
+        root = tmp_path / field
+        member = _fresh(root)
+        config_path = root / "impostor" / member.path / "config.json"
+        config = json.loads(config_path.read_text())
+        assert config[field] != forged
+        config[field] = forged
+        config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="provenance disagrees"):
+            HallOfFame.load(root, "impostor")
+
+    root = tmp_path / "ok"
+    _fresh(root)
+    assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()

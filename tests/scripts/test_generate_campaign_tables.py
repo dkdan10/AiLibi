@@ -331,10 +331,16 @@ def _write_arm(
     ``seeds`` is the tranche's real identity (the generator keys on the
     recorded seeds, not the filename), so every synthetic tranche declares its
     own seed set.
+
+    ``rank`` is normalised to 1 because the file holds exactly one row: a
+    committed row carrying ``rank: 2`` in a one-row file is a shape no recorder
+    produces, and the ranking-integrity guard now refuses it before any arm is
+    folded. An override may still set it deliberately.
     """
 
     row = dict(source_row)
     row["seeds"] = list(seeds)
+    row["rank"] = 1
     row.update(overrides)
     leg.mkdir(parents=True, exist_ok=True)
     (leg / f"ranking-{tranche}.jsonl").write_text(
@@ -420,7 +426,13 @@ def test_tranche_identity_comes_from_the_recorded_seeds(tmp_path: Path) -> None:
 
 
 def test_ranking_file_mixing_seed_sets_is_refused(tmp_path: Path) -> None:
-    """One ranking file is one tranche; disagreeing rows are corruption."""
+    """One ranking file is one tranche; disagreeing rows are corruption.
+
+    The refusal now comes from the shared ranking-integrity check (``seeds`` is
+    a leg-level field), which runs before the tranche identity is derived — an
+    earlier, better-named stop than the identity helper's own guard, which
+    remains as defence.
+    """
 
     first, second = _committed_row(0), _committed_row(1)
     first["seeds"] = [1, 2, 3]
@@ -430,7 +442,7 @@ def test_ranking_file_mixing_seed_sets_is_refused(tmp_path: Path) -> None:
     (leg / "ranking-mixed.jsonl").write_text(
         json.dumps(first) + "\n" + json.dumps(second) + "\n", encoding="utf-8"
     )
-    with pytest.raises(SystemExit, match="mixes seed sets"):
+    with pytest.raises(SystemExit, match="disagree on the leg-level field 'seeds'"):
         gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
 
 
@@ -670,3 +682,78 @@ def test_leg_tables_refuse_a_duplicated_candidate(tmp_path: Path) -> None:
     path.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n", "utf-8")
     with pytest.raises(SystemExit, match="appears more than once"):
         gct.render_leg_tables(path)
+
+
+def test_negative_seeds_do_not_break_the_disjointness_guard(tmp_path: Path) -> None:
+    """Tranche seed sets are kept STRUCTURED, not reparsed from the display string.
+
+    The identity string is lossy: seeds ``(-3, -2, -1)`` render as ``-3--2--1``,
+    which splitting on ``-`` cannot invert. Round 4's guard reparsed it and
+    raised ``ValueError`` on artifacts the recorder happily produces — nothing
+    constrains seeds to be non-negative (Codex on PR #314).
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(-3, -2, -1))
+    _write_arm(leg, "b", row, seeds=(-6, -5, -4))
+    stability = gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+    assert stability["arms_with_both_tranches"] == 1
+
+
+def test_negative_seed_overlap_is_still_refused(tmp_path: Path) -> None:
+    """Structured seed sets keep the disjointness guard working for negatives."""
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(-3, -2, -1))
+    _write_arm(leg, "b", row, seeds=(-1, 4, 5))
+    with pytest.raises(SystemExit, match="share seeds"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_stability_validates_ranking_integrity_before_folding(tmp_path: Path) -> None:
+    """The stability fold runs the SAME per-file checks the leg renderer does.
+
+    The stability path read rows directly, so duplicated ranks/candidates or
+    mixed leg settings could still yield an authoritative stability artifact as
+    long as each genome had a matching read in the other tranche (Codex on
+    PR #314). File integrity is a property of the file, not of the table.
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "b", row, seeds=(4, 5, 6))
+    # A duplicated candidate inside one tranche file.
+    leg.mkdir(parents=True, exist_ok=True)
+    dup = dict(row)
+    dup["seeds"] = [1, 2, 3]
+    dup["rank"] = 1
+    second = dict(dup)
+    second["rank"] = 2
+    (leg / "ranking-a.jsonl").write_text(
+        json.dumps(dup) + "\n" + json.dumps(second) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="appears more than once"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_check_compares_raw_bytes_not_newline_normalized_text(
+    tmp_path: Path,
+) -> None:
+    """``read_text`` normalizes newlines, which would defeat the byte invariant.
+
+    A CRLF artifact decodes equal to the generator's LF-only string, so
+    ``--check`` would report byte-for-byte reproduction while ``--json-out``
+    rewrote the file to different bytes (Codex on PR #314).
+    """
+
+    committed = gct.stability_json(
+        gct.compute_stability(gct.find_ranking_files(_default_roots()))
+    )
+    artifact = tmp_path / "measurement-stability.json"
+    artifact.write_bytes(committed.replace("\n", "\r\n").encode("utf-8"))
+    # Text-mode reading makes these look identical; the bytes are not.
+    assert artifact.read_text() == committed
+    assert artifact.read_bytes() != committed.encode("utf-8")
+    assert gct.main(["stability", "--check", str(artifact)]) == 1

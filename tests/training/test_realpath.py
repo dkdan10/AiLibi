@@ -1342,3 +1342,174 @@ def test_ranking_publish_is_atomic_and_still_write_once(tmp_path: Path) -> None:
     # The committed bytes are untouched, and no stage file is left behind.
     assert target.read_text(encoding="utf-8") == '{"rank": 1}\n'
     assert [p.name for p in tmp_path.iterdir()] == [target.name]
+
+
+def test_resume_ignores_audit_sidecars_left_by_an_interrupted_leg(
+    tmp_path: Path,
+) -> None:
+    """The ordinary interruption state must not read as a foreign tranche.
+
+    ``HeadlessGame`` writes ``replay-seed-N.audit.jsonl`` beside every replay,
+    and ``_drop_audit_sidecars`` only runs AFTER a candidate's whole seed loop —
+    so an interrupted leg still holds them. They MATCH the
+    ``replay-seed-*.jsonl`` glob and ``_replay_seed`` cannot parse ``N.audit``,
+    which made the foreign-replay guard abort every resume it was meant to
+    serve (Codex on PR #314). My earlier fixtures resumed from a COMPLETED leg,
+    which has no sidecars, so none of them reached this.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    candidate_dir = work_dir / "000-utility-es"
+    # Exactly what an interruption leaves behind.
+    for seed in (1, 2):
+        (candidate_dir / f"replay-seed-{seed}.audit.jsonl").write_text(
+            '{"kind": "audit"}\n', encoding="utf-8"
+        )
+    assert len(list(candidate_dir.glob("replay-seed-*.jsonl"))) == 4
+
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in result.top().seed_telemetry] == [True, True]
+
+
+def test_resume_refuses_a_replay_whose_policy_identity_differs(
+    tmp_path: Path,
+) -> None:
+    """The resume predicate compares the WHOLE stamp, not the genome digest.
+
+    Identical genome bytes under a different ``policy_id`` / ``method`` /
+    ``anchor_policy`` / ``encoder_version`` are a DIFFERENT policy. Comparing
+    only ``weights_sha256`` would adopt the previous identity's games and
+    attribute them to this candidate — and ``_verify_stamps`` cannot catch it,
+    since the digest matches and the stamps stay uniform across seeds (Codex on
+    PR #314).
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    # Same genome, same digest, different declared identity.
+    renamed = _util_candidate().model_copy(update={"policy_id": "some-other-policy-id"})
+    result = run_realpath_rerank(
+        [renamed],
+        seeds=[1, 2],
+        work_dir=tmp_path / "work-2",
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    # Nothing was skipped: the bytes belong to another policy identity.
+    assert [entry.resumed for entry in result.top().seed_telemetry] == [False, False]
+
+
+def test_resume_refuses_a_changed_recording_protocol(tmp_path: Path) -> None:
+    """A resume adopts bytes recorded under the PRIOR protocol (Codex on PR #314).
+
+    Every invocation stamps its full config into a leg manifest, but nothing
+    compared them: resuming with a changed roster / baseline / tick budget /
+    timeout / retry budget skipped the old recordings while ``_build_row``
+    reported the NEW settings as though they produced those bytes.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    with pytest.raises(RealPathRerankError, match="different protocol"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(max_ticks=777),
+            resume=True,
+        )
+
+    # The unchanged protocol still resumes.
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in result.top().seed_telemetry] == [True, True]
+
+
+def test_resume_refuses_a_label_whose_genome_moved(tmp_path: Path) -> None:
+    """A label is not an identity: reusing one over a new genome is refused."""
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    moved = _util_candidate().model_copy(
+        update={"genome": tuple(g + 1.0 for g in _util_weights())}
+    )
+    with pytest.raises(RealPathRerankError, match="different genome digest"):
+        run_realpath_rerank(
+            [moved],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            resume=True,
+        )
+
+
+def test_a_cleanup_failure_never_overturns_a_committed_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once ``os.link`` succeeds the ranking is committed (Codex on PR #314).
+
+    A raising ``unlink`` in the ``finally`` used to propagate after a successful
+    publish, so the caller emitted ``leg-failed``, dropped its rank events, and
+    every retry then bounced off the ranking it had actually written.
+    """
+
+    from training.realpath import _publish_ranking
+
+    target = tmp_path / "ranking.jsonl"
+    original = Path.unlink
+
+    def _explode(self: Path, *args: object, **kwargs: object) -> None:
+        if self.name.endswith(".tmp"):
+            raise OSError("cleanup denied")
+        original(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "unlink", _explode)
+    _publish_ranking(target, '{"rank": 1}\n')
+    assert target.read_text(encoding="utf-8") == '{"rank": 1}\n'
+
+
+def test_an_unpublishable_ranking_filesystem_is_refused_before_any_game(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hard-link capability is preflighted, not discovered after the spend.
+
+    ``os.link`` is the publish primitive; on a filesystem that cannot do it
+    (exFAT, some FUSE/network mounts) the leg would fail only after every paid
+    game, and a resume would hit the same wall forever (Codex on PR #314).
+    """
+
+    import os
+
+    def _no_links(src: object, dst: object) -> None:
+        raise OSError("link(2) not supported")
+
+    monkeypatch.setattr(os, "link", _no_links)
+    with pytest.raises(RealPathRerankError, match="cannot publish hard links"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=tmp_path / "work",
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(),
+        )
+    # Refused in the preflight: no work dir, no games.
+    assert not (tmp_path / "work").exists()
