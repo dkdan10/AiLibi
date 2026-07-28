@@ -605,6 +605,44 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     assert gct.main(["stability", "--check"]) == 0
 
 
+def test_stability_refuses_one_path_for_both_artifacts(tmp_path: Path) -> None:
+    """``--out`` and ``--json-out`` emit DIFFERENT artifacts (Codex on PR #314).
+
+    Pointing both at one file wrote the JSON and then immediately overwrote it
+    with the Markdown, returning success while silently discarding one of the
+    two things the operator asked for.
+    """
+
+    shared = tmp_path / "both.json"
+    with pytest.raises(SystemExit, match="they emit different artifacts"):
+        gct.main(["stability", "--out", str(shared), "--json-out", str(shared)])
+    assert not shared.exists()
+
+    # Recognised through path normalisation, not just string equality.
+    with pytest.raises(SystemExit, match="they emit different artifacts"):
+        gct.main(
+            [
+                "stability",
+                "--out",
+                str(tmp_path / "both.json"),
+                "--json-out",
+                str(tmp_path / "." / "both.json"),
+            ]
+        )
+
+    # Two distinct paths still emit both artifacts.
+    table_out, json_out = tmp_path / "t.md", tmp_path / "t.json"
+    assert (
+        gct.main(["stability", "--out", str(table_out), "--json-out", str(json_out)])
+        == 0
+    )
+    assert table_out.read_text(encoding="utf-8").startswith("| stability check")
+    assert (
+        json.loads(json_out.read_text(encoding="utf-8"))["arms_with_both_tranches"]
+        == 22
+    )
+
+
 def test_a_ranking_row_must_carry_the_complete_stamp(tmp_path: Path) -> None:
     """An incomplete stamp can no longer certify its own agreement (Codex #314).
 

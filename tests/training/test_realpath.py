@@ -1799,10 +1799,18 @@ def test_concurrent_tranches_never_share_a_candidate_directory(
     # is present. (That sequential version passed with the fix reverted, which
     # is why it is not the pin.)
     first = realpath._allocate_candidate_dirs(
-        work_dir, tranche="1-2", candidates=[candidate], resume=True
+        work_dir,
+        tranche="1-2",
+        candidates=[candidate],
+        resume=True,
+        publish=lambda dirs: None,
     )
     second = realpath._allocate_candidate_dirs(
-        work_dir, tranche="7-8", candidates=[candidate], resume=True
+        work_dir,
+        tranche="7-8",
+        candidates=[candidate],
+        resume=True,
+        publish=lambda dirs: None,
     )
 
     assert first[0] != second[0], (
@@ -1835,6 +1843,161 @@ def test_concurrent_tranches_never_share_a_candidate_directory(
 
     assert _seeds(live / "000-utility-es") == {1, 2}
     assert _seeds(live / "001-utility-es") == {7, 8}
+
+
+def test_a_fresh_leg_steps_aside_from_another_tranches_claim(tmp_path: Path) -> None:
+    """A NON-resume leg reserves through its manifest (Codex on PR #314).
+
+    Round 10 scoped the reservation to resume, reasoning that a fresh collision
+    is "a loud FileExistsError rather than contamination". That was wrong about
+    the ORDERING: the manifest is published before the recording loop, so the
+    loser had already committed a manifest naming the shared directory — and
+    every later resume of that tranche then resolved back to it and rejected the
+    winner's replays as foreign, unrecoverable without hand-editing the
+    manifest.
+
+    The manifest is now published under the allocation claim, and a fresh leg
+    steps aside from a directory another tranche's manifest owns.
+    """
+
+    work_dir = tmp_path / "work"
+    candidate = _util_candidate()
+
+    # Tranche 1-2 records; its manifest claims 000-utility-es.
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    assert (work_dir / "000-utility-es").is_dir()
+
+    # A FRESH leg on another tranche must not be handed that directory.
+    fresh = realpath._allocate_candidate_dirs(
+        work_dir,
+        tranche="7-8",
+        candidates=[candidate],
+        resume=False,
+        publish=lambda dirs: None,
+    )
+    assert fresh[0].name == "001-utility-es"
+
+    # And end to end it records into its own directory and resumes cleanly —
+    # the recovery the shared-directory manifest denied.
+    assert run_realpath_rerank(
+        [candidate],
+        seeds=[7, 8],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+    ).rows
+    resumed = run_realpath_rerank(
+        [candidate],
+        seeds=[7, 8],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in resumed.top().seed_telemetry] == [True, True]
+
+    # The write-once rule is UNTOUCHED: a fresh leg on a tranche that already
+    # owns its directory still refuses rather than quietly picking a new name.
+    with pytest.raises(FileExistsError):
+        run_realpath_rerank(
+            [candidate],
+            seeds=[7, 8],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-4.jsonl",
+            config=_config(),
+        )
+
+
+def test_resume_refuses_a_mode_change(tmp_path: Path) -> None:
+    """The MODE is leg protocol, and the drift check was blind to it (#314).
+
+    ``generate_campaign_tables`` treats ``mode`` as a leg-protocol field and
+    refuses two tranches of an arm that disagree on it — but ``mode`` is not a
+    ``RealPathRerankConfig`` field, so the config comparison never saw it. A
+    ``top-k`` recording resumed as ``champion-trace`` skipped every old replay
+    and emitted rows claiming the new mode with ``resumed=True``.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    with pytest.raises(RealPathRerankError, match="recorded this tranche in mode"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            mode=MODE_CHAMPION_TRACE,
+            resume=True,
+        )
+    # The SAME mode still resumes.
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        resume=True,
+    ).rows
+
+
+def test_resume_refuses_a_non_canonical_map(tmp_path: Path) -> None:
+    """The completeness fence rebuilds against the canonical map only (#314).
+
+    ``eval.kill_craft.compute_kill_craft_report`` takes no map argument and
+    calls ``load_canonical_map()`` unconditionally — and this task consumes
+    ``eval/kill_craft.py`` exactly as committed. On a custom map the fence
+    therefore disagrees with the recorder about the topology and rejects every
+    otherwise-complete replay, so the resume silently re-records every paid
+    seed: the feature delivering nothing while reporting success. Refused
+    instead.
+    """
+
+    altered = load_canonical_map().model_copy(
+        update={"kill_cooldown_ticks": load_canonical_map().kill_cooldown_ticks + 1}
+    )
+    work_dir = tmp_path / "work"
+    # Recorded on the custom map, so there is no backend DRIFT to report — the
+    # refusal has to come from the fence rule itself.
+    run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+        game_map=altered,
+    )
+    with pytest.raises(
+        RealPathRerankError, match="resume=True needs the canonical map"
+    ):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
+            game_map=altered,
+            resume=True,
+        )
+
+
+def test_explicit_invocation_ids_cannot_escape_the_work_dir(tmp_path: Path) -> None:
+    """An invocation id is a filename token, not a path (Codex on PR #314)."""
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    directory = tmp_path / "work"
+    for bad in ("slot/../../outside/escaped", "a/b", "..", "with space", ""):
+        with pytest.raises(ValueError, match="invocation must be"):
+            write_prescreen_record(
+                directory, seeds=[1], quotes=[_quote()], invocation=bad
+            )
+    assert list(outside.iterdir()) == []
+    # A filename-safe token still works.
+    path = write_prescreen_record(
+        directory, seeds=[1], quotes=[_quote()], invocation="slot_1-a"
+    )
+    assert path.parent == directory
 
 
 def test_the_allocation_claim_is_held_across_resolution(tmp_path: Path) -> None:

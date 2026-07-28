@@ -145,6 +145,11 @@ _WRITER_OWNED_CONFIG_KEYS: Final[tuple[str, ...]] = (
     "hidden",
 )
 
+#: How many leading hex chars of the weights digest ride the ``policy_id``. The
+#: stamp carries the FULL digest in ``weights_sha256``; this half is a readable
+#: per-member discriminator, so a short prefix is enough (Task 18.31).
+_POLICY_ID_SHA_CHARS: Final[int] = 8
+
 # A 64-lowercase-hex sha256 digest — the member identity + on-disk dir name.
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 
@@ -558,15 +563,34 @@ class LoadableArtifactMetadata(BaseModel):
             )
         return self
 
-    def policy_id_for(self, *, origin: str, generation: int) -> str:
-        """The member's ``stamp.json`` ``policy_id`` (the committed 18.24 shape).
+    def policy_id_for(
+        self, *, side: Side, origin: str, generation: int, weights_sha256: str
+    ) -> str:
+        """The member's ``stamp.json`` ``policy_id`` — UNIQUE per artifact (18.31).
 
-        ``<prefix>-<run_label>-<origin>-gen<generation>`` — e.g.
-        ``coevo-run-03-utility-bcanchor-exploiter-probe-gen10``, exactly the
-        shape the campaign's frozen members carry.
+        ``<prefix>-<run_label>-<side>-<origin>-gen<generation>-<sha8>``, e.g.
+        ``coevo-run-03-utility-bcanchor-impostor-exploiter-probe-gen10-6d327dcb``.
+
+        The 18.24 shape was ``<prefix>-<run_label>-<origin>-gen<generation>``,
+        which is not an identity: every MAP-Elites founder shares one origin and
+        generation 0, so a hall seeded with N founders stamped N distinct
+        genomes with ONE ``policy_id`` — and the impostor and crew halls of a
+        single run collided with each other as well. Handing one founder from
+        each side to ``scripts/run_tournament.py`` then trips its 18.19
+        cross-stamp conflation guard (run_tournament.py:911-913) even though
+        both four-file artifacts are otherwise loadable (Codex review on
+        PR #314).
+
+        ``side`` separates the two halls; the weights digest separates members
+        within one. The digest is abbreviated to 8 chars because the stamp
+        already carries the full ``weights_sha256`` — this half is a readable
+        discriminator, not the identity itself.
         """
 
-        return f"{self.policy_id_prefix}-{self.run_label}-{origin}-gen{generation}"
+        return (
+            f"{self.policy_id_prefix}-{self.run_label}-{side}-{origin}"
+            f"-gen{generation}-{weights_sha256[:_POLICY_ID_SHA_CHARS]}"
+        )
 
     def provenance(
         self,
@@ -1010,7 +1034,12 @@ class HallOfFame:
             written = write_loadable_artifact(
                 member_dir,
                 genome,
-                policy_id=metadata.policy_id_for(origin=origin, generation=generation),
+                policy_id=metadata.policy_id_for(
+                    side=self._side,
+                    origin=origin,
+                    generation=generation,
+                    weights_sha256=digest,
+                ),
                 method=metadata.method,
                 encoder_version=metadata.encoder_version,
                 anchor_policy=metadata.anchor_policy,
@@ -1256,7 +1285,10 @@ class HallOfFame:
             (
                 "policy_id",
                 metadata.policy_id_for(
-                    origin=member.origin, generation=member.generation
+                    side=side,
+                    origin=member.origin,
+                    generation=member.generation,
+                    weights_sha256=member.weights_sha256,
                 ),
             ),
         ):

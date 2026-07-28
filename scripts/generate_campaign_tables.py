@@ -1057,6 +1057,19 @@ def _run_stability(args: argparse.Namespace) -> int:
             "--check VERIFIES a committed artifact and writes nothing; drop --out / "
             "--json-out (or drop --check to render)."
         )
+    # Two DIFFERENT artifacts are requested, so they need two paths. Pointing
+    # both at one file emitted the JSON and then immediately overwrote it with
+    # the Markdown, returning success while silently discarding one of the two
+    # things the operator asked for (Codex review on PR #314). Compared after
+    # ``_resolve`` so ``./x.json`` and ``x.json`` are recognised as one file.
+    if args.out is not None and args.json_out is not None:
+        rendered, machine = _resolve(Path(args.out)), _resolve(Path(args.json_out))
+        if rendered == machine:
+            raise SystemExit(
+                f"--out and --json-out both name {rendered}; they emit different "
+                "artifacts (Markdown and JSON), so one would overwrite the other. "
+                "Give them separate paths."
+            )
     stability = compute_stability(find_ranking_files(roots))
     if args.check is not None:
         committed_path = _resolve(Path(args.check))

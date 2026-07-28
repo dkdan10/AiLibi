@@ -780,8 +780,11 @@ def test_every_generation_champion_is_persisted_as_a_loadable_artifact(
         assert stamp["weights_sha256"] == row.champion_weights_sha256
         assert stamp["encoder_version"] == row.moving_encoder_version
         assert stamp["method"] == COEVO_FREEZE_METHOD
+        # The id carries the SIDE and a weights discriminator as well as the
+        # origin and generation, so two artifacts never share one (Codex #314).
         assert stamp["policy_id"].endswith(
-            f"-{GENERATION_CHAMPION_ORIGIN}-gen{row.generation_index}"
+            f"-{row.moving_side}-{GENERATION_CHAMPION_ORIGIN}"
+            f"-gen{row.generation_index}-{row.champion_weights_sha256[:8]}"
         )
         config = json.loads((artifact_dir / "config.json").read_text())
         assert config["side"] == row.moving_side

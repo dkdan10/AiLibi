@@ -858,6 +858,30 @@ def _invocation_path(directory: Path, stem: str, tranche: str, ordinal: int) -> 
     return directory / f"{stem}-{tranche}-{ordinal:03d}.json"
 
 
+def _validate_invocation_token(invocation: str) -> None:
+    """An explicit invocation id is a FILENAME token, never a path (18.31).
+
+    The id is interpolated straight into a filename, so ``"a/../../escaped"``
+    would publish the record outside ``directory`` — an unexpected filesystem
+    write, and one that removes the supposedly native pre-screen evidence from
+    the work dir's record set, which is the whole point of the §12 item-10 fix
+    (Codex review on PR #314). Restricted to the character class the allocator's
+    own ids use, plus ``-``/``_`` for human-chosen slots.
+    """
+
+    if not invocation:
+        raise ValueError("invocation must be a non-empty token; got ''")
+    if not all(
+        (char.isascii() and char.isalnum()) or char in _SLUG_EXTRA
+        for char in invocation
+    ):
+        raise ValueError(
+            f"invocation must be a filename-safe token ([-A-Za-z0-9_]); got "
+            f"{invocation!r}. It is interpolated into a filename, so a path "
+            "component would publish the record outside the work dir"
+        )
+
+
 def write_prescreen_record(
     directory: Path,
     *,
@@ -877,6 +901,7 @@ def write_prescreen_record(
     record_seeds = tuple(seeds)
     directory.mkdir(parents=True, exist_ok=True)
     if invocation is not None:
+        _validate_invocation_token(invocation)
         path = directory / f"{PRESCREEN_FILENAME_STEM}-{tranche}-{invocation}.json"
         _write_prescreen_json(
             path,
@@ -1354,6 +1379,7 @@ def _refuse_protocol_drift(
     work_dir: Path,
     *,
     tranche: str,
+    mode: str,
     config: RealPathRerankConfig,
     candidates: Sequence[RealPathCandidate],
     backend: Mapping[str, object],
@@ -1398,6 +1424,21 @@ def _refuse_protocol_drift(
                 "and a resume that cannot verify that protocol is a resume that "
                 "cannot safely adopt those bytes"
             ) from exc
+        # The MODE is leg protocol too — ``generate_campaign_tables`` treats it
+        # as one, and refuses two tranches of an arm that disagree on it. It is
+        # not a ``RealPathRerankConfig`` field, so the config comparison below
+        # is blind to it: a ``top-k`` recording resumed as ``champion-trace``
+        # would skip every old replay and emit rows claiming the new mode with
+        # ``resumed=True``, relabelling the recorded experiment (Codex review on
+        # PR #314).
+        recorded_mode = manifest.get("mode")
+        if recorded_mode != mode:
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche in mode "
+                f"{recorded_mode!r} but this invocation asks for {mode!r}. The "
+                "existing replays were produced by that selection loop; adopting "
+                "them under another mode relabels the experiment"
+            )
         recorded_config = manifest.get("config")
         if recorded_config != wanted_config:
             drift = sorted(
@@ -1447,6 +1488,41 @@ def _refuse_protocol_drift(
                 "is not an identity, and adopting those replays would rank one "
                 "policy under another's name"
             )
+
+
+def _dirs_claimed_by_other_tranches(work_dir: Path, *, tranche: str) -> set[str]:
+    """Every candidate directory another tranche's manifest already claims (18.31).
+
+    A manifest is the durable record of which directories a leg owns, so it is
+    what makes a claim survive the allocating process. A FRESH leg's enumerated
+    ``NNN-<slug>`` name is unconditional, so two non-resume legs on different
+    tranches in one work dir both name ``000-<slug>``: one creates it, the other
+    fails — but only AFTER publishing a manifest that points at the shared
+    directory, so every later resume of the loser resolves back to it and
+    rejects the winner's replays as foreign. Legitimate cross-tranche
+    concurrency was then unrecoverable without editing the manifest by hand
+    (Codex review on PR #314).
+
+    Reading the claims lets a fresh leg step aside from ANOTHER tranche's
+    directory while still refusing one of its own — which is the write-once
+    rule, and must not be weakened into "pick the next free name".
+    """
+
+    claimed: set[str] = set()
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # A partial manifest names no directories this allocator can trust;
+            # the drift check reports it on the tranche that owns it.
+            continue
+        if manifest.get("tranche") == tranche:
+            continue
+        for entry in manifest.get("candidates", []):
+            recorded_dir = entry.get("dir")
+            if isinstance(recorded_dir, str) and recorded_dir:
+                claimed.add(recorded_dir)
+    return claimed
 
 
 def _recorded_candidate_dirs(
@@ -1546,7 +1622,41 @@ def _resolve_candidate_dirs(
         for index, candidate in enumerate(candidates)
     )
     if not resume:
-        return enumerated
+        # A fresh leg keeps the historic enumerated name, EXCEPT where another
+        # tranche's manifest already claims it. Stepping aside there is what
+        # makes legitimate cross-tranche concurrency work; the write-once rule
+        # is untouched, because a directory this tranche owns (or an unclaimed
+        # one that merely exists) still collides at ``mkdir`` and refuses. In a
+        # clean work dir — the normal case — nothing moves (Codex on PR #314).
+        claimed = _dirs_claimed_by_other_tranches(work_dir, tranche=tranche)
+        if not claimed:
+            return enumerated
+        stepped_aside: list[Path] = []
+        taken: set[Path] = set()
+        for index, (candidate, default) in enumerate(
+            zip(candidates, enumerated, strict=True)
+        ):
+            slug = _safe_slug(candidate.label)
+            chosen = default
+            # Step over names ANOTHER tranche owns — and only those. On-disk
+            # existence is deliberately NOT a reason to move: a directory this
+            # tranche already recorded into must still collide at ``mkdir``, or
+            # the write-once rule silently degrades into "pick the next free
+            # name" and a re-run quietly records a second copy of the leg.
+            for ordinal in range(index, index + _MAX_INVOCATIONS):
+                chosen = work_dir / f"{ordinal:03d}-{slug}"
+                if chosen.name not in claimed and chosen not in taken:
+                    break
+            else:  # pragma: no cover - 1000 claimed ordinals is a runaway
+                raise RealPathRerankError(
+                    f"no unclaimed recording directory for candidate "
+                    f"{candidate.label!r} under {work_dir} after "
+                    f"{_MAX_INVOCATIONS} attempts; that is a runaway, not a "
+                    "campaign"
+                )
+            taken.add(chosen)
+            stepped_aside.append(chosen)
+        return tuple(stepped_aside)
 
     recorded, seen_labels = _recorded_candidate_dirs(work_dir, tranche=tranche)
     resolved: list[Path] = []
@@ -1838,6 +1948,7 @@ def _allocate_candidate_dirs(
     tranche: str,
     candidates: Sequence[RealPathCandidate],
     resume: bool,
+    publish: Callable[[Sequence[Path]], None],
 ) -> tuple[Path, ...]:
     """Resolve this leg's candidate dirs and RESERVE them, atomically (18.31).
 
@@ -1847,15 +1958,23 @@ def _allocate_candidate_dirs(
     taken. Splitting the two is precisely the window two concurrent tranches
     slipped through (Codex review on PR #314).
 
-    Directories are created here only under ``resume``, deliberately. That is
-    where the hazard lives: the recording loop's ``mkdir(exist_ok=True)`` lets
-    BOTH legs adopt a shared directory and interleave their seed sets, which the
-    scoring functions then fold whole. A fresh leg creates with
-    ``exist_ok=False``, so a collision is a loud ``FileExistsError`` rather than
-    contamination — and leaving its creation in the recording loop preserves the
-    property that a leg failing BEFORE it records (a pre-screen coverage
-    refusal, a failed manifest publish) leaves no directory behind for the next
-    attempt to trip over.
+    A RESUMING leg reserves by creating its directories here: the recording
+    loop's ``mkdir(exist_ok=True)`` would otherwise let two legs adopt a shared
+    directory and interleave their seed sets, which the scoring functions fold
+    whole.
+
+    A FRESH leg reserves through the MANIFEST instead, published by ``publish``
+    while this claim is still held. Round 10 scoped the reservation to resume on
+    the reasoning that a fresh collision is "a loud ``FileExistsError`` rather
+    than contamination" — which was wrong about the ordering. The manifest is
+    published BEFORE the recording loop, so the loser had already committed a
+    manifest pointing at the shared directory; every later resume of that
+    tranche then resolved back to it and rejected the winner's replays as
+    foreign, leaving legitimate cross-tranche concurrency unrecoverable without
+    hand-editing the manifest (Codex review on PR #314). Publishing the claim
+    under the lock means the loser never allocates that directory at all — and
+    creating nothing keeps the property that a leg failing before it records
+    leaves no directory for the next attempt to trip over.
     """
 
     with _allocation_claim(work_dir):
@@ -1865,6 +1984,7 @@ def _allocate_candidate_dirs(
         if resume:
             for candidate_dir in candidate_dirs:
                 candidate_dir.mkdir(parents=True, exist_ok=True)
+        publish(candidate_dirs)
     return candidate_dirs
 
 
@@ -2475,25 +2595,59 @@ def run_realpath_rerank(
             _refuse_protocol_drift(
                 work_dir,
                 tranche=tranche,
+                mode=mode,
                 config=resolved_config,
                 candidates=candidates,
                 backend=backend,
             )
+            # The byte-completeness fence is the third leg of the conjunctive
+            # skip predicate, and ``compute_kill_craft_report`` reconstructs
+            # unconditionally with ``load_canonical_map()`` — it takes no map
+            # argument, and ``eval/kill_craft.py`` is consumed exactly as
+            # committed (this task does not edit it). So on a non-canonical map
+            # the fence disagrees with the recorder about the topology and every
+            # otherwise-complete replay fails it: the resume silently re-records
+            # every paid seed, which is precisely the 30-40 h this feature
+            # exists to save (Codex review on PR #314). Refused rather than
+            # quietly delivering nothing — and placed AFTER the drift check so a
+            # genuine map CHANGE still reports as backend drift.
+            if _map_digest(resolved_map) != _map_digest(load_canonical_map()):
+                raise RealPathRerankError(
+                    "resume=True needs the canonical map: the byte-completeness "
+                    "fence (eval.kill_craft.compute_kill_craft_report) rebuilds "
+                    "every replay against load_canonical_map() and takes no map "
+                    "argument, so on a custom map it would reject every complete "
+                    "replay and re-record the whole leg. Record custom-map legs "
+                    "without resume, or extend the fence to accept a map"
+                )
+        # The manifest IS the fresh leg's reservation, so it is published while
+        # the allocation claim is still held (Codex review on PR #314).
+        opened: list[tuple[str, Path]] = []
+
+        def _publish_manifest(dirs: Sequence[Path]) -> None:
+            opened.append(
+                _open_leg_manifest(
+                    work_dir,
+                    tranche=tranche,
+                    seeds=seeds_tuple,
+                    mode=mode,
+                    resume=resume,
+                    candidates=candidates,
+                    config=resolved_config,
+                    ranking_path=ranking_path,
+                    backend=backend,
+                    candidate_dirs=dirs,
+                )
+            )
+
         candidate_dirs = _allocate_candidate_dirs(
-            work_dir, tranche=tranche, candidates=candidates, resume=resume
-        )
-        invocation, manifest_path = _open_leg_manifest(
             work_dir,
             tranche=tranche,
-            seeds=seeds_tuple,
-            mode=mode,
-            resume=resume,
             candidates=candidates,
-            config=resolved_config,
-            ranking_path=ranking_path,
-            backend=backend,
-            candidate_dirs=candidate_dirs,
+            resume=resume,
+            publish=_publish_manifest,
         )
+        invocation, manifest_path = opened[0]
         leg_log = RealPathLegLog(
             work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
         )

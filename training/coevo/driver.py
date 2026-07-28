@@ -1327,7 +1327,10 @@ class _CampaignEngine:
             artifact_dir,
             moving.champion,
             policy_id=metadata.policy_id_for(
-                origin=GENERATION_CHAMPION_ORIGIN, generation=global_generation
+                side=moving.side,
+                origin=GENERATION_CHAMPION_ORIGIN,
+                generation=global_generation,
+                weights_sha256=champion_sha,
             ),
             method=metadata.method,
             encoder_version=metadata.encoder_version,

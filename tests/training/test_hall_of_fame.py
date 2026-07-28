@@ -1163,10 +1163,32 @@ def test_loadable_artifact_metadata_validation() -> None:
             _metadata(hidden=boolean)
 
     metadata = _metadata(hidden=8, encoder_version="v3", anchor_weight=4.0)
+    # The id is an IDENTITY: side + origin + generation + a weights
+    # discriminator. Origin and generation alone collide across every
+    # MAP-Elites founder and across the two sides of one run (Codex #314).
     assert (
-        metadata.policy_id_for(origin="exploiter-probe", generation=10)
-        == "coevo-run-01-utility-champion-exploiter-probe-gen10"
+        metadata.policy_id_for(
+            side="impostor",
+            origin="exploiter-probe",
+            generation=10,
+            weights_sha256="6d327dcb" + "0" * 56,
+        )
+        == "coevo-run-01-utility-champion-impostor-exploiter-probe-gen10-6d327dcb"
     )
+
+    # Two founders sharing origin AND generation no longer collide, and the two
+    # sides of one run no longer collide with each other — which is what
+    # run_tournament.py's 18.19 cross-stamp guard refuses.
+    def _pid(side: str, sha: str) -> str:
+        return metadata.policy_id_for(
+            side=side,  # type: ignore[arg-type]
+            origin="map-elites-founder",
+            generation=0,
+            weights_sha256=sha,
+        )
+
+    assert _pid("impostor", "a" * 64) != _pid("impostor", "b" * 64)
+    assert _pid("impostor", "a" * 64) != _pid("crew", "a" * 64)
     provenance = metadata.provenance(
         side="impostor",
         generation=10,
@@ -1215,7 +1237,8 @@ def test_add_member_with_metadata_freezes_a_loadable_artifact(tmp_path: Path) ->
     stamp = json.loads((member_dir / "stamp.json").read_text())
     assert stamp["weights_sha256"] == member.weights_sha256
     assert stamp["policy_id"] == (
-        "coevo-run-01-utility-champion-alternating-freeze-champion-gen9"
+        "coevo-run-01-utility-champion-impostor-alternating-freeze-champion-gen9"
+        f"-{member.weights_sha256[:8]}"
     )
     config = json.loads((member_dir / "config.json").read_text())
     assert config["hall_origin"] == "alternating-freeze-champion"
