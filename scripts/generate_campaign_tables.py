@@ -370,9 +370,52 @@ _LEG_PROTOCOL_FIELDS: Final[tuple[str, ...]] = (
     "meeting_timeout_seconds",
 )
 
-#: The leg-level fields ONE ranking file's rows must agree on — the protocol
-#: plus the seed set (one ranking file is one tranche).
-_LEG_LEVEL_FIELDS: Final[tuple[str, ...]] = ("seeds", *_LEG_PROTOCOL_FIELDS)
+#: WHO recorded a leg and on WHAT topology. Not on :data:`_LEG_PROTOCOL_FIELDS`
+#: because the frozen 18.24 corpus predates them: ``realpath-rerank-v1`` rows
+#: carry no recorder identity at all, and this generator reproduces that record
+#: rather than fabricating history for it. Every ``-v2`` row carries both, and
+#: for those the fields are protocol in the fullest sense — two tranche rankings
+#: written into one leg directory by separate calls can otherwise use different
+#: providers, prompt sets, custom runners or maps while agreeing on every field
+#: above, and §4.0 would report that behavioural change as provider/seed noise
+#: (Codex review on PR #314).
+_RECORDER_IDENTITY_FIELDS: Final[tuple[str, ...]] = (
+    "recording_backend_sha256",
+    "game_map_sha256",
+)
+
+#: The row schemas that predate :data:`_RECORDER_IDENTITY_FIELDS`. A CLOSED set
+#: — the only member is the frozen 18.24 corpus, and it will never grow, because
+#: a schema that omits the recorder identity is not one this repository writes
+#: any more. Every other version MUST carry the fields, so a future generation
+#: that forgot them is refused rather than quietly treated as legacy. (Comparing
+#: version STRINGS with ``>=`` would have done the opposite: ``"...-v10"`` sorts
+#: below ``"...-v2"``, so the tenth schema would silently read as pre-18.31.)
+_PRE_RECORDER_IDENTITY_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {"realpath-rerank-v1"}
+)
+_RECORDER_IDENTITY_SCHEMA: Final[str] = "realpath-rerank-v2"
+
+#: The leg-level fields ONE ranking file's rows must agree on — the protocol,
+#: the seed set (one ranking file is one tranche), the schema generation, and
+#: the recorder identity when the schema carries it.
+_LEG_LEVEL_FIELDS: Final[tuple[str, ...]] = (
+    "seeds",
+    "schema_version",
+    *_LEG_PROTOCOL_FIELDS,
+)
+
+
+def _recorder_identity_fields(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """The recorder-identity fields THIS file's schema generation carries.
+
+    ``read_validated_ranking`` has already proven every row agrees on
+    ``schema_version``, so rank 1 speaks for the file.
+    """
+
+    if not rows or str(rows[0]["schema_version"]) in _PRE_RECORDER_IDENTITY_SCHEMAS:
+        return ()
+    return _RECORDER_IDENTITY_FIELDS
 
 
 def _stamp_proof(row: Mapping[str, Any]) -> str:
@@ -435,6 +478,50 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
             raise SystemExit(
                 f"{ranking_path}: rows disagree on the leg-level field {field!r} "
                 f"({sorted(values)}); one leg table describes ONE experiment"
+            )
+    # The recorder identity, once the schema generation says the rows carry it.
+    # Keying on the row's OWN declared ``schema_version`` is what keeps this
+    # honest for the frozen ``-v1`` corpus: absence is then a recorded fact
+    # about a pre-18.31 record, not a silent omission that vouches for itself
+    # (Codex review on PR #314).
+    for field in _recorder_identity_fields(rows):
+        values = {json.dumps(row.get(field), sort_keys=True) for row in rows}
+        if len(values) != 1 or values == {"null"}:
+            raise SystemExit(
+                f"{ranking_path}: rows declare {rows[0]['schema_version']} but "
+                f"disagree on (or omit) {field!r} ({sorted(values)}); from "
+                f"{_RECORDER_IDENTITY_SCHEMA} on, a ranking row names the recorder "
+                "that produced it"
+            )
+    # The stamp SHAPE, before anything compares stamps. The stability fold reads
+    # identity fields with ``.get``, so a field absent from BOTH tranche rows
+    # collapses to ``{None}`` and the arm passes as one policy read twice — a
+    # missing stamp certifying its own agreement (Codex review on PR #314). And
+    # a stamp whose ``weights_sha256`` names other bytes than the row it sits on
+    # is a conflation of exactly the 17.14 kind, so bind the two here rather
+    # than trusting the pair downstream.
+    for row in rows:
+        stamp = row["stamp"]
+        if not isinstance(stamp, dict) or set(stamp) != set(_STAMP_IDENTITY_FIELDS):
+            raise SystemExit(
+                f"{ranking_path}: rank {row['rank']} carries stamp {stamp!r}; a "
+                f"ranking row's stamp is EXACTLY the five fields "
+                f"{list(_STAMP_IDENTITY_FIELDS)}, which is what makes it an identity"
+            )
+        nonstring = sorted(
+            key for key, value in stamp.items() if not isinstance(value, str)
+        )
+        if nonstring:
+            raise SystemExit(
+                f"{ranking_path}: rank {row['rank']} stamp fields {nonstring} are "
+                "not strings; every TacticalPolicyStamp field is a string"
+            )
+        if stamp["weights_sha256"] != row["weights_sha256"]:
+            raise SystemExit(
+                f"{ranking_path}: rank {row['rank']} is recorded for "
+                f"{row['weights_sha256']} but stamped {stamp['weights_sha256']}; a "
+                "stamp names the bytes it was frozen from (the 17.14 conflation "
+                "guard)"
             )
     return rows
 
@@ -672,7 +759,10 @@ def _collect_arms(
         # two differently-stamped policies is not measurement noise (Codex
         # review on PR #314).
         for field in _STAMP_IDENTITY_FIELDS:
-            values = {reads[key]["stamp"].get(field) for key in (first_key, second_key)}
+            # ``[field]``, not ``.get``: ``read_validated_ranking`` has already
+            # proven the exact five-field shape, so an absent field can no
+            # longer collapse to ``{None}`` and certify its own agreement.
+            values = {reads[key]["stamp"][field] for key in (first_key, second_key)}
             if len(values) != 1:
                 raise SystemExit(
                     f"{leg}: genome {sha} is stamped {field}={sorted(map(str, values))} "
@@ -684,7 +774,14 @@ def _collect_arms(
         # mode or budget between the two reads makes the difference a measured
         # effect of that change, which this table would then report as
         # measurement instability (Codex review on PR #314).
-        for field in _LEG_PROTOCOL_FIELDS:
+        # The recorder identity is protocol too, and it is compared on the SAME
+        # schema generation: an arm read once under ``-v1`` and once under
+        # ``-v2`` is half-anonymous, so the pair is refused rather than
+        # compared on the half that happens to be present. Within one
+        # generation the fields are either both required (``-v2``) or both
+        # absent by record (``-v1``) — never absent-and-therefore-agreeing
+        # (Codex review on PR #314).
+        for field in ("schema_version", *_LEG_PROTOCOL_FIELDS):
             values = {
                 json.dumps(reads[key][field], sort_keys=True)
                 for key in (first_key, second_key)
@@ -695,6 +792,19 @@ def _collect_arms(
                     f"across tranches {first_key} and {second_key} "
                     f"({sorted(values)}); a stability swing compares one policy "
                     "under ONE protocol, twice"
+                )
+        for field in _recorder_identity_fields([reads[first_key]]):
+            values = {
+                json.dumps(reads[key][field], sort_keys=True)
+                for key in (first_key, second_key)
+            }
+            if len(values) != 1:
+                raise SystemExit(
+                    f"{leg}: genome {sha} was recorded under different {field} "
+                    f"across tranches {first_key} and {second_key} "
+                    f"({sorted(values)}); a swing between two different recorders "
+                    "or two different maps is a measured effect of that change, "
+                    "not provider/seed noise"
                 )
         arms.append(
             _Arm(

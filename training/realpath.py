@@ -67,6 +67,20 @@ evidence — training/reports/report-impostor-campaign.md §11):
   before any recording, one event per recorded/resumed seed, the ranked rows,
   and a terminal event on success or failure.
 
+Two properties the review on PR #314 added to the above, called out because
+they change what is on disk:
+
+* every ranking row is ``realpath-rerank-v2``, which names the RECORDER
+  (``recording_backend_sha256``) and the topology (``game_map_sha256``)
+  alongside the protocol. A row travels away from its work dir; without them,
+  two tranches recorded by different providers, prompt sets or maps agree on
+  every field a reader can see, and a stability table reports that behavioural
+  change as provider/seed noise;
+* one leg at a time per ``(work_dir, tranche)``, enforced by
+  :func:`_tranche_claim`. Every pre-recording guard reads state a concurrent
+  leg is about to change, so the claim is what makes read-then-publish atomic
+  rather than merely exclusive at the final write.
+
 Public surface (stable — downstream tasks import these):
 :class:`RealPathCandidate`, :class:`RealPathRerankConfig`,
 :class:`RealPathSeedTelemetry`, :class:`RealPathRerankRow`,
@@ -74,12 +88,13 @@ Public surface (stable — downstream tasks import these):
 :class:`PreScreenRecord`, :class:`RealPathLegLog`,
 :func:`candidates_from_champion_trace`, :func:`write_prescreen_record`,
 :func:`run_realpath_rerank`, the :class:`RealPathRerankError` family, and the
-``SCHEMA_VERSION`` / ``MODE_*`` / ``DEFAULT_*`` constants.
+``SCHEMA_VERSION`` / ``MODE_*`` / ``DEFAULT_*`` / ``*_FILENAME*`` constants.
 """
 
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
 import math
@@ -88,7 +103,8 @@ import re
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -98,6 +114,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from agents.base import AgentInterface
+from agents.strategic.prompts.loader import resolve_prompt_set
 from agents.tactical.features import weights_to_hex_json
 from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
@@ -119,6 +136,30 @@ from eval.watchability import (
     compute_watchability,
 )
 from llm.budget import BudgetExceededError
+
+# The recording-backend identity records what ``build_default_client`` would
+# ACTUALLY construct, not the raw environment, so it mirrors that function's own
+# dispatch over these names (Task 18.31). ``_ollama_seed_from_env`` /
+# ``_ollama_num_ctx_from_env`` are deliberate private imports — the same posture
+# as ``_resolve_game_budget`` and ``_BASELINE_SUPPLY_FLOORS`` above: they are the
+# ONLY resolvers that reproduce the recorder's parse (including its fail-loud
+# refusal of a malformed knob), and restating them would let the identity drift
+# from the client it claims to describe.
+from llm.provider import (
+    DEFAULT_MEETING_MODEL,
+    DEFAULT_TRIGGER_MODEL,
+    ENV_FEATHERLESS_BASE_URL,
+    ENV_MEETING_MODEL,
+    ENV_OLLAMA_HOST,
+    ENV_PROVIDER,
+    ENV_TRIGGER_MODEL,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_FAKE,
+    PROVIDER_FEATHERLESS,
+    PROVIDER_OLLAMA,
+    _ollama_num_ctx_from_env,
+    _ollama_seed_from_env,
+)
 from meetings.manager import MeetingTrigger
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
@@ -149,7 +190,7 @@ import measure_baseline  # noqa: E402
 # Constants.                                                                   #
 # --------------------------------------------------------------------------- #
 
-SCHEMA_VERSION: Final[str] = "realpath-rerank-v1"
+SCHEMA_VERSION: Final[str] = "realpath-rerank-v2"
 
 # The re-rank imposes its OWN per-meeting wall-clock deadline because headless
 # meetings run deadline-free (orchestrator/game.py:397-399).
@@ -240,28 +281,18 @@ LEG_MANIFEST_FILENAME_STEM: Final[str] = "leg"
 #: keyed by ``(tranche, invocation)``.
 LEG_LOG_FILENAME: Final[str] = "leg-log.jsonl"
 
-#: The environment variables that pick the RECORDING BACKEND. They are not on
-#: :class:`RealPathRerankConfig` (the config describes the game, not the
-#: provider), so a resume that compared only the config would skip seeds
-#: recorded against one provider/model and record the rest against another,
-#: committing ONE row that mixes two recording protocols (Codex on PR #314).
-_PROVIDER_ENV_VARS: Final[tuple[str, ...]] = (
-    "AILIBI_LLM_PROVIDER",
-    "AILIBI_LLM_MEETING_MODEL",
-    "AILIBI_LLM_TRIGGER_MODEL",
-    # ``build_default_meeting_runner`` resolves this to pick the rendered
-    # templates AND the recorded prompt versions (``orchestrator/game.py``), so
-    # two prompt sets are two recording protocols even on one provider/model
-    # (Codex review on PR #314).
-    "AILIBI_PROMPT_SET",
-    # Provider-CONSTRUCTION knobs (llm/provider.py): endpoint, generation seed
-    # and context window all change the bytes a recorder produces, and none of
-    # them ride the provider/model names above (Codex on PR #314).
-    "AILIBI_OLLAMA_HOST",
-    "AILIBI_OLLAMA_SEED",
-    "AILIBI_OLLAMA_NUM_CTX",
-    "AILIBI_FEATHERLESS_BASE_URL",
-)
+#: ``<work_dir>/tranche-claim-<tranche>.lock`` — the ``flock`` target that
+#: serialises concurrent legs on one tranche (see :func:`_tranche_claim`). Its
+#: BYTES are meaningless; only the kernel lock on the open fd matters, so a
+#: crashed process leaves nothing to clean up. Deliberately NOT prefixed
+#: ``leg-``: ``_recorded_candidate_dirs`` globs ``leg-*.json`` for manifests.
+TRANCHE_CLAIM_FILENAME_STEM: Final[str] = "tranche-claim"
+
+#: The prompt-set selector. Not provider-specific: ``build_default_meeting_runner``
+#: resolves it to pick the rendered templates AND the recorded prompt versions
+#: (``orchestrator/game.py``), so two prompt sets are two recording protocols on
+#: every provider — including the fake one (Codex review on PR #314).
+_PROMPT_SET_KEY: Final[str] = "prompt_set"
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
@@ -581,6 +612,18 @@ class RealPathRerankRow(BaseModel):
     stamp_verified_games: int
     stamp_uniform: bool
     stamp_equals_computed_digest: bool
+    #: WHO recorded these bytes and on WHAT topology (Task 18.31, ``-v2``). The
+    #: leg manifest already carried both, but a manifest lives beside the
+    #: recordings and a ranking row travels alone: two tranche rankings written
+    #: into one leg directory by separate calls could use different providers,
+    #: prompt sets, custom runners or maps while agreeing on every protocol
+    #: field, and the §4.0 stability table would then report that behavioural
+    #: change as provider/seed noise (Codex review on PR #314). The backend
+    #: digest hashes the whole identity mapping; the map sha is carried
+    #: separately because the topology is the one protocol axis a reader is
+    #: likely to want to compare without reconstructing the identity.
+    recording_backend_sha256: str
+    game_map_sha256: str
     seeds: tuple[int, ...]
     num_players: int
     num_impostors: int
@@ -904,7 +947,19 @@ def _write_prescreen_json(
     seeds: tuple[int, ...],
     quotes: Sequence[PreScreenQuote],
 ) -> None:
-    """Build + exclusively write one pre-screen record (validation before I/O)."""
+    """Build + atomically publish one pre-screen record (validation before I/O).
+
+    Published through :func:`_publish_json_atomically` rather than a plain
+    exclusive ``open("x")``: the exclusive open CREATES the final path before
+    its bytes are complete, so an interruption or a full disk mid-``write``
+    leaves an empty or truncated file that reads as committed invocation
+    evidence — and in the rerank path the leg manifest has already claimed that
+    invocation, so the retry advances to another ordinal and the corrupt record
+    stays in the audit set forever (Codex review on PR #314). ``os.link``
+    publishes only completed, fsynced bytes and is still exclusive, so it
+    remains a valid ordinal allocator: :class:`FileExistsError` still means
+    "this ordinal is taken", never "this ordinal is half-written".
+    """
 
     record = PreScreenRecord(
         tranche=tranche,
@@ -913,8 +968,7 @@ def _write_prescreen_json(
         recorded_at=_utc_now(),
         quotes=tuple(quotes),
     )
-    with path.open("x", encoding="utf-8") as handle:
-        handle.write(record.to_json())
+    _publish_json_atomically(path, record.to_json())
 
 
 def _publish_json_atomically(path: Path, payload: str) -> None:
@@ -1578,10 +1632,81 @@ def _recording_backend_identity(
         # another's (Codex review on PR #314). Hashed rather than embedded so
         # the manifest stays small and the comparison stays exact.
         "game_map_sha256": _map_digest(game_map),
+        _PROMPT_SET_KEY: resolve_prompt_set(env=env),
+        **_effective_backend_config(env),
     }
-    for name in _PROVIDER_ENV_VARS:
-        identity[name] = env.get(name)
     return identity
+
+
+def _effective_backend_config(env: Mapping[str, str]) -> dict[str, object]:
+    """The SELECTED provider's NORMALISED effective settings (18.31).
+
+    Recording the raw ``AILIBI_*`` variables made the identity both too wide and
+    too narrow (Codex review on PR #314):
+
+    * too WIDE — a Featherless or fake run was refused because an unrelated
+      ``AILIBI_OLLAMA_NUM_CTX`` moved, and an Ollama run depended on a
+      Featherless URL it never reads. A resume refused on a knob the recorder
+      never consulted forfeits exactly the verified-resume benefit this task
+      exists to deliver;
+    * too NARROW in the other direction — comparing RAW strings made setting a
+      variable to the value it already resolves to (``AILIBI_OLLAMA_HOST`` unset
+      vs. explicitly ``localhost:11434``) read as drift, while ``" fake "`` and
+      ``"fake"`` read as agreement only by luck.
+
+    So this mirrors :func:`llm.provider.build_default_client`'s own dispatch and
+    records what the recorder would ACTUALLY be built with — the same
+    ``.strip().lower()`` provider name, the same per-provider model defaults,
+    the same host/seed/num_ctx resolution — and nothing from the branches it
+    would not take. The optional-SDK defaults are imported lazily INSIDE each
+    branch, exactly as ``build_default_client`` does, so a non-Ollama run still
+    never imports ``llm.ollama_client``.
+
+    API keys are deliberately absent: they are a credential, not a protocol, and
+    an identity mapping is written into a manifest on disk.
+    """
+
+    provider = env.get(ENV_PROVIDER, PROVIDER_FAKE).strip().lower()
+    settings: dict[str, object] = {"provider": provider}
+    if provider == PROVIDER_FAKE:
+        return settings
+    if provider == PROVIDER_ANTHROPIC:
+        settings["meeting_model"] = env.get(ENV_MEETING_MODEL, DEFAULT_MEETING_MODEL)
+        settings["trigger_model"] = env.get(ENV_TRIGGER_MODEL, DEFAULT_TRIGGER_MODEL)
+        return settings
+    if provider == PROVIDER_OLLAMA:
+        from llm.ollama_client import DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_MODEL
+
+        settings["host"] = env.get(ENV_OLLAMA_HOST, "").strip() or DEFAULT_OLLAMA_HOST
+        # These two PARSE their variable and are fail-loud on garbage, so the
+        # identity carries the integer the client would receive — and a
+        # malformed knob is refused before any seed is recorded, not after.
+        settings["seed"] = _ollama_seed_from_env(dict(env))
+        settings["num_ctx"] = _ollama_num_ctx_from_env(dict(env))
+        settings["meeting_model"] = env.get(ENV_MEETING_MODEL, DEFAULT_OLLAMA_MODEL)
+        settings["trigger_model"] = env.get(ENV_TRIGGER_MODEL, DEFAULT_OLLAMA_MODEL)
+        return settings
+    if provider == PROVIDER_FEATHERLESS:
+        from llm.featherless_client import (
+            DEFAULT_FEATHERLESS_BASE_URL,
+            DEFAULT_FEATHERLESS_MODEL,
+        )
+
+        settings["base_url"] = (
+            env.get(ENV_FEATHERLESS_BASE_URL, "").strip()
+            or DEFAULT_FEATHERLESS_BASE_URL
+        )
+        settings["meeting_model"] = env.get(
+            ENV_MEETING_MODEL, DEFAULT_FEATHERLESS_MODEL
+        )
+        settings["trigger_model"] = env.get(
+            ENV_TRIGGER_MODEL, DEFAULT_FEATHERLESS_MODEL
+        )
+        return settings
+    raise RealPathRerankError(
+        f"unknown {ENV_PROVIDER} value: {provider!r}; build_default_client would "
+        "refuse to construct a recorder for it, so this leg can record nothing"
+    )
 
 
 def _normalize_for_digest(value: object) -> object:
@@ -1604,6 +1729,63 @@ def _normalize_for_digest(value: object) -> object:
     if isinstance(value, str | int | float | bool) or value is None:
         return value
     return str(value)
+
+
+@contextmanager
+def _tranche_claim(work_dir: Path, *, tranche: str) -> Iterator[Path]:
+    """Hold an EXCLUSIVE claim on one tranche of one work dir for a whole leg.
+
+    Every guard this leg runs before it records — the protocol-drift check, the
+    candidate-directory resolution, the manifest publish — reads state that a
+    CONCURRENT leg is about to change. Two resumes entering one tranche both
+    finish :func:`_refuse_protocol_drift` before either manifest exists, so the
+    exclusive manifest publish merely hands them different ordinals and neither
+    ever validates the other's protocol; they then record into the SAME
+    candidate directories, potentially under different configs or backends, and
+    score each other's half-written replays (Codex review on PR #314).
+
+    Serialising the claim closes the window at its source: read-then-publish is
+    atomic with respect to any other leg on this tranche, so the loser sees the
+    winner's manifest and is refused by the drift check it already runs.
+
+    ``fcntl.flock`` rather than an exclusive-create lock FILE, deliberately. A
+    created file must be deleted to release, so a killed process — the hour-40
+    provider 503 this whole task exists to survive — would leave a claim that
+    blocks every future resume until someone deletes it by hand. That is the
+    same permanently-unresumable deadlock the round-8 runner-identity refusal
+    created, and it is not worth re-introducing. The kernel drops a ``flock``
+    when the fd closes OR the process dies, so a crash leaves the tranche
+    claimable and the claim file itself is inert.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    path = work_dir / f"{TRANCHE_CLAIM_FILENAME_STEM}-{tranche}.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RealPathRerankError(
+                f"another leg already holds tranche {tranche!r} in {work_dir} "
+                f"({path}); two legs recording one tranche into one work dir "
+                "share candidate directories and would score each other's "
+                "half-written replays. Wait for it, or use a separate work dir"
+            ) from exc
+        yield path
+    finally:
+        os.close(fd)
+
+
+def _backend_digest(backend: Mapping[str, object]) -> str:
+    """A deterministic digest over a whole recording-backend identity (18.31).
+
+    The identity mapping is what a resume compares; this is the same fact in
+    the form a ranking ROW can carry, so a reader comparing two tranches has
+    one value to compare instead of a nested mapping to unpack.
+    """
+
+    payload = json.dumps(_normalize_for_digest(dict(backend)), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _map_digest(game_map: Map) -> str:
@@ -1965,6 +2147,7 @@ def _build_row(
     mode: str,
     seeds: tuple[int, ...],
     config: RealPathRerankConfig,
+    backend: Mapping[str, object],
     selection_score: float,
     rank: int,
 ) -> RealPathRerankRow:
@@ -1978,6 +2161,8 @@ def _build_row(
         stamp_verified_games=payload.verified,
         stamp_uniform=True,
         stamp_equals_computed_digest=True,
+        recording_backend_sha256=_backend_digest(backend),
+        game_map_sha256=str(backend["game_map_sha256"]),
         seeds=seeds,
         num_players=config.num_players,
         num_impostors=config.num_impostors,
@@ -2190,182 +2375,187 @@ def run_realpath_rerank(
             "name this leg could never be resumed without risking bytes recorded "
             "by a different runner"
         )
-    if resume:
-        _refuse_protocol_drift(
+    # ONE leg per (work dir, tranche) at a time. Held across the drift check,
+    # the directory resolution, the manifest publish AND the recording, so a
+    # concurrent leg cannot slip between the read and the publish (Codex #314).
+    with _tranche_claim(work_dir, tranche=tranche):
+        if resume:
+            _refuse_protocol_drift(
+                work_dir,
+                tranche=tranche,
+                config=resolved_config,
+                candidates=candidates,
+                backend=backend,
+            )
+        candidate_dirs = _resolve_candidate_dirs(
+            work_dir, tranche=tranche, candidates=candidates, resume=resume
+        )
+        invocation, manifest_path = _open_leg_manifest(
             work_dir,
             tranche=tranche,
-            config=resolved_config,
+            seeds=seeds_tuple,
+            mode=mode,
+            resume=resume,
             candidates=candidates,
+            config=resolved_config,
+            ranking_path=ranking_path,
             backend=backend,
+            candidate_dirs=candidate_dirs,
         )
-    candidate_dirs = _resolve_candidate_dirs(
-        work_dir, tranche=tranche, candidates=candidates, resume=resume
-    )
-    invocation, manifest_path = _open_leg_manifest(
-        work_dir,
-        tranche=tranche,
-        seeds=seeds_tuple,
-        mode=mode,
-        resume=resume,
-        candidates=candidates,
-        config=resolved_config,
-        ranking_path=ranking_path,
-        backend=backend,
-        candidate_dirs=candidate_dirs,
-    )
-    leg_log = RealPathLegLog(
-        work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
-    )
-    leg_log.emit(
-        "leg-start",
-        candidates=list(labels),
-        manifest=str(manifest_path),
-        mode=mode,
-        resume=resume,
-        seeds=list(seeds_tuple),
-    )
-    try:
-        if prescreen is not None:
-            # Coverage BEFORE the record and the log: evidence that names the
-            # wrong candidates is worse than no evidence, because it reads as
-            # proof (Codex review on PR #314).
-            _validate_prescreen_coverage(prescreen, candidates)
-            for quote in prescreen:
+        leg_log = RealPathLegLog(
+            work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
+        )
+        leg_log.emit(
+            "leg-start",
+            candidates=list(labels),
+            manifest=str(manifest_path),
+            mode=mode,
+            resume=resume,
+            seeds=list(seeds_tuple),
+        )
+        try:
+            if prescreen is not None:
+                # Coverage BEFORE the record and the log: evidence that names the
+                # wrong candidates is worse than no evidence, because it reads as
+                # proof (Codex review on PR #314).
+                _validate_prescreen_coverage(prescreen, candidates)
+                for quote in prescreen:
+                    leg_log.emit(
+                        "prescreen-quote",
+                        label=quote.label,
+                        note=quote.note,
+                        predicted_flags_per_meeting=quote.predicted_flags_per_meeting,
+                        predicted_floors_pass=quote.predicted_floors_pass,
+                        weights_sha256=quote.weights_sha256,
+                    )
+                prescreen_path = write_prescreen_record(
+                    work_dir,
+                    seeds=seeds_tuple,
+                    quotes=prescreen,
+                    invocation=invocation,
+                )
                 leg_log.emit(
-                    "prescreen-quote",
-                    label=quote.label,
-                    note=quote.note,
-                    predicted_flags_per_meeting=quote.predicted_flags_per_meeting,
-                    predicted_floors_pass=quote.predicted_floors_pass,
-                    weights_sha256=quote.weights_sha256,
+                    "prescreen-record",
+                    path=str(prescreen_path),
+                    quotes=len(prescreen),
                 )
-            prescreen_path = write_prescreen_record(
-                work_dir,
-                seeds=seeds_tuple,
-                quotes=prescreen,
-                invocation=invocation,
-            )
-            leg_log.emit(
-                "prescreen-record",
-                path=str(prescreen_path),
-                quotes=len(prescreen),
-            )
 
-        payloads: list[_CandidatePayload] = []
-        for index, candidate in enumerate(candidates):
-            stamp = _candidate_stamp(candidate)
-            digest = stamp.weights_sha256
-            agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
-            candidate_dir = candidate_dirs[index]
-            candidate_dir.mkdir(parents=True, exist_ok=resume)
-            if resume:
-                _refuse_foreign_replays(
-                    candidate_dir, seeds=seeds_tuple, label=candidate.label
+            payloads: list[_CandidatePayload] = []
+            for index, candidate in enumerate(candidates):
+                stamp = _candidate_stamp(candidate)
+                digest = stamp.weights_sha256
+                agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
+                candidate_dir = candidate_dirs[index]
+                candidate_dir.mkdir(parents=True, exist_ok=resume)
+                if resume:
+                    _refuse_foreign_replays(
+                        candidate_dir, seeds=seeds_tuple, label=candidate.label
+                    )
+                leg_log.emit(
+                    "candidate-start",
+                    dir=str(candidate_dir),
+                    index=index,
+                    label=candidate.label,
+                    weights_sha256=digest,
                 )
-            leg_log.emit(
-                "candidate-start",
-                dir=str(candidate_dir),
-                index=index,
-                label=candidate.label,
-                weights_sha256=digest,
-            )
-            telemetry = tuple(
-                _record_or_resume_seed(
-                    seed=seed,
-                    candidate=candidate,
-                    candidate_dir=candidate_dir,
-                    game_map=resolved_map,
-                    agent_factory=agent_factory,
-                    stamp=stamp,
-                    digest=digest,
+                telemetry = tuple(
+                    _record_or_resume_seed(
+                        seed=seed,
+                        candidate=candidate,
+                        candidate_dir=candidate_dir,
+                        game_map=resolved_map,
+                        agent_factory=agent_factory,
+                        stamp=stamp,
+                        digest=digest,
+                        config=resolved_config,
+                        base_meeting_runner_factory=meeting_runner_factory,
+                        resume=resume,
+                        leg_log=leg_log,
+                    )
+                    for seed in seeds_tuple
+                )
+                _drop_audit_sidecars(candidate_dir)
+                _write_roster_json(candidate_dir, resolved_config)
+                decisive_seeds = tuple(
+                    entry.seed for entry in telemetry if not entry.tick_budget_reached
+                )
+                read_stamp, verified = _verify_stamps(
+                    candidate_dir,
+                    seeds=decisive_seeds,
+                    expected_digest=digest,
+                    label=candidate.label,
+                )
+                validity = run_validity_gate(candidate_dir)
+                watchability = compute_watchability(
+                    candidate_dir, baseline_id=resolved_config.baseline_id
+                )
+                core = measure_baseline.measure_baseline(candidate_dir)
+                leg_log.emit(
+                    "candidate-scored",
+                    label=candidate.label,
+                    mean_score=watchability.mean_score,
+                    referee_passed=watchability.referee_passed,
+                    resumed_seeds=[entry.seed for entry in telemetry if entry.resumed],
+                    stamp_verified_games=verified,
+                    validity_passed=validity.passed,
+                )
+                payloads.append(
+                    _CandidatePayload(
+                        candidate=candidate,
+                        stamp=read_stamp,
+                        digest=digest,
+                        verified=verified,
+                        telemetry=telemetry,
+                        validity=validity,
+                        watchability=watchability,
+                        core=core,
+                    )
+                )
+
+            scores = [
+                _selection_score(payload.validity, payload.watchability)
+                for payload in payloads
+            ]
+            order = sorted(range(len(payloads)), key=lambda i: (-scores[i], i))
+            rows = tuple(
+                _build_row(
+                    payloads[i],
+                    mode=mode,
+                    seeds=seeds_tuple,
                     config=resolved_config,
-                    base_meeting_runner_factory=meeting_runner_factory,
-                    resume=resume,
-                    leg_log=leg_log,
+                    backend=backend,
+                    selection_score=scores[i],
+                    rank=rank,
                 )
-                for seed in seeds_tuple
+                for rank, i in enumerate(order, start=1)
             )
-            _drop_audit_sidecars(candidate_dir)
-            _write_roster_json(candidate_dir, resolved_config)
-            decisive_seeds = tuple(
-                entry.seed for entry in telemetry if not entry.tick_budget_reached
+            ranking_path.parent.mkdir(parents=True, exist_ok=True)
+            _publish_ranking(
+                ranking_path, "".join(row.to_json_line() + "\n" for row in rows)
             )
-            read_stamp, verified = _verify_stamps(
-                candidate_dir,
-                seeds=decisive_seeds,
-                expected_digest=digest,
-                label=candidate.label,
-            )
-            validity = run_validity_gate(candidate_dir)
-            watchability = compute_watchability(
-                candidate_dir, baseline_id=resolved_config.baseline_id
-            )
-            core = measure_baseline.measure_baseline(candidate_dir)
-            leg_log.emit(
-                "candidate-scored",
-                label=candidate.label,
-                mean_score=watchability.mean_score,
-                referee_passed=watchability.referee_passed,
-                resumed_seeds=[entry.seed for entry in telemetry if entry.resumed],
-                stamp_verified_games=verified,
-                validity_passed=validity.passed,
-            )
-            payloads.append(
-                _CandidatePayload(
-                    candidate=candidate,
-                    stamp=read_stamp,
-                    digest=digest,
-                    verified=verified,
-                    telemetry=telemetry,
-                    validity=validity,
-                    watchability=watchability,
-                    core=core,
+            for row in rows:
+                leg_log.emit(
+                    "rank",
+                    label=row.label,
+                    rank=row.rank,
+                    referee_passed=row.referee_passed,
+                    selection_score=row.selection_score,
+                    validity_passed=row.validity_passed,
                 )
-            )
-
-        scores = [
-            _selection_score(payload.validity, payload.watchability)
-            for payload in payloads
-        ]
-        order = sorted(range(len(payloads)), key=lambda i: (-scores[i], i))
-        rows = tuple(
-            _build_row(
-                payloads[i],
-                mode=mode,
-                seeds=seeds_tuple,
-                config=resolved_config,
-                selection_score=scores[i],
-                rank=rank,
-            )
-            for rank, i in enumerate(order, start=1)
+            leg_log.emit("leg-done", ranking_path=str(ranking_path), rows=len(rows))
+        except BaseException as exc:
+            # The hour-40 provider 503 leaves its own record: the leg log states
+            # exactly where the leg stopped, which is what a resume reads next.
+            leg_log.emit("leg-failed", error=type(exc).__name__, message=str(exc))
+            raise
+        return RealPathRerankResult(
+            mode=mode,
+            ranking_path=str(ranking_path),
+            work_dir=str(work_dir),
+            seeds=seeds_tuple,
+            config=resolved_config,
+            rows=rows,
         )
-        ranking_path.parent.mkdir(parents=True, exist_ok=True)
-        _publish_ranking(
-            ranking_path, "".join(row.to_json_line() + "\n" for row in rows)
-        )
-        for row in rows:
-            leg_log.emit(
-                "rank",
-                label=row.label,
-                rank=row.rank,
-                referee_passed=row.referee_passed,
-                selection_score=row.selection_score,
-                validity_passed=row.validity_passed,
-            )
-        leg_log.emit("leg-done", ranking_path=str(ranking_path), rows=len(rows))
-    except BaseException as exc:
-        # The hour-40 provider 503 leaves its own record: the leg log states
-        # exactly where the leg stopped, which is what a resume reads next.
-        leg_log.emit("leg-failed", error=type(exc).__name__, message=str(exc))
-        raise
-    return RealPathRerankResult(
-        mode=mode,
-        ranking_path=str(ranking_path),
-        work_dir=str(work_dir),
-        seeds=seeds_tuple,
-        config=resolved_config,
-        rows=rows,
-    )
 
 
 __all__ = [
@@ -2385,6 +2575,7 @@ __all__ = [
     "PRESCREEN_FILENAME_STEM",
     "PRESCREEN_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "TRANCHE_CLAIM_FILENAME_STEM",
     "PreScreenQuote",
     "PreScreenRecord",
     "RealPathCandidate",

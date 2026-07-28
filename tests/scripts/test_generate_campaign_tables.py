@@ -38,6 +38,9 @@ _STABILITY_ARTIFACT = _COEVO / "measurement-stability.json"
 _RUN_01_LEG = _COEVO / "realpath" / "run-01-utility-champion"
 _CAMPAIGN_ROWS = _REPO_ROOT / "training" / "reports" / "results-impostor-campaign.jsonl"
 
+#: Sentinel meaning "delete this stamp key", distinct from any JSON value.
+_DROP: Any = object()
+
 
 def _default_roots() -> list[Path]:
     return [_REPO_ROOT / root for root in gct.DEFAULT_RANKING_ROOTS]
@@ -530,6 +533,130 @@ def test_stability_refuses_encoder_family_drift_within_an_arm(tmp_path: Path) ->
     # field that drifted (Codex round 8); the encoder case is one of five.
     with pytest.raises(SystemExit, match="stamped encoder_version="):
         gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def _v2_row(*, index: int = 0, **overrides: object) -> dict[str, object]:
+    """A committed row upgraded to the ``-v2`` schema that names its recorder."""
+
+    row = _committed_row(index)
+    row["schema_version"] = gct._RECORDER_IDENTITY_SCHEMA
+    row["recording_backend_sha256"] = "a" * 64
+    row["game_map_sha256"] = "c" * 64
+    row.update(overrides)
+    return row
+
+
+def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> None:
+    """Recorder and map identity are protocol from ``-v2`` on (Codex on PR #314).
+
+    Two tranche rankings written into one leg directory by separate calls can
+    use different providers, prompt sets, custom runners or maps while agreeing
+    on every protocol field — and ``compute_stability`` would then report that
+    behavioural change as provider/seed noise. ``run_realpath_rerank`` now names
+    the recorder in every row it writes, and an arm's two reads must agree.
+
+    Keyed on the ROW's declared schema so the frozen ``-v1`` corpus is handled
+    as what it is: a record made before the field existed, not a pair that
+    silently agrees on its own absence. An arm that is half ``-v1`` and half
+    ``-v2`` is refused rather than compared on the half that happens to exist.
+    """
+
+    for field in gct._RECORDER_IDENTITY_FIELDS:
+        leg = tmp_path / field / "leg-01"
+        drifted = _v2_row()
+        drifted[field] = "d" * 64
+        _write_arm(leg, "t1", _v2_row(), seeds=(1, 2, 3))
+        _write_arm(leg, "t2", drifted, seeds=(4, 5, 6))
+        with pytest.raises(SystemExit, match="not provider/seed noise"):
+            gct.compute_stability(gct.find_ranking_files([tmp_path / field]))
+
+    # A ``-v2`` row that OMITS the identity is refused where the file is read.
+    dropped = _v2_row()
+    del dropped["recording_backend_sha256"]
+    leg = tmp_path / "omitted" / "leg-01"
+    _write_arm(leg, "t1", dropped, seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="a ranking row names the recorder"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # Half-``v1``/half-``v2`` is not comparable: the pair is refused, never
+    # compared on the read that happens to carry an identity.
+    leg = tmp_path / "mixed" / "leg-01"
+    _write_arm(leg, "t1", _committed_row(0), seeds=(1, 2, 3))
+    _write_arm(leg, "t2", _v2_row(), seeds=(4, 5, 6))
+    with pytest.raises(SystemExit, match="different schema_version"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "mixed"]))
+
+    # A FUTURE schema is required to carry the identity too: the legacy set is
+    # closed, so a generation that forgot the fields is refused rather than
+    # read as pre-18.31. (A ``>=`` string compare would have got this backwards
+    # — ``"...-v10"`` sorts below ``"...-v2"``.)
+    future = _v2_row(schema_version="realpath-rerank-v10")
+    del future["game_map_sha256"]
+    leg = tmp_path / "future" / "leg-01"
+    _write_arm(leg, "t1", future, seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="a ranking row names the recorder"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # Agreeing ``-v2`` reads fold normally, and so does the frozen ``-v1`` pair.
+    leg = tmp_path / "agree" / "leg-01"
+    _write_arm(leg, "t1", _v2_row(), seeds=(1, 2, 3))
+    _write_arm(leg, "t2", _v2_row(), seeds=(4, 5, 6))
+    assert len(gct.compute_stability(gct.find_ranking_files([tmp_path / "agree"]))) >= 1
+    assert gct.main(["stability", "--check"]) == 0
+
+
+def test_a_ranking_row_must_carry_the_complete_stamp(tmp_path: Path) -> None:
+    """An incomplete stamp can no longer certify its own agreement (Codex #314).
+
+    The stability fold read identity fields with ``.get``, so a field absent
+    from BOTH tranche rows collapsed to ``{None}`` and the arm passed as one
+    policy read twice — a missing identity vouching for itself. And a stamp
+    whose ``weights_sha256`` names other bytes than the row it sits on is a
+    17.14-style conflation. Both are file-integrity properties, so both are
+    checked where the file is read, not where the table is folded.
+    """
+
+    def _mutate(**stamp_overrides: object) -> dict[str, object]:
+        row = _committed_row(0)
+        stamp: dict[str, Any] = dict(row["stamp"])  # type: ignore[call-overload]
+        for key, value in stamp_overrides.items():
+            if value is _DROP:
+                del stamp[key]
+            else:
+                stamp[key] = value
+        row["stamp"] = stamp
+        return row
+
+    # The same field missing from BOTH tranches: the defect exactly.
+    leg = tmp_path / "missing" / "leg-01"
+    dropped = _mutate(method=_DROP)
+    _write_arm(leg, "t1", dropped, seeds=(1, 2, 3))
+    _write_arm(leg, "t2", dropped, seeds=(4, 5, 6))
+    with pytest.raises(SystemExit, match="EXACTLY the five fields"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "missing"]))
+
+    # A sixth field is equally not a TacticalPolicyStamp.
+    leg = tmp_path / "extra" / "leg-01"
+    _write_arm(leg, "t1", _mutate(surprise="x"), seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="EXACTLY the five fields"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # A non-string field would pass a set comparison and fail the consumer.
+    leg = tmp_path / "typed" / "leg-01"
+    _write_arm(leg, "t1", _mutate(method=7), seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="are not strings"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # A stamp naming other bytes than the row it sits on.
+    leg = tmp_path / "conflated" / "leg-01"
+    _write_arm(leg, "t1", _mutate(weights_sha256="b" * 64), seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="conflation guard"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # The unmutated committed row still reads cleanly.
+    leg = tmp_path / "ok" / "leg-01"
+    _write_arm(leg, "t1", _committed_row(0), seeds=(1, 2, 3))
+    assert len(gct.read_validated_ranking(leg / "ranking-t1.jsonl")) == 1
 
 
 def test_rows_split_refuses_a_gap_inside_a_segment(tmp_path: Path) -> None:

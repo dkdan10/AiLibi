@@ -23,7 +23,9 @@ ordering evidence a library artifact instead of a shell redirection.
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
+import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -44,6 +46,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import read_tactical_policy_stamp
+import training.realpath as realpath
 from training.bakeoff.es import ESResult
 from training.bakeoff.harness import load_candidate_weights
 from training.realpath import (
@@ -938,6 +941,42 @@ def test_prescreen_records_are_tranche_and_invocation_keyed(tmp_path: Path) -> N
         )
 
 
+def test_a_failed_prescreen_write_publishes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An interrupted pre-screen write leaves no half-record (Codex on PR #314).
+
+    An exclusive ``open("x")`` CREATES the final path before the payload is
+    complete, so a disk-full or a kill mid-``write`` leaves a truncated file
+    that reads as committed invocation evidence — and the retry, seeing the
+    ordinal taken, advances past it and strands the corrupt record in the audit
+    set permanently. Staged-then-linked, the ordinal is either absent or a whole
+    record, so the retry reclaims the SAME ordinal.
+    """
+
+    real_fsync = os.fsync
+
+    def _explode(fd: int) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "fsync", _explode)
+    with pytest.raises(OSError, match="disk full"):
+        write_prescreen_record(tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()])
+    monkeypatch.setattr(os, "fsync", real_fsync)
+
+    # Neither a partial record nor a leaked staging file survives.
+    assert list(tmp_path.iterdir()) == []
+
+    # The retry reclaims ordinal 000 rather than skipping past a corpse.
+    retried = write_prescreen_record(
+        tmp_path, seeds=[4000, 4001, 4002], quotes=[_quote()]
+    )
+    assert retried.name == "prescreen-quotes-4000-4002-000.json"
+    assert PreScreenRecord.model_validate(
+        json.loads(retried.read_text())
+    ).invocation == ("000")
+
+
 def test_prescreen_quote_validation_fails_loud() -> None:
     with pytest.raises(ValidationError):
         PreScreenQuote(
@@ -1566,21 +1605,28 @@ def test_resume_finds_recordings_after_the_slate_narrows(tmp_path: Path) -> None
     assert not (work_dir / "000-arm-b").exists()
 
 
+@pytest.mark.parametrize(
+    "knob",
+    ["AILIBI_LLM_PROVIDER", "AILIBI_PROMPT_SET"],
+)
 def test_resume_refuses_a_changed_recording_backend(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, knob: str
 ) -> None:
-    """The PROVIDER is part of the recording protocol (Codex on PR #314).
+    """The RECORDER is part of the protocol (Codex on PR #314).
 
-    ``RealPathRerankConfig`` describes the game, not the backend, so a
-    provider/model swap left ``wanted_config`` identical: existing seeds were
-    skipped while missing ones recorded through the new provider, committing
-    ONE row whose seeds came from two different recorders.
+    ``RealPathRerankConfig`` describes the game, not the backend, so a provider
+    or prompt-set swap left ``wanted_config`` identical: existing seeds were
+    skipped while missing ones recorded through the new recorder, committing ONE
+    row whose seeds came from two different backends. Both knobs here are read
+    on EVERY provider, so both are refused end to end — and the refusal lands
+    before a single game is recorded, which is why a provider this environment
+    cannot even construct still exercises the guard.
     """
 
     work_dir = tmp_path / "work"
     _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
 
-    monkeypatch.setenv("AILIBI_LLM_MEETING_MODEL", "some-other-model")
+    monkeypatch.setenv(knob, "anthropic" if knob == "AILIBI_LLM_PROVIDER" else "9b-alt")
     with pytest.raises(RealPathRerankError, match="different recording backend"):
         run_realpath_rerank(
             [_util_candidate()],
@@ -1590,6 +1636,195 @@ def test_resume_refuses_a_changed_recording_backend(
             config=_config(),
             resume=True,
         )
+
+
+def test_one_leg_at_a_time_per_work_dir_tranche(tmp_path: Path) -> None:
+    """Concurrent legs on one tranche are serialized, not interleaved (Codex #314).
+
+    Two resumes entering one tranche both finish ``_refuse_protocol_drift``
+    before either manifest exists, so the exclusive manifest publish merely
+    hands them different ordinals and neither validates the other's protocol.
+    They then record into the SAME candidate directories — potentially under
+    different configs or backends — and score each other's half-written
+    replays. Serialising the claim makes read-then-publish atomic, so the loser
+    is refused instead of racing.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    claim = work_dir / f"{realpath.TRANCHE_CLAIM_FILENAME_STEM}-1-2.lock"
+    assert claim.exists()
+
+    # Stand in for the concurrent leg by holding its claim.
+    fd = os.open(claim, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(RealPathRerankError, match="already holds tranche"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=tmp_path / "ranking-2.jsonl",
+                config=_config(),
+                resume=True,
+            )
+    finally:
+        os.close(fd)
+
+    # A DIFFERENT tranche in the same work dir is an independent leg: the claim
+    # is per (work dir, tranche), never a work-dir-wide mutex.
+    fd = os.open(claim, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with realpath._tranche_claim(work_dir, tranche="7"):
+            pass
+        with pytest.raises(RealPathRerankError, match="already holds tranche"):
+            with realpath._tranche_claim(work_dir, tranche="1-2"):
+                pass
+    finally:
+        os.close(fd)
+
+    # Released on the way out, so the next resume of the SAME tranche proceeds.
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-4.jsonl",
+        config=_config(),
+        resume=True,
+    ).rows
+
+
+def test_a_failed_leg_releases_its_tranche_claim(tmp_path: Path) -> None:
+    """A crashed leg must not leave the tranche permanently unclaimable (#314).
+
+    An exclusive-create lock FILE would have to be deleted to release, so the
+    hour-40 provider 503 this task exists to survive would strand every future
+    resume behind a claim only a human could clear — the same permanently
+    unresumable deadlock the round-8 runner-identity refusal created. The claim
+    is a ``flock``, which the kernel drops on close and on process death.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+
+    # A leg that dies mid-flight: the protocol-drift refusal fires INSIDE the
+    # claim, which is exactly where a stale lock would be left behind.
+    with pytest.raises(RealPathRerankError, match="different"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(tasks_per_crewmate=3),
+            resume=True,
+        )
+
+    # The tranche is claimable again, with no file to delete by hand.
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        resume=True,
+    ).rows
+
+
+def test_backend_identity_pins_only_the_selected_providers_settings() -> None:
+    """The identity is the EFFECTIVE config, not the raw environment (Codex #314).
+
+    Recording all eight ``AILIBI_*`` variables raw made the identity both too
+    wide and too narrow: a fake or Featherless resume was refused because an
+    unrelated ``AILIBI_OLLAMA_*`` knob moved (forfeiting the verified-resume
+    benefit over a knob the recorder never reads), while setting a variable to
+    the value it already resolves to read as drift. The identity now mirrors
+    ``build_default_client``'s own dispatch, so it moves exactly when the
+    constructed recorder would.
+    """
+
+    game_map = load_canonical_map()
+
+    def _identity(**env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=False, game_map=game_map, environment=env
+        )
+
+    # IRRELEVANT knobs, per provider: changing one must not move the identity.
+    irrelevant = {
+        "fake": (
+            "AILIBI_OLLAMA_HOST",
+            "AILIBI_OLLAMA_SEED",
+            "AILIBI_OLLAMA_NUM_CTX",
+            "AILIBI_FEATHERLESS_BASE_URL",
+            "AILIBI_LLM_MEETING_MODEL",
+            "AILIBI_LLM_TRIGGER_MODEL",
+        ),
+        "ollama": ("AILIBI_FEATHERLESS_BASE_URL",),
+        "featherless": (
+            "AILIBI_OLLAMA_HOST",
+            "AILIBI_OLLAMA_SEED",
+            "AILIBI_OLLAMA_NUM_CTX",
+        ),
+        "anthropic": (
+            "AILIBI_OLLAMA_HOST",
+            "AILIBI_OLLAMA_SEED",
+            "AILIBI_OLLAMA_NUM_CTX",
+            "AILIBI_FEATHERLESS_BASE_URL",
+        ),
+    }
+    for provider, knobs in irrelevant.items():
+        base = _identity(AILIBI_LLM_PROVIDER=provider)
+        for knob in knobs:
+            value = "7" if knob.endswith(("SEED", "NUM_CTX")) else "changed"
+            assert _identity(AILIBI_LLM_PROVIDER=provider, **{knob: value}) == base, (
+                f"{knob} moved the {provider} identity but {provider} never reads it"
+            )
+
+    # RELEVANT knobs, per provider: changing one MUST move the identity.
+    relevant = {
+        "ollama": ("AILIBI_OLLAMA_HOST", "AILIBI_OLLAMA_SEED", "AILIBI_OLLAMA_NUM_CTX"),
+        "featherless": ("AILIBI_FEATHERLESS_BASE_URL",),
+        "anthropic": ("AILIBI_LLM_MEETING_MODEL", "AILIBI_LLM_TRIGGER_MODEL"),
+    }
+    for provider, knobs in relevant.items():
+        base = _identity(AILIBI_LLM_PROVIDER=provider)
+        for knob in knobs:
+            value = "7" if knob.endswith(("SEED", "NUM_CTX")) else "changed"
+            assert _identity(AILIBI_LLM_PROVIDER=provider, **{knob: value}) != base, (
+                f"{knob} left the {provider} identity unchanged but it is read"
+            )
+
+    # NORMALISED, not raw: setting a knob to the value it already resolves to is
+    # not drift, and neither is whitespace or case around the provider name.
+    assert _identity(AILIBI_LLM_PROVIDER=" OLLAMA ") == _identity(
+        AILIBI_LLM_PROVIDER="ollama"
+    )
+    assert _identity(
+        AILIBI_LLM_PROVIDER="ollama", AILIBI_OLLAMA_HOST="localhost:11434"
+    ) == _identity(AILIBI_LLM_PROVIDER="ollama")
+
+    # The prompt set rides EVERY provider — it picks the rendered templates and
+    # the recorded prompt versions regardless of who serves the tokens.
+    for provider in ("fake", "ollama", "featherless", "anthropic"):
+        assert _identity(
+            AILIBI_LLM_PROVIDER=provider, AILIBI_PROMPT_SET="9b-alt"
+        ) != _identity(AILIBI_LLM_PROVIDER=provider)
+
+    # An unbuildable provider is refused here, before any seed is recorded,
+    # rather than deep inside the first game.
+    with pytest.raises(RealPathRerankError, match="unknown AILIBI_LLM_PROVIDER"):
+        _identity(AILIBI_LLM_PROVIDER="not-a-provider")
+
+    # A malformed numeric knob keeps the recorder's own fail-loud parse.
+    with pytest.raises(ValueError, match="base-10 integer"):
+        _identity(AILIBI_LLM_PROVIDER="ollama", AILIBI_OLLAMA_SEED="not-an-int")
+
+    # No credential is ever written into an on-disk identity mapping.
+    identity = _identity(
+        AILIBI_LLM_PROVIDER="anthropic", ANTHROPIC_API_KEY="sk-secret-value"
+    )
+    assert "sk-secret-value" not in json.dumps(identity, sort_keys=True)
 
 
 def test_resume_places_labels_whose_slugs_collide(tmp_path: Path) -> None:
@@ -1885,31 +2120,27 @@ def test_a_partial_leg_manifest_never_blocks_a_later_resume(
         "AILIBI_OLLAMA_HOST",
         "AILIBI_OLLAMA_SEED",
         "AILIBI_OLLAMA_NUM_CTX",
-        "AILIBI_FEATHERLESS_BASE_URL",
-        "AILIBI_PROMPT_SET",
     ],
 )
-def test_resume_refuses_any_changed_provider_construction_knob(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, knob: str
-) -> None:
-    """EVERY effective backend knob rides the resume identity (Codex on PR #314).
+def test_every_effective_backend_knob_rides_the_resume_identity(knob: str) -> None:
+    """The endpoint, generation seed and context window are all protocol (#314).
 
     ``llm/provider.py`` builds the recorder from more than the provider and
-    model names: the endpoint, the generation seed and the context window all
-    change the bytes a recording produces. Comparing only provider+models left
-    one ranking row able to combine recordings from different effective
-    backends.
+    model names, so comparing only provider+models left one ranking row able to
+    combine recordings from different effective backends. Exercised against the
+    provider that READS these knobs — under the fake provider they are dead
+    settings, and refusing a resume over one would forfeit the verified-resume
+    benefit for nothing (Codex round 9).
     """
 
-    work_dir = tmp_path / "work"
-    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
-    monkeypatch.setenv(knob, "changed-between-invocations")
-    with pytest.raises(RealPathRerankError, match="different recording backend"):
-        run_realpath_rerank(
-            [_util_candidate()],
-            seeds=[1, 2],
-            work_dir=work_dir,
-            ranking_path=tmp_path / "ranking-2.jsonl",
-            config=_config(),
-            resume=True,
+    game_map = load_canonical_map()
+
+    def _identity(**env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=False, game_map=game_map, environment=env
         )
+
+    value = "7" if knob.endswith(("SEED", "NUM_CTX")) else "some-other-endpoint:1234"
+    assert _identity(AILIBI_LLM_PROVIDER="ollama", **{knob: value}) != _identity(
+        AILIBI_LLM_PROVIDER="ollama"
+    )

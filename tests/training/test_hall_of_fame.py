@@ -23,12 +23,17 @@ import json
 import os
 import sys
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from agents.tactical.features import TacticalFeatureEncoderV3, weights_to_hex_json
+from agents.tactical.features import (
+    TacticalFeatureEncoder,
+    TacticalFeatureEncoderV3,
+    weights_to_hex_json,
+)
 from engine.world import load_canonical_map
 from training.bakeoff.harness import load_candidate_weights
 from training.bakeoff.map_elites import (
@@ -52,6 +57,7 @@ from training.coevo.hall_of_fame import (
     sample_opponents,
     write_loadable_artifact,
 )
+from training.crew.options import OwnedTaskOptionBasis, crew_genome_length
 
 # ``scripts/`` is a bare-module namespace (no ``__init__.py``): the loadable-
 # freeze pin (Task 18.31) needs the CONSUMING entry point
@@ -870,17 +876,63 @@ def test_staleness_ledger_sha_keying_and_register() -> None:
 # policy rebuilds an object, it plays nothing.
 
 
-def _v3_genome_length() -> int:
-    """The 18.22 encoder-v3 + per-target-head family's exact genome length."""
+def _masked_mlp_genome_length(encoder_version: str, hidden: int) -> int:
+    """The masked-MLP family's exact genome length on the canonical map.
+
+    ``v2`` is the pre-18.22 encoder with NO per-target KILL head; ``v3`` is the
+    18.22 encoder-v3 vector feeding a :data:`TARGET_KILL_SLOTS`-wide head. These
+    mirror ``policy_es._encoder_for_version``'s two arms.
+    """
 
     from orchestrator.boundary import public_map_from_engine_map
 
+    encoder, target_slots = (
+        (TacticalFeatureEncoderV3(), TARGET_KILL_SLOTS)
+        if encoder_version == "v3"
+        else (TacticalFeatureEncoder(), 0)
+    )
     return policy_genome_length(
         public_map_from_engine_map(load_canonical_map()),
-        hidden=_V3_HIDDEN,
-        encoder=TacticalFeatureEncoderV3(),
-        target_slots=TARGET_KILL_SLOTS,
+        hidden=hidden,
+        encoder=encoder,
+        target_slots=target_slots,
     )
+
+
+def _v3_genome_length() -> int:
+    """The 18.22 encoder-v3 + per-target-head family's exact genome length."""
+
+    return _masked_mlp_genome_length("v3", _V3_HIDDEN)
+
+
+@lru_cache(maxsize=None)
+def _rebuildable_genome(
+    encoder_version: str, hidden: int | None = None
+) -> tuple[float, ...]:
+    """A genome the CONSUMER's own builder actually accepts for this family.
+
+    The 18.31 writer proves loadability by REBUILDING the genome before it
+    freezes anything (Codex review on PR #314), so a toy two-gene stand-in is no
+    longer a valid fixture for ANY family — it names a shape no builder has, and
+    a fixture like that is exactly the artifact the guard exists to refuse.
+    Every length here comes from the family's own public length helper rather
+    than a literal, so an encoder change moves these fixtures with it instead of
+    silently pinning a stale width.
+    """
+
+    if encoder_version in {"v2", "v3"}:
+        if hidden is None:
+            raise AssertionError(f"{encoder_version!r} needs a hidden width")
+        return (0.0,) * _masked_mlp_genome_length(encoder_version, hidden)
+    if hidden is not None:
+        raise AssertionError(f"{encoder_version!r} takes no hidden width")
+    if encoder_version == _UTILITY_ENCODER:
+        return load_candidate_weights(_UTILITY_ARTIFACT)
+    if encoder_version == "crew-option-features-v1":
+        return (0.0,) * crew_genome_length()
+    if encoder_version == "crew-option-features-v2":
+        return (0.0,) * OwnedTaskOptionBasis().genome_length()
+    raise AssertionError(f"no rebuildable fixture for {encoder_version!r}")
 
 
 def _metadata(**overrides: object) -> LoadableArtifactMetadata:
@@ -905,7 +957,7 @@ def test_write_loadable_artifact_writes_the_four_committed_files(
     carries the declared family plus the caller's provenance.
     """
 
-    genome = (0.25, -0.5, 0.75)
+    genome = _rebuildable_genome(_UTILITY_ENCODER)
     artifact_dir = tmp_path / "member"
     digest = write_loadable_artifact(
         artifact_dir,
@@ -939,7 +991,7 @@ def test_write_loadable_artifact_writes_the_four_committed_files(
 
     config = json.loads((artifact_dir / "config.json").read_text())
     assert config["encoder_version"] == _UTILITY_ENCODER
-    assert config["genome_length"] == 3
+    assert config["genome_length"] == len(genome)
     assert "hidden" not in config  # never a zero-ghost for a no-hidden family
     assert config["campaign"] == "task-18.31"
     assert config["trained_against"] == TRAINED_AGAINST_FSM
@@ -989,7 +1041,15 @@ def test_loadable_artifact_loads_through_candidate_policy_both_families(
 
 
 def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
-    """Empty genome, bad stamp token, bad hidden, owned config key, clobber."""
+    """Empty genome, bad stamp token, bad hidden, owned config key, clobber.
+
+    Every arm that is NOT about the genome shape carries a genome the builder
+    accepts, so each refusal is provably the one named in the ``match`` and not
+    the reconstruction guard firing first on a toy fixture.
+    """
+
+    v2_genome = _rebuildable_genome("v2", _V3_HIDDEN)
+    utility_genome = _rebuildable_genome(_UTILITY_ENCODER)
 
     with pytest.raises(ValueError, match="empty genome"):
         write_loadable_artifact(
@@ -998,20 +1058,30 @@ def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
             policy_id="p",
             method="m",
             encoder_version="v2",
-            hidden=8,
+            hidden=_V3_HIDDEN,
         )
     with pytest.raises(ValueError, match="non-blank"):
         write_loadable_artifact(
-            tmp_path / "b", (0.1,), policy_id="  ", method="m", encoder_version="v2"
+            tmp_path / "b",
+            v2_genome,
+            policy_id="  ",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
         )
     with pytest.raises(ValueError, match="MANIFEST-safe"):
         write_loadable_artifact(
-            tmp_path / "c", (0.1,), policy_id="a|b", method="m", encoder_version="v2"
+            tmp_path / "c",
+            v2_genome,
+            policy_id="a|b",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
         )
     with pytest.raises(ValueError, match="hidden must be >= 1"):
         write_loadable_artifact(
             tmp_path / "d",
-            (0.1,),
+            v2_genome,
             policy_id="p",
             method="m",
             encoder_version="v2",
@@ -1020,21 +1090,42 @@ def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="owned by write_loadable_artifact"):
         write_loadable_artifact(
             tmp_path / "e",
-            (0.1,),
+            v2_genome,
             policy_id="p",
             method="m",
             encoder_version="v2",
-            hidden=8,
+            hidden=_V3_HIDDEN,
             config={"hidden": 4},
         )
+    # A recognised family with a syntactically valid width and a genome the
+    # builder cannot rebuild: all four files would have been written and then
+    # refused by the consumer at load time (Codex review on PR #314).
+    with pytest.raises(ValueError, match="does not rebuild as 'v2' at hidden=8"):
+        write_loadable_artifact(
+            tmp_path / "g",
+            v2_genome[:-1],
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+        )
+    # Same defect on a width-free family, where only the LENGTH can be wrong.
+    with pytest.raises(ValueError, match="does not rebuild as"):
+        write_loadable_artifact(
+            tmp_path / "h",
+            utility_genome + (0.0,),
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
     # No partial artifact survives any of the refusals above.
-    for name in ("a", "b", "c", "d", "e"):
+    for name in ("a", "b", "c", "d", "e", "g", "h"):
         assert not (tmp_path / name).exists() or not list((tmp_path / name).iterdir())
 
     # And the writer never clobbers: a second write into the same dir raises.
     write_loadable_artifact(
         tmp_path / "f",
-        (0.1,),
+        utility_genome,
         policy_id="p",
         method="m",
         encoder_version=_UTILITY_ENCODER,
@@ -1042,7 +1133,7 @@ def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError):
         write_loadable_artifact(
             tmp_path / "f",
-            (0.2,),
+            tuple(-value for value in utility_genome),  # same shape, other bytes
             policy_id="p",
             method="m",
             encoder_version=_UTILITY_ENCODER,
@@ -1163,11 +1254,12 @@ def test_artifact_metadata_round_trips_through_the_index(tmp_path: Path) -> None
     missing-``stamp.json`` defect this task removes.
     """
 
+    genome = _rebuildable_genome(_UTILITY_ENCODER)
     hall = HallOfFame.create(
         tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
     )
     hall.add_member(
-        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+        genome, generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
     )
     index = json.loads((tmp_path / "impostor" / "hall_of_fame.json").read_text())
     assert index["artifact_metadata"]["run_label"] == "run-01-utility-champion"
@@ -1176,7 +1268,10 @@ def test_artifact_metadata_round_trips_through_the_index(tmp_path: Path) -> None
     reloaded = HallOfFame.load(tmp_path, "impostor")
     assert reloaded.artifact_metadata == _metadata()
     member = reloaded.add_member(
-        (0.3, 0.4), generation=2, origin="champion", trained_against=TRAINED_AGAINST_FSM
+        tuple(-value for value in genome),
+        generation=2,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
     )
     assert sorted(
         path.name for path in (tmp_path / "impostor" / member.path).iterdir()
@@ -1223,7 +1318,7 @@ def test_write_loadable_artifact_refuses_a_nonempty_dir(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError, match="non-empty artifact dir"):
         write_loadable_artifact(
             artifact_dir,
-            (0.1, 0.2),
+            _rebuildable_genome(_UTILITY_ENCODER),
             policy_id="p",
             method="m",
             encoder_version=_UTILITY_ENCODER,
@@ -1250,7 +1345,7 @@ def test_loading_a_loadable_pool_verifies_all_four_files(tmp_path: Path) -> None
             artifact_metadata=_metadata(),
         )
         return hall.add_member(
-            (0.1, 0.2),
+            _rebuildable_genome(_UTILITY_ENCODER),
             generation=1,
             origin="champion",
             trained_against=TRAINED_AGAINST_FSM,
@@ -1301,14 +1396,15 @@ def test_loadable_reload_verifies_the_whole_stamp_and_the_width(
     """
 
     def _fresh(root: Path, **overrides: object) -> HallOfFameMember:
+        metadata = _metadata(**overrides)
         hall = HallOfFame.create(
             root,
             "impostor",
             substrate_sha256=_SUBSTRATE,
-            artifact_metadata=_metadata(**overrides),
+            artifact_metadata=metadata,
         )
         return hall.add_member(
-            (0.1, 0.2),
+            _rebuildable_genome(metadata.encoder_version, metadata.hidden),
             generation=1,
             origin="champion",
             trained_against=TRAINED_AGAINST_FSM,
@@ -1374,7 +1470,7 @@ def test_loadable_reload_verifies_stamp_IDENTITY_not_just_syntax(
             artifact_metadata=_metadata(),
         )
         return hall.add_member(
-            (0.1, 0.2),
+            _rebuildable_genome(_UTILITY_ENCODER),
             generation=1,
             origin="champion",
             trained_against=TRAINED_AGAINST_FSM,
@@ -1431,7 +1527,10 @@ def test_loadable_reload_refuses_a_stamp_the_consumer_would_refuse(
         artifact_metadata=_metadata(),
     )
     member = hall.add_member(
-        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
     )
     stamp_path = tmp_path / "pool" / "impostor" / member.path / "stamp.json"
     stamp = json.loads(stamp_path.read_text())
@@ -1461,7 +1560,7 @@ def test_loadable_reload_verifies_config_provenance_against_the_member_row(
             artifact_metadata=_metadata(),
         )
         return hall.add_member(
-            (0.1, 0.2),
+            _rebuildable_genome(_UTILITY_ENCODER),
             generation=1,
             origin="champion",
             trained_against=TRAINED_AGAINST_FSM,
@@ -1486,6 +1585,40 @@ def test_loadable_reload_verifies_config_provenance_against_the_member_row(
         with pytest.raises(ValueError, match="provenance disagrees"):
             HallOfFame.load(root, "impostor")
 
+    # An EXTRA key is false history too: verifying only the reconstructible
+    # subset let a member carry fabricated audit provenance the hall cannot
+    # rebuild, on an artifact it certifies loadable (Codex on PR #314).
+    root = tmp_path / "extra-key"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["fabricated_lineage_note"] = "bred from a run that never happened"
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="carries unexpected keys"):
+        HallOfFame.load(root, "impostor")
+
+    # And a width-free family never carries a null-ghost ``hidden``: the writer
+    # OMITS the key, so an explicit JSON null is a file this pool did not write
+    # even though its value comparison against ``metadata.hidden`` passes.
+    root = tmp_path / "hidden-ghost"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["hidden"] = None
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="carries unexpected keys"):
+        HallOfFame.load(root, "impostor")
+
+    # A key the writer DOES own, removed, is caught by the same closed set.
+    root = tmp_path / "missing-key"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    del config["genome_length"]
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="provenance disagrees|is missing"):
+        HallOfFame.load(root, "impostor")
+
     root = tmp_path / "ok"
     _fresh(root)
     assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()
@@ -1504,6 +1637,7 @@ def test_a_failed_freeze_leaves_no_partial_artifact(
     """
 
     artifact_dir = tmp_path / "pool" / "gen-1" / "abc"
+    genome = _rebuildable_genome("v3", 8)
     real_fsync = os.fsync
     calls = {"n": 0}
 
@@ -1517,7 +1651,7 @@ def test_a_failed_freeze_leaves_no_partial_artifact(
     with pytest.raises(OSError, match="disk full"):
         write_loadable_artifact(
             artifact_dir,
-            (0.1, 0.2),
+            genome,
             policy_id="p",
             method="m",
             encoder_version="v3",
@@ -1532,7 +1666,7 @@ def test_a_failed_freeze_leaves_no_partial_artifact(
     # The retry now succeeds, which is the whole point.
     write_loadable_artifact(
         artifact_dir,
-        (0.1, 0.2),
+        genome,
         policy_id="p",
         method="m",
         encoder_version="v3",
@@ -1599,7 +1733,7 @@ def test_the_public_writer_accepts_every_loadable_family(tmp_path: Path) -> None
         artifact_dir = tmp_path / f"ok-{index}"
         write_loadable_artifact(
             artifact_dir,
-            (0.1, 0.2),
+            _rebuildable_genome(encoder_version, hidden),
             policy_id="p",
             method="m",
             encoder_version=encoder_version,

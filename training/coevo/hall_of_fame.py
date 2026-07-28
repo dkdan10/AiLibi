@@ -51,8 +51,16 @@ Three doctrines the module mirrors verbatim from committed siblings:
 
 Pure stdlib + pydantic v2 (no numpy — the sampler follows the es.py:25 /
 map_elites training-layer RNG doctrine: a pure-Python ``random.Random`` stream
-is bit-stable across machines where a numpy reduction is not). No ``engine``
-imports (the observation firewall is untouched). No global state.
+is bit-stable across machines where a numpy reduction is not). No global state.
+
+:func:`write_loadable_artifact` imports the CONSUMER's builders (and
+``engine.world.load_canonical_map`` for the map they rebuild against) so it can
+PROVE a genome reconstructs before publishing it, rather than declaring the
+family loadable and letting ``_load_candidate_policy`` discover otherwise after
+a campaign was paid for (Codex review on PR #314). This module previously
+documented itself as engine-free; that was a hygiene preference, not one of the
+four import-linter contracts, and all four still pass. The observation firewall
+(``observation`` / ``agents`` must not import upward) is untouched.
 """
 
 from __future__ import annotations
@@ -80,7 +88,16 @@ from pydantic import (
 )
 
 from agents.tactical.features import weights_from_hex_json, weights_to_hex_json
+from engine.world import load_canonical_map
 from training.bakeoff.map_elites import ArchiveCell, load_archive_cell_genomes
+from training.bakeoff.policy_es import build_masked_mlp_policy
+from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
+from training.bakeoff.utility_es import build_utility_scorer_policy
+from training.crew.options import OwnedTaskOptionBasis
+from training.crew.scorer import (
+    OWNED_TASK_ENCODER_VERSION as _CREW_OWNED_TASK_ENCODER,
+)
+from training.crew.scorer import build_crew_scorer
 
 Side = Literal["impostor", "crew"]
 
@@ -180,8 +197,8 @@ def _is_valid_trained_against(value: object) -> bool:
 
 #: The encoder families ``scripts/run_tournament.py`` can rebuild — the impostor
 #: loader's ``v2``/``v3`` masked-MLP pair plus the width-free utility scorer, and
-#: the crew loader's two option-feature families. Restated here (this module
-#: imports no builder), and a new family extends this AND the loader dispatch.
+#: the crew loader's two option-feature families. A new family extends this, the
+#: :func:`_refuse_unrebuildable_genome` dispatch below, AND the loader dispatch.
 _WIDTH_BEARING_ENCODERS: Final[frozenset[str]] = frozenset({"v2", "v3"})
 _LOADABLE_ENCODERS: Final[frozenset[str]] = _WIDTH_BEARING_ENCODERS | frozenset(
     {
@@ -197,10 +214,12 @@ def _validate_stamp_token(name: str, value: str) -> None:
 
     Restates the :class:`~orchestrator.replay.TacticalPolicyStamp` field rules
     (non-blank, no ``|`` / newline / CR — replay.py:211-254) rather than
-    importing them: this module stays pure stdlib + pydantic (no ``engine`` /
-    ``orchestrator`` graph), the same restated-literal idiom the filename
-    constants above use. ``training.realpath.RealPathCandidate`` restates the
-    identical rule set for the same reason.
+    importing them: this module pulls in no ``orchestrator`` graph, the same
+    restated-literal idiom the filename constants above use.
+    ``training.realpath.RealPathCandidate`` restates the identical rule set for
+    the same reason. (The builder seam DOES import ``engine.world`` — see the
+    module docstring — but a stamp-token rule is a two-line predicate, so
+    restating it stays cheaper than importing a pydantic model to validate it.)
     """
 
     if not value.strip():
@@ -215,6 +234,46 @@ def _validate_stamp_token(name: str, value: str) -> None:
 # --------------------------------------------------------------------------- #
 # The loadable four-file artifact (Task 18.31).                                #
 # --------------------------------------------------------------------------- #
+
+
+def _refuse_unrebuildable_genome(
+    genome: Sequence[float], *, encoder_version: str, hidden: int | None
+) -> None:
+    """Fail loud unless the CONSUMER's own builder can rebuild this genome (18.31).
+
+    Runs the same reconstruction ``scripts/run_tournament.py`` performs at load
+    time, over the canonical map it loads, so "this artifact is loadable" is a
+    proven claim rather than a declared one.
+    """
+
+    game_map = load_canonical_map()
+    try:
+        if encoder_version in _WIDTH_BEARING_ENCODERS:
+            # The caller has already refused ``hidden=None`` for this family;
+            # the assert re-states that for the type checker at the seam.
+            assert hidden is not None
+            build_masked_mlp_policy(
+                tuple(genome),
+                game_map=game_map,
+                hidden=hidden,
+                encoder_version=encoder_version,
+            )
+        elif encoder_version == _UTILITY_ENCODER_VERSION:
+            build_utility_scorer_policy(tuple(genome), game_map=game_map)
+        else:
+            build_crew_scorer(
+                tuple(genome),
+                basis=OwnedTaskOptionBasis()
+                if encoder_version == _CREW_OWNED_TASK_ENCODER
+                else None,
+            )
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"a {len(genome)}-gene genome does not rebuild as {encoder_version!r}"
+            + (f" at hidden={hidden}" if hidden is not None else "")
+            + f" ({exc}); the consuming entry point would reject this artifact, "
+            "so it is not written"
+        ) from exc
 
 
 def write_loadable_artifact(
@@ -274,6 +333,15 @@ def write_loadable_artifact(
         ("anchor_policy", anchor_policy),
     ):
         _validate_stamp_token(name, token)
+    # ``bool`` is an ``int`` SUBTYPE, so ``True`` satisfies ``>= 1`` and would
+    # reach the builder as width 1 — but ``config.json`` records JSON ``true``
+    # and ``_read_candidate_hidden`` rejects booleans outright, so every such
+    # freeze is unloadable (Codex review on PR #314).
+    if isinstance(hidden, bool):
+        raise ValueError(
+            f"hidden must be a non-boolean integer; got {hidden!r}. JSON records "
+            "it as a boolean and the consuming reader refuses that outright"
+        )
     if hidden is not None and hidden < 1:
         raise ValueError(f"hidden must be >= 1 when declared; got {hidden!r}")
     # The FAMILY contract, enforced by the public writer rather than only by the
@@ -302,6 +370,15 @@ def write_loadable_artifact(
             f"hidden={hidden!r}. Declaring one stamps a masked-MLP width its "
             "builder does not have"
         )
+    # PROVE the genome rebuilds, rather than asserting the family is loadable.
+    # A recognised family with a syntactically valid width and an incompatible
+    # genome length publishes all four files and is then rejected by
+    # ``_load_candidate_policy`` during reconstruction — the artifact is
+    # certified loadable and is not (Codex review on PR #314). I declined this
+    # in round 8 on the grounds that the builder import was too costly for this
+    # module; that was wrong on the facts — the import is clean, adds no cycle,
+    # and ``uv run lint-imports`` keeps all four contracts.
+    _refuse_unrebuildable_genome(genome, encoder_version=encoder_version, hidden=hidden)
     provenance = dict(config) if config is not None else {}
     clashing = sorted(key for key in _WRITER_OWNED_CONFIG_KEYS if key in provenance)
     if clashing:
@@ -1163,6 +1240,28 @@ class HallOfFame:
                 f"{member_dir / _CONFIG_FILENAME} provenance disagrees with this "
                 f"pool's member row: {detail}; a frozen artifact's provenance is "
                 "reconstructible, so a mismatch is false history, not a variant"
+            )
+        # The COMPLETE key set, not merely the reconstructible subset. Checking
+        # only the keys this verifier rebuilds still certified a member whose
+        # config.json carried extra stale or fabricated provenance — audit
+        # history the hall cannot reconstruct, on an artifact it calls loadable
+        # (Codex review on PR #314). ``write_loadable_artifact`` writes exactly
+        # the provenance mapping plus its own ``encoder_version`` /
+        # ``genome_length`` / ``hidden`` (the last omitted for a width-free
+        # family), so the expected set is closed and a difference either way is
+        # a file this pool did not write.
+        expected_keys = set(expected_config) | {"encoder_version"}
+        if metadata.hidden is not None:
+            expected_keys.add("hidden")
+        unexpected_config = sorted(set(config) - expected_keys)
+        absent_config = sorted(expected_keys - set(config))
+        if unexpected_config or absent_config:
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} carries unexpected keys "
+                f"{unexpected_config} and is missing {absent_config}; a loadable "
+                "freeze's config.json is exactly the reconstructible provenance "
+                "plus the writer-owned family keys, and this pool cannot vouch "
+                "for history it did not write"
             )
 
     def _write_index(self) -> None:
