@@ -4,8 +4,8 @@
 **Machinery consumed (frozen, never edited here):** training/coevo/driver.py (18.19/18.20/18.21/18.31), training/crew/ (15.16/15.22), training/realpath.py (18.17/18.31 + the 18.32 crew re-rank arm), scripts/generate_campaign_tables.py (18.31), scripts/run_tournament.py --crew-artifact (18.19)
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Date started:** 2026-07-28
-**Last evidence recorded:** 2026-07-28 (session 1)
-**Status:** IN PROGRESS — fake-path runs recording; real-path legs blocked on the 18.32 amendment (the Amend + overlap ruling, owner 2026-07-28).
+**Last evidence recorded:** 2026-07-28 (session 2 — c2 slate retested both tranches; F12 stability read RULED)
+**Status:** IN PROGRESS — fake path COMPLETE (both runs); real path: c2 slate complete (both tranches), c1 legs in flight; **the F12 read rules real-path spend STOPS after the in-flight c1 legs** (§4.0: noise 183% of the flags threshold at n=3; verdict-grade depth routes to 18.26's 50-seed protocol).
 
 Every table in this report is GENERATED from committed artifacts via
 `scripts/generate_campaign_tables.py` (the F12 lesson), never hand-assembled.
@@ -203,9 +203,40 @@ converts pace to wins on the REAL path (the 17.13 cell) is exactly what §4 meas
 
 ## 4.0 MEASUREMENT RELIABILITY — read this before any §4 number
 
-PENDING — computed via `generate_campaign_tables.py stability` after the FIRST retested
-candidate (the F12 precondition; the campaign does not proceed at a seed budget whose
-measured noise exceeds 25% of any threshold it tests).
+**Every real-path read in this report is a SCREEN, not a verdict.** Computed via
+`generate_campaign_tables.py stability` immediately after the FIRST retested candidates
+(the c2 slate, both tranches — the F12 precondition honored at hour ~1 of legs, not
+hour 40):
+
+| stability check — **2 ARMS** (2 distinct genomes) recorded on both tranches | value |
+|---|---|
+| mean absolute swing in `flags_per_meeting` between tranches | **2.0000** |
+| the floor that quantity is tested against | 1.0909 |
+| **noise as a fraction of the threshold** | **183%** |
+| arms whose derived conversion floor saturated at 1.000 on ≥1 tranche | **2 of 2** |
+| mean absolute win-rate swing, in games | 0.00 |
+| arms swinging ≥ 1 game in win rate between tranches | **0 of 2** |
+| referee PASSes recorded / retested / replicated | **2 / 2 / 0** |
+
+Machine-readable: `realpath/run-c2-crew-general/measurement-stability-c2.json`.
+Input provenance (disclosed): the committed rankings include the gen-0 arm, which
+recorded ZERO meetings on tranche 1 — an unmeasured `flags_per_meeting` gauge the
+stability tool refuses outright (CF3); the read above runs over the two arms measured
+on BOTH tranches, via derived input copies at `stability-inputs-filtered/` (gen-0 row
+dropped, ranks re-indexed contiguously, no measured value altered). The native
+exclusion-with-reporting fix is routed, never hand-patched (CF3).
+
+**Consequence (the F12 ruling, session 2):** 183% ≫ the 25% precondition. Both t1
+referee PASSes failed to replicate on fresh seeds — the 18.24 `f280962f…` lesson
+reproduced exactly. At the 3-seed tranche budget, referee/flags verdicts are NOT
+resolvable for this campaign. Disposition: the two in-flight c1 legs complete the
+pre-registered two-tranche core (their arms need the retest for the c1-side stability
+row), then real-path spend STOPS — no gen-champion legs, no additional n=3 comparator
+legs (the committed 18.24 back-fill rows already carry the ea4bc955-vs-FSM cell) —
+and verdict-grade depth routes to 18.26's 50-seed protocol with its pre-registered
+UNRESOLVABLE third outcome. Duration honesty: the ~30–40 h leg envelope the contract
+priced is deliberately NOT spent at a noise level that cannot support the verdicts it
+would buy.
 
 ## 4. Real-path re-rank legs (18.17/18.31/18.32 machinery; 17.14 table discipline)
 
@@ -225,6 +256,18 @@ sequential, `meeting_timeout_seconds=900`):**
 
 The trained-vs-gen-0 delta against the SAME frozen opponent is the counter-adaptation
 cell; the FSM-opponent comparator legs (opponent None) follow the stability read.
+
+**Posture amendment (session 2, owner discussion):** the two-leg directive is run as a
+ROLLING pair — when a leg finishes, the next protocol leg launches immediately rather
+than waiting for its pair-mate (leg-c2-t2 launched beside the still-recording leg-c1-t1
+the moment this was ratified). Rationale: the F7 constraint was never overlap
+correctness (per-element replays, no cross-game state, no real-path byte-determinism
+claim) but provider throughput + the library's leg-owns-its-tranche recording model; a
+lone meeting-rich game leaves plan capacity idle during its sequential meeting phases,
+which a second in-flight leg soaks. True element-level work-stealing (two workers
+pulling seeds from ONE leg) needs a record/score split the tranche flock exists to
+refuse today — routed to 18.28's deferred ledger as a next-campaign ergonomics item,
+never a mid-campaign amendment (the 3-seed tranche shape is F12-load-bearing).
 Pre-screen: none rides these legs — the slate ordering is protocol-fixed (gen-0 control
 + lineage swap champions), not conviction-influenced, so blocker-4's pairing obligation
 does not bind; the native `leg-log.jsonl` is the ordering evidence (Decision, session 2).
@@ -286,14 +329,29 @@ stamp only). The only committed dual-stamp recorder (`run_tournament.py --crew-a
 produces no ranking/leg-log/resume/tranche machinery. Routed as Task 18.32 (owner
 ruling 2026-07-28: Amend + overlap — fake-path evolution proceeds, real legs wait).
 
-**CF2 — the general-base lineage is starvation-family on the real path; the conviction
-term moves it toward the evidence economy but not past the validity floor.** The fake
-path's watch (§3.2: conviction 635 uses, 0 at gen-1) predicted it; the real path
-confirmed it (§4.1): gen-0 records zero meetings vs the frozen champion, trained arms
-one meeting per 3 games with above-floor supply (2.0 flags/meeting) and a correct
-ejection each. The 15.22 structural guard exists only on the owned-task basis — this is
-the measured cost of its absence on v1. Selection consequence: c2 arms cannot be 18.26
-finalists from this evidence; any promotion would need a validity-passing tranche first.
+**CF2 — the general-base lineage is meeting-scarce on the real path; the conviction
+term moves it toward the evidence economy, and the effect is REAL but UNSTABLE at n=3.**
+The fake path's watch (§3.2: conviction 635 uses, 0 at gen-1) predicted scarcity; the
+real path measured it both ways: tranche 1 — gen-0 zero meetings, trained arms 0.33
+meeting rate with 2.0 flags/meeting and a correct ejection each, ALL arms validity-FAIL;
+tranche 2 — both trained arms validity-PASS (meeting rate cleared 0.60; selection 5.83 /
+1.67) with 0.0 measured flags, gen-0 still validity-FAIL but winning a game (0.667
+impostor win). The trained-vs-gen-0 meeting-rate delta persists across BOTH tranches
+(the counter-adaptation direction is consistent); every per-meeting gauge swings at
+full scale (§4.0). The 15.22 structural guard exists only on the owned-task basis —
+v1's meeting scarcity is the measured cost of its absence. Selection consequence:
+no c2 arm survives this campaign's selection bars at n=3; whether the trained arms'
+validity-passing behavior is real is exactly a 50-seed (18.26) question.
+
+**CF3 — the stability instrument refuses the crew campaign's data shapes (routed, not
+patched).** Two guards, both correct for 18.24's corpus, both tripped by crew data:
+(a) a zero-meeting arm has an unmeasured `flags_per_meeting`, and the tool refuses the
+ENTIRE read rather than reporting the arm as unmeasured-on-a-tranche; (b) a
+derived input set with a dropped arm trips the contiguous-rank total-order guard.
+Session-2 workaround: disclosed derived copies (§4.0). The routed fix is native
+exclusion-with-reporting in `generate_campaign_tables.py stability` (an
+`arms_unmeasured_on_a_tranche` count beside the swing means) — 18.28's deferred
+ledger, alongside the record/score-split ergonomics item (§4 posture amendment).
 
 <!-- SESSION-FINDINGS: extended as they land -->
 
