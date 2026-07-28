@@ -1836,10 +1836,16 @@ retested candidate. The
 twin reproduced the impostor champion lineage sha-for-sha while CREW selection diverged —
 the term's selection-relevant effect is crew-side, exactly where this campaign wants it
 (quote the committed twin artifacts, not the report prose — report §12 Errata lists the
-prose defects). Runbook corrections measured by 18.24 (F7): one real-path leg at a time,
-`meeting_timeout_seconds=900`, 3-seed tranches — but those numbers were measured under a
-partially-impaired provider window, so re-measure at healthy status before repricing this
-campaign's duration; sweep legs follow the recording-dir convention (`roster.json`
+prose defects). Runbook (owner directive 2026-07-28, superseding 18.24's F7 one-leg
+correction): run TWO legs concurrently — always on different tranches or different
+work_dirs (the 18.31 tranche claim refuses same-tranche concurrency by design), staggered
+starts with jittered backoff, keeping F7's `meeting_timeout_seconds=900` and 3-seed
+tranches; each leg stays internally sequential (the library records one game at a time —
+concurrency exists ONLY at the leg level). F7's one-leg numbers were measured under a
+partially-impaired provider window; the two-leg default is the healthy-provider posture,
+so if impairment symptoms reappear (rising timeout or retry-exhaustion rates in the
+native leg logs), degrade to one leg and record the switch in the report — duration
+honesty prices whichever posture actually ran. Sweep legs follow the recording-dir convention (`roster.json`
 present, audit sidecars out — the campaign's F5). Founder-game pricing (F3) is moot while
 founders cannot load (see the founder-honesty block above); run-05's 2×2 reduced shape is
 the sizing precedent if any free-policy side runs. Stamp
