@@ -1448,6 +1448,27 @@ def test_utility_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
     _assert_no_disk_mutation(tmp_path)
 
 
+def test_a_boolean_hidden_width_is_refused_not_coerced(tmp_path: Path) -> None:
+    """``hidden=True`` is a guess, not a width of 1 (Codex on PR #314).
+
+    ``bool`` is an ``int`` subtype, so ``True`` satisfies the ``>= 1`` check and
+    reads as width 1 — and ``CoevoSideConfig`` is a plain dataclass, so nothing
+    coerces or rejects it on the way in. "Yes, this family has a hidden layer"
+    would silently become "width 1", which is exactly the inferred width §12
+    Errata item 1 records the cost of. Refused at the side config, before any
+    work dir exists.
+    """
+
+    for boolean in (True, False):
+        config = _make_config(
+            tmp_path,
+            impostor=_impostor_side(hidden=boolean),
+        )
+        with pytest.raises(ValueError, match="non-boolean integer"):
+            run_alternating_freeze(config)
+        _assert_no_disk_mutation(tmp_path)
+
+
 def test_crew_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
     """The crew scorer takes no head width either (Codex on PR #314).
 

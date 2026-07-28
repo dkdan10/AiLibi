@@ -1151,6 +1151,14 @@ def test_loadable_artifact_metadata_validation() -> None:
         _metadata(hidden=0)
     with pytest.raises(ValidationError):
         _metadata(anchor_weight=float("inf"))
+    # A BOOLEAN width, refused before pydantic's lax mode coerces it. `bool` is
+    # an `int` subtype, so `True` would have become a silent width of 1 — an
+    # inferred width, which is the §12 Errata item-1 ambiguity (Codex on #314).
+    # This needs a mode="before" validator: an after-validator only ever sees
+    # the already-coerced `1`.
+    for boolean in (True, False):
+        with pytest.raises(ValidationError, match="non-boolean integer"):
+            _metadata(hidden=boolean)
 
     metadata = _metadata(hidden=8, encoder_version="v3", anchor_weight=4.0)
     assert (

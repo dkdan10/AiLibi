@@ -472,6 +472,29 @@ class LoadableArtifactMetadata(BaseModel):
     anchor_weight: float | None = None
     policy_id_prefix: str = "coevo"
 
+    @field_validator("hidden", mode="before")
+    @classmethod
+    def _refuse_boolean_hidden(cls, value: object) -> object:
+        """Refuse ``hidden=True`` BEFORE pydantic coerces it to ``1`` (18.31).
+
+        ``mode="before"``, deliberately: pydantic v2's lax mode coerces ``True``
+        into ``1``, so an ``mode="after"`` validator only ever sees an ``int``
+        and the boolean is already gone. That coercion is not harmful in the way
+        a raw ``True`` reaching :func:`write_loadable_artifact` is — the frozen
+        ``config.json`` records ``1``, not JSON ``true``, so the artifact still
+        loads — but it silently turns "yes, this family has a hidden layer" into
+        "width 1", which is a silent fallback (AGENTS.md) and exactly the kind of
+        guessed width §12 Errata item 1 records the cost of. Declaring a width
+        is the caller's job; inferring one from a boolean is nobody's.
+        """
+
+        if isinstance(value, bool):
+            raise ValueError(
+                f"hidden must be a non-boolean integer; got {value!r}, which "
+                "pydantic would silently coerce to a width of 1"
+            )
+        return value
+
     @model_validator(mode="after")
     def _validate(self) -> LoadableArtifactMetadata:
         for name, token in (

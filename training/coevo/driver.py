@@ -861,6 +861,19 @@ def _validate_side(
     # ``hidden`` width the consumer reads from the artifact's config.json
     # (``scripts/run_tournament.py`` ``_read_candidate_hidden``): a side that
     # freezes without declaring it produces unloadable artifacts.
+    # ``bool`` is an ``int`` SUBTYPE, so ``True`` satisfies ``>= 1`` and reads
+    # as a width of 1. ``CoevoSideConfig`` is a plain dataclass, so nothing
+    # coerces or rejects it on the way in, and "yes, this family has a hidden
+    # layer" would silently become "width 1" — a guessed width, which is the
+    # ambiguity §12 Errata item 1 records the cost of (Codex review on PR #314).
+    # Checked here as well as on the metadata model so the message names the
+    # SIDE CONFIG the operator actually wrote.
+    if isinstance(config.hidden, bool):
+        raise ValueError(
+            f"the {expected_side} side config declares hidden={config.hidden!r}; "
+            "a masked-MLP head width is a non-boolean integer, and inferring a "
+            "width of 1 from a boolean is a guess this campaign does not make"
+        )
     if config.hidden is not None and config.hidden < 1:
         raise ValueError(
             f"the {expected_side} side config declares hidden={config.hidden!r}; "
