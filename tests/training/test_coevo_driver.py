@@ -86,6 +86,7 @@ from training.coevo.driver import (
     COEVO_CAMPAIGN_ROW_SCHEMA_VERSION,
     COEVO_FREEZE_METHOD,
     EXPLOITER_ORIGIN,
+    GEN_CHAMPIONS_DIRNAME,
     GENERATION_CHAMPION_ORIGIN,
     SWAP_CHAMPION_ORIGIN,
     CoevoCampaignConfig,
@@ -910,23 +911,41 @@ def test_the_work_dir_and_the_hall_root_may_not_overlap(tmp_path: Path) -> None:
     first champion is frozen. The campaign spent every paid game and only the
     NEXT load failed, on a hall the campaign had corrupted itself.
 
-    Pinned in both directions and demonstrated, not just asserted: the second
-    half shows the load that the accepted configuration would have broken.
+    The predicate is the SIDE DIR, not the hall root. The first version refused
+    any containment either way, which blocked `hall_root = work_dir / "halls"` —
+    a natural layout whose trees are siblings with nothing overlapping (Codex
+    review on PR #314). Both halves are pinned here, because a guard that
+    over-refuses is a defect in the same way an absent one is.
     """
 
     for side in ("impostor", "crew"):
         config = _make_config(
             tmp_path / side, work_dir=tmp_path / side / "halls" / side
         )
-        with pytest.raises(ValueError, match="is inside the hall root"):
+        with pytest.raises(ValueError, match=f"is inside the {side} hall directory"):
             run_alternating_freeze(config)
         assert not (tmp_path / side / "halls").exists()
 
-    nested = _make_config(
-        tmp_path / "nested", hall_root=tmp_path / "nested" / "work" / "halls"
+    # A gen-*-named subdir of a side dir is the same collision: the subdir is
+    # itself read as a generation bucket, so the campaign's own files become its
+    # members. Verified below alongside the direct case.
+    deep = _make_config(
+        tmp_path / "deep", work_dir=tmp_path / "deep" / "halls" / "impostor" / "gen-x"
     )
-    with pytest.raises(ValueError, match="is inside work_dir"):
-        run_alternating_freeze(nested)
+    with pytest.raises(ValueError, match="is inside the impostor hall directory"):
+        run_alternating_freeze(deep)
+
+    # NO OVER-REACH: the halls nested under the work dir is a legitimate layout,
+    # and it is proven by RUNNING it — the campaign completes and both halls
+    # reload, which is the operation the over-broad guard was purporting to
+    # protect.
+    nested_root = tmp_path / "nested"
+    nested = _make_config(nested_root, hall_root=nested_root / "work" / "halls")
+    result = run_alternating_freeze(nested)
+    assert result.total_games == _BASELINE_GAMES
+    for side in ("impostor", "crew"):
+        HallOfFame.load(nested_root / "work" / "halls", cast(Side, side))
+    assert (nested_root / "work" / GEN_CHAMPIONS_DIRNAME).is_dir()
 
     # The harm, shown directly: a gen-champions tree inside a side dir is what
     # the refusal above prevents, and it is fatal to the hall that holds it.

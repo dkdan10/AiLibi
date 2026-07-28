@@ -112,6 +112,26 @@ def _util_candidate(label: str = "utility-es") -> RealPathCandidate:
     )
 
 
+def _claim_entry(
+    label: str, directory: str, candidate: RealPathCandidate | None = None
+) -> dict[str, object]:
+    """One leg-manifest candidate entry, shaped exactly as the recorder writes it.
+
+    Fixtures must not be thinner than the real artifact: an entry without the
+    identity fields is corrupted evidence the recorder refuses, so a fixture that
+    omitted them would be pinning a state that cannot occur.
+    """
+
+    resolved = candidate if candidate is not None else _util_candidate(label=label)
+    return {
+        "dir": directory,
+        "encoder_version": resolved.encoder_version,
+        "hidden": resolved.hidden,
+        "label": label,
+        "weights_sha256": realpath._genome_digest(resolved.genome),
+    }
+
+
 def _pol_candidate(label: str = "policy-es") -> RealPathCandidate:
     return RealPathCandidate(
         label=label,
@@ -3023,7 +3043,7 @@ def test_a_claim_is_matched_to_the_candidate_being_allocated(tmp_path: Path) -> 
     work_dir.mkdir()
     (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
         json.dumps(
-            {"tranche": "1-2", "candidates": [{"label": "arm a", "dir": "000-arm-a"}]}
+            {"tranche": "1-2", "candidates": [_claim_entry("arm a", "000-arm-a")]}
         ),
         encoding="utf-8",
     )
@@ -3111,6 +3131,84 @@ def test_a_reused_label_may_not_inherit_a_reservation(tmp_path: Path) -> None:
         )[0].name
         == "000-arm-a"
     )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ({"weights_sha256": None}, "without"),
+        ({"encoder_version": None}, "without"),
+        ({"hidden": None}, "without"),
+        ({"weights_sha256": 17}, "malformed"),
+        ({"encoder_version": ["v1"]}, "malformed"),
+        ({"hidden": "8"}, "malformed"),
+        ({"hidden": True}, "malformed"),
+    ],
+    ids=[
+        "no-digest",
+        "no-family",
+        "no-width",
+        "digest-not-a-string",
+        "family-not-a-string",
+        "width-a-string",
+        "width-a-bool",
+    ],
+)
+def test_a_malformed_manifest_identity_is_refused_not_downgraded(
+    tmp_path: Path, mutation: dict[str, object], expected: str
+) -> None:
+    """Unreadable identity is corrupted evidence, not a legacy format (Codex #314).
+
+    The round-18 version returned ``None`` for an entry whose identity fields were
+    missing or malformed, and callers read that as "this claim speaks for the
+    label only" — a silent weakening exactly where the strength is load-bearing.
+    A fresh invocation with changed bytes could reclaim the malformed manifest's
+    reservation, spend its games, and leave the tranche holding contradictory
+    manifests. There is no legacy format to accommodate: leg manifests arrived
+    with this task and have always carried these three fields.
+
+    ``hidden: None`` is deliberately expressed as key REMOVAL below, not as a null
+    value — the utility family records a null width legitimately, and conflating
+    the two is the bug the round-18 pin caught.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    original = _util_candidate(label="arm-a")
+    entry = _claim_entry("arm-a", "000-arm-a", original)
+    for key, value in mutation.items():
+        if value is None:
+            del entry[key]
+        else:
+            entry[key] = value
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps({"tranche": "1-2", "candidates": [entry]}), encoding="utf-8"
+    )
+
+    moved = original.model_copy(
+        update={"genome": tuple(original.genome[:-1]) + (original.genome[-1] + 1.0,)}
+    )
+    with pytest.raises(RealPathRerankError, match=expected):
+        run_realpath_rerank(
+            [moved],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(),
+        )
+    # Refused BEFORE allocation: nothing recorded, no second manifest to poison
+    # the tranche's future resumes.
+    assert not (work_dir / "000-arm-a").exists()
+    assert (
+        len(list(work_dir.glob(f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-*.json")))
+        == 1
+    )
+    # The allocator refuses it too, rather than reading the claim as label-only
+    # and handing the reservation to whichever candidate wears the name.
+    with pytest.raises(RealPathRerankError, match=expected):
+        realpath._resolve_candidate_dirs(
+            work_dir, tranche="1-2", candidates=[moved], resume=False
+        )
 
 
 def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:
@@ -3262,7 +3360,7 @@ def test_a_stale_same_tranche_claim_is_still_a_reservation(tmp_path: Path) -> No
     # never created it. ``_safe_slug`` maps "arm a" and "arm-a" onto one slug.
     (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
         json.dumps(
-            {"tranche": "1-2", "candidates": [{"label": "arm a", "dir": "000-arm-a"}]}
+            {"tranche": "1-2", "candidates": [_claim_entry("arm a", "000-arm-a")]}
         ),
         encoding="utf-8",
     )
@@ -3312,7 +3410,7 @@ def test_ranking_path_may_not_name_another_legs_claimed_directory(
         json.dumps(
             {
                 "tranche": "9-9",
-                "candidates": [{"label": "other-arm", "dir": "000-other-arm"}],
+                "candidates": [_claim_entry("other-arm", "000-other-arm")],
             }
         ),
         encoding="utf-8",

@@ -1638,13 +1638,14 @@ class _DirClaim(NamedTuple):
     """One leg manifest's reservation of one candidate directory.
 
     ``identity`` is the ``(digest, encoder_version, hidden)`` triple the manifest
-    recorded for the label, or ``None`` for a manifest written before this task
-    added those fields — see :func:`_recorded_identity`.
+    recorded for the label. Never absent: :func:`_recorded_identity` refuses a
+    manifest that cannot supply one, so a claim is always a claim by a specific
+    candidate rather than by a name.
     """
 
     tranche: str
     label: str
-    identity: tuple[str, str, int | None] | None
+    identity: tuple[str, str, int | None]
 
 
 def _claimed_candidate_dirs(work_dir: Path) -> dict[str, _DirClaim]:
@@ -1696,7 +1697,7 @@ def _claimed_candidate_dirs(work_dir: Path) -> dict[str, _DirClaim]:
                 claimed[recorded_dir] = _DirClaim(
                     tranche=tranche,
                     label=label,
-                    identity=_recorded_identity(entry),
+                    identity=_recorded_identity(entry, manifest=path),
                 )
     return claimed
 
@@ -1720,45 +1721,68 @@ def _claim_belongs_to(
 ) -> bool:
     """Is this reservation THIS candidate's, to reclaim or to record into?
 
-    Tranche and label first, then identity. A claim with no recorded identity
-    (an older manifest) speaks for the label only, so it still belongs to the
-    label — refusing to reclaim it would re-open the round-17 leak, where a
-    candidate could never reach its own reserved directory and leaked a fresh one
-    on every retry.
+    Tranche, label AND identity — all three, with no weaker fallback. Every claim
+    carries an identity because :func:`_recorded_identity` refuses a manifest that
+    lacks one, so there is no branch here that reduces ownership to the label.
     """
 
-    if claim.tranche != tranche or claim.label != candidate.label:
-        return False
-    return claim.identity is None or claim.identity == _candidate_identity(candidate)
+    return (
+        claim.tranche == tranche
+        and claim.label == candidate.label
+        and claim.identity == _candidate_identity(candidate)
+    )
 
 
 def _recorded_identity(
-    entry: Mapping[str, object],
-) -> tuple[str, str, int | None] | None:
-    """One manifest candidate entry's identity triple, or ``None`` if it has none.
-
-    ``None`` is a recorded fact about an OLDER manifest — one written before this
-    task added the identity fields — not a shrug. Callers treat it as "this claim
-    speaks for the label only", which is exactly what such a manifest asserts.
+    entry: Mapping[str, object], *, manifest: Path
+) -> tuple[str, str, int | None]:
+    """One manifest candidate entry's identity triple, or fail loud (18.31).
 
     Absence is decided by the KEYS, not by their values: the utility family takes
     no ``hidden`` width and records ``null`` for it, so reading a null width as
-    "no identity here" would have exempted every utility candidate from the very
-    check this exists for.
+    "no identity here" would exempt every utility candidate from the very checks
+    this feeds.
+
+    A missing or malformed field is REFUSED rather than reported as an older
+    manifest without one. The first version returned ``None`` for that case and
+    callers read it as "this claim speaks for the label only" — which is a silent
+    weakening exactly where the strength is load-bearing: a fresh invocation with
+    changed bytes could then reclaim the malformed manifest's reservation, spend
+    its games, and leave the tranche holding contradictory manifests (Codex review
+    on PR #314). The legacy format that fallback was written for does not exist:
+    leg manifests arrived with this task and have carried these three fields since
+    they were introduced, and ``_refuse_protocol_drift`` has always indexed them
+    unconditionally. So a valid-JSON manifest missing them is corrupted evidence,
+    and this module does not act on evidence it cannot read.
     """
 
-    if not {"weights_sha256", "encoder_version", "hidden"} <= set(entry):
-        return None
+    missing = sorted({"weights_sha256", "encoder_version", "hidden"} - set(entry))
+    if missing:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry without {missing}; every leg "
+            "manifest this recorder writes carries the candidate's digest, encoder "
+            "family and hidden width, so one that does not is corrupted evidence. "
+            "Reservations are matched on that identity — treating the entry as "
+            "label-only would let a different genome inherit its directory"
+        )
     digest = entry["weights_sha256"]
     family = entry["encoder_version"]
     hidden = entry["hidden"]
-    if not isinstance(digest, str) or not isinstance(family, str):
-        return None
-    if hidden is None:
-        return (digest, family, None)
-    if isinstance(hidden, int) and not isinstance(hidden, bool):
-        return (digest, family, hidden)
-    return None
+    if (
+        not isinstance(digest, str)
+        or not isinstance(family, str)
+        or not (
+            hidden is None or (isinstance(hidden, int) and not isinstance(hidden, bool))
+        )
+    ):
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry whose identity is malformed "
+            f"(weights_sha256={digest!r}, encoder_version={family!r}, "
+            f"hidden={hidden!r}); a digest and family are strings and a width is "
+            "an integer or null. Corrupted evidence is refused, never downgraded "
+            "to a label-only claim"
+        )
+    return (digest, family, hidden)
 
 
 def _refuse_reused_label_identity(
@@ -1800,9 +1824,11 @@ def _refuse_reused_label_identity(
             continue
         for entry in manifest.get("candidates", []):
             label = entry.get("label")
-            recorded = _recorded_identity(entry)
-            if not isinstance(label, str) or recorded is None:
+            if not isinstance(label, str):
                 continue
+            # Read BEFORE the label filter would let it past: a malformed entry
+            # is refused whether or not this slate happens to carry its label.
+            recorded = _recorded_identity(entry, manifest=path)
             if label in wanted and wanted[label] != recorded:
                 raise RealPathRerankError(
                     f"a prior leg manifest ({path}) records candidate label "
