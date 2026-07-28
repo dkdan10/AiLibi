@@ -1586,3 +1586,57 @@ def test_resume_refuses_a_changed_recording_backend(
             config=_config(),
             resume=True,
         )
+
+
+def test_resume_places_labels_whose_slugs_collide(tmp_path: Path) -> None:
+    """Distinct labels sharing a SLUG must still resume (Codex on PR #314 follow-up).
+
+    ``_safe_slug`` is not injective: ``"arm a"`` and ``"arm-a"`` are two labels
+    the recorder accepts as distinct (uniqueness is checked on the LABEL) that
+    map onto one slug. Round 6 resolved resume directories by globbing
+    ``*-<slug>``, so such a leg recorded fine into ``000-arm-a``/``001-arm-a``
+    and could then NEVER resume — every lookup found two dirs and refused as
+    ambiguous. The manifest now records each candidate's directory, so the
+    label maps to it exactly.
+    """
+
+    work_dir = tmp_path / "work"
+    candidates = [_util_candidate("arm a"), _util_candidate("arm-a")]
+    run_realpath_rerank(
+        candidates,
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+    )
+    assert sorted(p.name for p in work_dir.iterdir() if p.is_dir()) == [
+        "000-arm-a",
+        "001-arm-a",
+    ]
+    # The manifest states which dir belongs to which label.
+    manifest = json.loads((work_dir / "leg-1-000.json").read_text())
+    assert {entry["label"]: entry["dir"] for entry in manifest["candidates"]} == {
+        "arm a": "000-arm-a",
+        "arm-a": "001-arm-a",
+    }
+
+    resumed = run_realpath_rerank(
+        candidates,
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert all(entry.resumed for row in resumed.rows for entry in row.seed_telemetry)
+
+    # And narrowing to one of the colliding labels still finds ITS dir.
+    narrowed = run_realpath_rerank(
+        [_util_candidate("arm-a")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert [entry.resumed for entry in narrowed.top().seed_telemetry] == [True]

@@ -915,6 +915,7 @@ def _open_leg_manifest(
     config: RealPathRerankConfig,
     ranking_path: Path,
     backend: Mapping[str, object],
+    candidate_dirs: Sequence[Path],
 ) -> tuple[str, Path]:
     """Allocate this leg's invocation id by exclusively creating its manifest.
 
@@ -930,12 +931,16 @@ def _open_leg_manifest(
             "backend": dict(backend),
             "candidates": [
                 {
+                    # The recording dir rides the manifest so a later resume
+                    # places each label EXACTLY, without re-deriving it from a
+                    # non-injective slug (Codex review on PR #314).
+                    "dir": directory.name,
                     "encoder_version": candidate.encoder_version,
                     "hidden": candidate.hidden,
                     "label": candidate.label,
                     "weights_sha256": _genome_digest(candidate.genome),
                 }
-                for candidate in candidates
+                for candidate, directory in zip(candidates, candidate_dirs, strict=True)
             ],
             "config": config.model_dump(mode="json"),
             "invocation": f"{ordinal:03d}",
@@ -1329,41 +1334,89 @@ def _refuse_protocol_drift(
             )
 
 
-def _resolve_candidate_dir(
-    work_dir: Path, *, index: int, label: str, resume: bool
-) -> Path:
-    """This candidate's recording dir, found by LABEL when resuming (18.31).
+def _recorded_candidate_dirs(work_dir: Path, *, tranche: str) -> dict[str, str]:
+    """``label -> recorded dir name`` from this tranche's prior manifests (18.31).
+
+    Manifests are read newest-last, so the most recent invocation's directory
+    wins for any label recorded more than once.
+    """
+
+    recorded: dict[str, str] = {}
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # ``_refuse_protocol_drift`` already read and validated every prior
+            # manifest before this runs, so an unreadable one cannot reach here
+            # under resume; skipping keeps this helper total.
+            continue
+        for entry in manifest.get("candidates", []):
+            recorded_dir = entry.get("dir")
+            if isinstance(recorded_dir, str) and recorded_dir:
+                recorded[entry["label"]] = recorded_dir
+    return recorded
+
+
+def _resolve_candidate_dirs(
+    work_dir: Path,
+    *,
+    tranche: str,
+    candidates: Sequence[RealPathCandidate],
+    resume: bool,
+) -> tuple[Path, ...]:
+    """Each candidate's recording dir, resolved by EXACT LABEL when resuming (18.31).
 
     Non-resume runs keep the historic ``<index>-<slug>`` name exactly. Under
     ``resume`` the index is the wrong key: ``_refuse_protocol_drift``
-    deliberately permits a NARROWED slate (re-running the two candidates a 503
+    deliberately permits a NARROWED slate (re-running the candidates a 503
     interrupted is the normal case), and narrowing ``[A, B, C]`` to ``[B, C]``
     renumbers ``001-B``/``002-C`` into ``000-B``/``001-C``. The resume would
     then look straight past every verified recording it exists to reuse and
     re-record the whole leg — 30-40 h repeated (Codex review on PR #314).
 
-    So a resume looks for an EXISTING ``*-<slug>`` dir and uses it wherever it
-    sits, falling back to the enumerated name when the label has no recordings
-    yet (a candidate added to the slate). Two dirs for one slug is unresolvable
-    ambiguity about which holds the real bytes, and fails loud.
+    The LABEL is the key, and it is read from the manifest rather than
+    reconstructed from the filesystem. An earlier revision globbed
+    ``*-<slug>``, which is not injective: ``_safe_slug`` maps ``"arm a"`` and
+    ``"arm-a"`` — two labels the recorder accepts as distinct — onto one slug,
+    so a leg carrying both recorded fine and could then NEVER resume, because
+    every lookup found two dirs and refused as ambiguous. Recording the
+    directory in the manifest makes the mapping exact.
+
+    Legacy work dirs whose manifests predate the ``dir`` field fall back to the
+    unambiguous slug walk, and to the enumerated name when a label has no
+    recordings yet (a candidate added to the slate). An ambiguous legacy walk
+    fails loud rather than guessing which dir holds the bytes.
     """
 
-    enumerated = work_dir / f"{index:03d}-{_safe_slug(label)}"
+    enumerated = tuple(
+        work_dir / f"{index:03d}-{_safe_slug(candidate.label)}"
+        for index, candidate in enumerate(candidates)
+    )
     if not resume:
         return enumerated
-    slug = _safe_slug(label)
-    existing = sorted(
-        path
-        for path in work_dir.glob(f"*-{slug}")
-        if path.is_dir() and path.name[3:] == f"-{slug}"
-    )
-    if len(existing) > 1:
-        raise RealPathRerankError(
-            f"resume found {len(existing)} recording dirs for candidate {label!r} "
-            f"({[p.name for p in existing]}); which one holds this candidate's "
-            "bytes is unresolvable — re-record the leg into a fresh work dir"
+
+    recorded = _recorded_candidate_dirs(work_dir, tranche=tranche)
+    resolved: list[Path] = []
+    for fallback, candidate in zip(enumerated, candidates, strict=True):
+        name = recorded.get(candidate.label)
+        if name is not None:
+            resolved.append(work_dir / name)
+            continue
+        slug = _safe_slug(candidate.label)
+        existing = sorted(
+            path
+            for path in work_dir.glob(f"*-{slug}")
+            if path.is_dir() and path.name[3:] == f"-{slug}"
         )
-    return existing[0] if existing else enumerated
+        if len(existing) > 1:
+            raise RealPathRerankError(
+                f"resume cannot place candidate {candidate.label!r}: no manifest "
+                f"records its directory and {len(existing)} dirs share its slug "
+                f"({[p.name for p in existing]}); which one holds this candidate's "
+                "bytes is unresolvable — re-record the leg into a fresh work dir"
+            )
+        resolved.append(existing[0] if existing else fallback)
+    return tuple(resolved)
 
 
 def _recording_backend_identity(
@@ -1946,6 +1999,9 @@ def run_realpath_rerank(
             candidates=candidates,
             backend=backend,
         )
+    candidate_dirs = _resolve_candidate_dirs(
+        work_dir, tranche=tranche, candidates=candidates, resume=resume
+    )
     invocation, manifest_path = _open_leg_manifest(
         work_dir,
         tranche=tranche,
@@ -1956,6 +2012,7 @@ def run_realpath_rerank(
         config=resolved_config,
         ranking_path=ranking_path,
         backend=backend,
+        candidate_dirs=candidate_dirs,
     )
     leg_log = RealPathLegLog(
         work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
@@ -2000,9 +2057,7 @@ def run_realpath_rerank(
             stamp = _candidate_stamp(candidate)
             digest = stamp.weights_sha256
             agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
-            candidate_dir = _resolve_candidate_dir(
-                work_dir, index=index, label=candidate.label, resume=resume
-            )
+            candidate_dir = candidate_dirs[index]
             candidate_dir.mkdir(parents=True, exist_ok=resume)
             if resume:
                 _refuse_foreign_replays(
