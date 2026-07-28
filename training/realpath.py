@@ -114,7 +114,10 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from agents.base import AgentInterface
-from agents.strategic.prompts.loader import resolve_prompt_set
+from agents.strategic.prompts.loader import (
+    impostor_roll_call_enabled,
+    resolve_prompt_set,
+)
 from agents.tactical.features import weights_to_hex_json
 from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
@@ -293,6 +296,11 @@ TRANCHE_CLAIM_FILENAME_STEM: Final[str] = "tranche-claim"
 #: (``orchestrator/game.py``), so two prompt sets are two recording protocols on
 #: every provider — including the fake one (Codex review on PR #314).
 _PROMPT_SET_KEY: Final[str] = "prompt_set"
+
+#: The 18.10 impostor-answer lever (``AILIBI_IMPOSTOR_ROLL_CALL``). It selects
+#: template VARIANTS inside a prompt set, so it is a second protocol axis the
+#: set name does not cover (Codex review on PR #314).
+_ROLL_CALL_KEY: Final[str] = "impostor_roll_call"
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
 #: compares before adopting a recording as this candidate's. The digest alone is
@@ -1633,6 +1641,17 @@ def _recording_backend_identity(
         # the manifest stays small and the comparison stays exact.
         "game_map_sha256": _map_digest(game_map),
         _PROMPT_SET_KEY: resolve_prompt_set(env=env),
+        # The prompt SET name alone does not determine the rendered bytes. The
+        # 18.10 impostor-answer lever swaps the impostor-report and
+        # accusation-round templates WITHIN a set and makes
+        # ``prompt_versions_for_set`` stamp the variant versions, so a leg
+        # resumed after the lever flipped would skip seeds recorded under one
+        # template family and record the rest under another — one committed row
+        # spanning two prompt protocols, with nothing in it saying so (Codex
+        # review on PR #314). Verified on ``qwen3_6_27b``: flipping the lever
+        # moves ``impostor_report`` and ``accusation_round`` to their
+        # ``_roll_call`` variants.
+        _ROLL_CALL_KEY: impostor_roll_call_enabled(env),
         **_effective_backend_config(env),
     }
     return identity
@@ -1774,6 +1793,79 @@ def _tranche_claim(work_dir: Path, *, tranche: str) -> Iterator[Path]:
         yield path
     finally:
         os.close(fd)
+
+
+@contextmanager
+def _allocation_claim(work_dir: Path) -> Iterator[Path]:
+    """Serialize candidate-directory allocation ACROSS tranches (18.31).
+
+    :func:`_tranche_claim` is per ``(work dir, tranche)``, which is right for
+    recording — two tranches are independent experiments and both should run.
+    But they allocate out of ONE namespace: ``_fresh_candidate_dir`` picks the
+    first ``NNN-<slug>`` that neither exists on disk nor sits in this pass's
+    reservation set, and the directories are not created until later. Two legs
+    on DIFFERENT tranches therefore hold different tranche claims, both see
+    ``000-<slug>`` free, and both take it. Under ``resume`` the recording loop's
+    ``mkdir(exist_ok=True)`` then lets both proceed, both pass their
+    foreign-replay checks, and both write different seed sets into one
+    directory — which the scoring functions fold whole, so each leg's row is
+    contaminated by the other's games (Codex review on PR #314). My round-9
+    comment on ``_fresh_candidate_dir`` even names the window ("directories are
+    not created until the recording loop runs") and closed only the same-pass
+    half of it.
+
+    BLOCKING, unlike the tranche claim, and the difference is the point:
+    concurrent legs on different tranches are LEGITIMATE and must both succeed,
+    they simply cannot allocate at the same instant. Two legs on ONE tranche are
+    not legitimate and are refused outright. The critical section is a directory
+    resolution plus the ``mkdir`` that publishes the reservation, so the wait is
+    bounded by filesystem work, never by recording.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    path = work_dir / f"{TRANCHE_CLAIM_FILENAME_STEM}-allocation.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield path
+    finally:
+        os.close(fd)
+
+
+def _allocate_candidate_dirs(
+    work_dir: Path,
+    *,
+    tranche: str,
+    candidates: Sequence[RealPathCandidate],
+    resume: bool,
+) -> tuple[Path, ...]:
+    """Resolve this leg's candidate dirs and RESERVE them, atomically (18.31).
+
+    Resolution and reservation are one step under one work-dir-wide claim,
+    because a resolution that is not yet visible on disk is not a reservation:
+    creating the directories is what tells the next tranche's allocator they are
+    taken. Splitting the two is precisely the window two concurrent tranches
+    slipped through (Codex review on PR #314).
+
+    Directories are created here only under ``resume``, deliberately. That is
+    where the hazard lives: the recording loop's ``mkdir(exist_ok=True)`` lets
+    BOTH legs adopt a shared directory and interleave their seed sets, which the
+    scoring functions then fold whole. A fresh leg creates with
+    ``exist_ok=False``, so a collision is a loud ``FileExistsError`` rather than
+    contamination — and leaving its creation in the recording loop preserves the
+    property that a leg failing BEFORE it records (a pre-screen coverage
+    refusal, a failed manifest publish) leaves no directory behind for the next
+    attempt to trip over.
+    """
+
+    with _allocation_claim(work_dir):
+        candidate_dirs = _resolve_candidate_dirs(
+            work_dir, tranche=tranche, candidates=candidates, resume=resume
+        )
+        if resume:
+            for candidate_dir in candidate_dirs:
+                candidate_dir.mkdir(parents=True, exist_ok=True)
+    return candidate_dirs
 
 
 def _backend_digest(backend: Mapping[str, object]) -> str:
@@ -2387,7 +2479,7 @@ def run_realpath_rerank(
                 candidates=candidates,
                 backend=backend,
             )
-        candidate_dirs = _resolve_candidate_dirs(
+        candidate_dirs = _allocate_candidate_dirs(
             work_dir, tranche=tranche, candidates=candidates, resume=resume
         )
         invocation, manifest_path = _open_leg_manifest(
@@ -2446,7 +2538,12 @@ def run_realpath_rerank(
                 digest = stamp.weights_sha256
                 agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
                 candidate_dir = candidate_dirs[index]
-                candidate_dir.mkdir(parents=True, exist_ok=resume)
+                if not resume:
+                    # A resuming leg created (and thereby reserved) its dirs
+                    # under the allocation claim; a fresh leg creates here so an
+                    # early failure leaves nothing behind, and so a collision is
+                    # a loud refusal rather than a silent adoption.
+                    candidate_dir.mkdir(parents=True, exist_ok=False)
                 if resume:
                     _refuse_foreign_replays(
                         candidate_dir, seeds=seeds_tuple, label=candidate.label

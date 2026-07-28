@@ -236,6 +236,45 @@ def _validate_stamp_token(name: str, value: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _refuse_unloadable_family(*, encoder_version: str, hidden: int | None) -> None:
+    """The FAMILY/width contract every loadable freeze must satisfy (18.31).
+
+    Shared by :func:`write_loadable_artifact` and
+    :class:`LoadableArtifactMetadata` so the two can never drift. Enforcing it
+    at the METADATA is what keeps a bad declaration from being expensive: the
+    metadata is what ``HallOfFame.create`` persists into ``hall_of_fame.json``,
+    and it used to commit that index before anything checked the family. The
+    first ``add_member`` then failed here, and the retry with corrected metadata
+    hit ``create``'s no-clobber guard — an unusable hall that only a manual
+    delete could clear (Codex review on PR #314). That is the round-8
+    runner-identity deadlock wearing different clothes, and the fix is the same
+    shape: refuse before anything durable is written.
+
+    Restated literals, per this module's no-cross-seam-import idiom; the writer
+    additionally PROVES the width by rebuilding the genome, which needs an
+    actual genome and so stays there.
+    """
+
+    if encoder_version not in _LOADABLE_ENCODERS:
+        raise ValueError(
+            f"encoder_version {encoder_version!r} is not one the consuming entry "
+            f"point can rebuild (loadable: {sorted(_LOADABLE_ENCODERS)}); this "
+            "artifact would be unloadable through _load_candidate_policy"
+        )
+    if encoder_version in _WIDTH_BEARING_ENCODERS and hidden is None:
+        raise ValueError(
+            f"the {encoder_version!r} family rebuilds through the masked-MLP "
+            "builder, so its config.json needs an integer 'hidden'; declaring "
+            "none publishes an artifact the consumer always rejects"
+        )
+    if encoder_version not in _WIDTH_BEARING_ENCODERS and hidden is not None:
+        raise ValueError(
+            f"the {encoder_version!r} family takes no hidden width; got "
+            f"hidden={hidden!r}. Declaring one stamps a masked-MLP width its "
+            "builder does not have"
+        )
+
+
 def _refuse_unrebuildable_genome(
     genome: Sequence[float], *, encoder_version: str, hidden: int | None
 ) -> None:
@@ -326,6 +365,31 @@ def write_loadable_artifact(
 
     if not genome:
         raise ValueError("cannot freeze an empty genome as a loadable artifact")
+    # NON-FINITE genes survive the whole pipeline silently: ``weights_to_hex_json``
+    # writes the bare tokens ``"nan"`` / ``"inf"``, ``weights_from_hex_json``
+    # rehydrates them without complaint, and every builder accepts them — so the
+    # artifact is CERTIFIED loadable by the reconstruction guard below while its
+    # policy propagates non-finite logits into whatever it is evaluated against
+    # (Codex review on PR #314). The driver already treats non-finite initial
+    # genes as corrupted input; a freeze is the same claim about the same floats,
+    # so it gets the same answer. Checked before any reconstruction or
+    # filesystem mutation.
+    nonfinite = sorted(
+        index for index, gene in enumerate(genome) if not math.isfinite(gene)
+    )
+    if nonfinite:
+        shown = nonfinite[:8]
+        raise ValueError(
+            f"genome carries non-finite genes at indices {shown}"
+            + (
+                f" (+{len(nonfinite) - len(shown)} more)"
+                if len(nonfinite) > len(shown)
+                else ""
+            )
+            + f", e.g. {genome[nonfinite[0]]!r}; the float-hex encoding round-trips "
+            "these silently, so the artifact would load and then propagate "
+            "non-finite values through every evaluation it seeds"
+        )
     for name, token in (
         ("policy_id", policy_id),
         ("method", method),
@@ -344,32 +408,7 @@ def write_loadable_artifact(
         )
     if hidden is not None and hidden < 1:
         raise ValueError(f"hidden must be >= 1 when declared; got {hidden!r}")
-    # The FAMILY contract, enforced by the public writer rather than only by the
-    # driver preflight. This function is exported, so a caller reaching it
-    # directly could publish an artifact the consuming entry point can never
-    # load — a v2/v3 freeze with no ``hidden`` is rejected outright by
-    # ``_load_candidate_policy``, and an unknown tag has no builder at all
-    # (Codex review on PR #314). Restated literals, per this module's
-    # no-cross-seam-import idiom; the driver additionally proves the declared
-    # width by REBUILDING the genome, which needs the builder and stays there.
-    if encoder_version not in _LOADABLE_ENCODERS:
-        raise ValueError(
-            f"encoder_version {encoder_version!r} is not one the consuming entry "
-            f"point can rebuild (loadable: {sorted(_LOADABLE_ENCODERS)}); this "
-            "artifact would be unloadable through _load_candidate_policy"
-        )
-    if encoder_version in _WIDTH_BEARING_ENCODERS and hidden is None:
-        raise ValueError(
-            f"the {encoder_version!r} family rebuilds through the masked-MLP "
-            "builder, so its config.json needs an integer 'hidden'; declaring "
-            "none publishes an artifact the consumer always rejects"
-        )
-    if encoder_version not in _WIDTH_BEARING_ENCODERS and hidden is not None:
-        raise ValueError(
-            f"the {encoder_version!r} family takes no hidden width; got "
-            f"hidden={hidden!r}. Declaring one stamps a masked-MLP width its "
-            "builder does not have"
-        )
+    _refuse_unloadable_family(encoder_version=encoder_version, hidden=hidden)
     # PROVE the genome rebuilds, rather than asserting the family is loadable.
     # A recognised family with a syntactically valid width and an incompatible
     # genome length publishes all four files and is then rejected by
@@ -507,6 +546,12 @@ class LoadableArtifactMetadata(BaseModel):
             _validate_stamp_token(name, token)
         if self.hidden is not None and self.hidden < 1:
             raise ValueError(f"hidden must be >= 1 when declared; got {self.hidden!r}")
+        # The SAME family/width contract the writer enforces, applied here so a
+        # hall is never persisted around metadata whose first freeze must fail
+        # (Codex review on PR #314).
+        _refuse_unloadable_family(
+            encoder_version=self.encoder_version, hidden=self.hidden
+        )
         if self.anchor_weight is not None and not math.isfinite(self.anchor_weight):
             raise ValueError(
                 f"anchor_weight must be finite when declared; got {self.anchor_weight!r}"

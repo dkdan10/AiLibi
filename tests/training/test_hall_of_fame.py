@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 from collections import Counter
@@ -32,6 +33,7 @@ from pydantic import ValidationError
 from agents.tactical.features import (
     TacticalFeatureEncoder,
     TacticalFeatureEncoderV3,
+    weights_from_hex_json,
     weights_to_hex_json,
 )
 from engine.world import load_canonical_map
@@ -1724,6 +1726,101 @@ def test_the_public_writer_refuses_an_unloadable_family(
         )
     # Refused BEFORE anything was published.
     assert not artifact_dir.exists()
+
+
+def test_a_non_finite_genome_is_refused_before_anything_is_written(
+    tmp_path: Path,
+) -> None:
+    """NaN/inf genes are refused, not frozen (Codex on PR #314).
+
+    They survive the whole pipeline silently: ``weights_to_hex_json`` writes the
+    bare tokens ``"nan"`` / ``"inf"``, ``weights_from_hex_json`` rehydrates them
+    without complaint, and every builder accepts them — so the reconstruction
+    guard CERTIFIES such an artifact as loadable while its policy propagates
+    non-finite logits into every evaluation it seeds.
+    """
+
+    finite = _rebuildable_genome(_UTILITY_ENCODER)
+    # The premise, asserted rather than assumed: the encoding really does
+    # round-trip non-finite values, which is why the writer must catch them.
+    poisoned = (float("nan"),) + finite[1:]
+    assert math.isnan(weights_from_hex_json(weights_to_hex_json(poisoned))[0])
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        genome = (bad,) + finite[1:]
+        artifact_dir = tmp_path / f"artifact-{bad}"
+        with pytest.raises(ValueError, match="non-finite genes"):
+            write_loadable_artifact(
+                artifact_dir,
+                genome,
+                policy_id="p",
+                method="m",
+                encoder_version=_UTILITY_ENCODER,
+            )
+        assert not artifact_dir.exists()
+
+    # The finite genome still freezes.
+    assert write_loadable_artifact(
+        tmp_path / "ok",
+        finite,
+        policy_id="p",
+        method="m",
+        encoder_version=_UTILITY_ENCODER,
+    )
+
+
+def test_metadata_refuses_a_family_no_hall_could_freeze(tmp_path: Path) -> None:
+    """An unloadable family is refused BEFORE a hall is persisted (Codex #314).
+
+    ``HallOfFame.create`` commits ``hall_of_fame.json`` from this metadata. When
+    the family/width contract was checked only by ``write_loadable_artifact``,
+    an index was written, the first ``add_member`` failed, and the retry with
+    corrected metadata hit ``create``'s no-clobber guard — an unusable hall only
+    a manual delete could clear. That is the round-8 runner-identity deadlock in
+    different clothes, and it gets the same answer: refuse before anything
+    durable exists.
+    """
+
+    for kwargs, match in (
+        ({"encoder_version": "v2"}, "needs an integer 'hidden'"),
+        ({"encoder_version": "v3"}, "needs an integer 'hidden'"),
+        ({"encoder_version": "some-unknown-family"}, "not one the consuming entry"),
+        ({"encoder_version": _UTILITY_ENCODER, "hidden": 8}, "takes no hidden width"),
+        (
+            {"encoder_version": "crew-option-features-v1", "hidden": 8},
+            "takes no hidden width",
+        ),
+    ):
+        with pytest.raises(ValidationError, match=match):
+            _metadata(**kwargs)
+
+    # Nothing durable is created on the way to that refusal, and a corrected
+    # declaration still builds a working hall in the SAME root — the recovery
+    # the deadlock denied.
+    root = tmp_path / "pool"
+    with pytest.raises(ValidationError):
+        HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(encoder_version="v3"),
+        )
+    assert not (root / "impostor" / "hall_of_fame.json").exists()
+    hall = HallOfFame.create(
+        root,
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(encoder_version="v3", hidden=_V3_HIDDEN),
+    )
+    member = hall.add_member(
+        _rebuildable_genome("v3", _V3_HIDDEN),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    assert sorted(
+        path.name for path in (root / "impostor" / member.path).iterdir()
+    ) == ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
 
 
 def test_the_public_writer_accepts_every_loadable_family(tmp_path: Path) -> None:

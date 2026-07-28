@@ -44,9 +44,11 @@ from orchestrator.game import (
     MeetingArtifacts,
     MeetingRunner,
     build_default_meeting_runner,
+    prompt_versions_for_set,
 )
 from orchestrator.replay import read_tactical_policy_stamp
 import training.realpath as realpath
+from training.realpath import _AUDIT_SIDECAR_SUFFIX as _AUDIT_SUFFIX
 from training.bakeoff.es import ESResult
 from training.bakeoff.harness import load_candidate_weights
 from training.realpath import (
@@ -1729,6 +1731,133 @@ def test_a_failed_leg_releases_its_tranche_claim(tmp_path: Path) -> None:
         config=_config(),
         resume=True,
     ).rows
+
+
+def test_the_prompt_variant_lever_rides_the_backend_identity() -> None:
+    """The prompt SET name does not determine the rendered bytes (Codex #314).
+
+    The 18.10 impostor-answer lever (``AILIBI_IMPOSTOR_ROLL_CALL``) swaps the
+    impostor-report and accusation-round templates WITHIN a set, and
+    ``prompt_versions_for_set`` stamps the variant versions. A leg resumed after
+    the lever flipped would skip seeds recorded under one template family and
+    record the rest under another, publishing one backend digest over two prompt
+    protocols.
+    """
+
+    game_map = load_canonical_map()
+
+    def _identity(**env: str) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=False, game_map=game_map, environment=env
+        )
+
+    # The lever genuinely changes the RECORDED prompt versions on a
+    # variant-capable set — the fact that makes it protocol, asserted here
+    # rather than assumed, so this pin fails if the registry stops varying.
+    off = dict(prompt_versions_for_set(env={"AILIBI_PROMPT_SET": "qwen3_6_27b"}))
+    on = dict(
+        prompt_versions_for_set(
+            env={"AILIBI_PROMPT_SET": "qwen3_6_27b", "AILIBI_IMPOSTOR_ROLL_CALL": "1"}
+        )
+    )
+    assert off != on
+    assert off["impostor_report"] != on["impostor_report"]
+
+    assert _identity(
+        AILIBI_PROMPT_SET="qwen3_6_27b", AILIBI_IMPOSTOR_ROLL_CALL="1"
+    ) != _identity(AILIBI_PROMPT_SET="qwen3_6_27b")
+    # It rides EVERY provider, like the prompt set itself.
+    for provider in ("fake", "ollama", "featherless", "anthropic"):
+        assert _identity(
+            AILIBI_LLM_PROVIDER=provider, AILIBI_IMPOSTOR_ROLL_CALL="1"
+        ) != _identity(AILIBI_LLM_PROVIDER=provider)
+
+
+def test_concurrent_tranches_never_share_a_candidate_directory(
+    tmp_path: Path,
+) -> None:
+    """Directory allocation is serialized ACROSS tranches (Codex on PR #314).
+
+    The round-9 tranche claim is per ``(work dir, tranche)`` — correct for
+    recording, since two tranches are independent experiments — but they
+    allocate out of ONE namespace. Two resuming legs on different tranches held
+    different claims, both saw ``000-<slug>`` free, and both took it; the
+    recording loop's ``mkdir(exist_ok=True)`` then let both write different seed
+    sets into one directory, which the scoring functions fold whole.
+
+    Allocation now happens under a work-dir-wide claim AND creates the
+    directories inside it, so the reservation is visible to the next allocator.
+    """
+
+    work_dir = tmp_path / "work"
+    candidate = _util_candidate()
+
+    # The INTERLEAVING the lock exists to prevent, reproduced deterministically:
+    # tranche A resolves, and tranche B resolves before A has recorded anything.
+    # Running the two legs end-to-end in sequence would NOT exercise this — A's
+    # directory is already on disk by then, so B skips it whether or not the fix
+    # is present. (That sequential version passed with the fix reverted, which
+    # is why it is not the pin.)
+    first = realpath._allocate_candidate_dirs(
+        work_dir, tranche="1-2", candidates=[candidate], resume=True
+    )
+    second = realpath._allocate_candidate_dirs(
+        work_dir, tranche="7-8", candidates=[candidate], resume=True
+    )
+
+    assert first[0] != second[0], (
+        "two tranches were handed the same candidate directory; under resume "
+        "both would mkdir(exist_ok=True) into it and interleave their seeds"
+    )
+    assert first[0].name == "000-utility-es"
+    assert second[0].name == "001-utility-es"
+
+    # And end to end in a clean work dir, each tranche's directory holds ONLY
+    # its own seeds — the contamination this finding describes would surface
+    # here as the other tranche's replays.
+    live = tmp_path / "live"
+    _record_two_seeds(live, tmp_path / "ranking-1.jsonl")
+    assert run_realpath_rerank(
+        [candidate],
+        seeds=[7, 8],
+        work_dir=live,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    ).rows
+
+    def _seeds(directory: Path) -> set[int]:
+        return {
+            int(path.name.removeprefix("replay-seed-").removesuffix(".jsonl"))
+            for path in directory.glob("replay-seed-*.jsonl")
+            if not path.name.endswith(_AUDIT_SUFFIX)
+        }
+
+    assert _seeds(live / "000-utility-es") == {1, 2}
+    assert _seeds(live / "001-utility-es") == {7, 8}
+
+
+def test_the_allocation_claim_is_held_across_resolution(tmp_path: Path) -> None:
+    """The allocation lock is work-dir-wide, and blocking rather than refusing.
+
+    Two legs on DIFFERENT tranches are legitimate concurrency and must both
+    succeed — they simply cannot allocate at the same instant. That is the
+    opposite posture to :func:`_tranche_claim`, which refuses outright, so the
+    two are pinned apart here.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir(parents=True)
+    claim = work_dir / f"{realpath.TRANCHE_CLAIM_FILENAME_STEM}-allocation.lock"
+
+    with realpath._allocation_claim(work_dir) as path:
+        assert path == claim
+    assert claim.exists()
+
+    # A tranche claim does NOT block allocation: they are different locks.
+    with realpath._tranche_claim(work_dir, tranche="1-2"):
+        with realpath._allocation_claim(work_dir):
+            pass
 
 
 def test_backend_identity_pins_only_the_selected_providers_settings() -> None:
