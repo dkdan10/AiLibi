@@ -997,8 +997,28 @@ def test_the_hall_root_may_not_be_a_driver_owned_path(tmp_path: Path) -> None:
         ROLLOUTS_DIRNAME,
     }
 
+    # A path that TRAVERSES an owned component is refused too, even though it
+    # resolves elsewhere: `resolve()` collapses `..` textually while the plan
+    # path does not exist yet, so `work_dir/"campaign-plan.json"/".."` resolved
+    # to `work_dir` and passed — and the hall's mkdir then tried to walk through
+    # the plan FILE via the unresolved path, raising NotADirectoryError after the
+    # work dir already existed (Codex review on PR #314).
+    trav_root = tmp_path / "traverse"
+    traversing = _make_config(
+        trav_root,
+        hall_root=trav_root / "work" / CAMPAIGN_PLAN_FILENAME / ".." / "halls",
+    )
+    with pytest.raises(ValueError, match="which this driver writes itself"):
+        run_alternating_freeze(traversing)
+    assert not (trav_root / "work").exists()
+
     # NO OVER-REACH: a sibling under the work dir is still fine, and a hall root
-    # merely PREFIXED by an owned name is a different path.
+    # merely PREFIXED by an owned name is a different path. An unrelated ANCESTOR
+    # directory that happens to share an owned name is also fine — the check is a
+    # lexical PREFIX of work_dir/<owned>, not "the name appears somewhere".
+    shared_name = tmp_path / GEN_CHAMPIONS_DIRNAME / "campaign"
+    shared = _make_config(shared_name, hall_root=shared_name / "halls")
+    assert run_alternating_freeze(shared).total_games == _BASELINE_GAMES
     ok_root = tmp_path / "ok"
     ok = _make_config(ok_root, hall_root=ok_root / "work" / "halls")
     assert run_alternating_freeze(ok).total_games == _BASELINE_GAMES

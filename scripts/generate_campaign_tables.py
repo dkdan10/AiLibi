@@ -69,9 +69,22 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from pydantic import ValidationError  # noqa: E402
+from pydantic import ValidationError, create_model  # noqa: E402
 
 from training.coevo.driver import CoevoCampaignRow  # noqa: E402
+from training.realpath import RealPathRerankRow  # noqa: E402
+
+#: The typed model for each supported ranking schema. ``-v2`` is the recorder's
+#: own row type; ``-v1`` is that type with the two recorder-identity fields made
+#: optional, because the frozen 18.24 corpus genuinely predates them (the
+#: round-9 PARTIAL accept) and this generator reproduces that record rather than
+#: backfilling it. Every OTHER field is checked identically on both.
+_V1_ROW_MODEL = create_model(
+    "RealPathRerankRowV1",
+    __base__=RealPathRerankRow,
+    recording_backend_sha256=(str | None, None),
+    game_map_sha256=(str | None, None),
+)
 
 # --------------------------------------------------------------------------- #
 # Constants.                                                                   #
@@ -176,15 +189,49 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if not line.strip():
             continue
         try:
-            row = json.loads(line)
+            # ``parse_constant`` is the ONLY hook that sees them: Python's
+            # ``json.loads`` accepts the non-standard bare constants ``NaN``,
+            # ``Infinity`` and ``-Infinity``, and pydantic's strict mode still
+            # admits them for an unconstrained ``float`` field — so a row
+            # carrying ``"champion_fitness": NaN`` rendered ``nan`` and exited 0,
+            # and a non-finite ranking metric poisons every stability average it
+            # enters (Codex review on PR #314). They are not JSON, and no
+            # artifact this repository writes emits them.
+            row = json.loads(line, parse_constant=_refuse_json_constant)
         except json.JSONDecodeError as exc:
             raise SystemExit(f"{path}:{number} is not valid JSON: {exc}") from exc
+        except ValueError as exc:
+            raise SystemExit(f"{path}:{number} {exc}") from exc
         if not isinstance(row, dict):
             raise SystemExit(f"{path}:{number} is not a JSON object")
         rows.append(row)
     if not rows:
         raise SystemExit(f"{path} holds no rows")
     return rows
+
+
+def _refuse_json_constant(constant: str) -> float:
+    """Refuse ``NaN`` / ``Infinity`` / ``-Infinity`` at the parse boundary."""
+
+    raise ValueError(
+        f"carries the non-standard JSON constant {constant}; a measurement "
+        "artifact holds finite numbers, and a non-finite one silently poisons "
+        "every average and comparison it enters"
+    )
+
+
+def _file_identity(path: Path) -> tuple[int, int]:
+    """``(st_dev, st_ino)`` — the same FILE under any number of names.
+
+    A resolved path collapses symlink aliases but not HARD links: the same
+    ranking bytes reachable as two names in two leg directories resolved to two
+    distinct paths, so the fold counted them as two independent lineage legs and
+    doubled ``arms_with_both_tranches`` (Codex review on PR #314). Filesystem
+    identity is the question the seen-set was always asking.
+    """
+
+    stat = path.stat()
+    return (stat.st_dev, stat.st_ino)
 
 
 def _display(path: Path) -> str:
@@ -622,6 +669,29 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
                 "stamp names the bytes it was frozen from (the 17.14 conflation "
                 "guard)"
             )
+    # The field TYPES, through the recorder's own row model. The structural
+    # checks above are all about SHAPE — ranks, uniqueness, agreement — and none
+    # of them looks at what a value is: `"referee_passed": "false"` is a non-empty
+    # string, so the leg table printed PASS and the stability fold counted a
+    # referee pass (Codex review on PR #314). This is the same defect the
+    # campaign-row validator was added to prevent, one artifact family over, and
+    # it gets the same treatment: JSON-strict, because lax coerces the string to
+    # a bool and strict-over-dict rejects every committed row.
+    model = (
+        _V1_ROW_MODEL
+        if declared_schema in _PRE_RECORDER_IDENTITY_SCHEMAS
+        else RealPathRerankRow
+    )
+    for row in rows:
+        try:
+            model.model_validate_json(json.dumps(row), strict=True)
+        except ValidationError as exc:
+            raise SystemExit(
+                f"{ranking_path}: rank {row.get('rank')!r} declares "
+                f"{declared_schema} but does not satisfy it: {exc}. The table is "
+                "refused rather than rendered from values whose types were never "
+                "checked"
+            ) from exc
     return rows
 
 
@@ -827,12 +897,16 @@ def _collect_arms(
     # folded twice and every count doubles behind a valid-looking artifact
     # (Codex review on PR #314). Resolving the leg collapses the alias; the
     # seen-set drops a file offered twice under two spellings.
-    seen_files: set[Path] = set()
+    # Keyed by FILESYSTEM IDENTITY, not resolved path: resolving collapses a
+    # symlink alias but leaves two hard-linked names distinct, so identical bytes
+    # offered under two names still manufactured a second lineage leg.
+    seen_files: set[tuple[int, int]] = set()
     for path in ranking_paths:
         resolved = path.resolve()
-        if resolved in seen_files:
+        identity = _file_identity(resolved)
+        if identity in seen_files:
             continue
-        seen_files.add(resolved)
+        seen_files.add(identity)
         leg = resolved.parent.as_posix()
         tranche, seeds = _tranche_identity(path)
         tranche_seeds[tranche] = seeds

@@ -1201,11 +1201,32 @@ def _validate_config(
     # (Codex review on PR #314). ``WORK_DIR_OWNED_NAMES`` is the enumeration, so
     # a fifth artifact added to this module has one place to be declared rather
     # than a guard to remember.
+    # Checked BOTH resolved and LEXICALLY. ``resolve()`` on a path that does not
+    # exist yet collapses ``..`` textually, so ``work_dir/"campaign-plan.json"/".."``
+    # resolved to ``work_dir`` and passed — and then the plan was written as a
+    # file and the hall's ``mkdir`` tried to traverse THROUGH it via the original
+    # unresolved path, raising ``NotADirectoryError`` after the work dir already
+    # existed (Codex review on PR #314). The resolved form answers "where does
+    # this end up"; the lexical form answers "what does it walk through", and a
+    # path that walks through a file this driver is about to create is refused on
+    # the second question even when it passes the first.
     hall_root_resolved = config.resolved_hall_root.resolve()
+    written_parts = config.resolved_hall_root.parts
     for owned in WORK_DIR_OWNED_NAMES:
         owned_path = (config.work_dir / owned).resolve()
-        if hall_root_resolved == owned_path or hall_root_resolved.is_relative_to(
-            owned_path
+        # LEXICAL prefix on the path AS WRITTEN — is ``work_dir/<owned>`` a
+        # component this hall root walks THROUGH? Not "does the name appear
+        # anywhere in the path", which would refuse an unrelated ancestor
+        # directory that merely shares the name.
+        owned_written = (config.work_dir / owned).parts
+        traverses = (
+            len(written_parts) > len(owned_written)
+            and written_parts[: len(owned_written)] == owned_written
+        )
+        if (
+            traverses
+            or hall_root_resolved == owned_path
+            or hall_root_resolved.is_relative_to(owned_path)
         ):
             raise ValueError(
                 f"hall_root {config.resolved_hall_root} is at or inside "

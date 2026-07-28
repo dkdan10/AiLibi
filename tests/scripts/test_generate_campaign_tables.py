@@ -24,6 +24,7 @@ Everything reads committed bytes read-only: no test writes into
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -942,6 +943,99 @@ def test_rows_refuse_type_invalid_values(
     )
     with pytest.raises(SystemExit, match="does not satisfy it"):
         gct.render_rows_document(forged, labels=["run-01"])
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("referee_passed", "false"),
+        ("validity_passed", 1),
+        ("stamp_verified_games", "2"),
+        ("selection_score", "0.5"),
+        ("resumed", "no"),
+    ],
+    ids=[
+        "bool-as-string",
+        "bool-as-int",
+        "int-as-string",
+        "float-as-string",
+        "resumed",
+    ],
+)
+def test_ranking_rows_refuse_type_invalid_values(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """The same defect as the campaign rows, one artifact family over (Codex #314).
+
+    ``read_validated_ranking``'s checks are all about SHAPE — ranks, uniqueness,
+    agreement — and none looks at what a value IS. ``"referee_passed": "false"``
+    is a non-empty string, so the leg table printed PASS and the stability fold
+    counted a referee pass.
+
+    Validated per schema: ``-v2`` against the recorder's own row model, ``-v1``
+    against that model with the two recorder-identity fields optional, because
+    the frozen 18.24 corpus genuinely predates them.
+    """
+
+    leg = tmp_path / "leg-01"
+    _write_arm(leg, "t1", _committed_row(0) | {field: value}, seeds=(1, 2, 3))
+    with pytest.raises(SystemExit, match="does not satisfy it"):
+        gct.read_validated_ranking(leg / "ranking-t1.jsonl")
+
+    # NO OVER-REACH: every committed ranking file still reads, on both schemas.
+    for path in gct.find_ranking_files(_default_roots()):
+        assert gct.read_validated_ranking(path)
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_json_constants_are_refused(tmp_path: Path, constant: str) -> None:
+    """``json.loads`` accepts them; JSON does not (Codex review on PR #314).
+
+    Python parses the bare constants ``NaN`` / ``Infinity`` / ``-Infinity``, and
+    pydantic's strict mode still admits them for an unconstrained ``float``, so a
+    row carrying ``"champion_fitness": NaN`` rendered ``nan`` and exited 0 — and
+    a non-finite ranking metric poisons every stability average it enters.
+    """
+
+    rows = _CAMPAIGN_ROWS.read_text(encoding="utf-8").splitlines()[:2]
+    forged = tmp_path / "rows.jsonl"
+    first = json.loads(rows[0])
+    first["champion_fitness"] = "__SENTINEL__"
+    text = json.dumps(first).replace('"__SENTINEL__"', constant)
+    forged.write_text(text + "\n" + rows[1] + "\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="non-standard JSON constant"):
+        gct.render_rows_document(forged, labels=["run-01"])
+
+    # NO OVER-REACH: the committed stream still parses and renders.
+    assert gct.render_rows_document(_CAMPAIGN_ROWS, labels=["run-01"])
+
+
+def test_hard_linked_ranking_inputs_are_counted_once(tmp_path: Path) -> None:
+    """Resolving collapses symlinks, not hard links (Codex review on PR #314).
+
+    The same ranking bytes reachable as two names in two leg directories resolved
+    to two distinct paths, so the fold counted them as two independent lineage
+    legs and doubled ``arms_with_both_tranches`` — measurement evidence
+    manufactured out of one recording.
+    """
+
+    campaign = tmp_path / "campaign"
+    first = campaign / "leg-01"
+    first.mkdir(parents=True)
+    for name in ("ranking-4000-4002.jsonl", "ranking-4003-4005.jsonl"):
+        shutil.copy(_RUN_01_LEG / name, first / name)
+    baseline = gct.compute_stability(gct.find_ranking_files([campaign]))
+    assert baseline["arms_with_both_tranches"] == 2
+
+    # The SAME files, hard-linked into a second leg directory.
+    second = campaign / "leg-02"
+    second.mkdir()
+    for name in ("ranking-4000-4002.jsonl", "ranking-4003-4005.jsonl"):
+        os.link(first / name, second / name)
+        assert (second / name).stat().st_nlink == 2
+
+    assert gct.compute_stability(gct.find_ranking_files([campaign])) == baseline
 
 
 def test_rows_refuse_a_foreign_schema_version(tmp_path: Path) -> None:

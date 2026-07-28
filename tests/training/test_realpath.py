@@ -3285,6 +3285,212 @@ def test_a_tranche_may_not_repeat_a_seed() -> None:
     assert realpath.tranche_key([1, 2, 4]).startswith("1-4-")
 
 
+def test_the_default_backend_ignores_a_runner_identity(tmp_path: Path) -> None:
+    """A field outside the block it belongs to (Codex review on PR #314).
+
+    ``meeting_runner_identity`` is only consulted when a custom runner is
+    installed. Carrying it unconditionally meant a resume that omitted an
+    incidental identity — or passed a different one — read as backend drift while
+    every effective recorder input agreed. Round 16's rule is present-whole /
+    absent-whole per branch; this field had been sitting outside it.
+    """
+
+    def identity(custom: bool, runner_identity: str | None) -> dict[str, object]:
+        return realpath._recording_backend_identity(
+            custom_runner=custom,
+            runner_identity=runner_identity,
+            game_map=load_canonical_map(),
+            num_players=4,
+            environment={"AILIBI_LLM_PROVIDER": "fake"},
+        )
+
+    default_none = identity(False, None)
+    assert "meeting_runner_identity" not in default_none
+    assert identity(False, "incidental") == default_none
+    assert identity(False, "something-else") == default_none
+
+    # NO OVER-REACH: on the CUSTOM branch the identity is still what distinguishes
+    # one runner from another — narrowing must not reopen round 8.
+    assert identity(True, "runner-a")["meeting_runner_identity"] == "runner-a"
+    assert identity(True, "runner-a") != identity(True, "runner-b")
+
+
+def test_a_malformed_recorded_dir_is_refused_not_slug_searched(
+    tmp_path: Path,
+) -> None:
+    """The legacy fallback may not be reachable by corruption (Codex #314).
+
+    ``_recorded_candidate_dirs`` recorded the label as seen while omitting a
+    malformed ``dir``, which dropped the resume into the legacy slug search — and
+    with exactly one matching ``*-<slug>`` directory present, the resume adopted
+    its recordings instead of refusing the corrupted claim. The fallback exists
+    for manifests written before the ``dir`` field; corruption is not that.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / "000-utility-es").mkdir()
+    entry = _claim_entry("utility-es", "000-utility-es")
+    del entry["dir"]
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps({"tranche": "1-2", "candidates": [entry]}), encoding="utf-8"
+    )
+
+    with pytest.raises(RealPathRerankError, match="corrupted evidence"):
+        realpath._recorded_candidate_dirs(work_dir, tranche="1-2")
+
+
+def test_a_fresh_leg_refuses_an_existing_dir_before_publishing_its_claim(
+    tmp_path: Path,
+) -> None:
+    """A failed no-clobber check must not leave a claim behind (Codex #314, P1).
+
+    The manifest is published BEFORE the recording loop's exclusive ``mkdir``, so
+    a fresh leg whose enumerated directory already existed but was unclaimed
+    published a manifest naming it and only THEN collided. That manifest is
+    durable: a later ``resume=True`` read it as proof of ownership and skipped
+    whatever replays already sat in the directory — bytes this invocation never
+    wrote and never verified against its own protocol.
+
+    The collision is unchanged (still ``FileExistsError``, still write-once); only
+    its ORDER moved, ahead of the publish.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    stale = work_dir / "000-utility-es"
+    stale.mkdir()
+    (stale / "replay-seed-1.jsonl").write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="no leg manifest claims it"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(),
+        )
+    # THE POINT: no manifest was published, so nothing can later read the failed
+    # invocation as the owner of those bytes.
+    assert not list(work_dir.glob(f"{realpath.LEG_MANIFEST_FILENAME_STEM}-*.json"))
+    assert (stale / "replay-seed-1.jsonl").read_text(encoding="utf-8") == "{}\n"
+
+
+def test_resume_drift_ignores_manifests_for_unrelated_candidates(
+    tmp_path: Path,
+) -> None:
+    """Sharing a tranche key is not sharing an experiment (Codex #314, P1).
+
+    One work dir may legitimately hold two FRESH legs over the same seed set
+    under different protocols with disjoint labels — the fresh path permits the
+    protocol change and gives them separate directories. Comparing a resume
+    against the unrelated manifest refused it on a config that describes bytes it
+    will never read, so an interrupted 30-40 h leg became unresumable because a
+    neighbour happened to share its seeds.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # An unrelated fresh leg on the same tranche: distinct label, different
+    # protocol (a different max_attempts), its own directory.
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps(
+            {
+                "tranche": "1-2",
+                "mode": realpath.MODE_TOP_K,
+                "config": _config(max_attempts=3).model_dump(mode="json"),
+                "backend": {"custom_meeting_runner": True, "other": "backend"},
+                "candidates": [_claim_entry("someone-else", "000-someone-else")],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # A resume for OUR label must not be refused by that manifest.
+    realpath._refuse_protocol_drift(
+        work_dir,
+        tranche="1-2",
+        mode=realpath.MODE_TOP_K,
+        config=_config(),
+        candidates=[_util_candidate(label="ours")],
+        backend={"custom_meeting_runner": False},
+    )
+
+    # NO OVER-REACH: a manifest that DOES own one of our labels is still compared,
+    # so the drift check has not been hollowed out.
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-001.json").write_text(
+        json.dumps(
+            {
+                "tranche": "1-2",
+                "mode": realpath.MODE_TOP_K,
+                "config": _config(max_attempts=3).model_dump(mode="json"),
+                "backend": {"custom_meeting_runner": False},
+                "candidates": [_claim_entry("ours", "001-ours")],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RealPathRerankError, match="different protocol"):
+        realpath._refuse_protocol_drift(
+            work_dir,
+            tranche="1-2",
+            mode=realpath.MODE_TOP_K,
+            config=_config(),
+            candidates=[_util_candidate(label="ours")],
+            backend={"custom_meeting_runner": False},
+        )
+
+
+def test_a_hard_linked_replay_is_refused(tmp_path: Path) -> None:
+    """``is_symlink()`` is false for a hard link (Codex review on PR #314).
+
+    A replay hard-linked to another campaign's file passed the round-16 no-links
+    guard outright. Both outcomes are silent: if the stamp and fence pass the
+    resume adopts bytes owned elsewhere, and if either misses the ``force=True``
+    re-record truncates the SHARED inode and destroys the other campaign's
+    replay. The rule is real AND sole-owner.
+    """
+
+    foreign = tmp_path / "other-campaign" / "replay-seed-1.jsonl"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text('{"kind":"other-campaign"}\n', encoding="utf-8")
+
+    linked = tmp_path / "work" / "000-utility-es" / "replay-seed-1.jsonl"
+    linked.parent.mkdir(parents=True)
+    os.link(foreign, linked)
+    assert not linked.is_symlink() and linked.stat().st_nlink == 2
+
+    with pytest.raises(RealPathRerankError, match="HARD LINK"):
+        realpath._refuse_symlinked_recording_entry(linked, what="the replay,")
+    # The other campaign's bytes are untouched.
+    assert foreign.read_text(encoding="utf-8") == '{"kind":"other-campaign"}\n'
+
+    # NO OVER-REACH: an ordinary sole-owner replay still passes, and so does an
+    # absent one (the fresh case).
+    linked.unlink()
+    linked.write_text('{"kind":"ours"}\n', encoding="utf-8")
+    realpath._refuse_symlinked_recording_entry(linked, what="the replay,")
+    realpath._refuse_symlinked_recording_entry(
+        linked.with_name("replay-seed-99.jsonl"), what="the replay,"
+    )
+
+
+def test_a_sparse_tranche_keys_without_materializing_the_span() -> None:
+    """Contiguity is an adjacent-pair question (Codex review on PR #314).
+
+    ``canonical == list(range(first, last + 1))`` allocated one element per
+    integer between the endpoints, so a legitimate sparse tranche exhausted
+    memory before reaching the digest path it was headed for.
+    """
+
+    key = realpath.tranche_key([0, 1_000_000_000])
+    assert key.startswith("0-1000000000-") and len(key.split("-")[-1]) == 64
+    # And every contiguous form is byte-unchanged, which is what the committed
+    # and fixture names depend on.
+    assert realpath.tranche_key([1, 2]) == "1-2"
+    assert realpath.tranche_key(list(range(4000, 4010))) == "4000-4009"
+
+
 def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:
     """Append mode follows a symlink (Codex review on PR #314).
 

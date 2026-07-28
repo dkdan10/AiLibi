@@ -965,7 +965,14 @@ def tranche_key(seeds: Sequence[int]) -> str:
     first, last = canonical[0], canonical[-1]
     if len(canonical) == 1:
         return str(first)
-    if canonical == list(range(first, last + 1)):
+    # Contiguity WITHOUT materialising the span. ``canonical == list(range(...))``
+    # allocated one element per integer between the endpoints, so a legitimate
+    # sparse tranche such as ``[0, 1_000_000_000]`` exhausted memory before the
+    # digest path it was headed for could run — and both the recorder and the
+    # public ``write_prescreen_record`` reach here with an unbounded seed range
+    # (Codex review on PR #314). Adjacent-pair comparison answers the same
+    # question in constant space.
+    if all(b - a == 1 for a, b in zip(canonical, canonical[1:], strict=False)):
         return f"{first}-{last}"
     # The FULL digest, not a prefix. Round 12 removed a truncated digest from
     # policy_id on the grounds that any prefix is the same collision bargain at
@@ -1374,7 +1381,7 @@ def _entry_exists(path: Path) -> bool:
 
 
 def _refuse_symlinked_recording_entry(path: Path, *, what: str) -> None:
-    """The recorder creates real files and directories, never links (18.31).
+    """The recorder creates real, UNSHARED files and directories (18.31).
 
     A symlink standing where recorded evidence belongs is a corrupted work tree,
     and following it writes this leg's replays — and its ``force=True``
@@ -1382,6 +1389,15 @@ def _refuse_symlinked_recording_entry(path: Path, *, what: str) -> None:
     directory the leg claimed and scored (Codex review on PR #314). The same
     rule already governs recorded candidate DIRECTORIES; this is it stated once
     for both.
+
+    A HARD link is the same sharing without the tell: ``is_symlink()`` is false
+    for one, so a replay hard-linked to another campaign's file passed this guard
+    outright. Both outcomes are bad and neither is detectable afterwards — if the
+    stamp and fence happen to pass, the resume silently adopts bytes owned
+    elsewhere; if either misses, the ``force=True`` re-record truncates the
+    SHARED inode and destroys the other campaign's replay (Codex review on
+    PR #314). ``st_nlink > 1`` is what distinguishes a file this leg owns from
+    one it merely reaches, so the rule is "real and sole-owner", not just "real".
     """
 
     if path.is_symlink():
@@ -1390,6 +1406,18 @@ def _refuse_symlinked_recording_entry(path: Path, *, what: str) -> None:
             "files and directories, so a link standing in for one is a "
             "corrupted work tree — following it would read and write evidence "
             "outside the directory this leg claimed"
+        )
+    try:
+        links = path.stat().st_nlink
+    except OSError:
+        # Absent (the ordinary fresh case) or unreadable — nothing to share.
+        return
+    if path.is_file() and links > 1:
+        raise RealPathRerankError(
+            f"{what} {path} is a HARD LINK ({links} names for one inode). The "
+            "recorder owns the evidence it writes: adopting a shared inode would "
+            "rank another campaign's bytes as this leg's, and re-recording it "
+            "would truncate that campaign's replay in place"
         )
 
 
@@ -1582,6 +1610,25 @@ def _refuse_protocol_drift(
                 "and a resume that cannot verify that protocol is a resume that "
                 "cannot safely adopt those bytes"
             ) from exc
+        # Only manifests describing candidates this resume will actually READ.
+        # The tranche key alone was the wrong scope: one work dir can legitimately
+        # hold two FRESH legs over the same seed set under different protocols
+        # with disjoint labels — the fresh path permits exactly that and gives
+        # them separate directories — and comparing against the unrelated one
+        # refused the resume on a config, mode or backend that describes bytes it
+        # is never going to touch. An interrupted 30-40 h leg became unresumable
+        # because a neighbour shared its seeds (Codex review on PR #314).
+        #
+        # Label overlap is the right test because the label is what
+        # ``_recorded_candidate_dirs`` resolves to a directory: no shared label,
+        # no shared directory, nothing adopted from that manifest.
+        recorded_labels = {
+            entry.get("label")
+            for entry in manifest.get("candidates", [])
+            if isinstance(entry.get("label"), str)
+        }
+        if not recorded_labels & set(wanted_slate):
+            continue
         # The MODE is leg protocol too — ``generate_campaign_tables`` treats it
         # as one, and refuses two tranches of an arm that disagree on it. It is
         # not a ``RealPathRerankConfig`` field, so the config comparison below
@@ -1979,16 +2026,22 @@ def _recorded_candidate_dirs(
             # under resume; skipping keeps this helper total.
             continue
         for entry in manifest.get("candidates", []):
-            label = entry.get("label")
-            if not isinstance(label, str):
-                continue
+            # The SAME validating readers the claim scan uses. Skipping a
+            # malformed ``label`` or ``dir`` here recorded the label as "seen"
+            # while omitting its directory, which dropped the resume into the
+            # legacy slug search — and if exactly one ``*-<slug>`` directory
+            # existed, the resume adopted its recordings instead of refusing the
+            # corrupted claim (Codex review on PR #314). Every manifest this task
+            # writes carries both fields, so a missing one is corrupted evidence,
+            # and the fallback that exists for pre-``dir`` manifests must not be
+            # reachable by corruption.
+            label = _claim_label(entry, manifest=path)
             seen.add(label)
-            recorded_dir = entry.get("dir")
-            if isinstance(recorded_dir, str) and recorded_dir:
-                _refuse_escaping_recorded_dir(
-                    recorded_dir, work_dir=work_dir, manifest=path
-                )
-                recorded[label] = recorded_dir
+            recorded_dir = _claim_dir_name(entry, manifest=path)
+            _refuse_escaping_recorded_dir(
+                recorded_dir, work_dir=work_dir, manifest=path
+            )
+            recorded[label] = recorded_dir
     return recorded, seen
 
 
@@ -2219,7 +2272,14 @@ def _recording_backend_identity(
     env = os.environ if environment is None else environment
     identity: dict[str, object] = {
         "custom_meeting_runner": custom_runner,
-        "meeting_runner_identity": runner_identity,
+        # The runner identity belongs to the CUSTOM branch only. On the default
+        # branch ``run_tournament_eval`` never consults it, so carrying it made a
+        # resume that omitted an incidental identity — or passed a different one
+        # — read as backend drift while every effective recorder input agreed
+        # (Codex review on PR #314). This is the round-16 block rule applied to
+        # the one field that had been sitting outside the block: present whole
+        # for the branch that reads it, absent whole for the branch that does not.
+        **({"meeting_runner_identity": runner_identity} if custom_runner else {}),
         # The MAP is read on BOTH branches: ``run_tournament_eval`` builds every
         # HeadlessGame with it regardless of which meeting runner is installed.
         # Hashed rather than embedded so the manifest stays small.
@@ -2511,6 +2571,36 @@ def _allocate_candidate_dirs(
         if resume:
             for candidate_dir in candidate_dirs:
                 candidate_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # WRITE-ONCE, checked BEFORE the claim is published. A fresh leg
+            # keeps an enumerated directory that already exists on disk but is
+            # unclaimed — deliberately, so a re-run collides at ``mkdir`` instead
+            # of quietly recording a second copy (round 11). But the manifest is
+            # published FIRST, so that collision left behind a manifest claiming
+            # a directory this invocation never created and never recorded into.
+            # A later ``resume=True`` then read that manifest as proof of
+            # ownership and skipped whatever replays already sat there — bytes
+            # that predate the invocation entirely (Codex review on PR #314).
+            #
+            # The collision is the same; only its ORDER was wrong. Refusing here
+            # keeps write-once exactly as strict and stops a failed no-clobber
+            # check from legitimising stale recordings.
+            for candidate, candidate_dir in zip(
+                candidates, candidate_dirs, strict=True
+            ):
+                if _entry_exists(candidate_dir):
+                    # ``FileExistsError`` deliberately — the SAME exception the
+                    # later exclusive ``mkdir`` raised. Only the order changes;
+                    # the write-once contract callers depend on does not.
+                    raise FileExistsError(
+                        f"candidate {candidate.label!r}: {candidate_dir} already "
+                        "exists and no leg manifest claims it. A fresh leg never "
+                        "records into an existing directory — pass resume=True to "
+                        "adopt verified recordings, or record into a fresh work "
+                        "dir. (Refused BEFORE this leg publishes its manifest, so "
+                        "no claim is left behind for a later resume to read as "
+                        "ownership of bytes this invocation never wrote.)"
+                    )
         publish(candidate_dirs)
     return candidate_dirs
 
