@@ -50,3 +50,9 @@ state-hash fence refuses at tick 0.
 
 Audit sidecars (`*.audit.jsonl`) are excluded from the committed tree: no instrument or
 gate reads them, and they are ~10× the size of the replays they accompany.
+
+## The 18.25 crew campaign (operator root `/Users/danielkeinan/ailibi-campaign-1825/`)
+
+| as-recorded absolute prefix | repository-relative prefix |
+|---|---|
+| `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath/<run>/` |
