@@ -35,7 +35,17 @@ the definition-of-done contract of :mod:`training.coevo.driver`:
   build or sampling, and the exploiter probe's found exploits join the frozen
   side's hall with honest provenance;
 * wrong-family/misconfigured campaigns fail loud at validation time, BEFORE
-  any hall exists on disk.
+  any hall exists on disk;
+* (Task 18.31) every GENERATION's champion is persisted beside the rows as a
+  four-file loadable artifact and every hall freeze writes one too — both
+  provably digest-inert (the double-run row digest is asserted again against
+  the same fixture, and no row field was added), both byte-deterministic across
+  two runs, and both loading END TO END through
+  ``scripts/run_tournament.py``'s ``_load_candidate_policy``; the work-dir
+  no-clobber discipline covers the new artifacts, and a side that would freeze
+  a MIS-STAMPED artifact (a masked-MLP family with no declared ``hidden``, an
+  alternative anchor with no stamp label, a blank/unsafe run label) is refused
+  before any hall exists.
 
 Every fixture-pinned count below (games, hall sizes, exploiter outcomes) was
 obtained by running the code under the fixed seeds and then hard-pinned here
@@ -48,7 +58,9 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import replace
+import os
+import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
@@ -73,7 +85,14 @@ from training.bakeoff.map_elites import (
 from training.bakeoff.utility_es import build_utility_scorer_policy
 from training.coevo.driver import (
     COEVO_CAMPAIGN_ROW_SCHEMA_VERSION,
+    COEVO_FREEZE_METHOD,
+    CAMPAIGN_PLAN_FILENAME,
+    CAMPAIGN_ROWS_FILENAME,
     EXPLOITER_ORIGIN,
+    GEN_CHAMPIONS_DIRNAME,
+    GENERATION_CHAMPION_ORIGIN,
+    ROLLOUTS_DIRNAME,
+    WORK_DIR_OWNED_NAMES,
     SWAP_CHAMPION_ORIGIN,
     CoevoCampaignConfig,
     CoevoCampaignResult,
@@ -86,6 +105,7 @@ from training.coevo.driver import (
 )
 from training.coevo.hall_of_fame import (
     MAP_ELITES_FOUNDER_ORIGIN,
+    _entry_exists,
     TRAINED_AGAINST_FSM,
     HallOfFame,
     OpponentStalenessCap,
@@ -94,6 +114,15 @@ from training.coevo.hall_of_fame import (
 from training.conviction.model import ConvictionStalenessCap, ConvictionUseCounter
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import CrewOptionScorer, CrewTrackPolicy, build_crew_scorer
+
+# ``scripts/`` is a bare-module namespace: the 18.31 loadable-freeze pin needs
+# the CONSUMING entry point ``run_tournament._load_candidate_policy``, so put
+# ``scripts/`` on sys.path the way tests/scripts/conftest.py does.
+_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import run_tournament  # noqa: E402
 
 # The two committed cheap linear families (the shared artifact/weights layout):
 # the 19-gene utility scorer (impostor encoder v1) and the 27-gene owned-task
@@ -702,8 +731,401 @@ def test_founders_seed_the_pool_and_exploits_join_the_hall(tmp_path: Path) -> No
     assert exploits[0].trained_against == row.champion_weights_sha256
     assert exploits[0].generation == 1
 
+    # Task 18.31: EVERY freeze path on this hall — MAP-Elites founders included —
+    # writes the four-file loadable artifact with the side's declared family.
+    for member in impostor_hall.members:
+        member_dir = tmp_path / "halls" / "impostor" / member.path
+        assert _artifact_files(member_dir) == _LOADABLE_FILES
+        assert (
+            json.loads((member_dir / "stamp.json").read_text())["encoder_version"]
+            == _IMPOSTOR_ENCODER
+        )
+        policy, _ = run_tournament._load_candidate_policy(member_dir)
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+
     crew_hall = HallOfFame.load(tmp_path / "halls", "crew")
     assert [member.origin for member in crew_hall.members] == [SWAP_CHAMPION_ORIGIN]
+
+
+# --------------------------------------------------------------------------- #
+# Campaign ergonomics (Task 18.31): per-generation champions + loadable freezes.#
+# --------------------------------------------------------------------------- #
+
+
+def _artifact_files(artifact_dir: Path) -> list[str]:
+    return sorted(path.name for path in artifact_dir.iterdir())
+
+
+_LOADABLE_FILES = ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
+
+
+def test_every_generation_champion_is_persisted_as_a_loadable_artifact(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """Each generation's champion lands beside the rows, loadable (18.31 fix 2).
+
+    The 18.24 campaign persisted swap champions and exploiter finds only, so its
+    intermediate generations had to be re-bred and hand-stamped: 66 real games
+    and two recovery passes (report §11 defect 2 / F1). Every row now has its
+    genome on disk under ``gen-champions/gen-<N>/<sha>/`` as the four-file
+    artifact, keyed by the row's OWN ``champion_weights_sha256``, and it loads
+    through the consuming entry point.
+    """
+
+    first, _, _ = baseline_runs
+    gen_dir = first.gen_champions_dir
+    assert gen_dir.is_dir()
+    assert sorted(child.name for child in gen_dir.iterdir()) == sorted(
+        f"gen-{row.generation_index}" for row in first.rows
+    )
+    for row in first.rows:
+        artifact_dir = (
+            gen_dir / f"gen-{row.generation_index}" / (row.champion_weights_sha256)
+        )
+        assert _artifact_files(artifact_dir) == _LOADABLE_FILES
+        stamp = json.loads((artifact_dir / "stamp.json").read_text())
+        assert stamp["weights_sha256"] == row.champion_weights_sha256
+        assert stamp["encoder_version"] == row.moving_encoder_version
+        assert stamp["method"] == COEVO_FREEZE_METHOD
+        # The id carries the SIDE and a weights discriminator as well as the
+        # origin and generation, so two artifacts never share one (Codex #314).
+        assert stamp["policy_id"].endswith(
+            f"-{row.moving_side}-{GENERATION_CHAMPION_ORIGIN}"
+            f"-gen{row.generation_index}-{row.champion_weights_sha256}"
+        )
+        config = json.loads((artifact_dir / "config.json").read_text())
+        assert config["side"] == row.moving_side
+        assert config["swap_index"] == row.swap_index
+        assert config["generation_in_swap"] == row.generation_in_swap
+        assert config["champion_updated"] == row.champion_updated
+        assert config["hall_origin"] == GENERATION_CHAMPION_ORIGIN
+        # The impostor family is the utility scorer here, so no hidden width
+        # is declared — and none is invented.
+        assert "hidden" not in config
+
+    # The impostor-moving generations load END TO END through the consuming
+    # entry point (the §11 defect-4 / F14 invariant this task satisfies).
+    impostor_rows = [row for row in first.rows if row.moving_side == "impostor"]
+    assert impostor_rows
+    for row in impostor_rows:
+        artifact_dir = (
+            gen_dir / f"gen-{row.generation_index}" / (row.champion_weights_sha256)
+        )
+        policy, stamp_model = run_tournament._load_candidate_policy(artifact_dir)
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+        assert stamp_model.weights_sha256 == row.champion_weights_sha256
+
+
+def test_generation_champion_artifacts_are_digest_inert_and_deterministic(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """The persistence moved no row byte, and its own bytes reproduce (18.31).
+
+    The 18.21 double-run digest pin is asserted again HERE against the same
+    fixture (rows are the digest's only input, and no row field was added), and
+    the new artifacts are themselves a pure function of the campaign: two
+    independent runs write byte-identical trees under different work dirs.
+    """
+
+    first, second, _ = baseline_runs
+    assert first.digest() == second.digest()
+    assert first.rows_path.read_bytes() == second.rows_path.read_bytes()
+    # No row carries a persistence field — the schema is unchanged.
+    assert not {
+        key
+        for key in first.rows[0].model_dump()
+        if "champion_path" in key or "gen_champion" in key
+    }
+
+    first_files = sorted(
+        path.relative_to(first.gen_champions_dir)
+        for path in first.gen_champions_dir.rglob("*")
+        if path.is_file()
+    )
+    second_files = sorted(
+        path.relative_to(second.gen_champions_dir)
+        for path in second.gen_champions_dir.rglob("*")
+        if path.is_file()
+    )
+    assert first_files == second_files
+    assert first_files
+    for relative in first_files:
+        assert (first.gen_champions_dir / relative).read_bytes() == (
+            second.gen_champions_dir / relative
+        ).read_bytes()
+
+
+def test_hall_freezes_are_loadable_four_file_artifacts(
+    baseline_runs: tuple[CoevoCampaignResult, CoevoCampaignResult, Path],
+) -> None:
+    """Every driver hall freeze writes the four-file artifact (18.31 fix 4).
+
+    Swap champions and exploiter finds alike: the campaign's own halls now hold
+    artifacts that load through ``_load_candidate_policy`` with no hand-stamping
+    pass, with ``encoder_version`` taken from the SIDE CONFIG (never re-derived
+    from genome length — §12 Errata item 1).
+    """
+
+    first, _, base = baseline_runs
+    hall_root = base / "halls"
+    for side, encoder in (("impostor", _IMPOSTOR_ENCODER), ("crew", _CREW_ENCODER)):
+        hall = HallOfFame.load(hall_root, cast(Side, side))
+        assert hall.members
+        for member in hall.members:
+            member_dir = hall_root / side / member.path
+            assert _artifact_files(member_dir) == _LOADABLE_FILES
+            stamp = json.loads((member_dir / "stamp.json").read_text())
+            assert stamp["encoder_version"] == encoder
+            assert stamp["weights_sha256"] == member.weights_sha256
+            config = json.loads((member_dir / "config.json").read_text())
+            assert config["hall_origin"] == member.origin
+            assert config["trained_against"] == member.trained_against
+            assert config["side"] == side
+
+    # The impostor members are the ones the consuming entry point loads (a crew
+    # artifact belongs to --crew-artifact — the standing 18.19 guard).
+    impostor_hall = HallOfFame.load(hall_root, "impostor")
+    for member in impostor_hall.members:
+        policy, stamp_model = run_tournament._load_candidate_policy(
+            hall_root / "impostor" / member.path
+        )
+        assert policy.encoder_version == _IMPOSTOR_ENCODER
+        assert stamp_model.weights_sha256 == member.weights_sha256
+    assert first.total_games == _BASELINE_GAMES
+
+
+def test_existing_generation_champions_dir_is_refused(tmp_path: Path) -> None:
+    """The work-dir no-clobber discipline extends to the new artifacts (18.31)."""
+
+    config = _make_config(tmp_path)
+    (config.work_dir / "gen-champions").mkdir(parents=True)
+    with pytest.raises(FileExistsError, match="per-generation champion artifacts"):
+        run_alternating_freeze(config)
+    assert not (tmp_path / "halls").exists()
+
+
+def test_the_work_dir_and_the_hall_root_may_not_overlap(tmp_path: Path) -> None:
+    """The champion tree may not land inside a hall (Codex review on PR #314).
+
+    ``HallOfFame.load`` reads every ``gen-*`` child of a side dir as a generation
+    bucket, and the 18.31 champion artifacts are written to
+    ``<work_dir>/gen-champions/gen-<N>/<sha>``. A work dir pointed at
+    ``<hall_root>/impostor`` therefore grew a ``gen-champions`` directory inside
+    that hall — and nothing on the way in saw it, because the fresh-root
+    preflight runs before the work dir is created and ``create`` runs before the
+    first champion is frozen. The campaign spent every paid game and only the
+    NEXT load failed, on a hall the campaign had corrupted itself.
+
+    The predicate is the SIDE DIR, not the hall root. The first version refused
+    any containment either way, which blocked `hall_root = work_dir / "halls"` —
+    a natural layout whose trees are siblings with nothing overlapping (Codex
+    review on PR #314). Both halves are pinned here, because a guard that
+    over-refuses is a defect in the same way an absent one is.
+    """
+
+    for side in ("impostor", "crew"):
+        config = _make_config(
+            tmp_path / side, work_dir=tmp_path / side / "halls" / side
+        )
+        with pytest.raises(ValueError, match=f"is inside the {side} hall directory"):
+            run_alternating_freeze(config)
+        assert not (tmp_path / side / "halls").exists()
+
+    # A gen-*-named subdir of a side dir is the same collision: the subdir is
+    # itself read as a generation bucket, so the campaign's own files become its
+    # members. Verified below alongside the direct case.
+    deep = _make_config(
+        tmp_path / "deep", work_dir=tmp_path / "deep" / "halls" / "impostor" / "gen-x"
+    )
+    with pytest.raises(ValueError, match="is inside the impostor hall directory"):
+        run_alternating_freeze(deep)
+
+    # NO OVER-REACH: the halls nested under the work dir is a legitimate layout,
+    # and it is proven by RUNNING it — the campaign completes and both halls
+    # reload, which is the operation the over-broad guard was purporting to
+    # protect.
+    nested_root = tmp_path / "nested"
+    nested = _make_config(nested_root, hall_root=nested_root / "work" / "halls")
+    result = run_alternating_freeze(nested)
+    assert result.total_games == _BASELINE_GAMES
+    for side in ("impostor", "crew"):
+        HallOfFame.load(nested_root / "work" / "halls", cast(Side, side))
+    assert (nested_root / "work" / GEN_CHAMPIONS_DIRNAME).is_dir()
+
+    # The harm, shown directly: a gen-champions tree inside a side dir is what
+    # the refusal above prevents, and it is fatal to the hall that holds it.
+    hall_root = tmp_path / "harm" / "halls"
+    hall = HallOfFame.create(hall_root, "impostor", substrate_sha256=_SUBSTRATE)
+    assert HallOfFame.load(hall_root, "impostor").members == hall.members
+    (hall_root / "impostor" / "gen-champions" / "gen-1" / "abc").mkdir(parents=True)
+    with pytest.raises(ValueError):
+        HallOfFame.load(hall_root, "impostor")
+
+
+def test_the_hall_root_may_not_be_a_driver_owned_path(tmp_path: Path) -> None:
+    """The mirror of the side-dir rule (Codex review on PR #314).
+
+    Narrowing the round-18 guard to the side dirs was right for the reported
+    layout and left this open: every ``hall_root`` under the work dir was then
+    allowed, including the four paths the driver writes itself. Each fails
+    differently and none of them failed WELL — measured:
+
+    * ``campaign-plan.json`` -> ``NotADirectoryError`` mid-startup;
+    * ``campaign-rows.jsonl`` -> the hall's mkdir creates the rows path as a
+      directory, so the corrected retry is refused by the rows no-clobber check;
+    * ``gen-champions`` / ``rollouts`` -> the first campaign COMPLETES with the
+      halls squatting in driver-owned output, and only a later campaign in that
+      work dir is refused.
+
+    The last two are the worst precisely because nothing fails at the time.
+    """
+
+    for owned in WORK_DIR_OWNED_NAMES:
+        base = tmp_path / owned.replace(".", "_")
+        config = _make_config(base, hall_root=base / "work" / owned)
+        with pytest.raises(ValueError, match="which this driver writes itself"):
+            run_alternating_freeze(config)
+        # Refused before ANY mutation: the work dir itself is still unmade, so a
+        # corrected retry has a clean tree rather than a half-built one.
+        assert not (base / "work").exists()
+
+    # The enumeration is the guard's domain, so it may not silently fall behind
+    # what the driver writes. Every owned name is a real artifact path.
+    assert set(WORK_DIR_OWNED_NAMES) == {
+        CAMPAIGN_PLAN_FILENAME,
+        CAMPAIGN_ROWS_FILENAME,
+        GEN_CHAMPIONS_DIRNAME,
+        ROLLOUTS_DIRNAME,
+    }
+
+    # A path that TRAVERSES an owned component is refused too, even though it
+    # resolves elsewhere: `resolve()` collapses `..` textually while the plan
+    # path does not exist yet, so `work_dir/"campaign-plan.json"/".."` resolved
+    # to `work_dir` and passed — and the hall's mkdir then tried to walk through
+    # the plan FILE via the unresolved path, raising NotADirectoryError after the
+    # work dir already existed (Codex review on PR #314).
+    trav_root = tmp_path / "traverse"
+    traversing = _make_config(
+        trav_root,
+        hall_root=trav_root / "work" / CAMPAIGN_PLAN_FILENAME / ".." / "halls",
+    )
+    with pytest.raises(ValueError, match="which this driver writes itself"):
+        run_alternating_freeze(traversing)
+    assert not (trav_root / "work").exists()
+
+    # MIXED SPELLINGS: a relative work_dir against an absolute hall_root
+    # compared a relative parts tuple with an absolute one and never matched, so
+    # the traversal slipped through (Codex review on PR #314). Both sides are
+    # normalised to an absolute-but-not-resolved basis — resolving would discard
+    # the very component the check looks for.
+    mixed_root = tmp_path / "mixed"
+    (mixed_root / "work").mkdir(parents=True)
+    relative_work = Path(os.path.relpath(mixed_root / "work", Path.cwd()))
+    mixed = _make_config(
+        mixed_root,
+        work_dir=relative_work,
+        hall_root=(mixed_root / "work" / CAMPAIGN_PLAN_FILENAME / ".." / "halls"),
+    )
+    with pytest.raises(ValueError, match="which this driver writes itself"):
+        run_alternating_freeze(mixed)
+
+    # NO OVER-REACH: a sibling under the work dir is still fine, and a hall root
+    # merely PREFIXED by an owned name is a different path. An unrelated ANCESTOR
+    # directory that happens to share an owned name is also fine — the check is a
+    # lexical PREFIX of work_dir/<owned>, not "the name appears somewhere".
+    shared_name = tmp_path / GEN_CHAMPIONS_DIRNAME / "campaign"
+    shared = _make_config(shared_name, hall_root=shared_name / "halls")
+    assert run_alternating_freeze(shared).total_games == _BASELINE_GAMES
+    ok_root = tmp_path / "ok"
+    ok = _make_config(ok_root, hall_root=ok_root / "work" / "halls")
+    assert run_alternating_freeze(ok).total_games == _BASELINE_GAMES
+    near_root = tmp_path / "near"
+    near = _make_config(
+        near_root, hall_root=near_root / "work" / f"{GEN_CHAMPIONS_DIRNAME}-halls"
+    )
+    assert run_alternating_freeze(near).total_games == _BASELINE_GAMES
+
+
+def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None:
+    """Presence is about the directory ENTRY (Codex review on PR #314).
+
+    ``Path.exists()`` follows symlinks, so a DANGLING entry at any no-clobber
+    path read as absent: the campaign built its plan and halls and ran a whole
+    generation of paid ES games before ``mkdir`` hit the symlink and raised,
+    leaving a spent generation and a tree the create-only retry cannot reuse.
+
+    Every no-clobber check in the campaign path now goes through the shared
+    ``_entry_exists`` helper, so this pin covers the rule rather than the two
+    call sites that happened to be reported.
+    """
+
+    for name, message in (
+        ("gen-champions", "per-generation champion artifacts"),
+        ("campaign-rows.jsonl", "campaign rows already exist"),
+    ):
+        config = _make_config(tmp_path / name)
+        config.work_dir.mkdir(parents=True, exist_ok=True)
+        dangling = config.work_dir / name
+        dangling.symlink_to(tmp_path / "nowhere")
+        assert not dangling.exists() and dangling.is_symlink()
+        with pytest.raises(FileExistsError, match=message):
+            run_alternating_freeze(config)
+        # Refused before the plan: no halls, so no paid generation was spent.
+        assert not (tmp_path / name / "halls").exists()
+
+    # The hall's own no-clobber checks share the helper, so a dangling side dir
+    # is a collision there too rather than an invitation to initialise over it.
+    from training.coevo import hall_of_fame as hof_module
+
+    assert _entry_exists is hof_module._entry_exists
+
+
+@dataclass(frozen=True)
+class _StubPolicy:
+    """A build_policy result carrying only the family tag the pin reads."""
+
+    encoder_version: str
+
+
+def test_masked_mlp_side_without_hidden_fails_loud(tmp_path: Path) -> None:
+    """A non-utility impostor family must DECLARE its head width (18.31).
+
+    ``_load_candidate_policy`` reads ``hidden`` from the artifact's config.json
+    to rebuild a masked-MLP family; a side that freezes without declaring it
+    produces unloadable artifacts — the §12 Errata item-1 failure. It is refused
+    before any hall exists, and the width is never guessed from genome length.
+    """
+
+    def build_v2(genome: tuple[float, ...]) -> BakeoffPolicy:
+        del genome
+        return cast(BakeoffPolicy, _StubPolicy("v2"))
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(build_policy=build_v2, encoder_version="v2"),
+    )
+    with pytest.raises(ValueError, match="needs an integer 'hidden'"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_anchor_policy_without_a_stamp_label_fails_loud(tmp_path: Path) -> None:
+    """A side bred on an alternative anchor must NAME it in the stamp (18.31)."""
+
+    stub_anchor = cast(BakeoffPolicy, object())
+    config = _make_config(tmp_path, impostor=_impostor_side(anchor_policy=stub_anchor))
+    with pytest.raises(ValueError, match="anchor_policy_label is still"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_blank_run_label_is_refused(tmp_path: Path) -> None:
+    """The stamp-grade run label rides every artifact, so it is validated (18.31)."""
+
+    with pytest.raises(ValueError, match="run_label must be non-blank"):
+        run_alternating_freeze(_make_config(tmp_path / "a", run_label="   "))
+    with pytest.raises(ValueError, match="run_label must be MANIFEST-safe"):
+        run_alternating_freeze(_make_config(tmp_path / "b", run_label="a|b"))
 
 
 # --------------------------------------------------------------------------- #
@@ -1053,3 +1475,278 @@ class TestCommittedImpostorCampaignRows:
         # the crew-moving swap trains against (opponent_pool_size is the FROZEN
         # side's active pool for the moving side's generation).
         assert any(row.opponent_pool_size >= 30 for row in block5)
+
+
+def test_unloadable_impostor_family_is_refused(tmp_path: Path) -> None:
+    """A family the CONSUMER cannot rebuild is refused up front (Codex #314).
+
+    ``_load_candidate_policy`` sends every non-utility tag to
+    ``build_masked_mlp_policy``, which accepts only ``v2`` / ``v3``. Declaring
+    any other impostor family would freeze artifacts nothing can load — and the
+    campaign would only discover it after paying for every generation.
+    """
+
+    def build_v9(genome: tuple[float, ...]) -> BakeoffPolicy:
+        del genome
+        return cast(BakeoffPolicy, _StubPolicy("v9"))
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(build_policy=build_v9, encoder_version="v9", hidden=8),
+    )
+    with pytest.raises(ValueError, match="not one the consuming entry point"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_bad_stamp_tokens_are_refused_before_any_disk_mutation(tmp_path: Path) -> None:
+    """Stamp tokens are validated in the preflight, not at hall-build time.
+
+    ``LoadableArtifactMetadata`` would otherwise first reject a malformed
+    ``anchor_policy_label`` while the halls are being constructed — after the
+    work dir and campaign plan exist — leaving a half-started tree behind a
+    configuration typo (Codex on PR #314).
+    """
+
+    # A custom anchor WITH a MANIFEST-unsafe label: the anchor identity rule is
+    # satisfied (anchor supplied, label named), so the token check is what must
+    # catch it — and it must do so before any mkdir.
+    stub_anchor = cast(BakeoffPolicy, object())
+    with pytest.raises(ValueError, match="MANIFEST-safe"):
+        run_alternating_freeze(
+            _make_config(
+                tmp_path / "a",
+                impostor=_impostor_side(
+                    anchor_policy=stub_anchor, anchor_policy_label="a|b"
+                ),
+            )
+        )
+    _assert_no_disk_mutation(tmp_path / "a")
+
+    with pytest.raises(ValueError, match="non-blank"):
+        run_alternating_freeze(
+            _make_config(tmp_path / "b", crew=_crew_side(anchor_policy_label="   "))
+        )
+    _assert_no_disk_mutation(tmp_path / "b")
+
+
+def test_anchor_label_without_an_anchor_policy_is_refused(tmp_path: Path) -> None:
+    """The anchor identity is enforced in BOTH directions (Codex on PR #314).
+
+    Naming an anchor artifact while supplying none means the campaign trains
+    against the scripted FSM and every stamp claims otherwise — the mirror of
+    the custom-anchor-without-a-label case, and the same false provenance.
+    """
+
+    config = _make_config(
+        tmp_path, impostor=_impostor_side(anchor_policy_label="filtered-bc-anchor")
+    )
+    with pytest.raises(ValueError, match="supplies no anchor_policy"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_declared_hidden_is_proven_against_the_consuming_builder(
+    tmp_path: Path,
+) -> None:
+    """A mis-declared ``hidden`` is caught by the CONSUMER's own builder (18.31).
+
+    A width that is merely positive is not enough: if the side declares 4 while
+    ``build_policy`` captured 8, training and the encoder probe both succeed,
+    every artifact records 4, and ``_load_candidate_policy`` rebuilds with 4 and
+    rejects the genome length — after the campaign has run (Codex on PR #314).
+    The preflight therefore runs ``build_masked_mlp_policy`` at the declared
+    width over the real genome, which is exactly the reconstruction the frozen
+    artifact must survive.
+    """
+
+    from orchestrator.boundary import public_map_from_engine_map
+    from training.bakeoff.policy_es import (
+        TARGET_KILL_SLOTS,
+        build_masked_mlp_policy,
+        policy_genome_length,
+    )
+
+    from agents.tactical.features import TacticalFeatureEncoderV3
+    from engine.world import load_canonical_map
+
+    hidden = 8
+    genome_length = policy_genome_length(
+        public_map_from_engine_map(load_canonical_map()),
+        hidden=hidden,
+        encoder=TacticalFeatureEncoderV3(),
+        target_slots=TARGET_KILL_SLOTS,
+    )
+
+    def build_v3(genome: tuple[float, ...]) -> BakeoffPolicy:
+        return build_masked_mlp_policy(
+            genome,
+            game_map=load_canonical_map(),
+            hidden=hidden,
+            encoder_version="v3",
+        )
+
+    # The honest declaration passes the preflight (it fails later, on the
+    # over-ceiling guard, which proves validation was cleared).
+    honest = _make_config(
+        tmp_path / "ok",
+        impostor=_impostor_side(
+            genome_length=genome_length,
+            build_policy=build_v3,
+            encoder_version="v3",
+            hidden=hidden,
+            initial_genome=(0.0,) * genome_length,
+        ),
+        game_ceiling=1,
+        allow_over_ceiling=False,
+    )
+    with pytest.raises(ValueError, match="exceeds the stated ceiling"):
+        run_alternating_freeze(honest)
+
+    # The mis-declared width is refused by the consuming builder itself.
+    wrong = _make_config(
+        tmp_path / "bad",
+        impostor=_impostor_side(
+            genome_length=genome_length,
+            build_policy=build_v3,
+            encoder_version="v3",
+            hidden=4,
+            initial_genome=(0.0,) * genome_length,
+        ),
+    )
+    with pytest.raises(ValueError, match="cannot rebuild"):
+        run_alternating_freeze(wrong)
+    _assert_no_disk_mutation(tmp_path / "bad")
+
+
+def test_utility_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
+    """The utility scorer takes no head width, so declaring one is refused.
+
+    The consumer ignores ``hidden`` for this family, so such artifacts still
+    load — but every ``config.json`` would falsely claim a masked-MLP width.
+    ``RealPathCandidate`` rejects the same combination for the same family
+    (Codex on PR #314).
+    """
+
+    config = _make_config(tmp_path, impostor=_impostor_side(hidden=8))
+    with pytest.raises(ValueError, match="takes no hidden width"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_a_boolean_hidden_width_is_refused_not_coerced(tmp_path: Path) -> None:
+    """``hidden=True`` is a guess, not a width of 1 (Codex on PR #314).
+
+    ``bool`` is an ``int`` subtype, so ``True`` satisfies the ``>= 1`` check and
+    reads as width 1 — and ``CoevoSideConfig`` is a plain dataclass, so nothing
+    coerces or rejects it on the way in. "Yes, this family has a hidden layer"
+    would silently become "width 1", which is exactly the inferred width §12
+    Errata item 1 records the cost of. Refused at the side config, before any
+    work dir exists.
+    """
+
+    for boolean in (True, False):
+        config = _make_config(
+            tmp_path,
+            impostor=_impostor_side(hidden=boolean),
+        )
+        with pytest.raises(ValueError, match="non-boolean integer"):
+            run_alternating_freeze(config)
+        _assert_no_disk_mutation(tmp_path)
+
+
+def test_width_free_families_are_rebuilt_in_the_campaign_preflight(
+    tmp_path: Path,
+) -> None:
+    """Every loadable family is preflighted, not just width-bearing ones (#314).
+
+    The reconstruction branch only covered width-bearing impostor encoders, so a
+    custom ``build_policy`` reporting a crew tag (or the utility tag) with an
+    incompatible genome length passed startup, spent the first generation's
+    games, and failed only when ``_persist_generation_champion`` reached the
+    real consumer builder.
+    """
+
+    # A PERMISSIVE custom builder: it reports the loadable family tag and
+    # accepts any length, which is exactly the shape that slipped through — the
+    # committed builders validate the length themselves, so the gap is only
+    # reachable through a caller-supplied one.
+    def _permissive_impostor(genome: tuple[float, ...]) -> BakeoffPolicy:
+        return build_utility_scorer_policy(genome[:_IMPOSTOR_GENOME_LENGTH])
+
+    def _permissive_crew(genome: tuple[float, ...]) -> CrewTrackPolicy:
+        return _crew_builder(genome[:_CREW_GENOME_LENGTH])
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(
+            genome_length=_IMPOSTOR_GENOME_LENGTH + 1, build_policy=_permissive_impostor
+        ),
+    )
+    with pytest.raises(ValueError, match="does not survive the consuming builder"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+    # The crew families, same gap on the other side.
+    config = _make_config(
+        tmp_path,
+        crew=_crew_side(
+            genome_length=_CREW_GENOME_LENGTH + 1, build_policy=_permissive_crew
+        ),
+    )
+    with pytest.raises(ValueError, match="does not survive the consuming builder"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_crew_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
+    """The crew scorer takes no head width either (Codex on PR #314).
+
+    The round-3 family rules were written inside the ``impostor`` branch, so a
+    crew side declaring ``hidden`` passed validation and stamped that width into
+    every crew freeze's ``config.json``. Crew artifacts rebuild through
+    ``build_crew_scorer``, which has no width input — exactly the false
+    masked-MLP provenance the utility-family guard rejects, reachable on the
+    other side.
+    """
+
+    config = _make_config(tmp_path, crew=_crew_side(hidden=8))
+    with pytest.raises(ValueError, match="crew family .* takes no hidden width"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
+def test_crew_family_must_be_one_the_consumer_can_rebuild(tmp_path: Path) -> None:
+    """The crew side gets the SAME loadability preflight the impostor side has.
+
+    The 18.19 namespace guard only proves a tag starts with ``crew-``, so an
+    arbitrary ``crew-option-features-v9`` passed validation and froze artifacts
+    ``_load_crew_artifact_policy`` cannot rebuild — discovered only after the
+    campaign was paid for (Codex on PR #314).
+    """
+
+    class _ExoticCrewPolicy:
+        """A crew policy in the ``crew-*`` namespace that no loader can rebuild."""
+
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+            self.encoder_version = "crew-option-features-v9"
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+    def _exotic_crew_builder(genome: tuple[float, ...]) -> object:
+        return _ExoticCrewPolicy(_crew_builder(genome))
+
+    config = _make_config(
+        tmp_path,
+        crew=_crew_side(
+            build_policy=_exotic_crew_builder,
+            encoder_version="crew-option-features-v9",
+        ),
+    )
+    with pytest.raises(
+        ValueError, match="not one the consuming entry point can rebuild"
+    ):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)

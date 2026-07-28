@@ -20,13 +20,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import os
+import sys
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from agents.tactical.features import weights_to_hex_json
+from agents.tactical.features import (
+    TacticalFeatureEncoder,
+    TacticalFeatureEncoderV3,
+    weights_from_hex_json,
+    weights_to_hex_json,
+)
+from engine.world import load_canonical_map
+from training.bakeoff.harness import load_candidate_weights
 from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
     ArchiveCell,
@@ -35,22 +47,43 @@ from training.bakeoff.map_elites import (
     map_elites_budget,
     write_archive_cell_artifacts,
 )
+from training.bakeoff.policy_es import TARGET_KILL_SLOTS, policy_genome_length
+from training.coevo import hall_of_fame
 from training.coevo.hall_of_fame import (
     MAP_ELITES_FOUNDER_ORIGIN,
     TRAINED_AGAINST_FSM,
     HallOfFame,
     HallOfFameMember,
+    LoadableArtifactMetadata,
     OpponentStalenessCap,
     OpponentStalenessExceededError,
     OpponentStalenessLedger,
     sample_opponents,
+    write_loadable_artifact,
 )
+from training.crew.options import OwnedTaskOptionBasis, crew_genome_length
+
+# ``scripts/`` is a bare-module namespace (no ``__init__.py``): the loadable-
+# freeze pin (Task 18.31) needs the CONSUMING entry point
+# ``run_tournament._load_candidate_policy``, so put ``scripts/`` on sys.path the
+# way tests/scripts/conftest.py and scripts/measure_baseline.py:76-78 do.
+_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import run_tournament  # noqa: E402
 
 # A valid 64-lowercase-hex substrate for store-fidelity tests that do not need
 # the real corpus substrate (founder tests use ``bakeoff_substrate_sha()``).
 _SUBSTRATE = "ab" * 32
 # A stand-in opposing-side sha for a champion bred against a frozen member.
 _OPPONENT_SHA = "cd" * 32
+
+# The two impostor families the 18.31 loadable-freeze pin exercises: the
+# committed 19-gene utility scorer and the 18.22 encoder-v3 masked MLP.
+_UTILITY_ARTIFACT = Path("training/artifacts/impostor/utility-es")
+_UTILITY_ENCODER = "impostor-option-features-v1"
+_V3_HIDDEN = 8
 
 
 def _synthetic_archive() -> dict[tuple[int, int, int], ArchiveCell]:
@@ -86,6 +119,29 @@ def _synthetic_archive() -> dict[tuple[int, int, int], ArchiveCell]:
             genome=genome, fitness=fitness, descriptors=descriptors
         )
     return archive
+
+
+def _persist_two_cell_archive(
+    artifact_dir: Path, first: tuple[float, ...], second: tuple[float, ...]
+) -> Path:
+    """Persist a TWO-cell archive whose sorted cell-key order is (first, second).
+
+    Ingestion walks ``sorted(archive)``, so putting the offending genome second
+    is what makes a per-member refusal visible as a partial mutation.
+    """
+
+    specs = [
+        ({"kill_count": 0.0, "witness_exposure_rate": 0.0, "vent_usage": 0.0}, first),
+        ({"kill_count": 5.0, "witness_exposure_rate": 0.9, "vent_usage": 7.0}, second),
+    ]
+    archive: dict[tuple[int, int, int], ArchiveCell] = {}
+    for index, (descriptors, genome) in enumerate(specs):
+        cell_key = BEHAVIOR_DESCRIPTOR_CONFIGURATION.bin_values(descriptors)
+        archive[cell_key] = ArchiveCell(
+            genome=genome, fitness=float(index + 1), descriptors=descriptors
+        )
+    assert sorted(archive) == list(archive), "cell-key order must match spec order"
+    return _persist_archive(archive, artifact_dir)
 
 
 def _persist_archive(
@@ -833,3 +889,1233 @@ def test_staleness_ledger_sha_keying_and_register() -> None:
 
     with pytest.raises(ValidationError):
         OpponentStalenessCap(max_generations=0, unit="generations")
+
+
+# --------------------------------------------------------------------------- #
+# The four-file loadable freeze (Task 18.31).                                  #
+# --------------------------------------------------------------------------- #
+#
+# These extend the module's cheap-fixture doctrine one step: the loadability
+# pin needs the CONSUMER (``scripts/run_tournament.py`` ``_load_candidate_policy``,
+# imported through the established bare-module bootstrap — the same one
+# tests/scripts/conftest.py and scripts/measure_baseline.py:76-78 use), and a
+# genome each policy family actually accepts. Still no game rollouts: loading a
+# policy rebuilds an object, it plays nothing.
+
+
+def _masked_mlp_genome_length(encoder_version: str, hidden: int) -> int:
+    """The masked-MLP family's exact genome length on the canonical map.
+
+    ``v2`` is the pre-18.22 encoder with NO per-target KILL head; ``v3`` is the
+    18.22 encoder-v3 vector feeding a :data:`TARGET_KILL_SLOTS`-wide head. These
+    mirror ``policy_es._encoder_for_version``'s two arms.
+    """
+
+    from orchestrator.boundary import public_map_from_engine_map
+
+    encoder, target_slots = (
+        (TacticalFeatureEncoderV3(), TARGET_KILL_SLOTS)
+        if encoder_version == "v3"
+        else (TacticalFeatureEncoder(), 0)
+    )
+    return policy_genome_length(
+        public_map_from_engine_map(load_canonical_map()),
+        hidden=hidden,
+        encoder=encoder,
+        target_slots=target_slots,
+    )
+
+
+def _v3_genome_length() -> int:
+    """The 18.22 encoder-v3 + per-target-head family's exact genome length."""
+
+    return _masked_mlp_genome_length("v3", _V3_HIDDEN)
+
+
+@lru_cache(maxsize=None)
+def _rebuildable_genome(
+    encoder_version: str, hidden: int | None = None
+) -> tuple[float, ...]:
+    """A genome the CONSUMER's own builder actually accepts for this family.
+
+    The 18.31 writer proves loadability by REBUILDING the genome before it
+    freezes anything (Codex review on PR #314), so a toy two-gene stand-in is no
+    longer a valid fixture for ANY family — it names a shape no builder has, and
+    a fixture like that is exactly the artifact the guard exists to refuse.
+    Every length here comes from the family's own public length helper rather
+    than a literal, so an encoder change moves these fixtures with it instead of
+    silently pinning a stale width.
+    """
+
+    if encoder_version in {"v2", "v3"}:
+        if hidden is None:
+            raise AssertionError(f"{encoder_version!r} needs a hidden width")
+        return (0.0,) * _masked_mlp_genome_length(encoder_version, hidden)
+    if hidden is not None:
+        raise AssertionError(f"{encoder_version!r} takes no hidden width")
+    if encoder_version == _UTILITY_ENCODER:
+        return load_candidate_weights(_UTILITY_ARTIFACT)
+    if encoder_version == "crew-option-features-v1":
+        return (0.0,) * crew_genome_length()
+    if encoder_version == "crew-option-features-v2":
+        return (0.0,) * OwnedTaskOptionBasis().genome_length()
+    raise AssertionError(f"no rebuildable fixture for {encoder_version!r}")
+
+
+def _metadata(**overrides: object) -> LoadableArtifactMetadata:
+    base: dict[str, object] = {
+        "run_label": "run-01-utility-champion",
+        "method": "alternating-freeze-es",
+        "encoder_version": _UTILITY_ENCODER,
+    }
+    base.update(overrides)
+    return LoadableArtifactMetadata(**base)  # type: ignore[arg-type]
+
+
+def test_write_loadable_artifact_writes_the_four_committed_files(
+    tmp_path: Path,
+) -> None:
+    """The writer emits weights + sidecar + five-field stamp + config (18.31).
+
+    Byte conventions are the committed ones: float-hex weights with a trailing
+    newline, a ``<digest>  weights.json`` sidecar, and 2-space key-sorted JSON.
+    The stamp carries EXACTLY the five ``TacticalPolicyStamp`` fields with
+    ``weights_sha256`` computed from the bytes just written; ``config.json``
+    carries the declared family plus the caller's provenance.
+    """
+
+    genome = _rebuildable_genome(_UTILITY_ENCODER)
+    artifact_dir = tmp_path / "member"
+    digest = write_loadable_artifact(
+        artifact_dir,
+        genome,
+        policy_id="coevo-run-01-swap-champion-gen3",
+        method="alternating-freeze-es",
+        encoder_version=_UTILITY_ENCODER,
+        config={"campaign": "task-18.31", "trained_against": TRAINED_AGAINST_FSM},
+    )
+
+    weights_bytes = (artifact_dir / "weights.json").read_bytes()
+    assert weights_bytes == (weights_to_hex_json(genome) + "\n").encode("utf-8")
+    assert digest == hashlib.sha256(weights_bytes).hexdigest()
+    assert (artifact_dir / "weights.json.sha256").read_text() == (
+        f"{digest}  weights.json\n"
+    )
+
+    stamp_text = (artifact_dir / "stamp.json").read_text()
+    assert stamp_text.endswith("\n")
+    stamp = json.loads(stamp_text)
+    assert set(stamp) == {
+        "anchor_policy",
+        "encoder_version",
+        "method",
+        "policy_id",
+        "weights_sha256",
+    }
+    assert stamp["weights_sha256"] == digest
+    assert stamp["anchor_policy"] == "fsm-default"
+    assert stamp["encoder_version"] == _UTILITY_ENCODER
+
+    config = json.loads((artifact_dir / "config.json").read_text())
+    assert config["encoder_version"] == _UTILITY_ENCODER
+    assert config["genome_length"] == len(genome)
+    assert "hidden" not in config  # never a zero-ghost for a no-hidden family
+    assert config["campaign"] == "task-18.31"
+    assert config["trained_against"] == TRAINED_AGAINST_FSM
+
+
+def test_loadable_artifact_loads_through_candidate_policy_both_families(
+    tmp_path: Path,
+) -> None:
+    """Both impostor families load END TO END through ``_load_candidate_policy``.
+
+    The §11 defect-4 / F14 pin: the 18.24 shortlist could not load through its
+    consuming entry point at all. A utility genome and a v3 masked-MLP genome —
+    the two shapes the campaign froze — now rebuild through the committed
+    loader with the stamp the writer wrote, and the loader's own 17.14
+    conflation guard (stamp sha == sidecar digest) passes by construction.
+    ``hidden`` comes from ``config.json``, which is exactly what the v3 family
+    needs and what §12 Errata item 1 records the absence of.
+    """
+
+    utility_dir = tmp_path / "utility"
+    utility_digest = write_loadable_artifact(
+        utility_dir,
+        load_candidate_weights(_UTILITY_ARTIFACT),
+        policy_id="coevo-utility-champion",
+        method="alternating-freeze-es",
+        encoder_version=_UTILITY_ENCODER,
+    )
+    utility_policy, utility_stamp = run_tournament._load_candidate_policy(utility_dir)
+    assert utility_policy.encoder_version == _UTILITY_ENCODER
+    assert utility_stamp.weights_sha256 == utility_digest
+    assert utility_stamp.policy_id == "coevo-utility-champion"
+
+    v3_dir = tmp_path / "v3"
+    v3_digest = write_loadable_artifact(
+        v3_dir,
+        (0.0,) * _v3_genome_length(),
+        policy_id="coevo-freepolicy-v3-gen1",
+        method="alternating-freeze-es",
+        encoder_version="v3",
+        hidden=_V3_HIDDEN,
+    )
+    assert json.loads((v3_dir / "config.json").read_text())["hidden"] == _V3_HIDDEN
+    v3_policy, v3_stamp = run_tournament._load_candidate_policy(v3_dir)
+    assert v3_policy.encoder_version == "v3"
+    assert v3_stamp.weights_sha256 == v3_digest
+    assert v3_stamp.encoder_version == "v3"
+
+
+def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
+    """Empty genome, bad stamp token, bad hidden, owned config key, clobber.
+
+    Every arm that is NOT about the genome shape carries a genome the builder
+    accepts, so each refusal is provably the one named in the ``match`` and not
+    the reconstruction guard firing first on a toy fixture.
+    """
+
+    v2_genome = _rebuildable_genome("v2", _V3_HIDDEN)
+    utility_genome = _rebuildable_genome(_UTILITY_ENCODER)
+
+    with pytest.raises(ValueError, match="empty genome"):
+        write_loadable_artifact(
+            tmp_path / "a",
+            (),
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+        )
+    with pytest.raises(ValueError, match="non-blank"):
+        write_loadable_artifact(
+            tmp_path / "b",
+            v2_genome,
+            policy_id="  ",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+        )
+    with pytest.raises(ValueError, match="MANIFEST-safe"):
+        write_loadable_artifact(
+            tmp_path / "c",
+            v2_genome,
+            policy_id="a|b",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+        )
+    with pytest.raises(ValueError, match="hidden must be >= 1"):
+        write_loadable_artifact(
+            tmp_path / "d",
+            v2_genome,
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=0,
+        )
+    with pytest.raises(ValueError, match="owned by write_loadable_artifact"):
+        write_loadable_artifact(
+            tmp_path / "e",
+            v2_genome,
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+            config={"hidden": 4},
+        )
+    # A recognised family with a syntactically valid width and a genome the
+    # builder cannot rebuild: all four files would have been written and then
+    # refused by the consumer at load time (Codex review on PR #314).
+    with pytest.raises(ValueError, match="does not rebuild as 'v2' at hidden=8"):
+        write_loadable_artifact(
+            tmp_path / "g",
+            v2_genome[:-1],
+            policy_id="p",
+            method="m",
+            encoder_version="v2",
+            hidden=_V3_HIDDEN,
+        )
+    # Same defect on a width-free family, where only the LENGTH can be wrong.
+    with pytest.raises(ValueError, match="does not rebuild as"):
+        write_loadable_artifact(
+            tmp_path / "h",
+            utility_genome + (0.0,),
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
+    # No partial artifact survives any of the refusals above.
+    for name in ("a", "b", "c", "d", "e", "g", "h"):
+        assert not (tmp_path / name).exists() or not list((tmp_path / name).iterdir())
+
+    # And the writer never clobbers: a second write into the same dir raises.
+    write_loadable_artifact(
+        tmp_path / "f",
+        utility_genome,
+        policy_id="p",
+        method="m",
+        encoder_version=_UTILITY_ENCODER,
+    )
+    with pytest.raises(FileExistsError):
+        write_loadable_artifact(
+            tmp_path / "f",
+            tuple(-value for value in utility_genome),  # same shape, other bytes
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
+
+
+def test_loadable_artifact_metadata_validation() -> None:
+    """The per-hall metadata rejects a stamp it could not honestly write."""
+
+    with pytest.raises(ValidationError):
+        _metadata(run_label="   ")
+    with pytest.raises(ValidationError):
+        _metadata(method="a|b")
+    with pytest.raises(ValidationError):
+        _metadata(hidden=0)
+    with pytest.raises(ValidationError):
+        _metadata(anchor_weight=float("inf"))
+    # A BOOLEAN width, refused before pydantic's lax mode coerces it. `bool` is
+    # an `int` subtype, so `True` would have become a silent width of 1 — an
+    # inferred width, which is the §12 Errata item-1 ambiguity (Codex on #314).
+    # This needs a mode="before" validator: an after-validator only ever sees
+    # the already-coerced `1`.
+    for boolean in (True, False):
+        with pytest.raises(ValidationError, match="non-boolean integer"):
+            _metadata(hidden=boolean)
+
+    metadata = _metadata(hidden=8, encoder_version="v3", anchor_weight=4.0)
+    # The id is an IDENTITY: side + origin + generation + a weights
+    # discriminator. Origin and generation alone collide across every
+    # MAP-Elites founder and across the two sides of one run (Codex #314).
+    assert (
+        metadata.policy_id_for(
+            side="impostor",
+            origin="exploiter-probe",
+            generation=10,
+            weights_sha256="6d327dcb" + "0" * 56,
+        )
+        == "coevo-run-01-utility-champion-impostor-exploiter-probe-gen10-"
+        + "6d327dcb"
+        + "0" * 56
+    )
+
+    # Two founders sharing origin AND generation no longer collide, and the two
+    # sides of one run no longer collide with each other — which is what
+    # run_tournament.py's 18.19 cross-stamp guard refuses.
+    def _pid(side: str, sha: str) -> str:
+        return metadata.policy_id_for(
+            side=side,  # type: ignore[arg-type]
+            origin="map-elites-founder",
+            generation=0,
+            weights_sha256=sha,
+        )
+
+    assert _pid("impostor", "a" * 64) != _pid("impostor", "b" * 64)
+    assert _pid("impostor", "a" * 64) != _pid("crew", "a" * 64)
+    provenance = metadata.provenance(
+        side="impostor",
+        generation=10,
+        origin="exploiter-probe",
+        trained_against=_OPPONENT_SHA,
+        path="gen-10/" + _OPPONENT_SHA,
+    )
+    assert provenance["campaign"] == "run-01-utility-champion"
+    assert provenance["entrant"] == (
+        f"run-01-utility-champion/impostor/gen-10/{_OPPONENT_SHA}"
+    )
+    assert provenance["anchor_weight"] == 4.0
+    # The writer owns these; the metadata never smuggles them in as provenance.
+    assert not {"encoder_version", "genome_length", "hidden"} & set(provenance)
+
+
+def test_add_member_with_metadata_freezes_a_loadable_artifact(tmp_path: Path) -> None:
+    """Every hall freeze writes the four-file artifact and it LOADS (18.31).
+
+    The pool's stamp metadata is a campaign constant (single-side,
+    single-family), so ``add_member`` composes each member's ``policy_id`` and
+    provenance from it — and the frozen member loads through the consuming
+    entry point without a hand-stamping pass.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path,
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(anchor_weight=1.0),
+    )
+    assert hall.artifact_metadata is not None
+    member = hall.add_member(
+        load_candidate_weights(_UTILITY_ARTIFACT),
+        generation=9,
+        origin="alternating-freeze-champion",
+        trained_against=_OPPONENT_SHA,
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    assert sorted(path.name for path in member_dir.iterdir()) == [
+        "config.json",
+        "stamp.json",
+        "weights.json",
+        "weights.json.sha256",
+    ]
+    stamp = json.loads((member_dir / "stamp.json").read_text())
+    assert stamp["weights_sha256"] == member.weights_sha256
+    # The FULL digest, not a prefix: an 8-char prefix is 32 bits, so two
+    # members could collide on it and re-acquire the ambiguity this removes.
+    assert stamp["policy_id"] == (
+        "coevo-run-01-utility-champion-impostor-alternating-freeze-champion-gen9"
+        f"-{member.weights_sha256}"
+    )
+    config = json.loads((member_dir / "config.json").read_text())
+    assert config["hall_origin"] == "alternating-freeze-champion"
+    assert config["trained_against"] == _OPPONENT_SHA
+    assert config["generation"] == 9
+    assert config["side"] == "impostor"
+
+    policy, loaded_stamp = run_tournament._load_candidate_policy(member_dir)
+    assert policy.encoder_version == _UTILITY_ENCODER
+    assert loaded_stamp.weights_sha256 == member.weights_sha256
+
+    # The index + reload contract is untouched by the extra files.
+    reloaded = HallOfFame.load(tmp_path, "impostor")
+    assert reloaded.members == hall.members
+    assert reloaded.load_member_genome(member.weights_sha256) == load_candidate_weights(
+        _UTILITY_ARTIFACT
+    )
+
+
+def test_add_member_without_metadata_keeps_the_two_file_member(tmp_path: Path) -> None:
+    """A pool created without stamp metadata freezes exactly as before (18.31).
+
+    The back-compat pin: the 18.20 store is a genome store first, and a caller
+    that declares no family gets the historic weights-only member rather than a
+    guessed stamp.
+    """
+
+    hall = HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
+    assert hall.artifact_metadata is None
+    member = hall.add_member(
+        (0.1, 0.2), generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    assert sorted(path.name for path in member_dir.iterdir()) == [
+        "weights.json",
+        "weights.json.sha256",
+    ]
+
+
+def test_artifact_metadata_round_trips_through_the_index(tmp_path: Path) -> None:
+    """A loadable pool STAYS loadable across a reload (Codex on PR #314).
+
+    The metadata is not a property of whoever opens the store — it is the
+    pool's own freeze identity. Without persistence a reloaded four-file pool
+    would silently start freezing two-file members, recreating the exact
+    missing-``stamp.json`` defect this task removes.
+    """
+
+    genome = _rebuildable_genome(_UTILITY_ENCODER)
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    hall.add_member(
+        genome, generation=1, origin="champion", trained_against=TRAINED_AGAINST_FSM
+    )
+    index = json.loads((tmp_path / "impostor" / "hall_of_fame.json").read_text())
+    assert index["artifact_metadata"]["run_label"] == "run-01-utility-champion"
+
+    # Reloaded WITHOUT re-supplying it: the pool still knows its own identity.
+    reloaded = HallOfFame.load(tmp_path, "impostor")
+    assert reloaded.artifact_metadata == _metadata()
+    member = reloaded.add_member(
+        tuple(-value for value in genome),
+        generation=2,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    assert sorted(
+        path.name for path in (tmp_path / "impostor" / member.path).iterdir()
+    ) == ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
+
+    # Re-supplying a DIFFERENT identity is loud drift, never a silent override.
+    with pytest.raises(ValueError, match="never silently overridden"):
+        HallOfFame.load(
+            tmp_path, "impostor", artifact_metadata=_metadata(run_label="other-run")
+        )
+    # Agreeing metadata is accepted.
+    assert (
+        HallOfFame.load(
+            tmp_path, "impostor", artifact_metadata=_metadata()
+        ).artifact_metadata
+        == _metadata()
+    )
+
+
+def test_a_loadable_pool_with_no_metadata_block_is_refused(tmp_path: Path) -> None:
+    """A missing metadata block is corruption, not a legacy pool (Codex #314).
+
+    Treating the two alike skipped every stamp/config verification while those
+    files sat on disk, returned a hall with ``artifact_metadata=None``, and its
+    next ``add_member`` wrote two files — silently mixing formats and losing the
+    campaign's freeze identity.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    member = hall.add_member(
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    assert (tmp_path / "impostor" / member.path / "stamp.json").exists()
+
+    index_path = tmp_path / "impostor" / "hall_of_fame.json"
+    # Both shapes a corrupted index takes: the key DELETED, and the key present
+    # but null. The value check alone would treat the second as legacy too.
+    for drop_key in (True, False):
+        index: dict[str, Any] = json.loads(index_path.read_text())
+        if drop_key:
+            del index["artifact_metadata"]
+        else:
+            index["artifact_metadata"] = None
+        index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="metadata block is missing or null"):
+            HallOfFame.load(tmp_path, "impostor")
+
+    # A genuinely weights-only pool is unaffected: no stamps, no refusal.
+    plain = tmp_path / "plain"
+    weights_only = HallOfFame.create(plain, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(weights_only)
+    assert HallOfFame.load(plain, "impostor").artifact_metadata is None
+
+
+def test_a_residual_config_json_is_loadable_pool_evidence(tmp_path: Path) -> None:
+    """``config.json`` alone still proves the pool was loadable (Codex #314).
+
+    My round-13 guard scanned for ``stamp.json`` only, so a corruption that
+    removes the stamps but leaves the config sidecars read as a legacy
+    weights-only pool: the next ``add_member`` wrote two files and silently
+    converted a corrupted loadable pool into a mixed-format one. Neither file is
+    ever written by the two-file path, so EITHER one is evidence.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    member = hall.add_member(
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    member_dir = tmp_path / "impostor" / member.path
+    (member_dir / "stamp.json").unlink()
+    assert (member_dir / "config.json").exists()
+
+    index_path = tmp_path / "impostor" / "hall_of_fame.json"
+    index: dict[str, Any] = json.loads(index_path.read_text())
+    del index["artifact_metadata"]
+    index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="metadata block is missing or null"):
+        HallOfFame.load(tmp_path, "impostor")
+
+    # Still no over-reach: a pool carrying NEITHER file is genuinely legacy.
+    plain = tmp_path / "plain"
+    weights_only = HallOfFame.create(plain, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(weights_only)
+    assert HallOfFame.load(plain, "impostor").artifact_metadata is None
+
+
+def test_a_dangling_loadable_sidecar_is_still_pool_evidence(tmp_path: Path) -> None:
+    """Presence is about the directory ENTRY (Codex review on PR #314).
+
+    My round-14 scan used ``.exists()``, which follows symlinks, so a corruption
+    leaving a DANGLING ``stamp.json``/``config.json`` read as a legacy
+    weights-only pool — the same downgrade the scan exists to prevent, reached
+    through a broken link instead of a deleted file.
+    """
+
+    for casualty in ("stamp.json", "config.json"):
+        root = tmp_path / casualty
+        hall = HallOfFame.create(
+            root, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+        )
+        member = hall.add_member(
+            _rebuildable_genome(_UTILITY_ENCODER),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+        member_dir = root / "impostor" / member.path
+        # Both sidecars gone as FILES; the reported one left as a broken link.
+        for name in ("stamp.json", "config.json"):
+            (member_dir / name).unlink()
+        (member_dir / casualty).symlink_to(member_dir / "gone.json")
+        assert not (member_dir / casualty).exists()
+        assert (member_dir / casualty).is_symlink()
+
+        index_path = root / "impostor" / "hall_of_fame.json"
+        index: dict[str, Any] = json.loads(index_path.read_text())
+        del index["artifact_metadata"]
+        index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="metadata block is missing or null"):
+            HallOfFame.load(root, "impostor")
+
+
+def test_the_side_family_registry_is_immutable(tmp_path: Path) -> None:
+    """``Final`` prevents rebinding, not mutation (Codex review on PR #314).
+
+    A module-level ``dict`` let any code add or replace an allowed side/family
+    mapping and change loadability validation globally for every hall created or
+    loaded afterwards — validation owned by mutable module state rather than by
+    the state passed in. This is the round-6 module-level-mutable-state finding
+    reappearing in a registry I added in round 14.
+    """
+
+    with pytest.raises(TypeError):
+        hall_of_fame._SIDE_ENCODERS["crew"] = frozenset({"v3"})  # type: ignore[index]
+    with pytest.raises(AttributeError):
+        hall_of_fame._SIDE_ENCODERS.clear()  # type: ignore[attr-defined]
+
+    # And the refusal it backs still holds afterwards.
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.create(
+            tmp_path, "crew", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+        )
+
+
+def test_a_pool_may_not_declare_the_other_sides_encoder_family(
+    tmp_path: Path,
+) -> None:
+    """A freeze family belongs to a SIDE (Codex review on PR #314).
+
+    ``_refuse_unloadable_family`` proves SOME consumer can rebuild the family
+    and says nothing about which, so a crew hall could carry impostor ``v3``
+    metadata: every freeze would be proven against the impostor builder and then
+    rejected by ``_load_candidate_policy`` when read back as a crew candidate.
+    """
+
+    impostor_meta = _metadata()
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.create(
+            tmp_path / "a",
+            "crew",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=impostor_meta,
+        )
+    # Refused BEFORE anything durable: no index was committed, so a corrected
+    # retry is not blocked by create's own no-clobber guard.
+    assert not (tmp_path / "a" / "crew" / "hall_of_fame.json").exists()
+
+    # The same declaration on its OWN side is fine — no over-reach.
+    hall = HallOfFame.create(
+        tmp_path / "b",
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=impostor_meta,
+    )
+    assert hall.artifact_metadata is not None
+
+    # And a hand-edited index carrying the mismatch is refused on the way back
+    # in, or the refusal is only as durable as the process that wrote it.
+    index_path = tmp_path / "b" / "impostor" / "hall_of_fame.json"
+    index: dict[str, Any] = json.loads(index_path.read_text())
+    index["side"] = "crew"
+    crew_dir = tmp_path / "b" / "crew"
+    crew_dir.mkdir(parents=True)
+    (crew_dir / "hall_of_fame.json").write_text(
+        json.dumps(index, indent=2, sort_keys=True) + "\n"
+    )
+    with pytest.raises(ValueError, match="belongs to the other side"):
+        HallOfFame.load(tmp_path / "b", "crew")
+
+
+def test_weights_only_pool_index_bytes_are_unchanged(tmp_path: Path) -> None:
+    """A pool that declares no family records no metadata key (18.31).
+
+    The persistence is additive: a weights-only pool's ``hall_of_fame.json``
+    carries exactly the 18.20 key set, so committed pools reload untouched.
+    """
+
+    hall = HallOfFame.create(tmp_path, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(hall)
+    index = json.loads((tmp_path / "impostor" / "hall_of_fame.json").read_text())
+    assert set(index) == {"members", "side", "substrate_sha256"}
+    assert HallOfFame.load(tmp_path, "impostor").artifact_metadata is None
+
+
+def test_write_loadable_artifact_refuses_a_nonempty_dir(tmp_path: Path) -> None:
+    """A stray file in the target dir refuses the freeze (Codex on PR #314).
+
+    Exclusive opens alone only guard the four known filenames, so a stale or
+    unrelated file would be silently adopted into a five-file "artifact".
+    """
+
+    artifact_dir = tmp_path / "member"
+    artifact_dir.mkdir()
+    (artifact_dir / "stale-notes.txt").write_text("left over from an earlier pass")
+    with pytest.raises(FileExistsError, match="non-empty artifact dir"):
+        write_loadable_artifact(
+            artifact_dir,
+            _rebuildable_genome(_UTILITY_ENCODER),
+            policy_id="p",
+            method="m",
+            encoder_version=_UTILITY_ENCODER,
+        )
+    # Nothing was written beside the stray file.
+    assert sorted(path.name for path in artifact_dir.iterdir()) == ["stale-notes.txt"]
+
+
+def test_loading_a_loadable_pool_verifies_all_four_files(tmp_path: Path) -> None:
+    """A pool that advertises loadable members verifies four files, not two.
+
+    Restoring the metadata is a promise that every member loads through
+    ``_load_candidate_policy``; checking only weights + sidecar would hand back
+    a hall whose members fail at spend time instead of resume time (Codex on
+    PR #314). The module's eager two-pass posture is that corruption surfaces
+    at load.
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            _rebuildable_genome(_UTILITY_ENCODER),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    # A member whose stamp.json was removed.
+    missing = tmp_path / "missing"
+    member = _fresh(missing)
+    (missing / "impostor" / member.path / "stamp.json").unlink()
+    with pytest.raises(ValueError, match="missing part of its loadable artifact"):
+        HallOfFame.load(missing, "impostor")
+
+    # A member stamped for a DIFFERENT family than the pool declares.
+    wrong_family = tmp_path / "family"
+    member = _fresh(wrong_family)
+    stamp_path = wrong_family / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["encoder_version"] = "v3"
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="a hall stays "):
+        HallOfFame.load(wrong_family, "impostor")
+
+    # A member whose stamp names another genome (the 17.14 conflation guard).
+    wrong_sha = tmp_path / "sha"
+    member = _fresh(wrong_sha)
+    stamp_path = wrong_sha / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["weights_sha256"] = "0" * 64
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="conflation guard"):
+        HallOfFame.load(wrong_sha, "impostor")
+
+    # A healthy loadable pool still reloads cleanly.
+    healthy = tmp_path / "healthy"
+    _fresh(healthy)
+    assert HallOfFame.load(healthy, "impostor").artifact_metadata == _metadata()
+
+
+def test_loadable_reload_verifies_the_whole_stamp_and_the_width(
+    tmp_path: Path,
+) -> None:
+    """The eager load checks all five stamp fields AND the rebuild width (18.31).
+
+    Checking only the sha and the family still let a member missing ``method``,
+    or carrying a drifted ``hidden``, pass reload and fail later inside
+    ``_load_candidate_policy`` — deferring artifact corruption to the campaign
+    path the eager pass exists to protect (Codex on PR #314).
+    """
+
+    def _fresh(root: Path, **overrides: object) -> HallOfFameMember:
+        metadata = _metadata(**overrides)
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=metadata,
+        )
+        return hall.add_member(
+            _rebuildable_genome(metadata.encoder_version, metadata.hidden),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    # A stamp missing a required field.
+    root = tmp_path / "field"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    del stamp["method"]
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="missing stamp fields"):
+        HallOfFame.load(root, "impostor")
+
+    # A stamp field that is blank (the committed reader would reject it).
+    root = tmp_path / "blank"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["policy_id"] = "   "
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="non-blank stamp token"):
+        HallOfFame.load(root, "impostor")
+
+    # A config whose rebuild width drifted from the pool's declared one.
+    root = tmp_path / "width"
+    member = _fresh(root, encoder_version="v3", hidden=8)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["hidden"] = 4
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="records hidden"):
+        HallOfFame.load(root, "impostor")
+
+    # A v3 pool with an intact artifact still reloads.
+    root = tmp_path / "ok"
+    _fresh(root, encoder_version="v3", hidden=8)
+    reloaded = HallOfFame.load(root, "impostor")
+    assert reloaded.artifact_metadata is not None
+    assert reloaded.artifact_metadata.hidden == 8
+
+
+def test_loadable_reload_verifies_stamp_IDENTITY_not_just_syntax(
+    tmp_path: Path,
+) -> None:
+    """A syntactically valid but WRONG stamp is false provenance (Codex on PR #314).
+
+    Round 3 checked that ``method`` / ``anchor_policy`` / ``policy_id`` were
+    present, string-typed and MANIFEST-safe — but never that they were the
+    values this pool's own metadata reconstructs. So a member re-stamped for
+    another campaign, method or anchor reloaded cleanly and carried that false
+    provenance into every recording it seeded: the §12 Errata item-1 defect
+    wearing a valid name. The pool metadata plus the member row determine all
+    three exactly, so there is no reason to accept a mismatch.
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            _rebuildable_genome(_UTILITY_ENCODER),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    for field, forged in (
+        ("method", "some-other-method"),
+        ("anchor_policy", "some-other-anchor"),
+        ("policy_id", "coevo-other-run-champion-gen1"),
+    ):
+        root = tmp_path / field
+        member = _fresh(root)
+        stamp_path = root / "impostor" / member.path / "stamp.json"
+        stamp = json.loads(stamp_path.read_text())
+        assert stamp[field] != forged
+        stamp[field] = forged
+        stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match=f"records {field} "):
+            HallOfFame.load(root, "impostor")
+
+    # A member whose policy_id names the WRONG generation is caught too: the
+    # id encodes (run, origin, generation), so drift there mislabels the row.
+    root = tmp_path / "generation"
+    member = _fresh(root)
+    stamp_path = root / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["policy_id"] = stamp["policy_id"].replace("gen1", "gen7")
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="records policy_id "):
+        HallOfFame.load(root, "impostor")
+
+    # An untampered pool still reloads.
+    root = tmp_path / "ok"
+    _fresh(root)
+    assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()
+
+
+def test_loadable_reload_refuses_a_stamp_the_consumer_would_refuse(
+    tmp_path: Path,
+) -> None:
+    """The stamp key set must EQUAL the five, not merely contain them.
+
+    ``_load_candidate_policy`` parses the same file through
+    ``TacticalPolicyStamp``, which is ``extra="forbid"``. A subset check let the
+    eager verifier certify a member as loadable that the consuming entry point
+    rejects — and this task's whole invariant is that the consumer can load
+    every freeze (Codex on PR #314).
+    """
+
+    hall = HallOfFame.create(
+        tmp_path / "pool",
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(),
+    )
+    member = hall.add_member(
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    stamp_path = tmp_path / "pool" / "impostor" / member.path / "stamp.json"
+    stamp = json.loads(stamp_path.read_text())
+    stamp["surprise_field"] = "valid-looking"
+    stamp_path.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="unexpected stamp fields"):
+        HallOfFame.load(tmp_path / "pool", "impostor")
+
+
+def test_loadable_reload_verifies_config_provenance_against_the_member_row(
+    tmp_path: Path,
+) -> None:
+    """config.json's provenance half is reconstructible, so a mismatch is false history.
+
+    Round 4 verified only ``encoder_version`` and ``hidden`` from config.json,
+    leaving ``genome_length``, ``campaign``, ``generation``, ``hall_origin``,
+    ``trained_against``, ``entrant`` and ``source_lineage`` unverified — every
+    one of them derivable from the verified weights plus the member row (Codex
+    on PR #314).
+    """
+
+    def _fresh(root: Path) -> HallOfFameMember:
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(),
+        )
+        return hall.add_member(
+            _rebuildable_genome(_UTILITY_ENCODER),
+            generation=1,
+            origin="champion",
+            trained_against=TRAINED_AGAINST_FSM,
+        )
+
+    for field, forged in (
+        ("genome_length", 99),
+        ("campaign", "some-other-campaign"),
+        ("generation", 7),
+        ("hall_origin", "some-other-origin"),
+        ("trained_against", "b" * 64),
+        ("entrant", "some-other-entrant"),
+        ("source_lineage", "some-other-lineage"),
+    ):
+        root = tmp_path / field
+        member = _fresh(root)
+        config_path = root / "impostor" / member.path / "config.json"
+        config = json.loads(config_path.read_text())
+        assert config[field] != forged
+        config[field] = forged
+        config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="provenance disagrees"):
+            HallOfFame.load(root, "impostor")
+
+    # An EXTRA key is false history too: verifying only the reconstructible
+    # subset let a member carry fabricated audit provenance the hall cannot
+    # rebuild, on an artifact it certifies loadable (Codex on PR #314).
+    root = tmp_path / "extra-key"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["fabricated_lineage_note"] = "bred from a run that never happened"
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="carries unexpected keys"):
+        HallOfFame.load(root, "impostor")
+
+    # And a width-free family never carries a null-ghost ``hidden``: the writer
+    # OMITS the key, so an explicit JSON null is a file this pool did not write
+    # even though its value comparison against ``metadata.hidden`` passes.
+    root = tmp_path / "hidden-ghost"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    config["hidden"] = None
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="carries unexpected keys"):
+        HallOfFame.load(root, "impostor")
+
+    # A key the writer DOES own, removed, is caught by the same closed set.
+    root = tmp_path / "missing-key"
+    member = _fresh(root)
+    config_path = root / "impostor" / member.path / "config.json"
+    config = json.loads(config_path.read_text())
+    del config["genome_length"]
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="provenance disagrees|is missing"):
+        HallOfFame.load(root, "impostor")
+
+    root = tmp_path / "ok"
+    _fresh(root)
+    assert HallOfFame.load(root, "impostor").artifact_metadata == _metadata()
+
+
+def test_a_failed_freeze_leaves_no_partial_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The four-file freeze publishes atomically (Codex on PR #314).
+
+    Writing straight into the destination left a NON-EMPTY partial artifact on
+    any mid-way failure; the retry then hit the non-empty-dir refusal while
+    ``add_member`` had not indexed the member, so the campaign could not
+    recover without a manual delete. Staged and renamed, the destination is
+    either absent or complete.
+    """
+
+    artifact_dir = tmp_path / "pool" / "gen-1" / "abc"
+    genome = _rebuildable_genome("v3", 8)
+    real_fsync = os.fsync
+    calls = {"n": 0}
+
+    def _fail_on_third(fd: int) -> None:
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise OSError("disk full")
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", _fail_on_third)
+    with pytest.raises(OSError, match="disk full"):
+        write_loadable_artifact(
+            artifact_dir,
+            genome,
+            policy_id="p",
+            method="m",
+            encoder_version="v3",
+            hidden=8,
+        )
+    monkeypatch.undo()
+
+    # Nothing partial was published, and no staging dir was left behind.
+    assert not artifact_dir.exists()
+    assert list((tmp_path / "pool" / "gen-1").iterdir()) == []
+
+    # The retry now succeeds, which is the whole point.
+    write_loadable_artifact(
+        artifact_dir,
+        genome,
+        policy_id="p",
+        method="m",
+        encoder_version="v3",
+        hidden=8,
+    )
+    assert sorted(p.name for p in artifact_dir.iterdir()) == [
+        "config.json",
+        "stamp.json",
+        "weights.json",
+        "weights.json.sha256",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("encoder_version", "hidden", "match"),
+    [
+        ("v3", None, "needs an integer 'hidden'"),
+        ("v2", None, "needs an integer 'hidden'"),
+        ("impostor-option-features-v1", 8, "takes no hidden width"),
+        ("crew-option-features-v1", 8, "takes no hidden width"),
+        ("some-unknown-family", None, "not one the consuming entry point"),
+        ("v9", 8, "not one the consuming entry point"),
+    ],
+)
+def test_the_public_writer_refuses_an_unloadable_family(
+    tmp_path: Path, encoder_version: str, hidden: int | None, match: str
+) -> None:
+    """``write_loadable_artifact`` validates the family it is publishing.
+
+    The driver preflight already proves loadability for a campaign, but this
+    writer is PUBLIC: a caller reaching it directly could publish a v2/v3 freeze
+    with no ``hidden`` (which ``_load_candidate_policy`` always rejects) or an
+    encoder tag with no builder at all, and a ``HallOfFame`` would then index
+    and reload artifacts the consuming entry point cannot load (Codex on
+    PR #314).
+    """
+
+    artifact_dir = tmp_path / "artifact"
+    with pytest.raises(ValueError, match=match):
+        write_loadable_artifact(
+            artifact_dir,
+            (0.1, 0.2),
+            policy_id="p",
+            method="m",
+            encoder_version=encoder_version,
+            hidden=hidden,
+        )
+    # Refused BEFORE anything was published.
+    assert not artifact_dir.exists()
+
+
+def test_founder_ingest_preflights_every_genome_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """A bad founder at position N must not leave 1..N-1 written (Codex #314).
+
+    ``ingest_map_elites_founders`` is all-or-nothing, but the loadable-freeze
+    refusals (non-finite genes, a genome the declared family cannot rebuild)
+    used to fire from inside its ``add_member`` loop — so the hall ended up
+    partially populated, and the driver's create-only retry path refuses that.
+    The genome checks now run with the digest checks, before the first write.
+    """
+
+    good = _rebuildable_genome(_UTILITY_ENCODER)
+    for bad, match in (
+        ((float("nan"),) + good[1:], "non-finite genes"),
+        (good + (0.0,), "does not rebuild"),
+    ):
+        root = tmp_path / f"pool-{match.split()[0]}"
+        cells = tmp_path / f"cells-{match.split()[0]}"
+        # Sorted cell-key order puts the BAD cell second, so a per-member
+        # refusal would fire only after the first founder was written.
+        _persist_two_cell_archive(cells, good, bad)
+        hall = HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=bakeoff_substrate_sha(),
+            artifact_metadata=_metadata(),
+        )
+        with pytest.raises(ValueError, match=match):
+            hall.ingest_map_elites_founders(cells)
+        # NOTHING was written: no members indexed, no member dirs on disk.
+        assert hall.members == ()
+        assert HallOfFame.load(root, "impostor").members == ()
+        assert (
+            sorted(path.name for path in (root / "impostor").iterdir() if path.is_dir())
+            == []
+        )
+
+
+def test_a_non_finite_genome_is_refused_before_anything_is_written(
+    tmp_path: Path,
+) -> None:
+    """NaN/inf genes are refused, not frozen (Codex on PR #314).
+
+    They survive the whole pipeline silently: ``weights_to_hex_json`` writes the
+    bare tokens ``"nan"`` / ``"inf"``, ``weights_from_hex_json`` rehydrates them
+    without complaint, and every builder accepts them — so the reconstruction
+    guard CERTIFIES such an artifact as loadable while its policy propagates
+    non-finite logits into every evaluation it seeds.
+    """
+
+    finite = _rebuildable_genome(_UTILITY_ENCODER)
+    # The premise, asserted rather than assumed: the encoding really does
+    # round-trip non-finite values, which is why the writer must catch them.
+    poisoned = (float("nan"),) + finite[1:]
+    assert math.isnan(weights_from_hex_json(weights_to_hex_json(poisoned))[0])
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        genome = (bad,) + finite[1:]
+        artifact_dir = tmp_path / f"artifact-{bad}"
+        with pytest.raises(ValueError, match="non-finite genes"):
+            write_loadable_artifact(
+                artifact_dir,
+                genome,
+                policy_id="p",
+                method="m",
+                encoder_version=_UTILITY_ENCODER,
+            )
+        assert not artifact_dir.exists()
+
+    # The finite genome still freezes.
+    assert write_loadable_artifact(
+        tmp_path / "ok",
+        finite,
+        policy_id="p",
+        method="m",
+        encoder_version=_UTILITY_ENCODER,
+    )
+
+
+def test_metadata_refuses_a_family_no_hall_could_freeze(tmp_path: Path) -> None:
+    """An unloadable family is refused BEFORE a hall is persisted (Codex #314).
+
+    ``HallOfFame.create`` commits ``hall_of_fame.json`` from this metadata. When
+    the family/width contract was checked only by ``write_loadable_artifact``,
+    an index was written, the first ``add_member`` failed, and the retry with
+    corrected metadata hit ``create``'s no-clobber guard — an unusable hall only
+    a manual delete could clear. That is the round-8 runner-identity deadlock in
+    different clothes, and it gets the same answer: refuse before anything
+    durable exists.
+    """
+
+    for kwargs, match in (
+        ({"encoder_version": "v2"}, "needs an integer 'hidden'"),
+        ({"encoder_version": "v3"}, "needs an integer 'hidden'"),
+        ({"encoder_version": "some-unknown-family"}, "not one the consuming entry"),
+        ({"encoder_version": _UTILITY_ENCODER, "hidden": 8}, "takes no hidden width"),
+        (
+            {"encoder_version": "crew-option-features-v1", "hidden": 8},
+            "takes no hidden width",
+        ),
+    ):
+        with pytest.raises(ValidationError, match=match):
+            _metadata(**kwargs)
+
+    # Nothing durable is created on the way to that refusal, and a corrected
+    # declaration still builds a working hall in the SAME root — the recovery
+    # the deadlock denied.
+    root = tmp_path / "pool"
+    with pytest.raises(ValidationError):
+        HallOfFame.create(
+            root,
+            "impostor",
+            substrate_sha256=_SUBSTRATE,
+            artifact_metadata=_metadata(encoder_version="v3"),
+        )
+    assert not (root / "impostor" / "hall_of_fame.json").exists()
+    hall = HallOfFame.create(
+        root,
+        "impostor",
+        substrate_sha256=_SUBSTRATE,
+        artifact_metadata=_metadata(encoder_version="v3", hidden=_V3_HIDDEN),
+    )
+    member = hall.add_member(
+        _rebuildable_genome("v3", _V3_HIDDEN),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    assert sorted(
+        path.name for path in (root / "impostor" / member.path).iterdir()
+    ) == ["config.json", "stamp.json", "weights.json", "weights.json.sha256"]
+
+
+def test_the_public_writer_accepts_every_loadable_family(tmp_path: Path) -> None:
+    """The guard rejects unloadable combinations, not legitimate ones."""
+
+    for index, (encoder_version, hidden) in enumerate(
+        [
+            ("v2", 8),
+            ("v3", 16),
+            ("impostor-option-features-v1", None),
+            ("crew-option-features-v1", None),
+            ("crew-option-features-v2", None),
+        ]
+    ):
+        artifact_dir = tmp_path / f"ok-{index}"
+        write_loadable_artifact(
+            artifact_dir,
+            _rebuildable_genome(encoder_version, hidden),
+            policy_id="p",
+            method="m",
+            encoder_version=encoder_version,
+            hidden=hidden,
+        )
+        config = json.loads((artifact_dir / "config.json").read_text())
+        assert config["encoder_version"] == encoder_version
+        assert config.get("hidden") == hidden

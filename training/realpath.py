@@ -40,33 +40,94 @@ ES fitness channel; routing them into :func:`~training.bakeoff.es.evolve` would
 break the double-run determinism digest. The committed output is the ranking
 JSONL; nothing here feeds :func:`~training.bakeoff.es.evolve`.
 
+Campaign ergonomics (Task 18.31, from the 18.24 campaign's operational cost
+evidence — training/reports/report-impostor-campaign.md §11):
+
+* **RESUME** (``resume=True``; §11 defect 1 — a provider 503 at hour 40
+  destroyed 25 recorded games because a re-run re-records everything). A
+  ``(candidate, seed)`` element is SKIPPED only when all three of these hold —
+  the predicate is CONJUNCTIVE and any miss RE-RECORDS: the replay exists; its
+  stamp read BACK from bytes carries a ``weights_sha256`` equal to the
+  candidate's computed genome digest; and the recording passes the dir-scoped
+  byte-completeness fence (:func:`eval.kill_craft.compute_kill_craft_report`,
+  reached per element through a per-seed staging copy). The cost asymmetry is
+  the whole design: re-recording one seed costs minutes, while skipping one
+  unverified element poisons an evidence table. Two dispositions follow from
+  the rule and are stated so nobody re-derives them: a ``TICK_BUDGET_REACHED``
+  replay writes NO ``game_over`` row by design, so it carries no stamp and is
+  NEVER skippable (it re-records, deliberately), and a replay recorded by a
+  DIFFERENT genome fails the digest check no matter how complete it is.
+* **Native pre-screen records + a native leg log** (§11 defect 3 / F9, and §12
+  Errata item 10 — the session-5 provenance gap: 36 games whose
+  pre-screen-before-spend ordering rests on operator testimony because the only
+  leg logs were shell redirections). :func:`write_prescreen_record` writes the
+  blocker-4 quotes keyed by TRANCHE and INVOCATION (never in place), and every
+  leg opens an invocation-stamped manifest plus an APPEND-ONLY
+  :class:`RealPathLegLog` that the library itself writes — pre-screen quotes
+  before any recording, one event per recorded/resumed seed, the ranked rows,
+  and a terminal event on success or failure.
+
+Two properties the review on PR #314 added to the above, called out because
+they change what is on disk:
+
+* every ranking row is ``realpath-rerank-v2``, which names the RECORDER
+  (``recording_backend_sha256``) and the topology (``game_map_sha256``)
+  alongside the protocol. A row travels away from its work dir; without them,
+  two tranches recorded by different providers, prompt sets or maps agree on
+  every field a reader can see, and a stability table reports that behavioural
+  change as provider/seed noise;
+* one leg at a time per ``(work_dir, tranche)``, enforced by
+  :func:`_tranche_claim`. Every pre-recording guard reads state a concurrent
+  leg is about to change, so the claim is what makes read-then-publish atomic
+  rather than merely exclusive at the final write.
+
 Public surface (stable — downstream tasks import these):
 :class:`RealPathCandidate`, :class:`RealPathRerankConfig`,
 :class:`RealPathSeedTelemetry`, :class:`RealPathRerankRow`,
-:class:`RealPathRerankResult`, :func:`candidates_from_champion_trace`,
+:class:`RealPathRerankResult`, :class:`PreScreenQuote`,
+:class:`PreScreenRecord`, :class:`RealPathLegLog`,
+:func:`candidates_from_champion_trace`, :func:`write_prescreen_record`,
 :func:`run_realpath_rerank`, the :class:`RealPathRerankError` family, and the
-``SCHEMA_VERSION`` / ``MODE_*`` / ``DEFAULT_*`` constants.
+``SCHEMA_VERSION`` / ``MODE_*`` / ``DEFAULT_*`` / ``*_FILENAME*`` constants.
 """
 
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
+import math
+import os
+import re
 import sys
+import tempfile
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from types import MappingProxyType
+from typing import Final, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from agents.base import AgentInterface
+from agents.strategic.prompts.loader import (
+    impostor_roll_call_enabled,
+    resolve_prompt_set,
+)
 from agents.tactical.features import weights_to_hex_json
 from engine.entities import PlayerId
 from engine.world import Map, WorldState, load_canonical_map
 from eval.balance_eval import _resolve_game_budget, run_tournament_eval
+
+# The dir-scoped byte-completeness fence the resume predicate's third check
+# reaches per (candidate, seed) through a staging copy (Task 18.31). It is
+# consumed EXACTLY as committed — eval/kill_craft.py is not edited.
+from eval.kill_craft import compute_kill_craft_report
 from eval.validity import ValidityGateReport, run_validity_gate
 
 # _BASELINE_SUPPLY_FLOORS is a deliberate private import (same posture as
@@ -79,6 +140,30 @@ from eval.watchability import (
     compute_watchability,
 )
 from llm.budget import BudgetExceededError
+
+# The recording-backend identity records what ``build_default_client`` would
+# ACTUALLY construct, not the raw environment, so it mirrors that function's own
+# dispatch over these names (Task 18.31). ``_ollama_seed_from_env`` /
+# ``_ollama_num_ctx_from_env`` are deliberate private imports — the same posture
+# as ``_resolve_game_budget`` and ``_BASELINE_SUPPLY_FLOORS`` above: they are the
+# ONLY resolvers that reproduce the recorder's parse (including its fail-loud
+# refusal of a malformed knob), and restating them would let the identity drift
+# from the client it claims to describe.
+from llm.provider import (
+    DEFAULT_MEETING_MODEL,
+    DEFAULT_TRIGGER_MODEL,
+    ENV_FEATHERLESS_BASE_URL,
+    ENV_MEETING_MODEL,
+    ENV_OLLAMA_HOST,
+    ENV_PROVIDER,
+    ENV_TRIGGER_MODEL,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_FAKE,
+    PROVIDER_FEATHERLESS,
+    PROVIDER_OLLAMA,
+    _ollama_num_ctx_from_env,
+    _ollama_seed_from_env,
+)
 from meetings.manager import MeetingTrigger
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
@@ -86,6 +171,7 @@ from orchestrator.game import (
     MeetingArtifacts,
     MeetingRunner,
     build_default_meeting_runner,
+    prompt_versions_for_set,
 )
 from orchestrator.replay import TacticalPolicyStamp, read_tactical_policy_stamp
 from training.bakeoff.es import ESResult
@@ -109,7 +195,7 @@ import measure_baseline  # noqa: E402
 # Constants.                                                                   #
 # --------------------------------------------------------------------------- #
 
-SCHEMA_VERSION: Final[str] = "realpath-rerank-v1"
+SCHEMA_VERSION: Final[str] = "realpath-rerank-v2"
 
 # The re-rank imposes its OWN per-meeting wall-clock deadline because headless
 # meetings run deadline-free (orchestrator/game.py:397-399).
@@ -164,6 +250,154 @@ _REFEREE_PASS_BONUS: Final[float] = 1000.0
 
 _ROSTER_FILENAME: Final[str] = "roster.json"
 _SLUG_EXTRA: Final[str] = "-_"
+
+# A 64-lowercase-hex sha256 digest (the genome identity every quote names).
+_SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
+
+# --------------------------------------------------------------------------- #
+# Task 18.31: pre-screen records + the native leg log.                         #
+# --------------------------------------------------------------------------- #
+
+#: The pre-screen quote record schema identity.
+PRESCREEN_SCHEMA_VERSION: Final[str] = "realpath-prescreen-v1"
+
+#: The append-only leg-log event schema identity.
+LEG_LOG_SCHEMA_VERSION: Final[str] = "realpath-leg-log-v1"
+
+#: The per-invocation leg-manifest schema identity (a distinct artifact from
+#: the log's event stream — one stamp per invocation, not one per event).
+LEG_MANIFEST_SCHEMA_VERSION: Final[str] = "realpath-leg-manifest-v1"
+
+#: The verbatim blocker-4 disclaimer every committed pre-screen quote carries:
+#: a pre-screen is SPEND ADVICE, never a gating read.
+PRESCREEN_ADVICE_NOTE: Final[str] = "spend advice ONLY (blocker 4)"
+
+#: ``<work_dir>/prescreen-quotes-<tranche>-<invocation>.json`` — the committed
+#: 18.24 stem, now keyed by invocation as well as tranche so a second tranche
+#: (or a re-run of the same one) can never overwrite the first's record.
+PRESCREEN_FILENAME_STEM: Final[str] = "prescreen-quotes"
+
+#: ``<work_dir>/leg-<tranche>-<invocation>.json`` — the invocation stamp whose
+#: exclusive creation ALLOCATES the invocation id (race-free, no directory
+#: scan-then-write window).
+LEG_MANIFEST_FILENAME_STEM: Final[str] = "leg"
+
+#: ``<work_dir>/leg-log.jsonl`` — one append-only log per work dir, every event
+#: keyed by ``(tranche, invocation)``.
+LEG_LOG_FILENAME: Final[str] = "leg-log.jsonl"
+
+#: ``<work_dir>/tranche-claim-<tranche>.lock`` — the ``flock`` target that
+#: serialises concurrent legs on one tranche (see :func:`_tranche_claim`). Its
+#: BYTES are meaningless; only the kernel lock on the open fd matters, so a
+#: crashed process leaves nothing to clean up. Deliberately NOT prefixed
+#: ``leg-``: ``_recorded_candidate_dirs`` globs ``leg-*.json`` for manifests.
+TRANCHE_CLAIM_FILENAME_STEM: Final[str] = "tranche-claim"
+
+#: The prompt-set selector. Not provider-specific: ``build_default_meeting_runner``
+#: resolves it to pick the rendered templates AND the recorded prompt versions
+#: (``orchestrator/game.py``), so two prompt sets are two recording protocols on
+#: every provider — including the fake one (Codex review on PR #314).
+_PROMPT_SET_KEY: Final[str] = "prompt_set"
+
+#: The 18.10 impostor-answer lever (``AILIBI_IMPOSTOR_ROLL_CALL``). It selects
+#: template VARIANTS inside a prompt set, so it is a second protocol axis the
+#: set name does not cover (Codex review on PR #314).
+_ROLL_CALL_KEY: Final[str] = "impostor_roll_call"
+
+#: The per-game budget key on the recording-backend identity. ``None`` when the
+#: caller supplies its own meeting runner, since ``run_tournament_eval`` then
+#: never builds one (Task 18.31).
+_GAME_BUDGET_KEY: Final[str] = "game_budget"
+
+#: The RESOLVED prompt-version mapping on the recording-backend identity — the
+#: provenance the runner stamps, not the selector that routes to it (18.31).
+_PROMPT_VERSIONS_KEY: Final[str] = "prompt_versions"
+
+#: EVERY ``AILIBI_*`` environment input the recording path can read, enumerated
+#: (Task 18.31). This is the domain :func:`_default_runner_inputs` must cover,
+#: stated as data so a test can check the coverage mechanically instead of a
+#: reviewer noticing the next omission.
+#:
+#: Derived by reading the two functions ``run_tournament_eval`` calls when no
+#: ``meeting_runner_factory`` is supplied:
+#:
+#: * ``build_default_meeting_runner`` -> ``llm.provider.build_default_client``
+#:   (the provider selector and its per-provider model/host/seed/ctx settings)
+#:   and the prompt loader (``AILIBI_PROMPT_SET``, ``AILIBI_IMPOSTOR_ROLL_CALL``);
+#: * ``eval.balance_eval._resolve_game_budget`` (``AILIBI_MAX_COST_USD``).
+#:
+#: ``ANTHROPIC_API_KEY`` / ``FEATHERLESS_API_KEY`` are deliberately ABSENT: a
+#: credential is not a recording protocol, and this mapping is written to disk.
+#:
+#: The pin does not take this list on trust: it re-derives the same set from the
+#: import closure of :data:`RECORDING_ENV_CALL_ROOTS` and asserts equality in
+#: BOTH directions, so a knob added anywhere under either root fails the suite
+#: here and a knob named here that nothing reads fails it too.
+RECORDING_ENV_INPUTS: Final[frozenset[str]] = frozenset(
+    {
+        "AILIBI_LLM_PROVIDER",
+        "AILIBI_LLM_MEETING_MODEL",
+        "AILIBI_LLM_TRIGGER_MODEL",
+        "AILIBI_OLLAMA_HOST",
+        "AILIBI_OLLAMA_SEED",
+        "AILIBI_OLLAMA_NUM_CTX",
+        "AILIBI_FEATHERLESS_BASE_URL",
+        "AILIBI_PROMPT_SET",
+        "AILIBI_IMPOSTOR_ROLL_CALL",
+        "AILIBI_MAX_COST_USD",
+    }
+)
+
+#: The two CALL ROOTS of the default recording path. The coverage pin derives
+#: the first-party import closure of these and scans every module in it, so the
+#: set of scanned modules is computed rather than maintained.
+#:
+#: This replaced a hand-written list of six modules, which was the wrong shape
+#: twice over (Codex review on PR #314). It had already been incomplete once —
+#: round 17 found both call roots missing from it — and even complete it could
+#: only ever describe the imports of the day: the moment either root reached a
+#: new helper that read a knob, the scan would not visit that helper and the pin
+#: would stay green while the backend digest omitted a real protocol input. The
+#: closure is what "on the path" actually means, so the pin computes it.
+RECORDING_ENV_CALL_ROOTS: Final[tuple[str, ...]] = (
+    # ``run_tournament_eval`` with no ``meeting_runner_factory`` reaches the
+    # provider selector and the prompt loader through the game, and the per-game
+    # budget through the balance-eval resolver. Everything else the recorder
+    # consults is downstream of one of these two.
+    "orchestrator.game",
+    "eval.balance_eval",
+)
+
+#: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
+#: compares before adopting a recording as this candidate's. The digest alone is
+#: not identity: genome lengths collide across encoder families.
+_STAMP_COMPARISON_FIELDS: Final[tuple[str, ...]] = (
+    "weights_sha256",
+    "encoder_version",
+    "policy_id",
+    "method",
+    "anchor_policy",
+)
+
+#: The per-game audit sidecar suffix ``HeadlessGame`` writes beside each replay.
+#: It matches the ``replay-seed-*.jsonl`` glob, so every seed walk must exclude
+#: it explicitly (Codex review on PR #314).
+_AUDIT_SIDECAR_SUFFIX: Final[str] = ".audit.jsonl"
+
+#: The invocation-ordinal ceiling. 1000 invocations of ONE tranche into ONE
+#: work dir is a runaway, not a campaign: refuse rather than spin.
+_MAX_INVOCATIONS: Final[int] = 1000
+
+#: Event-record keys the leg log owns; a caller field colliding with one of
+#: them is a fail-loud contradiction, never a silent override.
+_LEG_LOG_RESERVED_KEYS: Final[tuple[str, ...]] = (
+    "event",
+    "invocation",
+    "recorded_at",
+    "schema_version",
+    "seq",
+    "tranche",
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -375,6 +609,13 @@ class RealPathSeedTelemetry(BaseModel):
     ``game_over`` row (and no stamp bytes) BY DESIGN — never retried, and
     excluded from stamp verification. ``wall_seconds`` is cumulative monotonic
     time across all attempts, rounded to 3 places.
+
+    ``resumed`` (Task 18.31) marks an element this invocation did NOT record:
+    a pre-existing replay that satisfied the whole conjunctive resume
+    predicate. Such an entry carries ``attempts=0`` (honest — no recording was
+    attempted), empty counters, and ``tick_budget_reached=False``: a capped
+    replay has no ``game_over`` row, so it can never satisfy the predicate.
+    ``wall_seconds`` is then the verification cost.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -386,12 +627,29 @@ class RealPathSeedTelemetry(BaseModel):
     tick_budget_reached: bool
     error_types: tuple[str, ...]
     wall_seconds: float
+    resumed: bool = False
 
     @model_validator(mode="after")
     def _validate(self) -> RealPathSeedTelemetry:
-        if self.attempts < 1:
+        if self.resumed:
+            if self.attempts != 0:
+                raise ValueError(
+                    f"a resumed element attempts no recording; got "
+                    f"attempts={self.attempts!r}"
+                )
+            if self.error_types:
+                raise ValueError(
+                    "a resumed element records no failed attempt; got "
+                    f"error_types={self.error_types!r}"
+                )
+            if self.tick_budget_reached:
+                raise ValueError(
+                    "a tick-budget replay carries no game_over stamp and is "
+                    "therefore never resumable; got tick_budget_reached=True"
+                )
+        elif self.attempts < 1:
             raise ValueError(f"attempts must be >= 1; got {self.attempts!r}")
-        if len(self.error_types) != self.attempts - 1:
+        if len(self.error_types) != max(self.attempts - 1, 0):
             raise ValueError(
                 "error_types must record one entry per failed attempt "
                 f"(len == attempts - 1); got {len(self.error_types)} entries for "
@@ -428,6 +686,18 @@ class RealPathRerankRow(BaseModel):
     stamp_verified_games: int
     stamp_uniform: bool
     stamp_equals_computed_digest: bool
+    #: WHO recorded these bytes and on WHAT topology (Task 18.31, ``-v2``). The
+    #: leg manifest already carried both, but a manifest lives beside the
+    #: recordings and a ranking row travels alone: two tranche rankings written
+    #: into one leg directory by separate calls could use different providers,
+    #: prompt sets, custom runners or maps while agreeing on every protocol
+    #: field, and the §4.0 stability table would then report that behavioural
+    #: change as provider/seed noise (Codex review on PR #314). The backend
+    #: digest hashes the whole identity mapping; the map sha is carried
+    #: separately because the topology is the one protocol axis a reader is
+    #: likely to want to compare without reconstructing the identity.
+    recording_backend_sha256: str
+    game_map_sha256: str
     seeds: tuple[int, ...]
     num_players: int
     num_impostors: int
@@ -476,6 +746,499 @@ class RealPathRerankResult(BaseModel):
         """The rank-1 row (rows are never empty)."""
 
         return self.rows[0]
+
+
+# --------------------------------------------------------------------------- #
+# Pre-screen records + the native leg log (Task 18.31).                        #
+# --------------------------------------------------------------------------- #
+
+
+class PreScreenQuote(BaseModel):
+    """One candidate's blocker-4 pre-screen quote (frozen, extra='forbid').
+
+    SPEND ADVICE ONLY: a pre-screen predicts whether a candidate is worth real
+    seeds, and no gating read ever stands on it (``note`` carries the committed
+    disclaimer verbatim). The optional fields mirror the 18.24 records —
+    ``None`` means the quantity was not measured, never a zero-ghost.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    weights_sha256: str
+    predicted_flags_per_meeting: float
+    predicted_floors_pass: bool
+    generation: int | None = None
+    meetings_scored: int | None = None
+    conviction_uses: int | None = None
+    recorded_flags_fake_substrate: float | None = None
+    note: str = PRESCREEN_ADVICE_NOTE
+
+    @model_validator(mode="after")
+    def _validate(self) -> PreScreenQuote:
+        if not self.label.strip():
+            raise ValueError(f"label must be non-blank; got {self.label!r}")
+        if _SHA256_HEX_RE.fullmatch(self.weights_sha256) is None:
+            raise ValueError(
+                "weights_sha256 must be exactly 64 lowercase hex chars; got "
+                f"{self.weights_sha256!r}"
+            )
+        for name, value in (
+            ("predicted_flags_per_meeting", self.predicted_flags_per_meeting),
+            ("recorded_flags_fake_substrate", self.recorded_flags_fake_substrate),
+        ):
+            # Both are counts PER MEETING. Finiteness alone let a negative rate
+            # be persisted and logged as blocker-4 spend advice, where it reads
+            # as a validated quote discouraging real-path spend (Codex review on
+            # PR #314). A negative event rate is not a measurement.
+            if value is not None and not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(
+                    f"{name} is a per-meeting rate: it must be finite and "
+                    f">= 0; got {value!r}"
+                )
+        for name, count in (
+            ("meetings_scored", self.meetings_scored),
+            ("conviction_uses", self.conviction_uses),
+        ):
+            if count is not None and count < 0:
+                raise ValueError(f"{name} must be >= 0; got {count!r}")
+        if self.note != PRESCREEN_ADVICE_NOTE:
+            # The disclaimer is the record's provenance guarantee, not a caption:
+            # a quote whose note called the prediction gating evidence would
+            # invert blocker 4 in the committed artifact (Codex review on
+            # PR #314). It is a constant the field carries, never caller text.
+            raise ValueError(
+                f"note must be exactly {PRESCREEN_ADVICE_NOTE!r} (a pre-screen is "
+                f"spend advice by contract); got {self.note!r}"
+            )
+        return self
+
+
+class PreScreenRecord(BaseModel):
+    """A tranche/invocation-keyed pre-screen record (frozen, extra='forbid').
+
+    The committed 18.24 records were written IN PLACE per leg, so a second
+    tranche overwrote the first's quotes (report §11 defect 3 / F9) and the
+    session-5 records carried no invocation stamp at all (§12 Errata item 10).
+    Both keys are structural here: the record names its tranche AND its
+    invocation, and :func:`write_prescreen_record` only ever creates a NEW file.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: str = PRESCREEN_SCHEMA_VERSION
+    tranche: str
+    invocation: str
+    seeds: tuple[int, ...]
+    recorded_at: str
+    quotes: tuple[PreScreenQuote, ...]
+
+    @model_validator(mode="after")
+    def _validate(self) -> PreScreenRecord:
+        if not self.quotes:
+            raise ValueError("a pre-screen record must carry at least one quote")
+        labels = [quote.label for quote in self.quotes]
+        if len(set(labels)) != len(labels):
+            raise ValueError(f"pre-screen quote labels must be unique; got {labels!r}")
+        if not self.seeds:
+            raise ValueError("seeds must be non-empty")
+        return self
+
+    def to_json(self) -> str:
+        """The committed byte form: key-sorted, 2-space indent, trailing newline."""
+
+        return json.dumps(self.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+
+
+class RealPathLegLog:
+    """The leg library's OWN append-only run log (Task 18.31 fix 3).
+
+    An explicit, invocation-scoped object (never module state — AGENTS.md): the
+    leg constructs one and writes every ordering-relevant event through it, so
+    the blocker-4 "pre-screen quoted BEFORE any spend" evidence is a library
+    artifact rather than an operator shell redirection. §12 Errata item 10 is
+    the demonstration of the gap: session 5's 36 real games have no chain log,
+    so their ordering rests on testimony alone.
+
+    Every event is one key-sorted JSON object on its own line, carrying the
+    ``(tranche, invocation)`` key, a monotone per-invocation ``seq``, and a UTC
+    ``recorded_at``. The file is opened in APPEND mode per event and closed
+    again, so a leg killed mid-recording (the hour-40 provider 503) still leaves
+    every event it had already emitted on disk.
+    """
+
+    def __init__(self, path: Path, *, tranche: str, invocation: str) -> None:
+        self._path = path
+        self._tranche = tranche
+        self._invocation = invocation
+        self._seq = 0
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def invocation(self) -> str:
+        return self._invocation
+
+    def emit(self, event: str, **fields: object) -> None:
+        """Append one event; fail loud on a field that shadows a reserved key."""
+
+        clashing = sorted(key for key in _LEG_LOG_RESERVED_KEYS if key in fields)
+        if clashing:
+            raise ValueError(
+                f"leg-log event {event!r} carries reserved keys {clashing}; the "
+                "log owns them (they are its ordering evidence)"
+            )
+        self._seq += 1
+        record: dict[str, object] = {
+            "event": event,
+            "invocation": self._invocation,
+            "recorded_at": _utc_now(),
+            "schema_version": LEG_LOG_SCHEMA_VERSION,
+            "seq": self._seq,
+            "tranche": self._tranche,
+            **fields,
+        }
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        # Append mode FOLLOWS a symlink, so a corrupted work tree would write
+        # every "native" ordering event outside the claimed work dir — into
+        # whatever the link points at. The round-16 symlink rule covered
+        # candidate directories and replays; the log that is supposed to be this
+        # library's own evidence was the one entry it did not cover (Codex
+        # review on PR #314). A real existing file still appends, which is the
+        # append-only continuation this log depends on.
+        _refuse_symlinked_recording_entry(self._path, what="the leg log,")
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def _utc_now() -> str:
+    """The wall-clock stamp the ordering evidence needs (UTC, ISO-8601)."""
+
+    return datetime.now(UTC).isoformat()
+
+
+def tranche_key(seeds: Sequence[int]) -> str:
+    """An INJECTIVE key for a seed set (``4000-4002``; ``4000`` if one).
+
+    This value keys the tranche flock, manifest discovery, directory ownership
+    and the resume drift check, so two different experiments sharing a key are
+    treated as one: a fresh run publishes a manifest and then collides with the
+    other's directories, and a resume rejects its replay set as foreign.
+
+    The endpoint-only form it replaced was not injective in two ways, and the
+    docstring's excuse — that the exact seed list is recorded in the manifest,
+    "so nothing is lost by the abbreviation" — was false, because the key IS the
+    lookup that finds the manifest (Codex review on PR #314):
+
+    * non-contiguous lists collided on their endpoints (``[4000, 4001, 4003]``
+      and ``[4000, 4002, 4003]`` both keyed ``4000-4003``);
+    * the key read the caller's ORDER, so ``[1, 2, 3]`` and ``[3, 2, 1]`` — one
+      seed set recorded twice — keyed ``1-3`` and ``3-1`` and took two different
+      locks. ``generate_campaign_tables`` already canonicalises the seed set as
+      the experiment, so the recorder was the looser of the two halves.
+
+    Canonical (sorted) throughout, and a contiguous run still renders exactly as
+    before — every committed and fixture name is unchanged — while a gapped set
+    carries a digest of its full membership. A contiguous key can never collide
+    with a gapped one (the suffix), two contiguous keys with equal endpoints are
+    the same set, and two gapped ones differ in the digest.
+    """
+
+    if not seeds:
+        raise ValueError("cannot key a tranche with no seeds")
+    # Uniqueness belongs HERE, in the shared helper, not only in the recorder's
+    # entry point. ``run_realpath_rerank`` rejects a repeated seed, but
+    # ``write_prescreen_record`` is public and reaches this directly, so
+    # ``[1, 1, 2]`` keyed a distinct "gapped" tranche and wrote audit evidence
+    # for a seed set the recorder can never execute (Codex review on PR #314).
+    # A duplicate is also meaningless to every consumer of the key: the tranche
+    # IS the seed set, and a set has no multiplicities.
+    # ONE pass. The first version rebuilt ``list(seeds)`` and scanned it once per
+    # seed — quadratic, so a 100k-seed tranche did ~10^10 comparisons and hung,
+    # which is the same failure mode as the span materialisation this check was
+    # added beside and I reintroduced it in the fix (Codex review on PR #314).
+    counted = Counter(seeds)
+    duplicates = sorted(seed for seed, count in counted.items() if count > 1)
+    if duplicates:
+        raise ValueError(
+            f"cannot key a tranche with repeated seeds {duplicates}; a tranche "
+            "is a SET of seeds, and one recorded twice would key an experiment "
+            "no recording can reproduce"
+        )
+    canonical = sorted(seeds)
+    first, last = canonical[0], canonical[-1]
+    if len(canonical) == 1:
+        return str(first)
+    # Contiguity WITHOUT materialising the span. ``canonical == list(range(...))``
+    # allocated one element per integer between the endpoints, so a legitimate
+    # sparse tranche such as ``[0, 1_000_000_000]`` exhausted memory before the
+    # digest path it was headed for could run — and both the recorder and the
+    # public ``write_prescreen_record`` reach here with an unbounded seed range
+    # (Codex review on PR #314). Adjacent-pair comparison answers the same
+    # question in constant space.
+    if all(b - a == 1 for a, b in zip(canonical, canonical[1:], strict=False)):
+        return f"{first}-{last}"
+    # The FULL digest, not a prefix. Round 12 removed a truncated digest from
+    # policy_id on the grounds that any prefix is the same collision bargain at
+    # a different probability, and this key has the same job — disambiguating
+    # sets that would otherwise be treated as one experiment. A long filename is
+    # a smaller cost than a probabilistic key.
+    digest = hashlib.sha256(
+        json.dumps(canonical, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"{first}-{last}-{digest}"
+
+
+def _invocation_path(directory: Path, stem: str, tranche: str, ordinal: int) -> Path:
+    return directory / f"{stem}-{tranche}-{ordinal:03d}.json"
+
+
+def _validate_invocation_token(invocation: str) -> None:
+    """An explicit invocation id is a FILENAME token, never a path (18.31).
+
+    The id is interpolated straight into a filename, so ``"a/../../escaped"``
+    would publish the record outside ``directory`` — an unexpected filesystem
+    write, and one that removes the supposedly native pre-screen evidence from
+    the work dir's record set, which is the whole point of the §12 item-10 fix
+    (Codex review on PR #314). Restricted to the character class the allocator's
+    own ids use, plus ``-``/``_`` for human-chosen slots.
+    """
+
+    if not invocation:
+        raise ValueError("invocation must be a non-empty token; got ''")
+    if not all(
+        (char.isascii() and char.isalnum()) or char in _SLUG_EXTRA
+        for char in invocation
+    ):
+        raise ValueError(
+            f"invocation must be a filename-safe token ([-A-Za-z0-9_]); got "
+            f"{invocation!r}. It is interpolated into a filename, so a path "
+            "component would publish the record outside the work dir"
+        )
+
+
+def write_prescreen_record(
+    directory: Path,
+    *,
+    seeds: Sequence[int],
+    quotes: Sequence[PreScreenQuote],
+    invocation: str | None = None,
+) -> Path:
+    """Write one tranche/invocation-keyed pre-screen record; NEVER in place.
+
+    ``invocation=None`` allocates the next free ordinal for this tranche by
+    EXCLUSIVE creation (``open("x")``), so two concurrent legs cannot be handed
+    the same id; an explicit ``invocation`` writes exactly that file and raises
+    :class:`FileExistsError` if it already exists. Returns the written path.
+    """
+
+    tranche = tranche_key(tuple(seeds))
+    record_seeds = tuple(seeds)
+    directory.mkdir(parents=True, exist_ok=True)
+    if invocation is not None:
+        _validate_invocation_token(invocation)
+        path = directory / f"{PRESCREEN_FILENAME_STEM}-{tranche}-{invocation}.json"
+        _write_prescreen_json(
+            path,
+            tranche=tranche,
+            invocation=invocation,
+            seeds=record_seeds,
+            quotes=quotes,
+        )
+        return path
+    for ordinal in range(_MAX_INVOCATIONS):
+        path = _invocation_path(directory, PRESCREEN_FILENAME_STEM, tranche, ordinal)
+        try:
+            _write_prescreen_json(
+                path,
+                tranche=tranche,
+                invocation=f"{ordinal:03d}",
+                seeds=record_seeds,
+                quotes=quotes,
+            )
+        except FileExistsError:
+            continue
+        return path
+    raise RealPathRerankError(
+        f"no free pre-screen invocation ordinal for tranche {tranche!r} under "
+        f"{directory} after {_MAX_INVOCATIONS} attempts; that is a runaway, "
+        "not a campaign"
+    )
+
+
+def _validate_prescreen_coverage(
+    quotes: Sequence[PreScreenQuote], candidates: Sequence[RealPathCandidate]
+) -> None:
+    """Refuse pre-screen quotes that do not name THIS leg's candidates (18.31).
+
+    The ordering evidence is only worth what it names: a stale or partial quote
+    set proves that SOME advice preceded the spend, not that the candidates
+    consuming real-provider games were the ones pre-screened (Codex review on
+    PR #314). Coverage is therefore the full ``label -> digest`` MAPPING, not a
+    digest set: a leg may legitimately carry two labels over one genome (the
+    same policy re-entered under two names), and comparing sets would let one
+    quote cover both — leaving a candidate that consumed real games unnamed.
+    """
+
+    expected = {
+        candidate.label: _genome_digest(candidate.genome) for candidate in candidates
+    }
+    quoted: dict[str, str] = {}
+    for quote in quotes:
+        if quote.label in quoted:  # pragma: no cover - PreScreenRecord re-checks
+            raise ValueError(
+                f"pre-screen quotes must name each candidate once; {quote.label!r} "
+                "is quoted twice"
+            )
+        quoted[quote.label] = quote.weights_sha256
+    if quoted != expected:
+        missing = sorted(set(expected) - set(quoted))
+        extra = sorted(set(quoted) - set(expected))
+        mispaired = sorted(
+            f"{label} quoted {quoted[label]} != candidate {expected[label]}"
+            for label in set(expected) & set(quoted)
+            if quoted[label] != expected[label]
+        )
+        raise ValueError(
+            "pre-screen quotes must cover exactly this leg's candidates "
+            f"(label -> digest); missing {missing}, extra {extra}, "
+            f"mispaired {mispaired} (the blocker-4 evidence names the candidates "
+            "the spend recorded)"
+        )
+
+
+def _write_prescreen_json(
+    path: Path,
+    *,
+    tranche: str,
+    invocation: str,
+    seeds: tuple[int, ...],
+    quotes: Sequence[PreScreenQuote],
+) -> None:
+    """Build + atomically publish one pre-screen record (validation before I/O).
+
+    Published through :func:`_publish_json_atomically` rather than a plain
+    exclusive ``open("x")``: the exclusive open CREATES the final path before
+    its bytes are complete, so an interruption or a full disk mid-``write``
+    leaves an empty or truncated file that reads as committed invocation
+    evidence — and in the rerank path the leg manifest has already claimed that
+    invocation, so the retry advances to another ordinal and the corrupt record
+    stays in the audit set forever (Codex review on PR #314). ``os.link``
+    publishes only completed, fsynced bytes and is still exclusive, so it
+    remains a valid ordinal allocator: :class:`FileExistsError` still means
+    "this ordinal is taken", never "this ordinal is half-written".
+    """
+
+    record = PreScreenRecord(
+        tranche=tranche,
+        invocation=invocation,
+        seeds=seeds,
+        recorded_at=_utc_now(),
+        quotes=tuple(quotes),
+    )
+    _publish_json_atomically(path, record.to_json())
+
+
+def _publish_json_atomically(path: Path, payload: str) -> None:
+    """Write ``payload`` to ``path`` atomically AND exclusively (18.31).
+
+    Staged in the destination directory, flushed through to disk, then
+    published with :func:`os.link` — one syscall that is both atomic and
+    exclusive, raising ``FileExistsError`` if the path is already taken (which
+    is what makes it usable as an ordinal allocator). A cleanup failure after a
+    successful link never overturns the publish.
+    """
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stage: Path | None = None
+    published = False
+    try:
+        handle_fd, stage_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        stage = Path(stage_name)
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(stage, path)
+        published = True
+    finally:
+        if stage is not None:
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError:
+                if not published:
+                    raise
+
+
+def _open_leg_manifest(
+    work_dir: Path,
+    *,
+    tranche: str,
+    seeds: tuple[int, ...],
+    mode: str,
+    resume: bool,
+    candidates: Sequence[RealPathCandidate],
+    config: RealPathRerankConfig,
+    ranking_path: Path,
+    backend: Mapping[str, object],
+    candidate_dirs: Sequence[Path],
+) -> tuple[str, Path]:
+    """Allocate this leg's invocation id by exclusively creating its manifest.
+
+    The invocation stamp §12 Errata item 10 records the absence of: which
+    candidates, which seeds, which knobs, and WHEN — written before any
+    recording, and the file's exclusive creation is what makes the id unique.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    for ordinal in range(_MAX_INVOCATIONS):
+        path = _invocation_path(work_dir, LEG_MANIFEST_FILENAME_STEM, tranche, ordinal)
+        manifest = {
+            "backend": dict(backend),
+            "candidates": [
+                {
+                    # The recording dir rides the manifest so a later resume
+                    # places each label EXACTLY, without re-deriving it from a
+                    # non-injective slug (Codex review on PR #314).
+                    "dir": directory.name,
+                    "encoder_version": candidate.encoder_version,
+                    "hidden": candidate.hidden,
+                    "label": candidate.label,
+                    "weights_sha256": _genome_digest(candidate.genome),
+                }
+                for candidate, directory in zip(candidates, candidate_dirs, strict=True)
+            ],
+            "config": config.model_dump(mode="json"),
+            "invocation": f"{ordinal:03d}",
+            "mode": mode,
+            "ranking_path": str(ranking_path),
+            "resume": resume,
+            "schema_version": LEG_MANIFEST_SCHEMA_VERSION,
+            "seeds": list(seeds),
+            "started_at": _utc_now(),
+            "tranche": tranche,
+        }
+        # ATOMIC: an interrupt between the exclusive create and the write left a
+        # partial manifest, and ``_refuse_protocol_drift`` refuses an unreadable
+        # one — so every later resume died on evidence that had to be deleted by
+        # hand. Same stage-then-link discipline as the ranking publish (Codex
+        # review on PR #314): the create is what allocates the ordinal, and the
+        # bytes land whole or not at all.
+        try:
+            _publish_json_atomically(
+                path, json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            )
+        except FileExistsError:
+            continue
+        return f"{ordinal:03d}", path
+    raise RealPathRerankError(
+        f"no free leg invocation ordinal for tranche {tranche!r} under {work_dir} "
+        f"after {_MAX_INVOCATIONS} attempts; that is a runaway, not a campaign"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -600,11 +1363,1628 @@ def _drop_audit_sidecars(directory: Path) -> None:
     """Drop the per-game ``*.audit.jsonl`` sidecars (mirrors harness.py:993-998).
 
     The referee / validity / core seed glob (``replay-seed-*.jsonl``) trips on
-    them, so they must go before scoring.
+    them, so they must go before scoring. :func:`_refuse_foreign_replays` runs
+    BEFORE any recording, so it excludes the same suffix itself rather than
+    relying on this having run.
     """
 
-    for sidecar in directory.glob("*.audit.jsonl"):
+    for sidecar in directory.glob(f"*{_AUDIT_SIDECAR_SUFFIX}"):
         sidecar.unlink()
+
+
+def _entry_exists(path: Path) -> bool:
+    """True iff a directory ENTRY exists at ``path`` — resolvable or not (18.31).
+
+    ``Path.exists()`` FOLLOWS symlinks, so it answers "does this resolve?" when
+    every no-clobber and free-name check here is asking "is there something at
+    this name?". A dangling link reads as absent and the collision arrives later,
+    after the spend. Three separate review rounds filed one call site of this
+    each (the ranking preflight, the driver's campaign artifacts, the hall's
+    loadable sidecars) before it was written down once (Codex reviews, PR #314).
+    """
+
+    return path.exists() or path.is_symlink()
+
+
+def _refuse_symlinked_recording_entry(path: Path, *, what: str) -> None:
+    """The recorder creates real, UNSHARED files and directories (18.31).
+
+    A symlink standing where recorded evidence belongs is a corrupted work tree,
+    and following it writes this leg's replays — and its ``force=True``
+    re-records — through to wherever the link points, outside the candidate
+    directory the leg claimed and scored (Codex review on PR #314). The same
+    rule already governs recorded candidate DIRECTORIES; this is it stated once
+    for both.
+
+    A HARD link is the same sharing without the tell: ``is_symlink()`` is false
+    for one, so a replay hard-linked to another campaign's file passed this guard
+    outright. Both outcomes are bad and neither is detectable afterwards — if the
+    stamp and fence happen to pass, the resume silently adopts bytes owned
+    elsewhere; if either misses, the ``force=True`` re-record truncates the
+    SHARED inode and destroys the other campaign's replay (Codex review on
+    PR #314). ``st_nlink > 1`` is what distinguishes a file this leg owns from
+    one it merely reaches, so the rule is "real and sole-owner", not just "real".
+    """
+
+    if path.is_symlink():
+        raise RealPathRerankError(
+            f"{what} {path} is a SYMLINK. The recorder only ever creates real "
+            "files and directories, so a link standing in for one is a "
+            "corrupted work tree — following it would read and write evidence "
+            "outside the directory this leg claimed"
+        )
+    try:
+        links = path.stat().st_nlink
+    except OSError:
+        # Absent (the ordinary fresh case) or unreadable — nothing to share.
+        return
+    if path.is_file() and links > 1:
+        raise RealPathRerankError(
+            f"{what} {path} is a HARD LINK ({links} names for one inode). The "
+            "recorder owns the evidence it writes: adopting a shared inode would "
+            "rank another campaign's bytes as this leg's, and re-recording it "
+            "would truncate that campaign's replay in place"
+        )
+
+
+def _completeness_fence_failure(
+    replay_path: Path, *, config: RealPathRerankConfig
+) -> str | None:
+    """``None`` iff the single recording passes the byte-completeness fence.
+
+    The committed fence (:func:`eval.kill_craft.compute_kill_craft_report`) is
+    DIR-scoped: it walks every ``replay-seed-*.jsonl`` beside the roster
+    descriptor. Per-(candidate, seed) verification is therefore reached by
+    STAGING one replay into a throwaway directory with its ``roster.json`` —
+    the sanctioned route (Task 18.31), never an edit to ``eval/kill_craft.py``.
+    Any failure at all (a truncated replay, a missing ``game_over`` row,
+    trailing rows after the terminal tick, an unreadable file, a roster the
+    walk cannot reconstruct) returns a reason string, and every reason means
+    RE-RECORD: the resume predicate is conjunctive and biased toward spending
+    minutes rather than certifying bytes nobody verified.
+    """
+
+    with tempfile.TemporaryDirectory(prefix="realpath-resume-") as raw_staging:
+        staging = Path(raw_staging)
+        try:
+            (staging / replay_path.name).write_bytes(replay_path.read_bytes())
+        except OSError as exc:
+            return f"{type(exc).__name__}: {exc}"
+        _write_roster_json(staging, config)
+        try:
+            compute_kill_craft_report(staging)
+        except Exception as exc:  # noqa: BLE001 - ANY failure re-records
+            return f"{type(exc).__name__}: {exc}"
+    return None
+
+
+def _resume_skip_reason(
+    replay_path: Path,
+    *,
+    expected_stamp: TacticalPolicyStamp,
+    config: RealPathRerankConfig,
+) -> str | None:
+    """``None`` iff this (candidate, seed) element may be SKIPPED (Task 18.31).
+
+    The predicate is CONJUNCTIVE — all three checks must pass, and any miss
+    returns the reason and re-records:
+
+    1. **the replay exists** on disk at all;
+    2. **its stamp reads back from the bytes** (never echoed from the launch
+       config — the 17.14 discipline) and equals the candidate's WHOLE computed
+       stamp — all five fields, not the genome digest alone — so a foreign or
+       superseded policy IDENTITY can never be adopted as this candidate's;
+    3. **the byte-completeness fence is green** for that recording.
+
+    Check 2 is also what makes a ``TICK_BUDGET_REACHED`` replay unskippable:
+    the engine writes no ``game_over`` row for a capped game, so there are no
+    stamp bytes to read and the element re-records — deliberately, since a
+    capped replay is an accepted OUTCOME of a recording, not proof that this
+    invocation's recording happened.
+    """
+
+    if not _entry_exists(replay_path):
+        return "no replay on disk"
+    try:
+        stamp = read_tactical_policy_stamp(replay_path)
+    except Exception as exc:  # noqa: BLE001 - ANY unreadable replay re-records
+        # An interrupted process can leave a half-written line, and the reader
+        # raises on it (``ValueError: invalid replay JSON at line N``) or on the
+        # doubled-file pattern (``CorruptedFileError``). Those are the very
+        # states a resume exists to meet: an unreadable replay is a verification
+        # MISS, never a leg-killing exception (Codex review on PR #314).
+        return f"replay bytes are unreadable ({type(exc).__name__}: {exc})"
+    if stamp is None:
+        return (
+            "no tactical policy stamp on the recorded bytes (no game_over row — "
+            "a TICK_BUDGET_REACHED, truncated, or parse-folded recording)"
+        )
+    # The WHOLE stamp, not just the digest. Identical genome bytes under a
+    # different ``encoder_version`` / ``policy_id`` / ``method`` /
+    # ``anchor_policy`` are a DIFFERENT policy: skipping such a replay would
+    # attribute the previous identity's games to this candidate, and
+    # ``_verify_stamps`` would not catch it (it checks the digest and
+    # cross-seed uniformity, both of which hold when every seed carries the
+    # same old identity). Genome lengths collide across encoder families —
+    # §12 Errata item 1 is that exact mis-attribution (Codex review on PR #314).
+    for field in _STAMP_COMPARISON_FIELDS:
+        recorded = getattr(stamp, field)
+        expected = getattr(expected_stamp, field)
+        if recorded != expected:
+            return (
+                f"read-back stamp {field} {recorded!r} != this candidate's {expected!r}"
+            )
+    fence = _completeness_fence_failure(replay_path, config=config)
+    if fence is not None:
+        return f"byte-completeness fence failed ({fence})"
+    return None
+
+
+def _replay_seed(path: Path) -> int | None:
+    """The seed a ``replay-seed-<n>.jsonl`` filename names (``None`` if unparsable)."""
+
+    token = path.name.removeprefix("replay-seed-").removesuffix(".jsonl")
+    try:
+        return int(token)
+    except ValueError:
+        return None
+
+
+def _refuse_foreign_replays(
+    candidate_dir: Path, *, seeds: tuple[int, ...], label: str
+) -> None:
+    """Refuse a resume into a dir holding replays outside THIS tranche (18.31).
+
+    The scoring entry points (``run_validity_gate`` /
+    ``compute_watchability`` / ``measure_baseline``) fold the whole DIRECTORY,
+    so a leftover replay from a different tranche would silently enter this
+    invocation's committed row. An unparsable ``replay-seed-*.jsonl`` name
+    counts as foreign — the ambiguity is resolved toward refusing, never
+    toward folding bytes nobody can attribute to a seed.
+    """
+
+    requested = set(seeds)
+    # The ``*.audit.jsonl`` sidecars ``HeadlessGame`` writes beside each replay
+    # MATCH this glob (``replay-seed-1.audit.jsonl`` globs, and ``_replay_seed``
+    # cannot parse ``1.audit``), so without this exclusion every interrupted leg
+    # aborted here as though it held a foreign tranche — the ordinary
+    # interruption state defeating the resume path outright (Codex review on
+    # PR #314). ``_drop_audit_sidecars`` only runs AFTER a candidate's whole
+    # seed loop, so a COMPLETED leg has none and my resume fixtures never saw
+    # one; only the interrupted case this feature exists for does.
+    foreign = sorted(
+        path.name
+        for path in candidate_dir.glob("replay-seed-*.jsonl")
+        if not path.name.endswith(_AUDIT_SIDECAR_SUFFIX)
+        and _replay_seed(path) not in requested
+    )
+    if foreign:
+        raise RealPathRerankError(
+            f"candidate {label!r}: resume refuses {candidate_dir} — it holds "
+            f"replays outside this tranche {foreign}; the scoring gates fold the "
+            f"whole directory, so those bytes would silently enter the row for "
+            f"seeds {list(seeds)}"
+        )
+
+
+def _refuse_protocol_drift(
+    work_dir: Path,
+    *,
+    tranche: str,
+    mode: str,
+    config: RealPathRerankConfig,
+    candidates: Sequence[RealPathCandidate],
+    backend: Mapping[str, object],
+) -> None:
+    """Refuse a resume whose recording protocol differs from the prior leg (18.31).
+
+    A resume ADOPTS bytes recorded by an earlier invocation. Those bytes were
+    produced under that invocation's roster, baseline, tick budget, meeting
+    timeout and retry budget; this invocation's row will report ITS OWN config
+    for every element, skipped or recorded alike. If the two disagree the row
+    is a fabrication — it attributes old bytes to new settings — and nothing
+    downstream can detect it, because the row records only one config.
+
+    Every invocation already stamps ``config`` and its candidate slate into
+    ``leg-<tranche>-<invocation>.json``; this reads the prior manifests for the
+    SAME tranche and refuses on any difference. The candidate slate is compared
+    by ``label -> (digest, encoder_version, hidden)``: a resume may legitimately
+    narrow the slate (re-running the two candidates a 503 interrupted), so a
+    prior manifest covering MORE candidates is fine — but a label whose genome
+    or family moved is a different candidate wearing an old name.
+    """
+
+    prior = sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json"))
+    if not prior:
+        return
+    wanted_config = config.model_dump(mode="json")
+    wanted_slate = {
+        candidate.label: [
+            _genome_digest(candidate.genome),
+            candidate.encoder_version,
+            candidate.hidden,
+        ]
+        for candidate in candidates
+    }
+    for path in prior:
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RealPathRerankError(
+                f"resume cannot read the prior leg manifest {path} ({exc}); it "
+                "records the protocol the existing recordings were made under, "
+                "and a resume that cannot verify that protocol is a resume that "
+                "cannot safely adopt those bytes"
+            ) from exc
+        # Only manifests describing candidates this resume will actually READ.
+        # The tranche key alone was the wrong scope: one work dir can legitimately
+        # hold two FRESH legs over the same seed set under different protocols
+        # with disjoint labels — the fresh path permits exactly that and gives
+        # them separate directories — and comparing against the unrelated one
+        # refused the resume on a config, mode or backend that describes bytes it
+        # is never going to touch. An interrupted 30-40 h leg became unresumable
+        # because a neighbour shared its seeds (Codex review on PR #314).
+        #
+        # Label overlap is the right test because the label is what
+        # ``_recorded_candidate_dirs`` resolves to a directory: no shared label,
+        # no shared directory, nothing adopted from that manifest.
+        recorded_labels = {
+            entry.get("label")
+            for entry in manifest.get("candidates", [])
+            if isinstance(entry.get("label"), str)
+        }
+        if not recorded_labels & set(wanted_slate):
+            continue
+        # The MODE is leg protocol too — ``generate_campaign_tables`` treats it
+        # as one, and refuses two tranches of an arm that disagree on it. It is
+        # not a ``RealPathRerankConfig`` field, so the config comparison below
+        # is blind to it: a ``top-k`` recording resumed as ``champion-trace``
+        # would skip every old replay and emit rows claiming the new mode with
+        # ``resumed=True``, relabelling the recorded experiment (Codex review on
+        # PR #314).
+        recorded_mode = manifest.get("mode")
+        if recorded_mode != mode:
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche in mode "
+                f"{recorded_mode!r} but this invocation asks for {mode!r}. The "
+                "existing replays were produced by that selection loop; adopting "
+                "them under another mode relabels the experiment"
+            )
+        recorded_config = manifest.get("config")
+        if recorded_config != wanted_config:
+            drift = sorted(
+                key
+                for key in set(wanted_config) | set(recorded_config or {})
+                if wanted_config.get(key) != (recorded_config or {}).get(key)
+            )
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche under a different "
+                f"protocol (differing: {drift}). The existing replays were made "
+                "under those settings, but this invocation's rows would report "
+                "the new ones for every skipped element — re-record the leg into "
+                "a fresh work dir instead of adopting bytes from another "
+                "experiment"
+            )
+        # The RECORDER, not just the game. A provider/model swap (or a stub
+        # runner standing in for the real path) produces bytes that are not
+        # interchangeable with the originals, and none of it rides the config
+        # (Codex review on PR #314). A manifest predating this field records
+        # ``None`` and is treated as unknown-and-therefore-unsafe.
+        recorded_backend = manifest.get("backend")
+        if recorded_backend != dict(backend):
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche against a different "
+                f"recording backend ({recorded_backend!r} vs {dict(backend)!r}). "
+                "The existing replays came from that provider/runner; adopting "
+                "them here would commit one row whose seeds were recorded against "
+                "two different backends"
+            )
+        recorded_slate = {
+            entry["label"]: [
+                entry["weights_sha256"],
+                entry["encoder_version"],
+                entry["hidden"],
+            ]
+            for entry in manifest.get("candidates", [])
+        }
+        moved = sorted(
+            label
+            for label, identity in wanted_slate.items()
+            if label in recorded_slate and recorded_slate[label] != identity
+        )
+        if moved:
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded candidate label(s) {moved} with a "
+                "different genome digest, encoder family, or hidden width; a label "
+                "is not an identity, and adopting those replays would rank one "
+                "policy under another's name"
+            )
+
+
+class _DirClaim(NamedTuple):
+    """One leg manifest's reservation of one candidate directory.
+
+    ``identity`` is the ``(digest, encoder_version, hidden)`` triple the manifest
+    recorded for the label. Never absent: :func:`_recorded_identity` refuses a
+    manifest that cannot supply one, so a claim is always a claim by a specific
+    candidate rather than by a name.
+    """
+
+    tranche: str
+    label: str
+    identity: tuple[str, str, int | None]
+
+
+def _claimed_candidate_dirs(work_dir: Path) -> dict[str, _DirClaim]:
+    """Every candidate directory a leg manifest CLAIMS -> :class:`_DirClaim`.
+
+    A manifest is the durable record of which directories a leg owns, so it is
+    what makes a claim survive the allocating process — and a claim covers a
+    directory that need not exist yet (a leg can publish its manifest and then
+    fail before recording).
+
+    The claim carries the claimant rather than reducing to a bare set of names,
+    because the two consumers ask different questions and getting that wrong has
+    produced a finding in BOTH directions:
+
+    * an ALLOCATOR asks "may this candidate occupy this directory?" — yes only
+      when the claim is its own, matched on tranche, label AND identity. Reading
+      it as "ignore my whole tranche" let a later fresh leg with a distinct label
+      but a colliding slug take a stale reservation, after which a resume of the
+      original label resolved to the same directory and ranked the newer
+      candidate's games under the old name (Codex review on PR #314). Reading it
+      as "step aside from every claim" is the opposite error: a same-label re-run
+      would quietly record a second copy instead of colliding, which is the
+      round-11 defect. Matching on ``(tranche, label)`` and stopping there is a
+      third: a label reused for different bytes then inherited the reservation
+      (round 18) — ``_refuse_reused_label_identity`` refuses that case outright,
+      and the identity in the claim is what keeps the allocator from depending on
+      that refusal having run.
+    * a RANKING DESTINATION asks "is this directory spoken for?" — any claim at
+      all disqualifies it, with no exemption.
+    """
+
+    claimed: dict[str, _DirClaim] = {}
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # A partial manifest names nothing this can trust; the tranche that
+            # owns it reports it through the drift check.
+            continue
+        tranche = manifest.get("tranche")
+        for entry in manifest.get("candidates", []):
+            claimed[_claim_dir_name(entry, manifest=path)] = _DirClaim(
+                tranche=_claim_tranche(tranche, manifest=path),
+                label=_claim_label(entry, manifest=path),
+                identity=_recorded_identity(entry, manifest=path),
+            )
+    return claimed
+
+
+def _claim_tranche(tranche: object, *, manifest: Path) -> str:
+    """The tranche a manifest names, refusing one that is not a string."""
+
+    if not isinstance(tranche, str) or not tranche:
+        raise RealPathRerankError(
+            f"{manifest} names tranche {tranche!r}; every leg manifest this "
+            "recorder writes carries a non-empty tranche key, so one that does "
+            "not is corrupted evidence"
+        )
+    return tranche
+
+
+def _claim_label(entry: Mapping[str, object], *, manifest: Path) -> str:
+    """One entry's candidate label, refusing one that is not a string.
+
+    Skipping a malformed label was the same silent weakening as skipping a
+    malformed identity, one field over: the entry still named a real ``dir``, so
+    dropping it discarded a durable RESERVATION and let a fresh leg allocate the
+    claimed directory — or publish a ranking into it — instead of refusing the
+    corrupted evidence (Codex review on PR #314). Round 19 fixed the identity
+    fields and left the label, which is the whole reason this now goes through
+    one validating reader rather than an inline predicate per field.
+    """
+
+    label = entry.get("label")
+    if not isinstance(label, str) or not label:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry with label {label!r}; a label "
+            "is a non-empty string, and a claim whose owner cannot be named is "
+            "corrupted evidence — dropping it would release a directory another "
+            "leg still holds"
+        )
+    return label
+
+
+def _claim_dir_name(entry: Mapping[str, object], *, manifest: Path) -> str:
+    """One entry's claimed directory name, refusing one that is not a string."""
+
+    recorded_dir = entry.get("dir")
+    if not isinstance(recorded_dir, str) or not recorded_dir:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry with dir {recorded_dir!r}; a "
+            "claimed directory is a non-empty name, and an entry that cannot "
+            "name the directory it reserved is corrupted evidence"
+        )
+    return recorded_dir
+
+
+def _candidate_identity(candidate: RealPathCandidate) -> tuple[str, str, int | None]:
+    """What makes a candidate THIS candidate: bytes, family, width.
+
+    The same triple ``_refuse_protocol_drift`` compares, so a reservation and a
+    resume agree on what "the same candidate" means.
+    """
+
+    return (
+        _genome_digest(candidate.genome),
+        candidate.encoder_version,
+        candidate.hidden,
+    )
+
+
+def _claim_belongs_to(
+    claim: _DirClaim, *, tranche: str, candidate: RealPathCandidate
+) -> bool:
+    """Is this reservation THIS candidate's, to reclaim or to record into?
+
+    Tranche, label AND identity — all three, with no weaker fallback. Every claim
+    carries an identity because :func:`_recorded_identity` refuses a manifest that
+    lacks one, so there is no branch here that reduces ownership to the label.
+    """
+
+    return (
+        claim.tranche == tranche
+        and claim.label == candidate.label
+        and claim.identity == _candidate_identity(candidate)
+    )
+
+
+def _recorded_identity(
+    entry: Mapping[str, object], *, manifest: Path
+) -> tuple[str, str, int | None]:
+    """One manifest candidate entry's identity triple, or fail loud (18.31).
+
+    Absence is decided by the KEYS, not by their values: the utility family takes
+    no ``hidden`` width and records ``null`` for it, so reading a null width as
+    "no identity here" would exempt every utility candidate from the very checks
+    this feeds.
+
+    A missing or malformed field is REFUSED rather than reported as an older
+    manifest without one. The first version returned ``None`` for that case and
+    callers read it as "this claim speaks for the label only" — which is a silent
+    weakening exactly where the strength is load-bearing: a fresh invocation with
+    changed bytes could then reclaim the malformed manifest's reservation, spend
+    its games, and leave the tranche holding contradictory manifests (Codex review
+    on PR #314). The legacy format that fallback was written for does not exist:
+    leg manifests arrived with this task and have carried these three fields since
+    they were introduced, and ``_refuse_protocol_drift`` has always indexed them
+    unconditionally. So a valid-JSON manifest missing them is corrupted evidence,
+    and this module does not act on evidence it cannot read.
+    """
+
+    missing = sorted({"weights_sha256", "encoder_version", "hidden"} - set(entry))
+    if missing:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry without {missing}; every leg "
+            "manifest this recorder writes carries the candidate's digest, encoder "
+            "family and hidden width, so one that does not is corrupted evidence. "
+            "Reservations are matched on that identity — treating the entry as "
+            "label-only would let a different genome inherit its directory"
+        )
+    digest = entry["weights_sha256"]
+    family = entry["encoder_version"]
+    hidden = entry["hidden"]
+    if (
+        not isinstance(digest, str)
+        or not isinstance(family, str)
+        or not (
+            hidden is None or (isinstance(hidden, int) and not isinstance(hidden, bool))
+        )
+    ):
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry whose identity is malformed "
+            f"(weights_sha256={digest!r}, encoder_version={family!r}, "
+            f"hidden={hidden!r}); a digest and family are strings and a width is "
+            "an integer or null. Corrupted evidence is refused, never downgraded "
+            "to a label-only claim"
+        )
+    return (digest, family, hidden)
+
+
+def _refuse_reused_label_identity(
+    work_dir: Path, *, tranche: str, candidates: Sequence[RealPathCandidate]
+) -> None:
+    """A label may not come back wearing different bytes (18.31).
+
+    ``_refuse_protocol_drift`` enforces this for a RESUME. A fresh leg needs it
+    too, and for a sharper reason than symmetry: the fresh-leg allocator lets a
+    candidate reclaim the directory a prior manifest reserved for its label, and
+    round 17 keyed that reclaim on ``(tranche, label)`` alone. So a leg that
+    published its manifest and died before ``mkdir``, followed by a fresh leg
+    that reused the label for a different genome or encoder family, recorded the
+    new candidate into the old candidate's reservation (Codex review on PR #314).
+
+    The damage outlives that leg. The work dir is then left holding two manifests
+    for one tranche that disagree about what ``label`` is, and
+    ``_refuse_protocol_drift`` reads EVERY prior manifest — so every later resume
+    of that tranche is refused forever, on evidence that has to be deleted by
+    hand. Stepping the new candidate aside to a different directory would not
+    have helped: the contradiction is between the manifests, not between the
+    directories.
+
+    Refused here, before any allocation, so nothing is recorded and nothing is
+    claimed. Re-running a label against new bytes is a new experiment: give it a
+    fresh work dir, or a label of its own.
+    """
+
+    wanted = {
+        candidate.label: _candidate_identity(candidate) for candidate in candidates
+    }
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # Unreadable manifests are the drift check's to report, with its
+            # message; duplicating the refusal here would only change which
+            # error a resume sees first.
+            continue
+        for entry in manifest.get("candidates", []):
+            # Both read BEFORE the label filter would let anything past: a
+            # malformed entry is refused whether or not this slate happens to
+            # carry its label.
+            label = _claim_label(entry, manifest=path)
+            recorded = _recorded_identity(entry, manifest=path)
+            if label in wanted and wanted[label] != recorded:
+                raise RealPathRerankError(
+                    f"a prior leg manifest ({path}) records candidate label "
+                    f"{label!r} in this tranche with identity {recorded!r}, but "
+                    f"this invocation supplies {wanted[label]!r}. A label is not "
+                    "an identity: recording new bytes under a reserved label "
+                    "leaves this tranche with two manifests that disagree about "
+                    "it, and every later resume refuses on that disagreement — "
+                    "use a fresh work dir, or a distinct label"
+                )
+
+
+def _refuse_escaping_recorded_dir(
+    recorded_dir: str, *, work_dir: Path, manifest: Path
+) -> None:
+    """A manifest's ``dir`` is a REAL directory under the work dir (18.31).
+
+    ``_resolve_candidate_dirs`` joins this string onto ``work_dir`` and the
+    resume then records into the result. A corrupted or hand-edited manifest
+    carrying ``../../other-campaign/candidate`` — or an absolute path — would
+    therefore aim this leg's recording, and its ``force=True`` re-records, at
+    another campaign's replay evidence (Codex review on PR #314). The recorder
+    only ever writes ``NNN-<slug>``, so anything else is a manifest this leg
+    must not act on.
+
+    A LEXICAL check is not enough on its own, and that was the gap: a single
+    component such as ``001-candidate`` satisfies every test below while being
+    a SYMLINK onto another campaign's recording directory. The resume then
+    follows it through ``mkdir(parents=True, exist_ok=True)`` — which succeeds
+    on a link to an existing directory — and records straight through it, so the
+    same evidence destruction arrives by a different route (Codex review on
+    PR #314). Containment is therefore checked on the RESOLVED path, and a
+    symlink is refused outright: the recorder creates real directories, so a
+    link standing where one belongs is a corrupted work tree, never something to
+    follow.
+    """
+
+    candidate = Path(recorded_dir)
+    if (
+        candidate.is_absolute()
+        or len(candidate.parts) != 1
+        or recorded_dir in {os.curdir, os.pardir}
+        or os.sep in recorded_dir
+        or (os.altsep is not None and os.altsep in recorded_dir)
+    ):
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which is not a "
+            "single path component under the work dir; a resume joins that onto "
+            "work_dir and records into it, so a manifest naming a path outside "
+            "this leg is refused rather than followed"
+        )
+    joined = work_dir / recorded_dir
+    _refuse_symlinked_recording_entry(
+        joined, what=f"the candidate dir {recorded_dir!r} recorded by {manifest},"
+    )
+    try:
+        resolved_dir = joined.resolve()
+        work_root = work_dir.resolve()
+    except OSError as exc:  # pragma: no cover - unresolvable path fails later
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which cannot be "
+            f"resolved under {work_dir} ({exc}); a resume records into that path, "
+            "so an unresolvable one is refused rather than followed"
+        ) from exc
+    if resolved_dir.parent != work_root:
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which resolves to "
+            f"{resolved_dir} — outside the work root {work_root}. A resume records "
+            "into the resolved path, so evidence belonging to another campaign is "
+            "refused rather than written through"
+        )
+
+
+def _recorded_candidate_dirs(
+    work_dir: Path, *, tranche: str
+) -> tuple[dict[str, str], set[str]]:
+    """This tranche's prior ``label -> dir`` mapping, and every label it ever saw.
+
+    Manifests are read newest-last, so the most recent invocation's directory
+    wins for any label recorded more than once. The label SET is returned
+    separately because it is complete even for legacy manifests written before
+    the ``dir`` field existed — and knowing a label was never recorded is what
+    proves a candidate is new.
+    """
+
+    recorded: dict[str, str] = {}
+    seen: set[str] = set()
+    for path in sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # ``_refuse_protocol_drift`` already read and validated every prior
+            # manifest before this runs, so an unreadable one cannot reach here
+            # under resume; skipping keeps this helper total.
+            continue
+        by_label: dict[str, str] = {}
+        by_dir: dict[str, str] = {}
+        for entry in manifest.get("candidates", []):
+            # The SAME validating readers the claim scan uses. Skipping a
+            # malformed ``label`` or ``dir`` here recorded the label as "seen"
+            # while omitting its directory, which dropped the resume into the
+            # legacy slug search — and if exactly one ``*-<slug>`` directory
+            # existed, the resume adopted its recordings instead of refusing the
+            # corrupted claim (Codex review on PR #314). Every manifest this task
+            # writes carries both fields, so a missing one is corrupted evidence,
+            # and the fallback that exists for pre-``dir`` manifests must not be
+            # reachable by corruption.
+            label = _claim_label(entry, manifest=path)
+            seen.add(label)
+            recorded_dir = _claim_dir_name(entry, manifest=path)
+            _refuse_escaping_recorded_dir(
+                recorded_dir, work_dir=work_dir, manifest=path
+            )
+            # A manifest's candidate map is a BIJECTION — the recorder writes one
+            # directory per label and one label per directory. Assigning by
+            # iteration order let a corrupted manifest naming a label twice pick
+            # a winner silently, and the resume then adopted (and could skip)
+            # that directory while the durable claim named two possible homes for
+            # the candidate's bytes. The mirror case, two labels claiming one
+            # directory, is the one-directory-two-candidates contamination this
+            # module refuses everywhere else (Codex review on PR #314).
+            if label in by_label and by_label[label] != recorded_dir:
+                raise RealPathRerankError(
+                    f"{path} records candidate label {label!r} twice, naming both "
+                    f"{by_label[label]!r} and {recorded_dir!r}; a manifest maps "
+                    "one label to one directory, and evidence naming two is "
+                    "corrupted rather than resolvable by iteration order"
+                )
+            if recorded_dir in by_dir and by_dir[recorded_dir] != label:
+                raise RealPathRerankError(
+                    f"{path} claims directory {recorded_dir!r} for both "
+                    f"{by_dir[recorded_dir]!r} and {label!r}; a directory holds "
+                    "exactly one candidate's bytes"
+                )
+            by_label[label] = recorded_dir
+            by_dir[recorded_dir] = label
+            recorded[label] = recorded_dir
+    return recorded, seen
+
+
+def _fresh_candidate_dir(
+    work_dir: Path,
+    *,
+    index: int,
+    tranche: str,
+    candidate: RealPathCandidate,
+    reserved: set[Path],
+) -> Path:
+    """An UNUSED dir for a candidate with no prior recordings (18.31).
+
+    The enumerated name may already belong to another label (slugs collide, and
+    a narrowed slate renumbers), so the ordinal is bumped until the path is
+    free. A new candidate must never inherit another candidate's bytes.
+
+    ``reserved`` carries the paths already handed out in THIS resolution pass.
+    Directories are not created until the recording loop runs, so two new
+    labels sharing a slug would otherwise both be handed the same free name —
+    the manifest would then map one directory to two labels, and the second
+    candidate would either reuse the first's provider draw or overwrite its
+    evidence after its metrics were computed (Codex review on PR #314).
+    """
+
+    label = candidate.label
+    slug = _safe_slug(label)
+    # A RESERVATION counts as occupied, not just a directory entry. This helper
+    # asked the filesystem alone, so a resume adding a new label whose slug
+    # collides could take a directory another tranche's manifest had claimed and
+    # not yet created — after which that tranche cannot recover and either leg
+    # may adopt or overwrite the other's evidence (Codex review on PR #314). The
+    # fresh allocator has honoured claims since round 16; this path is the same
+    # question asked from the resume side, and it was still answering it with
+    # ``_entry_exists``.
+    claimed = _claimed_candidate_dirs(work_dir)
+    for ordinal in range(index, index + _MAX_INVOCATIONS):
+        candidate_dir = work_dir / f"{ordinal:03d}-{slug}"
+        if _entry_exists(candidate_dir) or candidate_dir in reserved:
+            continue
+        claim = claimed.get(candidate_dir.name)
+        # Only a claim that is exactly this candidate's may be occupied — the
+        # same predicate the fresh allocator uses, so the two paths cannot drift
+        # about what "mine" means.
+        if claim is None or _claim_belongs_to(
+            claim, tranche=tranche, candidate=candidate
+        ):
+            return candidate_dir
+    raise RealPathRerankError(
+        f"no free recording directory for candidate {label!r} under {work_dir} "
+        f"after {_MAX_INVOCATIONS} attempts; that is a runaway, not a campaign"
+    )
+
+
+def _resolve_candidate_dirs(
+    work_dir: Path,
+    *,
+    tranche: str,
+    candidates: Sequence[RealPathCandidate],
+    resume: bool,
+) -> tuple[Path, ...]:
+    """Each candidate's recording dir, resolved by EXACT LABEL when resuming (18.31).
+
+    Non-resume runs keep the historic ``<index>-<slug>`` name exactly. Under
+    ``resume`` the index is the wrong key: ``_refuse_protocol_drift``
+    deliberately permits a NARROWED slate (re-running the candidates a 503
+    interrupted is the normal case), and narrowing ``[A, B, C]`` to ``[B, C]``
+    renumbers ``001-B``/``002-C`` into ``000-B``/``001-C``. The resume would
+    then look straight past every verified recording it exists to reuse and
+    re-record the whole leg — 30-40 h repeated (Codex review on PR #314).
+
+    The LABEL is the key, and it is read from the manifest rather than
+    reconstructed from the filesystem. An earlier revision globbed
+    ``*-<slug>``, which is not injective: ``_safe_slug`` maps ``"arm a"`` and
+    ``"arm-a"`` — two labels the recorder accepts as distinct — onto one slug,
+    so a leg carrying both recorded fine and could then NEVER resume, because
+    every lookup found two dirs and refused as ambiguous. Recording the
+    directory in the manifest makes the mapping exact.
+
+    Legacy work dirs whose manifests predate the ``dir`` field fall back to the
+    unambiguous slug walk, and to the enumerated name when a label has no
+    recordings yet (a candidate added to the slate). An ambiguous legacy walk
+    fails loud rather than guessing which dir holds the bytes.
+    """
+
+    enumerated = tuple(
+        work_dir / f"{index:03d}-{_safe_slug(candidate.label)}"
+        for index, candidate in enumerate(candidates)
+    )
+    if not resume:
+        # A fresh leg keeps the historic enumerated name EXCEPT where a manifest
+        # claims it for a DIFFERENT ``(tranche, label)``. That predicate is the
+        # whole rule, and both looser readings are defects this PR has already
+        # shipped once each: "step aside from other tranches only" let a stale
+        # same-tranche reservation be taken by a colliding slug under another
+        # label, and "step aside from every claim" degrades write-once into
+        # "pick the next free name" so a re-run silently records a second copy
+        # (Codex reviews on PR #314). On-disk existence is deliberately NOT a
+        # reason to move: a directory this (tranche, label) already recorded
+        # into must still collide at ``mkdir``. In a clean work dir nothing
+        # moves.
+        claimed = _claimed_candidate_dirs(work_dir)
+        if not claimed:
+            return enumerated
+        stepped_aside: list[Path] = []
+        taken: set[Path] = set()
+        for index, (candidate, default) in enumerate(
+            zip(candidates, enumerated, strict=True)
+        ):
+            slug = _safe_slug(candidate.label)
+            chosen = default
+            # A candidate RECLAIMS its own reservation before walking. The
+            # enumerated walk starts at the candidate's slate INDEX, so a label
+            # reserved at ``000-`` but sitting second on the slate could never
+            # reach its own directory and would leak a fresh one on every
+            # retry — the reservation rule has to hold in both directions or it
+            # only says who may not have a directory, never who may.
+            owned = sorted(
+                name
+                for name, claim in claimed.items()
+                if _claim_belongs_to(claim, tranche=tranche, candidate=candidate)
+            )
+            if owned:
+                chosen = work_dir / owned[0]
+                if chosen not in taken:
+                    taken.add(chosen)
+                    stepped_aside.append(chosen)
+                    continue
+            # Per-CANDIDATE, not per-slate. A slate-wide "is this claim one of
+            # ours?" exemption reads a reservation for label A as available to
+            # label B whenever both are on the slate and share a slug, so a
+            # reordered slate hands A's reserved directory to B and moves A
+            # elsewhere — defeating the very (tranche, label) rule this is the
+            # implementation of (Codex review on PR #314). A directory is
+            # acceptable only if unclaimed, or claimed by exactly the candidate
+            # being placed. On-disk existence is still not a reason to move, so
+            # write-once continues to collide at ``mkdir``.
+            for ordinal in range(index, index + _MAX_INVOCATIONS):
+                chosen = work_dir / f"{ordinal:03d}-{slug}"
+                claim = claimed.get(chosen.name)
+                if chosen in taken:
+                    continue
+                if claim is None or _claim_belongs_to(
+                    claim, tranche=tranche, candidate=candidate
+                ):
+                    break
+            else:  # pragma: no cover - 1000 claimed ordinals is a runaway
+                raise RealPathRerankError(
+                    f"no unclaimed recording directory for candidate "
+                    f"{candidate.label!r} under {work_dir} after "
+                    f"{_MAX_INVOCATIONS} attempts; that is a runaway, not a "
+                    "campaign"
+                )
+            taken.add(chosen)
+            stepped_aside.append(chosen)
+        return tuple(stepped_aside)
+
+    recorded, seen_labels = _recorded_candidate_dirs(work_dir, tranche=tranche)
+    resolved: list[Path] = []
+    reserved: set[Path] = set()
+    for index, candidate in enumerate(candidates):
+        name = recorded.get(candidate.label)
+        if name is not None:
+            recorded_path = work_dir / name
+            reserved.add(recorded_path)
+            resolved.append(recorded_path)
+            continue
+        if candidate.label not in seen_labels:
+            # NEW to this tranche. It must never adopt an existing directory:
+            # ``_safe_slug`` is many-to-one, so a unique slug match can belong
+            # to a DIFFERENT label, and ``_resume_skip_reason`` cannot catch
+            # that when both carry the same genome and stamp — which this
+            # module explicitly permits. The row would then credit this
+            # candidate with another's games (Codex review on PR #314).
+            fresh = _fresh_candidate_dir(
+                work_dir,
+                index=index,
+                tranche=tranche,
+                candidate=candidate,
+                reserved=reserved,
+            )
+            reserved.add(fresh)
+            resolved.append(fresh)
+            continue
+        # Recorded before, but by a manifest predating the ``dir`` field. The
+        # slug walk is the only route left, and it is trusted ONLY when nothing
+        # about it is ambiguous.
+        slug = _safe_slug(candidate.label)
+        colliding = sorted(other for other in seen_labels if _safe_slug(other) == slug)
+        existing = sorted(
+            path
+            for path in work_dir.glob(f"*-{slug}")
+            if path.is_dir() and path.name[3:] == f"-{slug}"
+        )
+        if len(existing) > 1 or len(colliding) > 1:
+            raise RealPathRerankError(
+                f"resume cannot place candidate {candidate.label!r}: no manifest "
+                f"records its directory, and its slug {slug!r} is shared by "
+                f"labels {colliding} across dirs {[p.name for p in existing]}; "
+                "which one holds this candidate's bytes is unresolvable — "
+                "re-record the leg into a fresh work dir"
+            )
+        chosen = (
+            existing[0]
+            if existing
+            else _fresh_candidate_dir(
+                work_dir,
+                index=index,
+                tranche=tranche,
+                candidate=candidate,
+                reserved=reserved,
+            )
+        )
+        reserved.add(chosen)
+        resolved.append(chosen)
+    # Two labels must never land on one directory, by any route — and "the same
+    # directory" is a question about the FILESYSTEM, not about path strings.
+    # Comparing the joined paths alone let two distinct names reach one
+    # directory through a link, which is the same one-directory-two-candidates
+    # contamination this check exists to refuse (Codex review on PR #314).
+    # Checked on both forms: the resolved comparison is the real invariant, and
+    # the literal one still reports the clearer message when the names match.
+    for form, describe in (
+        (resolved, "path"),
+        ([p.resolve() for p in resolved], "resolved path"),
+    ):
+        if len(set(form)) != len(form):
+            collisions = sorted({str(path) for path in form if form.count(path) > 1})
+            raise RealPathRerankError(
+                f"resume resolved two candidates onto the same recording dir(s) "
+                f"by {describe} {collisions}; a directory holds exactly one "
+                "candidate's bytes"
+            )
+    return tuple(resolved)
+
+
+def _recording_backend_identity(
+    *,
+    custom_runner: bool,
+    runner_identity: str | None = None,
+    game_map: Map,
+    num_players: int,
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    """The serialisable identity of WHAT RECORDED the bytes (18.31).
+
+    ``RealPathRerankConfig`` describes the GAME — roster, budgets, baseline —
+    and deliberately says nothing about the provider behind the meetings. But a
+    replay recorded against one provider/model is not interchangeable with one
+    recorded against another, so a resume must compare this too or it will
+    silently commit a row whose seeds came from two different backends.
+
+    ``custom_runner`` records whether the caller supplied its own
+    ``meeting_runner_factory``: a stub runner and the real provider path are
+    different recorders even when every environment variable matches, and a
+    callable has no stable serialisable identity beyond its presence.
+    """
+
+    env = os.environ if environment is None else environment
+    identity: dict[str, object] = {
+        "custom_meeting_runner": custom_runner,
+        # The runner identity belongs to the CUSTOM branch only. On the default
+        # branch ``run_tournament_eval`` never consults it, so carrying it made a
+        # resume that omitted an incidental identity — or passed a different one
+        # — read as backend drift while every effective recorder input agreed
+        # (Codex review on PR #314). This is the round-16 block rule applied to
+        # the one field that had been sitting outside the block: present whole
+        # for the branch that reads it, absent whole for the branch that does not.
+        **({"meeting_runner_identity": runner_identity} if custom_runner else {}),
+        # The MAP is read on BOTH branches: ``run_tournament_eval`` builds every
+        # HeadlessGame with it regardless of which meeting runner is installed.
+        # Hashed rather than embedded so the manifest stays small.
+        "game_map_sha256": _map_digest(game_map),
+        # Everything else the recording path reads is read INSIDE
+        # ``build_default_meeting_runner`` / ``_resolve_game_budget``, which
+        # ``run_tournament_eval`` calls only when no ``meeting_runner_factory``
+        # was supplied — so for a custom runner none of it is consulted and
+        # ``meeting_runner_identity`` (mandatory since round 8) is the identity.
+        **({} if custom_runner else _default_runner_inputs(num_players, env)),
+    }
+    return identity
+
+
+def _default_runner_inputs(
+    num_players: int, env: Mapping[str, str]
+) -> dict[str, object]:
+    """Everything the DEFAULT recording path reads, enumerated in one place.
+
+    Fifteen review rounds added six fields to the recording identity one at a
+    time — the backend config, the map, the prompt set, the 18.10 lever, the
+    per-game budget, the resolved prompt versions — because each round fixed the
+    witness it was handed instead of asking what the recorder actually reads.
+    This function is that question answered once.
+
+    ``run_tournament_eval`` installs a supplied ``meeting_runner_factory``
+    directly; ONLY when none is given does it call
+    :func:`~orchestrator.game.build_default_meeting_runner` (which builds the
+    LLM client and binds the prompt renderers) and
+    :func:`~eval.balance_eval._resolve_game_budget`. Every environment input
+    below is consumed inside one of those two calls, which is why the whole
+    block is default-runner-only rather than field-by-field.
+
+    :data:`RECORDING_ENV_INPUTS` names the same domain as data, and
+    ``test_the_recording_identity_covers_every_env_input_on_the_path`` fails if
+    the recording path grows a knob this function does not account for — so the
+    next input is caught by the suite rather than by a sixteenth review round.
+    """
+
+    return {
+        _PROMPT_SET_KEY: resolve_prompt_set(env=env),
+        # The 18.10 impostor-answer lever swaps the impostor-report and
+        # accusation-round templates WITHIN a set, so the set name alone does
+        # not determine the rendered bytes.
+        _ROLL_CALL_KEY: impostor_roll_call_enabled(env),
+        # The RESOLVED versions, not just the two selectors above: the registry
+        # can be bumped inside a set with neither selector moving, and these are
+        # the bytes the runner itself stamps.
+        _PROMPT_VERSIONS_KEY: dict(prompt_versions_for_set(env=env)),
+        _GAME_BUDGET_KEY: _effective_game_budget(num_players=num_players, env=env),
+        **_effective_backend_config(env),
+    }
+
+
+def _effective_game_budget(
+    *, num_players: int, env: Mapping[str, str]
+) -> dict[str, float | int]:
+    """The per-game budget ``run_tournament_eval`` would build (Task 18.31).
+
+    Mirrors that function's own construction through
+    :func:`eval.balance_eval._resolve_game_budget` rather than re-deriving the
+    numbers, so the identity cannot drift from what recording does. Reached only
+    from :func:`_default_runner_inputs`, i.e. only on the branch that builds a
+    budget at all.
+    """
+
+    snapshot = _resolve_game_budget(num_players=num_players, env=env).snapshot()
+    return {
+        "max_cost_usd": snapshot.max_cost_usd,
+        "max_input_tokens": snapshot.max_input_tokens,
+        "max_output_tokens": snapshot.max_output_tokens,
+    }
+
+
+def _effective_backend_config(env: Mapping[str, str]) -> dict[str, object]:
+    """The SELECTED provider's NORMALISED effective settings (18.31).
+
+    Recording the raw ``AILIBI_*`` variables made the identity both too wide and
+    too narrow (Codex review on PR #314):
+
+    * too WIDE — a Featherless or fake run was refused because an unrelated
+      ``AILIBI_OLLAMA_NUM_CTX`` moved, and an Ollama run depended on a
+      Featherless URL it never reads. A resume refused on a knob the recorder
+      never consulted forfeits exactly the verified-resume benefit this task
+      exists to deliver;
+    * too NARROW in the other direction — comparing RAW strings made setting a
+      variable to the value it already resolves to (``AILIBI_OLLAMA_HOST`` unset
+      vs. explicitly ``localhost:11434``) read as drift, while ``" fake "`` and
+      ``"fake"`` read as agreement only by luck.
+
+    So this mirrors :func:`llm.provider.build_default_client`'s own dispatch and
+    records what the recorder would ACTUALLY be built with — the same
+    ``.strip().lower()`` provider name, the same per-provider model defaults,
+    the same host/seed/num_ctx resolution — and nothing from the branches it
+    would not take. The optional-SDK defaults are imported lazily INSIDE each
+    branch, exactly as ``build_default_client`` does, so a non-Ollama run still
+    never imports ``llm.ollama_client``.
+
+    API keys are deliberately absent: they are a credential, not a protocol, and
+    an identity mapping is written into a manifest on disk.
+    """
+
+    provider = env.get(ENV_PROVIDER, PROVIDER_FAKE).strip().lower()
+    settings: dict[str, object] = {"provider": provider}
+    if provider == PROVIDER_FAKE:
+        return settings
+    if provider == PROVIDER_ANTHROPIC:
+        settings["meeting_model"] = env.get(ENV_MEETING_MODEL, DEFAULT_MEETING_MODEL)
+        settings["trigger_model"] = env.get(ENV_TRIGGER_MODEL, DEFAULT_TRIGGER_MODEL)
+        return settings
+    if provider == PROVIDER_OLLAMA:
+        from llm.ollama_client import DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_MODEL
+
+        settings["host"] = env.get(ENV_OLLAMA_HOST, "").strip() or DEFAULT_OLLAMA_HOST
+        # These two PARSE their variable and are fail-loud on garbage, so the
+        # identity carries the integer the client would receive — and a
+        # malformed knob is refused before any seed is recorded, not after.
+        settings["seed"] = _ollama_seed_from_env(dict(env))
+        settings["num_ctx"] = _ollama_num_ctx_from_env(dict(env))
+        settings["meeting_model"] = env.get(ENV_MEETING_MODEL, DEFAULT_OLLAMA_MODEL)
+        settings["trigger_model"] = env.get(ENV_TRIGGER_MODEL, DEFAULT_OLLAMA_MODEL)
+        return settings
+    if provider == PROVIDER_FEATHERLESS:
+        from llm.featherless_client import (
+            DEFAULT_FEATHERLESS_BASE_URL,
+            DEFAULT_FEATHERLESS_MODEL,
+        )
+
+        settings["base_url"] = (
+            env.get(ENV_FEATHERLESS_BASE_URL, "").strip()
+            or DEFAULT_FEATHERLESS_BASE_URL
+        )
+        settings["meeting_model"] = env.get(
+            ENV_MEETING_MODEL, DEFAULT_FEATHERLESS_MODEL
+        )
+        settings["trigger_model"] = env.get(
+            ENV_TRIGGER_MODEL, DEFAULT_FEATHERLESS_MODEL
+        )
+        return settings
+    raise RealPathRerankError(
+        f"unknown {ENV_PROVIDER} value: {provider!r}; build_default_client would "
+        "refuse to construct a recorder for it, so this leg can record nothing"
+    )
+
+
+def _normalize_for_digest(value: object) -> object:
+    """Recursively canonicalise a dumped model into JSON-serialisable data.
+
+    ``Map`` holds its rooms / vents / tasks / sabotages in ``MappingProxyType``
+    (the engine's immutability convention), which pydantic's JSON serializer
+    refuses outright, so the dump is normalised here instead: mappings become
+    key-sorted dicts, sequences become lists, and anything else becomes its
+    ``str`` — enough for an IDENTITY, which is all this is used for.
+    """
+
+    if isinstance(value, MappingProxyType | dict):
+        return {
+            str(key): _normalize_for_digest(item)
+            for key, item in sorted(value.items(), key=lambda kv: str(kv[0]))
+        }
+    if isinstance(value, list | tuple):
+        return [_normalize_for_digest(item) for item in value]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
+
+
+@contextmanager
+def _tranche_claim(work_dir: Path, *, tranche: str) -> Iterator[Path]:
+    """Hold an EXCLUSIVE claim on one tranche of one work dir for a whole leg.
+
+    Every guard this leg runs before it records — the protocol-drift check, the
+    candidate-directory resolution, the manifest publish — reads state that a
+    CONCURRENT leg is about to change. Two resumes entering one tranche both
+    finish :func:`_refuse_protocol_drift` before either manifest exists, so the
+    exclusive manifest publish merely hands them different ordinals and neither
+    ever validates the other's protocol; they then record into the SAME
+    candidate directories, potentially under different configs or backends, and
+    score each other's half-written replays (Codex review on PR #314).
+
+    Serialising the claim closes the window at its source: read-then-publish is
+    atomic with respect to any other leg on this tranche, so the loser sees the
+    winner's manifest and is refused by the drift check it already runs.
+
+    ``fcntl.flock`` rather than an exclusive-create lock FILE, deliberately. A
+    created file must be deleted to release, so a killed process — the hour-40
+    provider 503 this whole task exists to survive — would leave a claim that
+    blocks every future resume until someone deletes it by hand. That is the
+    same permanently-unresumable deadlock the round-8 runner-identity refusal
+    created, and it is not worth re-introducing. The kernel drops a ``flock``
+    when the fd closes OR the process dies, so a crash leaves the tranche
+    claimable and the claim file itself is inert.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    path = work_dir / f"{TRANCHE_CLAIM_FILENAME_STEM}-{tranche}.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RealPathRerankError(
+                f"another leg already holds tranche {tranche!r} in {work_dir} "
+                f"({path}); two legs recording one tranche into one work dir "
+                "share candidate directories and would score each other's "
+                "half-written replays. Wait for it, or use a separate work dir"
+            ) from exc
+        yield path
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def _allocation_claim(work_dir: Path) -> Iterator[Path]:
+    """Serialize candidate-directory allocation ACROSS tranches (18.31).
+
+    :func:`_tranche_claim` is per ``(work dir, tranche)``, which is right for
+    recording — two tranches are independent experiments and both should run.
+    But they allocate out of ONE namespace: ``_fresh_candidate_dir`` picks the
+    first ``NNN-<slug>`` that neither exists on disk nor sits in this pass's
+    reservation set, and the directories are not created until later. Two legs
+    on DIFFERENT tranches therefore hold different tranche claims, both see
+    ``000-<slug>`` free, and both take it. Under ``resume`` the recording loop's
+    ``mkdir(exist_ok=True)`` then lets both proceed, both pass their
+    foreign-replay checks, and both write different seed sets into one
+    directory — which the scoring functions fold whole, so each leg's row is
+    contaminated by the other's games (Codex review on PR #314). My round-9
+    comment on ``_fresh_candidate_dir`` even names the window ("directories are
+    not created until the recording loop runs") and closed only the same-pass
+    half of it.
+
+    BLOCKING, unlike the tranche claim, and the difference is the point:
+    concurrent legs on different tranches are LEGITIMATE and must both succeed,
+    they simply cannot allocate at the same instant. Two legs on ONE tranche are
+    not legitimate and are refused outright. The critical section is a directory
+    resolution plus the ``mkdir`` that publishes the reservation, so the wait is
+    bounded by filesystem work, never by recording.
+    """
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    path = work_dir / f"{TRANCHE_CLAIM_FILENAME_STEM}-allocation.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield path
+    finally:
+        os.close(fd)
+
+
+def _allocate_candidate_dirs(
+    work_dir: Path,
+    *,
+    tranche: str,
+    candidates: Sequence[RealPathCandidate],
+    resume: bool,
+    publish: Callable[[Sequence[Path]], None],
+) -> tuple[Path, ...]:
+    """Resolve this leg's candidate dirs and RESERVE them, atomically (18.31).
+
+    Resolution and reservation are one step under one work-dir-wide claim,
+    because a resolution that is not yet visible on disk is not a reservation:
+    creating the directories is what tells the next tranche's allocator they are
+    taken. Splitting the two is precisely the window two concurrent tranches
+    slipped through (Codex review on PR #314).
+
+    A RESUMING leg reserves by creating its directories here: the recording
+    loop's ``mkdir(exist_ok=True)`` would otherwise let two legs adopt a shared
+    directory and interleave their seed sets, which the scoring functions fold
+    whole.
+
+    A FRESH leg reserves through the MANIFEST instead, published by ``publish``
+    while this claim is still held. Round 10 scoped the reservation to resume on
+    the reasoning that a fresh collision is "a loud ``FileExistsError`` rather
+    than contamination" — which was wrong about the ordering. The manifest is
+    published BEFORE the recording loop, so the loser had already committed a
+    manifest pointing at the shared directory; every later resume of that
+    tranche then resolved back to it and rejected the winner's replays as
+    foreign, leaving legitimate cross-tranche concurrency unrecoverable without
+    hand-editing the manifest (Codex review on PR #314). Publishing the claim
+    under the lock means the loser never allocates that directory at all — and
+    creating nothing keeps the property that a leg failing before it records
+    leaves no directory for the next attempt to trip over.
+    """
+
+    with _allocation_claim(work_dir):
+        candidate_dirs = _resolve_candidate_dirs(
+            work_dir, tranche=tranche, candidates=candidates, resume=resume
+        )
+        if resume:
+            for candidate_dir in candidate_dirs:
+                candidate_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # WRITE-ONCE, checked BEFORE the claim is published. A fresh leg
+            # keeps an enumerated directory that already exists on disk but is
+            # unclaimed — deliberately, so a re-run collides at ``mkdir`` instead
+            # of quietly recording a second copy (round 11). But the manifest is
+            # published FIRST, so that collision left behind a manifest claiming
+            # a directory this invocation never created and never recorded into.
+            # A later ``resume=True`` then read that manifest as proof of
+            # ownership and skipped whatever replays already sat there — bytes
+            # that predate the invocation entirely (Codex review on PR #314).
+            #
+            # The collision is the same; only its ORDER was wrong. Refusing here
+            # keeps write-once exactly as strict and stops a failed no-clobber
+            # check from legitimising stale recordings.
+            for candidate, candidate_dir in zip(
+                candidates, candidate_dirs, strict=True
+            ):
+                if _entry_exists(candidate_dir):
+                    # ``FileExistsError`` deliberately — the SAME exception the
+                    # later exclusive ``mkdir`` raised. Only the order changes;
+                    # the write-once contract callers depend on does not.
+                    raise FileExistsError(
+                        f"candidate {candidate.label!r}: {candidate_dir} already "
+                        "exists and no leg manifest claims it. A fresh leg never "
+                        "records into an existing directory — pass resume=True to "
+                        "adopt verified recordings, or record into a fresh work "
+                        "dir. (Refused BEFORE this leg publishes its manifest, so "
+                        "no claim is left behind for a later resume to read as "
+                        "ownership of bytes this invocation never wrote.)"
+                    )
+        publish(candidate_dirs)
+    return candidate_dirs
+
+
+def _backend_digest(backend: Mapping[str, object]) -> str:
+    """A deterministic digest over a whole recording-backend identity (18.31).
+
+    The identity mapping is what a resume compares; this is the same fact in
+    the form a ranking ROW can carry, so a reader comparing two tranches has
+    one value to compare instead of a nested mapping to unpack.
+    """
+
+    payload = json.dumps(_normalize_for_digest(dict(backend)), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _map_digest(game_map: Map) -> str:
+    """A deterministic identity for the resolved map (18.31).
+
+    The MAP is part of the recording protocol and arrives as a caller argument
+    rather than a :class:`RealPathRerankConfig` field, so a resume that compared
+    only the config could adopt seeds recorded on one topology and record the
+    rest on another — one committed row combining two different games, with
+    nothing in it saying so (Codex review on PR #314).
+    """
+
+    dumped = game_map.model_dump(warnings=False)
+    payload = json.dumps(_normalize_for_digest(dumped), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _publish_ranking(ranking_path: Path, payload: str) -> None:
+    """Publish the ranking bytes ATOMICALLY and write-once (18.31).
+
+    A bare ``open("x")`` creates the file and only then writes it, so an
+    interrupt (or a failing write) between the two leaves an empty or partial
+    ranking on disk. That file is indistinguishable from a committed one to
+    everything downstream: the resume preflight rejects the leg as already
+    recorded — refusing a resume whose verified replays are still there — and a
+    reader folds truncated rows as though they were the whole leg (Codex review
+    on PR #314). Round 3's preflight is what made that half-written file
+    reachable, so the fix belongs here rather than in the preflight.
+
+    The complete bytes are staged in the DESTINATION directory (same
+    filesystem, so the link below cannot cross devices), flushed through to
+    disk, and then published with :func:`os.link` — one syscall that is both
+    atomic and exclusive, failing with ``FileExistsError`` if the ranking
+    already exists. ``os.replace`` would be atomic but would silently CLOBBER a
+    committed ranking, which is the defect round 2 caught. The stage file is
+    removed on every path, so a crash leaves at most a ``.tmp`` nobody reads —
+    but ONCE THE LINK SUCCEEDS the ranking is committed, and no cleanup failure
+    is allowed to turn that into a reported leg failure (Codex review on
+    PR #314): the caller would emit ``leg-failed``, drop its rank events, and
+    every retry would then bounce off the ranking it had actually written.
+    """
+
+    stage: Path | None = None
+    published = False
+    try:
+        handle_fd, stage_name = tempfile.mkstemp(
+            dir=ranking_path.parent, prefix=f".{ranking_path.name}.", suffix=".tmp"
+        )
+        stage = Path(stage_name)
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(stage, ranking_path)
+        except FileExistsError as exc:
+            raise RealPathRerankError(
+                f"a committed ranking already exists at {ranking_path}; this leg "
+                "is already recorded and its rows are never rewritten (point "
+                "--ranking-path at a fresh file, or delete the stale one "
+                "deliberately)"
+            ) from exc
+        published = True
+    finally:
+        if stage is not None:
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError:
+                # A leftover stage file is litter; a leg reported as failed after
+                # its ranking was committed is unrecoverable. Only re-raise when
+                # nothing was published.
+                if not published:
+                    raise
+
+
+def _refuse_library_owned_ranking_path(
+    ranking_path: Path, *, work_dir: Path, candidates: Sequence[RealPathCandidate]
+) -> None:
+    """Refuse a ranking path this leg will itself create as a work artifact (18.31).
+
+    The existence preflight above runs before the leg has written anything, so
+    ``ranking_path = work_dir/leg-log.jsonl`` passes it — and then the leg log,
+    the manifest or the pre-screen record creates that path, and
+    :func:`_publish_ranking`'s exclusive ``os.link`` fails AFTER every paid game
+    (Codex review on PR #314). The failure mode is the one every preflight here
+    exists to prevent: a 30-40 h leg that can never commit its ranking.
+
+    Refuses by NAME rather than by predicting which invocation ordinal a
+    pre-screen record will take: the whole ``<stem>-*`` namespace is
+    library-owned, so a ranking must not live in it regardless of which file the
+    leg happens to allocate. A ranking outside ``work_dir`` is unaffected, which
+    is the normal arrangement.
+    """
+
+    try:
+        resolved = ranking_path.resolve()
+        work_root = work_dir.resolve()
+    except OSError:  # pragma: no cover - unresolvable path fails elsewhere
+        return
+    # The WORK DIR ITSELF. The old containment test compared the ranking's
+    # PARENT against the work root, and the work root's parent is its own
+    # parent — so ``--ranking-path <work_dir>`` read as "outside the work dir"
+    # and returned. The leg then recorded every paid game and ``_publish_ranking``
+    # tried to hard-link onto the work directory (Codex review on PR #314).
+    if resolved == work_root:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} IS the work dir; the leg creates and "
+            "records into that directory, so the ranking publish would fail its "
+            "link after every paid game — refusing before any game is spent "
+            "(point --ranking-path at a file, outside the work dir)"
+        )
+    if not resolved.is_relative_to(work_root):
+        return
+    if resolved.parent != work_root:
+        # NESTED below the work dir. Same blind spot, opposite direction: the
+        # parent-equality test read ``work/001-x/ranking.jsonl`` as outside, and
+        # ``_refuse_unpublishable_ranking_dir`` then MKDIRS the ranking's parent
+        # as its link probe — creating the very directory candidate 1 must
+        # reserve. Candidate 0 spends every paid seed and candidate 1 then fails
+        # its exclusive ``mkdir`` (Codex review on PR #314). The whole subtree
+        # below the work root is the leg's to allocate, so nothing there is a
+        # ranking destination.
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} is NESTED inside the work dir "
+            f"({work_root}); the leg allocates that whole subtree for candidate "
+            "recording directories, and the link preflight would create this "
+            "path's parent before any candidate could reserve it — refusing "
+            "before any game is spent (point --ranking-path outside the work dir)"
+        )
+    name = ranking_path.name
+    # A candidate RECORDING DIR is library-owned too, and its name is not in the
+    # stem namespace: ``000-utility-es`` passed the check below, the leg then
+    # created it as a directory, recorded every paid game into it, and
+    # ``_publish_ranking`` finally tried to hard-link the ranking onto a
+    # directory (Codex review on PR #314). My round-12 guard covered the stems
+    # and stopped there. The enumerated name is what a fresh leg takes, and a
+    # resume can step to a later ordinal, so every ordinal this slate could
+    # reach is refused rather than only the first.
+    slugs = {_safe_slug(candidate.label) for candidate in candidates}
+    stem_name, _, suffix_slug = name.partition("-")
+    # ANY numeric ordinal, not a three-digit one. ``f"{ordinal:03d}"`` is a
+    # minimum width, not a maximum: the enumerated name for candidate 1000 is
+    # ``1000-<slug>``, and the fresh-leg walk runs to ``index + 1000``, so a
+    # four-digit ordinal is a name this allocator really produces. Pinning the
+    # length to 3 let ``--ranking-path <work>/1000-arm-a`` through, after which
+    # the leg created that path as a directory, recorded every paid seed into it,
+    # and the publish failed its hard link on a directory — the exact failure
+    # this preflight exists to prevent, one digit out of range (Codex review on
+    # PR #314). Refusing every numeric stem is the conservative direction: the
+    # cost is a rejected ranking name inside the work dir, which the leg has no
+    # business writing anyway.
+    looks_like_candidate_dir = (
+        stem_name.isascii() and stem_name.isdigit() and suffix_slug in slugs
+    )
+    if looks_like_candidate_dir:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} names a candidate recording directory "
+            f"for this slate (NNN-<slug>, slugs {sorted(slugs)}); the leg creates "
+            "that path as a DIRECTORY and records into it, so the ranking publish "
+            "would fail its link after every paid game — refusing before any game "
+            "is spent (point --ranking-path outside the work dir)"
+        )
+    # And a directory ANOTHER leg's manifest already claims, whose slug need not
+    # appear in this slate at all. Deriving the refused names from this leg's
+    # candidates covers only what THIS leg will create; a manifest claim is a
+    # reservation on a directory that may not exist yet, so the name passed here
+    # and the leg spent every game before either the publish collided with the
+    # other tranche's newly created directory, or it published a FILE into the
+    # reserved path and left that tranche permanently unable to resume (Codex
+    # review on PR #314). Every manifest is read, this leg's included: a prior
+    # invocation of this same tranche can have claimed a label no longer on the
+    # slate.
+    claimed = _claimed_candidate_dirs(work_dir)
+    if name in claimed:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} names a candidate recording directory "
+            f"already CLAIMED by a leg manifest in {work_dir} (claimed: "
+            f"{sorted(claimed)}); that directory is reserved for a recording, so "
+            "publishing a ranking there would either collide after every paid "
+            "game or strand the leg that owns it — refusing before any game is "
+            "spent (point --ranking-path outside the work dir)"
+        )
+    if name == LEG_LOG_FILENAME or any(
+        name.startswith(f"{stem}-")
+        for stem in (
+            LEG_MANIFEST_FILENAME_STEM,
+            PRESCREEN_FILENAME_STEM,
+            TRANCHE_CLAIM_FILENAME_STEM,
+        )
+    ):
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} is in the work dir's library-owned "
+            f"namespace ({LEG_LOG_FILENAME}, {LEG_MANIFEST_FILENAME_STEM}-*, "
+            f"{PRESCREEN_FILENAME_STEM}-*, {TRANCHE_CLAIM_FILENAME_STEM}-*). This "
+            "leg creates those itself, so the ranking publish would fail its "
+            "exclusive link AFTER every paid game — refusing before any game is "
+            "spent (point --ranking-path outside the work dir)"
+        )
+
+
+def _refuse_unpublishable_ranking_dir(ranking_path: Path) -> None:
+    """Preflight that this filesystem can publish a ranking (18.31).
+
+    :func:`_publish_ranking` commits through :func:`os.link`, which some
+    filesystems (exFAT, several FUSE and network mounts) do not implement. That
+    would raise only AFTER every paid game of a 30–40 h leg, and a resume would
+    hit the identical wall — so the leg could never produce its committed
+    ranking (Codex review on PR #314). Probing costs two temp files and runs
+    beside the other budget-saving preflights.
+    """
+
+    ranking_path.parent.mkdir(parents=True, exist_ok=True)
+    probe_fd, probe_name = tempfile.mkstemp(
+        dir=ranking_path.parent,
+        prefix=f".{ranking_path.name}.linkprobe.",
+        suffix=".tmp",
+    )
+    os.close(probe_fd)
+    probe = Path(probe_name)
+    target = probe.with_suffix(".linked")
+    try:
+        os.link(probe, target)
+    except OSError as exc:
+        raise RealPathRerankError(
+            f"the filesystem holding {ranking_path.parent} cannot publish hard "
+            f"links ({type(exc).__name__}: {exc}), so a committed ranking could "
+            "never be written there atomically — refusing before any game is "
+            "spent (point --ranking-path at a filesystem that supports link(2))"
+        ) from exc
+    finally:
+        target.unlink(missing_ok=True)
+        probe.unlink(missing_ok=True)
+
+
+def _record_or_resume_seed(
+    *,
+    seed: int,
+    candidate: RealPathCandidate,
+    candidate_dir: Path,
+    game_map: Map,
+    agent_factory: AgentFactory,
+    stamp: TacticalPolicyStamp,
+    digest: str,
+    config: RealPathRerankConfig,
+    base_meeting_runner_factory: Callable[[], MeetingRunner] | None,
+    resume: bool,
+    leg_log: RealPathLegLog,
+) -> RealPathSeedTelemetry:
+    """Skip a verified-complete element, else record it (Task 18.31 fix 1).
+
+    Non-resume runs go straight to :func:`_record_seed`, byte-for-byte the
+    pre-18.31 path. Under ``resume`` the conjunctive predicate decides, and its
+    verdict — skip, or the exact reason for re-recording — is logged either way.
+    """
+
+    replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
+    _refuse_symlinked_recording_entry(replay_path, what="the replay for this seed,")
+    force_first_attempt = False
+    if resume:
+        start = time.monotonic()
+        reason = _resume_skip_reason(replay_path, expected_stamp=stamp, config=config)
+        if reason is None:
+            resumed = RealPathSeedTelemetry(
+                seed=seed,
+                attempts=0,
+                timed_out_attempts=0,
+                degraded_recordings=0,
+                tick_budget_reached=False,
+                error_types=(),
+                wall_seconds=round(time.monotonic() - start, 3),
+                resumed=True,
+            )
+            leg_log.emit(
+                "seed-resumed",
+                label=candidate.label,
+                replay=str(replay_path),
+                seed=seed,
+                wall_seconds=resumed.wall_seconds,
+            )
+            return resumed
+        # Any miss re-records, over whatever bytes are there.
+        force_first_attempt = _entry_exists(replay_path)
+        leg_log.emit(
+            "seed-rerecord",
+            label=candidate.label,
+            reason=reason,
+            seed=seed,
+        )
+    telemetry = _record_seed(
+        seed=seed,
+        label=candidate.label,
+        candidate_dir=candidate_dir,
+        game_map=game_map,
+        agent_factory=agent_factory,
+        stamp=stamp,
+        config=config,
+        base_meeting_runner_factory=base_meeting_runner_factory,
+        force_first_attempt=force_first_attempt,
+    )
+    leg_log.emit(
+        "seed-recorded",
+        attempts=telemetry.attempts,
+        label=candidate.label,
+        seed=seed,
+        tick_budget_reached=telemetry.tick_budget_reached,
+        wall_seconds=telemetry.wall_seconds,
+    )
+    return telemetry
 
 
 def _record_seed(
@@ -617,6 +2997,7 @@ def _record_seed(
     stamp: TacticalPolicyStamp,
     config: RealPathRerankConfig,
     base_meeting_runner_factory: Callable[[], MeetingRunner] | None,
+    force_first_attempt: bool = False,
 ) -> RealPathSeedTelemetry:
     """Record one seed with the per-seed crash-retry budget (fail-loud on exhaust).
 
@@ -632,6 +3013,10 @@ def _record_seed(
     (a metering stop — re-recording would re-spend the per-game cap; it
     propagates unretried). ``KeyboardInterrupt`` / ``SystemExit`` are not
     ``Exception`` and propagate.
+
+    ``force_first_attempt`` (Task 18.31) truncates a pre-existing replay on the
+    FIRST attempt too: a resume that refused to skip an element is by
+    definition re-recording over bytes it declined to certify.
     """
 
     timed_out = 0
@@ -640,6 +3025,7 @@ def _record_seed(
     last_exc: BaseException | None = None
     start = time.monotonic()
     replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
+    _refuse_symlinked_recording_entry(replay_path, what="the replay for this seed,")
     for attempt in range(1, config.max_attempts + 1):
         runner_factory = _timeout_runner_factory(
             base_meeting_runner_factory,
@@ -656,7 +3042,7 @@ def _record_seed(
                 num_impostors=config.num_impostors,
                 tasks_per_crewmate=config.tasks_per_crewmate,
                 max_ticks=config.max_ticks,
-                force=attempt > 1,
+                force=force_first_attempt or attempt > 1,
                 tactical_policy_stamp=stamp,
                 meeting_runner_factory=runner_factory,
             )
@@ -779,6 +3165,7 @@ def _build_row(
     mode: str,
     seeds: tuple[int, ...],
     config: RealPathRerankConfig,
+    backend: Mapping[str, object],
     selection_score: float,
     rank: int,
 ) -> RealPathRerankRow:
@@ -792,6 +3179,8 @@ def _build_row(
         stamp_verified_games=payload.verified,
         stamp_uniform=True,
         stamp_equals_computed_digest=True,
+        recording_backend_sha256=_backend_digest(backend),
+        game_map_sha256=str(backend["game_map_sha256"]),
         seeds=seeds,
         num_players=config.num_players,
         num_impostors=config.num_impostors,
@@ -879,7 +3268,10 @@ def run_realpath_rerank(
     config: RealPathRerankConfig | None = None,
     game_map: Map | None = None,
     meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
+    meeting_runner_identity: str | None = None,
     mode: str = MODE_TOP_K,
+    resume: bool = False,
+    prescreen: Sequence[PreScreenQuote] | None = None,
 ) -> RealPathRerankResult:
     """Record and re-rank K candidates over a seed list on the real path.
 
@@ -897,6 +3289,25 @@ def run_realpath_rerank(
     ``eval/balance_eval.py:241`` seam); the re-rank always wraps each produced
     runner in the timeout proxy. ``None`` uses the default roster-scaled runner,
     identical to ``run_tournament_eval``'s ``None`` path.
+
+    ``resume=True`` (Task 18.31) makes an interrupted leg re-enterable: the
+    candidate dirs may already exist, and each (candidate, seed) element whose
+    recording satisfies the whole CONJUNCTIVE predicate in
+    :func:`_resume_skip_reason` is skipped; every other element re-records with
+    ``force=True``. The default (``False``) keeps the write-once discipline
+    exactly as before — a pre-existing candidate dir fails loud. A resume also
+    refuses a candidate dir holding replays for seeds OUTSIDE this tranche:
+    the scoring entry points fold the whole DIRECTORY, so an unrequested replay
+    would silently enter the committed row.
+
+    ``prescreen`` records the blocker-4 spend advice NATIVELY: its quotes are
+    written to a tranche/invocation-keyed record and logged into this leg's
+    append-only log BEFORE any seed is recorded, which is the
+    pre-screen-before-spend ordering evidence §12 Errata item 10 found missing.
+
+    Every invocation stamps a manifest (``leg-<tranche>-<invocation>.json``) and
+    appends its events to ``leg-log.jsonl`` under ``work_dir``, including a
+    terminal ``leg-failed`` event when the leg raises.
     """
 
     resolved_config = config if config is not None else RealPathRerankConfig()
@@ -937,80 +3348,352 @@ def run_realpath_rerank(
             "refusing to record"
         )
 
-    payloads: list[_CandidatePayload] = []
-    for index, candidate in enumerate(candidates):
-        stamp = _candidate_stamp(candidate)
-        digest = stamp.weights_sha256
-        agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
-        candidate_dir = work_dir / f"{index:03d}-{_safe_slug(candidate.label)}"
-        candidate_dir.mkdir(parents=True, exist_ok=False)
-        telemetry = tuple(
-            _record_seed(
-                seed=seed,
-                label=candidate.label,
-                candidate_dir=candidate_dir,
-                game_map=resolved_map,
-                agent_factory=agent_factory,
-                stamp=stamp,
-                config=resolved_config,
-                base_meeting_runner_factory=meeting_runner_factory,
-            )
-            for seed in seeds_tuple
+    # The ranking path is preflighted HERE, before the first game: the
+    # exclusive open at the end is race protection, but on its own it would let
+    # an operator's path typo burn a whole 30–40 h leg before failing (Codex
+    # review on PR #314). Both checks stand — this one saves the budget, that
+    # one closes the window between them.
+    # ``exists()`` FOLLOWS symlinks, so a DANGLING ranking-path symlink read as
+    # absent here — and ``_publish_ranking``'s ``os.link`` then saw the directory
+    # ENTRY and raised ``FileExistsError`` after every paid game, leaving the leg
+    # permanently unpublishable (Codex review on PR #314). ``is_symlink()`` is
+    # the ``lexists`` half: every pre-existing entry is refused up front,
+    # whether or not it resolves.
+    if _entry_exists(ranking_path):
+        raise RealPathRerankError(
+            f"a committed ranking already exists at {ranking_path}; this leg is "
+            "already recorded and its rows are never rewritten — refusing before "
+            "any game is spent (point --ranking-path at a fresh file). A dangling "
+            "symlink counts: os.link refuses any existing directory entry, so it "
+            "would fail the publish after the whole spend"
         )
-        _drop_audit_sidecars(candidate_dir)
-        _write_roster_json(candidate_dir, resolved_config)
-        decisive_seeds = tuple(
-            entry.seed for entry in telemetry if not entry.tick_budget_reached
-        )
-        read_stamp, verified = _verify_stamps(
-            candidate_dir,
-            seeds=decisive_seeds,
-            expected_digest=digest,
-            label=candidate.label,
-        )
-        validity = run_validity_gate(candidate_dir)
-        watchability = compute_watchability(
-            candidate_dir, baseline_id=resolved_config.baseline_id
-        )
-        core = measure_baseline.measure_baseline(candidate_dir)
-        payloads.append(
-            _CandidatePayload(
-                candidate=candidate,
-                stamp=read_stamp,
-                digest=digest,
-                verified=verified,
-                telemetry=telemetry,
-                validity=validity,
-                watchability=watchability,
-                core=core,
-            )
-        )
+    _refuse_library_owned_ranking_path(
+        ranking_path, work_dir=work_dir, candidates=candidates
+    )
+    # EVERY candidate's builder, before the leg reserves anything. The factory
+    # was built lazily inside the recording loop, so a bad genome length or
+    # width on candidate N raised only after candidates 1..N-1 had consumed
+    # paid games — and by then the manifest recorded the whole slate, so
+    # correcting the bad candidate changes its digest/family identity and
+    # ``_refuse_protocol_drift`` refuses the resume, while a fresh retry
+    # collides with the reserved directories. An input error would strand the
+    # work dir AND the completed recordings in it (Codex review on PR #314).
+    # Building a policy is pure construction — it plays nothing — so this is
+    # the same cheap preflight the floor block and the ranking path already get.
+    for candidate in candidates:
+        try:
+            _build_agent_factory(candidate, game_map=resolved_map)
+        except (ValueError, TypeError) as exc:
+            raise RealPathRerankError(
+                f"candidate {candidate.label!r} does not rebuild as "
+                f"{candidate.encoder_version!r}"
+                + (
+                    f" at hidden={candidate.hidden}"
+                    if candidate.hidden is not None
+                    else ""
+                )
+                + f" ({exc}); refusing before any game is spent, because a slate "
+                "that fails partway strands both the work dir and the games "
+                "already recorded into it"
+            ) from exc
+    _refuse_unpublishable_ranking_dir(ranking_path)
 
-    scores = [
-        _selection_score(payload.validity, payload.watchability) for payload in payloads
-    ]
-    order = sorted(range(len(payloads)), key=lambda i: (-scores[i], i))
-    rows = tuple(
-        _build_row(
-            payloads[i],
+    # A resume adopts BYTES RECORDED UNDER A PREVIOUS PROTOCOL, so the previous
+    # protocol must be the one being asked for. Every earlier invocation stamped
+    # its full config into a manifest; without comparing them, a resume with a
+    # changed roster / baseline / tick budget / timeout / retry budget skips the
+    # old recordings and ``_build_row`` then reports the NEW settings as though
+    # they produced those bytes — a contaminated committed row, and (since
+    # round 4 pins protocol agreement across tranches) one that looks
+    # protocol-consistent while it is not (Codex review on PR #314).
+    tranche = tranche_key(seeds_tuple)
+    backend = _recording_backend_identity(
+        custom_runner=meeting_runner_factory is not None,
+        runner_identity=meeting_runner_identity,
+        game_map=resolved_map,
+        num_players=resolved_config.num_players,
+    )
+    # A callable has no stable serialisable identity, so two DIFFERENT stubs,
+    # composed runners or provider wrappers both reduce to ``True`` and compare
+    # equal. A resume would then adopt seeds recorded by one runner and record
+    # the rest through another, contaminating a single committed row.
+    #
+    # The requirement lands on EVERY custom-runner invocation, not just the
+    # resuming one: an initial run that recorded ``meeting_runner_identity:
+    # null`` is permanently unresumable, because a retry without an identity is
+    # refused here and a retry WITH one is refused as backend drift against the
+    # recorded null. Demanding the name up front is the only way both doors stay
+    # open (Codex review on PR #314).
+    if meeting_runner_factory is not None and not meeting_runner_identity:
+        raise RealPathRerankError(
+            "a custom meeting_runner_factory needs meeting_runner_identity: a "
+            "callable cannot be compared across invocations, so without a stable "
+            "name this leg could never be resumed without risking bytes recorded "
+            "by a different runner"
+        )
+    # ONE leg per (work dir, tranche) at a time. Held across the drift check,
+    # the directory resolution, the manifest publish AND the recording, so a
+    # concurrent leg cannot slip between the read and the publish (Codex #314).
+    with _tranche_claim(work_dir, tranche=tranche):
+        if resume:
+            _refuse_protocol_drift(
+                work_dir,
+                tranche=tranche,
+                mode=mode,
+                config=resolved_config,
+                candidates=candidates,
+                backend=backend,
+            )
+            # The byte-completeness fence is the third leg of the conjunctive
+            # skip predicate, and ``compute_kill_craft_report`` reconstructs
+            # unconditionally with ``load_canonical_map()`` — it takes no map
+            # argument, and ``eval/kill_craft.py`` is consumed exactly as
+            # committed (this task does not edit it). So on a non-canonical map
+            # the fence disagrees with the recorder about the topology and every
+            # otherwise-complete replay fails it: the resume silently re-records
+            # every paid seed, which is precisely the 30-40 h this feature
+            # exists to save (Codex review on PR #314). Refused rather than
+            # quietly delivering nothing — and placed AFTER the drift check so a
+            # genuine map CHANGE still reports as backend drift.
+            if _map_digest(resolved_map) != _map_digest(load_canonical_map()):
+                raise RealPathRerankError(
+                    "resume=True needs the canonical map: the byte-completeness "
+                    "fence (eval.kill_craft.compute_kill_craft_report) rebuilds "
+                    "every replay against load_canonical_map() and takes no map "
+                    "argument, so on a custom map it would reject every complete "
+                    "replay and re-record the whole leg. Record custom-map legs "
+                    "without resume, or extend the fence to accept a map"
+                )
+        else:
+            # A FRESH leg gets the slate half of the drift check. The resume path
+            # already refuses a label whose bytes moved; the fresh path needs it
+            # because its allocator RECLAIMS the directory a prior manifest
+            # reserved for the label, so a reused label would record new bytes
+            # into the old candidate's reservation and strand the tranche
+            # (Codex review on PR #314). Only the slate: a fresh leg is entitled
+            # to a different config, mode and backend — that is what makes it
+            # fresh — and it takes a new directory rather than adopting bytes.
+            _refuse_reused_label_identity(
+                work_dir, tranche=tranche, candidates=candidates
+            )
+        # The manifest IS the fresh leg's reservation, so it is published while
+        # the allocation claim is still held (Codex review on PR #314).
+        opened: list[tuple[str, Path]] = []
+
+        def _publish_manifest(dirs: Sequence[Path]) -> None:
+            opened.append(
+                _open_leg_manifest(
+                    work_dir,
+                    tranche=tranche,
+                    seeds=seeds_tuple,
+                    mode=mode,
+                    resume=resume,
+                    candidates=candidates,
+                    config=resolved_config,
+                    ranking_path=ranking_path,
+                    backend=backend,
+                    candidate_dirs=dirs,
+                )
+            )
+
+        candidate_dirs = _allocate_candidate_dirs(
+            work_dir,
+            tranche=tranche,
+            candidates=candidates,
+            resume=resume,
+            publish=_publish_manifest,
+        )
+        invocation, manifest_path = opened[0]
+        leg_log = RealPathLegLog(
+            work_dir / LEG_LOG_FILENAME, tranche=tranche, invocation=invocation
+        )
+        leg_log.emit(
+            "leg-start",
+            candidates=list(labels),
+            manifest=str(manifest_path),
             mode=mode,
+            resume=resume,
+            seeds=list(seeds_tuple),
+        )
+        try:
+            if prescreen is not None:
+                # Coverage BEFORE the record and the log: evidence that names the
+                # wrong candidates is worse than no evidence, because it reads as
+                # proof (Codex review on PR #314).
+                _validate_prescreen_coverage(prescreen, candidates)
+                for quote in prescreen:
+                    leg_log.emit(
+                        "prescreen-quote",
+                        label=quote.label,
+                        note=quote.note,
+                        predicted_flags_per_meeting=quote.predicted_flags_per_meeting,
+                        predicted_floors_pass=quote.predicted_floors_pass,
+                        weights_sha256=quote.weights_sha256,
+                    )
+                prescreen_path = write_prescreen_record(
+                    work_dir,
+                    seeds=seeds_tuple,
+                    quotes=prescreen,
+                    invocation=invocation,
+                )
+                leg_log.emit(
+                    "prescreen-record",
+                    path=str(prescreen_path),
+                    quotes=len(prescreen),
+                )
+
+            payloads: list[_CandidatePayload] = []
+            for index, candidate in enumerate(candidates):
+                stamp = _candidate_stamp(candidate)
+                digest = stamp.weights_sha256
+                agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
+                candidate_dir = candidate_dirs[index]
+                if not resume:
+                    # A resuming leg created (and thereby reserved) its dirs
+                    # under the allocation claim; a fresh leg creates here so an
+                    # early failure leaves nothing behind, and so a collision is
+                    # a loud refusal rather than a silent adoption.
+                    candidate_dir.mkdir(parents=True, exist_ok=False)
+                if resume:
+                    _refuse_foreign_replays(
+                        candidate_dir, seeds=seeds_tuple, label=candidate.label
+                    )
+                # ``roster.json`` is a recording entry too, and it was the one
+                # this leg WRITES that the no-links rule did not cover.
+                # ``_write_roster_json`` calls ``write_text`` unconditionally at
+                # the end of the seed loop, so a linked entry in an adopted
+                # directory would follow a symlink out of the work dir, or
+                # truncate a shared inode — modifying another campaign while
+                # corrupting the very provenance the scoring gates read (Codex
+                # review on PR #314). Checked BEFORE any seed is recorded, so
+                # the refusal costs nothing already spent.
+                _refuse_symlinked_recording_entry(
+                    candidate_dir / _ROSTER_FILENAME,
+                    what=f"the roster descriptor for candidate {candidate.label!r},",
+                )
+                leg_log.emit(
+                    "candidate-start",
+                    dir=str(candidate_dir),
+                    index=index,
+                    label=candidate.label,
+                    weights_sha256=digest,
+                )
+                telemetry = tuple(
+                    _record_or_resume_seed(
+                        seed=seed,
+                        candidate=candidate,
+                        candidate_dir=candidate_dir,
+                        game_map=resolved_map,
+                        agent_factory=agent_factory,
+                        stamp=stamp,
+                        digest=digest,
+                        config=resolved_config,
+                        base_meeting_runner_factory=meeting_runner_factory,
+                        resume=resume,
+                        leg_log=leg_log,
+                    )
+                    for seed in seeds_tuple
+                )
+                _drop_audit_sidecars(candidate_dir)
+                _write_roster_json(candidate_dir, resolved_config)
+                decisive_seeds = tuple(
+                    entry.seed for entry in telemetry if not entry.tick_budget_reached
+                )
+                read_stamp, verified = _verify_stamps(
+                    candidate_dir,
+                    seeds=decisive_seeds,
+                    expected_digest=digest,
+                    label=candidate.label,
+                )
+                validity = run_validity_gate(candidate_dir)
+                watchability = compute_watchability(
+                    candidate_dir, baseline_id=resolved_config.baseline_id
+                )
+                core = measure_baseline.measure_baseline(candidate_dir)
+                leg_log.emit(
+                    "candidate-scored",
+                    label=candidate.label,
+                    mean_score=watchability.mean_score,
+                    referee_passed=watchability.referee_passed,
+                    resumed_seeds=[entry.seed for entry in telemetry if entry.resumed],
+                    stamp_verified_games=verified,
+                    validity_passed=validity.passed,
+                )
+                payloads.append(
+                    _CandidatePayload(
+                        candidate=candidate,
+                        stamp=read_stamp,
+                        digest=digest,
+                        verified=verified,
+                        telemetry=telemetry,
+                        validity=validity,
+                        watchability=watchability,
+                        core=core,
+                    )
+                )
+
+            scores = [
+                _selection_score(payload.validity, payload.watchability)
+                for payload in payloads
+            ]
+            order = sorted(range(len(payloads)), key=lambda i: (-scores[i], i))
+            rows = tuple(
+                _build_row(
+                    payloads[i],
+                    mode=mode,
+                    seeds=seeds_tuple,
+                    config=resolved_config,
+                    backend=backend,
+                    selection_score=scores[i],
+                    rank=rank,
+                )
+                for rank, i in enumerate(order, start=1)
+            )
+            ranking_path.parent.mkdir(parents=True, exist_ok=True)
+            _publish_ranking(
+                ranking_path, "".join(row.to_json_line() + "\n" for row in rows)
+            )
+        except BaseException as exc:
+            # The hour-40 provider 503 leaves its own record: the leg log states
+            # exactly where the leg stopped, which is what a resume reads next.
+            leg_log.emit("leg-failed", error=type(exc).__name__, message=str(exc))
+            raise
+        # PAST THE COMMIT POINT. The ranking is a published write-once artifact
+        # now, so a failure in these trailing log appends must not report the leg
+        # as wholly failed: the caller would retry, the ranking preflight would
+        # refuse the existing file, and a leg that actually SUCCEEDED becomes
+        # permanently unrepeatable (Codex review on PR #314). A log append can
+        # fail on its own — ``work_dir`` filling while ``ranking_path`` sits on
+        # another filesystem is the concrete case — so the append is attempted,
+        # its failure is reported on stderr, and the committed result is
+        # returned. Losing an audit line is a real cost; losing a committed
+        # 30-40 h leg to it is a worse one.
+        try:
+            for row in rows:
+                leg_log.emit(
+                    "rank",
+                    label=row.label,
+                    rank=row.rank,
+                    referee_passed=row.referee_passed,
+                    selection_score=row.selection_score,
+                    validity_passed=row.validity_passed,
+                )
+            leg_log.emit("leg-done", ranking_path=str(ranking_path), rows=len(rows))
+        except OSError as exc:
+            print(
+                f"realpath: the ranking at {ranking_path} IS committed, but the "
+                f"leg log at {leg_log.path} could not record it ({exc}). The leg "
+                "succeeded; its trailing audit lines are missing.",
+                file=sys.stderr,
+            )
+        return RealPathRerankResult(
+            mode=mode,
+            ranking_path=str(ranking_path),
+            work_dir=str(work_dir),
             seeds=seeds_tuple,
             config=resolved_config,
-            selection_score=scores[i],
-            rank=rank,
+            rows=rows,
         )
-        for rank, i in enumerate(order, start=1)
-    )
-    ranking_path.parent.mkdir(parents=True, exist_ok=True)
-    ranking_path.write_text("".join(row.to_json_line() + "\n" for row in rows))
-    return RealPathRerankResult(
-        mode=mode,
-        ranking_path=str(ranking_path),
-        work_dir=str(work_dir),
-        seeds=seeds_tuple,
-        config=resolved_config,
-        rows=rows,
-    )
 
 
 __all__ = [
@@ -1020,10 +3703,21 @@ __all__ = [
     "DEFAULT_NUM_IMPOSTORS",
     "DEFAULT_NUM_PLAYERS",
     "DEFAULT_TASKS_PER_CREWMATE",
+    "LEG_LOG_FILENAME",
+    "LEG_LOG_SCHEMA_VERSION",
+    "LEG_MANIFEST_FILENAME_STEM",
+    "LEG_MANIFEST_SCHEMA_VERSION",
     "MODE_CHAMPION_TRACE",
     "MODE_TOP_K",
+    "PRESCREEN_ADVICE_NOTE",
+    "PRESCREEN_FILENAME_STEM",
+    "PRESCREEN_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "TRANCHE_CLAIM_FILENAME_STEM",
+    "PreScreenQuote",
+    "PreScreenRecord",
     "RealPathCandidate",
+    "RealPathLegLog",
     "RealPathMeetingTimeoutError",
     "RealPathRerankConfig",
     "RealPathRerankError",
@@ -1034,4 +3728,6 @@ __all__ = [
     "RealPathStampError",
     "candidates_from_champion_trace",
     "run_realpath_rerank",
+    "tranche_key",
+    "write_prescreen_record",
 ]

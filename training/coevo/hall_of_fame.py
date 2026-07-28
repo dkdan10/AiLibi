@@ -22,6 +22,17 @@ Three doctrines the module mirrors verbatim from committed siblings:
   stores agree at the byte level. Everything on disk reloads bit-exactly, and
   ``load`` re-hashes every member EAGERLY (the ``load_archive_cell_genomes``
   two-pass drift posture) so corruption is caught at campaign-resume time.
+  A hall constructed WITH :class:`LoadableArtifactMetadata` freezes the full
+  FOUR-file loadable artifact instead (Task 18.31 —
+  :func:`write_loadable_artifact`: the two byte-identical weight files plus a
+  five-field ``stamp.json`` and a provenance ``config.json``), so every frozen
+  member loads through ``scripts/run_tournament.py``'s
+  ``_load_candidate_policy`` without a hand-stamping pass. ``encoder_version``
+  and ``hidden`` come from that metadata — declared per family by the campaign
+  configuration, NEVER re-derived from genome length (the 18.24 campaign report
+  §12 Errata item 1 is what a length-guessed stamp costs: two 1442-gene v3
+  intermediates stamped as the 19-gene utility family, unloadable until
+  review caught them).
 
 * **Staleness** — :class:`OpponentStalenessLedger` is the co-evo analogue of
   :class:`training.surrogate.runner.SurrogateUseCounter` (runner.py:105-148): an
@@ -40,14 +51,25 @@ Three doctrines the module mirrors verbatim from committed siblings:
 
 Pure stdlib + pydantic v2 (no numpy — the sampler follows the es.py:25 /
 map_elites training-layer RNG doctrine: a pure-Python ``random.Random`` stream
-is bit-stable across machines where a numpy reduction is not). No ``engine``
-imports (the observation firewall is untouched). No global state.
+is bit-stable across machines where a numpy reduction is not). No global state.
+
+:func:`write_loadable_artifact` imports the CONSUMER's builders (and
+``engine.world.load_canonical_map`` for the map they rebuild against) so it can
+PROVE a genome reconstructs before publishing it, rather than declaring the
+family loadable and letting ``_load_candidate_policy`` discover otherwise after
+a campaign was paid for (Codex review on PR #314). This module previously
+documented itself as engine-free; that was a hygiene preference, not one of the
+four import-linter contracts, and all four still pass. The observation firewall
+(``observation`` / ``agents`` must not import upward) is untouched.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
+import shutil
+import os
 import math
 import random
 import re
@@ -56,10 +78,26 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final, Literal, TypeGuard
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from agents.tactical.features import weights_from_hex_json, weights_to_hex_json
+from engine.world import load_canonical_map
 from training.bakeoff.map_elites import ArchiveCell, load_archive_cell_genomes
+from training.bakeoff.policy_es import build_masked_mlp_policy
+from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
+from training.bakeoff.utility_es import build_utility_scorer_policy
+from training.crew.options import OwnedTaskOptionBasis
+from training.crew.scorer import (
+    OWNED_TASK_ENCODER_VERSION as _CREW_OWNED_TASK_ENCODER,
+)
+from training.crew.scorer import build_crew_scorer
 
 Side = Literal["impostor", "crew"]
 
@@ -72,9 +110,40 @@ _SIDES: Final[tuple[Side, ...]] = ("impostor", "crew")
 
 # Restated literals mirroring the harness / map_elites artifact layout (whose
 # filename constants are private), so a member subdir looks EXACTLY like a
-# champion artifact: a float-hex ``weights.json`` + its sidecar.
+# champion artifact: a float-hex ``weights.json`` + its sidecar. ``stamp.json``
+# / ``config.json`` complete the FOUR-file loadable artifact
+# ``scripts/run_tournament.py:492-493`` reads (its own constants are private
+# there too — the same restated-literal idiom).
 _WEIGHTS_FILENAME: Final[str] = "weights.json"
 _INDEX_FILENAME: Final[str] = "hall_of_fame.json"
+_STAMP_FILENAME: Final[str] = "stamp.json"
+_CONFIG_FILENAME: Final[str] = "config.json"
+
+#: The stamp label for a policy anchored on the scripted FSM proposal itself
+#: (the ``TacticalPolicyStamp.anchor_policy`` default every committed impostor
+#: artifact carries). The 18.5 filtered-BC seam names its artifact instead.
+DEFAULT_ANCHOR_POLICY: Final[str] = "fsm-default"
+
+#: The five ``TacticalPolicyStamp`` fields a loadable ``stamp.json`` carries —
+#: the exact set ``scripts/run_tournament.py`` ``_read_candidate_stamp``
+#: requires, restated here so a reload can verify the WHOLE stamp.
+_STAMP_FIELDS: Final[tuple[str, ...]] = (
+    "anchor_policy",
+    "encoder_version",
+    "method",
+    "policy_id",
+    "weights_sha256",
+)
+
+#: Keys :func:`write_loadable_artifact` OWNS in ``config.json`` — derived from
+#: the genome + the declared family, never accepted from a caller's provenance
+#: mapping (a caller-supplied duplicate is a fail-loud contradiction, not a
+#: silent override).
+_WRITER_OWNED_CONFIG_KEYS: Final[tuple[str, ...]] = (
+    "encoder_version",
+    "genome_length",
+    "hidden",
+)
 
 # A 64-lowercase-hex sha256 digest — the member identity + on-disk dir name.
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
@@ -124,6 +193,496 @@ def _is_valid_trained_against(value: object) -> bool:
     """
 
     return value == TRAINED_AGAINST_FSM or _is_sha256_hex(value)
+
+
+#: The encoder families ``scripts/run_tournament.py`` can rebuild — the impostor
+#: loader's ``v2``/``v3`` masked-MLP pair plus the width-free utility scorer, and
+#: the crew loader's two option-feature families. A new family extends this, the
+#: :func:`_refuse_unrebuildable_genome` dispatch below, AND the loader dispatch.
+_WIDTH_BEARING_ENCODERS: Final[frozenset[str]] = frozenset({"v2", "v3"})
+_LOADABLE_ENCODERS: Final[frozenset[str]] = _WIDTH_BEARING_ENCODERS | frozenset(
+    {
+        "impostor-option-features-v1",
+        "crew-option-features-v1",
+        "crew-option-features-v2",
+    }
+)
+
+
+#: Which loadable families belong to which SIDE. The crew loader dispatches on
+#: the ``crew-option-features-*`` namespace and the impostor loader on the rest,
+#: so the split is the consuming entry point's, not a convention this module
+#: invented (Task 18.31).
+_SIDE_ENCODERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "crew": frozenset({"crew-option-features-v1", "crew-option-features-v2"}),
+        "impostor": _WIDTH_BEARING_ENCODERS
+        | frozenset({"impostor-option-features-v1"}),
+    }
+)
+
+
+def _entry_exists(path: Path) -> bool:
+    """True iff a directory ENTRY exists at ``path`` — resolvable or not (18.31).
+
+    ``Path.exists()`` FOLLOWS symlinks, so it answers "does this resolve?" when
+    every no-clobber check here is asking "is there something at this name?". A
+    dangling link reads as absent, the check passes, and the collision arrives
+    later — after a generation of paid games, or as a silently downgraded freeze
+    format. Three review rounds filed one call site of this each before it was
+    written down once (Codex reviews on PR #314). ``training.coevo.driver``
+    imports this rather than restating it.
+    """
+
+    return path.exists() or path.is_symlink()
+
+
+def _refuse_side_family_mismatch(*, side: str, encoder_version: str) -> None:
+    """A pool's freeze family must belong to the pool's SIDE (Task 18.31).
+
+    :func:`_refuse_unloadable_family` proves the family is one SOME consumer can
+    rebuild; it says nothing about WHICH. Nothing related ``side`` to
+    ``artifact_metadata.encoder_version``, so a crew hall could be created
+    carrying impostor ``v3`` metadata: ``add_member`` then rebuilt the genome
+    against the impostor builder, passed, and published a four-file artifact
+    that ``scripts/run_tournament.py`` rejects when it loads that member as a
+    CREW candidate (Codex review on PR #314). The artifact is proven loadable
+    against the wrong side's loader, which is exactly the 18.19 conflation this
+    freeze format exists to make impossible.
+
+    Checked before the empty index is committed, so a mismatched declaration
+    costs nothing — the round-10 lesson about refusing before anything durable
+    is written.
+    """
+
+    allowed = _SIDE_ENCODERS.get(side)
+    if allowed is None:  # pragma: no cover - callers validate side first
+        return
+    if encoder_version not in allowed:
+        raise ValueError(
+            f"the {side} hall declares artifact encoder_version "
+            f"{encoder_version!r}, which belongs to the other side (loadable "
+            f"{side} families: {sorted(allowed)}). Every freeze on this pool "
+            "would be proven against the wrong loader and rejected by "
+            "_load_candidate_policy when read back as a "
+            f"{side} candidate"
+        )
+
+
+def _validate_stamp_token(name: str, value: str) -> None:
+    """Fail loud on a stamp string the committed stamp reader would reject.
+
+    Restates the :class:`~orchestrator.replay.TacticalPolicyStamp` field rules
+    (non-blank, no ``|`` / newline / CR — replay.py:211-254) rather than
+    importing them: this module pulls in no ``orchestrator`` graph, the same
+    restated-literal idiom the filename constants above use.
+    ``training.realpath.RealPathCandidate`` restates the identical rule set for
+    the same reason. (The builder seam DOES import ``engine.world`` — see the
+    module docstring — but a stamp-token rule is a two-line predicate, so
+    restating it stays cheaper than importing a pydantic model to validate it.)
+    """
+
+    if not value.strip():
+        raise ValueError(f"{name} must be a non-blank stamp token; got {value!r}")
+    for forbidden, human in (("|", "pipe"), ("\n", "newline"), ("\r", "CR")):
+        if forbidden in value:
+            raise ValueError(
+                f"{name} must be MANIFEST-safe (no {human}); got {value!r}"
+            )
+
+
+# --------------------------------------------------------------------------- #
+# The loadable four-file artifact (Task 18.31).                                #
+# --------------------------------------------------------------------------- #
+
+
+def _refuse_unloadable_family(*, encoder_version: str, hidden: int | None) -> None:
+    """The FAMILY/width contract every loadable freeze must satisfy (18.31).
+
+    Shared by :func:`write_loadable_artifact` and
+    :class:`LoadableArtifactMetadata` so the two can never drift. Enforcing it
+    at the METADATA is what keeps a bad declaration from being expensive: the
+    metadata is what ``HallOfFame.create`` persists into ``hall_of_fame.json``,
+    and it used to commit that index before anything checked the family. The
+    first ``add_member`` then failed here, and the retry with corrected metadata
+    hit ``create``'s no-clobber guard — an unusable hall that only a manual
+    delete could clear (Codex review on PR #314). That is the round-8
+    runner-identity deadlock wearing different clothes, and the fix is the same
+    shape: refuse before anything durable is written.
+
+    Restated literals, per this module's no-cross-seam-import idiom; the writer
+    additionally PROVES the width by rebuilding the genome, which needs an
+    actual genome and so stays there.
+    """
+
+    if encoder_version not in _LOADABLE_ENCODERS:
+        raise ValueError(
+            f"encoder_version {encoder_version!r} is not one the consuming entry "
+            f"point can rebuild (loadable: {sorted(_LOADABLE_ENCODERS)}); this "
+            "artifact would be unloadable through _load_candidate_policy"
+        )
+    if encoder_version in _WIDTH_BEARING_ENCODERS and hidden is None:
+        raise ValueError(
+            f"the {encoder_version!r} family rebuilds through the masked-MLP "
+            "builder, so its config.json needs an integer 'hidden'; declaring "
+            "none publishes an artifact the consumer always rejects"
+        )
+    if encoder_version not in _WIDTH_BEARING_ENCODERS and hidden is not None:
+        raise ValueError(
+            f"the {encoder_version!r} family takes no hidden width; got "
+            f"hidden={hidden!r}. Declaring one stamps a masked-MLP width its "
+            "builder does not have"
+        )
+
+
+def _refuse_unwritable_genome(
+    genome: Sequence[float],
+    *,
+    encoder_version: str,
+    hidden: int | None,
+    where: str,
+) -> None:
+    """Every genome check :func:`write_loadable_artifact` performs, callable early.
+
+    Shared so a BATCH writer can run the whole check set before its first
+    mutation. ``HallOfFame.ingest_map_elites_founders`` is all-or-nothing, but
+    these refusals used to fire from inside its ``add_member`` loop, so a bad
+    founder at position N aborted after 1..N-1 were already written and indexed
+    (Codex review on PR #314). ``where`` names the offending input, since a
+    batch caller needs to know WHICH genome failed.
+    """
+
+    nonfinite = sorted(
+        index for index, gene in enumerate(genome) if not math.isfinite(gene)
+    )
+    if nonfinite:
+        shown = nonfinite[:8]
+        raise ValueError(
+            f"{where} carries non-finite genes at indices {shown}"
+            + (
+                f" (+{len(nonfinite) - len(shown)} more)"
+                if len(nonfinite) > len(shown)
+                else ""
+            )
+            + f", e.g. {genome[nonfinite[0]]!r}; the float-hex encoding round-trips "
+            "these silently, so the artifact would load and then propagate "
+            "non-finite values through every evaluation it seeds"
+        )
+    _refuse_unrebuildable_genome(genome, encoder_version=encoder_version, hidden=hidden)
+
+
+def _refuse_unrebuildable_genome(
+    genome: Sequence[float], *, encoder_version: str, hidden: int | None
+) -> None:
+    """Fail loud unless the CONSUMER's own builder can rebuild this genome (18.31).
+
+    Runs the same reconstruction ``scripts/run_tournament.py`` performs at load
+    time, over the canonical map it loads, so "this artifact is loadable" is a
+    proven claim rather than a declared one.
+    """
+
+    game_map = load_canonical_map()
+    try:
+        if encoder_version in _WIDTH_BEARING_ENCODERS:
+            # The caller has already refused ``hidden=None`` for this family;
+            # the assert re-states that for the type checker at the seam.
+            assert hidden is not None
+            build_masked_mlp_policy(
+                tuple(genome),
+                game_map=game_map,
+                hidden=hidden,
+                encoder_version=encoder_version,
+            )
+        elif encoder_version == _UTILITY_ENCODER_VERSION:
+            build_utility_scorer_policy(tuple(genome), game_map=game_map)
+        else:
+            build_crew_scorer(
+                tuple(genome),
+                basis=OwnedTaskOptionBasis()
+                if encoder_version == _CREW_OWNED_TASK_ENCODER
+                else None,
+            )
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"a {len(genome)}-gene genome does not rebuild as {encoder_version!r}"
+            + (f" at hidden={hidden}" if hidden is not None else "")
+            + f" ({exc}); the consuming entry point would reject this artifact, "
+            "so it is not written"
+        ) from exc
+
+
+def write_loadable_artifact(
+    artifact_dir: Path,
+    genome: Sequence[float],
+    *,
+    policy_id: str,
+    method: str,
+    encoder_version: str,
+    anchor_policy: str = DEFAULT_ANCHOR_POLICY,
+    hidden: int | None = None,
+    config: Mapping[str, object] | None = None,
+) -> str:
+    """Freeze one genome as the FOUR-file artifact its consumer can load (18.31).
+
+    The four files, in the exact committed byte conventions:
+
+    * ``weights.json`` — the float-hex genome
+      (:func:`agents.tactical.features.weights_to_hex_json` + a trailing
+      newline), byte-identical to
+      :func:`training.bakeoff.harness.write_candidate_artifact`;
+    * ``weights.json.sha256`` — the ``<digest>  weights.json`` sidecar;
+    * ``stamp.json`` — EXACTLY the five
+      :class:`~orchestrator.replay.TacticalPolicyStamp` fields
+      (``policy_id`` / ``method`` / ``encoder_version`` / ``weights_sha256`` /
+      ``anchor_policy``), with ``weights_sha256`` computed from the bytes just
+      written, so the 17.14 conflation guard
+      (``scripts/run_tournament.py:620-631``: stamp sha == sidecar digest)
+      holds by construction;
+    * ``config.json`` — the provenance mapping plus the writer-owned
+      ``encoder_version`` / ``genome_length`` / ``hidden``. ``hidden`` is what
+      ``_read_candidate_hidden`` needs to rebuild a masked-MLP family.
+
+    ``encoder_version`` and ``hidden`` are DECLARED by the caller (the campaign
+    side config), never re-derived from ``len(genome)``: length collisions
+    between future families are exactly the ambiguity a stamp exists to remove,
+    and the 18.24 report's §12 Errata item 1 is the cost of guessing wrong
+    (two 1442-gene v3 genomes stamped ``impostor-option-features-v1``, refused
+    by the loader's genome-length check until repaired).
+
+    Fails loud on: an empty genome; a stamp token that is blank or
+    MANIFEST-unsafe; ``hidden < 1`` when declared; a ``config`` mapping that
+    carries any writer-owned key; and any pre-existing CONTENT in
+    ``artifact_dir`` — not merely a collision with one of the four filenames.
+    An artifact directory holding a stray or stale file would otherwise be
+    silently adopted and freeze as a five-or-more-file bundle (Codex review on
+    PR #314); the no-clobber discipline is that an artifact dir is written once,
+    whole, never patched in place. Returns the ``weights_sha256`` digest.
+    """
+
+    if not genome:
+        raise ValueError("cannot freeze an empty genome as a loadable artifact")
+    for name, token in (
+        ("policy_id", policy_id),
+        ("method", method),
+        ("encoder_version", encoder_version),
+        ("anchor_policy", anchor_policy),
+    ):
+        _validate_stamp_token(name, token)
+    # ``bool`` is an ``int`` SUBTYPE, so ``True`` satisfies ``>= 1`` and would
+    # reach the builder as width 1 — but ``config.json`` records JSON ``true``
+    # and ``_read_candidate_hidden`` rejects booleans outright, so every such
+    # freeze is unloadable (Codex review on PR #314).
+    if isinstance(hidden, bool):
+        raise ValueError(
+            f"hidden must be a non-boolean integer; got {hidden!r}. JSON records "
+            "it as a boolean and the consuming reader refuses that outright"
+        )
+    if hidden is not None and hidden < 1:
+        raise ValueError(f"hidden must be >= 1 when declared; got {hidden!r}")
+    _refuse_unloadable_family(encoder_version=encoder_version, hidden=hidden)
+    # PROVE the genome rebuilds, rather than asserting the family is loadable.
+    # A recognised family with a syntactically valid width and an incompatible
+    # genome length publishes all four files and is then rejected by
+    # ``_load_candidate_policy`` during reconstruction — the artifact is
+    # certified loadable and is not (Codex review on PR #314). I declined this
+    # in round 8 on the grounds that the builder import was too costly for this
+    # module; that was wrong on the facts — the import is clean, adds no cycle,
+    # and ``uv run lint-imports`` keeps all four contracts.
+    _refuse_unwritable_genome(
+        genome, encoder_version=encoder_version, hidden=hidden, where="this genome"
+    )
+    provenance = dict(config) if config is not None else {}
+    clashing = sorted(key for key in _WRITER_OWNED_CONFIG_KEYS if key in provenance)
+    if clashing:
+        raise ValueError(
+            f"config.json keys {clashing} are owned by write_loadable_artifact "
+            "(derived from the genome bytes + the declared family); pass them as "
+            "the encoder_version / hidden arguments instead of a provenance entry"
+        )
+
+    weights_json = weights_to_hex_json(tuple(genome)) + "\n"
+    digest = _sha256_hex(weights_json.encode("utf-8"))
+    provenance["encoder_version"] = encoder_version
+    provenance["genome_length"] = len(genome)
+    if hidden is not None:
+        provenance["hidden"] = hidden
+    stamp = {
+        "anchor_policy": anchor_policy,
+        "encoder_version": encoder_version,
+        "method": method,
+        "policy_id": policy_id,
+        "weights_sha256": digest,
+    }
+
+    if _entry_exists(artifact_dir):
+        existing = sorted(child.name for child in artifact_dir.iterdir())
+        if existing:
+            raise FileExistsError(
+                f"refusing to freeze into non-empty artifact dir {artifact_dir} "
+                f"(holds {existing}); a loadable artifact is written once and "
+                "whole, never merged into whatever is already there"
+            )
+    # ATOMIC, all four files or none. Writing them straight into the
+    # destination leaves a NON-EMPTY partial artifact if the process stops or
+    # an I/O error lands mid-way — and a retry then hits the non-empty-dir
+    # refusal above while ``add_member`` has not indexed the member, so the
+    # campaign cannot recover without a manual delete (Codex review on
+    # PR #314). Staged in a sibling dir on the same filesystem and renamed;
+    # ``os.rename`` onto a directory path fails if the destination exists, so
+    # write-once survives.
+    artifact_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{artifact_dir.name}.", dir=artifact_dir.parent)
+    )
+    try:
+        for filename, payload in (
+            (_WEIGHTS_FILENAME, weights_json),
+            (f"{_WEIGHTS_FILENAME}.sha256", f"{digest}  {_WEIGHTS_FILENAME}\n"),
+            (_STAMP_FILENAME, json.dumps(stamp, indent=2, sort_keys=True) + "\n"),
+            (_CONFIG_FILENAME, json.dumps(provenance, indent=2, sort_keys=True) + "\n"),
+        ):
+            with (staging / filename).open("x", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+        try:
+            os.rename(staging, artifact_dir)
+        except OSError as exc:
+            raise FileExistsError(
+                f"refusing to publish over {artifact_dir} ({exc}); a loadable "
+                "artifact is written once and whole"
+            ) from exc
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return digest
+
+
+class LoadableArtifactMetadata(BaseModel):
+    """The per-hall stamp-grade metadata every freeze writes (18.31; frozen).
+
+    A hall is single-side AND single-family per campaign, so the stamp fields a
+    frozen member needs are campaign constants, not per-``add_member``
+    arguments: the store carries them once and
+    :meth:`HallOfFame.add_member` composes each member's ``policy_id`` +
+    provenance from them. ``encoder_version`` / ``hidden`` are DECLARED here
+    (from the campaign side config), never re-derived from genome length.
+
+    ``run_label`` is the stamp-grade run name (e.g.
+    ``"run-01-utility-champion"``) that rides ``policy_id``, ``campaign``,
+    ``entrant`` and ``source_lineage`` — the provenance the 18.24 record had to
+    be hand-stamped with after the fact. ``anchor_weight`` is optional campaign
+    provenance (``None`` omits the key rather than recording a zero-ghost).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_label: str
+    method: str
+    encoder_version: str
+    anchor_policy: str = DEFAULT_ANCHOR_POLICY
+    hidden: int | None = None
+    anchor_weight: float | None = None
+    policy_id_prefix: str = "coevo"
+
+    @field_validator("hidden", mode="before")
+    @classmethod
+    def _refuse_boolean_hidden(cls, value: object) -> object:
+        """Refuse ``hidden=True`` BEFORE pydantic coerces it to ``1`` (18.31).
+
+        ``mode="before"``, deliberately: pydantic v2's lax mode coerces ``True``
+        into ``1``, so an ``mode="after"`` validator only ever sees an ``int``
+        and the boolean is already gone. That coercion is not harmful in the way
+        a raw ``True`` reaching :func:`write_loadable_artifact` is — the frozen
+        ``config.json`` records ``1``, not JSON ``true``, so the artifact still
+        loads — but it silently turns "yes, this family has a hidden layer" into
+        "width 1", which is a silent fallback (AGENTS.md) and exactly the kind of
+        guessed width §12 Errata item 1 records the cost of. Declaring a width
+        is the caller's job; inferring one from a boolean is nobody's.
+        """
+
+        if isinstance(value, bool):
+            raise ValueError(
+                f"hidden must be a non-boolean integer; got {value!r}, which "
+                "pydantic would silently coerce to a width of 1"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate(self) -> LoadableArtifactMetadata:
+        for name, token in (
+            ("run_label", self.run_label),
+            ("method", self.method),
+            ("encoder_version", self.encoder_version),
+            ("anchor_policy", self.anchor_policy),
+            ("policy_id_prefix", self.policy_id_prefix),
+        ):
+            _validate_stamp_token(name, token)
+        if self.hidden is not None and self.hidden < 1:
+            raise ValueError(f"hidden must be >= 1 when declared; got {self.hidden!r}")
+        # The SAME family/width contract the writer enforces, applied here so a
+        # hall is never persisted around metadata whose first freeze must fail
+        # (Codex review on PR #314).
+        _refuse_unloadable_family(
+            encoder_version=self.encoder_version, hidden=self.hidden
+        )
+        if self.anchor_weight is not None and not math.isfinite(self.anchor_weight):
+            raise ValueError(
+                f"anchor_weight must be finite when declared; got {self.anchor_weight!r}"
+            )
+        return self
+
+    def policy_id_for(
+        self, *, side: Side, origin: str, generation: int, weights_sha256: str
+    ) -> str:
+        """The member's ``stamp.json`` ``policy_id`` — UNIQUE per artifact (18.31).
+
+        ``<prefix>-<run_label>-<side>-<origin>-gen<generation>-<sha8>``, e.g.
+        ``coevo-run-03-utility-bcanchor-impostor-exploiter-probe-gen10-6d327dcb``.
+
+        The 18.24 shape was ``<prefix>-<run_label>-<origin>-gen<generation>``,
+        which is not an identity: every MAP-Elites founder shares one origin and
+        generation 0, so a hall seeded with N founders stamped N distinct
+        genomes with ONE ``policy_id`` — and the impostor and crew halls of a
+        single run collided with each other as well. Handing one founder from
+        each side to ``scripts/run_tournament.py`` then trips its 18.19
+        cross-stamp conflation guard (run_tournament.py:911-913) even though
+        both four-file artifacts are otherwise loadable (Codex review on
+        PR #314).
+
+        ``side`` separates the two halls; the weights digest separates members
+        within one. The digest is abbreviated to 8 chars because the stamp
+        already carries the full ``weights_sha256`` — this half is a readable
+        discriminator, not the identity itself.
+        """
+
+        return (
+            f"{self.policy_id_prefix}-{self.run_label}-{side}-{origin}"
+            f"-gen{generation}-{weights_sha256}"
+        )
+
+    def provenance(
+        self,
+        *,
+        side: Side,
+        generation: int,
+        origin: str,
+        trained_against: str,
+        path: str,
+    ) -> dict[str, object]:
+        """The member's ``config.json`` provenance (writer-owned keys excluded)."""
+
+        provenance: dict[str, object] = {
+            "campaign": self.run_label,
+            "entrant": f"{self.run_label}/{side}/{path}",
+            "generation": generation,
+            "hall_origin": origin,
+            "side": side,
+            "source_lineage": self.run_label,
+            "trained_against": trained_against,
+        }
+        if self.anchor_weight is not None:
+            provenance["anchor_weight"] = self.anchor_weight
+        return provenance
 
 
 # --------------------------------------------------------------------------- #
@@ -202,10 +761,12 @@ class HallOfFame:
         side_dir: Path,
         substrate_sha256: str,
         members: tuple[HallOfFameMember, ...],
+        artifact_metadata: LoadableArtifactMetadata | None = None,
     ) -> None:
         self._side = side
         self._side_dir = side_dir
         self._substrate_sha256 = substrate_sha256
+        self._artifact_metadata = artifact_metadata
         # The canonical order everywhere: sorted by the member identity sha, so
         # the index bytes and every drift check are insertion-order-independent.
         self._members = tuple(sorted(members, key=lambda member: member.weights_sha256))
@@ -225,6 +786,23 @@ class HallOfFame:
         return self._substrate_sha256
 
     @property
+    def artifact_metadata(self) -> LoadableArtifactMetadata | None:
+        """The stamp-grade freeze metadata, or ``None`` for a weights-only pool.
+
+        Set ⇒ every :meth:`add_member` freeze writes the FOUR-file loadable
+        artifact (Task 18.31). ``None`` ⇒ the historic two-file member (weights
+        + sidecar): the pool is still a valid genome store, but its members
+        carry no stamp and do not load through ``_load_candidate_policy``.
+
+        The value is PERSISTED into ``hall_of_fame.json`` and restored by
+        :meth:`load`, so the two modes are a property of the POOL rather than of
+        whoever happens to open it — a reloaded loadable pool cannot silently
+        start freezing unstamped members.
+        """
+
+        return self._artifact_metadata
+
+    @property
     def members(self) -> tuple[HallOfFameMember, ...]:
         """Every frozen member, sorted by ``weights_sha256``."""
 
@@ -239,7 +817,14 @@ class HallOfFame:
     # -- disk entry points -------------------------------------------------- #
 
     @classmethod
-    def create(cls, root: Path, side: Side, *, substrate_sha256: str) -> HallOfFame:
+    def create(
+        cls,
+        root: Path,
+        side: Side,
+        *,
+        substrate_sha256: str,
+        artifact_metadata: LoadableArtifactMetadata | None = None,
+    ) -> HallOfFame:
         """Initialise a FRESH empty pool at the given campaign substrate.
 
         Writes the (empty) index and returns the store. Validates ``side`` and
@@ -252,6 +837,10 @@ class HallOfFame:
         initialising an empty index beside them would present a dirty root as a
         fresh pool until the next ``load`` trips the drift check — papering
         over, never allowed.
+
+        ``artifact_metadata`` (Task 18.31) makes every freeze on this pool write
+        the FOUR-file loadable artifact; the 18.21 driver always supplies it
+        from the campaign side config.
         """
 
         if side not in _SIDES:
@@ -261,14 +850,18 @@ class HallOfFame:
                 f"substrate_sha256 must be exactly 64 lowercase hex chars; got "
                 f"{substrate_sha256!r}"
             )
+        if artifact_metadata is not None:
+            _refuse_side_family_mismatch(
+                side=side, encoder_version=artifact_metadata.encoder_version
+            )
         side_dir = root / side
         index_path = side_dir / _INDEX_FILENAME
-        if index_path.exists():
+        if _entry_exists(index_path):
             raise FileExistsError(
                 f"a hall of fame already exists at {index_path}; create never "
                 "clobbers a committed pool (load it instead)"
             )
-        if side_dir.exists():
+        if _entry_exists(side_dir):
             stray = sorted(
                 child.name
                 for child in side_dir.iterdir()
@@ -287,12 +880,19 @@ class HallOfFame:
             side_dir=side_dir,
             substrate_sha256=substrate_sha256,
             members=(),
+            artifact_metadata=artifact_metadata,
         )
         hall._write_index()
         return hall
 
     @classmethod
-    def load(cls, root: Path, side: Side) -> HallOfFame:
+    def load(
+        cls,
+        root: Path,
+        side: Side,
+        *,
+        artifact_metadata: LoadableArtifactMetadata | None = None,
+    ) -> HallOfFame:
         """Reload + fully verify the pool (EAGER two-pass, the ``load_archive_cell_genomes`` posture).
 
         A missing ``hall_of_fame.json`` raises :class:`FileNotFoundError`
@@ -306,6 +906,14 @@ class HallOfFame:
         bare :class:`FileNotFoundError` in the read loop. Pass 2 re-hashes each
         member's ``weights.json`` and double-checks the digest against BOTH the
         sidecar first token AND the index row.
+
+        ``artifact_metadata`` (Task 18.31) is RESTORED from the index when the
+        pool recorded one, so a reloaded loadable pool keeps freezing loadable
+        members — reloading can never silently downgrade a four-file pool to
+        two-file adds (Codex review on PR #314). Passing it explicitly is
+        allowed only when it AGREES with the recorded one (a disagreement is
+        loud drift, never a silent override); a pool with no recorded metadata
+        adopts the passed one.
         """
 
         if side not in _SIDES:
@@ -332,6 +940,77 @@ class HallOfFame:
         if not isinstance(raw_members, list):
             raise ValueError(
                 f"hall of fame index at {index_path} has a malformed members list"
+            )
+        raw_metadata = index.get("artifact_metadata")
+        resolved_metadata = artifact_metadata
+        if raw_metadata is not None:
+            if not isinstance(raw_metadata, dict):
+                raise ValueError(
+                    f"hall of fame index at {index_path} has a malformed "
+                    f"artifact_metadata block {raw_metadata!r} (expected an object)"
+                )
+            # Building the model runs the same fail-loud validation ``create``
+            # ran; a corrupted block is drift, not a reason to freeze unstamped.
+            recorded = LoadableArtifactMetadata(**raw_metadata)
+            if artifact_metadata is not None and artifact_metadata != recorded:
+                raise ValueError(
+                    f"hall of fame index at {index_path} records artifact "
+                    f"metadata {recorded.model_dump(mode='json')} but was loaded "
+                    f"with {artifact_metadata.model_dump(mode='json')}; the pool's "
+                    "own freeze identity is never silently overridden"
+                )
+            resolved_metadata = recorded
+
+        # A loadable pool whose metadata BLOCK went missing is a corrupted
+        # index, not a legacy weights-only pool. Treating the two alike skipped
+        # every stamp.json / config.json verification while those files sat
+        # right there on disk, handed back a hall with ``artifact_metadata=None``,
+        # and its next ``add_member`` wrote two files — silently turning a
+        # loadable pool into a mixed-format one and losing the campaign's freeze
+        # identity (Codex review on PR #314). The members themselves say which
+        # kind of pool this is, so ask them.
+        if resolved_metadata is None:
+            # EITHER loadable-only file is evidence. Scanning for stamp.json
+            # alone left a corruption that removes the stamps but keeps the
+            # config.json sidecars reading as a legacy weights-only pool, so the
+            # next add_member wrote two files and silently converted a corrupted
+            # loadable pool into a mixed-format one — the very outcome this
+            # guard was added to prevent, one file short (Codex review on
+            # PR #314). Neither file is ever written by the two-file path, so
+            # either one present means this pool was loadable.
+            stamped = sorted(
+                entry["path"]
+                for entry in raw_members
+                if isinstance(entry, dict)
+                and isinstance(entry.get("path"), str)
+                and any(
+                    # ``exists()`` follows symlinks, so a DANGLING stamp/config
+                    # sidecar read as absent and the pool was classified legacy
+                    # — the very downgrade this scan exists to prevent, reached
+                    # through a broken link instead of a deleted file (Codex
+                    # review on PR #314). Presence here is about the directory
+                    # ENTRY, so a dangling link is evidence too.
+                    _entry_exists(side_dir / entry["path"] / name)
+                    for name in (_STAMP_FILENAME, _CONFIG_FILENAME)
+                )
+            )
+            if stamped:
+                raise ValueError(
+                    f"hall of fame index at {index_path} declares no "
+                    f"artifact_metadata, but member(s) {stamped[:3]} carry a "
+                    f"{_STAMP_FILENAME} or {_CONFIG_FILENAME} on disk: this is a "
+                    "LOADABLE pool whose metadata block is missing or null. "
+                    "Loading it would skip every four-file verification and "
+                    "downgrade the next freeze to two files — repair the index "
+                    "rather than losing the pool's freeze identity"
+                )
+        else:
+            # A hand-edited or drifted index can declare the OTHER side's family
+            # just as a caller could; ``create`` refuses that, and reading it
+            # back must too, or the refusal is only as durable as the process
+            # that wrote it (Codex review on PR #314).
+            _refuse_side_family_mismatch(
+                side=side, encoder_version=resolved_metadata.encoder_version
             )
 
         # Pass 1: validate rows, self-check path, collect the declared path set.
@@ -381,15 +1060,26 @@ class HallOfFame:
                 f"member paths {sorted(declared_paths)} at {side_dir}"
             )
 
-        # Pass 2: read + double-verify every member's genome digest.
+        # Pass 2: read + double-verify every member's genome digest, and — for a
+        # pool that advertises itself as LOADABLE — the stamp/config half of the
+        # artifact too. Restoring the metadata without checking the files it
+        # promises would hand back a hall whose members only fail at
+        # ``_load_candidate_policy``, long after resume time (Codex review on
+        # PR #314); the module's eager two-pass posture is that corruption
+        # surfaces HERE.
         for member in members:
-            cls._verify_member_bytes(side_dir, member)
+            genome = cls._verify_member_bytes(side_dir, member)
+            if resolved_metadata is not None:
+                cls._verify_member_stamp(
+                    side_dir, member, resolved_metadata, side=side, genome=genome
+                )
 
         return cls(
             side=side,
             side_dir=side_dir,
             substrate_sha256=substrate_sha256,
             members=tuple(members),
+            artifact_metadata=resolved_metadata,
         )
 
     # -- mutation ----------------------------------------------------------- #
@@ -412,6 +1102,13 @@ class HallOfFame:
         pool (the sha is the member identity — never silently coalesce); a target
         member dir that already exists on disk (drift/collision guard, amendment
         A5). A negative ``generation`` is caught by the model.
+
+        With :attr:`artifact_metadata` set (Task 18.31) the member freezes as the
+        FOUR-file loadable artifact through :func:`write_loadable_artifact` —
+        the same weights bytes plus ``stamp.json`` / ``config.json``, so the
+        member loads through ``scripts/run_tournament.py``'s
+        ``_load_candidate_policy`` with no hand-stamping pass. Without it the
+        historic two-file member is written unchanged.
         """
 
         if not genome:
@@ -432,7 +1129,7 @@ class HallOfFame:
             )
         path = f"gen-{generation}/{digest}"
         member_dir = self._side_dir / path
-        if member_dir.exists():
+        if _entry_exists(member_dir):
             raise ValueError(
                 f"member dir {member_dir} already exists on disk but is not in the "
                 "index — refusing to overwrite (on-disk drift)"
@@ -450,11 +1147,42 @@ class HallOfFame:
             path=path,
         )
 
-        member_dir.mkdir(parents=True)
-        (member_dir / _WEIGHTS_FILENAME).write_text(weights_json)
-        (member_dir / f"{_WEIGHTS_FILENAME}.sha256").write_text(
-            f"{digest}  {_WEIGHTS_FILENAME}\n"
-        )
+        metadata = self._artifact_metadata
+        if metadata is None:
+            member_dir.mkdir(parents=True)
+            (member_dir / _WEIGHTS_FILENAME).write_text(weights_json)
+            (member_dir / f"{_WEIGHTS_FILENAME}.sha256").write_text(
+                f"{digest}  {_WEIGHTS_FILENAME}\n"
+            )
+        else:
+            written = write_loadable_artifact(
+                member_dir,
+                genome,
+                policy_id=metadata.policy_id_for(
+                    side=self._side,
+                    origin=origin,
+                    generation=generation,
+                    weights_sha256=digest,
+                ),
+                method=metadata.method,
+                encoder_version=metadata.encoder_version,
+                anchor_policy=metadata.anchor_policy,
+                hidden=metadata.hidden,
+                config=metadata.provenance(
+                    side=self._side,
+                    generation=generation,
+                    origin=origin,
+                    trained_against=trained_against,
+                    path=path,
+                ),
+            )
+            if written != digest:  # pragma: no cover - both digest the same bytes
+                raise ValueError(
+                    f"loadable artifact digest {written} != member digest {digest} "
+                    "for the same genome bytes (the two digests are the same "
+                    "function of the same float-hex payload — refusing to index "
+                    "a member the artifact does not name)"
+                )
 
         self._members = tuple(
             sorted(
@@ -530,6 +1258,22 @@ class HallOfFame:
                     "write (all-or-nothing)"
                 )
             batch[digest] = cell_key
+            # A loadable hall freezes every founder through
+            # ``write_loadable_artifact``, which refuses non-finite genes and
+            # genomes the declared family cannot rebuild. Those refusals used to
+            # fire from inside the ``add_member`` loop below, so a bad founder
+            # at position N aborted AFTER 1..N-1 were written and indexed —
+            # breaking this method's all-or-nothing guarantee and leaving the
+            # driver a partially-populated hall that its create-only retry path
+            # refuses (Codex review on PR #314). Preflighted here, with the
+            # digest checks, so the whole ingest is refused before any write.
+            if self._artifact_metadata is not None:
+                _refuse_unwritable_genome(
+                    archive[cell_key].genome,
+                    encoder_version=self._artifact_metadata.encoder_version,
+                    hidden=self._artifact_metadata.hidden,
+                    where=f"cell {cell_key}",
+                )
 
         founders: list[HallOfFameMember] = []
         for cell_key in sorted(archive):
@@ -590,6 +1334,176 @@ class HallOfFame:
             )
         return weights_from_hex_json(raw)
 
+    @staticmethod
+    def _verify_member_stamp(
+        side_dir: Path,
+        member: HallOfFameMember,
+        metadata: LoadableArtifactMetadata,
+        *,
+        side: Side,
+        genome: Sequence[float],
+    ) -> None:
+        """Verify the stamp/config half of a LOADABLE member's artifact (18.31).
+
+        A pool that records :class:`LoadableArtifactMetadata` promises every
+        member loads through ``_load_candidate_policy``. That promise rests on
+        four files, so a reload verifies four: ``stamp.json`` and
+        ``config.json`` must exist and parse, the stamp's ``weights_sha256``
+        must name THIS member (the 17.14 conflation guard), and its
+        ``encoder_version`` must match the pool's declared family — a member
+        stamped for another family is exactly the §12 Errata item-1 defect,
+        caught at resume time instead of at spend time.
+        """
+
+        member_dir = side_dir / member.path
+        try:
+            stamp = json.loads((member_dir / _STAMP_FILENAME).read_text())
+            config = json.loads((member_dir / _CONFIG_FILENAME).read_text())
+        except OSError as exc:
+            raise ValueError(
+                f"member {member.weights_sha256} is missing part of its loadable "
+                f"artifact under {member_dir} ({exc}); this pool records "
+                "artifact metadata, so every member is a four-file freeze"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"member {member.weights_sha256} has a malformed loadable "
+                f"artifact under {member_dir}: {exc}"
+            ) from exc
+        # The WHOLE five-field stamp: a member missing ``method`` (or any other
+        # field) is rejected by ``_read_candidate_stamp`` downstream, so an
+        # eager load that checked only the sha would still defer the corruption
+        # to spend time (Codex review on PR #314).
+        missing = sorted(field for field in _STAMP_FIELDS if field not in stamp)
+        if missing:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} is missing stamp fields {missing}; "
+                f"a loadable freeze carries all five ({list(_STAMP_FIELDS)})"
+            )
+        # EXACTLY the five, not merely at least them: the consumer parses this
+        # file through ``TacticalPolicyStamp``, which is ``extra="forbid"``, so
+        # a stamp with a sixth key is one this verifier would call loadable and
+        # ``_load_candidate_policy`` would reject (Codex review on PR #314).
+        unexpected = sorted(set(stamp) - set(_STAMP_FIELDS))
+        if unexpected:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} carries unexpected stamp fields "
+                f"{unexpected}; the consuming reader forbids extras, so this "
+                "artifact would not load"
+            )
+        for field in _STAMP_FIELDS:
+            value = stamp[field]
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{member_dir / _STAMP_FILENAME} field {field!r} is "
+                    f"{value!r}; every stamp field is a string"
+                )
+            _validate_stamp_token(f"{field} in {member_dir / _STAMP_FILENAME}", value)
+        if stamp["weights_sha256"] != member.weights_sha256:
+            raise ValueError(
+                f"{member_dir / _STAMP_FILENAME} names weights_sha256 "
+                f"{stamp['weights_sha256']!r} but the index records "
+                f"{member.weights_sha256} (the 17.14 conflation guard)"
+            )
+        for source, name in ((stamp, _STAMP_FILENAME), (config, _CONFIG_FILENAME)):
+            recorded = source.get("encoder_version")
+            if recorded != metadata.encoder_version:
+                raise ValueError(
+                    f"{member_dir / name} records encoder_version {recorded!r} but "
+                    f"the pool declares {metadata.encoder_version!r}; a hall stays "
+                    "single-family per campaign"
+                )
+        # IDENTITY, not just syntax. The pool's metadata plus the member's own
+        # row reconstruct every remaining stamp field exactly, so checking only
+        # that they are MANIFEST-safe strings would accept a member re-stamped
+        # for another campaign, method, or anchor and let it carry that false
+        # provenance into every recording it seeds — the §12 Errata item-1
+        # defect wearing a syntactically valid name (Codex review on PR #314).
+        for field, expected in (
+            ("method", metadata.method),
+            ("anchor_policy", metadata.anchor_policy),
+            (
+                "policy_id",
+                metadata.policy_id_for(
+                    side=side,
+                    origin=member.origin,
+                    generation=member.generation,
+                    weights_sha256=member.weights_sha256,
+                ),
+            ),
+        ):
+            if stamp[field] != expected:
+                raise ValueError(
+                    f"{member_dir / _STAMP_FILENAME} records {field} "
+                    f"{stamp[field]!r} but this pool's member reconstructs to "
+                    f"{expected!r}; a member's stamp names the campaign that bred "
+                    "it, and false provenance is never loaded"
+                )
+        # The family-specific reconstruction field: a masked-MLP consumer reads
+        # ``hidden`` from config.json, so a missing or drifted width is exactly
+        # as unloadable as a wrong encoder tag.
+        recorded_hidden = config.get("hidden")
+        if recorded_hidden != metadata.hidden:
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} records hidden "
+                f"{recorded_hidden!r} but the pool declares {metadata.hidden!r}; "
+                "the consumer rebuilds the policy at that width"
+            )
+        # config.json's PROVENANCE half, reconstructed the same way stamp.json's
+        # is. ``genome_length`` follows from the weights this reload already
+        # verified byte-for-byte, and every remaining key is a pure function of
+        # the pool metadata plus the member's own index row — so accepting a
+        # mismatch would leave a member whose campaign, generation, lineage or
+        # trained-against opponent is whatever a tamper wrote, on an artifact
+        # this pool certifies as loadable (Codex review on PR #314).
+        expected_config: dict[str, object] = {
+            "genome_length": len(genome),
+            **metadata.provenance(
+                side=side,
+                generation=member.generation,
+                origin=member.origin,
+                trained_against=member.trained_against,
+                path=member.path,
+            ),
+        }
+        drifted = sorted(
+            key
+            for key, expected in expected_config.items()
+            if config.get(key) != expected
+        )
+        if drifted:
+            detail = ", ".join(
+                f"{key}={config.get(key)!r} (expected {expected_config[key]!r})"
+                for key in drifted
+            )
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} provenance disagrees with this "
+                f"pool's member row: {detail}; a frozen artifact's provenance is "
+                "reconstructible, so a mismatch is false history, not a variant"
+            )
+        # The COMPLETE key set, not merely the reconstructible subset. Checking
+        # only the keys this verifier rebuilds still certified a member whose
+        # config.json carried extra stale or fabricated provenance — audit
+        # history the hall cannot reconstruct, on an artifact it calls loadable
+        # (Codex review on PR #314). ``write_loadable_artifact`` writes exactly
+        # the provenance mapping plus its own ``encoder_version`` /
+        # ``genome_length`` / ``hidden`` (the last omitted for a width-free
+        # family), so the expected set is closed and a difference either way is
+        # a file this pool did not write.
+        expected_keys = set(expected_config) | {"encoder_version"}
+        if metadata.hidden is not None:
+            expected_keys.add("hidden")
+        unexpected_config = sorted(set(config) - expected_keys)
+        absent_config = sorted(expected_keys - set(config))
+        if unexpected_config or absent_config:
+            raise ValueError(
+                f"{member_dir / _CONFIG_FILENAME} carries unexpected keys "
+                f"{unexpected_config} and is missing {absent_config}; a loadable "
+                "freeze's config.json is exactly the reconstructible provenance "
+                "plus the writer-owned family keys, and this pool cannot vouch "
+                "for history it did not write"
+            )
+
     def _write_index(self) -> None:
         """Rewrite ``hall_of_fame.json`` as a pure function of the members.
 
@@ -598,13 +1512,21 @@ class HallOfFame:
         top-level keys AND every descriptor mapping's keys, so the bytes are
         deterministic and every row carries the same key set (absent optionals
         serialise ``null``).
+
+        ``artifact_metadata`` is persisted ONLY when the pool declares one
+        (Task 18.31): a weights-only pool's index bytes are unchanged, and a
+        loadable pool carries its own freeze identity so a later
+        :meth:`load` cannot silently drop it and freeze a two-file member into
+        a four-file pool (Codex review on PR #314).
         """
 
-        index = {
+        index: dict[str, Any] = {
             "members": [member.model_dump(mode="json") for member in self._members],
             "side": self._side,
             "substrate_sha256": self._substrate_sha256,
         }
+        if self._artifact_metadata is not None:
+            index["artifact_metadata"] = self._artifact_metadata.model_dump(mode="json")
         self._index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
 
 
@@ -817,15 +1739,18 @@ class OpponentStalenessLedger:
 
 
 __all__ = [
+    "DEFAULT_ANCHOR_POLICY",
     "DEFAULT_COEVO_ARTIFACT_ROOT",
     "DEFAULT_EXPLORATION_FLOOR",
     "MAP_ELITES_FOUNDER_ORIGIN",
     "TRAINED_AGAINST_FSM",
     "HallOfFame",
     "HallOfFameMember",
+    "LoadableArtifactMetadata",
     "OpponentStalenessCap",
     "OpponentStalenessExceededError",
     "OpponentStalenessLedger",
     "Side",
     "sample_opponents",
+    "write_loadable_artifact",
 ]
