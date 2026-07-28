@@ -1067,6 +1067,141 @@ def test_loadable_artifact_loads_through_candidate_policy_both_families(
     assert v3_stamp.encoder_version == "v3"
 
 
+@pytest.mark.parametrize(
+    ("encoder_version", "hidden", "side"),
+    [
+        (_UTILITY_ENCODER, None, "impostor"),
+        ("v3", _V3_HIDDEN, "impostor"),
+        ("crew-option-features-v1", None, "crew"),
+        ("crew-option-features-v2", None, "crew"),
+    ],
+)
+def test_read_loadable_artifact_round_trips_every_family(
+    tmp_path: Path, encoder_version: str, hidden: int | None, side: str
+) -> None:
+    """The reader recovers exactly what the writer froze (Task 18.32).
+
+    ``training/`` had a writer for the four-file artifact and no reader — the
+    only readers were ``scripts/run_tournament.py``'s private pair, and
+    ``training/`` must never import ``scripts/``. The 18.32 crew re-rank arm
+    installs a frozen opponent from such a directory, so the reader lives beside
+    its writer here and every check the CLI performs is performed by the format's
+    own owner: the sha sidecar, the 17.14 stamp/digest binding, the width
+    contract, and the proof that the genome rebuilds.
+    """
+
+    genome = _rebuildable_genome(encoder_version, hidden)
+    artifact_dir = tmp_path / "artifact"
+    digest = write_loadable_artifact(
+        artifact_dir,
+        genome,
+        policy_id="coevo-frozen-champion",
+        method="alternating-freeze-es",
+        encoder_version=encoder_version,
+        hidden=hidden,
+    )
+
+    artifact = hall_of_fame.read_loadable_artifact(artifact_dir)
+    assert artifact.genome == genome
+    assert artifact.weights_sha256 == digest
+    assert artifact.encoder_version == encoder_version
+    assert artifact.hidden == hidden
+    assert artifact.policy_id == "coevo-frozen-champion"
+    assert artifact.method == "alternating-freeze-es"
+    assert artifact.anchor_policy == hall_of_fame.DEFAULT_ANCHOR_POLICY
+    # The SIDE is derived from the family, so no caller re-derives which slot an
+    # artifact belongs in — the 18.19 conflation guard's precondition.
+    assert artifact.side == side
+
+
+def test_read_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
+    """Every way a committed artifact can fail to name its own bytes (18.32).
+
+    A frozen opponent is loaded BEFORE a 30-40 h crew leg spends anything, so
+    each of these is a refusal rather than a discovery made halfway through.
+    """
+
+    genome = _rebuildable_genome(_UTILITY_ENCODER)
+
+    def _freeze(name: str) -> Path:
+        artifact_dir = tmp_path / name
+        write_loadable_artifact(
+            artifact_dir,
+            genome,
+            policy_id="coevo-frozen-champion",
+            method="alternating-freeze-es",
+            encoder_version=_UTILITY_ENCODER,
+        )
+        return artifact_dir
+
+    with pytest.raises(ValueError, match="is not a directory"):
+        hall_of_fame.read_loadable_artifact(tmp_path / "nowhere")
+
+    missing_stamp = _freeze("no-stamp")
+    (missing_stamp / "stamp.json").unlink()
+    with pytest.raises(ValueError, match="cannot read"):
+        hall_of_fame.read_loadable_artifact(missing_stamp)
+
+    bad_json = _freeze("bad-json")
+    (bad_json / "stamp.json").write_text("{oops", encoding="utf-8")
+    with pytest.raises(ValueError, match="is not valid JSON"):
+        hall_of_fame.read_loadable_artifact(bad_json)
+
+    short_stamp = _freeze("short-stamp")
+    stamp = json.loads((short_stamp / "stamp.json").read_text(encoding="utf-8"))
+    del stamp["anchor_policy"]
+    (short_stamp / "stamp.json").write_text(json.dumps(stamp), encoding="utf-8")
+    with pytest.raises(ValueError, match="EXACTLY the five stamp fields"):
+        hall_of_fame.read_loadable_artifact(short_stamp)
+
+    blank_stamp = _freeze("blank-stamp")
+    stamp = json.loads((blank_stamp / "stamp.json").read_text(encoding="utf-8"))
+    stamp["policy_id"] = "   "
+    (blank_stamp / "stamp.json").write_text(json.dumps(stamp), encoding="utf-8")
+    with pytest.raises(ValueError, match="non-blank stamp token"):
+        hall_of_fame.read_loadable_artifact(blank_stamp)
+
+    # The genome no longer hashes to what the sidecar records.
+    drifted = _freeze("drifted")
+    weights = json.loads((drifted / "weights.json").read_text(encoding="utf-8"))
+    weights[0] = "0x1.0000000000000p+0"
+    (drifted / "weights.json").write_text(json.dumps(weights) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="weights load/verify failed"):
+        hall_of_fame.read_loadable_artifact(drifted)
+
+    # The stamp names OTHER bytes than the sidecar records (the 17.14 guard).
+    mis_stamped = _freeze("mis-stamped")
+    stamp = json.loads((mis_stamped / "stamp.json").read_text(encoding="utf-8"))
+    stamp["weights_sha256"] = "0" * 64
+    (mis_stamped / "stamp.json").write_text(json.dumps(stamp), encoding="utf-8")
+    with pytest.raises(ValueError, match="17.14 conflation guard"):
+        hall_of_fame.read_loadable_artifact(mis_stamped)
+
+    # A width-free family may not declare a masked-MLP width …
+    wide = _freeze("wide")
+    config = json.loads((wide / "config.json").read_text(encoding="utf-8"))
+    config["hidden"] = 8
+    (wide / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="takes no hidden width"):
+        hall_of_fame.read_loadable_artifact(wide)
+
+    # … and a masked-MLP family must.
+    narrow = tmp_path / "narrow"
+    write_loadable_artifact(
+        narrow,
+        _rebuildable_genome("v3", _V3_HIDDEN),
+        policy_id="coevo-frozen-v3",
+        method="alternating-freeze-es",
+        encoder_version="v3",
+        hidden=_V3_HIDDEN,
+    )
+    config = json.loads((narrow / "config.json").read_text(encoding="utf-8"))
+    del config["hidden"]
+    (narrow / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="must carry an integer 'hidden'"):
+        hall_of_fame.read_loadable_artifact(narrow)
+
+
 def test_write_loadable_artifact_fail_loud_matrix(tmp_path: Path) -> None:
     """Empty genome, bad stamp token, bad hidden, owned config key, clobber.
 

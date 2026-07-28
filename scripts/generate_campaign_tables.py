@@ -548,6 +548,24 @@ _PRE_RECORDER_IDENTITY_SCHEMAS: Final[frozenset[str]] = frozenset(
 )
 _RECORDER_IDENTITY_SCHEMA: Final[str] = "realpath-rerank-v2"
 
+#: The CREW-ARM schema (Task 18.32). Purely ADDITIVE over ``-v2``: the crew
+#: read-back proof (``crew_stamp`` + its verified/uniform/digest twins) and the
+#: frozen opponent's identity (``opponent_weights_sha256`` / ``opponent_stamp``).
+#: Every ``-v2`` field keeps its meaning, which is what lets both versions be
+#: validated by the recorder's own row model — the new fields are optional there,
+#: so a ``-v2`` row satisfies it unchanged (the ``_V1_ROW_MODEL`` pattern, one
+#: generation on).
+_CREW_ARM_SCHEMA: Final[str] = "realpath-rerank-v3"
+
+#: The FROZEN OPPONENT's identity, which a ``-v3`` leg shares across every row:
+#: the opponent is installed for EVERY candidate in the leg, so two rows of one
+#: ranking disagreeing on it means the file is not one leg. Absent (``None`` on
+#: both) is the scripted-FSM comparator cell and agrees with itself.
+_OPPONENT_IDENTITY_FIELDS: Final[tuple[str, ...]] = (
+    "opponent_weights_sha256",
+    "opponent_stamp",
+)
+
 #: Every ranking schema this generator knows how to READ. The membership test
 #: above answers "does this file carry the recorder identity?", and answering it
 #: with "anything that is not v1" made every unknown string — a future
@@ -558,8 +576,27 @@ _RECORDER_IDENTITY_SCHEMA: Final[str] = "realpath-rerank-v2"
 #: supported when it is named here, and refusing an unknown one costs a one-line
 #: addition on the day a v3 is actually specified.
 _SUPPORTED_RANKING_SCHEMAS: Final[frozenset[str]] = _PRE_RECORDER_IDENTITY_SCHEMAS | {
+    _RECORDER_IDENTITY_SCHEMA,
+    _CREW_ARM_SCHEMA,
+}
+
+#: The schemas that predate the crew arm. A ``crew_stamp`` on one of them is a
+#: row wearing a field its declared schema does not define — refused rather than
+#: read, for the same reason an unknown schema is: this generator would then be
+#: interpreting fields it never validated. (The recorder cannot emit such a row;
+#: a hand-assembled or half-migrated file can.)
+_PRE_CREW_ARM_SCHEMAS: Final[frozenset[str]] = _PRE_RECORDER_IDENTITY_SCHEMAS | {
     _RECORDER_IDENTITY_SCHEMA
 }
+
+#: Every field the crew arm added. Present only on ``-v3``.
+_CREW_ARM_FIELDS: Final[tuple[str, ...]] = (
+    "crew_stamp",
+    "crew_stamp_verified_games",
+    "crew_stamp_uniform",
+    "crew_stamp_equals_computed_digest",
+    *_OPPONENT_IDENTITY_FIELDS,
+)
 
 #: The leg-level fields ONE ranking file's rows must agree on — the protocol,
 #: the seed set (one ranking file is one tranche), the schema generation, and
@@ -595,14 +632,48 @@ def _recorder_identity_fields(rows: Sequence[Mapping[str, Any]]) -> tuple[str, .
     )
 
 
-def _stamp_proof(row: Mapping[str, Any]) -> str:
-    """The 17.14 stamp-proof cell, rendered from the row's own proof fields."""
+def _candidate_stamp(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The stamp naming the CANDIDATE this row ranks.
 
-    parts = [f"{row['stamp_verified_games']}/{len(row['seeds'])} games stamped"]
-    parts.append("uniform" if row["stamp_uniform"] else "**NOT uniform**")
+    A ``-v3`` crew row (Task 18.32) carries two identities: ``crew_stamp`` is
+    the candidate's, and ``stamp`` is the impostor side it was played against
+    (the frozen opponent, or the scripted-FSM default when none was installed).
+    Every other row carries one, in ``stamp``. Reading the candidate identity
+    from the wrong slot would key a crew arm on its OPPONENT — which is
+    leg-level and identical for every candidate in the leg, so the whole leg
+    would collapse into one arm.
+    """
+
+    crew_stamp = row.get("crew_stamp")
+    if isinstance(crew_stamp, dict):
+        return crew_stamp
+    stamp = row["stamp"]
+    assert isinstance(stamp, dict)  # read_validated_ranking proves the shape
+    return stamp
+
+
+def _candidate_stamp_prefix(row: Mapping[str, Any]) -> str:
+    """``"crew_"`` when this row's candidate identity is the crew stamp."""
+
+    return "crew_" if isinstance(row.get("crew_stamp"), dict) else ""
+
+
+def _stamp_proof(row: Mapping[str, Any]) -> str:
+    """The 17.14 stamp-proof cell, rendered from the row's own proof fields.
+
+    Rendered for the CANDIDATE's side: a crew row's proof lives in the
+    ``crew_stamp_*`` twins, and rendering the impostor block there would report
+    the FROZEN OPPONENT's read-back (or, in the comparator cell, zero games)
+    as though it were the ranked policy's provenance.
+    """
+
+    prefix = _candidate_stamp_prefix(row)
+    verified = row[f"{prefix}stamp_verified_games"]
+    parts = [f"{verified}/{len(row['seeds'])} games stamped"]
+    parts.append("uniform" if row[f"{prefix}stamp_uniform"] else "**NOT uniform**")
     parts.append(
         "sha == computed digest"
-        if row["stamp_equals_computed_digest"]
+        if row[f"{prefix}stamp_equals_computed_digest"]
         else "**sha != computed digest**"
     )
     return ", ".join(parts)
@@ -671,6 +742,34 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
             "regenerate the table with the matching generator, or teach this one "
             "the schema"
         )
+    # A row may not wear a field its declared schema does not define. The crew
+    # arm's fields are optional on the recorder's row model (that is what makes
+    # them additive), so a ``-v2`` row carrying a ``crew_stamp`` validates
+    # cleanly and would then be rendered as a crew arm by a file that claims to
+    # predate the crew arm entirely — the same "read under field meanings nobody
+    # checked" defect the unknown-schema refusal above exists to prevent.
+    if declared_schema in _PRE_CREW_ARM_SCHEMAS:
+        for row in rows:
+            worn = sorted(field for field in _CREW_ARM_FIELDS if field in row)
+            if worn:
+                raise SystemExit(
+                    f"{ranking_path}: rank {row['rank']} declares "
+                    f"{declared_schema} but carries the crew-arm fields {worn}, "
+                    f"which arrived with {_CREW_ARM_SCHEMA}; a row is read under "
+                    "the schema it declares, so this file is refused rather than "
+                    "rendered as a crew arm it does not claim to be"
+                )
+    else:
+        # The FROZEN OPPONENT is leg protocol on a crew arm: it is installed for
+        # every candidate in the leg, so rows disagreeing on it are not one leg.
+        for field in _OPPONENT_IDENTITY_FIELDS:
+            values = {json.dumps(row.get(field), sort_keys=True) for row in rows}
+            if len(values) != 1:
+                raise SystemExit(
+                    f"{ranking_path}: rows disagree on the frozen opponent's "
+                    f"{field!r} ({sorted(values)}); the opponent is installed for "
+                    "EVERY candidate in a leg, so one ranking file names one"
+                )
     # The recorder identity, once the schema generation says the rows carry it.
     # Keying on the row's OWN declared ``schema_version`` is what keeps this
     # honest for the frozen ``-v1`` corpus: absence is then a recorded fact
@@ -693,27 +792,48 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
     # is a conflation of exactly the 17.14 kind, so bind the two here rather
     # than trusting the pair downstream.
     for row in rows:
-        stamp = row["stamp"]
-        if not isinstance(stamp, dict) or set(stamp) != set(_STAMP_IDENTITY_FIELDS):
-            raise SystemExit(
-                f"{ranking_path}: rank {row['rank']} carries stamp {stamp!r}; a "
-                f"ranking row's stamp is EXACTLY the five fields "
-                f"{list(_STAMP_IDENTITY_FIELDS)}, which is what makes it an identity"
+        # EVERY stamp block the row carries — the impostor stamp, the crew twin
+        # and the frozen opponent's — because each is an identity and a
+        # malformed one is exactly as unreadable as a malformed ``stamp``.
+        for key in ("stamp", "crew_stamp", "opponent_stamp"):
+            stamp = row.get(key)
+            if stamp is None and key != "stamp":
+                continue
+            if not isinstance(stamp, dict) or set(stamp) != set(_STAMP_IDENTITY_FIELDS):
+                raise SystemExit(
+                    f"{ranking_path}: rank {row['rank']} carries {key} {stamp!r}; a "
+                    f"ranking row's stamp is EXACTLY the five fields "
+                    f"{list(_STAMP_IDENTITY_FIELDS)}, which is what makes it an "
+                    "identity"
+                )
+            nonstring = sorted(
+                name for name, value in stamp.items() if not isinstance(value, str)
             )
-        nonstring = sorted(
-            key for key, value in stamp.items() if not isinstance(value, str)
-        )
-        if nonstring:
-            raise SystemExit(
-                f"{ranking_path}: rank {row['rank']} stamp fields {nonstring} are "
-                "not strings; every TacticalPolicyStamp field is a string"
-            )
-        if stamp["weights_sha256"] != row["weights_sha256"]:
+            if nonstring:
+                raise SystemExit(
+                    f"{ranking_path}: rank {row['rank']} {key} fields {nonstring} "
+                    "are not strings; every TacticalPolicyStamp field is a string"
+                )
+        # The CANDIDATE's stamp names the CANDIDATE's bytes. On a crew row that
+        # is ``crew_stamp``; the ``stamp`` block there names the frozen opponent
+        # (or the scripted FSM), whose digest is deliberately NOT this row's.
+        candidate_stamp = _candidate_stamp(row)
+        if candidate_stamp["weights_sha256"] != row["weights_sha256"]:
             raise SystemExit(
                 f"{ranking_path}: rank {row['rank']} is recorded for "
-                f"{row['weights_sha256']} but stamped {stamp['weights_sha256']}; a "
-                "stamp names the bytes it was frozen from (the 17.14 conflation "
-                "guard)"
+                f"{row['weights_sha256']} but stamped "
+                f"{candidate_stamp['weights_sha256']}; a stamp names the bytes it "
+                "was frozen from (the 17.14 conflation guard)"
+            )
+        opponent_stamp = row.get("opponent_stamp")
+        if isinstance(opponent_stamp, dict) and opponent_stamp[
+            "weights_sha256"
+        ] != row.get("opponent_weights_sha256"):
+            raise SystemExit(
+                f"{ranking_path}: rank {row['rank']} names frozen opponent "
+                f"{row.get('opponent_weights_sha256')!r} but stamps "
+                f"{opponent_stamp['weights_sha256']!r}; the opponent's stamp names "
+                "the bytes it was frozen from too"
             )
     # The field TYPES, through the recorder's own row model. The structural
     # checks above are all about SHAPE — ranks, uniqueness, agreement — and none
@@ -1009,7 +1129,13 @@ def _collect_arms(
             # ``[field]``, not ``.get``: ``read_validated_ranking`` has already
             # proven the exact five-field shape, so an absent field can no
             # longer collapse to ``{None}`` and certify its own agreement.
-            values = {reads[key]["stamp"][field] for key in (first_key, second_key)}
+            # The CANDIDATE's stamp (Task 18.32): on a crew arm the ``stamp``
+            # block names the frozen opponent, which is leg-level and therefore
+            # identical across every candidate — comparing it would certify
+            # agreement about the opponent while the ranked policies differed.
+            values = {
+                _candidate_stamp(reads[key])[field] for key in (first_key, second_key)
+            }
             if len(values) != 1:
                 raise SystemExit(
                     f"{leg}: genome {sha} is stamped {field}={sorted(map(str, values))} "
@@ -1052,6 +1178,23 @@ def _collect_arms(
                     f"({sorted(values)}); a swing between two different recorders "
                     "or two different maps is a measured effect of that change, "
                     "not provider/seed noise"
+                )
+        # The FROZEN OPPONENT is protocol too (Task 18.32): a crew candidate
+        # retested against a different impostor side is a measured effect of the
+        # opponent change, not provider/seed noise. ``.get`` because a pre-``-v3``
+        # pair carries neither field — and the pair already agrees on
+        # ``schema_version``, so absence is never mixed with presence.
+        for field in _OPPONENT_IDENTITY_FIELDS:
+            values = {
+                json.dumps(reads[key].get(field), sort_keys=True)
+                for key in (first_key, second_key)
+            }
+            if len(values) != 1:
+                raise SystemExit(
+                    f"{leg}: genome {sha} was recorded against different {field} "
+                    f"across tranches {first_key} and {second_key} "
+                    f"({sorted(values)}); a swing between two different frozen "
+                    "opponents measures the opponent, not the candidate"
                 )
         arms.append(
             _Arm(

@@ -51,11 +51,16 @@ from orchestrator.game import (
     build_default_meeting_runner,
     prompt_versions_for_set,
 )
-from orchestrator.replay import read_tactical_policy_stamp
+from orchestrator.replay import (
+    fsm_default_tactical_policy_stamp,
+    read_policy_stamps,
+    read_tactical_policy_stamp,
+)
 import training.realpath as realpath
 from training.realpath import _AUDIT_SIDECAR_SUFFIX as _AUDIT_SUFFIX
 from training.bakeoff.es import ESResult
 from training.bakeoff.harness import load_candidate_weights
+from training.coevo.hall_of_fame import write_loadable_artifact
 from training.realpath import (
     LEG_LOG_FILENAME,
     MODE_CHAMPION_TRACE,
@@ -3436,6 +3441,7 @@ def test_resume_drift_ignores_manifests_for_unrelated_candidates(
         config=_config(),
         candidates=[_util_candidate(label="ours")],
         backend={"custom_meeting_runner": False},
+        opponent=None,
     )
 
     # NO OVER-REACH: a manifest that DOES own one of our labels is still compared,
@@ -3460,6 +3466,7 @@ def test_resume_drift_ignores_manifests_for_unrelated_candidates(
             config=_config(),
             candidates=[_util_candidate(label="ours")],
             backend={"custom_meeting_runner": False},
+            opponent=None,
         )
 
 
@@ -4057,4 +4064,538 @@ def test_every_effective_backend_knob_rides_the_resume_identity(knob: str) -> No
     value = "7" if knob.endswith(("SEED", "NUM_CTX")) else "some-other-endpoint:1234"
     assert _identity(AILIBI_LLM_PROVIDER="ollama", **{knob: value}) != _identity(
         AILIBI_LLM_PROVIDER="ollama"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 25. THE CREW ARM (Task 18.32) — crew candidates, the frozen-opponent seam,   #
+#     dual stamps, the v3 row, and the resume's opponent drift.                #
+# --------------------------------------------------------------------------- #
+
+_CREW_V1_DIR = Path("training/artifacts/crew/crew-utility-es")
+_CREW_V2_DIR = Path("training/artifacts/crew/crew-owned-tasks-es")
+_CREW_V1_ENCODER = "crew-option-features-v1"
+_CREW_V2_ENCODER = "crew-option-features-v2"
+
+
+def _crew_candidate(
+    label: str = "crew-owned-tasks-es", *, owned_tasks: bool = True
+) -> RealPathCandidate:
+    """A committed crew champion as a re-rank candidate.
+
+    The owned-task (v2) family is the default fixture because it fires meetings
+    on the cheap 4p1i roster over seeds 1-2 and therefore passes the validity
+    gate; the 22-weight v1 champion drives the same seeds to a kill-out with no
+    meeting, which is a real behavioural difference and not something a stamp
+    test should paper over.
+    """
+
+    directory = _CREW_V2_DIR if owned_tasks else _CREW_V1_DIR
+    return RealPathCandidate(
+        label=label,
+        genome=load_candidate_weights(directory),
+        encoder_version=_CREW_V2_ENCODER if owned_tasks else _CREW_V1_ENCODER,
+        policy_id=directory.name,
+        method="crew-option-scorer-es",
+    )
+
+
+def _freeze_opponent(
+    artifact_dir: Path, *, policy_id: str = "frozen-utility-es"
+) -> Path:
+    """Freeze the committed impostor utility champion as a loadable artifact.
+
+    The four-file shape the seam consumes, written by its own writer
+    (:func:`training.coevo.hall_of_fame.write_loadable_artifact`) rather than by
+    hand — a hand-built fixture would prove the reader accepts a shape nothing
+    produces.
+    """
+
+    write_loadable_artifact(
+        artifact_dir,
+        _util_weights(),
+        policy_id=policy_id,
+        method="utility-scorer-es",
+        encoder_version=_UTIL_ENCODER,
+    )
+    return artifact_dir
+
+
+def test_crew_candidates_validate_and_refuse_a_hidden_width() -> None:
+    """Both crew families are candidates; neither takes a masked-MLP width.
+
+    The crew scorer rebuilds through ``build_crew_scorer``, which has no head to
+    size, so a declared ``hidden`` is a width its builder does not have — the
+    same false provenance ``training/coevo/driver.py``'s ``_validate_side``
+    refuses one layer up.
+    """
+
+    game_map = load_canonical_map()
+    for owned_tasks in (False, True):
+        candidate = _crew_candidate(
+            label=f"crew-{owned_tasks}", owned_tasks=owned_tasks
+        )
+        # Constructing the factory IS the rebuild assertion: the internal
+        # post-check pins the rebuilt policy's encoder identity against the
+        # declared one, so a v2 genome rebuilt through the v1 menu fails here.
+        assert callable(_build_agent_factory(candidate, game_map=game_map))
+        with pytest.raises(ValidationError, match="crew family .* takes no hidden"):
+            RealPathCandidate(
+                label="wide",
+                genome=candidate.genome,
+                encoder_version=candidate.encoder_version,
+                hidden=8,
+                policy_id="p",
+                method="m",
+            )
+
+
+def test_a_crew_leg_records_dual_stamps_against_a_frozen_opponent(
+    tmp_path: Path,
+) -> None:
+    """The whole arm, end to end: two identities on one recording (18.32).
+
+    A crew candidate is interposed through the CREW slot while a frozen impostor
+    artifact holds the impostor slot, and each side's stamp is READ BACK from
+    the recorded bytes into its own DISTINCT row field. The two are pinned
+    against the bytes themselves — not against the launch config — so the row
+    cannot report provenance the recording does not carry.
+    """
+
+    opponent = _freeze_opponent(tmp_path / "opponent")
+    work_dir = tmp_path / "work"
+    ranking_path = tmp_path / "ranking.jsonl"
+    result = run_realpath_rerank(
+        [_crew_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=ranking_path,
+        config=_config(),
+        opponent_artifact=opponent,
+    )
+
+    row = result.top()
+    assert row.schema_version == SCHEMA_VERSION == "realpath-rerank-v3"
+    # The CANDIDATE is the crew side; the impostor side is the frozen opponent.
+    assert row.crew_stamp is not None
+    assert row.crew_stamp.encoder_version == _CREW_V2_ENCODER
+    assert row.crew_stamp.weights_sha256 == row.weights_sha256
+    assert row.crew_stamp_verified_games == 2
+    assert row.crew_stamp_uniform is True
+    assert row.crew_stamp_equals_computed_digest is True
+    assert row.stamp.policy_id == "frozen-utility-es"
+    assert row.stamp.weights_sha256 == _UTIL_DIGEST
+    assert row.stamp_verified_games == 2
+    assert row.opponent_weights_sha256 == _UTIL_DIGEST
+    assert row.opponent_stamp == row.stamp
+    # ... and the two identities are DISTINCT, which is what makes neither
+    # re-readable as the other's.
+    assert row.crew_stamp.policy_id != row.stamp.policy_id
+    assert row.crew_stamp.weights_sha256 != row.stamp.weights_sha256
+
+    # READ BACK FROM BYTES, in the two distinct replay slots.
+    candidate_dir = work_dir / "000-crew-owned-tasks-es"
+    for seed in (1, 2):
+        stamps = read_policy_stamps(candidate_dir / f"replay-seed-{seed}.jsonl")
+        assert stamps.crew is not None and stamps.crew == row.crew_stamp
+        assert stamps.tactical is not None and stamps.tactical == row.stamp
+
+    # The opponent identity rides the manifest and the leg-start event too.
+    manifest = json.loads(
+        sorted(work_dir.glob("leg-1-2-*.json"))[0].read_text(encoding="utf-8")
+    )
+    assert manifest["opponent"] == {
+        "stamp": row.stamp.model_dump(mode="json"),
+        "weights_sha256": _UTIL_DIGEST,
+    }
+    events = [
+        json.loads(line)
+        for line in (work_dir / LEG_LOG_FILENAME).read_text().splitlines()
+    ]
+    start = next(event for event in events if event["event"] == "leg-start")
+    assert start["side"] == "crew"
+    assert start["opponent"] == manifest["opponent"]
+    assert start["opponent_artifact"] == str(opponent)
+
+    # The mirror of the comparator cell's proof: these bytes DO name an impostor
+    # side, so certifying them as scripted-FSM games fails loud rather than
+    # quietly attributing an opponent's play to the untouched anchor.
+    with pytest.raises(RealPathStampError, match="froze no opponent"):
+        realpath._verify_stamps(
+            candidate_dir,
+            seeds=(1, 2),
+            expected_digest=None,
+            expected_crew_digest=row.weights_sha256,
+            label="crew-owned-tasks-es",
+        )
+
+
+def test_the_comparator_cell_proves_the_impostor_side_is_scripted(
+    tmp_path: Path,
+) -> None:
+    """``opponent_artifact=None`` records NO impostor stamp — and proves it.
+
+    An absent impostor stamp MEANS the scripted FSM (replay.py), so the row
+    carries the canonical FSM-default stamp with ZERO verified games. The
+    recorder does not assume that absence: ``_verify_stamps`` refuses any
+    impostor stamp on a leg that froze no opponent.
+    """
+
+    work_dir = tmp_path / "work"
+    result = run_realpath_rerank(
+        [_crew_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking.jsonl",
+        config=_config(),
+    )
+    row = result.top()
+    assert row.stamp == fsm_default_tactical_policy_stamp()
+    assert row.stamp_verified_games == 0
+    assert row.opponent_weights_sha256 is None
+    assert row.opponent_stamp is None
+    assert row.crew_stamp is not None
+    assert row.crew_stamp_verified_games == 2
+    assert row.validity_passed is True
+
+    candidate_dir = work_dir / "000-crew-owned-tasks-es"
+    for seed in (1, 2):
+        stamps = read_policy_stamps(candidate_dir / f"replay-seed-{seed}.jsonl")
+        assert stamps.tactical is None
+        assert stamps.crew is not None
+
+    # The proof, not the assumption. These bytes cannot be certified as anything
+    # but the comparator cell: claiming a frozen opponent over them fails loud,
+    # because nothing in the recording names one.
+    with pytest.raises(RealPathStampError, match="no tactical policy stamp"):
+        realpath._verify_stamps(
+            candidate_dir,
+            seeds=(1, 2),
+            expected_digest=_UTIL_DIGEST,
+            expected_crew_digest=row.weights_sha256,
+            label="crew-owned-tasks-es",
+        )
+    # ... and so is a CREW stamp on a leg that installs no crew policy.
+    with pytest.raises(RealPathStampError, match="but this leg installs no crew"):
+        realpath._verify_stamps(
+            candidate_dir,
+            seeds=(1, 2),
+            expected_digest=None,
+            expected_crew_digest=None,
+            label="crew-owned-tasks-es",
+        )
+    # A crew digest naming other bytes is the 17.14 conflation guard, crew-side.
+    with pytest.raises(RealPathStampError, match="read-back crew weights_sha256"):
+        realpath._verify_stamps(
+            candidate_dir,
+            seeds=(1, 2),
+            expected_digest=None,
+            expected_crew_digest="0" * 64,
+            label="crew-owned-tasks-es",
+        )
+
+
+def test_a_leg_is_homogeneous(tmp_path: Path) -> None:
+    """Crew and impostor candidates never share a leg (18.32).
+
+    One leg publishes ONE ranking under one protocol. A crew candidate's score
+    is read against a frozen impostor side and an impostor candidate's against a
+    scripted crew, so ranking them together would present two different
+    measurements as one total order.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    ranking_path = tmp_path / "ranking.jsonl"
+    with pytest.raises(ValueError, match="a leg is homogeneous"):
+        run_realpath_rerank(
+            [_crew_candidate(), _util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=ranking_path,
+            config=_config(),
+        )
+    assert list(work_dir.iterdir()) == []
+    assert not ranking_path.exists()
+
+
+def test_the_opponent_seam_refuses_before_any_spend(tmp_path: Path) -> None:
+    """Every frozen-opponent refusal fires BEFORE the first game (18.32).
+
+    The seam exists to freeze the side the candidate does NOT play, and it is
+    the last thing a 30-40 h crew leg should discover halfway through. Each case
+    leaves the work dir untouched and no ranking behind.
+    """
+
+    def _run(
+        candidates: Sequence[RealPathCandidate],
+        *,
+        opponent_artifact: Path | None,
+        work_dir: Path,
+    ) -> None:
+        run_realpath_rerank(
+            list(candidates),
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=work_dir.parent / f"{work_dir.name}-ranking.jsonl",
+            config=_config(),
+            opponent_artifact=opponent_artifact,
+        )
+
+    # 1. A CREW artifact in the impostor slot — the 18.19 conflation, most
+    #    expensive form. Frozen through the same writer, declaring its own crew
+    #    family, so the refusal is on the artifact and not on a broken fixture.
+    crew_artifact = tmp_path / "crew-opponent"
+    write_loadable_artifact(
+        crew_artifact,
+        load_candidate_weights(_CREW_V2_DIR),
+        policy_id="crew-owned-tasks-es",
+        method="crew-option-scorer-es",
+        encoder_version=_CREW_V2_ENCODER,
+    )
+    with pytest.raises(RealPathRerankError, match="names a CREW policy"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=crew_artifact,
+            work_dir=tmp_path / "w-crew-opponent",
+        )
+
+    # 2. An IMPOSTOR-family leg cannot take one at all: the candidate already
+    #    occupies the impostor slot.
+    good = _freeze_opponent(tmp_path / "opponent")
+    with pytest.raises(ValueError, match="IMPOSTOR-family leg"):
+        _run(
+            [_util_candidate()],
+            opponent_artifact=good,
+            work_dir=tmp_path / "w-impostor-leg",
+        )
+
+    # 3. A missing artifact dir.
+    with pytest.raises(RealPathRerankError, match="is not a directory"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=tmp_path / "nowhere",
+            work_dir=tmp_path / "w-missing",
+        )
+
+    # 4. A CORRUPT stamp.json (valid dir, unreadable identity).
+    corrupt = _freeze_opponent(tmp_path / "corrupt-stamp")
+    (corrupt / "stamp.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(RealPathRerankError, match="is not valid JSON"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=corrupt,
+            work_dir=tmp_path / "w-corrupt",
+        )
+
+    # 5. WEIGHTS DRIFT from the sidecar — the artifact no longer hashes to what
+    #    it claims, so nothing on disk names the bytes that would play.
+    drifted = _freeze_opponent(tmp_path / "drifted")
+    weights = json.loads((drifted / "weights.json").read_text(encoding="utf-8"))
+    assert isinstance(weights, list) and weights
+    weights[0] = "0x1.0000000000000p+0"
+    (drifted / "weights.json").write_text(json.dumps(weights) + "\n", encoding="utf-8")
+    with pytest.raises(RealPathRerankError, match="weights load/verify failed"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=drifted,
+            work_dir=tmp_path / "w-drifted",
+        )
+
+    # 6. A stamp naming OTHER bytes than the sidecar records (17.14).
+    mis_stamped = _freeze_opponent(tmp_path / "mis-stamped")
+    stamp = json.loads((mis_stamped / "stamp.json").read_text(encoding="utf-8"))
+    stamp["weights_sha256"] = "0" * 64
+    (mis_stamped / "stamp.json").write_text(json.dumps(stamp), encoding="utf-8")
+    with pytest.raises(RealPathRerankError, match="17.14 conflation guard"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=mis_stamped,
+            work_dir=tmp_path / "w-mis-stamped",
+        )
+
+    # 7. The candidate and the opponent must be DISTINCT identities: two stamps
+    #    on one recording that share a policy_id are mutually re-readable.
+    collider = _freeze_opponent(tmp_path / "collider", policy_id="crew-owned-tasks-es")
+    with pytest.raises(RealPathRerankError, match="cross-stamp guard"):
+        _run(
+            [_crew_candidate()],
+            opponent_artifact=collider,
+            work_dir=tmp_path / "w-collider",
+        )
+
+    # NOTHING was recorded by any of them.
+    for work_dir in sorted(tmp_path.glob("w-*")):
+        if work_dir.is_dir():
+            assert list(work_dir.iterdir()) == [], f"{work_dir} holds recordings"
+    assert not list(tmp_path.glob("w-*-ranking.jsonl"))
+
+
+def test_a_v3_crew_row_round_trips_and_refuses_a_contradiction(
+    tmp_path: Path,
+) -> None:
+    """The ``-v3`` row is JSONL-stable, and its two proof blocks must agree."""
+
+    opponent = _freeze_opponent(tmp_path / "opponent")
+    result = run_realpath_rerank(
+        [_crew_candidate()],
+        seeds=[1],
+        work_dir=tmp_path / "work",
+        ranking_path=tmp_path / "ranking.jsonl",
+        config=_config(),
+        opponent_artifact=opponent,
+    )
+    row = result.top()
+    assert RealPathRerankRow.model_validate_json(row.to_json_line()) == row
+    payload = json.loads(row.to_json_line())
+    assert payload["schema_version"] == "realpath-rerank-v3"
+    assert set(payload) >= {
+        "crew_stamp",
+        "crew_stamp_equals_computed_digest",
+        "crew_stamp_uniform",
+        "crew_stamp_verified_games",
+        "opponent_stamp",
+        "opponent_weights_sha256",
+    }
+
+    # An impostor-only row keeps the exact ``-v2`` shape apart from the version:
+    # every crew-arm field is present but empty, never populated by default.
+    impostor = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=tmp_path / "work-impostor",
+        ranking_path=tmp_path / "ranking-impostor.jsonl",
+        config=_config(),
+    ).top()
+    assert impostor.crew_stamp is None
+    assert impostor.crew_stamp_verified_games == 0
+    assert impostor.crew_stamp_uniform is False
+    assert impostor.crew_stamp_equals_computed_digest is False
+    assert impostor.opponent_weights_sha256 is None
+    assert impostor.opponent_stamp is None
+
+    # A crew proof without a crew stamp claims an identity nothing proved.
+    with pytest.raises(ValidationError, match="no crew_stamp carries no crew proof"):
+        RealPathRerankRow.model_validate(
+            {**payload, "crew_stamp": None, "crew_stamp_verified_games": 2}
+        )
+    # ... and a crew stamp with zero verified games is the mirror claim.
+    with pytest.raises(ValidationError, match="at least one decisive game"):
+        RealPathRerankRow.model_validate({**payload, "crew_stamp_verified_games": 0})
+    # The opponent's identity is whole or absent.
+    with pytest.raises(ValidationError, match="whole or absent"):
+        RealPathRerankRow.model_validate({**payload, "opponent_stamp": None})
+    # ... and its stamp names its own bytes.
+    with pytest.raises(ValidationError, match="17.14 conflation guard"):
+        RealPathRerankRow.model_validate(
+            {**payload, "opponent_weights_sha256": "0" * 64}
+        )
+
+
+def test_resume_refuses_a_changed_frozen_opponent(tmp_path: Path) -> None:
+    """A crew leg is evidence about the opponent it was played against (18.32).
+
+    Adopting bytes recorded against one impostor side into a row claiming
+    another — or claiming the scripted-FSM comparator cell — relabels the arm,
+    and none of it rides ``config`` or the recording backend. The matched resume
+    still skips every verified element, so the refusal is about the opponent and
+    not about resume being broken for crew legs.
+    """
+
+    first = _freeze_opponent(tmp_path / "opponent-a")
+    second = _freeze_opponent(tmp_path / "opponent-b", policy_id="frozen-policy-es")
+    work_dir = tmp_path / "work"
+    run_realpath_rerank(
+        [_crew_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+        opponent_artifact=first,
+    )
+
+    def _resume(opponent_artifact: Path | None, ranking: str) -> RealPathRerankResult:
+        return run_realpath_rerank(
+            [_crew_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / ranking,
+            config=_config(),
+            resume=True,
+            opponent_artifact=opponent_artifact,
+        )
+
+    # Dropping the opponent for the comparator cell.
+    with pytest.raises(RealPathRerankError, match="different frozen opponent"):
+        _resume(None, "ranking-2.jsonl")
+    # Swapping it for another artifact — same genome BYTES, different identity,
+    # which is exactly the case a digest-only comparison would miss.
+    with pytest.raises(RealPathRerankError, match="different frozen opponent"):
+        _resume(second, "ranking-3.jsonl")
+    # The MATCHED resume adopts the recorded bytes, so the refusals above are
+    # about the opponent rather than about crew legs being unresumable.
+    resumed = _resume(first, "ranking-4.jsonl")
+    assert [entry.resumed for entry in resumed.top().seed_telemetry] == [True, True]
+    assert resumed.top().crew_stamp_verified_games == 2
+
+
+def test_resume_re_records_a_crew_element_whose_stamps_do_not_match(
+    tmp_path: Path,
+) -> None:
+    """The conjunctive skip predicate reads BOTH sides (18.32).
+
+    A crew leg's recordings must carry this candidate's crew stamp AND the
+    impostor side this leg installs. A replay recorded against the scripted FSM
+    is not a replay recorded against a frozen opponent, however complete it is —
+    so an element whose impostor slot disagrees re-records rather than being
+    adopted.
+    """
+
+    opponent = _freeze_opponent(tmp_path / "opponent")
+    work_dir = tmp_path / "work"
+    result = run_realpath_rerank(
+        [_crew_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking.jsonl",
+        config=_config(),
+        opponent_artifact=opponent,
+    )
+    replay = work_dir / "000-crew-owned-tasks-es" / "replay-seed-1.jsonl"
+    crew_stamp = result.top().crew_stamp
+    assert crew_stamp is not None
+
+    # Recorded WITH an opponent, examined as a comparator-cell element.
+    reason = realpath._resume_skip_reason(
+        replay,
+        expected_stamp=None,
+        expected_crew_stamp=crew_stamp,
+        config=_config(),
+    )
+    assert reason is not None and "carry an IMPOSTOR stamp" in reason
+    # ... and as an impostor leg's element, whose bytes must carry NO crew stamp.
+    reason = realpath._resume_skip_reason(
+        replay,
+        expected_stamp=result.top().stamp,
+        expected_crew_stamp=None,
+        config=_config(),
+    )
+    assert reason is not None and "carry a CREW stamp" in reason
+    # A crew stamp naming another policy is drift on the crew side.
+    reason = realpath._resume_skip_reason(
+        replay,
+        expected_stamp=result.top().stamp,
+        expected_crew_stamp=crew_stamp.model_copy(update={"policy_id": "someone-else"}),
+        config=_config(),
+    )
+    assert reason is not None and "read-back crew stamp policy_id" in reason
+    # The leg's OWN pairing verifies.
+    assert (
+        realpath._resume_skip_reason(
+            replay,
+            expected_stamp=result.top().stamp,
+            expected_crew_stamp=crew_stamp,
+            config=_config(),
+        )
+        is None
     )

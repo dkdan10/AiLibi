@@ -81,6 +81,31 @@ they change what is on disk:
   leg is about to change, so the claim is what makes read-then-publish atomic
   rather than merely exclusive at the final write.
 
+The CREW ARM (Task 18.32, the routed 18.25 amendment). Task 18.25's crew
+campaign needs per-generation real-path re-ranks of CREW candidates, and every
+seam above was impostor-only: the family whitelist, the factory dispatch, the
+single-stamp read-back. Three things change, all additive:
+
+* **crew candidates.** ``crew-option-features-v1`` / ``-v2`` rebuild through
+  :func:`training.crew.scorer.build_crew_scorer` and are interposed through the
+  CREW slot of :func:`training.coevo.factory.build_coevo_factory`. A leg is
+  HOMOGENEOUS — all crew or all impostor — because one leg publishes one ranking
+  under one protocol, and the 18.19 conflation guard stays bidirectional: the
+  side a candidate plays is its encoder namespace, never a separate declaration;
+* **the frozen-opponent seam** (``opponent_artifact``). Measuring a crew
+  candidate against the scripted FSM measures it against a fixed, weak impostor;
+  the campaign needs it measured against a frozen learned one. The parameter
+  names a FOUR-file loadable artifact
+  (:func:`training.coevo.hall_of_fame.write_loadable_artifact`'s shape), loaded +
+  sha-verified + stamp-read BEFORE any spend and installed in the impostor slot
+  for EVERY candidate in the leg. ``None`` is the scripted-FSM comparator cell;
+* **dual stamps.** A crew recording carries its
+  :class:`~orchestrator.replay.CrewTacticalPolicyStamp` and, when an opponent is
+  installed, the impostor stamp too — both READ BACK from the recorded bytes
+  through :func:`~orchestrator.replay.read_policy_stamps`, each verified against
+  its own computed digest, and each in its own row field so one side's
+  provenance can never be re-read as the other's.
+
 Public surface (stable — downstream tasks import these):
 :class:`RealPathCandidate`, :class:`RealPathRerankConfig`,
 :class:`RealPathSeedTelemetry`, :class:`RealPathRerankRow`,
@@ -173,12 +198,36 @@ from orchestrator.game import (
     build_default_meeting_runner,
     prompt_versions_for_set,
 )
-from orchestrator.replay import TacticalPolicyStamp, read_tactical_policy_stamp
+from orchestrator.replay import (
+    CrewTacticalPolicyStamp,
+    TacticalPolicyStamp,
+    fsm_default_tactical_policy_stamp,
+    read_policy_stamps,
+)
 from training.bakeoff.es import ESResult
 from training.bakeoff.harness import BakeoffPolicy, build_candidate_factory
 from training.bakeoff.policy_es import build_masked_mlp_policy
 from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
 from training.bakeoff.utility_es import build_utility_scorer_policy
+
+# The 18.19 dual-role seam + its crew-namespace convention (Task 18.32): a crew
+# candidate is interposed through ``build_coevo_factory``'s CREW slot, with the
+# frozen opponent (or ``None`` = the scripted FSM) in the impostor slot. The
+# conflation guard lives THERE, at build time, and this module never restates the
+# ``crew-`` prefix literal.
+from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX, build_coevo_factory
+
+# The reader half of the four-file loadable artifact (Task 18.32). It lives beside
+# its writer in ``training.coevo.hall_of_fame`` because ``training/`` must never
+# import ``scripts/``, where the only prior readers (``_load_candidate_policy`` /
+# ``_load_crew_artifact_policy``) live.
+from training.coevo.hall_of_fame import LoadableArtifact, read_loadable_artifact
+from training.crew.options import OwnedTaskOptionBasis
+from training.crew.scorer import ENCODER_VERSION as _CREW_ENCODER_VERSION
+from training.crew.scorer import (
+    OWNED_TASK_ENCODER_VERSION as _CREW_OWNED_TASK_ENCODER_VERSION,
+)
+from training.crew.scorer import CrewTrackPolicy, build_crew_scorer
 
 # ``scripts/`` is a bare-module namespace (no ``__init__.py``): the committed core
 # CLI (``scripts/measure_baseline.py``) is importable only with ``scripts/`` on
@@ -195,7 +244,7 @@ import measure_baseline  # noqa: E402
 # Constants.                                                                   #
 # --------------------------------------------------------------------------- #
 
-SCHEMA_VERSION: Final[str] = "realpath-rerank-v2"
+SCHEMA_VERSION: Final[str] = "realpath-rerank-v3"
 
 # The re-rank imposes its OWN per-meeting wall-clock deadline because headless
 # meetings run deadline-free (orchestrator/game.py:397-399).
@@ -231,10 +280,30 @@ MODE_CHAMPION_TRACE: Final[str] = "champion-trace"
 # silently building the wrong encoder for an unknown version.
 _MASKED_MLP_ENCODER_VERSION: Final[str] = "v2"
 _MASKED_MLP_ENCODER_VERSION_V3: Final[str] = "v3"
-_SUPPORTED_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
+
+#: The IMPOSTOR-side families: the width-free utility scorer plus the two
+#: masked-MLP encoders. A candidate in one of these occupies the impostor slot,
+#: and a leg of them takes no frozen opponent (the opponent seam exists to freeze
+#: the impostor side while the CREW moves — Task 18.32).
+_IMPOSTOR_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
     _UTILITY_ENCODER_VERSION,
     _MASKED_MLP_ENCODER_VERSION,
     _MASKED_MLP_ENCODER_VERSION_V3,
+)
+
+#: The CREW-side families (Task 18.32) — the two ``build_crew_scorer`` menus the
+#: consuming entry point can rebuild: the 22-weight v1 menu (no basis) and the
+#: 27-weight owned-task v2 menu (:class:`~training.crew.options.OwnedTaskOptionBasis`).
+#: Imported from ``training.crew.scorer`` rather than re-literaled, so the
+#: recorder's whitelist cannot drift from the builder's own tags.
+_CREW_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
+    _CREW_ENCODER_VERSION,
+    _CREW_OWNED_TASK_ENCODER_VERSION,
+)
+
+_SUPPORTED_ENCODER_VERSIONS: Final[tuple[str, ...]] = (
+    *_IMPOSTOR_ENCODER_VERSIONS,
+    *_CREW_ENCODER_VERSIONS,
 )
 
 # The non-decisive outcome run_tournament_eval folds with
@@ -368,9 +437,11 @@ RECORDING_ENV_CALL_ROOTS: Final[tuple[str, ...]] = (
     "eval.balance_eval",
 )
 
-#: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
-#: compares before adopting a recording as this candidate's. The digest alone is
-#: not identity: genome lengths collide across encoder families.
+#: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` — or, since
+#: Task 18.32, its :class:`~orchestrator.replay.CrewTacticalPolicyStamp` twin,
+#: which carries the same five — that a resume compares before adopting a
+#: recording as this candidate's. The digest alone is not identity: genome
+#: lengths collide across encoder families.
 _STAMP_COMPARISON_FIELDS: Final[tuple[str, ...]] = (
     "weights_sha256",
     "encoder_version",
@@ -494,11 +565,22 @@ class RealPathCandidate(BaseModel):
 
     ``label`` is the unique candidate id and the source of the work-subdir slug.
     ``method`` is REQUIRED (no bland default): provenance must be caller-named.
-    The utility family (``encoder_version == 'impostor-option-features-v1'``) takes
-    no ``hidden`` width; every other family requires ``hidden >= 1`` (never
-    defaulted). The five stamp-bound strings are pre-validated against the
+    The SCORER families take no ``hidden`` width — the impostor utility scorer
+    (``impostor-option-features-v1``) and, since Task 18.32, both crew families
+    (``crew-option-features-v1`` / ``crew-option-features-v2``, which rebuild
+    through :func:`~training.crew.scorer.build_crew_scorer`) — while every
+    masked-MLP family requires ``hidden >= 1`` (never defaulted). The five
+    stamp-bound strings are pre-validated against the
     :class:`~orchestrator.replay.TacticalPolicyStamp` field rules (non-blank, no
-    ``|`` / newline / CR; replay.py:211-254) so a bad candidate fails HERE.
+    ``|`` / newline / CR; replay.py:211-254) so a bad candidate fails HERE — the
+    crew twin :class:`~orchestrator.replay.CrewTacticalPolicyStamp` shares those
+    rules byte-for-byte, so one validation covers both namespaces.
+
+    The SIDE a candidate plays is its family: a crew-namespace candidate is
+    interposed into the CREW slot of :func:`~training.coevo.factory.build_coevo_factory`
+    and an impostor-namespace one into the impostor slot. Nothing here lets a
+    caller declare the side separately, which is what makes the 18.19 conflation
+    guard unreachable-by-construction from this recorder.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -524,7 +606,19 @@ class RealPathCandidate(BaseModel):
                 "_build_agent_factory's dispatch and this whitelist — never a "
                 "silent fallback to the wrong builder"
             )
-        if self.encoder_version == _UTILITY_ENCODER_VERSION:
+        if self.encoder_version in _CREW_ENCODER_VERSIONS:
+            if self.hidden is not None:
+                # Mirrors ``training/coevo/driver.py``'s ``_validate_side``: the
+                # crew scorer rebuilds through ``build_crew_scorer``, which takes
+                # NO head width, so a declared one is a masked-MLP width its
+                # builder does not have.
+                raise ValueError(
+                    f"candidate {self.label!r}: the crew family "
+                    f"({self.encoder_version!r}) takes no hidden width; got "
+                    f"hidden={self.hidden!r}. It rebuilds through "
+                    "build_crew_scorer, which has no head to size"
+                )
+        elif self.encoder_version == _UTILITY_ENCODER_VERSION:
             if self.hidden is not None:
                 raise ValueError(
                     f"candidate {self.label!r}: the utility family "
@@ -673,6 +767,33 @@ class RealPathRerankRow(BaseModel):
     metrics are flattened scalars (no ``scripts/`` type in the row schema); a
     ``float | None`` core field stays ``None`` when its denominator is empty and
     is never coerced to ``0.0``.
+
+    ``realpath-rerank-v3`` (Task 18.32) adds the CREW arm's fields, all additive
+    and optional, so an impostor-only row keeps its exact ``-v2`` shape apart
+    from the version string. The two sides of a recording keep DISTINCT homes,
+    because that is what stops one identity being re-read as the other's (the
+    18.19 conflation guard, read-side):
+
+    * ``stamp`` / ``stamp_verified_games`` / ``stamp_uniform`` /
+      ``stamp_equals_computed_digest`` remain the IMPOSTOR-side read-back proof.
+      On an impostor leg that is the candidate, unchanged. On a CREW leg it is
+      the frozen opponent when one is installed; with no opponent the impostor
+      side IS the scripted FSM, so the row carries
+      :func:`~orchestrator.replay.fsm_default_tactical_policy_stamp` with
+      ``stamp_verified_games == 0`` — an absent stamp MEANS the FSM default
+      (replay.py), and the recorder proves the absence rather than assuming it;
+    * ``crew_stamp`` / ``crew_stamp_verified_games`` / ``crew_stamp_uniform`` /
+      ``crew_stamp_equals_computed_digest`` are the CREW-side twins, populated
+      only on a crew leg (``None`` / ``0`` / ``False`` on an impostor leg, where
+      the recorder PROVES no crew stamp was written);
+    * ``opponent_weights_sha256`` / ``opponent_stamp`` are the DECLARED identity
+      of the frozen opponent artifact — the sha-verified sidecar digest and the
+      artifact's own ``stamp.json``. They are not a duplicate of ``stamp``: that
+      one is read back from the recorded bytes, these are what the leg loaded,
+      and the recorder requires them to agree.
+
+    ``weights_sha256`` is always THE CANDIDATE's computed genome digest, on
+    either side — it is the arm key every downstream table joins on.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -718,6 +839,58 @@ class RealPathRerankRow(BaseModel):
     referee_passed: bool
     selection_score: float
     rank: int
+    #: The CREW arm (Task 18.32, ``-v3``), additive and optional throughout.
+    crew_stamp: CrewTacticalPolicyStamp | None = None
+    crew_stamp_verified_games: int = 0
+    crew_stamp_uniform: bool = False
+    crew_stamp_equals_computed_digest: bool = False
+    #: The FROZEN OPPONENT installed in the impostor slot for every candidate in
+    #: this leg (``None`` = the scripted-FSM comparator cell).
+    opponent_weights_sha256: str | None = None
+    opponent_stamp: TacticalPolicyStamp | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> RealPathRerankRow:
+        # A row states which side it ranks, and the two sides' proof blocks must
+        # not contradict each other: a crew stamp with zero verified games would
+        # claim an identity nothing on disk proved, and an opponent digest that
+        # disagrees with its own stamp is the 17.14 conflation defect in the
+        # committed artifact rather than in the recording.
+        if self.crew_stamp is None:
+            if self.crew_stamp_verified_games or self.crew_stamp_uniform:
+                raise ValueError(
+                    "a row with no crew_stamp carries no crew proof; got "
+                    f"crew_stamp_verified_games={self.crew_stamp_verified_games!r}, "
+                    f"crew_stamp_uniform={self.crew_stamp_uniform!r}"
+                )
+            if self.crew_stamp_equals_computed_digest:
+                raise ValueError(
+                    "a row with no crew_stamp cannot claim its crew digest was "
+                    "verified against the computed genome digest"
+                )
+        elif self.crew_stamp_verified_games < 1:
+            raise ValueError(
+                "a crew_stamp is READ BACK from bytes, so a row carrying one "
+                "names at least one decisive game that proved it; got "
+                f"crew_stamp_verified_games={self.crew_stamp_verified_games!r}"
+            )
+        if (self.opponent_stamp is None) != (self.opponent_weights_sha256 is None):
+            raise ValueError(
+                "the frozen opponent's identity is whole or absent; got "
+                f"opponent_weights_sha256={self.opponent_weights_sha256!r}, "
+                f"opponent_stamp={self.opponent_stamp!r}"
+            )
+        if (
+            self.opponent_stamp is not None
+            and self.opponent_stamp.weights_sha256 != self.opponent_weights_sha256
+        ):
+            raise ValueError(
+                "the frozen opponent's stamp names "
+                f"{self.opponent_stamp.weights_sha256!r} but the row records "
+                f"{self.opponent_weights_sha256!r}; a stamp names the bytes it "
+                "was frozen from (the 17.14 conflation guard)"
+            )
+        return self
 
     def to_json_line(self) -> str:
         """Serialize to a single, key-sorted JSONL line (the committed row form)."""
@@ -1186,12 +1359,14 @@ def _open_leg_manifest(
     ranking_path: Path,
     backend: Mapping[str, object],
     candidate_dirs: Sequence[Path],
+    opponent: _FrozenOpponent | None,
 ) -> tuple[str, Path]:
     """Allocate this leg's invocation id by exclusively creating its manifest.
 
     The invocation stamp §12 Errata item 10 records the absence of: which
-    candidates, which seeds, which knobs, and WHEN — written before any
-    recording, and the file's exclusive creation is what makes the id unique.
+    candidates, which seeds, which knobs, WHICH FROZEN OPPONENT (Task 18.32),
+    and WHEN — written before any recording, and the file's exclusive creation
+    is what makes the id unique.
     """
 
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -1215,6 +1390,10 @@ def _open_leg_manifest(
             "config": config.model_dump(mode="json"),
             "invocation": f"{ordinal:03d}",
             "mode": mode,
+            # ``None`` = the scripted-FSM comparator cell (and every pre-18.32
+            # leg, whose manifests omit the key entirely — ``.get`` reads the
+            # same ``None``, which is exactly what those legs recorded).
+            "opponent": None if opponent is None else opponent.identity(),
             "ranking_path": str(ranking_path),
             "resume": resume,
             "schema_version": LEG_MANIFEST_SCHEMA_VERSION,
@@ -1258,6 +1437,74 @@ class _CandidatePayload:
     validity: ValidityGateReport
     watchability: WatchabilityReport
     core: measure_baseline.BaselineMeasurementReport
+    #: The CREW-side read-back proof (Task 18.32); ``None`` on an impostor leg.
+    crew_stamp: CrewTacticalPolicyStamp | None = None
+    crew_verified: int = 0
+
+
+@dataclass(frozen=True)
+class _StampProof:
+    """One recording set's DUAL read-back proof (Task 18.32).
+
+    Two named slots of two DISTINCT types, mirroring
+    :class:`~orchestrator.replay.PolicyStamps`, so the impostor and crew
+    identities can never be positionally conflated on the way into a row.
+    ``tactical`` is never ``None``: an absent impostor stamp MEANS the scripted
+    FSM default (replay.py), and a crew leg without a frozen opponent records
+    exactly that, with ``tactical_verified == 0`` to say no bytes named it.
+    """
+
+    tactical: TacticalPolicyStamp
+    tactical_verified: int
+    crew: CrewTacticalPolicyStamp | None
+    crew_verified: int
+
+
+@dataclass(frozen=True)
+class _FrozenOpponent:
+    """The frozen IMPOSTOR artifact installed for a whole crew leg (Task 18.32).
+
+    Loaded and sha-verified ONCE, before any spend, then installed into the
+    impostor slot of every candidate's factory in the leg — the leg is the unit
+    that shares an opponent, so a per-candidate opponent is not representable.
+    ``stamp`` is composed here (not in
+    :func:`~training.coevo.hall_of_fame.read_loadable_artifact`, which imports no
+    ``orchestrator`` graph) and is what the recording carries in its impostor
+    slot, so the read-back proof compares against exactly these bytes.
+    """
+
+    artifact_dir: Path
+    artifact: LoadableArtifact
+    stamp: TacticalPolicyStamp
+
+    @property
+    def weights_sha256(self) -> str:
+        return self.artifact.weights_sha256
+
+    def identity(self) -> dict[str, object]:
+        """The serialisable opponent identity a manifest / log / row carries.
+
+        Deliberately WITHOUT the artifact path: a leg resumed after the artifact
+        directory moved is the same experiment, and a path is not an identity —
+        the sha-verified digest and the stamp are. The path rides the leg log,
+        where it is provenance rather than a comparison key.
+        """
+
+        return {
+            "stamp": self.stamp.model_dump(mode="json"),
+            "weights_sha256": self.weights_sha256,
+        }
+
+
+def _is_crew_family(encoder_version: str) -> bool:
+    """Is this a CREW-side family? Keyed on the 18.19 namespace prefix.
+
+    The single runtime discriminator between the two structurally near-identical
+    policy Protocols, owned by :data:`training.coevo.factory.CREW_ENCODER_NAMESPACE_PREFIX`
+    and never re-literaled here.
+    """
+
+    return encoder_version.startswith(CREW_ENCODER_NAMESPACE_PREFIX)
 
 
 def _genome_digest(genome: Sequence[float]) -> str:
@@ -1273,7 +1520,12 @@ def _genome_digest(genome: Sequence[float]) -> str:
 
 
 def _candidate_stamp(candidate: RealPathCandidate) -> TacticalPolicyStamp:
-    """Build the launch stamp, computing ``weights_sha256`` over the genome bytes."""
+    """Build the IMPOSTOR launch stamp, computing ``weights_sha256`` over bytes.
+
+    Only ever called for an impostor-family candidate: a crew candidate's launch
+    identity is the DISTINCT :func:`_candidate_crew_stamp` record class, which is
+    the whole point of the 18.7 crew stamp existing.
+    """
 
     return TacticalPolicyStamp(
         policy_id=candidate.policy_id,
@@ -1284,40 +1536,221 @@ def _candidate_stamp(candidate: RealPathCandidate) -> TacticalPolicyStamp:
     )
 
 
+def _candidate_crew_stamp(candidate: RealPathCandidate) -> CrewTacticalPolicyStamp:
+    """Build the CREW launch stamp for a crew-family candidate (Task 18.32).
+
+    The crew twin of :func:`_candidate_stamp`, in the DISTINCT record class the
+    recorder writes into ``GameEndReplayEntry.crew_tactical_policy``, so a crew
+    recording can never wear an impostor stamp (the 18.7 conflation guard).
+    """
+
+    return CrewTacticalPolicyStamp(
+        policy_id=candidate.policy_id,
+        method=candidate.method,
+        encoder_version=candidate.encoder_version,
+        weights_sha256=_genome_digest(candidate.genome),
+        anchor_policy=candidate.anchor_policy,
+    )
+
+
+def _build_impostor_policy(
+    genome: Sequence[float],
+    *,
+    encoder_version: str,
+    hidden: int | None,
+    game_map: Map,
+    what: str,
+) -> BakeoffPolicy:
+    """Rebuild one IMPOSTOR-side policy through the committed builder its tag names.
+
+    Shared by the candidate path and the frozen-opponent seam (Task 18.32) so a
+    re-ranked impostor genome and a frozen opponent genome rebuild through the
+    SAME dispatch — the one ``scripts/run_tournament.py``'s
+    ``_load_candidate_policy`` performs. ``what`` names the offending input in
+    every refusal.
+    """
+
+    if encoder_version == _UTILITY_ENCODER_VERSION:
+        return build_utility_scorer_policy(tuple(genome), game_map=game_map)
+    if hidden is None:  # unreachable: every caller validates the width first
+        raise RealPathStampError(
+            f"{what}: family {encoder_version!r} requires a hidden width"
+        )
+    # The encoder_version seam (Task 18.22) selects the v2 or v3 family — the
+    # whitelist already vetted it, and every caller pins the rebuilt identity
+    # against the declared one.
+    return build_masked_mlp_policy(
+        tuple(genome),
+        game_map=game_map,
+        hidden=hidden,
+        encoder_version=encoder_version,
+    )
+
+
+def _build_crew_policy(
+    genome: Sequence[float], *, encoder_version: str, game_map: Map, what: str
+) -> CrewTrackPolicy:
+    """Rebuild one CREW-side policy through ``build_crew_scorer`` (Task 18.32).
+
+    Mirrors ``scripts/run_tournament.py``'s ``_load_crew_artifact_policy``
+    dispatch field-for-field: ``crew-option-features-v1`` is the 22-weight menu
+    with no basis, ``crew-option-features-v2`` the 27-weight owned-task menu
+    (:class:`~training.crew.options.OwnedTaskOptionBasis`). Any other crew tag
+    names no rebuildable family and fails loud — never a silent fallback to the
+    v1 menu, which would score a 27-weight genome through the wrong option set.
+    """
+
+    if encoder_version == _CREW_ENCODER_VERSION:
+        return build_crew_scorer(tuple(genome), game_map=game_map)
+    if encoder_version == _CREW_OWNED_TASK_ENCODER_VERSION:
+        return build_crew_scorer(
+            tuple(genome), game_map=game_map, basis=OwnedTaskOptionBasis()
+        )
+    raise RealPathStampError(
+        f"{what}: crew encoder_version {encoder_version!r} names no rebuildable "
+        f"crew family — only {_CREW_ENCODER_VERSION!r} (build_crew_scorer, the "
+        f"22-weight v1 menu) and {_CREW_OWNED_TASK_ENCODER_VERSION!r} "
+        "(build_crew_scorer with an OwnedTaskOptionBasis, the 27-weight "
+        "owned-task menu) rebuild here"
+    )
+
+
 def _build_agent_factory(
-    candidate: RealPathCandidate, *, game_map: Map
+    candidate: RealPathCandidate,
+    *,
+    game_map: Map,
+    opponent: _FrozenOpponent | None = None,
 ) -> AgentFactory:
     """Rebuild the candidate's agent factory, dispatching on ``encoder_version``.
 
     Built ONCE per candidate before the seed loop, so a bad genome fails
     immediately (and is never retried).
+
+    An IMPOSTOR-family candidate takes the pre-18.32 path byte-for-byte:
+    :func:`~training.bakeoff.harness.build_candidate_factory` interposes its
+    decisions and the crew side stays the scripted FSM. A CREW-family candidate
+    (Task 18.32) is interposed through the CREW slot of
+    :func:`~training.coevo.factory.build_coevo_factory`, with ``opponent``'s
+    rebuilt policy — or ``None``, the scripted-FSM comparator cell — in the
+    impostor slot. The 18.19 conflation guard inside that factory is what makes
+    a side swap impossible at build time; the dispatch here is keyed on the same
+    namespace, so the guard is never actually reached from this module.
     """
 
-    policy: BakeoffPolicy
-    if candidate.encoder_version == _UTILITY_ENCODER_VERSION:
-        policy = build_utility_scorer_policy(candidate.genome, game_map=game_map)
-    else:
-        hidden = candidate.hidden
-        if hidden is None:  # unreachable: the model validator requires it
-            raise RealPathStampError(
-                f"candidate {candidate.label!r}: family "
-                f"{candidate.encoder_version!r} requires a hidden width"
-            )
-        # The encoder_version seam (Task 18.22) selects the v2 or v3 family —
-        # the whitelist above already vetted it, and the post-check below pins
-        # the rebuilt identity against the declared one.
-        policy = build_masked_mlp_policy(
+    if _is_crew_family(candidate.encoder_version):
+        crew_policy = _build_crew_policy(
             candidate.genome,
-            game_map=game_map,
-            hidden=hidden,
             encoder_version=candidate.encoder_version,
+            game_map=game_map,
+            what=f"candidate {candidate.label!r}",
         )
+        if crew_policy.encoder_version != candidate.encoder_version:
+            raise RealPathStampError(
+                f"candidate {candidate.label!r}: rebuilt crew policy "
+                f"encoder_version {crew_policy.encoder_version!r} != declared "
+                f"{candidate.encoder_version!r}"
+            )
+        impostor_policy: BakeoffPolicy | None = None
+        if opponent is not None:
+            impostor_policy = _build_impostor_policy(
+                opponent.artifact.genome,
+                encoder_version=opponent.artifact.encoder_version,
+                hidden=opponent.artifact.hidden,
+                game_map=game_map,
+                what=f"the frozen opponent {opponent.artifact_dir}",
+            )
+        return build_coevo_factory(
+            impostor_policy=impostor_policy,
+            crew_policy=crew_policy,
+            game_map=game_map,
+        )
+    if opponent is not None:  # unreachable: the entry point refuses this pairing
+        raise RealPathStampError(
+            f"candidate {candidate.label!r} is an impostor family "
+            f"({candidate.encoder_version!r}) and cannot take a frozen impostor "
+            "opponent; the opponent seam freezes the side the candidate does NOT "
+            "play"
+        )
+    policy = _build_impostor_policy(
+        candidate.genome,
+        encoder_version=candidate.encoder_version,
+        hidden=candidate.hidden,
+        game_map=game_map,
+        what=f"candidate {candidate.label!r}",
+    )
     if policy.encoder_version != candidate.encoder_version:
         raise RealPathStampError(
             f"candidate {candidate.label!r}: rebuilt policy encoder_version "
             f"{policy.encoder_version!r} != declared {candidate.encoder_version!r}"
         )
     return build_candidate_factory(policy, game_map=game_map)
+
+
+def _load_frozen_opponent(artifact_dir: Path, *, game_map: Map) -> _FrozenOpponent:
+    """Load + verify the frozen impostor opponent, BEFORE any spend (Task 18.32).
+
+    Reads the FOUR-file loadable artifact through
+    :func:`~training.coevo.hall_of_fame.read_loadable_artifact` — the reader half
+    of the writer that produced it, so the sha sidecar, the 17.14 stamp/digest
+    binding, the family whitelist and the "it actually rebuilds" proof are all
+    performed by the format's own owner rather than restated here. Then two
+    refusals this seam adds:
+
+    * a CREW artifact is refused outright. The opponent occupies the IMPOSTOR
+      slot, so a crew artifact there is the 18.19 conflation in its most
+      expensive form — it would be caught by ``build_coevo_factory``, but only
+      after the leg had claimed its directories;
+    * the rebuilt policy's ``encoder_version`` must equal the stamp's, mirroring
+      ``_load_candidate_policy``'s own artifact-stamp mismatch check.
+
+    Every failure is a :class:`RealPathRerankError` naming the artifact, raised
+    before the tranche claim is taken.
+    """
+
+    try:
+        artifact = read_loadable_artifact(artifact_dir)
+    except (OSError, ValueError) as exc:
+        raise RealPathRerankError(
+            f"opponent_artifact {artifact_dir}: {exc}. The frozen opponent is "
+            "loaded and sha-verified BEFORE any game is spent, so an unreadable, "
+            "incomplete or drifted artifact stops the leg here"
+        ) from exc
+    if artifact.side != "impostor" or _is_crew_family(artifact.encoder_version):
+        raise RealPathRerankError(
+            f"opponent_artifact {artifact_dir} names a CREW policy "
+            f"(encoder_version={artifact.encoder_version!r}); the frozen opponent "
+            "occupies the IMPOSTOR slot of every game in this leg. A crew artifact "
+            "there is the 18.19 conflation guard's own case — pass the crew genome "
+            "as a CANDIDATE instead"
+        )
+    stamp = TacticalPolicyStamp(
+        policy_id=artifact.policy_id,
+        method=artifact.method,
+        encoder_version=artifact.encoder_version,
+        weights_sha256=artifact.weights_sha256,
+        anchor_policy=artifact.anchor_policy,
+    )
+    try:
+        policy = _build_impostor_policy(
+            artifact.genome,
+            encoder_version=artifact.encoder_version,
+            hidden=artifact.hidden,
+            game_map=game_map,
+            what=f"the frozen opponent {artifact_dir}",
+        )
+    except (ValueError, TypeError) as exc:
+        raise RealPathRerankError(
+            f"opponent_artifact {artifact_dir} does not rebuild as "
+            f"{artifact.encoder_version!r} on this map ({exc}); refusing before "
+            "any game is spent"
+        ) from exc
+    if policy.encoder_version != artifact.encoder_version:
+        raise RealPathRerankError(
+            f"opponent_artifact {artifact_dir}: rebuilt policy encoder_version "
+            f"{policy.encoder_version!r} != stamp encoder_version "
+            f"{artifact.encoder_version!r} (artifact-stamp mismatch)"
+        )
+    return _FrozenOpponent(artifact_dir=artifact_dir, artifact=artifact, stamp=stamp)
 
 
 def _timeout_runner_factory(
@@ -1458,10 +1891,38 @@ def _completeness_fence_failure(
     return None
 
 
+def _stamp_drift(
+    recorded: TacticalPolicyStamp | CrewTacticalPolicyStamp,
+    expected: TacticalPolicyStamp | CrewTacticalPolicyStamp,
+    *,
+    what: str,
+    owner: str,
+) -> str | None:
+    """The first field on which two same-side stamps disagree, or ``None``.
+
+    The WHOLE stamp, not just the digest. Identical genome bytes under a
+    different ``encoder_version`` / ``policy_id`` / ``method`` /
+    ``anchor_policy`` are a DIFFERENT policy: skipping such a replay would
+    attribute the previous identity's games to this candidate, and
+    ``_verify_stamps`` would not catch it (it checks the digest and cross-seed
+    uniformity, both of which hold when every seed carries the same old
+    identity). Genome lengths collide across encoder families — §12 Errata
+    item 1 is that exact mis-attribution (Codex review on PR #314).
+    """
+
+    for field in _STAMP_COMPARISON_FIELDS:
+        found = getattr(recorded, field)
+        wanted = getattr(expected, field)
+        if found != wanted:
+            return f"read-back {what}stamp {field} {found!r} != {owner} {wanted!r}"
+    return None
+
+
 def _resume_skip_reason(
     replay_path: Path,
     *,
-    expected_stamp: TacticalPolicyStamp,
+    expected_stamp: TacticalPolicyStamp | None,
+    expected_crew_stamp: CrewTacticalPolicyStamp | None,
     config: RealPathRerankConfig,
 ) -> str | None:
     """``None`` iff this (candidate, seed) element may be SKIPPED (Task 18.31).
@@ -1470,10 +1931,11 @@ def _resume_skip_reason(
     returns the reason and re-records:
 
     1. **the replay exists** on disk at all;
-    2. **its stamp reads back from the bytes** (never echoed from the launch
-       config — the 17.14 discipline) and equals the candidate's WHOLE computed
-       stamp — all five fields, not the genome digest alone — so a foreign or
-       superseded policy IDENTITY can never be adopted as this candidate's;
+    2. **BOTH sides' stamps read back from the bytes** (never echoed from the
+       launch config — the 17.14 discipline) and match what this leg installs —
+       the whole five-field stamp on each populated side, and PROVEN ABSENT on
+       an unpopulated one, so a foreign or superseded policy IDENTITY can never
+       be adopted as this candidate's;
     3. **the byte-completeness fence is green** for that recording.
 
     Check 2 is also what makes a ``TICK_BUDGET_REACHED`` replay unskippable:
@@ -1481,12 +1943,20 @@ def _resume_skip_reason(
     stamp bytes to read and the element re-records — deliberately, since a
     capped replay is an accepted OUTCOME of a recording, not proof that this
     invocation's recording happened.
+
+    Both expectations are optional (Task 18.32) because a leg populates exactly
+    one candidate side: an impostor leg expects an impostor stamp and NO crew
+    stamp; a crew leg expects a crew stamp, plus the frozen opponent's impostor
+    stamp when one is installed and no impostor stamp at all when the impostor
+    side is the scripted FSM. An unexpected stamp on either side re-records
+    rather than being ignored — bytes carrying an identity this leg did not
+    install are not this leg's bytes.
     """
 
     if not _entry_exists(replay_path):
         return "no replay on disk"
     try:
-        stamp = read_tactical_policy_stamp(replay_path)
+        stamps = read_policy_stamps(replay_path)
     except Exception as exc:  # noqa: BLE001 - ANY unreadable replay re-records
         # An interrupted process can leave a half-written line, and the reader
         # raises on it (``ValueError: invalid replay JSON at line N``) or on the
@@ -1494,26 +1964,56 @@ def _resume_skip_reason(
         # states a resume exists to meet: an unreadable replay is a verification
         # MISS, never a leg-killing exception (Codex review on PR #314).
         return f"replay bytes are unreadable ({type(exc).__name__}: {exc})"
-    if stamp is None:
-        return (
-            "no tactical policy stamp on the recorded bytes (no game_over row — "
-            "a TICK_BUDGET_REACHED, truncated, or parse-folded recording)"
-        )
-    # The WHOLE stamp, not just the digest. Identical genome bytes under a
-    # different ``encoder_version`` / ``policy_id`` / ``method`` /
-    # ``anchor_policy`` are a DIFFERENT policy: skipping such a replay would
-    # attribute the previous identity's games to this candidate, and
-    # ``_verify_stamps`` would not catch it (it checks the digest and
-    # cross-seed uniformity, both of which hold when every seed carries the
-    # same old identity). Genome lengths collide across encoder families —
-    # §12 Errata item 1 is that exact mis-attribution (Codex review on PR #314).
-    for field in _STAMP_COMPARISON_FIELDS:
-        recorded = getattr(stamp, field)
-        expected = getattr(expected_stamp, field)
-        if recorded != expected:
+    # The side this leg's CANDIDATE stamps is the one whose absence means "no
+    # game_over row": a crew leg against the scripted FSM writes no impostor
+    # stamp by design, so reading that absence as a truncated recording would
+    # make every crew element unskippable.
+    if expected_crew_stamp is not None:
+        if stamps.crew is None:
             return (
-                f"read-back stamp {field} {recorded!r} != this candidate's {expected!r}"
+                "no crew tactical policy stamp on the recorded bytes (no "
+                "game_over row — a TICK_BUDGET_REACHED, truncated, or "
+                "parse-folded recording)"
             )
+        drift = _stamp_drift(
+            stamps.crew,
+            expected_crew_stamp,
+            what="crew ",
+            owner="this candidate's",
+        )
+        if drift is not None:
+            return drift
+    elif stamps.crew is not None:
+        return (
+            f"the recorded bytes carry a CREW stamp ({stamps.crew.policy_id!r}) "
+            "but this leg installs no crew policy; those bytes were produced by "
+            "another experiment"
+        )
+    if expected_stamp is not None:
+        if stamps.tactical is None:
+            return (
+                "no tactical policy stamp on the recorded bytes (no game_over row — "
+                "a TICK_BUDGET_REACHED, truncated, or parse-folded recording)"
+            )
+        drift = _stamp_drift(
+            stamps.tactical,
+            expected_stamp,
+            what="",
+            owner=(
+                "this candidate's"
+                if expected_crew_stamp is None
+                else "this leg's frozen opponent's"
+            ),
+        )
+        if drift is not None:
+            return drift
+    elif stamps.tactical is not None:
+        return (
+            f"the recorded bytes carry an IMPOSTOR stamp "
+            f"({stamps.tactical.policy_id!r}) but this leg installs the scripted "
+            "FSM on that side; those bytes were recorded against a different "
+            "opponent"
+        )
     fence = _completeness_fence_failure(replay_path, config=config)
     if fence is not None:
         return f"byte-completeness fence failed ({fence})"
@@ -1575,6 +2075,7 @@ def _refuse_protocol_drift(
     config: RealPathRerankConfig,
     candidates: Sequence[RealPathCandidate],
     backend: Mapping[str, object],
+    opponent: _FrozenOpponent | None,
 ) -> None:
     """Refuse a resume whose recording protocol differs from the prior leg (18.31).
 
@@ -1591,12 +2092,24 @@ def _refuse_protocol_drift(
     by ``label -> (digest, encoder_version, hidden)``: a resume may legitimately
     narrow the slate (re-running the two candidates a 503 interrupted), so a
     prior manifest covering MORE candidates is fine — but a label whose genome
-    or family moved is a different candidate wearing an old name.
+    or family moved is a different candidate wearing an old name. That
+    comparison already carries the candidate FAMILY, so a label that moved
+    between the crew and impostor namespaces is refused by the same clause.
+
+    The FROZEN OPPONENT is protocol too (Task 18.32) and rides its own manifest
+    key. A crew leg's games were played against a specific impostor artifact —
+    or against the scripted FSM, the comparator cell — and adopting bytes from
+    one arm into a row claiming the other is exactly the mislabelling this
+    function exists to prevent, with none of it visible in ``config`` or
+    ``backend``. A manifest predating the key records ``None``, which equals the
+    no-opponent case: every pre-18.32 leg genuinely had no opponent, so the
+    back-compatible reading is also the true one.
     """
 
     prior = sorted(work_dir.glob(f"{LEG_MANIFEST_FILENAME_STEM}-{tranche}-*.json"))
     if not prior:
         return
+    wanted_opponent = None if opponent is None else opponent.identity()
     wanted_config = config.model_dump(mode="json")
     wanted_slate = {
         candidate.label: [
@@ -1678,6 +2191,19 @@ def _refuse_protocol_drift(
                 "The existing replays came from that provider/runner; adopting "
                 "them here would commit one row whose seeds were recorded against "
                 "two different backends"
+            )
+        # The frozen OPPONENT (Task 18.32). A crew leg is measured against the
+        # side it was played against, so swapping the opponent — or dropping it
+        # for the scripted-FSM comparator — makes the existing replays evidence
+        # for a different arm entirely.
+        recorded_opponent = manifest.get("opponent")
+        if recorded_opponent != wanted_opponent:
+            raise RealPathRerankError(
+                f"resume refuses: {path} recorded this tranche against a different "
+                f"frozen opponent ({recorded_opponent!r} vs {wanted_opponent!r}). "
+                "The existing replays were played against that impostor side; "
+                "adopting them here would rank a crew candidate against an "
+                "opponent it never faced"
             )
         recorded_slate = {
             entry["label"]: [
@@ -2918,7 +3444,8 @@ def _record_or_resume_seed(
     candidate_dir: Path,
     game_map: Map,
     agent_factory: AgentFactory,
-    stamp: TacticalPolicyStamp,
+    stamp: TacticalPolicyStamp | None,
+    crew_stamp: CrewTacticalPolicyStamp | None,
     digest: str,
     config: RealPathRerankConfig,
     base_meeting_runner_factory: Callable[[], MeetingRunner] | None,
@@ -2937,7 +3464,12 @@ def _record_or_resume_seed(
     force_first_attempt = False
     if resume:
         start = time.monotonic()
-        reason = _resume_skip_reason(replay_path, expected_stamp=stamp, config=config)
+        reason = _resume_skip_reason(
+            replay_path,
+            expected_stamp=stamp,
+            expected_crew_stamp=crew_stamp,
+            config=config,
+        )
         if reason is None:
             resumed = RealPathSeedTelemetry(
                 seed=seed,
@@ -2972,6 +3504,7 @@ def _record_or_resume_seed(
         game_map=game_map,
         agent_factory=agent_factory,
         stamp=stamp,
+        crew_stamp=crew_stamp,
         config=config,
         base_meeting_runner_factory=base_meeting_runner_factory,
         force_first_attempt=force_first_attempt,
@@ -2994,7 +3527,8 @@ def _record_seed(
     candidate_dir: Path,
     game_map: Map,
     agent_factory: AgentFactory,
-    stamp: TacticalPolicyStamp,
+    stamp: TacticalPolicyStamp | None,
+    crew_stamp: CrewTacticalPolicyStamp | None,
     config: RealPathRerankConfig,
     base_meeting_runner_factory: Callable[[], MeetingRunner] | None,
     force_first_attempt: bool = False,
@@ -3017,6 +3551,13 @@ def _record_seed(
     ``force_first_attempt`` (Task 18.31) truncates a pre-existing replay on the
     FIRST attempt too: a resume that refused to skip an element is by
     definition re-recording over bytes it declined to certify.
+
+    Exactly one of ``stamp`` / ``crew_stamp`` names THIS LEG'S CANDIDATE (Task
+    18.32); the other names the frozen opponent or is ``None`` for a scripted
+    side. The degraded-recording probe therefore reads back the CANDIDATE's own
+    side: on a crew leg against the scripted FSM the impostor slot is
+    legitimately unstamped, and probing it would report every completed game as
+    a parse-fold abort.
     """
 
     timed_out = 0
@@ -3044,6 +3585,7 @@ def _record_seed(
                 max_ticks=config.max_ticks,
                 force=force_first_attempt or attempt > 1,
                 tactical_policy_stamp=stamp,
+                crew_policy_stamp=crew_stamp,
                 meeting_runner_factory=runner_factory,
             )
         except RealPathMeetingTimeoutError as exc:
@@ -3061,7 +3603,13 @@ def _record_seed(
             last_exc = exc
             continue
         tick_budget = report.games[0].reason == _TICK_BUDGET_REASON
-        if not tick_budget and read_tactical_policy_stamp(replay_path) is None:
+        recorded = None if tick_budget else read_policy_stamps(replay_path)
+        candidate_side_stamp = (
+            None
+            if recorded is None
+            else (recorded.crew if crew_stamp is not None else recorded.tactical)
+        )
+        if not tick_budget and candidate_side_stamp is None:
             degraded += 1
             error_types.append("DegradedRecording")
             last_exc = RealPathRerankError(
@@ -3089,18 +3637,32 @@ def _verify_stamps(
     candidate_dir: Path,
     *,
     seeds: Sequence[int],
-    expected_digest: str,
+    expected_digest: str | None,
+    expected_crew_digest: str | None,
     label: str,
-) -> tuple[TacticalPolicyStamp, int]:
-    """Read every decisive seed's stamp back from bytes (the 17.14 invariants).
+) -> _StampProof:
+    """Read every decisive seed's stamps back from bytes (the 17.14 invariants).
 
     ``seeds`` are the DECISIVE seeds only — a tick-budget game writes no
     ``game_over`` row, so it carries no stamp bytes by design and is excluded by
-    the caller. Fails loud (RealPathStampError) when no decisive seed exists
-    (nothing on disk can prove which policy produced the bytes), on a missing
-    stamp, on a read-back ``weights_sha256`` that disagrees with the computed
-    genome digest, or on a non-uniform stamp across seeds. Returns the uniform
-    stamp and the verified game count.
+    the caller. Fails loud (:class:`RealPathStampError`) when no decisive seed
+    exists (nothing on disk can prove which policy produced the bytes), on a
+    missing stamp, on a read-back ``weights_sha256`` that disagrees with the
+    expected digest for that side, or on a non-uniform stamp across seeds.
+
+    Task 18.32 makes the read-back DUAL, with the same discipline on each side
+    and an explicit expectation of ABSENCE where a side carries no policy:
+
+    * ``expected_digest`` is the impostor-side digest — the candidate's on an
+      impostor leg, the frozen opponent's on a crew leg with one installed, and
+      ``None`` when the impostor side is the scripted FSM. ``None`` requires
+      every decisive replay to carry NO impostor stamp, and the returned proof
+      is :func:`~orchestrator.replay.fsm_default_tactical_policy_stamp` with
+      zero verified games: an absent stamp MEANS the FSM default, and this
+      proves the absence instead of assuming it;
+    * ``expected_crew_digest`` is the crew-side digest — the candidate's on a
+      crew leg, ``None`` on an impostor leg, where every replay must carry NO
+      crew stamp (a crew stamp there is another experiment's bytes).
     """
 
     if not seeds:
@@ -3110,27 +3672,69 @@ def _verify_stamps(
             "requires at least one decisive game)"
         )
     stamps: list[TacticalPolicyStamp] = []
+    crew_stamps: list[CrewTacticalPolicyStamp] = []
     for seed in seeds:
         replay_path = candidate_dir / f"replay-seed-{seed}.jsonl"
-        stamp = read_tactical_policy_stamp(replay_path)
-        if stamp is None:
+        recorded = read_policy_stamps(replay_path)
+        if expected_digest is None:
+            if recorded.tactical is not None:
+                raise RealPathStampError(
+                    f"candidate {label!r} seed {seed}: replay carries an impostor "
+                    f"stamp ({recorded.tactical.policy_id!r}) but this leg froze "
+                    f"no opponent — the impostor side is the scripted FSM, which "
+                    f"stamps nothing ({replay_path})"
+                )
+        elif recorded.tactical is None:
             raise RealPathStampError(
                 f"candidate {label!r} seed {seed}: replay carries no tactical "
                 f"policy stamp on its game_over record ({replay_path})"
             )
-        if stamp.weights_sha256 != expected_digest:
+        elif recorded.tactical.weights_sha256 != expected_digest:
             raise RealPathStampError(
                 f"candidate {label!r} seed {seed}: read-back weights_sha256 "
-                f"{stamp.weights_sha256!r} != computed genome digest "
+                f"{recorded.tactical.weights_sha256!r} != computed genome digest "
                 f"{expected_digest!r} (17.14 conflation guard)"
             )
-        stamps.append(stamp)
-    first = stamps[0]
-    if any(stamp.model_dump() != first.model_dump() for stamp in stamps[1:]):
+        else:
+            stamps.append(recorded.tactical)
+        if expected_crew_digest is None:
+            if recorded.crew is not None:
+                raise RealPathStampError(
+                    f"candidate {label!r} seed {seed}: replay carries a CREW stamp "
+                    f"({recorded.crew.policy_id!r}) but this leg installs no crew "
+                    f"policy ({replay_path})"
+                )
+        elif recorded.crew is None:
+            raise RealPathStampError(
+                f"candidate {label!r} seed {seed}: replay carries no crew tactical "
+                f"policy stamp on its game_over record ({replay_path})"
+            )
+        elif recorded.crew.weights_sha256 != expected_crew_digest:
+            raise RealPathStampError(
+                f"candidate {label!r} seed {seed}: read-back crew weights_sha256 "
+                f"{recorded.crew.weights_sha256!r} != computed genome digest "
+                f"{expected_crew_digest!r} (17.14 conflation guard)"
+            )
+        else:
+            crew_stamps.append(recorded.crew)
+    if stamps and any(
+        stamp.model_dump() != stamps[0].model_dump() for stamp in stamps[1:]
+    ):
         raise RealPathStampError(
             f"candidate {label!r}: read-back stamps are not uniform across seeds"
         )
-    return first, len(stamps)
+    if crew_stamps and any(
+        stamp.model_dump() != crew_stamps[0].model_dump() for stamp in crew_stamps[1:]
+    ):
+        raise RealPathStampError(
+            f"candidate {label!r}: read-back crew stamps are not uniform across seeds"
+        )
+    return _StampProof(
+        tactical=stamps[0] if stamps else fsm_default_tactical_policy_stamp(),
+        tactical_verified=len(stamps),
+        crew=crew_stamps[0] if crew_stamps else None,
+        crew_verified=len(crew_stamps),
+    )
 
 
 def _selection_score(
@@ -3166,6 +3770,7 @@ def _build_row(
     seeds: tuple[int, ...],
     config: RealPathRerankConfig,
     backend: Mapping[str, object],
+    opponent: _FrozenOpponent | None,
     selection_score: float,
     rank: int,
 ) -> RealPathRerankRow:
@@ -3177,8 +3782,20 @@ def _build_row(
         stamp=payload.stamp,
         weights_sha256=payload.digest,
         stamp_verified_games=payload.verified,
+        # ``_verify_stamps`` raises on non-uniformity and on any digest
+        # disagreement, so reaching here IS the proof for whichever sides the
+        # leg populated. With no frozen opponent the impostor slot is the
+        # scripted FSM: its expected digest is the ``"none"`` sentinel the FSM
+        # stamp carries by construction, which the recorder proved by finding
+        # NO impostor stamp on every decisive replay.
         stamp_uniform=True,
         stamp_equals_computed_digest=True,
+        crew_stamp=payload.crew_stamp,
+        crew_stamp_verified_games=payload.crew_verified,
+        crew_stamp_uniform=payload.crew_stamp is not None,
+        crew_stamp_equals_computed_digest=payload.crew_stamp is not None,
+        opponent_weights_sha256=None if opponent is None else opponent.weights_sha256,
+        opponent_stamp=None if opponent is None else opponent.stamp,
         recording_backend_sha256=_backend_digest(backend),
         game_map_sha256=str(backend["game_map_sha256"]),
         seeds=seeds,
@@ -3272,6 +3889,7 @@ def run_realpath_rerank(
     mode: str = MODE_TOP_K,
     resume: bool = False,
     prescreen: Sequence[PreScreenQuote] | None = None,
+    opponent_artifact: Path | None = None,
 ) -> RealPathRerankResult:
     """Record and re-rank K candidates over a seed list on the real path.
 
@@ -3308,6 +3926,33 @@ def run_realpath_rerank(
     Every invocation stamps a manifest (``leg-<tranche>-<invocation>.json``) and
     appends its events to ``leg-log.jsonl`` under ``work_dir``, including a
     terminal ``leg-failed`` event when the leg raises.
+
+    THE CREW ARM (Task 18.32). A leg is HOMOGENEOUS: every candidate is a crew
+    family (``crew-option-features-v1`` / ``-v2``) or every candidate is an
+    impostor family, never a mixture — one leg publishes one ranking under one
+    protocol, and a table joining crew and impostor arms would be comparing two
+    different measurements. Crew candidates are interposed through
+    :func:`~training.coevo.factory.build_coevo_factory`'s crew slot and their
+    recordings carry a :class:`~orchestrator.replay.CrewTacticalPolicyStamp`.
+
+    ``opponent_artifact`` names a FOUR-file loadable IMPOSTOR artifact
+    (``weights.json`` + its ``.sha256`` sidecar + ``stamp.json`` +
+    ``config.json`` — the :func:`~training.coevo.hall_of_fame.write_loadable_artifact`
+    shape) to freeze into the impostor slot for EVERY candidate in the leg. It
+    is loaded, sha-verified and stamp-read BEFORE any spend, and refused when:
+    it is unreadable / incomplete / drifted from its sidecar; its stamp names
+    other bytes; it names a CREW policy (the opponent occupies the impostor
+    slot); or the leg's candidates are themselves an impostor family (the seam
+    freezes the side the candidate does NOT play, so it exists for crew legs
+    only). ``None`` leaves the impostor side the scripted FSM — the comparator
+    cell — and the recordings then carry NO impostor stamp, which the stamp
+    verification PROVES rather than assumes.
+
+    The opponent identity (its sha-verified digest + its stamp) rides the leg
+    manifest, the ``leg-start`` log event and every ranking row, and
+    :func:`_refuse_protocol_drift` compares it: a leg resumed against a
+    different opponent — or against the FSM after an opponent, or the reverse —
+    refuses rather than adopting bytes from another arm.
     """
 
     resolved_config = config if config is not None else RealPathRerankConfig()
@@ -3324,6 +3969,38 @@ def run_realpath_rerank(
     if mode not in (MODE_TOP_K, MODE_CHAMPION_TRACE):
         raise ValueError(
             f"mode must be one of {(MODE_TOP_K, MODE_CHAMPION_TRACE)!r}; got {mode!r}"
+        )
+    # The leg's SIDE, decided before anything touches the disk (Task 18.32). A
+    # mixed slate is refused rather than split: one leg is one ranking under one
+    # protocol, and the two sides are not comparable measurements — a crew
+    # candidate's selection score is read against a frozen impostor side, an
+    # impostor candidate's against a scripted crew.
+    crew_labels = [
+        candidate.label
+        for candidate in candidates
+        if _is_crew_family(candidate.encoder_version)
+    ]
+    impostor_labels = [
+        candidate.label
+        for candidate in candidates
+        if not _is_crew_family(candidate.encoder_version)
+    ]
+    if crew_labels and impostor_labels:
+        raise ValueError(
+            f"a leg is homogeneous: crew candidates {crew_labels} and impostor "
+            f"candidates {impostor_labels} were supplied together. One leg "
+            "publishes ONE ranking under one protocol, and a crew candidate "
+            "scored against a frozen impostor side is not comparable with an "
+            "impostor candidate scored against a scripted crew — record them as "
+            "two legs"
+        )
+    crew_leg = bool(crew_labels)
+    if opponent_artifact is not None and not crew_leg:
+        raise ValueError(
+            f"opponent_artifact {opponent_artifact} was supplied for an "
+            f"IMPOSTOR-family leg ({impostor_labels}); the opponent seam freezes "
+            "the side the candidate does NOT play, so it exists for crew legs "
+            "only. An impostor candidate already occupies the impostor slot"
         )
 
     resolved_map = game_map if game_map is not None else load_canonical_map()
@@ -3370,6 +4047,35 @@ def run_realpath_rerank(
     _refuse_library_owned_ranking_path(
         ranking_path, work_dir=work_dir, candidates=candidates
     )
+    # The FROZEN OPPONENT, loaded + sha-verified + stamp-read ONCE for the whole
+    # leg and BEFORE any spend (Task 18.32). Placed ahead of the per-candidate
+    # factory preflight so that preflight builds the real dual-role factory, and
+    # a bad artifact costs nothing already recorded.
+    opponent = (
+        None
+        if opponent_artifact is None
+        else _load_frozen_opponent(opponent_artifact, game_map=resolved_map)
+    )
+    if opponent is not None:
+        # The 18.19 CROSS-STAMP conflation guard, on the recorder side: two
+        # identities ride one recording, so neither may be re-readable as the
+        # other's. A crew candidate sharing the opponent's policy_id or digest
+        # would make the dual read-back ambiguous in the committed bytes.
+        for candidate in candidates:
+            digest = _genome_digest(candidate.genome)
+            if (
+                candidate.policy_id == opponent.stamp.policy_id
+                or digest == opponent.weights_sha256
+            ):
+                raise RealPathRerankError(
+                    f"candidate {candidate.label!r} (policy_id="
+                    f"{candidate.policy_id!r}, weights_sha256={digest!r}) collides "
+                    f"with the frozen opponent (policy_id="
+                    f"{opponent.stamp.policy_id!r}, weights_sha256="
+                    f"{opponent.weights_sha256!r}); the two identities on one "
+                    "recording must be DISTINCT so neither side's provenance can "
+                    "be re-read as the other's (the 18.19 cross-stamp guard)"
+                )
     # EVERY candidate's builder, before the leg reserves anything. The factory
     # was built lazily inside the recording loop, so a bad genome length or
     # width on candidate N raised only after candidates 1..N-1 had consumed
@@ -3382,7 +4088,7 @@ def run_realpath_rerank(
     # the same cheap preflight the floor block and the ranking path already get.
     for candidate in candidates:
         try:
-            _build_agent_factory(candidate, game_map=resolved_map)
+            _build_agent_factory(candidate, game_map=resolved_map, opponent=opponent)
         except (ValueError, TypeError) as exc:
             raise RealPathRerankError(
                 f"candidate {candidate.label!r} does not rebuild as "
@@ -3443,6 +4149,7 @@ def run_realpath_rerank(
                 config=resolved_config,
                 candidates=candidates,
                 backend=backend,
+                opponent=opponent,
             )
             # The byte-completeness fence is the third leg of the conjunctive
             # skip predicate, and ``compute_kill_craft_report`` reconstructs
@@ -3493,6 +4200,7 @@ def run_realpath_rerank(
                     ranking_path=ranking_path,
                     backend=backend,
                     candidate_dirs=dirs,
+                    opponent=opponent,
                 )
             )
 
@@ -3512,8 +4220,17 @@ def run_realpath_rerank(
             candidates=list(labels),
             manifest=str(manifest_path),
             mode=mode,
+            # The SIDE this leg ranks and the impostor side it ranks against —
+            # the two facts a crew leg's ordering evidence turns on (18.32). The
+            # artifact PATH rides the log (provenance) but not the identity the
+            # drift check compares, which is the digest + stamp.
+            opponent=None if opponent is None else opponent.identity(),
+            opponent_artifact=(
+                None if opponent is None else str(opponent.artifact_dir)
+            ),
             resume=resume,
             seeds=list(seeds_tuple),
+            side="crew" if crew_leg else "impostor",
         )
         try:
             if prescreen is not None:
@@ -3544,9 +4261,21 @@ def run_realpath_rerank(
 
             payloads: list[_CandidatePayload] = []
             for index, candidate in enumerate(candidates):
-                stamp = _candidate_stamp(candidate)
-                digest = stamp.weights_sha256
-                agent_factory = _build_agent_factory(candidate, game_map=resolved_map)
+                digest = _genome_digest(candidate.genome)
+                # Exactly ONE side carries the candidate's identity, in ITS OWN
+                # record class; the other carries the frozen opponent or nothing
+                # at all. Nothing here can put a crew identity into the impostor
+                # slot — that is what the two distinct constructors buy.
+                crew_stamp: CrewTacticalPolicyStamp | None = None
+                stamp: TacticalPolicyStamp | None = None
+                if _is_crew_family(candidate.encoder_version):
+                    crew_stamp = _candidate_crew_stamp(candidate)
+                    stamp = None if opponent is None else opponent.stamp
+                else:
+                    stamp = _candidate_stamp(candidate)
+                agent_factory = _build_agent_factory(
+                    candidate, game_map=resolved_map, opponent=opponent
+                )
                 candidate_dir = candidate_dirs[index]
                 if not resume:
                     # A resuming leg created (and thereby reserved) its dirs
@@ -3586,6 +4315,7 @@ def run_realpath_rerank(
                         game_map=resolved_map,
                         agent_factory=agent_factory,
                         stamp=stamp,
+                        crew_stamp=crew_stamp,
                         digest=digest,
                         config=resolved_config,
                         base_meeting_runner_factory=meeting_runner_factory,
@@ -3599,10 +4329,13 @@ def run_realpath_rerank(
                 decisive_seeds = tuple(
                     entry.seed for entry in telemetry if not entry.tick_budget_reached
                 )
-                read_stamp, verified = _verify_stamps(
+                proof = _verify_stamps(
                     candidate_dir,
                     seeds=decisive_seeds,
-                    expected_digest=digest,
+                    expected_digest=(None if stamp is None else stamp.weights_sha256),
+                    expected_crew_digest=(
+                        None if crew_stamp is None else crew_stamp.weights_sha256
+                    ),
                     label=candidate.label,
                 )
                 validity = run_validity_gate(candidate_dir)
@@ -3612,23 +4345,26 @@ def run_realpath_rerank(
                 core = measure_baseline.measure_baseline(candidate_dir)
                 leg_log.emit(
                     "candidate-scored",
+                    crew_stamp_verified_games=proof.crew_verified,
                     label=candidate.label,
                     mean_score=watchability.mean_score,
                     referee_passed=watchability.referee_passed,
                     resumed_seeds=[entry.seed for entry in telemetry if entry.resumed],
-                    stamp_verified_games=verified,
+                    stamp_verified_games=proof.tactical_verified,
                     validity_passed=validity.passed,
                 )
                 payloads.append(
                     _CandidatePayload(
                         candidate=candidate,
-                        stamp=read_stamp,
+                        stamp=proof.tactical,
                         digest=digest,
-                        verified=verified,
+                        verified=proof.tactical_verified,
                         telemetry=telemetry,
                         validity=validity,
                         watchability=watchability,
                         core=core,
+                        crew_stamp=proof.crew,
+                        crew_verified=proof.crew_verified,
                     )
                 )
 
@@ -3644,6 +4380,7 @@ def run_realpath_rerank(
                     seeds=seeds_tuple,
                     config=resolved_config,
                     backend=backend,
+                    opponent=opponent,
                     selection_score=scores[i],
                     rank=rank,
                 )

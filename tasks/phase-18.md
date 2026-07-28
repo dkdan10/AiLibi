@@ -138,11 +138,12 @@ Wave 3 (co-evolution):
   (18.19, 18.30) -> 18.22 encoder v3 + within-kind target resolution
   (18.16, 18.21, 18.22) -> 18.23 scenario staging (state injection + skill scenarios)
   (18.4, 18.5, 18.17, 18.18, 18.21, 18.22, 18.30) -> 18.24 THE IMPOSTOR CAMPAIGN [OPERATOR multi-session]
-  (18.24, 18.31) -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
+  (18.24, 18.31, 18.32) -> 18.25 THE CREW CAMPAIGN [OPERATOR multi-session]
 
   (18.16, 18.18) -> 18.29 composed meeting-outcome runner (amendment, 2026-07-22)
   18.16 -> 18.30 the live conviction serving path (amendment, 2026-07-22)
   18.24 -> 18.31 pre-18.25 campaign ergonomics (amendment, 2026-07-27)
+  18.31 -> 18.32 the crew re-rank arm (amendment, 2026-07-28; 18.25's real-path legs consume it — its fake-path evolution runs on 18.31 alone)
 
 Wave 4 (selection + close):
   (18.24, 18.25) -> 18.26 real-LLM finalist eval [OPERATOR ~5h/finalist]
@@ -152,7 +153,7 @@ Wave 4 (selection + close):
 ```
 
 Critical path: 18.7 → 18.10 → 18.11 → 18.12 → 18.13 → 18.15 → 18.16 → 18.19 → 18.20 →
-18.21 → 18.24 → 18.31 → 18.25 → 18.26 → 18.27 → 18.28 (18.7 and 18.10 entered the head via the
+18.21 → 18.24 → 18.31 → 18.32 → 18.25 → 18.26 → 18.27 → 18.28 (18.7 and 18.10 entered the head via the
 `orchestrator/game.py`/`orchestrator/replay.py` serialization edges — dispatch 18.7 first).
 The day-one frontier is nine roots (18.1–18.3, 18.5, 18.6, 18.7, 18.8, 18.9, 18.17);
 nothing outside
@@ -1736,7 +1737,7 @@ flip bar at the screening budget — the finding, not a failure.
 
 ### Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h real-path legs)
 **Branch:** `phase-18-crew-campaign`
-**Depends on:** 18.24, 18.31
+**Depends on:** 18.24, 18.31, 18.32
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Complexity:** Integration
 
@@ -2384,3 +2385,90 @@ and `WORK_DIR_OWNED_NAMES` is hand-maintained (any future driver-owned path must
 declared there or the collision class re-opens) — both in 18.28's Phase-19 hand-off.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-31-campaign-ergonomics.md`
+
+### Task 18.32 — The crew re-rank arm: crew candidates, frozen-opponent seam, dual stamps
+**Branch:** `phase-18-crew-rerank-arm`
+**Depends on:** 18.31
+**Section refs:** training/realpath.py (`RealPathCandidate`, `_build_agent_factory`, `_verify_stamps` — the impostor-only surfaces this task widens); training/coevo/factory.py (`build_coevo_factory` + the 18.19 conflation guard, consumed not edited); scripts/run_tournament.py (`--crew-artifact` — the dual-stamp semantics this task mirrors, NOT edited); orchestrator/replay.py (`CrewTacticalPolicyStamp`)
+**Complexity:** Integration
+
+The routed amendment 18.25's leg discipline demands (owner-ratified 2026-07-28, the
+Amend + overlap ruling): the 18.25 contract requires per-generation real-path re-ranks
+whose recordings are the first dual-stamped crew recordings, with ranking rows, native
+leg-logs, resume, and tranche claims — but `run_realpath_rerank` was impostor-only end
+to end, and the only committed dual-stamp recorder (`run_tournament.py --crew-artifact`)
+produces none of that machinery. Six additions, all refuse-direction:
+(1) crew candidate families — `RealPathCandidate` accepts `crew-option-features-v1` and
+`crew-option-features-v2`; `hidden` refused for them (scorer family). (2) Factory
+dispatch — crew families build through `build_crew_scorer` (basis per family) wrapped in
+`build_coevo_factory`; the 18.19 conflation guard holds both directions at candidate
+preflight, before any spend. (3) The frozen-opponent seam — keyword-only
+`opponent_artifact` on `run_realpath_rerank`: a four-file loadable impostor artifact,
+loaded + sha-verified + stamp-read before any spend, installed in the impostor slot for
+EVERY candidate in the leg; a crew-family opponent refuses; an opponent with
+impostor-family candidates refuses — legs stay homogeneous; None with crew candidates
+records against the scripted FSM (the comparator cell); the opponent identity rides the
+leg manifest, the leg-log `leg-start` event, and every row. (4) Dual-stamp verification
+— the crew stamp is read back from bytes and verified sha == computed digest, with
+crew-side verified/uniform/equals-computed row fields mirroring the impostor discipline;
+row schema bumps `realpath-rerank-v2 → v3`, additive optional fields only, frozen
+`-v1`/`-v2` history untouched. (5) Resume/drift — the protocol-drift check folds the
+opponent identity and candidate families into the manifest comparison; a resumed leg
+whose opponent or family moved refuses. (6) `scripts/generate_campaign_tables.py`
+(`legs`, `stability`) accepts `-v3` beside `-v1`/`-v2`.
+
+**Files in scope:**
+- training/realpath.py (the crew arm: families, opponent seam, dual stamps, drift)
+- training/coevo/hall_of_fame.py (the shared four-file artifact reader)
+- scripts/generate_campaign_tables.py (v3 acceptance)
+- tests/training/test_realpath.py + tests/training/test_hall_of_fame.py + tests/scripts/test_generate_campaign_tables.py (the arm's pins)
+
+**Files NOT in scope:**
+- training/coevo/driver.py + factory.py + rollout.py (consumed frozen)
+- training/crew/ (consumed frozen)
+- scripts/run_tournament.py (the finalist entry point stays the 18.26 invariant)
+- training/artifacts/ (frozen history; committed recordings stay byte-identical)
+
+**Definition of done:**
+- [ ] A crew-candidate leg records end to end against a frozen-opponent artifact with both stamps verified (uniform, sha == computed digest per game), and each refusal path is fixture-pinned in both directions: crew hidden, crew-family opponent, opponent-with-impostor-candidates, missing/corrupt/sha-mismatched opponent artifact, resumed leg with a moved opponent.
+- [ ] `realpath-rerank-v3` rows render through the table generator's `legs` and `stability` subcommands including mixed-version ranking sets, and impostor-only invocations keep their exact current row shape modulo the version string (the frozen `-v1`/`-v2` corpus reads unchanged).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The loader lives under training/ — lint-imports forbids training-imports-scripts, so the
+`--crew-artifact` load semantics are mirrored from `run_tournament.py`, never imported.
+Bias every ambiguity toward refusal: the false-accept direction in stamp verification
+converts another campaign's bytes into this leg's evidence, which is the exact failure
+class the 18.19 guards exist to kill. The opponent is leg-constant by design —
+per-candidate opponents would make rows incomparable within one ranking.
+
+**Integration risk:**
+
+This library records 18.25's evidence within days of the merge; a defect lands directly
+in the campaign's selection tables. Every existing realpath test must pass unchanged,
+and the committed recordings and rankings under training/artifacts/coevo/ stay
+byte-identical after the full suite.
+
+**Public types introduced:**
+- `training.coevo.hall_of_fame.read_loadable_artifact`
+- `training.coevo.hall_of_fame.LoadableArtifact`
+
+**Post-merge record (2026-07-28, coordination).** Merged 088d4c2 (#315), all gates green
+(the macOS-only ES hash pin verified pre-existing on bare main, identical digest; CI
+Linux green). Two declared deviations SANCTIONED at the merge ruling, both
+refuse-direction-preserving: (a) on a crew leg the required row `stamp`/`stamp_*` fields
+hold the impostor-side READ-BACK proof (the frozen opponent read from recorded bytes; an
+fsm-default stamp with 0 verified games in the comparator cell) while `opponent_stamp`
+holds the DECLARED artifact stamp — read-back vs declaration stay distinct fields, and
+`weights_sha256` is always the candidate's digest; (b) the leg-manifest schema version
+is unbumped — the `opponent` manifest key and the `leg-start` `opponent`/`side` fields
+are additive, and the drift check reads them regardless.
+
+**Ready-to-paste prompt:** `agent_prompts/task-18-32-crew-rerank-arm.md`

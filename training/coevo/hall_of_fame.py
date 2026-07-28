@@ -557,6 +557,222 @@ def write_loadable_artifact(
     return digest
 
 
+class LoadableArtifact(BaseModel):
+    """One four-file loadable artifact, READ BACK and verified (Task 18.32).
+
+    The reader half of :func:`write_loadable_artifact`, living beside the writer
+    so the two cannot drift: the same filename constants, the same
+    :data:`_LOADABLE_ENCODERS` family whitelist, the same
+    :data:`_SIDE_ENCODERS` split, and the same "prove it rebuilds" discipline.
+
+    It exists because a loadable artifact had a writer under ``training/`` and no
+    reader: the only consumer was ``scripts/run_tournament.py``'s private
+    ``_load_candidate_policy`` / ``_load_crew_artifact_policy`` pair, and
+    ``training/`` must never import ``scripts/``. The 18.32 crew re-rank arm
+    installs a FROZEN IMPOSTOR OPPONENT from such a directory, so the semantics
+    those two functions encode had to become importable rather than be restated
+    a third time inside the recorder.
+
+    ``genome`` is the sha-verified float-hex payload; the five stamp strings are
+    exactly what ``stamp.json`` carries (already proven to name THESE bytes —
+    the 17.14 conflation guard); ``hidden`` is the masked-MLP width from
+    ``config.json`` (``None`` for the width-free families); ``side`` is derived
+    from the family, so a caller never has to re-derive which slot the artifact
+    belongs in. The five stamp fields are returned as plain strings — this
+    module imports no ``orchestrator`` graph, so composing a
+    :class:`~orchestrator.replay.TacticalPolicyStamp` (or its crew twin) is the
+    caller's business, which is also what keeps the two stamp namespaces from
+    being conflated HERE.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    artifact_dir: str
+    side: Side
+    genome: tuple[float, ...]
+    hidden: int | None
+    policy_id: str
+    method: str
+    encoder_version: str
+    weights_sha256: str
+    anchor_policy: str
+
+
+def _read_artifact_hidden(artifact_dir: Path, *, encoder_version: str) -> int | None:
+    """The masked-MLP width a loadable artifact's ``config.json`` declares (18.32).
+
+    Mirrors ``scripts/run_tournament.py``'s ``_read_candidate_hidden``: the width
+    is a committed artifact parameter, never re-derived from genome length, and a
+    missing / non-integer / boolean one is fail-loud. The width-free families
+    (the utility scorer and both crew scorers) must NOT declare one — a declared
+    width there is the same false provenance :func:`_refuse_unloadable_family`
+    refuses on the writing side.
+    """
+
+    config_path = artifact_dir / _CONFIG_FILENAME
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(
+            f"cannot read {config_path}: {exc}; every loadable artifact carries a "
+            "config.json (it is what declares the masked-MLP 'hidden' width)"
+        ) from exc
+    try:
+        config = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{config_path} is not valid JSON: {exc}") from exc
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"{config_path} is not a JSON object (got {type(config).__name__}); a "
+            "loadable artifact's config.json is a provenance mapping"
+        )
+    hidden = config.get("hidden")
+    if encoder_version in _WIDTH_BEARING_ENCODERS:
+        if not isinstance(hidden, int) or isinstance(hidden, bool):
+            raise ValueError(
+                f"{config_path} must carry an integer 'hidden' for the "
+                f"{encoder_version!r} masked-MLP family (got {hidden!r}); the "
+                "width is a committed artifact parameter, NEVER re-derived from "
+                "genome length"
+            )
+        return hidden
+    if hidden is not None:
+        raise ValueError(
+            f"{config_path} declares hidden={hidden!r} for the "
+            f"{encoder_version!r} family, which takes no hidden width; its "
+            "builder has no head to size, so the declaration is false provenance"
+        )
+    return None
+
+
+def read_loadable_artifact(artifact_dir: Path) -> LoadableArtifact:
+    """Read + VERIFY a four-file loadable artifact (Task 18.32; fail loud).
+
+    The reader half of :func:`write_loadable_artifact`, performing every check
+    ``scripts/run_tournament.py`` performs at load time so "this artifact is
+    loadable" stays a proven claim rather than a declared one:
+
+    1. the path is a directory;
+    2. ``stamp.json`` parses and carries EXACTLY the five
+       :data:`_STAMP_FIELDS` as non-blank, MANIFEST-safe strings;
+    3. ``weights.json`` sha-verifies against its sidecar
+       (:func:`training.bakeoff.harness.load_candidate_weights`);
+    4. the stamp's ``weights_sha256`` equals that sidecar digest — the 17.14
+       conflation guard: the stamp must name THESE bytes;
+    5. ``config.json``'s ``hidden`` matches the family's width contract;
+    6. the family is one a consumer can rebuild AND the genome actually rebuilds
+       through that consumer's own builder.
+
+    Every failure raises :class:`ValueError` naming the artifact and the check —
+    no silent fallback, and nothing is returned half-verified. ``OSError`` from
+    an unreadable directory entry is folded into the same ``ValueError`` so one
+    caller-side ``except`` covers the whole read.
+    """
+
+    from training.bakeoff.harness import load_candidate_weights
+
+    if not artifact_dir.is_dir():
+        raise ValueError(
+            f"{str(artifact_dir)!r} is not a directory; a loadable artifact is a "
+            f"FOUR-file directory ({_WEIGHTS_FILENAME}, "
+            f"{_WEIGHTS_FILENAME}.sha256, {_STAMP_FILENAME}, {_CONFIG_FILENAME})"
+        )
+
+    stamp_path = artifact_dir / _STAMP_FILENAME
+    try:
+        raw_stamp = stamp_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(
+            f"cannot read {stamp_path}: {exc}; a loadable artifact carries a "
+            f"five-field stamp.json ({', '.join(_STAMP_FIELDS)})"
+        ) from exc
+    try:
+        payload = json.loads(raw_stamp)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{stamp_path} is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict) or set(payload) != set(_STAMP_FIELDS):
+        found = sorted(payload) if isinstance(payload, dict) else payload
+        raise ValueError(
+            f"{stamp_path} must carry EXACTLY the five stamp fields "
+            f"{list(_STAMP_FIELDS)}; got {found!r}"
+        )
+    stamp: dict[str, str] = {}
+    for name in _STAMP_FIELDS:
+        value = payload[name]
+        if not isinstance(value, str):
+            raise ValueError(
+                f"{stamp_path} field {name!r} is {value!r}; every stamp field is a "
+                "string"
+            )
+        _validate_stamp_token(f"{stamp_path} {name}", value)
+        stamp[name] = value
+
+    try:
+        genome = load_candidate_weights(artifact_dir)
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"weights load/verify failed for {artifact_dir}: {exc}"
+        ) from exc
+    try:
+        sidecar_digest = (
+            (artifact_dir / f"{_WEIGHTS_FILENAME}.sha256")
+            .read_text(encoding="utf-8")
+            .split()[0]
+        )
+    except (OSError, IndexError) as exc:  # pragma: no cover - load already read it
+        raise ValueError(
+            f"cannot read the weights sidecar for {artifact_dir}: {exc}"
+        ) from exc
+    if stamp["weights_sha256"] != sidecar_digest:
+        raise ValueError(
+            f"{stamp_path} weights_sha256 {stamp['weights_sha256']!r} != sidecar "
+            f"digest {sidecar_digest!r} for {artifact_dir}; the stamp must name "
+            "THESE bytes (the 17.14 conflation guard — two learned movers must "
+            "never share one recording)"
+        )
+
+    encoder_version = stamp["encoder_version"]
+    hidden = _read_artifact_hidden(artifact_dir, encoder_version=encoder_version)
+    _refuse_unloadable_family(encoder_version=encoder_version, hidden=hidden)
+    try:
+        _refuse_unwritable_genome(
+            genome,
+            encoder_version=encoder_version,
+            hidden=hidden,
+            where=f"the genome in {artifact_dir}",
+        )
+    except ValueError as exc:
+        # The shared checker words its refusals for the WRITER ("so it is not
+        # written"). Re-stated here for the reader, whose failure is that a
+        # committed artifact cannot be rebuilt at all.
+        raise ValueError(
+            f"{artifact_dir} does not rebuild through its declared family: {exc}"
+        ) from exc
+
+    side: Side | None = None
+    for candidate_side in _SIDES:
+        if encoder_version in _SIDE_ENCODERS[candidate_side]:
+            side = candidate_side
+            break
+    if side is None:  # pragma: no cover - _refuse_unloadable_family covers this
+        raise ValueError(
+            f"{artifact_dir} declares encoder_version {encoder_version!r}, which "
+            f"belongs to no side (known: {sorted(_LOADABLE_ENCODERS)})"
+        )
+
+    return LoadableArtifact(
+        artifact_dir=str(artifact_dir),
+        side=side,
+        genome=genome,
+        hidden=hidden,
+        policy_id=stamp["policy_id"],
+        method=stamp["method"],
+        encoder_version=encoder_version,
+        weights_sha256=stamp["weights_sha256"],
+        anchor_policy=stamp["anchor_policy"],
+    )
+
+
 class LoadableArtifactMetadata(BaseModel):
     """The per-hall stamp-grade metadata every freeze writes (18.31; frozen).
 
@@ -1746,11 +1962,13 @@ __all__ = [
     "TRAINED_AGAINST_FSM",
     "HallOfFame",
     "HallOfFameMember",
+    "LoadableArtifact",
     "LoadableArtifactMetadata",
     "OpponentStalenessCap",
     "OpponentStalenessExceededError",
     "OpponentStalenessLedger",
     "Side",
+    "read_loadable_artifact",
     "sample_opponents",
     "write_loadable_artifact",
 ]
