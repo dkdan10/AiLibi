@@ -280,6 +280,7 @@ def test_hung_meeting_fails_seed_loudly_within_timeout(tmp_path: Path) -> None:
             ranking_path=ranking_path,
             config=_config(meeting_timeout_seconds=0.3, max_attempts=1),
             meeting_runner_factory=hang_factory,
+            meeting_runner_identity="hang-factory",
         )
     elapsed = time.monotonic() - start
 
@@ -314,6 +315,7 @@ def test_retry_budget_re_records_after_timeout(tmp_path: Path) -> None:
         ranking_path=tmp_path / "ranking.jsonl",
         config=_config(meeting_timeout_seconds=1.0, max_attempts=3),
         meeting_runner_factory=flaky_factory,
+        meeting_runner_identity="flaky-factory",
     )
 
     (row,) = result.rows
@@ -596,6 +598,7 @@ def test_budget_exceeded_is_never_retried(tmp_path: Path) -> None:
             ranking_path=tmp_path / "ranking.jsonl",
             config=_config(max_attempts=3),
             meeting_runner_factory=budget_stop_factory,
+            meeting_runner_identity="budget-stop-factory",
         )
     # One attempt only: a metering stop propagates instead of re-spending.
     assert calls["n"] == 1
@@ -1038,6 +1041,7 @@ def test_leg_log_records_a_failed_leg(tmp_path: Path) -> None:
             ranking_path=tmp_path / "ranking.jsonl",
             config=_config(meeting_timeout_seconds=0.3, max_attempts=1),
             meeting_runner_factory=hang_factory,
+            meeting_runner_identity="hang-factory",
         )
     events = [
         json.loads(line)
@@ -1728,19 +1732,37 @@ def test_resume_refuses_a_changed_game_map(tmp_path: Path) -> None:
         )
 
 
-def test_resume_with_a_custom_runner_requires_an_identity(tmp_path: Path) -> None:
+def test_a_custom_runner_always_requires_an_identity(tmp_path: Path) -> None:
     """A callable cannot be compared across invocations (Codex on PR #314).
 
     Every custom factory reduced to the same ``True``, so two DIFFERENT stubs or
     provider wrappers compared equal and a resume could adopt bytes recorded by
-    one runner while recording the rest through another. A resumable leg must
-    name its runner.
+    one runner while recording the rest through another.
+
+    The requirement lands on the INITIAL invocation, not only the resuming one:
+    a first run that recorded ``meeting_runner_identity: null`` would be
+    permanently unresumable — a retry without an identity is refused, and a
+    retry WITH one is refused as backend drift against the recorded null. That
+    deadlock is the round-7 fix's own defect, and refusing up front is the only
+    way both doors stay open.
     """
 
     def runner_factory() -> MeetingRunner:
         return build_default_meeting_runner()
 
     work_dir = tmp_path / "work"
+    # The INITIAL run is refused when the runner is unnamed — before any game.
+    with pytest.raises(RealPathRerankError, match="needs meeting_runner_identity"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-0.jsonl",
+            config=_config(),
+            meeting_runner_factory=runner_factory,
+        )
+    assert not work_dir.exists()
+
     run_realpath_rerank(
         [_util_candidate()],
         seeds=[1],
@@ -1750,7 +1772,8 @@ def test_resume_with_a_custom_runner_requires_an_identity(tmp_path: Path) -> Non
         meeting_runner_factory=runner_factory,
         meeting_runner_identity="stub-v1",
     )
-    with pytest.raises(RealPathRerankError, match="needs meeting_runner_identity"):
+    # A DIFFERENT named runner is refused as a backend change.
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
         run_realpath_rerank(
             [_util_candidate()],
             seeds=[1],
@@ -1758,17 +1781,135 @@ def test_resume_with_a_custom_runner_requires_an_identity(tmp_path: Path) -> Non
             ranking_path=tmp_path / "ranking-2.jsonl",
             config=_config(),
             meeting_runner_factory=runner_factory,
+            meeting_runner_identity="stub-v2",
             resume=True,
         )
-    # A DIFFERENT named runner is refused as a backend change.
-    with pytest.raises(RealPathRerankError, match="different recording backend"):
+    # The SAME named runner resumes cleanly.
+    resumed = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-3.jsonl",
+        config=_config(),
+        meeting_runner_factory=runner_factory,
+        meeting_runner_identity="stub-v1",
+        resume=True,
+    )
+    assert [entry.resumed for entry in resumed.top().seed_telemetry] == [True]
+
+
+def test_two_new_colliding_labels_get_distinct_dirs(tmp_path: Path) -> None:
+    """Fresh directories are RESERVED as they are allocated (Codex on PR #314).
+
+    Directories are not created until the recording loop runs, so two new
+    labels sharing a slug both saw the same free name and were handed it. The
+    manifest then mapped one directory to two labels: matching stamps reuse the
+    first label's provider draw, differing stamps overwrite its evidence after
+    its metrics were computed.
+    """
+
+    work_dir = tmp_path / "work"
+    # The first run OCCUPIES 000-arm-a. That is what forces the first new label
+    # to bump to 001-arm-a — the same ordinal the second new label starts at.
+    run_realpath_rerank(
+        [_util_candidate("arm.a")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-1.jsonl",
+        config=_config(),
+    )
+    assert (work_dir / "000-arm-a").is_dir()
+    # Two NEW labels whose slugs collide with each other AND with the occupant.
+    result = run_realpath_rerank(
+        [_util_candidate("arm a"), _util_candidate("arm-a")],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+        resume=True,
+    )
+    assert len(result.rows) == 2
+    manifest = json.loads(
+        sorted((work_dir).glob("leg-1-*.json"))[-1].read_text(encoding="utf-8")
+    )
+    dirs = [entry["dir"] for entry in manifest["candidates"]]
+    assert len(set(dirs)) == len(dirs), f"two labels share a directory: {dirs}"
+    for name in dirs:
+        assert (work_dir / name).is_dir()
+
+
+def test_a_partial_leg_manifest_never_blocks_a_later_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Leg manifests publish atomically (Codex on PR #314).
+
+    An interrupt between the exclusive create and the write left a partial
+    manifest, and ``_refuse_protocol_drift`` refuses an unreadable one — so
+    every later resume died on evidence that had to be deleted by hand.
+    """
+
+    import os as _os
+
+    work_dir = tmp_path / "work"
+    real_fsync = _os.fsync
+
+    def _boom(fd: int) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(_os, "fsync", _boom)
+    with pytest.raises(OSError, match="disk full"):
         run_realpath_rerank(
             [_util_candidate()],
             seeds=[1],
             work_dir=work_dir,
-            ranking_path=tmp_path / "ranking-3.jsonl",
+            ranking_path=tmp_path / "ranking-1.jsonl",
             config=_config(),
-            meeting_runner_factory=runner_factory,
-            meeting_runner_identity="stub-v2",
+        )
+    monkeypatch.setattr(_os, "fsync", real_fsync)
+
+    # No manifest was published, so nothing poisons the next invocation.
+    assert list(work_dir.glob("leg-*.json")) == []
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+    )
+    assert result.rows
+
+
+@pytest.mark.parametrize(
+    "knob",
+    [
+        "AILIBI_OLLAMA_HOST",
+        "AILIBI_OLLAMA_SEED",
+        "AILIBI_OLLAMA_NUM_CTX",
+        "AILIBI_FEATHERLESS_BASE_URL",
+        "AILIBI_PROMPT_SET",
+    ],
+)
+def test_resume_refuses_any_changed_provider_construction_knob(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, knob: str
+) -> None:
+    """EVERY effective backend knob rides the resume identity (Codex on PR #314).
+
+    ``llm/provider.py`` builds the recorder from more than the provider and
+    model names: the endpoint, the generation seed and the context window all
+    change the bytes a recording produces. Comparing only provider+models left
+    one ranking row able to combine recordings from different effective
+    backends.
+    """
+
+    work_dir = tmp_path / "work"
+    _record_two_seeds(work_dir, tmp_path / "ranking-1.jsonl")
+    monkeypatch.setenv(knob, "changed-between-invocations")
+    with pytest.raises(RealPathRerankError, match="different recording backend"):
+        run_realpath_rerank(
+            [_util_candidate()],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-2.jsonl",
+            config=_config(),
             resume=True,
         )

@@ -254,6 +254,13 @@ _PROVIDER_ENV_VARS: Final[tuple[str, ...]] = (
     # two prompt sets are two recording protocols even on one provider/model
     # (Codex review on PR #314).
     "AILIBI_PROMPT_SET",
+    # Provider-CONSTRUCTION knobs (llm/provider.py): endpoint, generation seed
+    # and context window all change the bytes a recorder produces, and none of
+    # them ride the provider/model names above (Codex on PR #314).
+    "AILIBI_OLLAMA_HOST",
+    "AILIBI_OLLAMA_SEED",
+    "AILIBI_OLLAMA_NUM_CTX",
+    "AILIBI_FEATHERLESS_BASE_URL",
 )
 
 #: Every field of a :class:`~orchestrator.replay.TacticalPolicyStamp` a resume
@@ -910,6 +917,39 @@ def _write_prescreen_json(
         handle.write(record.to_json())
 
 
+def _publish_json_atomically(path: Path, payload: str) -> None:
+    """Write ``payload`` to ``path`` atomically AND exclusively (18.31).
+
+    Staged in the destination directory, flushed through to disk, then
+    published with :func:`os.link` — one syscall that is both atomic and
+    exclusive, raising ``FileExistsError`` if the path is already taken (which
+    is what makes it usable as an ordinal allocator). A cleanup failure after a
+    successful link never overturns the publish.
+    """
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stage: Path | None = None
+    published = False
+    try:
+        handle_fd, stage_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        stage = Path(stage_name)
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(stage, path)
+        published = True
+    finally:
+        if stage is not None:
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError:
+                if not published:
+                    raise
+
+
 def _open_leg_manifest(
     work_dir: Path,
     *,
@@ -958,9 +998,16 @@ def _open_leg_manifest(
             "started_at": _utc_now(),
             "tranche": tranche,
         }
+        # ATOMIC: an interrupt between the exclusive create and the write left a
+        # partial manifest, and ``_refuse_protocol_drift`` refuses an unreadable
+        # one — so every later resume died on evidence that had to be deleted by
+        # hand. Same stage-then-link discipline as the ranking publish (Codex
+        # review on PR #314): the create is what allocates the ordinal, and the
+        # bytes land whole or not at all.
         try:
-            with path.open("x", encoding="utf-8") as handle:
-                handle.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            _publish_json_atomically(
+                path, json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            )
         except FileExistsError:
             continue
         return f"{ordinal:03d}", path
@@ -1373,18 +1420,27 @@ def _recorded_candidate_dirs(
     return recorded, seen
 
 
-def _fresh_candidate_dir(work_dir: Path, *, index: int, label: str) -> Path:
+def _fresh_candidate_dir(
+    work_dir: Path, *, index: int, label: str, reserved: set[Path]
+) -> Path:
     """An UNUSED dir for a candidate with no prior recordings (18.31).
 
     The enumerated name may already belong to another label (slugs collide, and
     a narrowed slate renumbers), so the ordinal is bumped until the path is
     free. A new candidate must never inherit another candidate's bytes.
+
+    ``reserved`` carries the paths already handed out in THIS resolution pass.
+    Directories are not created until the recording loop runs, so two new
+    labels sharing a slug would otherwise both be handed the same free name —
+    the manifest would then map one directory to two labels, and the second
+    candidate would either reuse the first's provider draw or overwrite its
+    evidence after its metrics were computed (Codex review on PR #314).
     """
 
     slug = _safe_slug(label)
     for ordinal in range(index, index + _MAX_INVOCATIONS):
         candidate_dir = work_dir / f"{ordinal:03d}-{slug}"
-        if not candidate_dir.exists():
+        if not candidate_dir.exists() and candidate_dir not in reserved:
             return candidate_dir
     raise RealPathRerankError(
         f"no free recording directory for candidate {label!r} under {work_dir} "
@@ -1432,10 +1488,13 @@ def _resolve_candidate_dirs(
 
     recorded, seen_labels = _recorded_candidate_dirs(work_dir, tranche=tranche)
     resolved: list[Path] = []
+    reserved: set[Path] = set()
     for index, candidate in enumerate(candidates):
         name = recorded.get(candidate.label)
         if name is not None:
-            resolved.append(work_dir / name)
+            recorded_path = work_dir / name
+            reserved.add(recorded_path)
+            resolved.append(recorded_path)
             continue
         if candidate.label not in seen_labels:
             # NEW to this tranche. It must never adopt an existing directory:
@@ -1444,9 +1503,11 @@ def _resolve_candidate_dirs(
             # that when both carry the same genome and stamp — which this
             # module explicitly permits. The row would then credit this
             # candidate with another's games (Codex review on PR #314).
-            resolved.append(
-                _fresh_candidate_dir(work_dir, index=index, label=candidate.label)
+            fresh = _fresh_candidate_dir(
+                work_dir, index=index, label=candidate.label, reserved=reserved
             )
+            reserved.add(fresh)
+            resolved.append(fresh)
             continue
         # Recorded before, but by a manifest predating the ``dir`` field. The
         # slug walk is the only route left, and it is trusted ONLY when nothing
@@ -1466,10 +1527,23 @@ def _resolve_candidate_dirs(
                 "which one holds this candidate's bytes is unresolvable — "
                 "re-record the leg into a fresh work dir"
             )
-        resolved.append(
+        chosen = (
             existing[0]
             if existing
-            else _fresh_candidate_dir(work_dir, index=index, label=candidate.label)
+            else _fresh_candidate_dir(
+                work_dir, index=index, label=candidate.label, reserved=reserved
+            )
+        )
+        reserved.add(chosen)
+        resolved.append(chosen)
+    # Two labels must never land on one directory, by any route.
+    if len(set(resolved)) != len(resolved):
+        collisions = sorted(
+            {path.name for path in resolved if resolved.count(path) > 1}
+        )
+        raise RealPathRerankError(
+            f"resume resolved two candidates onto the same recording dir(s) "
+            f"{collisions}; a directory holds exactly one candidate's bytes"
         )
     return tuple(resolved)
 
@@ -2101,14 +2175,20 @@ def run_realpath_rerank(
     # A callable has no stable serialisable identity, so two DIFFERENT stubs,
     # composed runners or provider wrappers both reduce to ``True`` and compare
     # equal. A resume would then adopt seeds recorded by one runner and record
-    # the rest through another, contaminating a single committed row. The
-    # caller must name the runner for a resumable leg (Codex review on PR #314).
-    if resume and meeting_runner_factory is not None and not meeting_runner_identity:
+    # the rest through another, contaminating a single committed row.
+    #
+    # The requirement lands on EVERY custom-runner invocation, not just the
+    # resuming one: an initial run that recorded ``meeting_runner_identity:
+    # null`` is permanently unresumable, because a retry without an identity is
+    # refused here and a retry WITH one is refused as backend drift against the
+    # recorded null. Demanding the name up front is the only way both doors stay
+    # open (Codex review on PR #314).
+    if meeting_runner_factory is not None and not meeting_runner_identity:
         raise RealPathRerankError(
-            "resume with a custom meeting_runner_factory needs "
-            "meeting_runner_identity: a callable cannot be compared across "
-            "invocations, so without a stable name this resume could adopt "
-            "bytes recorded by a different runner"
+            "a custom meeting_runner_factory needs meeting_runner_identity: a "
+            "callable cannot be compared across invocations, so without a stable "
+            "name this leg could never be resumed without risking bytes recorded "
+            "by a different runner"
         )
     if resume:
         _refuse_protocol_drift(

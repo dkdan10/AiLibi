@@ -1544,3 +1544,67 @@ def test_a_failed_freeze_leaves_no_partial_artifact(
         "weights.json",
         "weights.json.sha256",
     ]
+
+
+@pytest.mark.parametrize(
+    ("encoder_version", "hidden", "match"),
+    [
+        ("v3", None, "needs an integer 'hidden'"),
+        ("v2", None, "needs an integer 'hidden'"),
+        ("impostor-option-features-v1", 8, "takes no hidden width"),
+        ("crew-option-features-v1", 8, "takes no hidden width"),
+        ("some-unknown-family", None, "not one the consuming entry point"),
+        ("v9", 8, "not one the consuming entry point"),
+    ],
+)
+def test_the_public_writer_refuses_an_unloadable_family(
+    tmp_path: Path, encoder_version: str, hidden: int | None, match: str
+) -> None:
+    """``write_loadable_artifact`` validates the family it is publishing.
+
+    The driver preflight already proves loadability for a campaign, but this
+    writer is PUBLIC: a caller reaching it directly could publish a v2/v3 freeze
+    with no ``hidden`` (which ``_load_candidate_policy`` always rejects) or an
+    encoder tag with no builder at all, and a ``HallOfFame`` would then index
+    and reload artifacts the consuming entry point cannot load (Codex on
+    PR #314).
+    """
+
+    artifact_dir = tmp_path / "artifact"
+    with pytest.raises(ValueError, match=match):
+        write_loadable_artifact(
+            artifact_dir,
+            (0.1, 0.2),
+            policy_id="p",
+            method="m",
+            encoder_version=encoder_version,
+            hidden=hidden,
+        )
+    # Refused BEFORE anything was published.
+    assert not artifact_dir.exists()
+
+
+def test_the_public_writer_accepts_every_loadable_family(tmp_path: Path) -> None:
+    """The guard rejects unloadable combinations, not legitimate ones."""
+
+    for index, (encoder_version, hidden) in enumerate(
+        [
+            ("v2", 8),
+            ("v3", 16),
+            ("impostor-option-features-v1", None),
+            ("crew-option-features-v1", None),
+            ("crew-option-features-v2", None),
+        ]
+    ):
+        artifact_dir = tmp_path / f"ok-{index}"
+        write_loadable_artifact(
+            artifact_dir,
+            (0.1, 0.2),
+            policy_id="p",
+            method="m",
+            encoder_version=encoder_version,
+            hidden=hidden,
+        )
+        config = json.loads((artifact_dir / "config.json").read_text())
+        assert config["encoder_version"] == encoder_version
+        assert config.get("hidden") == hidden

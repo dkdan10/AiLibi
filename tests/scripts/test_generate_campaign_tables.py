@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -525,7 +526,9 @@ def test_stability_refuses_encoder_family_drift_within_an_arm(tmp_path: Path) ->
     _write_arm(leg, "t1", first, seeds=(1, 2, 3))
     _write_arm(leg, "t2", second, seeds=(4, 5, 6))
 
-    with pytest.raises(SystemExit, match="two families are two policies"):
+    # The check now covers the whole five-field stamp, so the message names the
+    # field that drifted (Codex round 8); the encoder case is one of five.
+    with pytest.raises(SystemExit, match="stamped encoder_version="):
         gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
 
 
@@ -818,3 +821,48 @@ def test_stability_is_pure_across_independent_invocations(tmp_path: Path) -> Non
     gct.compute_stability(gct.find_ranking_files(_default_roots()))
     assert gct.compute_stability(paths) == first
     assert not hasattr(gct, "_TRANCHE_SEEDS")
+
+
+@pytest.mark.parametrize("field", ["policy_id", "method", "anchor_policy"])
+def test_stability_refuses_stamp_identity_drift_across_an_arms_reads(
+    tmp_path: Path, field: str
+) -> None:
+    """An arm's two reads must share the COMPLETE five-field stamp.
+
+    This repository treats the whole stamp as policy identity — the resume
+    predicate compares all five for exactly this reason — so two reads agreeing
+    only on the encoder family can still be two different policies, and a swing
+    between them is not measurement noise (Codex on PR #314).
+    """
+
+    leg = tmp_path / "campaign" / "leg"
+    row = _committed_row()
+    _write_arm(leg, "a", row, seeds=(1, 2, 3))
+    stamp: dict[str, Any] = dict(row["stamp"])  # type: ignore[call-overload]
+    assert stamp[field] != "some-other-value"
+    stamp[field] = "some-other-value"
+    drifted = dict(row)
+    drifted["stamp"] = stamp
+    _write_arm(leg, "b", drifted, seeds=(4, 5, 6))
+    with pytest.raises(SystemExit, match=f"stamped {field}="):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
+def test_the_saturated_floor_row_does_not_claim_impossibility() -> None:
+    """A floor of exactly 1.000 is attainable at perfection, not unpassable.
+
+    ``evaluate_supply_floors`` clears a gauge on ``measured >= floor``, so the
+    rendered table must not call a saturated floor "structurally unpassable"
+    (Codex on PR #314). The COUNT and its artifact key are unchanged — they
+    reproduce the frozen 18.24 record — but the generator's own claim is now
+    accurate.
+    """
+
+    stability = gct.compute_stability(gct.find_ranking_files(_default_roots()))
+    table = gct.render_stability_table(stability)
+    assert "structurally unpassable" not in table
+    assert "saturated at 1.000" in table
+    assert "100% conversion required" in table
+    # The frozen count is untouched.
+    assert stability["arms_with_impossible_conversion_floor"] == 12
+    assert "**12 of 22**" in table

@@ -178,6 +178,20 @@ def _is_valid_trained_against(value: object) -> bool:
     return value == TRAINED_AGAINST_FSM or _is_sha256_hex(value)
 
 
+#: The encoder families ``scripts/run_tournament.py`` can rebuild — the impostor
+#: loader's ``v2``/``v3`` masked-MLP pair plus the width-free utility scorer, and
+#: the crew loader's two option-feature families. Restated here (this module
+#: imports no builder), and a new family extends this AND the loader dispatch.
+_WIDTH_BEARING_ENCODERS: Final[frozenset[str]] = frozenset({"v2", "v3"})
+_LOADABLE_ENCODERS: Final[frozenset[str]] = _WIDTH_BEARING_ENCODERS | frozenset(
+    {
+        "impostor-option-features-v1",
+        "crew-option-features-v1",
+        "crew-option-features-v2",
+    }
+)
+
+
 def _validate_stamp_token(name: str, value: str) -> None:
     """Fail loud on a stamp string the committed stamp reader would reject.
 
@@ -262,6 +276,32 @@ def write_loadable_artifact(
         _validate_stamp_token(name, token)
     if hidden is not None and hidden < 1:
         raise ValueError(f"hidden must be >= 1 when declared; got {hidden!r}")
+    # The FAMILY contract, enforced by the public writer rather than only by the
+    # driver preflight. This function is exported, so a caller reaching it
+    # directly could publish an artifact the consuming entry point can never
+    # load — a v2/v3 freeze with no ``hidden`` is rejected outright by
+    # ``_load_candidate_policy``, and an unknown tag has no builder at all
+    # (Codex review on PR #314). Restated literals, per this module's
+    # no-cross-seam-import idiom; the driver additionally proves the declared
+    # width by REBUILDING the genome, which needs the builder and stays there.
+    if encoder_version not in _LOADABLE_ENCODERS:
+        raise ValueError(
+            f"encoder_version {encoder_version!r} is not one the consuming entry "
+            f"point can rebuild (loadable: {sorted(_LOADABLE_ENCODERS)}); this "
+            "artifact would be unloadable through _load_candidate_policy"
+        )
+    if encoder_version in _WIDTH_BEARING_ENCODERS and hidden is None:
+        raise ValueError(
+            f"the {encoder_version!r} family rebuilds through the masked-MLP "
+            "builder, so its config.json needs an integer 'hidden'; declaring "
+            "none publishes an artifact the consumer always rejects"
+        )
+    if encoder_version not in _WIDTH_BEARING_ENCODERS and hidden is not None:
+        raise ValueError(
+            f"the {encoder_version!r} family takes no hidden width; got "
+            f"hidden={hidden!r}. Declaring one stamps a masked-MLP width its "
+            "builder does not have"
+        )
     provenance = dict(config) if config is not None else {}
     clashing = sorted(key for key in _WRITER_OWNED_CONFIG_KEYS if key in provenance)
     if clashing:

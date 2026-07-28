@@ -101,13 +101,35 @@ COMBINATION_RULE: Final[str] = (
     "(6d327dcb was recorded in both run-01 and run-03 on both tranches)."
 )
 
+#: The five ``TacticalPolicyStamp`` fields that together ARE a policy identity.
+#: The resume predicate compares all five; an arm's two reads must too.
+_STAMP_IDENTITY_FIELDS: Final[tuple[str, ...]] = (
+    "policy_id",
+    "method",
+    "encoder_version",
+    "weights_sha256",
+    "anchor_policy",
+)
+
 #: The supply gauge whose tranche-to-tranche swing IS the noise measurement.
 _NOISE_GAUGE: Final[str] = "flags_per_meeting"
 
-#: The population-relative conversion gauge whose floor saturates at 1.000 —
-#: a structurally unpassable bar, since a conversion fraction cannot exceed 1.
+#: The population-relative conversion gauge whose derived floor can SATURATE at
+#: 1.000 — the maximum a fraction can reach, so such a floor demands a perfect
+#: 100% conversion.
+#:
+#: NOT "impossible", despite the artifact key's name. ``evaluate_supply_floors``
+#: clears a gauge on ``measured >= floor``, so a floor of exactly 1.0 is
+#: attainable at perfection (Codex review on PR #314). The ``>=`` predicate and
+#: the ``arms_with_impossible_conversion_floor`` key are retained because they
+#: are what the FROZEN 18.24 artifact computed and published (§4.0: "12 of 22");
+#: this generator reproduces that record byte-for-byte and does not get to
+#: restate history. What it can fix is its own rendered claim, so the table now
+#: says the floor saturated rather than that it was unpassable. The report's
+#: own §4.0 wording is an erratum candidate — ``training/reports/`` is outside
+#: this task's file scope.
 _CONVERSION_GAUGE: Final[str] = "testimony_backed_conversion"
-_IMPOSSIBLE_FLOOR: Final[float] = 1.0
+_SATURATED_FLOOR: Final[float] = 1.0
 
 #: A win-rate swing of a full game, with a tolerance for float division.
 _ONE_GAME: Final[float] = 1.0 - 1e-9
@@ -643,15 +665,20 @@ def _collect_arms(
         # different stamped families are two policies whose layouts happen to
         # collide — precisely the ambiguity the artifact stamps exist to remove
         # — so a swing between them measures nothing (Codex review on PR #314).
-        families = {
-            reads[key]["stamp"]["encoder_version"] for key in (first_key, second_key)
-        }
-        if len(families) != 1:
-            raise SystemExit(
-                f"{leg}: genome {sha} is stamped {sorted(families)} across its two "
-                "tranches; the same bytes under two families are two policies, not "
-                "one arm read twice"
-            )
+        # The COMPLETE five-field stamp is policy identity in this repository —
+        # the resume predicate compares all five for exactly this reason. Two
+        # reads agreeing only on the encoder family can still differ in
+        # ``policy_id`` / ``method`` / ``anchor_policy``, and a swing between
+        # two differently-stamped policies is not measurement noise (Codex
+        # review on PR #314).
+        for field in _STAMP_IDENTITY_FIELDS:
+            values = {reads[key]["stamp"].get(field) for key in (first_key, second_key)}
+            if len(values) != 1:
+                raise SystemExit(
+                    f"{leg}: genome {sha} is stamped {field}={sorted(map(str, values))} "
+                    "across its two tranches; the same bytes under two policy "
+                    "identities are two policies, not one arm read twice"
+                )
         # Same policy, same PROTOCOL. A swing is only provider/seed noise if
         # nothing else about the experiment moved: a changed roster, baseline,
         # mode or budget between the two reads makes the difference a measured
@@ -773,7 +800,7 @@ def compute_stability(ranking_paths: Sequence[Path]) -> dict[str, Any]:
             for read in reads
         ]
         if any(
-            floor is not None and floor >= _IMPOSSIBLE_FLOOR
+            floor is not None and floor >= _SATURATED_FLOOR
             for floor in conversion_floors
         ):
             impossible += 1
@@ -858,8 +885,8 @@ def render_stability_table(stability: Mapping[str, Any]) -> str:
             f"**{stability['noise_to_threshold_ratio'] * 100:.0f}%**",
         ),
         (
-            "arms whose derived conversion floor hit 1.000 (structurally "
-            "unpassable) on ≥1 tranche",
+            "arms whose derived conversion floor saturated at 1.000 (a perfect "
+            "100% conversion required) on ≥1 tranche",
             f"**{stability['arms_with_impossible_conversion_floor']} of {arms}**",
         ),
         (
