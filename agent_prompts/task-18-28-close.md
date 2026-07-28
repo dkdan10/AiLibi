@@ -86,9 +86,11 @@ for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
 hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
 `composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
-than design, the silently-overwritable `campaign-plan.json`, and the scenario selector seam's
+than design, the silently-overwritable `campaign-plan.json`, the scenario selector seam's
 unenforced delegation convention — a selector-built agent drives every seat, opponents
-included) as review inputs, not as contracts.
+included — and two 18.31 residuals: resume refuses non-canonical maps (custom-map
+campaigns have no resume path without an eval/ change) and the hand-maintained
+`WORK_DIR_OWNED_NAMES` registry) as review inputs, not as contracts.
 
 ## Integration risk
 

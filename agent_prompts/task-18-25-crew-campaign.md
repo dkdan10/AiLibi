@@ -90,6 +90,24 @@ sessions, checkpoint-push per generation.
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
 answer it with the campaign's real re-rank data and say so explicitly either way. The
+18.31 operator surface (merged e2a040b, verified): stamp-grade config is now
+config-preflight-enforced — `CoevoSideConfig.encoder_version` names the actual family,
+`hidden` is REQUIRED for `v2`/`v3` masked-MLP families and FORBIDDEN for utility/scorer
+families, `anchor_policy_label` must name the anchor artifact whenever `anchor_policy`
+is set, and `CoevoCampaignConfig.run_label` must be set to the campaign run name (the
+default stamps `coevo-campaign` into every freeze's provenance). Resume is OPT-IN:
+re-invoke `run_realpath_rerank(..., resume=True)` with the same work_dir/tranche/mode/
+config/prompt-set/backend (drift refuses; non-canonical maps refuse resume outright;
+tick-budget-capped elements re-record on every resume by design, ~8 min each — budget
+for it). The library now writes `leg-log.jsonl` and
+`prescreen-quotes-<tranche>-<invocation>.json` natively per invocation — commit them
+beside the rankings (they ARE the blocker-4 ordering evidence); new rankings carry
+schema `realpath-rerank-v2`. Champion persistence is DEFAULT-ON — checkpoint-push now
+includes `gen-champions/` (four files per generation); keep campaign trees on one real
+filesystem (symlink/hard-link entries refuse). Report tables come from
+`scripts/generate_campaign_tables.py` (`rows`/`legs`/`stability` subcommands), never
+hand-assembled, and the F12 stability read runs via `stability` after the first
+retested candidate. The
 18.24 evidence is on this campaign's side here: the run-01 same-seed `conviction=None`
 twin reproduced the impostor champion lineage sha-for-sha while CREW selection diverged —
 the term's selection-relevant effect is crew-side, exactly where this campaign wants it

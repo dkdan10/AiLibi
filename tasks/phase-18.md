@@ -1814,6 +1814,24 @@ sessions, checkpoint-push per generation.
 The interesting cell is pace-to-wins conversion on the REAL path (the 17.13 open question:
 does the citation-era conviction channel move an owned-task crew's pace advantage?) —
 answer it with the campaign's real re-rank data and say so explicitly either way. The
+18.31 operator surface (merged e2a040b, verified): stamp-grade config is now
+config-preflight-enforced — `CoevoSideConfig.encoder_version` names the actual family,
+`hidden` is REQUIRED for `v2`/`v3` masked-MLP families and FORBIDDEN for utility/scorer
+families, `anchor_policy_label` must name the anchor artifact whenever `anchor_policy`
+is set, and `CoevoCampaignConfig.run_label` must be set to the campaign run name (the
+default stamps `coevo-campaign` into every freeze's provenance). Resume is OPT-IN:
+re-invoke `run_realpath_rerank(..., resume=True)` with the same work_dir/tranche/mode/
+config/prompt-set/backend (drift refuses; non-canonical maps refuse resume outright;
+tick-budget-capped elements re-record on every resume by design, ~8 min each — budget
+for it). The library now writes `leg-log.jsonl` and
+`prescreen-quotes-<tranche>-<invocation>.json` natively per invocation — commit them
+beside the rankings (they ARE the blocker-4 ordering evidence); new rankings carry
+schema `realpath-rerank-v2`. Champion persistence is DEFAULT-ON — checkpoint-push now
+includes `gen-champions/` (four files per generation); keep campaign trees on one real
+filesystem (symlink/hard-link entries refuse). Report tables come from
+`scripts/generate_campaign_tables.py` (`rows`/`legs`/`stability` subcommands), never
+hand-assembled, and the F12 stability read runs via `stability` after the first
+retested candidate. The
 18.24 evidence is on this campaign's side here: the run-01 same-seed `conviction=None`
 twin reproduced the impostor champion lineage sha-for-sha while CREW selection diverged —
 the term's selection-relevant effect is crew-side, exactly where this campaign wants it
@@ -2068,9 +2086,11 @@ for want of a model row, which is why composed-substrate probe reads are pinned
 diagnostic-grade in `verdict.json.adoption_constraints` — the platform-sensitive `test_es`
 hash pin that fails on non-Linux interpreters, and two coevo-driver trivia: the
 `composed_artifact_dir` type-annotation-only escape that fails loud by accident rather
-than design, the silently-overwritable `campaign-plan.json`, and the scenario selector seam's
+than design, the silently-overwritable `campaign-plan.json`, the scenario selector seam's
 unenforced delegation convention — a selector-built agent drives every seat, opponents
-included) as review inputs, not as contracts.
+included — and two 18.31 residuals: resume refuses non-canonical maps (custom-map
+campaigns have no resume path without an eval/ change) and the hand-maintained
+`WORK_DIR_OWNED_NAMES` registry) as review inputs, not as contracts.
 
 **Integration risk:**
 
@@ -2339,5 +2359,22 @@ dangerous failure mode; bias every ambiguity toward re-recording.
 
 **Public types introduced:**
 - `training.coevo.hall_of_fame.write_loadable_artifact`
+
+**Post-merge record (2026-07-28, coordination).** Merged e2a040b, verified PASS: all six
+fixes pinned; every pre-existing test passes unchanged BY NAME (29/22/16 originals across
+the three machinery suites, now 48/52/113); the 18.21 campaign digest reproduced
+byte-identically across both trees (`7c8fe054…`); zero artifact paths touched. Three
+declared deviations SANCTIONED as merged, all refuse-direction: (a) the realpath row
+schema bumped `realpath-rerank-v1 → v2` (new recordings gain recorder-identity fields
+`recording_backend_sha256`/`game_map_sha256`; frozen `-v1` history untouched; the
+generator reads both and distinguishes identity-absent from identity-mismatch); (b) the
+adversarial-filesystem hardening (symlink/hard-link/claim guards — fresh runs now refuse
+dangling-symlink collisions `.exists()` sailed past); (c) `hall_of_fame.py` now imports
+engine/consumer surfaces for reconstruction proof (its old no-engine-imports docstring
+line amended honestly; lint-imports contracts keep — they fence agents/observation, not
+training→engine). Residual limits recorded for the review ledger: resume refuses
+non-canonical maps (custom-map campaigns have no resume path without an eval/ change),
+and `WORK_DIR_OWNED_NAMES` is hand-maintained (any future driver-owned path must be
+declared there or the collision class re-opens) — both in 18.28's Phase-19 hand-off.
 
 **Ready-to-paste prompt:** `agent_prompts/task-18-31-campaign-ergonomics.md`
