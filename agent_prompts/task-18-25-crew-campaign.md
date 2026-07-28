@@ -12,7 +12,7 @@ Implement Task 18.25 — THE CREW CAMPAIGN (operator, multi-session, ~30–40h r
 The authoritative task contract is copied below from tasks/phase-18.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-18-crew-campaign`
-**Depends on:** 18.24, 18.31
+**Depends on:** 18.24, 18.31, 18.32
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Complexity:** Integration
 
