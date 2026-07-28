@@ -216,6 +216,7 @@ from training.coevo.hall_of_fame import (
     OpponentStalenessCap,
     OpponentStalenessLedger,
     Side,
+    _refuse_unwritable_genome,
     sample_opponents,
     write_loadable_artifact,
 )
@@ -954,6 +955,27 @@ def _validate_side(
                     f"{len(initial)}-gene genome at that width ({exc}); every "
                     "artifact this campaign froze would be unloadable"
                 ) from exc
+    # The WIDTH-FREE families get the same reconstruction. The branch above only
+    # covers width-bearing impostor encoders, so a custom ``build_policy``
+    # reporting a crew tag (or the utility tag) with an incompatible genome
+    # length passed startup, spent the first generation's games, and failed only
+    # when ``_persist_generation_champion`` reached the real consumer builder
+    # (Codex review on PR #314). Every loadable family is preflighted now, not
+    # just the ones whose declared width made the gap visible.
+    try:
+        _refuse_unwritable_genome(
+            initial,
+            encoder_version=probe_encoder,
+            hidden=config.hidden,
+            where=f"the {expected_side} side's initial genome",
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"the {expected_side} side's initial genome does not survive the "
+            f"consuming builder for family {probe_encoder!r} ({exc}); every "
+            "artifact this campaign froze would be unloadable — refusing before "
+            "the first game"
+        ) from exc
     return initial
 
 

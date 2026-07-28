@@ -1525,6 +1525,34 @@ def _dirs_claimed_by_other_tranches(work_dir: Path, *, tranche: str) -> set[str]
     return claimed
 
 
+def _refuse_escaping_recorded_dir(recorded_dir: str, *, manifest: Path) -> None:
+    """A manifest's ``dir`` is a BASENAME under the work dir, never a path (18.31).
+
+    ``_resolve_candidate_dirs`` joins this string onto ``work_dir`` and the
+    resume then records into the result. A corrupted or hand-edited manifest
+    carrying ``../../other-campaign/candidate`` — or an absolute path — would
+    therefore aim this leg's recording, and its ``force=True`` re-records, at
+    another campaign's replay evidence (Codex review on PR #314). The recorder
+    only ever writes ``NNN-<slug>``, so anything else is a manifest this leg
+    must not act on.
+    """
+
+    candidate = Path(recorded_dir)
+    if (
+        candidate.is_absolute()
+        or len(candidate.parts) != 1
+        or recorded_dir in {os.curdir, os.pardir}
+        or os.sep in recorded_dir
+        or (os.altsep is not None and os.altsep in recorded_dir)
+    ):
+        raise RealPathRerankError(
+            f"{manifest} records candidate dir {recorded_dir!r}, which is not a "
+            "single path component under the work dir; a resume joins that onto "
+            "work_dir and records into it, so a manifest naming a path outside "
+            "this leg is refused rather than followed"
+        )
+
+
 def _recorded_candidate_dirs(
     work_dir: Path, *, tranche: str
 ) -> tuple[dict[str, str], set[str]]:
@@ -1554,6 +1582,7 @@ def _recorded_candidate_dirs(
             seen.add(label)
             recorded_dir = entry.get("dir")
             if isinstance(recorded_dir, str) and recorded_dir:
+                _refuse_escaping_recorded_dir(recorded_dir, manifest=path)
                 recorded[label] = recorded_dir
     return recorded, seen
 
@@ -2073,7 +2102,9 @@ def _publish_ranking(ranking_path: Path, payload: str) -> None:
                     raise
 
 
-def _refuse_library_owned_ranking_path(ranking_path: Path, *, work_dir: Path) -> None:
+def _refuse_library_owned_ranking_path(
+    ranking_path: Path, *, work_dir: Path, candidates: Sequence[RealPathCandidate]
+) -> None:
     """Refuse a ranking path this leg will itself create as a work artifact (18.31).
 
     The existence preflight above runs before the leg has written anything, so
@@ -2097,6 +2128,27 @@ def _refuse_library_owned_ranking_path(ranking_path: Path, *, work_dir: Path) ->
     if not inside:
         return
     name = ranking_path.name
+    # A candidate RECORDING DIR is library-owned too, and its name is not in the
+    # stem namespace: ``000-utility-es`` passed the check below, the leg then
+    # created it as a directory, recorded every paid game into it, and
+    # ``_publish_ranking`` finally tried to hard-link the ranking onto a
+    # directory (Codex review on PR #314). My round-12 guard covered the stems
+    # and stopped there. The enumerated name is what a fresh leg takes, and a
+    # resume can step to a later ordinal, so every ordinal this slate could
+    # reach is refused rather than only the first.
+    slugs = {_safe_slug(candidate.label) for candidate in candidates}
+    stem_name, _, suffix_slug = name.partition("-")
+    looks_like_candidate_dir = (
+        len(stem_name) == 3 and stem_name.isdigit() and suffix_slug in slugs
+    )
+    if looks_like_candidate_dir:
+        raise RealPathRerankError(
+            f"ranking_path {ranking_path} names a candidate recording directory "
+            f"for this slate (NNN-<slug>, slugs {sorted(slugs)}); the leg creates "
+            "that path as a DIRECTORY and records into it, so the ranking publish "
+            "would fail its link after every paid game — refusing before any game "
+            "is spent (point --ranking-path outside the work dir)"
+        )
     if name == LEG_LOG_FILENAME or any(
         name.startswith(f"{stem}-")
         for stem in (
@@ -2595,7 +2647,35 @@ def run_realpath_rerank(
             "already recorded and its rows are never rewritten — refusing before "
             "any game is spent (point --ranking-path at a fresh file)"
         )
-    _refuse_library_owned_ranking_path(ranking_path, work_dir=work_dir)
+    _refuse_library_owned_ranking_path(
+        ranking_path, work_dir=work_dir, candidates=candidates
+    )
+    # EVERY candidate's builder, before the leg reserves anything. The factory
+    # was built lazily inside the recording loop, so a bad genome length or
+    # width on candidate N raised only after candidates 1..N-1 had consumed
+    # paid games — and by then the manifest recorded the whole slate, so
+    # correcting the bad candidate changes its digest/family identity and
+    # ``_refuse_protocol_drift`` refuses the resume, while a fresh retry
+    # collides with the reserved directories. An input error would strand the
+    # work dir AND the completed recordings in it (Codex review on PR #314).
+    # Building a policy is pure construction — it plays nothing — so this is
+    # the same cheap preflight the floor block and the ranking path already get.
+    for candidate in candidates:
+        try:
+            _build_agent_factory(candidate, game_map=resolved_map)
+        except (ValueError, TypeError) as exc:
+            raise RealPathRerankError(
+                f"candidate {candidate.label!r} does not rebuild as "
+                f"{candidate.encoder_version!r}"
+                + (
+                    f" at hidden={candidate.hidden}"
+                    if candidate.hidden is not None
+                    else ""
+                )
+                + f" ({exc}); refusing before any game is spent, because a slate "
+                "that fails partway strands both the work dir and the games "
+                "already recorded into it"
+            ) from exc
     _refuse_unpublishable_ranking_dir(ranking_path)
 
     # A resume adopts BYTES RECORDED UNDER A PREVIOUS PROTOCOL, so the previous
@@ -2827,6 +2907,22 @@ def run_realpath_rerank(
             _publish_ranking(
                 ranking_path, "".join(row.to_json_line() + "\n" for row in rows)
             )
+        except BaseException as exc:
+            # The hour-40 provider 503 leaves its own record: the leg log states
+            # exactly where the leg stopped, which is what a resume reads next.
+            leg_log.emit("leg-failed", error=type(exc).__name__, message=str(exc))
+            raise
+        # PAST THE COMMIT POINT. The ranking is a published write-once artifact
+        # now, so a failure in these trailing log appends must not report the leg
+        # as wholly failed: the caller would retry, the ranking preflight would
+        # refuse the existing file, and a leg that actually SUCCEEDED becomes
+        # permanently unrepeatable (Codex review on PR #314). A log append can
+        # fail on its own — ``work_dir`` filling while ``ranking_path`` sits on
+        # another filesystem is the concrete case — so the append is attempted,
+        # its failure is reported on stderr, and the committed result is
+        # returned. Losing an audit line is a real cost; losing a committed
+        # 30-40 h leg to it is a worse one.
+        try:
             for row in rows:
                 leg_log.emit(
                     "rank",
@@ -2837,11 +2933,13 @@ def run_realpath_rerank(
                     validity_passed=row.validity_passed,
                 )
             leg_log.emit("leg-done", ranking_path=str(ranking_path), rows=len(rows))
-        except BaseException as exc:
-            # The hour-40 provider 503 leaves its own record: the leg log states
-            # exactly where the leg stopped, which is what a resume reads next.
-            leg_log.emit("leg-failed", error=type(exc).__name__, message=str(exc))
-            raise
+        except OSError as exc:
+            print(
+                f"realpath: the ranking at {ranking_path} IS committed, but the "
+                f"leg log at {leg_log.path} could not record it ({exc}). The leg "
+                "succeeded; its trailing audit lines are missing.",
+                file=sys.stderr,
+            )
         return RealPathRerankResult(
             mode=mode,
             ranking_path=str(ranking_path),

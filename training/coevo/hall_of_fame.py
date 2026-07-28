@@ -897,6 +897,33 @@ class HallOfFame:
                 )
             resolved_metadata = recorded
 
+        # A loadable pool whose metadata BLOCK went missing is a corrupted
+        # index, not a legacy weights-only pool. Treating the two alike skipped
+        # every stamp.json / config.json verification while those files sat
+        # right there on disk, handed back a hall with ``artifact_metadata=None``,
+        # and its next ``add_member`` wrote two files — silently turning a
+        # loadable pool into a mixed-format one and losing the campaign's freeze
+        # identity (Codex review on PR #314). The members themselves say which
+        # kind of pool this is, so ask them.
+        if resolved_metadata is None:
+            stamped = sorted(
+                entry["path"]
+                for entry in raw_members
+                if isinstance(entry, dict)
+                and isinstance(entry.get("path"), str)
+                and (side_dir / entry["path"] / _STAMP_FILENAME).exists()
+            )
+            if stamped:
+                raise ValueError(
+                    f"hall of fame index at {index_path} declares no "
+                    f"artifact_metadata, but member(s) {stamped[:3]} carry a "
+                    f"{_STAMP_FILENAME} on disk: this is a LOADABLE pool whose "
+                    "metadata block is missing or null. Loading it would skip "
+                    "every four-file verification and downgrade the next freeze "
+                    "to two files — repair the index rather than losing the "
+                    "pool's freeze identity"
+                )
+
         # Pass 1: validate rows, self-check path, collect the declared path set.
         members: list[HallOfFameMember] = []
         declared_paths: set[str] = set()

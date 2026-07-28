@@ -26,6 +26,7 @@ import sys
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -1349,6 +1350,46 @@ def test_artifact_metadata_round_trips_through_the_index(tmp_path: Path) -> None
         ).artifact_metadata
         == _metadata()
     )
+
+
+def test_a_loadable_pool_with_no_metadata_block_is_refused(tmp_path: Path) -> None:
+    """A missing metadata block is corruption, not a legacy pool (Codex #314).
+
+    Treating the two alike skipped every stamp/config verification while those
+    files sat on disk, returned a hall with ``artifact_metadata=None``, and its
+    next ``add_member`` wrote two files — silently mixing formats and losing the
+    campaign's freeze identity.
+    """
+
+    hall = HallOfFame.create(
+        tmp_path, "impostor", substrate_sha256=_SUBSTRATE, artifact_metadata=_metadata()
+    )
+    member = hall.add_member(
+        _rebuildable_genome(_UTILITY_ENCODER),
+        generation=1,
+        origin="champion",
+        trained_against=TRAINED_AGAINST_FSM,
+    )
+    assert (tmp_path / "impostor" / member.path / "stamp.json").exists()
+
+    index_path = tmp_path / "impostor" / "hall_of_fame.json"
+    # Both shapes a corrupted index takes: the key DELETED, and the key present
+    # but null. The value check alone would treat the second as legacy too.
+    for drop_key in (True, False):
+        index: dict[str, Any] = json.loads(index_path.read_text())
+        if drop_key:
+            del index["artifact_metadata"]
+        else:
+            index["artifact_metadata"] = None
+        index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(ValueError, match="metadata block is missing or null"):
+            HallOfFame.load(tmp_path, "impostor")
+
+    # A genuinely weights-only pool is unaffected: no stamps, no refusal.
+    plain = tmp_path / "plain"
+    weights_only = HallOfFame.create(plain, "impostor", substrate_sha256=_SUBSTRATE)
+    _add_champions(weights_only)
+    assert HallOfFame.load(plain, "impostor").artifact_metadata is None
 
 
 def test_weights_only_pool_index_bytes_are_unchanged(tmp_path: Path) -> None:

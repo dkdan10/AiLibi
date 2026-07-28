@@ -739,13 +739,41 @@ def _collect_arms(
 
     by_arm: dict[tuple[str, str, str], dict[str, Mapping[str, Any]]] = {}
     tranche_seeds: dict[str, frozenset[int]] = {}
+    label_genomes: dict[tuple[str, str], str] = {}
+    # RESOLVED leg identity, and each ranking file counted once. The same tree
+    # supplied through both its real path and a symlinked ``--ranking-root``
+    # yields different LEXICAL parents for identical files, so the arms are
+    # folded twice and every count doubles behind a valid-looking artifact
+    # (Codex review on PR #314). Resolving the leg collapses the alias; the
+    # seen-set drops a file offered twice under two spellings.
+    seen_files: set[Path] = set()
     for path in ranking_paths:
-        leg = path.parent.as_posix()
+        resolved = path.resolve()
+        if resolved in seen_files:
+            continue
+        seen_files.add(resolved)
+        leg = resolved.parent.as_posix()
         tranche, seeds = _tranche_identity(path)
         tranche_seeds[tranche] = seeds
         for row in read_validated_ranking(path):
             # The LABEL rides the arm key: one genome under two labels is two
             # candidates, and collapsing them would pair the wrong reads.
+            # A LABEL names one candidate within a leg. If two tranche files
+            # reuse it for different genomes, the digest in the arm key turns
+            # them into two unrelated ONE-tranche arms, both dropped by the
+            # ``len(reads) < 2`` branch below — so the identity drift is
+            # silently omitted from the table rather than reported, and the
+            # result still succeeds on the other arms (Codex review on PR #314).
+            label_key = (leg, row["label"])
+            known = label_genomes.setdefault(label_key, row["weights_sha256"])
+            if known != row["weights_sha256"]:
+                raise SystemExit(
+                    f"{path}: label {row['label']!r} names genome "
+                    f"{row['weights_sha256']} here but {known} in another tranche "
+                    f"of leg {leg}; a label is a candidate's identity within a "
+                    "leg, so a label that moves between genomes is drift, not two "
+                    "candidates"
+                )
             key = (leg, row["weights_sha256"], row["label"])
             reads = by_arm.setdefault(key, {})
             if tranche in reads:
@@ -1163,7 +1191,11 @@ def _run_stability(args: argparse.Namespace) -> int:
     # ``_resolve`` so ``./x.json`` and ``x.json`` are recognised as one file.
     if args.out is not None and args.json_out is not None:
         rendered, machine = _resolve(Path(args.out)), _resolve(Path(args.json_out))
-        if rendered == machine:
+        # ``_same_file``, not ``==``: two different path STRINGS can resolve to
+        # one file through a symlink or hard link, and the round-11 equality
+        # check missed exactly that (Codex review on PR #314). The helper the
+        # round-12 input/output guard already uses handles both.
+        if _same_file(rendered, machine):
             raise SystemExit(
                 f"--out and --json-out both name {rendered}; they emit different "
                 "artifacts (Markdown and JSON), so one would overwrite the other. "

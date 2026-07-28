@@ -698,6 +698,47 @@ def test_the_generator_never_overwrites_an_artifact_it_read(tmp_path: Path) -> N
     assert out.read_text(encoding="utf-8").startswith("## Campaign rows")
 
 
+def test_a_symlinked_ranking_root_is_not_two_campaigns(tmp_path: Path) -> None:
+    """The same tree under two spellings is one input (Codex on PR #314).
+
+    Supplying a ranking tree through both its real path and a symlink gave the
+    identical files different LEXICAL leg keys, so every arm folded twice and
+    the counts doubled behind a valid-looking artifact.
+    """
+
+    real = tmp_path / "campaign" / "leg-01"
+    real.mkdir(parents=True)
+    for name in ("ranking-4000-4002.jsonl", "ranking-4003-4005.jsonl"):
+        shutil.copy(_RUN_01_LEG / name, real / name)
+    link = tmp_path / "aliased"
+    link.symlink_to(tmp_path / "campaign", target_is_directory=True)
+
+    once = gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+    twice = gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign", link]))
+    assert once["arms_with_both_tranches"] == 2
+    assert twice == once, "an aliased root must not double the arms"
+
+
+def test_a_label_may_not_change_genome_between_tranches(tmp_path: Path) -> None:
+    """A label naming two genomes is drift, and must be reported (Codex #314).
+
+    The digest rides the arm key, so a label reused for a different genome
+    became two unrelated ONE-tranche arms — both dropped by the ``len(reads) <
+    2`` branch, so the identity drift was silently omitted while the result
+    succeeded on the other arms.
+    """
+
+    first, second = _committed_row(0), _committed_row(1)
+    second["label"] = first["label"]  # same label, different genome
+    assert first["weights_sha256"] != second["weights_sha256"]
+
+    leg = tmp_path / "campaign" / "leg-01"
+    _write_arm(leg, "t1", first, seeds=(1, 2, 3))
+    _write_arm(leg, "t2", second, seeds=(4, 5, 6))
+    with pytest.raises(SystemExit, match="a label that moves between genomes is drift"):
+        gct.compute_stability(gct.find_ranking_files([tmp_path / "campaign"]))
+
+
 def test_stability_refuses_one_path_for_both_artifacts(tmp_path: Path) -> None:
     """``--out`` and ``--json-out`` emit DIFFERENT artifacts (Codex on PR #314).
 
@@ -722,6 +763,15 @@ def test_stability_refuses_one_path_for_both_artifacts(tmp_path: Path) -> None:
                 str(tmp_path / "." / "both.json"),
             ]
         )
+
+    # And through a SYMLINK: two different path strings resolving to one file.
+    # The round-11 equality check missed this; `_same_file` catches it.
+    real = tmp_path / "real.md"
+    real.write_text("", encoding="utf-8")
+    alias = tmp_path / "alias.md"
+    alias.symlink_to(real)
+    with pytest.raises(SystemExit, match="they emit different artifacts"):
+        gct.main(["stability", "--out", str(real), "--json-out", str(alias)])
 
     # Two distinct paths still emit both artifacts.
     table_out, json_out = tmp_path / "t.md", tmp_path / "t.json"

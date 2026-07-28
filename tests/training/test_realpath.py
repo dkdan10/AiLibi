@@ -26,6 +26,7 @@ import asyncio
 import fcntl
 import json
 import os
+import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -2039,6 +2040,154 @@ def test_ranking_path_may_not_be_a_library_owned_work_dir_file(
         ranking_path=work_dir / "ranking-1-2.jsonl",
         config=_config(),
     ).rows
+
+
+def test_ranking_path_may_not_name_a_candidate_directory(tmp_path: Path) -> None:
+    """A candidate RECORDING DIR is library-owned too (Codex on PR #314).
+
+    My round-12 guard covered the ``leg-*`` / ``prescreen-*`` / ``tranche-claim-*``
+    stems and stopped there, so ``work/000-utility-es`` passed: the leg created
+    it as a directory, recorded every paid game into it, and the ranking publish
+    then tried to hard-link onto a directory.
+    """
+
+    work_dir = tmp_path / "work"
+    for name in ("000-utility-es", "001-utility-es", "007-utility-es"):
+        with pytest.raises(RealPathRerankError, match="candidate recording directory"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=work_dir / name,
+                config=_config(),
+            )
+    assert not work_dir.exists() or list(work_dir.iterdir()) == []
+    # A name that is NOT a candidate dir for this slate still works.
+    assert run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1, 2],
+        work_dir=work_dir,
+        ranking_path=work_dir / "000-something-else.jsonl",
+        config=_config(),
+    ).rows
+
+
+def test_resume_refuses_a_manifest_dir_that_escapes_the_work_root(
+    tmp_path: Path,
+) -> None:
+    """A manifest's ``dir`` is a basename, never a path (Codex on PR #314).
+
+    ``_resolve_candidate_dirs`` joins the recorded string onto ``work_dir`` and
+    records into the result, so a corrupted or hand-edited manifest naming
+    ``../../other-campaign/candidate`` would aim this leg's recording — and its
+    force re-records — at another campaign's replay evidence.
+    """
+
+    work_dir = tmp_path / "work"
+    outside = tmp_path / "other-campaign"
+    outside.mkdir()
+    (outside / "sentinel.jsonl").write_text("untouched", encoding="utf-8")
+
+    for escaping in ("../other-campaign/candidate", "..", "a/b", str(outside)):
+        _record_two_seeds(work_dir, tmp_path / f"ranking-{abs(hash(escaping))}.jsonl")
+        manifest = next(work_dir.glob("leg-1-2-*.json"))
+        payload = json.loads(manifest.read_text())
+        payload["candidates"][0]["dir"] = escaping
+        manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        with pytest.raises(RealPathRerankError, match="single path component"):
+            run_realpath_rerank(
+                [_util_candidate()],
+                seeds=[1, 2],
+                work_dir=work_dir,
+                ranking_path=tmp_path / f"resumed-{abs(hash(escaping))}.jsonl",
+                config=_config(),
+                resume=True,
+            )
+        shutil.rmtree(work_dir)
+
+    assert (outside / "sentinel.jsonl").read_text(encoding="utf-8") == "untouched"
+
+
+def test_every_candidate_is_rebuilt_before_the_leg_reserves_anything(
+    tmp_path: Path,
+) -> None:
+    """A bad candidate must not strand the work dir (Codex on PR #314).
+
+    ``_build_agent_factory`` ran lazily inside the recording loop, so an invalid
+    genome on candidate N raised only after 1..N-1 had consumed paid games — and
+    the manifest already recorded the whole slate, so correcting the bad
+    candidate changes its identity and the resume is refused as drift, while a
+    fresh retry collides with the reserved directories.
+    """
+
+    good = _util_candidate("arm-good")
+    bad = _util_candidate("arm-bad").model_copy(
+        update={"genome": _util_candidate().genome + (0.0,)}
+    )
+    work_dir = tmp_path / "work"
+    with pytest.raises(RealPathRerankError, match="does not rebuild as"):
+        run_realpath_rerank(
+            [good, bad],
+            seeds=[1],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking-1.jsonl",
+            config=_config(),
+        )
+    # NOTHING reserved and NOTHING recorded: no manifest, no candidate dirs.
+    assert not work_dir.exists() or list(work_dir.iterdir()) == []
+    # The corrected slate then runs into a clean work dir.
+    assert run_realpath_rerank(
+        [good],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=tmp_path / "ranking-2.jsonl",
+        config=_config(),
+    ).rows
+
+
+def test_a_post_commit_log_failure_does_not_fail_a_committed_leg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Once the ranking is published the leg SUCCEEDED (Codex on PR #314).
+
+    The trailing rank / leg-done appends sat inside the broad failure handler,
+    so an append failure emitted ``leg-failed`` and raised even though the
+    ranking already existed — and every retry is then refused by the ranking
+    preflight, making a leg that actually succeeded permanently unrepeatable.
+    """
+
+    work_dir = tmp_path / "work"
+    ranking_path = tmp_path / "ranking-1.jsonl"
+    real_emit = realpath.RealPathLegLog.emit
+
+    def _fail_after_commit(
+        self: realpath.RealPathLegLog, event: str, **fields: object
+    ) -> None:
+        if event in {"rank", "leg-done"}:
+            raise OSError("no space left on device")
+        real_emit(self, event, **fields)
+
+    monkeypatch.setattr(realpath.RealPathLegLog, "emit", _fail_after_commit)
+    result = run_realpath_rerank(
+        [_util_candidate()],
+        seeds=[1],
+        work_dir=work_dir,
+        ranking_path=ranking_path,
+        config=_config(),
+    )
+    monkeypatch.undo()
+
+    # The leg returned its committed result, and the ranking is on disk.
+    assert result.rows
+    assert ranking_path.exists()
+    # The lost audit lines are REPORTED, not swallowed.
+    assert "IS committed" in capsys.readouterr().err
+    # And the leg log records no failure, because there was none.
+    events = [
+        json.loads(line)["event"]
+        for line in (work_dir / LEG_LOG_FILENAME).read_text().splitlines()
+    ]
+    assert "leg-failed" not in events
 
 
 def test_the_allocation_claim_is_held_across_resolution(tmp_path: Path) -> None:

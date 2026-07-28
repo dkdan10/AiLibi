@@ -1472,6 +1472,50 @@ def test_a_boolean_hidden_width_is_refused_not_coerced(tmp_path: Path) -> None:
         _assert_no_disk_mutation(tmp_path)
 
 
+def test_width_free_families_are_rebuilt_in_the_campaign_preflight(
+    tmp_path: Path,
+) -> None:
+    """Every loadable family is preflighted, not just width-bearing ones (#314).
+
+    The reconstruction branch only covered width-bearing impostor encoders, so a
+    custom ``build_policy`` reporting a crew tag (or the utility tag) with an
+    incompatible genome length passed startup, spent the first generation's
+    games, and failed only when ``_persist_generation_champion`` reached the
+    real consumer builder.
+    """
+
+    # A PERMISSIVE custom builder: it reports the loadable family tag and
+    # accepts any length, which is exactly the shape that slipped through — the
+    # committed builders validate the length themselves, so the gap is only
+    # reachable through a caller-supplied one.
+    def _permissive_impostor(genome: tuple[float, ...]) -> BakeoffPolicy:
+        return build_utility_scorer_policy(genome[:_IMPOSTOR_GENOME_LENGTH])
+
+    def _permissive_crew(genome: tuple[float, ...]) -> CrewTrackPolicy:
+        return _crew_builder(genome[:_CREW_GENOME_LENGTH])
+
+    config = _make_config(
+        tmp_path,
+        impostor=_impostor_side(
+            genome_length=_IMPOSTOR_GENOME_LENGTH + 1, build_policy=_permissive_impostor
+        ),
+    )
+    with pytest.raises(ValueError, match="does not survive the consuming builder"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+    # The crew families, same gap on the other side.
+    config = _make_config(
+        tmp_path,
+        crew=_crew_side(
+            genome_length=_CREW_GENOME_LENGTH + 1, build_policy=_permissive_crew
+        ),
+    )
+    with pytest.raises(ValueError, match="does not survive the consuming builder"):
+        run_alternating_freeze(config)
+    _assert_no_disk_mutation(tmp_path)
+
+
 def test_crew_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
     """The crew scorer takes no head width either (Codex on PR #314).
 
