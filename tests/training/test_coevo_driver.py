@@ -85,9 +85,13 @@ from training.bakeoff.utility_es import build_utility_scorer_policy
 from training.coevo.driver import (
     COEVO_CAMPAIGN_ROW_SCHEMA_VERSION,
     COEVO_FREEZE_METHOD,
+    CAMPAIGN_PLAN_FILENAME,
+    CAMPAIGN_ROWS_FILENAME,
     EXPLOITER_ORIGIN,
     GEN_CHAMPIONS_DIRNAME,
     GENERATION_CHAMPION_ORIGIN,
+    ROLLOUTS_DIRNAME,
+    WORK_DIR_OWNED_NAMES,
     SWAP_CHAMPION_ORIGIN,
     CoevoCampaignConfig,
     CoevoCampaignResult,
@@ -955,6 +959,54 @@ def test_the_work_dir_and_the_hall_root_may_not_overlap(tmp_path: Path) -> None:
     (hall_root / "impostor" / "gen-champions" / "gen-1" / "abc").mkdir(parents=True)
     with pytest.raises(ValueError):
         HallOfFame.load(hall_root, "impostor")
+
+
+def test_the_hall_root_may_not_be_a_driver_owned_path(tmp_path: Path) -> None:
+    """The mirror of the side-dir rule (Codex review on PR #314).
+
+    Narrowing the round-18 guard to the side dirs was right for the reported
+    layout and left this open: every ``hall_root`` under the work dir was then
+    allowed, including the four paths the driver writes itself. Each fails
+    differently and none of them failed WELL — measured:
+
+    * ``campaign-plan.json`` -> ``NotADirectoryError`` mid-startup;
+    * ``campaign-rows.jsonl`` -> the hall's mkdir creates the rows path as a
+      directory, so the corrected retry is refused by the rows no-clobber check;
+    * ``gen-champions`` / ``rollouts`` -> the first campaign COMPLETES with the
+      halls squatting in driver-owned output, and only a later campaign in that
+      work dir is refused.
+
+    The last two are the worst precisely because nothing fails at the time.
+    """
+
+    for owned in WORK_DIR_OWNED_NAMES:
+        base = tmp_path / owned.replace(".", "_")
+        config = _make_config(base, hall_root=base / "work" / owned)
+        with pytest.raises(ValueError, match="which this driver writes itself"):
+            run_alternating_freeze(config)
+        # Refused before ANY mutation: the work dir itself is still unmade, so a
+        # corrected retry has a clean tree rather than a half-built one.
+        assert not (base / "work").exists()
+
+    # The enumeration is the guard's domain, so it may not silently fall behind
+    # what the driver writes. Every owned name is a real artifact path.
+    assert set(WORK_DIR_OWNED_NAMES) == {
+        CAMPAIGN_PLAN_FILENAME,
+        CAMPAIGN_ROWS_FILENAME,
+        GEN_CHAMPIONS_DIRNAME,
+        ROLLOUTS_DIRNAME,
+    }
+
+    # NO OVER-REACH: a sibling under the work dir is still fine, and a hall root
+    # merely PREFIXED by an owned name is a different path.
+    ok_root = tmp_path / "ok"
+    ok = _make_config(ok_root, hall_root=ok_root / "work" / "halls")
+    assert run_alternating_freeze(ok).total_games == _BASELINE_GAMES
+    near_root = tmp_path / "near"
+    near = _make_config(
+        near_root, hall_root=near_root / "work" / f"{GEN_CHAMPIONS_DIRNAME}-halls"
+    )
+    assert run_alternating_freeze(near).total_games == _BASELINE_GAMES
 
 
 def test_dangling_campaign_artifact_symlinks_are_refused(tmp_path: Path) -> None:

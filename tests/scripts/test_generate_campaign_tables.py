@@ -895,6 +895,55 @@ def test_no_output_may_land_under_a_frozen_evidence_root(tmp_path: Path) -> None
     assert outside.read_text(encoding="utf-8").startswith("| stability check")
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("champion_updated", "false"),
+        ("champion_updated", 0),
+        ("swap_index", "0"),
+        ("champion_fitness", "20.5"),
+        ("opponent_pool_size", 1.5),
+        ("moving_side", "sheriff"),
+        ("generation_index", "1"),
+    ],
+    ids=[
+        "bool-as-string",
+        "bool-as-int",
+        "int-as-string",
+        "float-as-string",
+        "int-as-float",
+        "side-not-a-side",
+        "generation-as-string",
+    ],
+)
+def test_rows_refuse_type_invalid_values(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """The right schema says nothing about the values under it (Codex #314).
+
+    ``"champion_updated": "false"`` — the STRING — is truthy, so this renderer
+    printed ``yes`` for it and reported success. A generator whose whole purpose
+    is to remove transcription error must not invent one.
+
+    Validation is ``model_validate_json`` in STRICT mode and both halves matter:
+    lax validation coerces ``"false"`` to ``False`` and would accept the
+    corrupted row silently, while strict validation over a dict rejects every
+    committed row (a JSON array is not a ``tuple``). From JSON the two reconcile.
+    """
+
+    rows = [
+        json.loads(line)
+        for line in _CAMPAIGN_ROWS.read_text(encoding="utf-8").splitlines()[:3]
+    ]
+    corrupted = [{**rows[0], field: value}, *rows[1:]]
+    forged = tmp_path / "rows.jsonl"
+    forged.write_text(
+        "".join(json.dumps(row) + "\n" for row in corrupted), encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="does not satisfy it"):
+        gct.render_rows_document(forged, labels=["run-01"])
+
+
 def test_rows_refuse_a_foreign_schema_version(tmp_path: Path) -> None:
     """The CLI promises ``coevo-campaign-v1``; nothing checked it (Codex #314).
 

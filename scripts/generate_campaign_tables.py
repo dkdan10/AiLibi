@@ -69,6 +69,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from pydantic import ValidationError  # noqa: E402
+
+from training.coevo.driver import CoevoCampaignRow  # noqa: E402
+
 # --------------------------------------------------------------------------- #
 # Constants.                                                                   #
 # --------------------------------------------------------------------------- #
@@ -291,6 +295,29 @@ def split_run_segments(
             "names and change what they mean, so the table is refused rather "
             "than rendered from fields nobody has checked"
         )
+    # And the field TYPES, through the driver's own row model. Declaring the
+    # right schema says nothing about the values under it, and this renderer
+    # read them straight: a corrupted ``"champion_updated": "false"`` — the
+    # STRING — is truthy, so it rendered as ``yes`` and the run reported
+    # success. A generator whose whole purpose is to remove transcription error
+    # must not invent one (Codex review on PR #314).
+    #
+    # ``model_validate_json`` in STRICT mode, not ``model_validate``. Lax
+    # validation coerces ``"false"`` to ``False`` and would have accepted the
+    # corrupted row silently; strict validation over a dict is unusable here,
+    # because a JSON array is not a ``tuple`` and every committed row fails. From
+    # JSON the two are reconciled: arrays satisfy tuple fields, and a
+    # string-for-bool is still refused. Verified against the committed corpus —
+    # all 52 rows pass, and a wrong type in any field does not.
+    for index, row in enumerate(rows, start=1):
+        try:
+            CoevoCampaignRow.model_validate_json(json.dumps(row), strict=True)
+        except ValidationError as exc:
+            raise SystemExit(
+                f"campaign row {index} declares {CAMPAIGN_ROWS_SCHEMA} but does "
+                f"not satisfy it: {exc}. The table is refused rather than "
+                "rendered from values whose types were never checked"
+            ) from exc
     if rows and rows[0].get("generation_index") != 1:
         raise SystemExit(
             "the row stream does not begin at generation_index 1 "

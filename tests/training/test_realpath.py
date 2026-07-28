@@ -3211,6 +3211,80 @@ def test_a_malformed_manifest_identity_is_refused_not_downgraded(
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("label", 17),
+        ("label", None),
+        ("label", ""),
+        ("dir", 17),
+        ("dir", ""),
+    ],
+    ids=["label-int", "label-null", "label-empty", "dir-int", "dir-empty"],
+)
+def test_a_malformed_claim_owner_is_refused_not_skipped(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    """A claim whose owner cannot be named is corrupted, not absent (Codex #314).
+
+    Round 19 made a malformed IDENTITY fail loud and left the label and dir on an
+    inline predicate that silently skipped them — one field over, the same silent
+    weakening. The entry still names a real directory, so dropping it discards a
+    durable RESERVATION: a fresh leg then allocates the claimed directory, or
+    publishes a ranking into it, and the original leg is unrecoverable.
+    """
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    entry = _claim_entry("arm-a", "000-arm-a")
+    entry[field] = value
+    (work_dir / f"{realpath.LEG_MANIFEST_FILENAME_STEM}-1-2-000.json").write_text(
+        json.dumps({"tranche": "1-2", "candidates": [entry]}), encoding="utf-8"
+    )
+
+    # The ALLOCATOR refuses rather than treating the directory as unclaimed.
+    with pytest.raises(RealPathRerankError, match="corrupted evidence"):
+        realpath._resolve_candidate_dirs(
+            work_dir,
+            tranche="1-2",
+            candidates=[_util_candidate(label="arm-a")],
+            resume=False,
+        )
+    # And so does the whole leg, before it spends anything.
+    with pytest.raises(RealPathRerankError, match="corrupted evidence"):
+        run_realpath_rerank(
+            [_util_candidate(label="arm-a")],
+            seeds=[1, 2],
+            work_dir=work_dir,
+            ranking_path=tmp_path / "ranking.jsonl",
+            config=_config(),
+        )
+    assert not (work_dir / "000-arm-a").exists()
+
+
+def test_a_tranche_may_not_repeat_a_seed() -> None:
+    """Uniqueness belongs in the shared key, not only the recorder (Codex #314).
+
+    ``run_realpath_rerank`` rejects a repeated seed, but ``write_prescreen_record``
+    is public and reaches ``tranche_key`` directly — so ``[1, 1, 2]`` keyed a
+    distinct "gapped" tranche and would have written audit evidence for a seed
+    set the recorder can never execute. A tranche IS a set; a set has no
+    multiplicities.
+    """
+
+    with pytest.raises(ValueError, match="repeated seeds"):
+        realpath.tranche_key([1, 1, 2])
+    with pytest.raises(ValueError, match="repeated seeds"):
+        realpath.tranche_key([4000, 4000])
+    # NO OVER-REACH: every legitimate shape still keys, and byte-identically to
+    # before — the committed contiguous names are unchanged.
+    assert realpath.tranche_key([1, 2]) == "1-2"
+    assert realpath.tranche_key([4000, 4001, 4002]) == "4000-4002"
+    assert realpath.tranche_key([7]) == "7"
+    assert realpath.tranche_key([3, 2, 1]) == "1-3"
+    assert realpath.tranche_key([1, 2, 4]).startswith("1-4-")
+
+
 def test_the_leg_log_is_a_recording_entry_too(tmp_path: Path) -> None:
     """Append mode follows a symlink (Codex review on PR #314).
 

@@ -327,6 +327,32 @@ CAMPAIGN_PLAN_FILENAME: Final[str] = "campaign-plan.json"
 #: :meth:`CoevoCampaignResult.digest`, does not move.
 GEN_CHAMPIONS_DIRNAME: Final[str] = "gen-champions"
 
+#: Per-rollout scratch lands under ``<work_dir>/rollouts/r<NNNNNN>/``.
+ROLLOUTS_DIRNAME: Final[str] = "rollouts"
+
+#: EVERY name this driver writes under ``work_dir``, enumerated. Stated as data
+#: because the config preflight has to know the whole set: a ``hall_root``
+#: pointed at one of these is a collision between two trees that both believe
+#: they own the path, and the failures are ugly and late (Codex review on
+#: PR #314). Measured, per name, with ``hall_root = work_dir / <name>``:
+#:
+#: * ``campaign-plan.json`` -> ``NotADirectoryError`` mid-startup, after the work
+#:   dir and plan exist;
+#: * ``campaign-rows.jsonl`` -> the hall's ``mkdir`` creates the rows PATH as a
+#:   directory, so the corrected retry is refused by the rows no-clobber check;
+#: * ``gen-champions`` and ``rollouts`` -> the first campaign completes with the
+#:   halls squatting inside a directory this driver owns, and only a LATER
+#:   campaign in that work dir is refused.
+#:
+#: The last two are the worst of the four precisely because nothing fails at the
+#: time. All four are refused up front instead.
+WORK_DIR_OWNED_NAMES: Final[tuple[str, ...]] = (
+    CAMPAIGN_PLAN_FILENAME,
+    CAMPAIGN_ROWS_FILENAME,
+    GEN_CHAMPIONS_DIRNAME,
+    ROLLOUTS_DIRNAME,
+)
+
 # Deterministic stream tags for ``derive_stream_seed`` (arbitrary fixed ints;
 # distinct tags can never collide by construction of the stream derivation).
 _STREAM_INIT: Final[int] = 1821
@@ -1168,6 +1194,28 @@ def _validate_config(
     # subdir rests on ``load`` never walking further down — and this P1 exists
     # precisely because a scan that "doesn't look there" started to.
     work_dir = config.work_dir.resolve()
+    # And the mirror of it: the hall root may not be, or sit inside, a path this
+    # driver writes. Narrowing the check to the side dirs (above) was right for
+    # the reported layout and left this one open — every ``hall_root`` under the
+    # work dir was then allowed, including the four the driver owns itself
+    # (Codex review on PR #314). ``WORK_DIR_OWNED_NAMES`` is the enumeration, so
+    # a fifth artifact added to this module has one place to be declared rather
+    # than a guard to remember.
+    hall_root_resolved = config.resolved_hall_root.resolve()
+    for owned in WORK_DIR_OWNED_NAMES:
+        owned_path = (config.work_dir / owned).resolve()
+        if hall_root_resolved == owned_path or hall_root_resolved.is_relative_to(
+            owned_path
+        ):
+            raise ValueError(
+                f"hall_root {config.resolved_hall_root} is at or inside "
+                f"{config.work_dir / owned}, which this driver writes itself. The "
+                "two trees would each assume they own that path — depending on "
+                "which one is created first the campaign dies mid-startup, or "
+                "completes with the halls buried in campaign output and refuses "
+                "the NEXT campaign in this work dir. Give the halls a path the "
+                f"driver does not own (a sibling such as work_dir/'halls' is fine)"
+            )
     for side in ("impostor", "crew"):
         side_dir = (config.resolved_hall_root / side).resolve()
         if work_dir == side_dir or work_dir.is_relative_to(side_dir):
@@ -1528,7 +1576,7 @@ class _CampaignEngine:
 
         impostor_policy, crew_policy = _ordered_pair(moving_side, mover, opponent)
         output_dir = (
-            self._config.work_dir / "rollouts" / f"r{self._rollout_counter:06d}"
+            self._config.work_dir / ROLLOUTS_DIRNAME / f"r{self._rollout_counter:06d}"
         )
         self._rollout_counter += 1
         self._games_total += 1
@@ -2156,7 +2204,9 @@ __all__ = [
     "EXPLOITER_ORIGIN",
     "GEN_CHAMPIONS_DIRNAME",
     "GENERATION_CHAMPION_ORIGIN",
+    "ROLLOUTS_DIRNAME",
     "SWAP_CHAMPION_ORIGIN",
+    "WORK_DIR_OWNED_NAMES",
     "CoevoCampaignConfig",
     "CoevoCampaignResult",
     "CoevoCampaignRow",

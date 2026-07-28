@@ -947,6 +947,20 @@ def tranche_key(seeds: Sequence[int]) -> str:
 
     if not seeds:
         raise ValueError("cannot key a tranche with no seeds")
+    # Uniqueness belongs HERE, in the shared helper, not only in the recorder's
+    # entry point. ``run_realpath_rerank`` rejects a repeated seed, but
+    # ``write_prescreen_record`` is public and reaches this directly, so
+    # ``[1, 1, 2]`` keyed a distinct "gapped" tranche and wrote audit evidence
+    # for a seed set the recorder can never execute (Codex review on PR #314).
+    # A duplicate is also meaningless to every consumer of the key: the tranche
+    # IS the seed set, and a set has no multiplicities.
+    duplicates = sorted({seed for seed in seeds if list(seeds).count(seed) > 1})
+    if duplicates:
+        raise ValueError(
+            f"cannot key a tranche with repeated seeds {duplicates}; a tranche "
+            "is a SET of seeds, and one recorded twice would key an experiment "
+            "no recording can reproduce"
+        )
     canonical = sorted(seeds)
     first, last = canonical[0], canonical[-1]
     if len(canonical) == 1:
@@ -1687,19 +1701,60 @@ def _claimed_candidate_dirs(work_dir: Path) -> dict[str, _DirClaim]:
             continue
         tranche = manifest.get("tranche")
         for entry in manifest.get("candidates", []):
-            recorded_dir, label = entry.get("dir"), entry.get("label")
-            if (
-                isinstance(recorded_dir, str)
-                and recorded_dir
-                and isinstance(tranche, str)
-                and isinstance(label, str)
-            ):
-                claimed[recorded_dir] = _DirClaim(
-                    tranche=tranche,
-                    label=label,
-                    identity=_recorded_identity(entry, manifest=path),
-                )
+            claimed[_claim_dir_name(entry, manifest=path)] = _DirClaim(
+                tranche=_claim_tranche(tranche, manifest=path),
+                label=_claim_label(entry, manifest=path),
+                identity=_recorded_identity(entry, manifest=path),
+            )
     return claimed
+
+
+def _claim_tranche(tranche: object, *, manifest: Path) -> str:
+    """The tranche a manifest names, refusing one that is not a string."""
+
+    if not isinstance(tranche, str) or not tranche:
+        raise RealPathRerankError(
+            f"{manifest} names tranche {tranche!r}; every leg manifest this "
+            "recorder writes carries a non-empty tranche key, so one that does "
+            "not is corrupted evidence"
+        )
+    return tranche
+
+
+def _claim_label(entry: Mapping[str, object], *, manifest: Path) -> str:
+    """One entry's candidate label, refusing one that is not a string.
+
+    Skipping a malformed label was the same silent weakening as skipping a
+    malformed identity, one field over: the entry still named a real ``dir``, so
+    dropping it discarded a durable RESERVATION and let a fresh leg allocate the
+    claimed directory — or publish a ranking into it — instead of refusing the
+    corrupted evidence (Codex review on PR #314). Round 19 fixed the identity
+    fields and left the label, which is the whole reason this now goes through
+    one validating reader rather than an inline predicate per field.
+    """
+
+    label = entry.get("label")
+    if not isinstance(label, str) or not label:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry with label {label!r}; a label "
+            "is a non-empty string, and a claim whose owner cannot be named is "
+            "corrupted evidence — dropping it would release a directory another "
+            "leg still holds"
+        )
+    return label
+
+
+def _claim_dir_name(entry: Mapping[str, object], *, manifest: Path) -> str:
+    """One entry's claimed directory name, refusing one that is not a string."""
+
+    recorded_dir = entry.get("dir")
+    if not isinstance(recorded_dir, str) or not recorded_dir:
+        raise RealPathRerankError(
+            f"{manifest} records a candidate entry with dir {recorded_dir!r}; a "
+            "claimed directory is a non-empty name, and an entry that cannot "
+            "name the directory it reserved is corrupted evidence"
+        )
+    return recorded_dir
 
 
 def _candidate_identity(candidate: RealPathCandidate) -> tuple[str, str, int | None]:
@@ -1823,11 +1878,10 @@ def _refuse_reused_label_identity(
             # error a resume sees first.
             continue
         for entry in manifest.get("candidates", []):
-            label = entry.get("label")
-            if not isinstance(label, str):
-                continue
-            # Read BEFORE the label filter would let it past: a malformed entry
-            # is refused whether or not this slate happens to carry its label.
+            # Both read BEFORE the label filter would let anything past: a
+            # malformed entry is refused whether or not this slate happens to
+            # carry its label.
+            label = _claim_label(entry, manifest=path)
             recorded = _recorded_identity(entry, manifest=path)
             if label in wanted and wanted[label] != recorded:
                 raise RealPathRerankError(
