@@ -1,0 +1,15 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "run-c1-crew-owned-tasks",
+  "champion_updated": false,
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-c1-crew-owned-tasks/impostor/gen-champions/gen-10/0ca3a382a0e3566dfb225d99cd72abd48e988709dba0cbae9fa5f96d68fa4f52",
+  "generation": 10,
+  "generation_in_swap": 1,
+  "genome_length": 19,
+  "hall_origin": "generation-champion",
+  "side": "impostor",
+  "source_lineage": "run-c1-crew-owned-tasks",
+  "swap_index": 3,
+  "trained_against": "26636fab45e3025d54f8948db12f0a08fea9dec73e21876e4031540845cb3bbc"
+}

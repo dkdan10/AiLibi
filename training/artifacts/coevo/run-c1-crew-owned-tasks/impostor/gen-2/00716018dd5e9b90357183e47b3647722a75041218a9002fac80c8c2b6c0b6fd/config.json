@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "run-c1-crew-owned-tasks",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-c1-crew-owned-tasks/impostor/gen-2/00716018dd5e9b90357183e47b3647722a75041218a9002fac80c8c2b6c0b6fd",
+  "generation": 2,
+  "genome_length": 19,
+  "hall_origin": "exploiter-probe",
+  "side": "impostor",
+  "source_lineage": "run-c1-crew-owned-tasks",
+  "trained_against": "a1fc26cc530534320ddeb7e750d5b4809310a67b1be34e5a9ce4abf44420ce42"
+}
