@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "run-c1-crew-owned-tasks",
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "run-c1-crew-owned-tasks/crew/gen-10/02f900e8479addc6ec8749e81b35fd54d07d40c5d1b6f08863f515718c1f693f",
+  "generation": 10,
+  "genome_length": 27,
+  "hall_origin": "exploiter-probe",
+  "side": "crew",
+  "source_lineage": "run-c1-crew-owned-tasks",
+  "trained_against": "0ca3a382a0e3566dfb225d99cd72abd48e988709dba0cbae9fa5f96d68fa4f52"
+}

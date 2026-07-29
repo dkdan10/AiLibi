@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "crew-option-features-v2",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-c1-crew-owned-tasks-crew-exploiter-probe-gen11-2cf6c29c3c4132006382b70ba069dc0d6509346d19341aa4487a3ca661f37809",
+  "weights_sha256": "2cf6c29c3c4132006382b70ba069dc0d6509346d19341aa4487a3ca661f37809"
+}

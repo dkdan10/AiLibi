@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "crew-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-ablation-run-c2-conviction-term-crew-exploiter-probe-gen12-404526a5b35a78f19036421e614dab0f8b9252dedd88b1d15ddc8294be1202a2",
+  "weights_sha256": "404526a5b35a78f19036421e614dab0f8b9252dedd88b1d15ddc8294be1202a2"
+}

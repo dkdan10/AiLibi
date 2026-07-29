@@ -1,0 +1,8 @@
+{
+  "campaign": "task-18.25-crew-campaign",
+  "encoder_version": "crew-option-features-v1",
+  "entrant": "crew-utility-es/gen-0-control",
+  "genome_length": 22,
+  "provenance": "the committed measurement-tier weights at training/artifacts/crew/crew-utility-es re-frozen as a four-file loadable artifact so the 18.26 dual-stamped control cell is executable via --crew-artifact (Codex review of PR #316; the 3-file source dir has no stamp.json by design)",
+  "source_lineage": "crew-utility-es"
+}

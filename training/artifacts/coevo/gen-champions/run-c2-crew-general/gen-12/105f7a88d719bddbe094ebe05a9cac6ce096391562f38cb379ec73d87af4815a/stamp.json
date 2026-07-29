@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "impostor-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-c2-crew-general-impostor-generation-champion-gen12-105f7a88d719bddbe094ebe05a9cac6ce096391562f38cb379ec73d87af4815a",
+  "weights_sha256": "105f7a88d719bddbe094ebe05a9cac6ce096391562f38cb379ec73d87af4815a"
+}

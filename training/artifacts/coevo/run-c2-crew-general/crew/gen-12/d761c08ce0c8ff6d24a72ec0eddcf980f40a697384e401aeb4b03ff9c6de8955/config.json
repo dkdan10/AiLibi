@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "run-c2-crew-general",
+  "encoder_version": "crew-option-features-v1",
+  "entrant": "run-c2-crew-general/crew/gen-12/d761c08ce0c8ff6d24a72ec0eddcf980f40a697384e401aeb4b03ff9c6de8955",
+  "generation": 12,
+  "genome_length": 22,
+  "hall_origin": "exploiter-probe",
+  "side": "crew",
+  "source_lineage": "run-c2-crew-general",
+  "trained_against": "105f7a88d719bddbe094ebe05a9cac6ce096391562f38cb379ec73d87af4815a"
+}

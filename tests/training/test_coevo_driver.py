@@ -1477,6 +1477,143 @@ class TestCommittedImpostorCampaignRows:
         assert any(row.opponent_pool_size >= 30 for row in block5)
 
 
+# --------------------------------------------------------------------------- #
+# The committed crew-campaign rows (Task 18.25).                               #
+#                                                                              #
+# Two sequential fresh driver runs with ``first_side="crew"``, their campaign  #
+# rows concatenated into one committed JSONL, in run order:                    #
+#                                                                              #
+#   1. run-c1-crew-owned-tasks   12 rows (4 swaps × 3 generations, crew v2)    #
+#   2. run-c2-crew-general       12 rows (crew v1)                             #
+#                                                                              #
+# Both runs seed the impostor side from the committed 18.24 candidate          #
+# ``ea4bc955…`` and bind to the anchor-study composite substrate. Same pin     #
+# doctrine as the 18.24 region above: pure file-read STRUCTURAL pins, no       #
+# absolute float or digest constants, substrate pinned by dynamic              #
+# self-consistency only. Additive to the 18.24 region per the 18.25 contract.  #
+# --------------------------------------------------------------------------- #
+
+_CREW_CAMPAIGN_ROWS_PATH: Path = Path("training/reports/results-crew-campaign.jsonl")
+
+_CREW_EXPECTED_BLOCK_LENGTHS: tuple[int, ...] = (12, 12)
+_CREW_BLOCK_NUM_SWAPS: tuple[int, ...] = (4, 4)
+# The crew-moving encoder family per block: the owned-task basis (v2) for
+# run-c1, the general 15.16 menu (v1) for run-c2.
+_CREW_BLOCK_CREW_ENCODERS: tuple[str, ...] = (_CREW_ENCODER, "crew-option-features-v1")
+# run-c1's swap-3 impostor champion deduped against its swap-1 sha
+# (``champion_frozen`` False with the sha still recorded — the driver's
+# re-freeze dedup); run-c2 froze fresh at every boundary.
+_CREW_BLOCK_FROZEN_COUNTS: tuple[int, ...] = (3, 4)
+
+
+def _committed_crew_campaign_rows() -> list[CoevoCampaignRow]:
+    """Every committed crew-campaign row, parsed in file order (loud on a bad line)."""
+
+    lines = _CREW_CAMPAIGN_ROWS_PATH.read_text().splitlines()
+    return [CoevoCampaignRow(**json.loads(line)) for line in lines if line.strip()]
+
+
+def _crew_campaign_blocks() -> list[list[CoevoCampaignRow]]:
+    """Recover the two runs by splitting on the per-run ``generation_index``."""
+
+    blocks: list[list[CoevoCampaignRow]] = []
+    current: list[CoevoCampaignRow] = []
+    for row in _committed_crew_campaign_rows():
+        if row.generation_index == 1 and current:
+            blocks.append(current)
+            current = []
+        current.append(row)
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+class TestCommittedCrewCampaignRows:
+    """Structural pins on the committed two-run crew campaign JSONL (18.25)."""
+
+    def test_every_line_parses_and_total_row_count(self) -> None:
+        rows = _committed_crew_campaign_rows()
+        # Every line round-trips through the row schema; the campaign is the
+        # concatenation of the two runs' rows: 2×12 == 24.
+        assert sum(_CREW_EXPECTED_BLOCK_LENGTHS) == 24
+        assert len(rows) == 24
+
+    def test_generation_index_split_yields_two_blocks(self) -> None:
+        blocks = _crew_campaign_blocks()
+        assert len(blocks) == 2
+        assert tuple(len(block) for block in blocks) == _CREW_EXPECTED_BLOCK_LENGTHS
+
+    def test_every_row_carries_the_fixed_protocol_columns(self) -> None:
+        for row in _committed_crew_campaign_rows():
+            assert row.schema_version == COEVO_CAMPAIGN_ROW_SCHEMA_VERSION
+            # The 18.25 protocol: fake-provider meeting path, no composed
+            # adoption, scenario adoption DECLINED (report §1.4), surrogate
+            # absent (None, not a zero-ghost).
+            assert row.meeting_runner == "fake-provider"
+            assert row.adoption_constraints == ()
+            assert row.scenario_labels == ()
+            assert row.surrogate_uses is None
+            assert row.moving_side != row.frozen_side
+
+    def test_conviction_term_served_non_decreasing_per_block(self) -> None:
+        for block in _crew_campaign_blocks():
+            uses = [row.conviction_uses for row in block]
+            # Served every generation, cumulative within the run, positive by
+            # the end. run-c2 opens at 0 — the general base's meeting-scarce
+            # early lineage (the report's starvation-family watch), which is
+            # exactly why the pin allows a zero START but never a zero END.
+            assert all(count is not None for count in uses)
+            metered = cast("list[int]", uses)
+            assert metered == sorted(metered)
+            assert metered[-1] > 0
+
+    def test_each_block_alternates_from_a_crew_first_swap(self) -> None:
+        for block in _crew_campaign_blocks():
+            # first_side crew: the opening swap of every run moves the crew
+            # side — the inverted 18.24 pin, per the 18.25 contract.
+            assert block[0].moving_side == "crew"
+            cumulative = [row.games_played_cumulative for row in block]
+            assert all(
+                earlier < later
+                for earlier, later in zip(cumulative, cumulative[1:], strict=False)
+            )
+            assert cumulative[-1] <= _CAMPAIGN_GAME_CEILING
+
+    def test_substrate_is_the_compute_sha_for_both_blocks(self) -> None:
+        # Both runs bind to the anchor-study composite (dynamic
+        # self-consistency, never hardcoded hex).
+        compute_sha = compute_substrate_sha()
+        for block in _crew_campaign_blocks():
+            for row in block:
+                assert row.substrate_sha_kind == "compute_substrate_sha"
+                assert row.substrate_sha256 == compute_sha
+
+    def test_moving_encoder_version_per_block_and_side(self) -> None:
+        for index, block in enumerate(_crew_campaign_blocks()):
+            crew_encoder = _CREW_BLOCK_CREW_ENCODERS[index]
+            for row in block:
+                if row.moving_side == "crew":
+                    assert row.moving_encoder_version == crew_encoder
+                else:
+                    assert row.moving_encoder_version == _IMPOSTOR_ENCODER
+
+    def test_swap_boundary_freezes_and_the_c1_dedup(self) -> None:
+        for index, block in enumerate(_crew_campaign_blocks()):
+            # Every swap's FINAL generation row records a champion sha, frozen
+            # fresh or deduped against an existing hall member; fresh freezes
+            # happen only at swap-final rows.
+            finals: dict[int, CoevoCampaignRow] = {}
+            for row in block:
+                finals[row.swap_index] = row
+            assert len(finals) == _CREW_BLOCK_NUM_SWAPS[index]
+            for final_row in finals.values():
+                assert final_row.champion_frozen_sha is not None
+            frozen_rows = [row for row in block if row.champion_frozen]
+            assert len(frozen_rows) == _CREW_BLOCK_FROZEN_COUNTS[index]
+            final_ids = {id(row) for row in finals.values()}
+            assert all(id(row) in final_ids for row in frozen_rows)
+
+
 def test_unloadable_impostor_family_is_refused(tmp_path: Path) -> None:
     """A family the CONSUMER cannot rebuild is refused up front (Codex #314).
 

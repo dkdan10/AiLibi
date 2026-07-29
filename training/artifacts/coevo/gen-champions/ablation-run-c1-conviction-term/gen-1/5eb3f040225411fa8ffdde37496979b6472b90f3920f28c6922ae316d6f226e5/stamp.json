@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "crew-option-features-v2",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-ablation-run-c1-conviction-term-crew-generation-champion-gen1-5eb3f040225411fa8ffdde37496979b6472b90f3920f28c6922ae316d6f226e5",
+  "weights_sha256": "5eb3f040225411fa8ffdde37496979b6472b90f3920f28c6922ae316d6f226e5"
+}

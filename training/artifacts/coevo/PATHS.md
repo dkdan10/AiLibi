@@ -50,3 +50,29 @@ state-hash fence refuses at tick 0.
 
 Audit sidecars (`*.audit.jsonl`) are excluded from the committed tree: no instrument or
 gate reads them, and they are ~10× the size of the replays they accompany.
+
+## The 18.25 crew campaign (operator root `/Users/danielkeinan/ailibi-campaign-1825/`)
+
+| as-recorded absolute prefix | repository-relative prefix |
+|---|---|
+| `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath-crew/<run>/` |
+
+The fake-path work directories under `/Users/danielkeinan/ailibi-campaign-1825/<run>/work/`
+(named in the session logs and harnesses) were CONSOLIDATED, not mirrored 1:1 — the
+per-artifact map:
+
+| as-recorded operator path | committed location |
+|---|---|
+| `<run>/work/campaign-rows.jsonl` (main runs) | `training/reports/results-crew-campaign.jsonl` (concatenated in run order: run-c1 rows 1–12, run-c2 rows 13–24) |
+| `<run>/work/campaign-rows.jsonl` + `campaign-plan.json` (ablation twins) | `training/artifacts/coevo/ablation-<run-suffix>/` |
+| `<run>/work/gen-champions/` | `training/artifacts/coevo/gen-champions/<run>/` |
+| hall_root (written in-tree by the driver) | `training/artifacts/coevo/<run>/` |
+| harnesses + leg scripts | `training/artifacts/coevo/provenance/harnesses/` |
+
+**Sweep provenance split (18.25):** the paragraph above about as-recorded operator
+paths applies to RANKING rows and the 18.24 sweeps. The four 18.25 crew sweeps
+(`realpath-crew/*/sweep-*.json`) were REGENERATED from the committed recording bytes at
+their committed locations after the CF4 relocation (disclosed in report-crew-campaign.md
+§5 + PR #316 review round 2/3), so their `sample_dir`/`replay_set_dir` fields are
+repository-relative and need no prefix map. The 18.25 ranking rows keep as-recorded
+operator-absolute paths covered by the `ailibi-campaign-1825` map above.

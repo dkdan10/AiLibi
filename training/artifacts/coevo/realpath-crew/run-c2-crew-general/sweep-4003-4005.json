@@ -1,0 +1,732 @@
+[
+  {
+    "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
+      "alibi_survival_rate": [
+        59,
+        77
+      ],
+      "crew_mean_conditional_entropy": 0.869323712309377,
+      "crew_witnessed_kill_rate": [
+        12,
+        505
+      ],
+      "effective_deflection_rate": [
+        69,
+        152
+      ],
+      "false_vouch_corroboration_rate": [
+        31,
+        176
+      ],
+      "false_vouch_saw_player_rate": [
+        74,
+        602
+      ],
+      "frame_attempt_rate": [
+        437,
+        463
+      ],
+      "frame_conversion_rate": [
+        23,
+        437
+      ],
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
+      "off_menu_rate": [
+        0,
+        6663
+      ],
+      "teammate_accusation_rate": [
+        0,
+        549
+      ],
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
+    },
+    "byte_complete": true,
+    "deception": {
+      "alibi_fabrication": {
+        "survival_rate": 0.0,
+        "survived": 0,
+        "total_impostor_alibis": 0
+      },
+      "corroboration_claims_impostor": 0,
+      "corroboration_claims_total": 0,
+      "crew_ejected_meetings": 0,
+      "effective_deflection": {
+        "accused_impostor_events": 0,
+        "accused_impostor_survivals": 0,
+        "active_survivals": 0,
+        "effective_deflections": 0,
+        "named_target_deflections": 0,
+        "skip_saved_active_survivals": 0,
+        "third_party_deflections": 0
+      },
+      "false_vouch_corroboration_rate": null,
+      "false_vouch_corroborations": 0,
+      "false_vouch_fabricated": 0,
+      "false_vouch_fabricated_subject_observations": 0,
+      "false_vouch_grounded": 0,
+      "false_vouch_grounded_share": null,
+      "false_vouch_grounded_subject_observations": 0,
+      "false_vouch_saw_player_observations": 0,
+      "false_vouch_saw_player_rate": null,
+      "false_vouch_subject_events": 0,
+      "false_vouches_total": 0,
+      "frame_attempt_meetings": 0,
+      "frame_attempts": 0,
+      "frame_conversions": {
+        "advisory": true,
+        "denominator": 0,
+        "numerator": 0,
+        "rate": null,
+        "wilson_high": null,
+        "wilson_low": null
+      },
+      "games_total": 3,
+      "impostor_accusations_total": 0,
+      "impostor_ejected_meetings": 0,
+      "impostor_self_accusations": 0,
+      "meetings_total": 0,
+      "no_eject_meetings": 0,
+      "num_impostors": 2,
+      "num_players": 9,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/000-c2-gen0-utility-es",
+      "tasks_per_crewmate": 2,
+      "teammate_accusations": {
+        "advisory": true,
+        "denominator": 0,
+        "numerator": 0,
+        "rate": null,
+        "wilson_high": null,
+        "wilson_low": null
+      },
+      "vouch_observations_impostor": 0
+    },
+    "kill_craft": {
+      "co_present_histogram": {
+        "0": 11,
+        "1": 3
+      },
+      "crew_witnessed_kills": 3,
+      "entropy_by_side": {
+        "CREWMATE": {
+          "agents": 21,
+          "buckets": {
+            "none|crowd": {
+              "action_kinds": {
+                "do_task": 45,
+                "move": 59
+              },
+              "decisions": 104,
+              "entropy": 0.9868884753797076
+            },
+            "none|pair": {
+              "action_kinds": {
+                "do_task": 51,
+                "move": 67,
+                "wait": 6
+              },
+              "decisions": 124,
+              "entropy": 1.2184588651808754
+            },
+            "none|solo": {
+              "action_kinds": {
+                "do_task": 105,
+                "move": 81,
+                "wait": 2
+              },
+              "decisions": 188,
+              "entropy": 1.0624418857808422
+            }
+          },
+          "decisions": 416,
+          "mean_conditional_entropy": 0.5773491449066983,
+          "mean_unconditional_entropy": 0.8551107405717637
+        },
+        "IMPOSTOR": {
+          "agents": 6,
+          "buckets": {
+            "cooling|crowd": {
+              "action_kinds": {
+                "do_task": 13,
+                "move": 8
+              },
+              "decisions": 21,
+              "entropy": 0.9587118829771318
+            },
+            "cooling|pair": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 7,
+                "vent": 6,
+                "wait": 2
+              },
+              "decisions": 18,
+              "entropy": 1.8412501702815547
+            },
+            "cooling|solo": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 14,
+                "vent": 13,
+                "wait": 3
+              },
+              "decisions": 33,
+              "entropy": 1.6832286572685264
+            },
+            "ready|crowd": {
+              "action_kinds": {
+                "kill": 6,
+                "move": 11
+              },
+              "decisions": 17,
+              "entropy": 0.9366673818775626
+            },
+            "ready|pair": {
+              "action_kinds": {
+                "kill": 34,
+                "move": 25,
+                "vent": 1
+              },
+              "decisions": 60,
+              "entropy": 1.0890549064938575
+            },
+            "ready|solo": {
+              "action_kinds": {
+                "move": 33,
+                "vent": 2
+              },
+              "decisions": 35,
+              "entropy": 0.31599713297842463
+            }
+          },
+          "decisions": 184,
+          "mean_conditional_entropy": 0.7450761932041782,
+          "mean_unconditional_entropy": 1.694135335444703
+        }
+      },
+      "games_total": 3,
+      "kills_total": 14,
+      "mean_co_present_unwitnessed": 0.09090909090909091,
+      "mean_co_present_witnessed": 0.6666666666666666,
+      "mean_one_hop_unwitnessed": 0.8181818181818182,
+      "mean_one_hop_witnessed": 2.3333333333333335,
+      "num_impostors": 2,
+      "num_players": 9,
+      "one_hop_histogram": {
+        "0": 6,
+        "1": 2,
+        "2": 4,
+        "3": 2
+      },
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/000-c2-gen0-utility-es",
+      "tasks_per_crewmate": 2,
+      "witnessed_point_biserial_co_present": 0.5757575757575758,
+      "witnessed_point_biserial_within_one_hop": 0.6969696969696968
+    },
+    "off_menu": {
+      "games_total": 3,
+      "impostor_decisions": 184,
+      "num_impostors": 2,
+      "num_players": 9,
+      "off_menu_by_kind": 0,
+      "off_menu_by_target": 0,
+      "off_menu_rate": 0.0,
+      "off_menu_total": 0,
+      "on_menu_total": 184,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/000-c2-gen0-utility-es",
+      "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+      "tasks_per_crewmate": 2
+    },
+    "sample_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/000-c2-gen0-utility-es"
+  },
+  {
+    "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
+      "alibi_survival_rate": [
+        59,
+        77
+      ],
+      "crew_mean_conditional_entropy": 0.869323712309377,
+      "crew_witnessed_kill_rate": [
+        12,
+        505
+      ],
+      "effective_deflection_rate": [
+        69,
+        152
+      ],
+      "false_vouch_corroboration_rate": [
+        31,
+        176
+      ],
+      "false_vouch_saw_player_rate": [
+        74,
+        602
+      ],
+      "frame_attempt_rate": [
+        437,
+        463
+      ],
+      "frame_conversion_rate": [
+        23,
+        437
+      ],
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
+      "off_menu_rate": [
+        0,
+        6663
+      ],
+      "teammate_accusation_rate": [
+        0,
+        549
+      ],
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
+    },
+    "byte_complete": true,
+    "deception": {
+      "alibi_fabrication": {
+        "survival_rate": 1.0,
+        "survived": 2,
+        "total_impostor_alibis": 2
+      },
+      "corroboration_claims_impostor": 1,
+      "corroboration_claims_total": 2,
+      "crew_ejected_meetings": 0,
+      "effective_deflection": {
+        "accused_impostor_events": 1,
+        "accused_impostor_survivals": 1,
+        "active_survivals": 1,
+        "effective_deflections": 1,
+        "named_target_deflections": 0,
+        "skip_saved_active_survivals": 0,
+        "third_party_deflections": 1
+      },
+      "false_vouch_corroboration_rate": 1.0,
+      "false_vouch_corroborations": 1,
+      "false_vouch_fabricated": 1,
+      "false_vouch_fabricated_subject_observations": 1,
+      "false_vouch_grounded": 0,
+      "false_vouch_grounded_share": 0.0,
+      "false_vouch_grounded_subject_observations": 0,
+      "false_vouch_saw_player_observations": 1,
+      "false_vouch_saw_player_rate": 0.2,
+      "false_vouch_subject_events": 1,
+      "false_vouches_total": 2,
+      "frame_attempt_meetings": 2,
+      "frame_attempts": 4,
+      "frame_conversions": {
+        "advisory": true,
+        "denominator": 2,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.6576280471103807,
+        "wilson_low": 0.0
+      },
+      "games_total": 3,
+      "impostor_accusations_total": 4,
+      "impostor_ejected_meetings": 0,
+      "impostor_self_accusations": 0,
+      "meetings_total": 2,
+      "no_eject_meetings": 2,
+      "num_impostors": 2,
+      "num_players": 9,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/001-c2-swap0-champ-gen3",
+      "tasks_per_crewmate": 2,
+      "teammate_accusations": {
+        "advisory": true,
+        "denominator": 4,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.48990002040399916,
+        "wilson_low": 0.0
+      },
+      "vouch_observations_impostor": 5
+    },
+    "kill_craft": {
+      "co_present_histogram": {
+        "0": 13,
+        "1": 3
+      },
+      "crew_witnessed_kills": 4,
+      "entropy_by_side": {
+        "CREWMATE": {
+          "agents": 21,
+          "buckets": {
+            "none|crowd": {
+              "action_kinds": {
+                "do_task": 43,
+                "move": 84,
+                "repair_sabotage": 5,
+                "report": 1,
+                "wait": 4
+              },
+              "decisions": 137,
+              "entropy": 1.3323847220843013
+            },
+            "none|pair": {
+              "action_kinds": {
+                "do_task": 62,
+                "emergency": 2,
+                "move": 68,
+                "wait": 1
+              },
+              "decisions": 133,
+              "entropy": 1.1522174396439764
+            },
+            "none|solo": {
+              "action_kinds": {
+                "do_task": 116,
+                "move": 60
+              },
+              "decisions": 176,
+              "entropy": 0.9256859869821299
+            }
+          },
+          "decisions": 446,
+          "mean_conditional_entropy": 0.7219710558418635,
+          "mean_unconditional_entropy": 1.0019823254913969
+        },
+        "IMPOSTOR": {
+          "agents": 6,
+          "buckets": {
+            "cooling|crowd": {
+              "action_kinds": {
+                "do_task": 12,
+                "move": 10,
+                "wait": 1
+              },
+              "decisions": 23,
+              "entropy": 1.208830175294948
+            },
+            "cooling|pair": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 8,
+                "vent": 3,
+                "wait": 4
+              },
+              "decisions": 18,
+              "entropy": 1.8638263900908156
+            },
+            "cooling|solo": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 11,
+                "sabotage": 1,
+                "vent": 16,
+                "wait": 2
+              },
+              "decisions": 33,
+              "entropy": 1.7471627464137947
+            },
+            "ready|crowd": {
+              "action_kinds": {
+                "kill": 5,
+                "move": 21
+              },
+              "decisions": 26,
+              "entropy": 0.7062740891876007
+            },
+            "ready|pair": {
+              "action_kinds": {
+                "kill": 18,
+                "move": 19
+              },
+              "decisions": 37,
+              "entropy": 0.9994730201859836
+            },
+            "ready|solo": {
+              "action_kinds": {
+                "do_task": 4,
+                "move": 39
+              },
+              "decisions": 43,
+              "entropy": 0.44648134689680297
+            }
+          },
+          "decisions": 180,
+          "mean_conditional_entropy": 0.7757384002892973,
+          "mean_unconditional_entropy": 1.6463576892812892
+        }
+      },
+      "games_total": 3,
+      "kills_total": 16,
+      "mean_co_present_unwitnessed": 0.08333333333333333,
+      "mean_co_present_witnessed": 0.5,
+      "mean_one_hop_unwitnessed": 0.9166666666666666,
+      "mean_one_hop_witnessed": 1.75,
+      "num_impostors": 2,
+      "num_players": 9,
+      "one_hop_histogram": {
+        "0": 6,
+        "1": 4,
+        "2": 4,
+        "3": 2
+      },
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/001-c2-swap0-champ-gen3",
+      "tasks_per_crewmate": 2,
+      "witnessed_point_biserial_co_present": 0.4622501635210242,
+      "witnessed_point_biserial_within_one_hop": 0.5184758473652127
+    },
+    "off_menu": {
+      "games_total": 3,
+      "impostor_decisions": 180,
+      "num_impostors": 2,
+      "num_players": 9,
+      "off_menu_by_kind": 0,
+      "off_menu_by_target": 0,
+      "off_menu_rate": 0.0,
+      "off_menu_total": 0,
+      "on_menu_total": 180,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/001-c2-swap0-champ-gen3",
+      "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+      "tasks_per_crewmate": 2
+    },
+    "sample_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/001-c2-swap0-champ-gen3"
+  },
+  {
+    "baseline_cells_corpus_9p2i": {
+      "_note": "baseline-6 corpus 9p2i, recomputed at this tree (see report \u00a75); an earlier revision embedded the 18.4 memo's baseline-5 prose values, which disagreed with the report \u2014 regenerated 2026-07-27",
+      "alibi_survival_rate": [
+        59,
+        77
+      ],
+      "crew_mean_conditional_entropy": 0.869323712309377,
+      "crew_witnessed_kill_rate": [
+        12,
+        505
+      ],
+      "effective_deflection_rate": [
+        69,
+        152
+      ],
+      "false_vouch_corroboration_rate": [
+        31,
+        176
+      ],
+      "false_vouch_saw_player_rate": [
+        74,
+        602
+      ],
+      "frame_attempt_rate": [
+        437,
+        463
+      ],
+      "frame_conversion_rate": [
+        23,
+        437
+      ],
+      "impostor_mean_conditional_entropy": 0.6525758068858258,
+      "off_menu_rate": [
+        0,
+        6663
+      ],
+      "teammate_accusation_rate": [
+        0,
+        549
+      ],
+      "witnessed_point_biserial_within_one_hop": 0.2585155159660001
+    },
+    "byte_complete": true,
+    "deception": {
+      "alibi_fabrication": {
+        "survival_rate": 1.0,
+        "survived": 1,
+        "total_impostor_alibis": 1
+      },
+      "corroboration_claims_impostor": 3,
+      "corroboration_claims_total": 7,
+      "crew_ejected_meetings": 0,
+      "effective_deflection": {
+        "accused_impostor_events": 1,
+        "accused_impostor_survivals": 0,
+        "active_survivals": 0,
+        "effective_deflections": 0,
+        "named_target_deflections": 0,
+        "skip_saved_active_survivals": 0,
+        "third_party_deflections": 0
+      },
+      "false_vouch_corroboration_rate": 0.0,
+      "false_vouch_corroborations": 0,
+      "false_vouch_fabricated": 0,
+      "false_vouch_fabricated_subject_observations": 0,
+      "false_vouch_grounded": 0,
+      "false_vouch_grounded_share": null,
+      "false_vouch_grounded_subject_observations": 0,
+      "false_vouch_saw_player_observations": 0,
+      "false_vouch_saw_player_rate": 0.0,
+      "false_vouch_subject_events": 0,
+      "false_vouches_total": 0,
+      "frame_attempt_meetings": 2,
+      "frame_attempts": 3,
+      "frame_conversions": {
+        "advisory": true,
+        "denominator": 2,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.6576280471103807,
+        "wilson_low": 0.0
+      },
+      "games_total": 3,
+      "impostor_accusations_total": 3,
+      "impostor_ejected_meetings": 1,
+      "impostor_self_accusations": 0,
+      "meetings_total": 2,
+      "no_eject_meetings": 1,
+      "num_impostors": 2,
+      "num_players": 9,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/002-c2-swap2-champ-gen9",
+      "tasks_per_crewmate": 2,
+      "teammate_accusations": {
+        "advisory": true,
+        "denominator": 3,
+        "numerator": 0,
+        "rate": 0.0,
+        "wilson_high": 0.5615060804490177,
+        "wilson_low": 0.0
+      },
+      "vouch_observations_impostor": 5
+    },
+    "kill_craft": {
+      "co_present_histogram": {
+        "0": 11,
+        "1": 2
+      },
+      "crew_witnessed_kills": 4,
+      "entropy_by_side": {
+        "CREWMATE": {
+          "agents": 21,
+          "buckets": {
+            "none|crowd": {
+              "action_kinds": {
+                "do_task": 40,
+                "emergency": 1,
+                "move": 99,
+                "report": 2,
+                "wait": 13
+              },
+              "decisions": 155,
+              "entropy": 1.345226692247076
+            },
+            "none|pair": {
+              "action_kinds": {
+                "do_task": 61,
+                "move": 62
+              },
+              "decisions": 123,
+              "entropy": 0.9999523196862128
+            },
+            "none|solo": {
+              "action_kinds": {
+                "do_task": 128,
+                "move": 79,
+                "wait": 3
+              },
+              "decisions": 210,
+              "entropy": 1.0535142481034818
+            }
+          },
+          "decisions": 488,
+          "mean_conditional_entropy": 0.7389415586736154,
+          "mean_unconditional_entropy": 1.0210460716818066
+        },
+        "IMPOSTOR": {
+          "agents": 6,
+          "buckets": {
+            "cooling|crowd": {
+              "action_kinds": {
+                "do_task": 12,
+                "move": 8,
+                "wait": 1
+              },
+              "decisions": 21,
+              "entropy": 1.2009102795095283
+            },
+            "cooling|pair": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 9,
+                "sabotage": 1,
+                "wait": 1
+              },
+              "decisions": 14,
+              "entropy": 1.4299111709758698
+            },
+            "cooling|solo": {
+              "action_kinds": {
+                "do_task": 3,
+                "move": 8,
+                "vent": 17,
+                "wait": 4
+              },
+              "decisions": 32,
+              "entropy": 1.6799451311431488
+            },
+            "ready|crowd": {
+              "action_kinds": {
+                "kill": 5,
+                "move": 19
+              },
+              "decisions": 24,
+              "entropy": 0.7382848661434506
+            },
+            "ready|pair": {
+              "action_kinds": {
+                "kill": 16,
+                "move": 41
+              },
+              "decisions": 57,
+              "entropy": 0.8564052389131376
+            },
+            "ready|solo": {
+              "action_kinds": {
+                "do_task": 4,
+                "move": 32,
+                "vent": 5
+              },
+              "decisions": 41,
+              "entropy": 0.9768290662171857
+            }
+          },
+          "decisions": 189,
+          "mean_conditional_entropy": 0.7916121957295038,
+          "mean_unconditional_entropy": 1.5331864166894704
+        }
+      },
+      "games_total": 3,
+      "kills_total": 13,
+      "mean_co_present_unwitnessed": 0.0,
+      "mean_co_present_witnessed": 0.5,
+      "mean_one_hop_unwitnessed": 1.0,
+      "mean_one_hop_witnessed": 1.5,
+      "num_impostors": 2,
+      "num_players": 9,
+      "one_hop_histogram": {
+        "0": 5,
+        "1": 3,
+        "2": 3,
+        "3": 2
+      },
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/002-c2-swap2-champ-gen9",
+      "tasks_per_crewmate": 2,
+      "witnessed_point_biserial_co_present": 0.6396021490668314,
+      "witnessed_point_biserial_within_one_hop": 0.4063712768871579
+    },
+    "off_menu": {
+      "games_total": 3,
+      "impostor_decisions": 189,
+      "num_impostors": 2,
+      "num_players": 9,
+      "off_menu_by_kind": 0,
+      "off_menu_by_target": 0,
+      "off_menu_rate": 0.0,
+      "off_menu_total": 0,
+      "on_menu_total": 189,
+      "replay_set_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/002-c2-swap2-champ-gen9",
+      "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+      "tasks_per_crewmate": 2
+    },
+    "sample_dir": "training/artifacts/coevo/realpath-crew/run-c2-crew-general/recordings-4003-4005/002-c2-swap2-champ-gen9"
+  }
+]

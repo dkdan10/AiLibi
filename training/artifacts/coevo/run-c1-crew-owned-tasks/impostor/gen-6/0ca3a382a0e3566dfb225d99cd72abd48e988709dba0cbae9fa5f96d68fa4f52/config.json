@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 4.0,
+  "campaign": "run-c1-crew-owned-tasks",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-c1-crew-owned-tasks/impostor/gen-6/0ca3a382a0e3566dfb225d99cd72abd48e988709dba0cbae9fa5f96d68fa4f52",
+  "generation": 6,
+  "genome_length": 19,
+  "hall_origin": "alternating-freeze-champion",
+  "side": "impostor",
+  "source_lineage": "run-c1-crew-owned-tasks",
+  "trained_against": "26636fab45e3025d54f8948db12f0a08fea9dec73e21876e4031540845cb3bbc"
+}
