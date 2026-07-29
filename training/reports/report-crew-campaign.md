@@ -125,7 +125,7 @@ the campaign leg until routed).
 
 | session | date | work | evidence |
 |---|---|---|---|
-| 1 | 2026-07-28 | Protocol fixed; F14 seed smokes; run-c1 + run-c2 fake-path runs; 18.32 routed (Amend + overlap ruling); checkpoint-push per run | this report §1/§3; `training/artifacts/coevo/run-c1-crew-owned-tasks/`; commit a9a74bc |
+| 1 | 2026-07-28 | Protocol fixed; F14 seed smokes; run-c1 + run-c2 fake-path runs; 18.32 routed (Amend + overlap ruling); checkpoint-push per run | this report §1/§3; `provenance/session1-chain.log` (assembled from captured harness stdout — the primary fake-path ordering evidence is the committed append-only rows streams); commit a9a74bc |
 | 2 | 2026-07-28 | 18.32 merged (088d4c2, #315) + coordination a752f85; leg pair 1 launched (c1-t1 + c2-t1, tranche 4000–4002, two-leg runbook, vs ea4bc955) | §4; `provenance/session2-leg-c1-t1.log`, `…-c2-t1.log` (committed at leg close) |
 | 2 (cont., 2026-07-28→29) | overnight | Rolling-pair posture ratified; all four legs recorded (36 games); F12 stability RULED (stop after c1 legs); ablation twin pair; report close | §4.0–§4.4, §6; provenance/session2-leg-*.log; commits 4339a23…e96e352 |
 
@@ -344,9 +344,9 @@ swings at full scale.
 
 **Reading (n=3 — a SCREEN; §4.0 rules).** The counter-adaptation cell points the hoped
 direction on every instrument simultaneously: the trained gen-9 champion ranks FIRST,
-nearly doubles its gen-0 control's selection score (47.30 vs 25.73), lifts ejection
-accuracy monotonically along the lineage where it matters (gen-0 0.250 → gen-9 0.571;
-gen-3 sits at 0.000 — training time, not lineage age, is the gradient), and dents the
+nearly doubles its gen-0 control's selection score (47.30 vs 25.73), posts the leg's
+best ejection accuracy (gen-9 0.571 vs gen-0 0.250; gen-3 0.000 — no ordering claim
+along the lineage survives even within this tranche), and dents the
 frozen champion's win edge by one game (0.667 vs the control's 1.000 sweep). ALL c1
 arms pass validity — the owned-task lineage is meeting-rich everywhere the general
 lineage starved (the 15.22 structural guard's fingerprint, per CF2). Honesty: a
@@ -357,9 +357,9 @@ edge dent replicates is what leg-c1-t2 retests, and verdict grade remains 18.26'
 
 | rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
 |---|---|---|---|---|---|---|---|
-| 1 | `72adb41c…` gen3 | 58.13 | PASS | FAIL | 0.667 | — | 3/3 games stamped, uniform, sha == computed digest |
-| 2 | `bd6fdd0a…` gen0 | 41.00 | PASS | FAIL | 0.667 | — | 3/3 games stamped, uniform, sha == computed digest |
-| 3 | `0bf179b7…` gen9 | 32.10 | PASS | FAIL | 1.000 | — | 3/3 games stamped, uniform, sha == computed digest |
+| 1 | `72adb41c…` gen3 | 58.13 | PASS | FAIL | 0.667 | 0.600 | 3/3 games stamped, uniform, sha == computed digest |
+| 2 | `bd6fdd0a…` gen0 | 41.00 | PASS | FAIL | 0.667 | 1.000 | 3/3 games stamped, uniform, sha == computed digest |
+| 3 | `0bf179b7…` gen9 | 32.10 | PASS | FAIL | 1.000 | 0.500 | 3/3 games stamped, uniform, sha == computed digest |
 
 **Reading (the retest that disciplines §4.3).** Complete rank INVERSION vs tranche 1:
 gen-3 — bottom-ranked on t1 with ejection accuracy 0.000 — wins the leg AND takes a
@@ -424,7 +424,7 @@ gen-0 games carry zero meeting rows), the §4.1/CF2 starvation read at the byte 
 
 ## 6. Counterfactual ablations (the 18.4-named discipline)
 
-### 6.1 ablation:run-c2/conviction-term (session 2 — COMPLETE, 2574-game twin)
+### 6.1 ablation:*/conviction-term — the run-c2 twin (session 2 — COMPLETE, 2574-game twin)
 
 Config byte-identical to run-c2 (same `master_seed=182502`, same budgets/seeds) with
 `conviction=None`. Committed twin: `training/artifacts/coevo/
@@ -442,20 +442,26 @@ committed artifacts):
 | impostor swap-3 champion (gen-12) | `105f7a88…` | `aa337c7e…` | **DIVERGES** |
 
 **Reading.** The divergence onset is dose-aligned: run-c2's conviction meter served 0 /
-1 / 24 uses across gens 1–3 (§3.2), and crew selection is sha-identical exactly while
-the term is unserved (gens 1–2), diverging at the FIRST generation with real meeting
-service (gen-3) and at every crew freeze after. The impostor lineage is initially
+1 / 24 uses across gens 1–3 (§3.2), and crew selection is sha-identical through gen-1
+(zero uses) and gen-2 (a single use that did not reorder selection), diverging at gen-3
+— the first generation with substantial service (24 uses) — and at every crew freeze
+after. The impostor lineage is initially
 robust to the divergent crew opponent (swap-1 champion identical) and diverges only by
 gen-12 — the term's selection-relevant effect is CREW-SIDE and propagates to the
 impostor through co-evolution, extending 18.24's F6 (which found the same crew-side
 locus from the impostor-first direction). Emergence-claim status per the 18.4 four-part
-discipline: this is the counterfactual-ablation limb (c) — the enabling lever is
-selection-relevant; but limb (a), the |z| ≥ 1.96 instrument delta on the real path, is
-NOT satisfiable at this campaign's n=3 budget (§4.0), so the "conviction term produces
-meeting-seeking crew" claim reads **NOT-DEMONSTRATED at this budget** with the ablation
-direction recorded — the 18.26/50-seed protocol is the venue for the claim-grade read.
+discipline: this twin establishes the lever's SELECTION-relevance — a necessary
+precondition — and limb (c) is therefore **PARTIAL, not complete**: the registered
+recede criterion for a training-time lever requires recording the ablated run's
+champion on the same claim cell and showing the behavior recedes, and those real-path
+arms are deliberately NOT recorded (the §4.0 F12 ruling stops further n=3 legs, and a
+recede read at this noise level could not resolve anyway). Limb (a) (|z| ≥ 1.96 on the
+real path) is equally unsatisfiable at n=3. The "conviction term produces
+meeting-seeking crew" claim therefore reads **NOT-DEMONSTRATED at this budget**, is
+handed to 18.27 as UNABLATED-on-the-claim-cell, and the recede recording belongs to
+the 18.26/50-seed venue if the claim is pursued.
 
-### 6.2 ablation:run-c1/conviction-term (session 2 — COMPLETE, 2432-game twin)
+### 6.2 ablation:*/conviction-term — the run-c1 twin (session 2 — COMPLETE, 2432-game twin)
 
 Config byte-identical to run-c1 (same `master_seed=182501`) with `conviction=None`.
 Committed twin: `training/artifacts/coevo/ablation-run-c1-conviction-term/` +
@@ -481,7 +487,9 @@ swap-2 champion. Paired reading of §6.1 + §6.2: the conviction term's selectio
 is crew-side in BOTH campaigns (F6 extended), but its locus depends on the base — it
 reorders crew selection directly where meetings are scarce (v1) and acts through the
 exploiter/opponent-pool channel where meetings are already rich (v2). Emergence-claim
-status: same as §6.1 — ablation limb recorded, claim NOT-DEMONSTRATED at this budget.
+status: same as §6.1 — selection-relevance recorded, limb (c) PARTIAL (no recede
+recording, per the §4.0 ruling), claim NOT-DEMONSTRATED at this budget and handed to
+18.27 as UNABLATED-on-the-claim-cell.
 
 ## 7. Findings (integration findings + routed items; never silent patches)
 
@@ -548,7 +556,7 @@ contract), the campaign's four named candidates, all F14-verified through
 | `72adb41c…` c1 gen-3 | `run-c1-crew-owned-tasks/crew/gen-3/…` | validity PASS ×2; won its t2 leg with a game off the champion |
 | `515fc066…` c2 gen-9 | `run-c2-crew-general/crew/gen-9/…` | validity 1/2 tranches; the strongest general-base arm; carries the CF2 starvation watch |
 | `7fa59718…` c2 gen-3 | `run-c2-crew-general/crew/gen-3/…` | validity 1/2 tranches; carries the CF2 watch |
-| (control) `bd6fdd0a…` gen-0 owned-tasks | training/artifacts/crew/crew-owned-tasks-es (3-file measurement tier — loads via the 18.7 learned-crew factory, NOT `--crew-artifact`) | the counter-adaptation control; validity PASS ×2 |
+| (control) `bd6fdd0a…` gen-0 owned-tasks | `realpath-crew/controls/crew-owned-tasks-es-gen0/` (four-file, F14-verified — re-frozen from the 3-file measurement-tier dir so the dual-stamped control cell is executable via `--crew-artifact`; the `888046d0…` general-base control sits beside it) | the counter-adaptation control; validity PASS ×2 |
 
 The dual-stamped crew-vs-champion cell 18.26's contract pre-registers is exactly what
 these recordings piloted; the campaign's protocol recommendation to 18.26: pair every
@@ -576,7 +584,7 @@ session chain logs at `training/artifacts/coevo/provenance/session2-leg-*.log`.
 Verify every recordings manifest from a fresh checkout:
 
 ```bash
-find training/artifacts/coevo/realpath/run-c[12]-* -name 'recordings-manifest*.sha256' -print0 | \
+find training/artifacts/coevo/realpath-crew -name 'recordings-manifest*.sha256' -print0 | \
   xargs -0 -I{} sh -c 'cd "$(dirname {})" && shasum -a 256 -c "$(basename {})"'
 ```
 

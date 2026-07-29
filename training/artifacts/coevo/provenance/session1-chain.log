@@ -1,0 +1,14 @@
+=== session 1 chain (fake path; assembled from the captured harness stdout — the
+=== fake path's primary ordering evidence is the committed append-only
+=== campaign-rows.jsonl streams themselves, deterministic + digest-pinned;
+=== assembly noted per the Codex review of PR #316) ===
+--- harness_run_c1.py (captured stdout) ---
+RUN DONE run-c1-crew-owned-tasks
+rows: /Users/danielkeinan/ailibi-campaign-1825/run-c1-crew-owned-tasks/work/campaign-rows.jsonl
+digest: 7a6136962e6884cebde84286947bfa6dd8e3ef315c323cbc1b83d9602774c201
+gen_champions_dir: /Users/danielkeinan/ailibi-campaign-1825/run-c1-crew-owned-tasks/work/gen-champions
+--- harness_run_c2.py (captured stdout) ---
+RUN DONE run-c2-crew-general
+rows: /Users/danielkeinan/ailibi-campaign-1825/run-c2-crew-general/work/campaign-rows.jsonl
+digest: 7e6823772f783fdc48f24878f518c10022dff4216323729fd715f45e3dae70e0
+gen_champions_dir: /Users/danielkeinan/ailibi-campaign-1825/run-c2-crew-general/work/gen-champions

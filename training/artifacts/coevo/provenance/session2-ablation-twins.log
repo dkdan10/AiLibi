@@ -1,0 +1,11 @@
+=== session 2 ablation twins (fake path; captured harness stdout) ===
+--- harness_run_c2_ablation.py ---
+RUN DONE ablation-run-c2-conviction-term
+rows: /Users/danielkeinan/ailibi-campaign-1825/ablation-run-c2-conviction-term/work/campaign-rows.jsonl
+digest: 1d0668d15c6635b2098b04054e6096d93f3f4dc669b28236e548b0ad4e324c03
+gen_champions_dir: /Users/danielkeinan/ailibi-campaign-1825/ablation-run-c2-conviction-term/work/gen-champions
+--- harness_run_c1_ablation.py ---
+RUN DONE ablation-run-c1-conviction-term
+rows: /Users/danielkeinan/ailibi-campaign-1825/ablation-run-c1-conviction-term/work/campaign-rows.jsonl
+digest: 435707472f9a98cdfc91288fbc88289823aecc82828634b90435213f9f187ace
+gen_champions_dir: /Users/danielkeinan/ailibi-campaign-1825/ablation-run-c1-conviction-term/work/gen-champions
