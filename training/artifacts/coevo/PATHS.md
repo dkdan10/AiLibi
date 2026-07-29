@@ -55,4 +55,4 @@ gate reads them, and they are ~10× the size of the replays they accompany.
 
 | as-recorded absolute prefix | repository-relative prefix |
 |---|---|
-| `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath/<run>/` |
+| `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath-crew/<run>/` |
