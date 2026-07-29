@@ -57,7 +57,12 @@ candidates arrive UNRANKED by 18.25's own anti-laundering ruling: `0bf179b7…`
 (run-c1-crew-owned-tasks/crew/gen-9), `72adb41c…` (c1 gen-3), `515fc066…`
 (run-c2-crew-general/crew/gen-9), `7fa59718…` (c2 gen-3), with re-frozen gen-0 controls
 at `training/artifacts/coevo/realpath-crew/controls/` (all six loads re-executed green at
-hand-off). Crew slots are owner-justified at dispatch; the piloted protocol if taken:
+hand-off). **Owner directive (2026-07-29): the crew block IS taken** — four crew arms
+(the two gen-9 candidates `0bf179b7…`/`515fc066…` plus their same-seed gen-0 controls),
+each SINGLE-OPPONENT against the frozen champion `ea4bc955…` (these are diagnostics, not
+finalists — the dual-opponent shape in this contract's opening applies only to a crew
+CHAMPION candidate, which 18.25 named none of; the gen-0 pairing at the same opponent is
+what isolates crew learning). The piloted protocol:
 pair every crew arm with its SAME-SEED gen-0 control, read win conversion only at n=50,
 expect `flags_per_meeting` to be the UNRESOLVABLE-prone gauge (183% noise at n=3 on the
 meeting-scarce lineage vs 33% meeting-rich), and watch `meeting_rate` ≥ 0.60 as the live
@@ -71,7 +76,15 @@ zero verified games). The 18.24 backfill n=3 `ea4bc955`-vs-FSM rows remain a scr
 never this task's comparator. One routed instrument question rides in: the crew-witnessed
 kill rate ran 6.5×–15× corpus across all twelve 18.25 arms (confounded at n=3) — the
 n=50 comparator pair is what decides whether that is a learned-crew observation effect
-or an artifact.
+or an artifact. Duration honesty: the gate's ~5 h/finalist is the TWO-CONCURRENT-LEG
+effective rate — 18.25's committed leg logs measure ~12.2 min/game serial at healthy
+provider (7.32 h / 36 games), so a 50-seed arm is ~10 h of recording and ~5 h effective
+in a leg pair; the full ratified slate (4 impostor + the same-seed FSM comparator + 4
+crew = 9 arms ≈ 450 games) prices at ≈ 46 h wall-clock at the two-leg posture,
+sessioned with checkpoint-push. That per-game rate was measured on meeting-rich
+crew-vs-champion games — RE-PRICE from the first leg's measured pace before trusting
+the projection, and record whichever posture actually ran (the 18.25 §12 lesson: quote
+derivable figures only).
 
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
