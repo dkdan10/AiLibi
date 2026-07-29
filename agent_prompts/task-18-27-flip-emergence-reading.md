@@ -45,7 +45,17 @@ disposition routed to the close's hand-off ledger. (d) The named non-finalist ex
 `27f852fe…` (v3 gen-9 hall champion) stands ready if the off-menu instrument's
 claim-grade denominators are wanted. (e) Any UNRESOLVABLE gauge verdict from 18.26 reads
 exactly that in axis 1 — the bar stays as ratified, unresolvability is reported, and
-re-pricing the bar remains an owner decision outside this memo.
+re-pricing the bar remains an owner decision outside this memo. (f) From the 18.25
+merge: the conviction-term emergence claim arrives NOT-DEMONSTRATED with its limb states
+recorded (limb (a) unsatisfiable at n=3; limb (c) PARTIAL — the recede recording
+deliberately withheld under the F12 stop); F6 is EXTENDED, not contradicted — the term's
+selection locus is crew-side on BOTH bases with a base-dependent channel (direct
+selection reordering where meetings are scarce, exploiter-novelty where meetings are
+rich) — and no impostor-side attribution is permitted on the `ea4bc955…`-seeded
+lineages either. The cycling-detector inputs: Red-Queen signature PRESENT on the
+general-base impostor (flat anchor + oscillating co-matchup), owned-task crew reads
+progress, its impostor plateaus. Any crew-adoption slot rests on 18.26 evidence alone —
+18.25 supplies none that clears a bar.
 
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)

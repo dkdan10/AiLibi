@@ -671,4 +671,27 @@ find training/artifacts/coevo/realpath-crew -name 'recordings-manifest*.sha256' 
 - **Phase-19-facing**: CF2 (the v1 base without the 15.22 guard is starvation-family
   under a strong impostor) prices any future general-base crew work.
 
-## 12. Errata — (none yet)
+## 12. Errata (coordination, 2026-07-29 — post-merge verification; additive, no in-place rewrites)
+
+A post-merge verification at e9da533 recomputed the rows tables, all four leg tables,
+both stability artifacts, the lineage-diff shas, the stamp proofs, and a sweep cell from
+committed bytes — **all reproduce exactly**; the six hand-off artifact loads re-executed
+green at HEAD. The items below are the residue; none overturns a conclusion.
+
+1. **§4.0's stability-table row label was hand-shortened** against the generator's output
+   ("…saturated at 1.000 on ≥1 tranche" vs the generator's "…at 1.000 (a perfect 100%
+   conversion required) on ≥1 tranche"). Every VALUE is identical; only the label
+   diverges from the report's own generated-never-hand-assembled pledge.
+2. **The header's "~8.7 h wall-clock" is not derivable from committed evidence.**
+   Derivable figures: 6.76 h (union of leg spans), 7.32 h (summed per-game
+   `wall_seconds`), 11.9 h (summed leg durations). The close's accounting should quote
+   one of these.
+3. **The header's "the two-leg rolling posture ran throughout" overstates**: committed
+   leg-log timestamps show a ~56-minute single-leg window (c2-t1 done 21:53:50Z →
+   c2-t2 start 22:49:37Z) while the rolling-pair amendment was being ratified — §4's
+   amendment narrative discloses this; the header sentence does not.
+4. **§4.4's witnessed-event-rate "(0.25–0.36)" mixes signed floor margins with measured
+   rates** — the measured range is 0.2857–0.3571 (min margin +0.2518).
+5. **The §2 session ledger's per-session commit shas are unreachable from main**
+   (they lived on the squashed PR branch). The evidence they pointed at is fully
+   committed (rows digests, leg logs, harness transcripts); follow those, not the shas.

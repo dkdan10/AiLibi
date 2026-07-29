@@ -74,8 +74,18 @@ pre-screen-ordering evidence — an honest caveat on blocker (4)'s discharge, no
 retro-manufacturable record); and two deferred-ledger entries — the encoder-v3
 disposition (F11: a from-scratch v3 ES at the 12-generation budget is a net loss; routes
 to Phase-19/free-policy campaign sizing) and the conditional utility-family
-founder-persistence run (18.6-shaped; live only if 18.25 finds opponent-pool diversity
-load-bearing). The Phase-19 hand-off section
+founder-persistence run (18.6-shaped; NOT triggered — 18.25 closed without needing pool
+diversity, so it lapses to a Phase-19 note). The 18.25 additions to the ledger: the
+record/score element-level leg-concurrency split (the §4 posture amendment), CF3 (the
+stability tool's zero-meeting-arm refusal wants native exclusion-with-reporting), CF4's
+general rule (hand-maintained namespace registries — `DEFAULT_RANKING_ROOTS`,
+`WORK_DIR_OWNED_NAMES` — mean NEW campaigns take SIBLING roots, as `realpath-crew/`
+did), CF2 (the guardless general base is starvation-family under a strong impostor —
+prices any future general-base crew work), the missing generator family for sweeps
+(sweep tables stay hand-assembled — the one table class 18.31 didn't cover), and
+duration honesty for the close's accounting: quote the derivable real-path figures
+(6.76–7.32 h) from the committed leg logs, never the report header's ~8.7 h (its §12
+erratum 2). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race

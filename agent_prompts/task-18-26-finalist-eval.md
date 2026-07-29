@@ -51,6 +51,28 @@ less far along the trade — predicts the runner-ups' gauge margins PERSIST at n
 hypothesis B (n≤6 referee reads are noise — predicts the champion/runner-up gauge gap
 VANISHES at n=50). The cell reports; 18.27 rules.
 
+The 18.25 hand-off (merged e9da533, verified): **no crew finalist clears the bars** — the
+crew side of this task is DIAGNOSTIC, not champion selection. Four F14-loadable
+candidates arrive UNRANKED by 18.25's own anti-laundering ruling: `0bf179b7…`
+(run-c1-crew-owned-tasks/crew/gen-9), `72adb41c…` (c1 gen-3), `515fc066…`
+(run-c2-crew-general/crew/gen-9), `7fa59718…` (c2 gen-3), with re-frozen gen-0 controls
+at `training/artifacts/coevo/realpath-crew/controls/` (all six loads re-executed green at
+hand-off). Crew slots are owner-justified at dispatch; the piloted protocol if taken:
+pair every crew arm with its SAME-SEED gen-0 control, read win conversion only at n=50,
+expect `flags_per_meeting` to be the UNRESOLVABLE-prone gauge (183% noise at n=3 on the
+meeting-scarce lineage vs 33% meeting-rich), and watch `meeting_rate` ≥ 0.60 as the live
+starvation floor on the general-base arms. The crew-vs-frozen-champion cell runs through
+`run_tournament.py --crew-artifact <crew> --candidate-artifact <ea4bc955 dir>` — the
+entry point 18.32 deliberately never touched, so its dual-stamp semantics stand; this
+task's new pins must NOT copy the realpath-v3 row convention (there, `stamp`/`stamp_*`
+hold the impostor READ-BACK even on crew legs and `opponent_stamp` the declaration), and
+the scripted-impostor comparator cell must PROVE opponent absence (fsm-default stamp,
+zero verified games). The 18.24 backfill n=3 `ea4bc955`-vs-FSM rows remain a screen —
+never this task's comparator. One routed instrument question rides in: the crew-witnessed
+kill rate ran 6.5×–15× corpus across all twelve 18.25 arms (confounded at n=3) — the
+n=50 comparator pair is what decides whether that is a learned-crew observation effect
+or an artifact.
+
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
 - tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)

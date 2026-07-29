@@ -1761,3 +1761,8 @@ bytes; all other artifacts are untouched.
     contract: the seed is a committed CANDIDATE, and the strongest arms live under
     `intermediates/` and `runnerups/` (e.g. `bfd145cb…` was never a champion) — all
     loadable through the four-file artifact.
+15. **(added 2026-07-29, from the 18.25 verification)** §5.1's claim that the sweep
+    artifacts preserve the off-menu decision distribution is not true of the committed
+    bytes: the committed sweep JSONs carry no `off_menu_decisions` key. The
+    denominators for any off-menu reading come from the named non-finalist exhibit
+    (`27f852fe…`) recordings directly, not from the sweep artifacts.

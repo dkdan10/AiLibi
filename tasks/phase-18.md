@@ -1861,6 +1861,27 @@ Crew real-path evals are the phase's first learned-crew recordings — the 18.7/
 guards get their first live exercise; any conflation or leak finding stops the campaign leg
 until routed.
 
+**Post-merge record (2026-07-29, coordination).** Merged e9da533 (#316), verified PASS on
+every DoD bullet — including the pre-registered preconditions actually functioning as
+designed: the F12 stability read ran after the first retested slate, showed flags noise
+at 183% of threshold on the meeting-scarce lineage (33% meeting-rich), and STOPPED the
+real-path spend after the pre-registered core (~7 h recorded vs the 30–40 h envelope — a
+deliberate, priced non-spend; the 18.24 non-replication lesson reproduced: 2 referee
+screening passes, 0 replicated). The mid-campaign integration finding (CF1: no crew
+re-rank seam) became routed Task 18.32 per the discipline — never a silent patch. **Crew
+finalists: NONE clear the bars**; four F14-loadable candidates hand to 18.26 UNRANKED by
+this campaign's own anti-laundering ruling (§4.4's complete rank inversion between
+tranches), with re-frozen gen-0 controls beside them. Counter-adaptation: no crew closes
+`ea4bc955…`'s win edge at n=3; the tranche-stable signal is structural (the owned-task
+base's meeting-rate advantage persists; the general base starves — CF2, Phase-19
+pricing). Pace-to-wins (17.13): structural half YES, wins half NOT RESOLVABLE at this
+budget — 18.26's question. Report §12 Errata records the verification residue (a
+hand-shortened table label, the underivable ~8.7 h header figure, the 56-min single-leg
+window, a margins-vs-rates range, unreachable PR-branch shas); the 18.24 report gains
+erratum 15 (`off_menu_decisions` absent from committed sweeps). Two-leg concurrency ran
+as directed (staggered starts timestamp-verified), with the §4 posture amendment
+disclosed.
+
 **Ready-to-paste prompt:** `agent_prompts/task-18-25-crew-campaign.md`
 
 ---
@@ -1907,6 +1928,28 @@ gauges: hypothesis A (the ES trades evidence-supply for wins; runner-ups sit one
 less far along the trade — predicts the runner-ups' gauge margins PERSIST at n=50),
 hypothesis B (n≤6 referee reads are noise — predicts the champion/runner-up gauge gap
 VANISHES at n=50). The cell reports; 18.27 rules.
+
+The 18.25 hand-off (merged e9da533, verified): **no crew finalist clears the bars** — the
+crew side of this task is DIAGNOSTIC, not champion selection. Four F14-loadable
+candidates arrive UNRANKED by 18.25's own anti-laundering ruling: `0bf179b7…`
+(run-c1-crew-owned-tasks/crew/gen-9), `72adb41c…` (c1 gen-3), `515fc066…`
+(run-c2-crew-general/crew/gen-9), `7fa59718…` (c2 gen-3), with re-frozen gen-0 controls
+at `training/artifacts/coevo/realpath-crew/controls/` (all six loads re-executed green at
+hand-off). Crew slots are owner-justified at dispatch; the piloted protocol if taken:
+pair every crew arm with its SAME-SEED gen-0 control, read win conversion only at n=50,
+expect `flags_per_meeting` to be the UNRESOLVABLE-prone gauge (183% noise at n=3 on the
+meeting-scarce lineage vs 33% meeting-rich), and watch `meeting_rate` ≥ 0.60 as the live
+starvation floor on the general-base arms. The crew-vs-frozen-champion cell runs through
+`run_tournament.py --crew-artifact <crew> --candidate-artifact <ea4bc955 dir>` — the
+entry point 18.32 deliberately never touched, so its dual-stamp semantics stand; this
+task's new pins must NOT copy the realpath-v3 row convention (there, `stamp`/`stamp_*`
+hold the impostor READ-BACK even on crew legs and `opponent_stamp` the declaration), and
+the scripted-impostor comparator cell must PROVE opponent absence (fsm-default stamp,
+zero verified games). The 18.24 backfill n=3 `ea4bc955`-vs-FSM rows remain a screen —
+never this task's comparator. One routed instrument question rides in: the crew-witnessed
+kill rate ran 6.5×–15× corpus across all twelve 18.25 arms (confounded at n=3) — the
+n=50 comparator pair is what decides whether that is a learned-crew observation effect
+or an artifact.
 
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
@@ -1979,7 +2022,17 @@ disposition routed to the close's hand-off ledger. (d) The named non-finalist ex
 `27f852fe…` (v3 gen-9 hall champion) stands ready if the off-menu instrument's
 claim-grade denominators are wanted. (e) Any UNRESOLVABLE gauge verdict from 18.26 reads
 exactly that in axis 1 — the bar stays as ratified, unresolvability is reported, and
-re-pricing the bar remains an owner decision outside this memo.
+re-pricing the bar remains an owner decision outside this memo. (f) From the 18.25
+merge: the conviction-term emergence claim arrives NOT-DEMONSTRATED with its limb states
+recorded (limb (a) unsatisfiable at n=3; limb (c) PARTIAL — the recede recording
+deliberately withheld under the F12 stop); F6 is EXTENDED, not contradicted — the term's
+selection locus is crew-side on BOTH bases with a base-dependent channel (direct
+selection reordering where meetings are scarce, exploiter-novelty where meetings are
+rich) — and no impostor-side attribution is permitted on the `ea4bc955…`-seeded
+lineages either. The cycling-detector inputs: Red-Queen signature PRESENT on the
+general-base impostor (flat anchor + oscillating co-matchup), owned-task crew reads
+progress, its impostor plateaus. Any crew-adoption slot rests on 18.26 evidence alone —
+18.25 supplies none that clears a bar.
 
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
@@ -2081,8 +2134,18 @@ pre-screen-ordering evidence — an honest caveat on blocker (4)'s discharge, no
 retro-manufacturable record); and two deferred-ledger entries — the encoder-v3
 disposition (F11: a from-scratch v3 ES at the 12-generation budget is a net loss; routes
 to Phase-19/free-policy campaign sizing) and the conditional utility-family
-founder-persistence run (18.6-shaped; live only if 18.25 finds opponent-pool diversity
-load-bearing). The Phase-19 hand-off section
+founder-persistence run (18.6-shaped; NOT triggered — 18.25 closed without needing pool
+diversity, so it lapses to a Phase-19 note). The 18.25 additions to the ledger: the
+record/score element-level leg-concurrency split (the §4 posture amendment), CF3 (the
+stability tool's zero-meeting-arm refusal wants native exclusion-with-reporting), CF4's
+general rule (hand-maintained namespace registries — `DEFAULT_RANKING_ROOTS`,
+`WORK_DIR_OWNED_NAMES` — mean NEW campaigns take SIBLING roots, as `realpath-crew/`
+did), CF2 (the guardless general base is starvation-family under a strong impostor —
+prices any future general-base crew work), the missing generator family for sweeps
+(sweep tables stay hand-assembled — the one table class 18.31 didn't cover), and
+duration honesty for the close's accounting: quote the derivable real-path figures
+(6.76–7.32 h) from the committed leg logs, never the report header's ~8.7 h (its §12
+erratum 2). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
