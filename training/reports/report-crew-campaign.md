@@ -194,12 +194,22 @@ opponent pressure the owned-task crew did not. The swap-2 benchmark pair collaps
 (anchor_champ 15.5 → 6.2 beside anchor_fsm 9.0 → 6.0) after the swap-1 impostor froze —
 a benchmark-environment shift to read against the real path, not a crew regression alone.
 
-### 3.6 Cross-run readings — PENDING (fuller reading rides the real-path legs)
+### 3.6 Cross-run readings
 
-The two bases separate on the fake path already: the owned-task (c1) crew is
-meeting-rich (conviction 3021) and its impostor opponent plateaus; the general (c2) crew
-is meeting-scarce (635, 0 at gen-1) and its impostor opponent keeps improving. Which
-converts pace to wins on the REAL path (the 17.13 cell) is exactly what §4 measures.
+The two bases separate on the fake path and the separation SURVIVES the real path at
+the lineage level: the owned-task (c1) crew is meeting-rich (conviction 3021 uses; all
+real-path arms validity-PASS both tranches) and its impostor opponent plateaus; the
+general (c2) crew is meeting-scarce (635 uses, 0 at gen-1; gen-0 starves outright on
+the real path) and its impostor opponent keeps improving. The 17.13 cell — does the
+citation-era conviction channel move an owned-task crew's pace advantage into WINS —
+answers from the campaign's real re-rank data: **NOT RESOLVABLE at this budget, and
+the structural half is answered.** The owned-task crew reliably reaches the meeting/
+conviction economy against the frozen champion (every arm, every tranche — the pace
+advantage converts into meetings, flags above floor, and occasional accurate
+ejections), but win conversion swings a full game per arm between tranches (§4.4), so
+whether the conviction channel moves WINS is exactly 18.26's 50-seed question. The
+ablation pair (§6) adds the mechanism: the term's selection effect is real and
+crew-side on both bases, with a base-dependent locus.
 
 ## 4.0 MEASUREMENT RELIABILITY — read this before any §4 number
 
@@ -342,7 +352,27 @@ lineage starved (the 15.22 structural guard's fingerprint, per CF2). Honesty: a
 one-game win dent is exactly the swing scale §4.0 measured as noise; whether gen-9's
 edge dent replicates is what leg-c1-t2 retests, and verdict grade remains 18.26's.
 
-### 4.4 leg-c1-t2 — RECORDING (tranche 4003–4005; the c1 retest + the campaign's final real-path leg per the §4.0 ruling)
+### 4.4 leg-c1-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…` — the campaign's FINAL real-path leg per the §4.0 ruling)
+
+| rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
+|---|---|---|---|---|---|---|---|
+| 1 | `72adb41c…` gen3 | 58.13 | PASS | FAIL | 0.667 | — | 3/3 games stamped, uniform, sha == computed digest |
+| 2 | `bd6fdd0a…` gen0 | 41.00 | PASS | FAIL | 0.667 | — | 3/3 games stamped, uniform, sha == computed digest |
+| 3 | `0bf179b7…` gen9 | 32.10 | PASS | FAIL | 1.000 | — | 3/3 games stamped, uniform, sha == computed digest |
+
+**Reading (the retest that disciplines §4.3).** Complete rank INVERSION vs tranche 1:
+gen-3 — bottom-ranked on t1 with ejection accuracy 0.000 — wins the leg AND takes a
+game off the champion; gen-0 takes a game too; gen-9's t1 win dent does not replicate
+(0.667 → 1.000). Every per-arm ordering claim from §4.3 (the selection gap, the
+ejection-accuracy "training gradient", the win dent) is inside the measured swing.
+What survives the retest — the campaign's tranche-STABLE real-path results: every c1
+arm passes validity on BOTH tranches (the owned-task lineage is structurally
+meeting-rich under the frozen champion), zero referee passes campaign-wide, and the
+c1-vs-c2 lineage contrast (§4.1/§4.2). The c1-side stability row
+(`measurement-stability-c1.json`): flags noise 33% of threshold (vs c2's 183% — the
+meeting-rich lineage measures more stably per meeting), but ALL 3 arms swung ≥ 1
+win-game between tranches (mean 1.00 game), and 33% still exceeds the 25% F12
+precondition — the §4.0 stop ruling stands on both slates.
 
 <!-- all legs recorded -->
 
