@@ -56,3 +56,15 @@ gate reads them, and they are ~10× the size of the replays they accompany.
 | as-recorded absolute prefix | repository-relative prefix |
 |---|---|
 | `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath-crew/<run>/` |
+
+The fake-path work directories under `/Users/danielkeinan/ailibi-campaign-1825/<run>/work/`
+(named in the session logs and harnesses) were CONSOLIDATED, not mirrored 1:1 — the
+per-artifact map:
+
+| as-recorded operator path | committed location |
+|---|---|
+| `<run>/work/campaign-rows.jsonl` (main runs) | `training/reports/results-crew-campaign.jsonl` (concatenated in run order: run-c1 rows 1–12, run-c2 rows 13–24) |
+| `<run>/work/campaign-rows.jsonl` + `campaign-plan.json` (ablation twins) | `training/artifacts/coevo/ablation-<run-suffix>/` |
+| `<run>/work/gen-champions/` | `training/artifacts/coevo/gen-champions/<run>/` |
+| hall_root (written in-tree by the driver) | `training/artifacts/coevo/<run>/` |
+| harnesses + leg scripts | `training/artifacts/coevo/provenance/harnesses/` |

@@ -7,8 +7,12 @@
 **Last evidence recorded:** 2026-07-29 (session 2 close — all four legs + sweeps recorded)
 **Status:** COMPLETE — fake path 2 runs + 2 ablation twins; real path 4 legs / 36 games, STOPPED by the §4.0 F12 ruling after the pre-registered two-tranche core (~8.7 h wall-clock vs the ~30–40 h envelope — duration honesty: the envelope was deliberately NOT spent at a noise level that cannot support the verdicts it would buy; the two-leg rolling posture ran throughout, zero retry exhaustion, no degrade).
 
-Every table in this report is GENERATED from committed artifacts via
-`scripts/generate_campaign_tables.py` (the F12 lesson), never hand-assembled.
+Every row/leg/stability table in this report is GENERATED from committed artifacts
+via `scripts/generate_campaign_tables.py` (the F12 lesson), never hand-assembled — the
+generator's three families are `rows`, `legs`, `stability`. The §5 sweep cells are
+quoted from the committed `sweep-*.json` files (produced by the eval instrument entry
+points; §5 names the recipe); their tabular ASSEMBLY is the report's, disclosed here
+because no generator family renders sweeps — a routed 18.28 ergonomics note.
 
 ## 1. Protocol (fixed before any run)
 
@@ -313,10 +317,12 @@ committed 18.24 back-fill rows show `ea4bc955…` vs SCRIPTED crew on the SAME s
 `meeting_rate 1.0` (win also 1.0) — so the meeting scarcity is crew-side and
 lineage-wide, not champion kill-speed, and no crew (learned or scripted) closes this
 champion's win edge on these 3 seeds. Direction of the counter-adaptation signal:
-training under the conviction term moved the general base from fully starved (0.0) to
-0.33 meeting rate with above-floor per-meeting supply and accurate convictions — the
-conviction-economy gradient is visibly pulling even the unguarded v1 base toward
-evidence play — but not past the validity floor. Gate-validity discipline outcome: NO
+the TRAINED lineage (term-ON) reaches 0.33 meeting rate with above-floor per-meeting
+supply and accurate convictions where its untrained control starves at 0.0 — a
+trained-lineage ASSOCIATION, stated as such: attributing it to the conviction term
+specifically is exactly what §6's missing recede recording would test (limb (c)
+PARTIAL), and the term-OFF champions are unrecorded on this cell — but the trained
+arms still do not clear the validity floor. Gate-validity discipline outcome: NO
 c2 arm survives selection at this tranche (selection −1.0 sentinel), exactly as the
 starvation-family exclusion demands.
 
@@ -503,8 +509,9 @@ stamp only). The only committed dual-stamp recorder (`run_tournament.py --crew-a
 produces no ranking/leg-log/resume/tranche machinery. Routed as Task 18.32 (owner
 ruling 2026-07-28: Amend + overlap — fake-path evolution proceeds, real legs wait).
 
-**CF2 — the general-base lineage is meeting-scarce on the real path; the conviction
-term moves it toward the evidence economy, and the effect is REAL but UNSTABLE at n=3.**
+**CF2 — the general-base lineage is meeting-scarce on the real path; its TRAINED arms
+move toward the evidence economy (a trained-lineage association; term attribution
+awaits the §6 recede recording), and the effect is REAL but UNSTABLE at n=3.**
 The fake path's watch (§3.2: conviction 635 uses, 0 at gen-1) predicted scarcity; the
 real path measured it both ways: tranche 1 — gen-0 zero meetings, trained arms 0.33
 meeting rate with 2.0 flags/meeting and a correct ejection each, ALL arms validity-FAIL;
@@ -565,8 +572,10 @@ crew arm with the same-seed gen-0 control, and read win conversion only at n=50.
 ## 9. Reproduce
 
 Fake path (deterministic under `master_seed` on the recording platform, macOS; the
-row pins assert structure, never floats): the two run harnesses + two ablation twins
-are §1.3/§1.6/§6 configs applied to the 18.24 §9 snippet shape — `first_side="crew"`,
+row pins assert structure, never floats): the two run harnesses + two ablation twins are COMMITTED VERBATIM at
+`training/artifacts/coevo/provenance/harnesses/` (with the four leg scripts) — the
+twin's config-identity claim is auditable by diff (run name + `conviction=None` are the
+only deltas). They are §1.3/§1.6/§6 configs applied to the 18.24 §9 snippet shape — `first_side="crew"`,
 `run_label` set per run, fresh `ConvictionFitnessTerm` (or `None` for twins),
 `hall_root=training/artifacts/coevo/<run>`, work_dir under the operator root
 `/Users/danielkeinan/ailibi-campaign-1825/` (PATHS.md carries the prefix map).
@@ -579,7 +588,8 @@ AILIBI_PROMPT_SET=qwen3_6_27b AILIBI_SEED_MAX_ATTEMPTS=8` + `FEATHERLESS_API_KEY
 `run_realpath_rerank(..., config=RealPathRerankConfig(meeting_timeout_seconds=900.0),
 opponent_artifact=<the ea4bc955 artifact dir>)` per leg (§4 slates; schema
 `realpath-rerank-v3`). Every leg's `leg-log.jsonl` + `leg-<tranche>-<invocation>.json`
-+ `prescreen` state are committed inside the mirrored `recordings-<tranche>/` dirs;
+are committed inside the mirrored `recordings-<tranche>/` dirs (no pre-screen state
+exists — the legs ran `prescreen=None` per the §4 decision);
 session chain logs at `training/artifacts/coevo/provenance/session2-leg-*.log`.
 Verify every recordings manifest from a fresh checkout:
 
