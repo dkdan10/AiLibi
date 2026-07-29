@@ -131,7 +131,7 @@ the campaign leg until routed).
 |---|---|---|---|
 | 1 | 2026-07-28 | Protocol fixed; F14 seed smokes; run-c1 + run-c2 fake-path runs; 18.32 routed (Amend + overlap ruling); checkpoint-push per run | this report §1/§3; `provenance/session1-chain.log` (assembled from captured harness stdout — the primary fake-path ordering evidence is the committed append-only rows streams); commit a9a74bc |
 | 2 | 2026-07-28 | 18.32 merged (088d4c2, #315) + coordination a752f85; leg pair 1 launched (c1-t1 + c2-t1, tranche 4000–4002, two-leg runbook, vs ea4bc955) | §4; `provenance/session2-leg-c1-t1.log`, `…-c2-t1.log` (committed at leg close) |
-| 2 (cont., 2026-07-28→29) | overnight | Rolling-pair posture ratified; all four legs recorded (36 games); F12 stability RULED (stop after c1 legs); ablation twin pair; report close | §4.0–§4.4, §6; provenance/session2-leg-*.log; commits 4339a23…e96e352 |
+| 2 (cont., 2026-07-28→29) | overnight | Rolling-pair posture ratified; all four legs recorded (36 games); F12 stability RULED (stop after c1 legs; c1-t2's launch preceded the read by ~10 min — recorded §4.0 deviation); ablation twin pair; report close | §4.0–§4.4, §6; provenance/session2-leg-*.log; commits 4339a23…e96e352 |
 
 ## 3. The campaign rows (fake/surrogate path; per run)
 
@@ -159,8 +159,9 @@ deduped (`champion_frozen=False`, sha `0ca3a382…` already a member). Exploiter
 Digest: `7a6136962e6884cebde84286947bfa6dd8e3ef315c323cbc1b83d9602774c201`.
 
 First readings (session 1, fake path — screens, not verdicts): the crew champion's
-fitness DECLINES within crew-moving swaps as the opponent pool hardens (12.66 → 11.53 in
-swap 0 at pool 0→2; 11.10 → 11.15 at pool 4→6) while its anchor-CE benchmark stays flat
+fitness DECLINES within swap 0 as the opponent pool first hardens (12.66 → 11.53 at
+pool 0→2), while swap 2 is flat/non-monotonic (11.10 → 11.39 → 11.15 at pool 4→6 —
+no decline claim there), and its anchor-CE benchmark stays flat
 (anchor_champ ~10.4–10.5) — opponent pressure, not anchor drift. The seeded impostor
 improved exactly once (gen-4, `champion_updated=yes`, genome moved off the ea4bc955 seed
 to `0ca3a382…`) and then plateaued for both its swaps — consistent with 18.24's run-02
@@ -209,9 +210,12 @@ the real path) and its impostor opponent keeps improving. The 17.13 cell — doe
 citation-era conviction channel move an owned-task crew's pace advantage into WINS —
 answers from the campaign's real re-rank data: **NOT RESOLVABLE at this budget, and
 the structural half is answered.** The owned-task crew reliably reaches the meeting/
-conviction economy against the frozen champion (every arm, every tranche — the pace
-advantage converts into meetings, flags above floor, and occasional accurate
-ejections), but win conversion swings a full game per arm between tranches (§4.4), so
+conviction economy against the frozen champion (every arm, every tranche converts the
+pace advantage into MEETINGS and occasional accurate ejections — meeting REACHABILITY
+is the tranche-stable result; the per-meeting flag supply is NOT above floor: only
+gen-3 t1 passes at 1.375, the other five arm/tranche cells measure 0.4444–0.7778
+against the 1.0909 floor, which is also why every c1 referee check fails), but win
+conversion swings a full game per arm between tranches (§4.4), so
 whether the conviction channel moves WINS is exactly 18.26's 50-seed question. The
 ablation pair (§6) adds the mechanism: the term's selection effect is real and
 crew-side on both bases, with a base-dependent locus.
@@ -244,9 +248,16 @@ exclusion-with-reporting fix is routed, never hand-patched (CF3).
 **Consequence (the F12 ruling, session 2):** 183% ≫ the 25% precondition. Both t1
 referee PASSes failed to replicate on fresh seeds — the 18.24 `f280962f…` lesson
 reproduced exactly. At the 3-seed tranche budget, referee/flags verdicts are NOT
-resolvable for this campaign. Disposition: the two in-flight c1 legs complete the
-pre-registered two-tranche core (their arms need the retest for the c1-side stability
-row), then real-path spend STOPS — no gen-champion legs, no additional n=3 comparator
+resolvable for this campaign. **Protocol deviation, recorded (Codex round-3 P1):** the
+native leg logs show leg-c1-t2's `leg-start` at 23:14:52Z — 14 seconds after
+leg-c2-t2's `leg-done` (23:14:38Z) and BEFORE this stability read ran (~23:25Z). The
+rolling-pair posture launched the final leg in the window between the first retest
+completing and the F12 computation, so "compute after the FIRST retested candidate"
+was honored only to ~10 minutes, not strictly-before-the-next-launch. c1-t1 was
+genuinely in flight; c1-t2's nine games are a deviation the ruling then sanctioned
+completing (the c1-side stability row needs the retest), never a precondition-clean
+leg. Disposition: both c1 legs complete the pre-registered two-tranche core, then
+real-path spend STOPS — no gen-champion legs, no additional n=3 comparator
 legs (the committed 18.24 back-fill rows already carry the ea4bc955-vs-FSM cell) —
 and verdict-grade depth routes to 18.26's 50-seed protocol with its pre-registered
 UNRESOLVABLE third outcome. Duration honesty: the ~30–40 h leg envelope the contract
@@ -337,8 +348,10 @@ starvation-family exclusion demands.
 **Reading.** The c2 retest that fed §4.0: both trained arms flip to validity PASS
 (meeting rate cleared 0.60) while both of t1's referee PASSes fail to replicate, and
 gen-0 wins a game it swept-lost on t1. Read jointly with §4.1 in CF2 — the
-trained-vs-gen-0 meeting-rate delta persists across tranches; every per-meeting gauge
-swings at full scale.
+trained-vs-gen-0 meeting-rate delta persists across tranches; the flags-per-meeting
+gauge swings at full scale (2.0 → 0.0 on both trained arms — sufficient for the F12
+finding), while conversion does not (gen-9 stays 1.0 on both tranches; gen-3 moves
+0.5 → 0.0).
 
 ### 4.3 leg-c1-t1 (session 2 — COMPLETE, 9 games, tranche 4000–4002, vs `ea4bc955…`)
 
@@ -359,7 +372,7 @@ lineage starved (the 15.22 structural guard's fingerprint, per CF2). Honesty: a
 one-game win dent is exactly the swing scale §4.0 measured as noise; whether gen-9's
 edge dent replicates is what leg-c1-t2 retests, and verdict grade remains 18.26's.
 
-### 4.4 leg-c1-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…` — the campaign's FINAL real-path leg per the §4.0 ruling)
+### 4.4 leg-c1-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…` — the campaign's FINAL real-path leg; launched 14 s before the §4.0 read, a recorded protocol deviation the ruling sanctioned completing)
 
 | rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
 |---|---|---|---|---|---|---|---|
@@ -374,7 +387,8 @@ game off the champion; gen-0 takes a game too; gen-9's t1 win dent does not repl
 ejection-accuracy "training gradient", the win dent) is inside the measured swing.
 What survives the retest — the campaign's tranche-STABLE real-path results: every c1
 arm passes validity on BOTH tranches (the owned-task lineage is structurally
-meeting-rich under the frozen champion), zero referee passes campaign-wide, and the
+meeting-rich under the frozen champion), zero REPLICATED referee passes (the two c2
+t1 passes both failed retest — §4.0's 2/2/0; zero passes among c1 arms), and the
 c1-vs-c2 lineage contrast (§4.1/§4.2). The c1-side stability row
 (`measurement-stability-c1.json`): flags noise 33% of threshold (vs c2's 183% — the
 meeting-rich lineage measures more stably per meeting), but ALL 3 arms swung ≥ 1
@@ -395,7 +409,7 @@ state_hash verified) — every denominator below is trusted.
 **Instrument scope on CREW arms (the honest read, stated before any cell):** these are
 the tree's first learned-crew recordings, and two of the three shelf instruments are
 impostor-arm instruments by construction. `off_menu` scores only impostor decisions —
-the frozen champion is menu-bounded, so 0/119…0/203 on all 12 dirs is VACUOUS for the
+the frozen champion is menu-bounded, so 0/114…0/203 on all 12 dirs is VACUOUS for the
 crew claim (its own scope_note says as much). The `deception_instruments` cells fold
 the frozen OPPONENT's speech/outcomes; the crew candidate enters only through eject
 outcomes and deflection's survival half — and on c2 most denominators are 0–2
@@ -412,15 +426,16 @@ applies; corpus anchor 9p2i baseline-6 in the right column):
 | cell (c1 arms t1/t2 pooled range) | c1 owned-tasks | c2 general | corpus 9p2i |
 |---|---|---|---|
 | meetings per 3 games | 8–12 | **0–2** | ~9.3 |
-| crew-witnessed kill rate | 0.154–0.357 | 0.188–0.308 | **0.024** |
+| crew-witnessed kill rate | 0.1538–0.3571 | 0.1875–0.3077 | **0.0238** |
 | frame conversions | 0–2 per leg | 0 everywhere | 23/437 |
 | teammate accusations | 0 everywhere | 0 everywhere | 0/549 |
 | witnessed point-biserial (one hop) | 0.13–0.46 | 0.21–0.70 | 0.2585 |
-| crew H(cond) | 0.80–0.93 | 0.58–0.90 | 0.8693 |
+| crew H(cond) | 0.8041–0.9272 | 0.5773–0.7991 | 0.8693 |
 | off-menu rate | 0 (vacuous) | 0 (vacuous) | 0/6663 |
 
-Largest movements, stated not ruled: **crew-witnessed kill rate runs an order of
-magnitude above corpus on EVERY crew leg** — both arms confounded (learned crew
+Largest movements, stated not ruled: **crew-witnessed kill rate runs 6.5×–15× the
+corpus rate across the 12 arms (0.1538–0.3571 vs 0.0238)** — elevated on every arm,
+an order of magnitude only at the top of the range — both arms confounded (learned crew
 witnessing more vs the champion killing more brazenly against these crews than
 candidates did against scripted crew) — a named 18.26 comparator question, not a
 campaign ruling. And c2's meeting layer is nearly absent in raw bytes (verified: the
@@ -518,8 +533,8 @@ meeting rate with 2.0 flags/meeting and a correct ejection each, ALL arms validi
 tranche 2 — both trained arms validity-PASS (meeting rate cleared 0.60; selection 5.83 /
 1.67) with 0.0 measured flags, gen-0 still validity-FAIL but winning a game (0.667
 impostor win). The trained-vs-gen-0 meeting-rate delta persists across BOTH tranches
-(the counter-adaptation direction is consistent); every per-meeting gauge swings at
-full scale (§4.0). The 15.22 structural guard exists only on the owned-task basis —
+(the counter-adaptation direction is consistent); the flags-per-meeting gauge swings
+at full scale — 2.0 → 0.0 on both trained arms — while conversion does not (§4.0). The 15.22 structural guard exists only on the owned-task basis —
 v1's meeting scarcity is the measured cost of its absence. Selection consequence:
 no c2 arm survives this campaign's selection bars at n=3; whether the trained arms'
 validity-passing behavior is real is exactly a 50-seed (18.26) question.
@@ -561,7 +576,7 @@ contract), the campaign's four named candidates, all F14-verified through
 |---|---|---|
 | `0bf179b7…` c1 gen-9 | `run-c1-crew-owned-tasks/crew/gen-9/…` | validity PASS ×2; won its t1 leg; the most-trained owned-task champion |
 | `72adb41c…` c1 gen-3 | `run-c1-crew-owned-tasks/crew/gen-3/…` | validity PASS ×2; won its t2 leg with a game off the champion |
-| `515fc066…` c2 gen-9 | `run-c2-crew-general/crew/gen-9/…` | validity 1/2 tranches; the strongest general-base arm; carries the CF2 starvation watch |
+| `515fc066…` c2 gen-9 | `run-c2-crew-general/crew/gen-9/…` | validity 1/2 tranches; the most-trained general-base arm (no per-arm ordering survives retest — §4.4); carries the CF2 starvation watch |
 | `7fa59718…` c2 gen-3 | `run-c2-crew-general/crew/gen-3/…` | validity 1/2 tranches; carries the CF2 watch |
 | (control) `bd6fdd0a…` gen-0 owned-tasks | `realpath-crew/controls/crew-owned-tasks-es-gen0/` (four-file, F14-verified — re-frozen from the 3-file measurement-tier dir so the dual-stamped control cell is executable via `--crew-artifact`; the `888046d0…` general-base control sits beside it) | the counter-adaptation control; validity PASS ×2 |
 
