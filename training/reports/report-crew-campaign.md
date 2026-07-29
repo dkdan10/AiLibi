@@ -23,9 +23,11 @@ candidate `ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f`
 (intermediates/run-02-utility-lambda4/gen-2 — finalist 1a, pooled 6/6, the λ=4 regime;
 `anchor_weight=4.0` on the impostor side per the seed's own config.json). There is NO
 seam for adopting 18.24's committed hall as this campaign's opponent pool (the merged
-driver, 316d4e5): the seed re-freezes as a fresh lineage in this campaign's own hall at
-the first impostor-moving swap boundary, and the counter-adaptation reading is against
-that lineage plus this campaign's accumulating hall. The runner-up alternative
+driver, 316d4e5): the seed INITIALIZES a fresh lineage in this campaign's own hall —
+the exact `ea4bc955…` genome is never itself frozen (both runs update away from it at
+gen-4; the first persisted impostor hall champions are its evolved descendants
+`0ca3a382…` (c1) and `1577942b…` (c2) at gen-6) — and the counter-adaptation reading is
+against that descendant lineage plus this campaign's accumulating hall. The runner-up alternative
 `bfd145cb…` (runnerups/run-02-utility-lambda4/gen-9 — never a champion) is the
 documented alternative seed; both load through `--candidate-artifact` (F14, verified
 session 1 before any run). If full-pool continuity is judged load-bearing, that is a
@@ -202,6 +204,17 @@ a benchmark-environment shift to read against the real path, not a crew regressi
 
 ### 3.6 Cross-run readings
 
+**Cycling verdicts (the pre-registered signature: flat anchor + oscillating co-matchup
+= Red-Queen; monotone anchor = progress; series from the committed rows, moving-side
+`anchor_benchmark_champion_side` and mean opponent payoff per generation):**
+
+| run / side | anchor series | co-matchup series | verdict |
+|---|---|---|---|
+| c1 crew | 9.67 → 10.40 → 10.44 → 10.49 → 10.52 → 10.47 | 8.16 → 10.17 → 10.28 → 10.47 → 10.83 | both rise, no oscillation — **progress signature** |
+| c1 impostor | 17.59 flat ×6 | 18.26 → 18.13, drifting | neither half fires — **plateau, not Red-Queen** (the seeded champion's §3.1 plateau) |
+| c2 crew | 15.23 → 15.50 then 6.20 → 6.22 | 8.59 → 9.69 → 10.68 → 10.99 → 10.90 | anchor non-comparable across the swap-2 benchmark shift (§3.2); within-swap rising/flat + monotone co-matchup — **no Red-Queen signature** |
+| c2 impostor | 17.74 → 17.81, near-flat | 14.80 → 13.74 → 14.15 → 14.13 → 14.28 → 14.40 | flat anchor + a ~0.5-amplitude co-matchup dip-and-recover — **the closest to the Red-Queen half-signature; amplitude too small to rule at this budget; stated, not ruled** |
+
 The two bases separate on the fake path and the separation SURVIVES the real path at
 the lineage level: the owned-task (c1) crew is meeting-rich (conviction 3021 uses; all
 real-path arms validity-PASS both tranches) and its impostor opponent plateaus; the
@@ -224,8 +237,8 @@ crew-side on both bases, with a base-dependent locus.
 
 **Every real-path read in this report is a SCREEN, not a verdict.** Computed via
 `generate_campaign_tables.py stability` immediately after the FIRST retested candidates
-(the c2 slate, both tranches — the F12 precondition honored at hour ~1 of legs, not
-hour 40):
+(the c2 slate, both tranches — computed at hour ~1 of legs, not hour 40, though NOT
+strictly before the next launch; see the recorded deviation below):
 
 | stability check — **2 ARMS** (2 distinct genomes) recorded on both tranches | value |
 |---|---|
@@ -345,6 +358,11 @@ starvation-family exclusion demands.
 | 2 | `7fa59718…` gen3 | 1.67 | PASS | FAIL | 1.000 | None | 3/3 games stamped, uniform, sha == computed digest |
 | 3 | `888046d0…` gen0 | -1.00 | FAIL | FAIL | 0.667 | None | 3/3 games stamped, uniform, sha == computed digest |
 
+Floor sensitivity (generated, signed): `515fc066…` flags 0.0000 − 1.0909 = **−1.0909
+FAIL**, conversion 1.0000 − 1.0000 = +0.0000 PASS; `7fa59718…` flags **−1.0909 FAIL**,
+conversion **−1.0000 FAIL**; `888046d0…` both denominator-empty FAIL;
+witnessed-event-rate PASS all three.
+
 **Reading.** The c2 retest that fed §4.0: both trained arms flip to validity PASS
 (meeting rate cleared 0.60) while both of t1's referee PASSes fail to replicate, and
 gen-0 wins a game it swept-lost on t1. Read jointly with §4.1 in CF2 — the
@@ -361,8 +379,16 @@ finding), while conversion does not (gen-9 stays 1.0 on both tranches; gen-3 mov
 | 2 | `bd6fdd0a…` gen0 | 25.73 | PASS | FAIL | 1.000 | 0.250 | 3/3 games stamped, uniform, sha == computed digest |
 | 3 | `72adb41c…` gen3 | 24.40 | PASS | FAIL | 1.000 | 0.000 | 3/3 games stamped, uniform, sha == computed digest |
 
+Floor sensitivity (generated, signed): `0bf179b7…` flags 0.5000 − 1.0909 = **−0.5909
+FAIL**, conversion **−0.5556 FAIL**; `bd6fdd0a…` flags **−0.3131 FAIL**, conversion
+**−0.6794 FAIL**; `72adb41c…` flags 1.3750 − 1.0909 = **+0.2841 PASS** (the campaign's
+only flag-floor pass), conversion **−0.4550 FAIL**; witnessed-event-rate PASS all three.
+
 **Reading (n=3 — a SCREEN; §4.0 rules).** The counter-adaptation cell points the hoped
-direction on every instrument simultaneously: the trained gen-9 champion ranks FIRST,
+direction on most channels at once — but NOT all: gen-9's flag supply (0.5000) sits
+below both the gen-0 control's (0.7778) and the floor, so the campaign's central
+conviction-supply gauge does not favor the trained arm here. On the rest: the trained
+gen-9 champion ranks FIRST,
 nearly doubles its gen-0 control's selection score (47.30 vs 25.73), posts the leg's
 best ejection accuracy (gen-9 0.571 vs gen-0 0.250; gen-3 0.000 — no ordering claim
 along the lineage survives even within this tranche), and dents the
@@ -372,13 +398,18 @@ lineage starved (the 15.22 structural guard's fingerprint, per CF2). Honesty: a
 one-game win dent is exactly the swing scale §4.0 measured as noise; whether gen-9's
 edge dent replicates is what leg-c1-t2 retests, and verdict grade remains 18.26's.
 
-### 4.4 leg-c1-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…` — the campaign's FINAL real-path leg; launched 14 s before the §4.0 read, a recorded protocol deviation the ruling sanctioned completing)
+### 4.4 leg-c1-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…` — the campaign's FINAL real-path leg; launched 14 s after the first retest completed and ~10 min before the §4.0 read — a recorded protocol deviation the ruling sanctioned completing)
 
 | rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
 |---|---|---|---|---|---|---|---|
 | 1 | `72adb41c…` gen3 | 58.13 | PASS | FAIL | 0.667 | 0.600 | 3/3 games stamped, uniform, sha == computed digest |
 | 2 | `bd6fdd0a…` gen0 | 41.00 | PASS | FAIL | 0.667 | 1.000 | 3/3 games stamped, uniform, sha == computed digest |
 | 3 | `0bf179b7…` gen9 | 32.10 | PASS | FAIL | 1.000 | 0.500 | 3/3 games stamped, uniform, sha == computed digest |
+
+Floor sensitivity (generated, signed): `72adb41c…` flags 0.7273 − 1.0909 = **−0.3636
+FAIL**, conversion **−0.6603 FAIL**; `bd6fdd0a…` flags **−0.6465 FAIL**, conversion
+**−0.6250 FAIL**; `0bf179b7…` flags **−0.4909 FAIL**, conversion **−0.8889 FAIL**;
+witnessed-event-rate PASS all three (0.25–0.36 vs floor 0.0339).
 
 **Reading (the retest that disciplines §4.3).** Complete rank INVERSION vs tranche 1:
 gen-3 — bottom-ranked on t1 with ejection accuracy 0.000 — wins the leg AND takes a
@@ -413,9 +444,14 @@ the frozen champion is menu-bounded, so 0/114…0/203 on all 12 dirs is VACUOUS 
 crew claim (its own scope_note says as much). The `deception_instruments` cells fold
 the frozen OPPONENT's speech/outcomes; the crew candidate enters only through eject
 outcomes and deflection's survival half — and on c2 most denominators are 0–2
-(absent-denominator, not low-rate). `kill_craft` is the one instrument that directly
+(absent-denominator, not low-rate). `kill_craft` is the one shelf instrument that directly
 reads the learned arm (crew-witnessed census, point-biserial, the CREWMATE entropy
-cell). Routed note for coordination: 18.24's §5.1 prose says the off-menu
+cell). The contract-named crew instrument **roll-call coverage** is computed via
+`eval.funnel.compute_pooling_funnel` over the same 12 dirs (rows above): learned-crew
+roll-call coverage sits AT the corpus anchor on every meeting-reaching arm (crew-side
+means 0.83–1.00 vs corpus 0.9970; answer rates 0.81–0.92 vs 0.8720) — structured
+whereabouts uptake survives the learned-crew swap wherever meetings occur at all; the
+c2 gen-0 arms have no meetings to measure (the CF2 starvation read). Routed note for coordination: 18.24's §5.1 prose says the off-menu
 DISTRIBUTION is preserved in the committed sweeps, but every committed sweep drops
 `off_menu_decisions` (the aggregates survive) — an 18.24 §12-errata-channel item,
 recorded here, not silently fixed.
@@ -432,6 +468,8 @@ applies; corpus anchor 9p2i baseline-6 in the right column):
 | witnessed point-biserial (one hop) | 0.13–0.46 | 0.21–0.70 | 0.2585 |
 | crew H(cond) | 0.8041–0.9272 | 0.5773–0.7991 | 0.8693 |
 | off-menu rate | 0 (vacuous) | 0 (vacuous) | 0/6663 |
+| roll-call coverage (mean; crew / impostor) | 0.78–0.89 (crew 0.96–1.00 / imp 0.41–0.61) | 0.82–0.93 on the 1–2 meetings that occur (crew 0.83–1.00); gen-0 no meetings | 0.8640 (crew 0.9970 / imp 0.4654) |
+| roll-call answer rate | 0.81–0.89 | 0.82–0.92 | 0.8720 |
 
 Largest movements, stated not ruled: **crew-witnessed kill rate runs 6.5×–15× the
 corpus rate across the 12 arms (0.1538–0.3571 vs 0.0238)** — elevated on every arm,
@@ -499,12 +537,14 @@ Committed twin: `training/artifacts/coevo/ablation-run-c1-conviction-term/` +
 **Reading.** The complement of §6.1: on the meeting-RICH owned-task base (conviction
 served from gen-1: 165/297/459 uses across swap 0), the crew's own first-swap selection
 is term-INSENSITIVE — the supply addend did not reorder an already-meeting-seeking top.
-The term's first selection-relevant effect is on the EXPLOITER channel: crew-side
-exploiter probes climb `crew_inner_episode_fitness`, which carries the term when
-configured, and with the term ON no crew exploiter cleared the freeze bar during the
-impostor's swap while with it OFF two did — changing the impostor's opponent pool
-mid-swap, diverging the impostor swap-1 champion, and cascading into a different crew
-swap-2 champion. Paired reading of §6.1 + §6.2: the conviction term's selection effect
+The term's first selection-relevant effect is on the EXPLOITER channel — and the
+mechanism is NOVELTY, not bar-clearance: the term-ON probes at gens 5–6 DID clear the
+freeze bar (`exploiter_outcome="duplicate"`, fitness 10.9634 > the 9.8409 baseline) but
+reproduced the existing `72adb41c…` member and deduped, while the term-OFF probes found
+two NOVEL genomes that froze — changing the impostor's opponent pool mid-swap,
+diverging the impostor swap-1 champion, and cascading into a different crew swap-2
+champion. The term steered which region of crew-policy space the exploiter searched,
+not whether it could clear the bar. Paired reading of §6.1 + §6.2: the conviction term's selection effect
 is crew-side in BOTH campaigns (F6 extended), but its locus depends on the base — it
 reorders crew selection directly where meetings are scarce (v1) and acts through the
 exploiter/opponent-pool channel where meetings are already rich (v2). Emergence-claim
