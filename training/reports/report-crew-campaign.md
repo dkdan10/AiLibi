@@ -309,6 +309,41 @@ evidence play — but not past the validity floor. Gate-validity discipline outc
 c2 arm survives selection at this tranche (selection −1.0 sentinel), exactly as the
 starvation-family exclusion demands.
 
+### 4.2 leg-c2-t2 (session 2 — COMPLETE, 9 games, tranche 4003–4005, vs `ea4bc955…`)
+
+| rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
+|---|---|---|---|---|---|---|---|
+| 1 | `515fc066…` gen9 | 5.83 | PASS | FAIL | 1.000 | 1.000 | 3/3 games stamped, uniform, sha == computed digest |
+| 2 | `7fa59718…` gen3 | 1.67 | PASS | FAIL | 1.000 | None | 3/3 games stamped, uniform, sha == computed digest |
+| 3 | `888046d0…` gen0 | -1.00 | FAIL | FAIL | 0.667 | None | 3/3 games stamped, uniform, sha == computed digest |
+
+**Reading.** The c2 retest that fed §4.0: both trained arms flip to validity PASS
+(meeting rate cleared 0.60) while both of t1's referee PASSes fail to replicate, and
+gen-0 wins a game it swept-lost on t1. Read jointly with §4.1 in CF2 — the
+trained-vs-gen-0 meeting-rate delta persists across tranches; every per-meeting gauge
+swings at full scale.
+
+### 4.3 leg-c1-t1 (session 2 — COMPLETE, 9 games, tranche 4000–4002, vs `ea4bc955…`)
+
+| rank | candidate | selection | validity | referee | win | ejection acc | stamp proof |
+|---|---|---|---|---|---|---|---|
+| 1 | `0bf179b7…` gen9 | 47.30 | PASS | FAIL | 0.667 | 0.571 | 3/3 games stamped, uniform, sha == computed digest |
+| 2 | `bd6fdd0a…` gen0 | 25.73 | PASS | FAIL | 1.000 | 0.250 | 3/3 games stamped, uniform, sha == computed digest |
+| 3 | `72adb41c…` gen3 | 24.40 | PASS | FAIL | 1.000 | 0.000 | 3/3 games stamped, uniform, sha == computed digest |
+
+**Reading (n=3 — a SCREEN; §4.0 rules).** The counter-adaptation cell points the hoped
+direction on every instrument simultaneously: the trained gen-9 champion ranks FIRST,
+nearly doubles its gen-0 control's selection score (47.30 vs 25.73), lifts ejection
+accuracy monotonically along the lineage where it matters (gen-0 0.250 → gen-9 0.571;
+gen-3 sits at 0.000 — training time, not lineage age, is the gradient), and dents the
+frozen champion's win edge by one game (0.667 vs the control's 1.000 sweep). ALL c1
+arms pass validity — the owned-task lineage is meeting-rich everywhere the general
+lineage starved (the 15.22 structural guard's fingerprint, per CF2). Honesty: a
+one-game win dent is exactly the swing scale §4.0 measured as noise; whether gen-9's
+edge dent replicates is what leg-c1-t2 retests, and verdict grade remains 18.26's.
+
+### 4.4 leg-c1-t2 — RECORDING (tranche 4003–4005; the c1 retest + the campaign's final real-path leg per the §4.0 ruling)
+
 <!-- all legs recorded -->
 
 ## 5. Emergence-instrument sweeps — PENDING (rides the real-path recordings)

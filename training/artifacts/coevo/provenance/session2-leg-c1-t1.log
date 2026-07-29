@@ -1,0 +1,7 @@
+[leg-c1-t1] candidates: [('c1-gen0-owned-tasks-es', 'crew-option-features-v2'), ('c1-swap0-champ-gen3', 'crew-option-features-v2'), ('c1-swap2-champ-gen9', 'crew-option-features-v2')]
+[leg-c1-t1] opponent: ea4bc955 (the 18.24 frozen champion)  seeds=(4000, 4001, 4002)
+[leg-c1-t1] meeting_timeout_seconds=900.0 (F7 kept)  prescreen=None (protocol-fixed slate)
+[leg-c1-t1] rank 1: c1-swap2-champ-gen9 selection=47.3000 validity=True referee=False win=0.667 crew_stamped=3
+[leg-c1-t1] rank 2: c1-gen0-owned-tasks-es selection=25.7300 validity=True referee=False win=1.000 crew_stamped=3
+[leg-c1-t1] rank 3: c1-swap0-champ-gen3 selection=24.4000 validity=True referee=False win=1.000 crew_stamped=3
+[leg-c1-t1] LEG DONE ranking=/Users/danielkeinan/ailibi-campaign-1825/realpath/run-c1-crew-owned-tasks/ranking-4000-4002.jsonl
