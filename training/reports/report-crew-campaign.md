@@ -4,8 +4,8 @@
 **Machinery consumed (frozen, never edited here):** training/coevo/driver.py (18.19/18.20/18.21/18.31), training/crew/ (15.16/15.22), training/realpath.py (18.17/18.31 + the 18.32 crew re-rank arm), scripts/generate_campaign_tables.py (18.31), scripts/run_tournament.py --crew-artifact (18.19)
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Date started:** 2026-07-28
-**Last evidence recorded:** 2026-07-29 (session 2 close — all four legs recorded; sweeps in §5)
-**Status:** COMPLETE (pending §5 sweeps) — fake path 2 runs + 2 ablation twins; real path 4 legs / 36 games, STOPPED by the §4.0 F12 ruling after the pre-registered two-tranche core (~8.7 h wall-clock vs the ~30–40 h envelope — duration honesty: the envelope was deliberately NOT spent at a noise level that cannot support the verdicts it would buy; the two-leg rolling posture ran throughout, zero retry exhaustion, no degrade).
+**Last evidence recorded:** 2026-07-29 (session 2 close — all four legs + sweeps recorded)
+**Status:** COMPLETE — fake path 2 runs + 2 ablation twins; real path 4 legs / 36 games, STOPPED by the §4.0 F12 ruling after the pre-registered two-tranche core (~8.7 h wall-clock vs the ~30–40 h envelope — duration honesty: the envelope was deliberately NOT spent at a noise level that cannot support the verdicts it would buy; the two-leg rolling posture ran throughout, zero retry exhaustion, no degrade).
 
 Every table in this report is GENERATED from committed artifacts via
 `scripts/generate_campaign_tables.py` (the F12 lesson), never hand-assembled.
@@ -377,7 +377,48 @@ precondition — the §4.0 stop ruling stands on both slates.
 
 <!-- all legs recorded -->
 
-## 5. Emergence-instrument sweeps — PENDING (rides the real-path recordings)
+## 5. Emergence-instrument sweeps (18.1/18.2/18.3 over the campaign's real-path recordings)
+
+Committed sweep JSONs beside each ranking (`sweep-<tranche>.json`, one entry per
+candidate dir, the 18.24 shape byte-for-byte in key structure; recipe validated by
+recomputing the corpus-9p2i baseline block at this tree — byte-identical to the block
+every committed 18.24 sweep embeds). **Byte-completeness fence: PASS on all 12
+candidate dirs** before any instrument read (every game GAME_OVER-stamped, every
+state_hash verified) — every denominator below is trusted.
+
+**Instrument scope on CREW arms (the honest read, stated before any cell):** these are
+the tree's first learned-crew recordings, and two of the three shelf instruments are
+impostor-arm instruments by construction. `off_menu` scores only impostor decisions —
+the frozen champion is menu-bounded, so 0/119…0/203 on all 12 dirs is VACUOUS for the
+crew claim (its own scope_note says as much). The `deception_instruments` cells fold
+the frozen OPPONENT's speech/outcomes; the crew candidate enters only through eject
+outcomes and deflection's survival half — and on c2 most denominators are 0–2
+(absent-denominator, not low-rate). `kill_craft` is the one instrument that directly
+reads the learned arm (crew-witnessed census, point-biserial, the CREWMATE entropy
+cell). Routed note for coordination: 18.24's §5.1 prose says the off-menu
+DISTRIBUTION is preserved in the committed sweeps, but every committed sweep drops
+`off_menu_decisions` (the aggregates survive) — an 18.24 §12-errata-channel item,
+recorded here, not silently fixed.
+
+Key cells (from the committed sweep JSONs; n=3 games/arm — advisory scale, §4.0
+applies; corpus anchor 9p2i baseline-6 in the right column):
+
+| cell (c1 arms t1/t2 pooled range) | c1 owned-tasks | c2 general | corpus 9p2i |
+|---|---|---|---|
+| meetings per 3 games | 8–12 | **0–2** | ~9.3 |
+| crew-witnessed kill rate | 0.154–0.357 | 0.188–0.308 | **0.024** |
+| frame conversions | 0–2 per leg | 0 everywhere | 23/437 |
+| teammate accusations | 0 everywhere | 0 everywhere | 0/549 |
+| witnessed point-biserial (one hop) | 0.13–0.46 | 0.21–0.70 | 0.2585 |
+| crew H(cond) | 0.80–0.93 | 0.58–0.90 | 0.8693 |
+| off-menu rate | 0 (vacuous) | 0 (vacuous) | 0/6663 |
+
+Largest movements, stated not ruled: **crew-witnessed kill rate runs an order of
+magnitude above corpus on EVERY crew leg** — both arms confounded (learned crew
+witnessing more vs the champion killing more brazenly against these crews than
+candidates did against scripted crew) — a named 18.26 comparator question, not a
+campaign ruling. And c2's meeting layer is nearly absent in raw bytes (verified: the
+gen-0 games carry zero meeting rows), the §4.1/CF2 starvation read at the byte level.
 
 <!-- all sweeps recorded -->
 
