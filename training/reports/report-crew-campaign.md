@@ -213,7 +213,7 @@ a benchmark-environment shift to read against the real path, not a crew regressi
 | c1 crew | 9.67 → 10.40 → 10.44 → 10.49 → 10.52 → 10.47 | 8.16 → 10.17 → 10.28 → 10.47 → 10.83 | both rise, no oscillation — **progress signature** |
 | c1 impostor | 17.59 flat ×6 | 18.26 → 18.13, drifting | neither half fires — **plateau, not Red-Queen** (the seeded champion's §3.1 plateau) |
 | c2 crew | 15.23 → 15.50 then 6.20 → 6.22 | 8.59 → 9.69 → 10.68 → 10.99 → 10.90 | anchor non-comparable across the swap-2 benchmark shift (§3.2); within-swap rising/flat + monotone co-matchup — **no Red-Queen signature** |
-| c2 impostor | 17.74 → 17.81, near-flat | 14.80 → 13.74 → 14.15 → 14.13 → 14.28 → 14.40 | flat anchor + a ~0.5-amplitude co-matchup dip-and-recover — **the closest to the Red-Queen half-signature; amplitude too small to rule at this budget; stated, not ruled** |
+| c2 impostor | 17.74 → 17.81, near-flat | 14.80 → 13.74 → 14.15 → 14.13 → 14.28 → 14.40 | flat anchor + oscillating co-matchup (peak-to-trough 1.06, multiple direction changes) — **Red-Queen signature PRESENT under the registered rule**; the 6-generation horizon is the stated evidentiary uncertainty, not a verdict qualifier |
 
 The two bases separate on the fake path and the separation SURVIVES the real path at
 the lineage level: the owned-task (c1) crew is meeting-rich (conviction 3021 uses; all
@@ -448,10 +448,12 @@ outcomes and deflection's survival half — and on c2 most denominators are 0–
 reads the learned arm (crew-witnessed census, point-biserial, the CREWMATE entropy
 cell). The contract-named crew instrument **roll-call coverage** is computed via
 `eval.funnel.compute_pooling_funnel` over the same 12 dirs (rows above): learned-crew
-roll-call coverage sits AT the corpus anchor on every meeting-reaching arm (crew-side
-means 0.83–1.00 vs corpus 0.9970; answer rates 0.81–0.92 vs 0.8720) — structured
-whereabouts uptake survives the learned-crew swap wherever meetings occur at all; the
-c2 gen-0 arms have no meetings to measure (the CF2 starvation read). Routed note for coordination: 18.24's §5.1 prose says the off-menu
+roll-call coverage clears the ratified 0.60 floor on every meeting-reaching arm —
+above-floor SCREENS, not at-anchor claims: aggregate means 0.78–0.93 vs the corpus
+0.8640, crew-side means 0.83–1.00 vs the corpus 0.9970 (the c2 cells rest on 1–2
+meetings), answer rates 0.81–0.92 vs 0.8720. Structured whereabouts uptake survives
+the learned-crew swap wherever meetings occur at all; the c2 gen-0 arms have no
+meetings to measure (the CF2 starvation read). Routed note for coordination: 18.24's §5.1 prose says the off-menu
 DISTRIBUTION is preserved in the committed sweeps, but every committed sweep drops
 `off_menu_decisions` (the aggregates survive) — an 18.24 §12-errata-channel item,
 recorded here, not silently fixed.
@@ -530,7 +532,7 @@ Committed twin: `training/artifacts/coevo/ablation-run-c1-conviction-term/` +
 | lineage point | run-c1 (term ON) | twin (term OFF) | verdict |
 |---|---|---|---|
 | crew swap-0 champion (gen-3) | `72adb41c…` | identical | SAME |
-| crew exploiter finds, gens 5–6 | **none passed the bar** | `d007fc37…`, `2530b11d…` | **DIVERGES** |
+| crew exploiter finds, gens 5–6 | cleared the bar (10.9634 > 9.8409) but DEDUPED against `72adb41c…` — no novel freeze | `d007fc37…`, `2530b11d…` froze (novel) | **DIVERGES** |
 | impostor swap-1 champion (gen-6) | `0ca3a382…` | `7ddc3709…` | **DIVERGES** |
 | crew swap-2 champion (gen-9) | `0bf179b7…` | `a0ab72e2…` | **DIVERGES** |
 
