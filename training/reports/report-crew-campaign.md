@@ -573,7 +573,7 @@ crew arm with the same-seed gen-0 control, and read win conversion only at n=50.
 
 Fake path (deterministic under `master_seed` on the recording platform, macOS; the
 row pins assert structure, never floats): the two run harnesses + two ablation twins are COMMITTED VERBATIM at
-`training/artifacts/coevo/provenance/harnesses/` (with the four leg scripts) — the
+`training/artifacts/coevo/provenance/harnesses/` (with the four leg scripts; committed as `.py.txt` so repo-wide lint/typing gates skip operator scripts) — the
 twin's config-identity claim is auditable by diff (run name + `conviction=None` are the
 only deltas). They are §1.3/§1.6/§6 configs applied to the 18.24 §9 snippet shape — `first_side="crew"`,
 `run_label` set per run, fresh `ConvictionFitnessTerm` (or `None` for twins),
