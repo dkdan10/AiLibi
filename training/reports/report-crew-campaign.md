@@ -4,8 +4,8 @@
 **Machinery consumed (frozen, never edited here):** training/coevo/driver.py (18.19/18.20/18.21/18.31), training/crew/ (15.16/15.22), training/realpath.py (18.17/18.31 + the 18.32 crew re-rank arm), scripts/generate_campaign_tables.py (18.31), scripts/run_tournament.py --crew-artifact (18.19)
 **Section refs:** the 18.24 report (the frozen impostor champions this campaign trains against); training/crew/ (the crew bases); audits/audit-phase-18-planning.md §4 (#8, the impostor-first rationale) + the crew-fitness finding (correct_reports dead on non-convicting paths — the conviction term is the counterweight)
 **Date started:** 2026-07-28
-**Last evidence recorded:** 2026-07-28 (session 2 — c2 slate retested both tranches; F12 stability read RULED)
-**Status:** IN PROGRESS — fake path COMPLETE (both runs); real path: c2 slate complete (both tranches), c1 legs in flight; **the F12 read rules real-path spend STOPS after the in-flight c1 legs** (§4.0: noise 183% of the flags threshold at n=3; verdict-grade depth routes to 18.26's 50-seed protocol).
+**Last evidence recorded:** 2026-07-29 (session 2 close — all four legs recorded; sweeps in §5)
+**Status:** COMPLETE (pending §5 sweeps) — fake path 2 runs + 2 ablation twins; real path 4 legs / 36 games, STOPPED by the §4.0 F12 ruling after the pre-registered two-tranche core (~8.7 h wall-clock vs the ~30–40 h envelope — duration honesty: the envelope was deliberately NOT spent at a noise level that cannot support the verdicts it would buy; the two-leg rolling posture ran throughout, zero retry exhaustion, no degrade).
 
 Every table in this report is GENERATED from committed artifacts via
 `scripts/generate_campaign_tables.py` (the F12 lesson), never hand-assembled.
@@ -127,6 +127,7 @@ the campaign leg until routed).
 |---|---|---|---|
 | 1 | 2026-07-28 | Protocol fixed; F14 seed smokes; run-c1 + run-c2 fake-path runs; 18.32 routed (Amend + overlap ruling); checkpoint-push per run | this report §1/§3; `training/artifacts/coevo/run-c1-crew-owned-tasks/`; commit a9a74bc |
 | 2 | 2026-07-28 | 18.32 merged (088d4c2, #315) + coordination a752f85; leg pair 1 launched (c1-t1 + c2-t1, tranche 4000–4002, two-leg runbook, vs ea4bc955) | §4; `provenance/session2-leg-c1-t1.log`, `…-c2-t1.log` (committed at leg close) |
+| 2 (cont., 2026-07-28→29) | overnight | Rolling-pair posture ratified; all four legs recorded (36 games); F12 stability RULED (stop after c1 legs); ablation twin pair; report close | §4.0–§4.4, §6; provenance/session2-leg-*.log; commits 4339a23…e96e352 |
 
 ## 3. The campaign rows (fake/surrogate path; per run)
 
@@ -479,10 +480,67 @@ ledger, alongside the record/score-split ergonomics item (§4 posture amendment)
 
 <!-- SESSION-FINDINGS: extended as they land -->
 
-## 8. Ranked shortlist for 18.26 — PENDING (a screen, not a verdict)
+## 8. Hand-off to 18.26 (a screen, not a verdict — and deliberately NOT a ranked shortlist)
 
-## 9. Reproduce — PENDING (harnesses + manifest census at close)
+**No crew finalist clears the bars from this campaign's evidence, and no per-arm
+ordering survives its own retest (§4.4), so this section names CANDIDATES with their
+tranche-stable properties instead of ranking them** — a ranked list would launder §4.0
+noise into a hand-off. If 18.26 takes crew arms (owner-justified slots per its
+contract), the campaign's four named candidates, all F14-verified through
+`--crew-artifact` at hand-off (session 2):
 
-## 10. How downstream consumes this — PENDING
+| candidate | artifact (crew hall) | tranche-stable evidence |
+|---|---|---|
+| `0bf179b7…` c1 gen-9 | `run-c1-crew-owned-tasks/crew/gen-9/…` | validity PASS ×2; won its t1 leg; the most-trained owned-task champion |
+| `72adb41c…` c1 gen-3 | `run-c1-crew-owned-tasks/crew/gen-3/…` | validity PASS ×2; won its t2 leg with a game off the champion |
+| `515fc066…` c2 gen-9 | `run-c2-crew-general/crew/gen-9/…` | validity 1/2 tranches; the strongest general-base arm; carries the CF2 starvation watch |
+| `7fa59718…` c2 gen-3 | `run-c2-crew-general/crew/gen-3/…` | validity 1/2 tranches; carries the CF2 watch |
+| (control) `bd6fdd0a…` gen-0 owned-tasks | training/artifacts/crew/crew-owned-tasks-es (3-file measurement tier — loads via the 18.7 learned-crew factory, NOT `--crew-artifact`) | the counter-adaptation control; validity PASS ×2 |
+
+The dual-stamped crew-vs-champion cell 18.26's contract pre-registers is exactly what
+these recordings piloted; the campaign's protocol recommendation to 18.26: pair every
+crew arm with the same-seed gen-0 control, and read win conversion only at n=50.
+
+## 9. Reproduce
+
+Fake path (deterministic under `master_seed` on the recording platform, macOS; the
+row pins assert structure, never floats): the two run harnesses + two ablation twins
+are §1.3/§1.6/§6 configs applied to the 18.24 §9 snippet shape — `first_side="crew"`,
+`run_label` set per run, fresh `ConvictionFitnessTerm` (or `None` for twins),
+`hall_root=training/artifacts/coevo/<run>`, work_dir under the operator root
+`/Users/danielkeinan/ailibi-campaign-1825/` (PATHS.md carries the prefix map).
+Verification pins: `uv run pytest tests/training/test_coevo_driver.py -k
+CommittedCrewCampaignRows`. Run digests: c1 `7a613696…`, c2 `7e682377…`, twin-c1
+`43570747…`, twin-c2 (committed rows at `ablation-run-c2-conviction-term/`).
+
+Real path (selection-only, non-deterministic): `AILIBI_LLM_PROVIDER=featherless
+AILIBI_PROMPT_SET=qwen3_6_27b AILIBI_SEED_MAX_ATTEMPTS=8` + `FEATHERLESS_API_KEY`,
+`run_realpath_rerank(..., config=RealPathRerankConfig(meeting_timeout_seconds=900.0),
+opponent_artifact=<the ea4bc955 artifact dir>)` per leg (§4 slates; schema
+`realpath-rerank-v3`). Every leg's `leg-log.jsonl` + `leg-<tranche>-<invocation>.json`
++ `prescreen` state are committed inside the mirrored `recordings-<tranche>/` dirs;
+session chain logs at `training/artifacts/coevo/provenance/session2-leg-*.log`.
+Verify every recordings manifest from a fresh checkout:
+
+```bash
+find training/artifacts/coevo/realpath/run-c[12]-* -name 'recordings-manifest*.sha256' -print0 | \
+  xargs -0 -I{} sh -c 'cd "$(dirname {})" && shasum -a 256 -c "$(basename {})"'
+```
+
+## 10. How downstream consumes this
+
+- **18.26** takes §8's candidates (owner-justified slots; adoption is NOT this task's
+  call) and the §4/§4.0 lesson that every crew verdict needs the 50-seed protocol with
+  the UNRESOLVABLE third outcome; the dual-stamped crew-vs-champion recording recipe is
+  piloted here (the first dual-stamped crew recordings in the tree).
+- **18.27** reads the emergence discipline outcome: the conviction-term claim carries
+  its ablation limb (§6, both bases, dose-aligned + channel-resolved) and is
+  NOT-DEMONSTRATED overall at this budget; F6's crew-side locus is extended, not
+  contradicted.
+- **18.28** inherits the deferred-ledger items: the record/score split (element-level
+  leg concurrency, §4 posture amendment), the stability tool's zero-meeting-arm
+  handling (CF3), and the standing 18.31 residuals.
+- **Phase-19-facing**: CF2 (the v1 base without the 15.22 guard is starvation-family
+  under a strong impostor) prices any future general-base crew work.
 
 ## 12. Errata — (none yet)
