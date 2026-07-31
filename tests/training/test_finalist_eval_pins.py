@@ -49,6 +49,11 @@ What is pinned, and why:
   cell rather than recomputing one. Its rates and margin are re-derived from
   its own counts, and its excluded seed is tied back to c1-gen0's declared
   stalemate.
+* **The same-seed comparison blocks.** The F13 quartet's gauges re-measured
+  on one common 49-seed set (carried by the three FULL impostor arms; absent
+  from ``7f73929d``, whose own block already IS that view), and the c1 pair's
+  paired per-seed crew-win table. Both are reconciled against the arms they
+  summarise rather than trusted as self-consistent tables.
 * **The co-present-departure cell.** Persisted per arm because the flattened
   rows dropped the histogram it is cut from, so the committed number is now
   the only copy. Its rate is re-derived from its own counts, its denominator
@@ -115,6 +120,44 @@ _CANONICAL_SEEDS: Final[tuple[int, ...]] = tuple(range(50))
 _IMPOSTOR: Final[str] = "impostor"
 _COMPARATOR: Final[str] = "comparator"
 _CREW: Final[str] = "crew"
+
+#: A game_over reason that means the CREW won (everything else is an impostor
+#: win, or — for a stalled game — no win at all).
+_CREW_WIN_REASONS: Final[frozenset[str]] = frozenset(
+    {"CREWMATE_EJECT", "CREWMATE_TASKS"}
+)
+
+#: The F13 quartet re-measured on ONE seed set: the three FULL impostor arms
+#: cut down to 7f73929d's native 49 seeds, so the four arms are compared on
+#: identical games. Measured values only — every floor is re-derived.
+_F13_EXCLUDED_SEED: Final[int] = 35
+_F13_INTERSECTION_MEASURED: Final[dict[str, dict[str, float]]] = {
+    "p18-imp-ea4bc955": {
+        "witnessed_event_rate": 0.15625,
+        "flags_per_meeting": 0.9536423841059603,
+        "testimony_backed_conversion": 0.3716216216216216,
+    },
+    "p18-imp-bfd145cb": {
+        "witnessed_event_rate": 0.1507537688442211,
+        "flags_per_meeting": 0.8974358974358975,
+        "testimony_backed_conversion": 0.3493150684931507,
+    },
+    "p18-imp-6d327dcb": {
+        "witnessed_event_rate": 0.2275132275132275,
+        "flags_per_meeting": 0.9559748427672956,
+        "testimony_backed_conversion": 0.43661971830985913,
+    },
+}
+
+#: The c1 pair's paired per-seed crew-win table (McNemar-style discordant
+#: counts) over the 49 seeds both sides finalized.
+_C1_PAIRED_EXCLUDED_SEED: Final[int] = 20
+_C1_PAIRED_49: Final[dict[str, int]] = {
+    "both_win": 20,
+    "gen9_only_win": 6,
+    "gen0_only_win": 5,
+    "neither_win": 18,
+}
 
 #: The §8.1 arm listing, in the report's own order — quoted from the
 #: pre-registration, not from the file, so the file is checked AGAINST the
@@ -489,6 +532,21 @@ def _gauges(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """The row's supply gauges, keyed by gauge name."""
 
     return {gauge["name"]: gauge for gauge in row["watchability"]["supply_gauges"]}
+
+
+def _crew_wins_excluding(row: dict[str, Any], seed: int) -> int:
+    """The row's crew wins with one seed removed, read from its own per-game bytes.
+
+    A paired cut may only be compared against the same arm's wins over the
+    SAME seeds. Rather than assume the excluded seed was a loss, this looks up
+    what actually happened in it: a crew win there is subtracted, an impostor
+    win or a stalled game is not.
+    """
+
+    per_game = {game["seed"]: game for game in row["watchability"]["per_game"]}
+    excluded = per_game[seed]
+    was_crew_win = excluded["reason"] in _CREW_WIN_REASONS
+    return int(row["core"]["crew_wins"]) - (1 if was_crew_win else 0)
 
 
 def _assert_digest_closes_on_the_artifact_bytes(
@@ -1015,6 +1073,131 @@ def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() ->
     assert gen9_parent["games_total"] == 50
     assert cell["gen9_kills_total"] < gen9_parent["kills_total"]
     assert cell["gen9_crew_witnessed_kills"] == gen9_parent["crew_witnessed_kills"]
+
+
+def test_the_f13_intersection_gauges_put_the_quartet_on_one_seed_set() -> None:
+    """The F13 four are compared on IDENTICAL games, not near-identical ones.
+
+    ``7f73929d`` recorded 49 seeds; the other three recorded 50. Comparing
+    those directly would let one extra game move a gauge and read as a
+    behavioural margin, so the three FULL arms carry a re-measurement on
+    7f73929d's own seed set. The block therefore sits on exactly those three
+    rows — and its ABSENCE from ``7f73929d`` is not an oversight but the
+    point: that arm's ordinary ``watchability`` block already IS the n=49
+    view, which is asserted here rather than left as a claim in a note.
+
+    Both halves are pinned: the measured values, and every floor re-derived —
+    the two fixed baseline-6 pins, plus the population-relative conversion
+    floor recomputed from the INTERSECTION's own flag supply (not the
+    full-50 one, which would silently judge the cut against the wrong bar).
+    Finally, every intersection value must DIFFER from the row's own full-50
+    gauge: a block copied wholesale from the uncut measurement would satisfy
+    every other assertion here.
+    """
+
+    rows = _rows()
+    carriers = {
+        entrant for entrant, row in rows.items() if "f13_intersection_gauges" in row
+    }
+    assert carriers == set(_F13_INTERSECTION_MEASURED)
+
+    # The six non-carriers, and WHY 7f73929d is one of them.
+    non_carriers = {arm.entrant for arm in _SLATE} - carriers
+    assert len(non_carriers) == len(_SLATE) - len(carriers)
+    f13_arm = next(arm for arm in _SLATE if arm.entrant == "p18-imp-7f73929d")
+    assert "p18-imp-7f73929d" in non_carriers
+    assert f13_arm.missing_seeds == (_F13_EXCLUDED_SEED,)
+    seventh = rows["p18-imp-7f73929d"]
+    intersection_seeds = sorted(set(_CANONICAL_SEEDS) - {_F13_EXCLUDED_SEED})
+    assert seventh["recording"]["seeds"] == intersection_seeds
+    assert seventh["watchability"]["games_total"] == len(intersection_seeds) == 49
+
+    notes: set[str] = set()
+    for entrant, expected in _F13_INTERSECTION_MEASURED.items():
+        block = rows[entrant]["f13_intersection_gauges"]
+        assert block["excluded_seed"] == _F13_EXCLUDED_SEED
+        notes.add(block["note"])
+
+        gauges = block["gauges"]
+        assert set(gauges) == set(expected)
+        full = _gauges(rows[entrant])
+        for name, measured in expected.items():
+            assert set(gauges[name]) == {"floor", "measured"}
+            assert gauges[name]["measured"] == pytest.approx(measured)
+            # The cut MOVED the gauge — this is not the uncut block again.
+            assert gauges[name]["measured"] != full[name]["measured"]
+
+        assert gauges["witnessed_event_rate"]["floor"] == pytest.approx(
+            _WITNESSED_FLOOR
+        )
+        assert gauges["flags_per_meeting"]["floor"] == pytest.approx(_FLAGS_FLOOR)
+        # Population-relative, off the INTERSECTION's own flag supply.
+        assert gauges["testimony_backed_conversion"]["floor"] == pytest.approx(
+            min(
+                1.0,
+                _CONVERSION_PIN
+                * (_FLAGS_FLOOR / gauges["flags_per_meeting"]["measured"]),
+            )
+        )
+
+    assert len(notes) == 1
+    assert str(_F13_EXCLUDED_SEED) in notes.pop()
+
+
+def test_the_c1_paired_crew_win_table_is_the_49_seed_discordant_cut() -> None:
+    """The c1 pair's per-seed win table, reconciled against both arms' totals.
+
+    A paired (McNemar-style) table only means anything if its four cells
+    describe the same games both arms finalized: seed 20 is c1-gen0's
+    stalemate, so it is excluded, and the cells must sum to the remaining 49.
+
+    The margins are then reconciled ACROSS rows, which is what stops the table
+    being internally tidy but detached from the arms it summarises:
+    ``both_win + gen9_only_win`` must equal c1-gen9's crew wins over those same
+    49 seeds, and ``both_win + gen0_only_win`` c1-gen0's. Each side's 49-seed
+    total is re-derived from its OWN per-game bytes rather than assumed equal
+    to its full-50 count — they happen to coincide here, but only because
+    neither arm won seed 20 as crew (gen9 lost it to an impostor parity, gen0
+    never finished it). Asserting the raw equality would pass for the wrong
+    reason the moment that changed.
+    """
+
+    rows = _rows()
+    carriers = [
+        entrant
+        for entrant, row in rows.items()
+        if "conversion_paired_49_seed" in row.get("instruments", {})
+    ]
+    assert carriers == ["p18-crew-c1-gen9"]
+
+    gen9 = rows["p18-crew-c1-gen9"]
+    gen0 = rows["p18-crew-c1-gen0"]
+    table = gen9["instruments"]["conversion_paired_49_seed"]
+
+    assert table["excluded_seed"] == _C1_PAIRED_EXCLUDED_SEED
+    assert gen0["stalemate_games_no_game_over"] == [
+        f"replay-seed-{_C1_PAIRED_EXCLUDED_SEED}.jsonl"
+    ]
+    for cell, count in _C1_PAIRED_49.items():
+        assert table[cell] == count
+
+    assert sum(_C1_PAIRED_49.values()) == 49
+    assert sum(table[cell] for cell in _C1_PAIRED_49) == 49
+
+    # The cross-row reconciliation, against each arm's own 49-seed total.
+    gen9_wins_49 = _crew_wins_excluding(gen9, _C1_PAIRED_EXCLUDED_SEED)
+    gen0_wins_49 = _crew_wins_excluding(gen0, _C1_PAIRED_EXCLUDED_SEED)
+    assert table["both_win"] + table["gen9_only_win"] == gen9_wins_49 == 26
+    assert table["both_win"] + table["gen0_only_win"] == gen0_wins_49 == 25
+
+    # ... and the reason both survive the cut unchanged: neither arm won the
+    # excluded seed as crew, so removing it moved neither total.
+    gen9_seed = {game["seed"]: game for game in gen9["watchability"]["per_game"]}[
+        _C1_PAIRED_EXCLUDED_SEED
+    ]
+    assert gen9_seed["reason"] == "IMPOSTOR_PARITY"
+    assert gen9_wins_49 == gen9["core"]["crew_wins"]
+    assert gen0_wins_49 == gen0["core"]["crew_wins"]
 
 
 def test_the_co_present_departure_cell_is_persisted_on_every_arm() -> None:
