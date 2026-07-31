@@ -1275,9 +1275,15 @@ the gauge whose noise ceiling is unreachable. It was pre-registered as a
 possibility for the **crew** lineage's flags gauge and it landed everywhere for
 the **witnessed** gauge instead.
 
-**`flags_per_meeting` reads UNRESOLVABLE on exactly two arms** —
-`p18-imp-bfd145cb` (noise 0.29291 vs ceiling 0.27273, a 7% overshoot) and
-`p18-crew-c2-gen9` (noise **1.30** vs 0.27273, a 4.8× overshoot). The c2-gen9
+**`flags_per_meeting` reads UNRESOLVABLE on three arms — two by measured noise
+over the ceiling, one for want of meetings.** By measured noise:
+`p18-imp-bfd145cb` (0.29291 vs ceiling 0.27273, a 7% overshoot) and
+`p18-crew-c2-gen9` (**1.30** vs 0.27273, a 4.8× overshoot). By undefinedness:
+`p18-crew-c2-gen0`, whose zero meetings leave the gauge with no halves to split
+at all — marked UNRESOLVABLE in the table above, and a different kind of
+unresolvable from the other two (no measurement, rather than a measurement too
+noisy to use). Its `testimony_backed_conversion` cell is undefined for the same
+reason. The c2-gen9
 cell is **the §10.4 prediction landing**: the pre-registration named
 `flags_per_meeting` "the UNRESOLVABLE-prone gauge on the meeting-scarce crew
 lineage", quoting the committed n=3 `noise_to_threshold_ratio` **1.8333** for c2
@@ -1375,18 +1381,28 @@ steady the **margin itself** is between halves and is **an observation about
 reproducibility, NOT the §11.2 test** — the §11.2 test is the two bolded
 side-noise columns.)
 
-**Applying §11.2 as registered.** On **`witnessed_event_rate`** (|−0.00650| vs
-0.07001 / 0.06026) and **`flags_per_meeting`** (|−0.09189| vs 0.17958 / 0.15652)
-the margin sits **below both** pooled sides' noise, so both are "reported as such
-and cannot be read as support for A". **`testimony_backed_conversion` does not
-behave that way and is not smoothed here:** |−0.03483| sits below the champion
-side's **0.06578** but runs **3.70× above** the runner-up side's **0.00942** —
-the runner-up pair happens to be unusually steady between halves (0.37422 →
-0.36480). **It does not matter for hypothesis A, and the reason is the sign, not
-the noise:** A predicts runner-ups sitting **higher** ("one step less far along
-the trade") and **all three margins are negative**, so no gauge on this cell
-points toward A whatever its noise does. **No F13 gauge can be read as supporting
-hypothesis A** — two by §11.2's noise test, the third by direction.
+**Applying §11.2 as registered.** The rule is **either-side sufficiency** — "A
+margin smaller than **either** side's split-half noise is reported as such and
+cannot be read as support for A" — so a margin that one pooled side cannot
+distinguish from its own half-to-half wobble is barred, whatever the other side
+does. That is the conservative reading and it is the one applied here. **All
+three gauges are barred, each by the same route:**
+
+| gauge | margin, absolute | champion-side noise | runner-up-side noise | barred by |
+|---|---|---|---|---|
+| `witnessed_event_rate` | 0.00650 | 0.07001 | 0.06026 | **both** sides |
+| `flags_per_meeting` | 0.09189 | 0.17958 | 0.15652 | **both** sides |
+| `testimony_backed_conversion` | 0.03483 | **0.06578** | 0.00942 | the **champion** side |
+
+**So no F13 gauge can be read as supporting hypothesis A**, by §11.2's noise rule
+alone. Two observations sit beside that and neither is the load-bearing route:
+`testimony_backed_conversion`'s margin runs **3.70× above** the runner-up side's
+**0.00942** (that pair is unusually steady between halves, 0.37422 → 0.36480), so
+it is barred by one side and not the other; and its half-margins **flip sign**
+(+0.00260 → −0.07260). **Corroborating note, not the argument:** all three margins
+are **negative** while A predicts runner-ups sitting *higher* ("one step less far
+along the trade"), so the direction points away from A independently of any noise
+test.
 
 **The margin-stability and sign reads, kept as separate observations:**
 
@@ -1477,16 +1493,14 @@ so "smaller than the noise" is true of the row as a whole and **not** of every
 pairwise comparison inside it; the bullets above give the exact split.
 
 **Under §11.2's registered test the statement is cleaner than any of that.** The
-rule is the margin against **either pooled side's** split-half noise, and
-`witnessed_event_rate` and `flags_per_meeting` sit **below both** sides' noise, so
-both are disqualified from supporting A by the rule itself.
-`testimony_backed_conversion` clears the runner-up side's 0.00942 — and is
-disqualified anyway, because **its margin is negative**, which is A's opposite.
-**So no F13 gauge supports hypothesis A**: two by the noise test, the third by
-direction. That is the whole of what the cell establishes; the B-shaped reading it
-leaves standing is *not* thereby confirmed, since "A unsupported" is not "B
-demonstrated". **The ruling is 18.27's.** Nothing in this Part declares A or B
-confirmed.
+rule bars a margin smaller than **either** pooled side's split-half noise, and
+**all three gauges are barred** — witnessed and flags below **both** sides,
+conversion below the **champion** side (0.03483 < 0.06578). **So no F13 gauge
+supports hypothesis A, by the noise rule alone**; that the margins are also all
+**negative**, A's opposite, is corroboration rather than the route. That is the
+whole of what the cell establishes; the B-shaped reading it leaves standing is
+*not* thereby confirmed, since "A unsupported" is not "B demonstrated". **The
+ruling is 18.27's.** Nothing in this Part declares A or B confirmed.
 
 **The within-lineage pair** (`run-02-utility-lambda4`: `ea4bc955…` gen-2 vs
 `bfd145cb…` gen-9) — the one comparison where lineage is held constant and only
@@ -2214,8 +2228,18 @@ is legible. **This report does not apply the 2-of-3 sign rule and does not rule
 on clause (b).** Clause (b) is one of four conjunctive conditions (§6: pooled
 |z| ≥ 1.96 vs the same-seed FSM comparator, sign reproduction, a named ablation
 showing the behaviour recede, and selected-for presence in the champion's own
-recordings), and **no ablation was recorded in this campaign**, so no cell here
-can satisfy the conjunction regardless of its splits. **18.27 applies the rule**
+recordings). **This task recorded no ablations** — clause (c) is not sourced from
+the finalist eval. **The clause-(c) evidence lives in the campaign reports' own
+§6 ablation runs**: `training/reports/report-impostor-campaign.md` §6 records
+three (`ablation:*/conviction-term` on the run-01 twin,
+`ablation:*/anchor-lambda=4.0` on the run-02 twin, `ablation:off-menu/encoder-v3`)
+and `training/reports/report-crew-campaign.md` §6 records two
+(`ablation:*/conviction-term` on the run-c2 and run-c1 twins), each a byte-identical
+same-seed re-run with the lever disabled. **Whether any of them covers a given
+cell here is 18.27's inspection to make** — the naming is
+`ablation:<instrument-key>/<lever-id>` and the coverage question is per cell, not
+per campaign. **This report neither supplies clause (c) nor forecloses it.**
+**18.27 applies the rule**
 against the committed per-split cells; §16.f's labels carry forward unchanged —
 the crew columns are ✥ NOT-DEMONSTRABLE for want of an opponent-matched
 comparator, and the two entropy rulings are ✧ NOT-DEMONSTRATED, on both axes.
