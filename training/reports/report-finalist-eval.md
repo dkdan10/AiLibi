@@ -855,13 +855,21 @@ accounting below separates *exit code* from *outcome*:
   leg 2 and 4 in leg 3 (passes 1–4 each, **all rc 99**, two `leg-abort`s), then 5
   stubborn rounds; the **14th** attempt (`2026-07-31T08:11:17Z`, 1022 s) returned
   **rc 0**. The arm scores at the full **n=50**.
-- **`p18-imp-7f73929d` seed 35 — excluded, forensics kept.** **10 logged
+- **`p18-imp-7f73929d` seed 35 — excluded, forensics kept.** **14 logged
   attempts, every one rc 99**: 4 in-leg (passes 1–4, ending in `leg-abort` at
-  `2026-07-30T23:23:31Z`) and 6 stubborn rounds (rounds 1–6, last at
-  `2026-07-31T08:33:09Z`). The seed was **excluded** rather than retried further
-  and the arm scores at **n=49** (§17). All 6 stubborn recordings are kept as
-  forensics under `~/ailibi-campaign-1826/forensics/` — 10 forensic files in
-  total, 4 for comparator seed 5 and 6 for seed 35.
+  `2026-07-30T23:23:31Z`), 6 stubborn rounds (rounds 1–6, last at
+  `2026-07-31T08:33:09Z`), and a **final owner-directed retry run** of 4 more
+  in-leg passes (all rc 99, 2981 s summed wall, `leg-abort` after the last at
+  `2026-07-31T17:58:35Z`). The failure anatomy is **identical in every kept
+  forensic copy**: the game's first meeting (`meeting-0`, tick 10), opening
+  turn 0, agent `p-8`, defaults on **validation** ("p-8 submitted no turn").
+  The pre-meeting prefix is engine-deterministic, so every attempt presents
+  the model the identical opening prompt — a content-triggered pathology
+  (invalid completion with observed probability 14/14), not a transient. The
+  seed is **excluded** and the arm scores at **n=49** (§17). The 6 stubborn
+  recordings are kept as forensics under `~/ailibi-campaign-1826/forensics/`
+  — 10 forensic files in total, 4 for comparator seed 5 and 6 for seed 35
+  (the in-leg passes delete impure replays rather than archiving them).
 - **`p18-crew-c1-gen0` seed 20 — 8 attempts, every one `rc 0`, every one a
   stalemate.** This seed never triggered a purity retry and never reached the
   stubborn runner, because the recorder **succeeded** every time: 4 in-leg
@@ -871,9 +879,10 @@ accounting below separates *exit code* from *outcome*:
   rc 0**, 4829 s of wall between them. Each run produced a complete 1002-row
   replay that reaches **tick 999** and simply never emits `game_over`. The arm
   scores at **49 finalized of 50 recorded** (§16.b, §17.1).
-- Stubborn wall: **3676 s** on comparator seed 5, **4145 s** on seed 35,
-  **7821 s** together; seed 20's 8 attempts cost a further **4829 s** inside its
-  own leg.
+- Stubborn wall: **3676 s** on comparator seed 5, **4145 s** on seed 35 in the
+  stubborn rounds plus **2981 s** in the final retry run (**7126 s** for the
+  seed in total), **10802 s** across both seeds; seed 20's 8 attempts cost a
+  further **4829 s** inside its own leg.
 
 **The c2 legs are fast because meetings are scarce, not because the provider was.**
 `c2-gen9` runs at **2.780 min/game** (whole leg 2.5950 h) and `c2-gen0` at
@@ -1334,6 +1343,29 @@ intersection cell is **30/191**:
 | **margin (gen-9 − gen-0)** | | | **−0.00793** | | |
 | *`p18-crew-c1-gen9`, for reference* | *full 50-seed, the arm's own instrument value quoted elsewhere in this Part* | *30/196* | *0.15306* | *6.44×* | *+3.8917* |
 
+**Where this cell lives — the row, not the workspace.** The intersection is
+**persisted in the committed evidence row**:
+`training/reports/results-finalist-eval.jsonl`, entrant `p18-crew-c1-gen9`,
+`instruments.kill_craft_rider_intersection`. It carries the whole cell as
+recorded — `gen9_crew_witnessed_kills` **30** / `gen9_kills_total` **191**
+(`gen9_rate` **0.15706806282722513**), `gen0_crew_witnessed_kills` **33** /
+`gen0_kills_total` **200** (`gen0_rate` **0.165**), `margin_gen9_minus_gen0`
+**−0.007931937172774878**, `excluded_seed` **20**, and `corpus_rate`
+**0.023762376237623763** (the 12/505 cell) — so every figure in the table above
+is readable straight out of the committed evidence file with no workspace access
+and no recomputation. **That row is the evidence of record**, and it is pinned:
+`tests/training/test_finalist_eval_pins.py::test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell`
+ties the counts, both rates, the margin (derived, sign included), the excluded
+seed, and the corpus cell to the row — including the gen-9/gen-0 asymmetry
+(gen-9's denominator cut 196→191 by the exclusion; gen-0's 33/200 already its
+own fenced parent verbatim), so a future recompute cannot cut the wrong side
+without failing the suite. The operator workspace directory named above
+(`~/ailibi-campaign-1826/scoring/p18-crew-c1-gen9/rider-intersection-view/`) is a
+**re-derivation path** — how the cell was produced, and how a reader reproduces
+it from the recordings — **not** the evidence; it is an operator working artifact
+outside `replays/` (§9.2), and nothing in this section depends on its continued
+existence.
+
 The last row is the arm's own §16.b / §16.e-table instrument value and is **not**
 the comparison cell — it is quoted beside so the two numbers cannot be confused.
 Excluding seed 20 moves gen-9 by **+0.00401**, which is smaller than the margin
@@ -1399,6 +1431,118 @@ The c2 pair could never have substituted for the deciding cell: `c2-gen0` at
 a clean generation contrast, and the c2 gen-0 arm never played a game in the
 sense the rider means. It is the c1 pair — two healthy, meeting-rich legs at the
 same encoder and the same opponent — that carries the ruling above.
+
+### 16.f The emergence instruments (§13's second axis) — the full pre-registered table
+
+§13 pre-registered a **second axis** beside the selection cells: the four
+committed instrument families, computed per arm over that arm's recordings, read
+beside the corpus. §16.a–§16.e quoted the handful of cells that carry the
+verdicts; **this subsection records the whole registered set, per arm, with
+nothing dropped and nothing invented.**
+
+**Sources, exactly.** Every per-arm cell is read from the `instruments` block of
+that arm's phase-18 row in `training/reports/results-finalist-eval.jsonl` — the
+same committed row §16.a/§16.b/§16.e quote, so the overlapping cells are
+identical numbers and not a re-derivation. Every baseline cell is read from
+`training/artifacts/coevo/realpath/baseline-cells-corpus.json`,
+`baseline_cells_corpus_9p2i` — the machine-readable, baseline-6 registered
+claim-cell block (§13); the baseline-5 memo prose is not quoted anywhere here.
+Numerator/denominator is given wherever the row carries both terms.
+
+Column labels are the arm suffixes of §16.a/§16.b (`c1-g9` = `p18-crew-c1-gen9`,
+and so on). A bold **(49)** / **(48)** marks the crew-block **fenced view** the
+arm's instruments were computed over.
+
+| instrument (registered cell) | corpus baseline (9p2i, baseline-6) | ea4bc955 | bfd145cb | 6d327dcb | 7f73929d **(49)** | fsm-comp | c1-g9 | c1-g0 **(49)** | c2-g9 **(48)** | c2-g0 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| false-vouch `saw_player` rate — `false_vouch_saw_player_observations / vouch_observations_impostor` | 0.22819 (34/149) | 0.12621 (26/206) | 0.13825 (30/217) | 0.18779 (40/213) | 0.14078 (29/206) | 0.10204 (20/196) | 0.06250 (12/192) | 0.11413 (21/184) | 0.10448 (7/67) | **undef** (0/0) |
+| false-vouch corroboration rate — `false_vouch_corroborations / corroboration_claims_impostor` | 0.28261 (13/46) | 0.22222 (12/54) | 0.18310 (13/71) | 0.42254 (30/71) | 0.33333 (20/60) | 0.11111 (6/54) | 0.14286 (7/49) | 0.28846 (15/52) | 0.33333 (7/21) | **undef** (0/0) |
+| frame attempt rate — `frame_attempt_meetings / meetings_total` | 0.76710 (415/541) | 0.97419 (151/155) | 0.95625 (153/160) | 0.98148 (159/162) | 0.97041 (164/169) | 0.94268 (148/157) | 0.97315 (145/149) | 0.97973 (145/148) | 1.00000 (33/33) | **undef** (0/0) |
+| frame conversion rate ‡ | 0.01205 (5/415) | — | — | — | — | — | — | — | — | — |
+| teammate accusation rate ‡ | 0.00000 (0/455) | — | — | — | — | — | — | — | — | — |
+| alibi survival rate ‡ | 0.78571 (11/14) | — | — | — | — | — | — | — | — | — |
+| effective deflection rate ‡ | 0.23980 (47/196) | — | — | — | — | — | — | — | — | — |
+| crew-witnessed kill rate — `crew_witnessed_kills / kills_total` | 0.03339 (20/599) † | 0.15228 (30/197) | 0.14778 (30/203) | 0.22280 (43/193) | 0.22000 (44/200) | 0.04598 (8/174) | 0.15306 (30/196) | 0.16500 (33/200) | 0.19481 (45/231) | 0.14343 (36/251) |
+| witnessed point-biserial, within one hop | 0.27899 | 0.21108 | 0.20847 | 0.52142 | 0.35293 | 0.27505 | 0.23395 | 0.20536 | 0.28347 | 0.26509 |
+| witnessed point-biserial, co-present | **no registered cell** (corpus sample: `null`) | 0.73122 | 0.77013 | 0.76781 | 0.77291 | **n/a** | 0.71486 | 0.83352 | 0.67307 | 0.65639 |
+| co-present departure — mean co-present, witnessed / unwitnessed | **no registered cell** (corpus sample: 0.0 / 0.0) | 0.66667 / 0.00599 | 0.66667 / 0.00578 | 0.88372 / 0.02000 | 0.84091 / 0.01282 | 0.00000 / 0.00000 | 0.73333 / 0.00602 | 0.78788 / 0.00000 | 0.53333 / 0.00538 | 0.50000 / 0.00465 |
+| action entropy — crew mean conditional ‡ | 0.91764 | — | — | — | — | — | — | — | — | — |
+| action entropy — impostor mean conditional ‡ | 0.71262 | — | — | — | — | — | — | — | — | — |
+| off-menu rate — `off_menu_total / impostor_decisions` | 0.00000 (0/7693) | 0.00000 (0/2015) | 0.00000 (0/2083) | 0.00000 (0/2100) | 0.00000 (0/2176) | 0.00000 (0/2299) | 0.00000 (0/2027) | 0.00000 (0/1962) | 0.00000 (0/2520) | 0.00000 (0/2596) |
+| roll-call coverage mean (all) | **no corpus cell** — ratified floor **0.60** | 0.84320 | 0.84192 | 0.83549 | 0.84498 | 0.85872 | 0.83846 | 0.84485 | 0.86353 | **n/a** |
+| roll-call coverage mean — crew | **no corpus cell** | 1.00000 | 0.98885 | 0.99383 | 0.99556 | 0.99735 | 0.99060 | 1.00000 | 1.00000 | **n/a** |
+| roll-call coverage mean — impostor | **no corpus cell** | 0.40968 | 0.45625 | 0.41049 | 0.42899 | 0.43949 | 0.42953 | 0.43919 | 0.57576 | **n/a** |
+| roll-call answer rate — `roll_call_answered_total / roll_call_asked_total` | **no corpus cell** | 0.85222 (767/900) | 0.85307 (778/912) | 0.84842 (806/950) | 0.85331 (826/968) | 0.86746 (805/928) | 0.85129 (727/854) | 0.85748 (728/849) | 0.86170 (162/188) | **undef** (0/0) |
+
+**‡ — the six registered cells this table CANNOT fill from the rows, and why.**
+The `instruments` block committed on each row is a **flattened** view: it keeps
+the scalar and counter keys of each instrument report and **drops every
+nested/dict-valued sub-object**. The dropped sub-objects are exactly where these
+six cells live — `deception.frame_conversions` (frame conversion rate),
+`deception.teammate_accusations` (teammate accusation rate),
+`deception.alibi_fabrication` (alibi survival rate),
+`deception.effective_deflection` (effective deflection rate), and
+`kill_craft.entropy_by_side` (both action-entropy cells, per side). The same
+flattening also dropped `kill_craft.co_present_histogram` and
+`kill_craft.one_hop_histogram`. **No per-arm value is stated for any of them,
+because none is available without recomputation** — they are recoverable only by
+re-running the committed instruments
+(`eval.deception_instruments.compute_deception_instruments`,
+`eval.kill_craft.compute_kill_craft_report`) over each arm's recordings, which
+this task did not do. The baseline column is filled because the corpus JSON
+carries the nested blocks in full; the arm columns are honestly blank.
+
+**† — the two corpus blocks in that file disagree on the witnessed kill rate, and
+this table names it rather than picking one silently.** The registered
+`baseline_cells_corpus_9p2i` cell is **20/599 = 0.03339**; the same file's
+`sample_dir: replays/ml_corpus/9p2i` `kill_craft` block reads **12/505 =
+0.02376**, and **12/505 is the cell §12 pre-registered and §16.e's rider ruling
+uses**. The registered block's denominators are uniformly the larger ones (599
+kills vs 505, 541 meetings vs 463, 176 impostor corroboration claims vs 46), so
+the two are different corpus snapshots, not a transcription error. **The rider
+ruling is unaffected by which one is used**: against 20/599 the learned arms run
+**4.3×–6.7×** corpus instead of 6.2×–9.4×, the scripted comparator runs
+**1.38×** instead of 1.93×, the ordering is identical, and the c1 gen-9-minus-gen-0
+margin (a difference of two rates) does not move at all. Every other baseline
+cell in the table above is the registered block's, per §13.
+
+**The fenced views, and the one column that is not a fence.** `7f73929d` is a
+49-game arm because seed 35 was never recorded (§14.1, §17); `c1-g0` (49, seed 20)
+and `c2-g9` (48, seeds 19–20) were computed through the staged
+`scoring/<arm>/instruments-view/` fences of §16.b. **`c2-g0` is a full 50-game
+view** — its **undef**/**n/a** cells are not a fence but the zero-meeting
+starvation of §16.e: 0 meetings ⇒ 0 vouch observations, 0 frame attempts, 0
+roll calls, so every meeting-derived denominator is genuinely zero. Its
+kill-craft and off-menu cells **are** real (they need no meeting), which is
+precisely what lets §16.e quote its 6.04× witnessed rate as evidence that the
+elevation needs neither the meeting economy nor the language model.
+
+**The two Part I rows carry no instruments at all.** `utility-es` and
+`policy-es` (§3.a) are **prior-record** baseline-5 entries recorded before this
+axis existed; their rows have **no `instruments` block**, so no cell in this
+table is quoted for them and none is back-filled.
+
+**What the table says, in one pass.** (i) **Off-menu is 0/N on every arm** —
+vacuous by construction for menu-bounded movers, exactly as the instrument's own
+`scope_note` warns; it discriminates nothing here and is recorded to show the
+denominator was real (1962–2596 impostor decisions per arm). (ii) **Frame-attempt
+rate is far above corpus on every arm** (0.94–1.00 vs 0.76710) including the
+all-scripted comparator, so it is a substrate property of this roster, not a
+learned trait. (iii) **The false-vouch cells sit at or below corpus** on every
+arm but `6d327dcb` (corroboration 0.42254 vs 0.28261) — the deception channel did
+not run hot. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
+arm that held meetings** (0.8355–0.8635), with the same crew/impostor split
+everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors under-place themselves
+uniformly, learned or scripted. (v) **The one large, uniform departure is the
+kill-craft pair** — the witnessed rate (§16.e's rider) and, beside it, the
+co-present cell: every **learned** arm places witnessed kills strongly co-present
+(0.50–0.88) against a near-zero unwitnessed figure, while the **scripted**
+comparator is 0.00000/0.00000 and the corpus sample 0.0/0.0. That is the same
+learned-mover-versus-scripted-mover split the rider ruling turns on, showing up
+on a second, independent kill-craft cell — consistent with §16.e's conclusion
+that what is left is the impostor side and the physical layer. It is **an
+observation on a pre-registered instrument, not a new pre-registered cell**, and
+nothing in §17 rests on it.
 
 ---
 

@@ -44,6 +44,11 @@ What is pinned, and why:
   ``test_the_comparator_cell_proves_the_impostor_side_is_scripted``: the
   all-scripted arm carries the canonical fsm-default stamp, ZERO learned and
   ZERO crew stamp games, and states ``opponent_absence_proven``.
+* **The §12 deciding cell.** The c1 pair's same-seed kill-craft rider
+  intersection is persisted on the c1-gen9 row, so 18.27 reads a committed
+  cell rather than recomputing one. Its rates and margin are re-derived from
+  its own counts, and its excluded seed is tied back to c1-gen0's declared
+  stalemate.
 * **The honesty pins.** Three of the four crew diagnostics FAIL their validity
   gate, and the rows say so themselves — the failing check names, the
   stalemate replay files, the starved meeting rate. A row that quietly flipped
@@ -917,6 +922,80 @@ def test_every_committed_digest_closes_on_the_artifact_bytes_on_disk() -> None:
     # so skip the whole check.
     assert len(checked) == len(_arms(_IMPOSTOR)) + 2 * len(_arms(_CREW))
     assert [arm.artifact_path for arm in _arms(_COMPARATOR)] == [None]
+
+
+# -- the §12 deciding cell ----------------------------------------------------
+
+
+def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() -> None:
+    """The §12 cell 18.27 decides on, persisted in the row rather than recomputed.
+
+    The c1 pair is compared on the SAME seeds: seed 20 is c1-gen0's stalemate,
+    so it is excluded from BOTH sides — comparing a 50-seed set against a
+    49-seed one would let a missing game masquerade as a behavioural margin.
+    The excluded seed is derived from c1-gen0's own declared stalemate file, so
+    the exclusion cannot drift from the reason for it.
+
+    Every rate is re-derived from the cell's OWN numerator and denominator, and
+    the margin from the two rates, so no decimal here can drift from the counts
+    behind it. The two sides sit differently against their parent instruments,
+    and that asymmetry is pinned too: c1-gen0's ``kill_craft`` ALREADY excludes
+    the stalled seed (it scored 49 games), so the gen0 side matches it exactly;
+    c1-gen9 scored all 50, so its denominator drops by seed 20's kills while
+    its witnessed count is untouched — seed 20 contributed no witnessed kill.
+    """
+
+    rows = _rows()
+    row = rows["p18-crew-c1-gen9"]
+
+    # The cell is the c1 pair's, and lives on exactly one row — checked before
+    # it is read, so a dropped cell fails as a missing PIN rather than as a
+    # stray KeyError.
+    carriers = [
+        entrant
+        for entrant, candidate in rows.items()
+        if "kill_craft_rider_intersection" in candidate.get("instruments", {})
+    ]
+    assert carriers == ["p18-crew-c1-gen9"]
+    cell = row["instruments"]["kill_craft_rider_intersection"]
+
+    # The excluded seed IS c1-gen0's declared stalemate, not a bare 20.
+    stalemates = rows["p18-crew-c1-gen0"]["stalemate_games_no_game_over"]
+    assert stalemates == ["replay-seed-20.jsonl"]
+    assert cell["excluded_seed"] == 20
+    assert f"replay-seed-{cell['excluded_seed']}.jsonl" in stalemates
+
+    assert cell["gen9_crew_witnessed_kills"] == 30
+    assert cell["gen9_kills_total"] == 191
+    assert cell["gen0_crew_witnessed_kills"] == 33
+    assert cell["gen0_kills_total"] == 200
+
+    gen9_rate = cell["gen9_crew_witnessed_kills"] / cell["gen9_kills_total"]
+    gen0_rate = cell["gen0_crew_witnessed_kills"] / cell["gen0_kills_total"]
+    assert cell["gen9_rate"] == pytest.approx(gen9_rate)
+    assert cell["gen9_rate"] == pytest.approx(30 / 191)
+    assert cell["gen0_rate"] == pytest.approx(gen0_rate)
+    assert cell["gen0_rate"] == pytest.approx(33 / 200)
+
+    assert cell["margin_gen9_minus_gen0"] == pytest.approx(gen9_rate - gen0_rate)
+    assert cell["margin_gen9_minus_gen0"] == pytest.approx(30 / 191 - 33 / 200)
+    # The trained crew reads BELOW its own gen-0 control on this gauge; 18.27
+    # rules on that, this only pins the sign against the numbers.
+    assert cell["margin_gen9_minus_gen0"] < 0
+
+    assert cell["corpus_rate"] == pytest.approx(12 / 505)
+
+    # Coherence with the parent instruments each side was cut from.
+    gen9_parent = row["instruments"]["kill_craft"]
+    gen0_parent = rows["p18-crew-c1-gen0"]["instruments"]["kill_craft"]
+    # gen0 already dropped the stalled seed, so the cut is a no-op there.
+    assert gen0_parent["games_total"] == 49
+    assert cell["gen0_crew_witnessed_kills"] == gen0_parent["crew_witnessed_kills"]
+    assert cell["gen0_kills_total"] == gen0_parent["kills_total"]
+    # gen9 scored all 50, so excluding seed 20 can only REMOVE kills.
+    assert gen9_parent["games_total"] == 50
+    assert cell["gen9_kills_total"] < gen9_parent["kills_total"]
+    assert cell["gen9_crew_witnessed_kills"] == gen9_parent["crew_witnessed_kills"]
 
 
 # -- honesty: the failing diagnostics say what failed -------------------------
