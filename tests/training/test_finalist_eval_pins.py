@@ -49,6 +49,11 @@ What is pinned, and why:
   cell rather than recomputing one. Its rates and margin are re-derived from
   its own counts, and its excluded seed is tied back to c1-gen0's declared
   stalemate.
+* **The split views and the leg clocks.** The §6.b seed-mod-5 partitions,
+  with every expected size DERIVED from the arm's own seed list and declared
+  fences, and their cells summing back to the flattened parents; plus each
+  leg's wall clock, including the two arms that look like broken
+  instrumentation and are not.
 * **The registered nested cells.** The six rulings' nested sources, persisted
   per arm because the flattened rows dropped them — shape pinned at every
   level, plus the standing no-betrayal invariant (no arm accuses a teammate),
@@ -175,6 +180,36 @@ _NESTED_FRAME_CONVERSIONS: Final[dict[str, tuple[int, int]]] = {
     "p18-imp-ea4bc955": (10, 151),
     "p18-fsm-comparator": (6, 148),
 }
+
+#: The §6.b split-reproducibility views: seed mod 5 partitioned 012/3/4.
+_MOD5_RESIDUES: Final[dict[str, tuple[int, ...]]] = {
+    "train_mod5_012": (0, 1, 2),
+    "val_mod5_3": (3,),
+    "test_mod5_4": (4,),
+}
+#: The eleven ``{n, d}`` claim cells per split; ``one_hop_point_biserial`` is
+#: the twelfth and carries ``{r, kills_total}`` instead.
+_MOD5_RATIO_CELLS: Final[frozenset[str]] = frozenset(
+    {
+        "alibi_survival",
+        "co_present_departure",
+        "crew_witnessed_kills",
+        "effective_deflection",
+        "false_vouch_corroboration",
+        "false_vouch_fabricated",
+        "false_vouch_saw_player",
+        "frame_attempts",
+        "frame_conversions",
+        "off_menu",
+        "teammate_accusations",
+    }
+)
+
+#: The campaign's last recorded event — 7f73929d's post-PR retry leg.
+_CAMPAIGN_LAST_EVENT_AT: Final[str] = "2026-07-31T18:00:06Z"
+#: c2-gen0's wall clock is REAL, not a missing measurement: every game ended
+#: before a meeting convened, so almost no LLM call was ever made.
+_C2_GEN0_WALL_SECONDS: Final[int] = 27
 
 #: The comparator's cells re-cut onto the F13 49-seed intersection.
 _COMPARATOR_INTERSECTION_COUNTS: Final[dict[str, int]] = {
@@ -568,6 +603,27 @@ def _gauges(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """The row's supply gauges, keyed by gauge name."""
 
     return {gauge["name"]: gauge for gauge in row["watchability"]["supply_gauges"]}
+
+
+def _fenced_seeds(row: dict[str, Any]) -> frozenset[int]:
+    """The seeds a row's INSTRUMENT view excludes — its declared stalemates.
+
+    Parsed from the row's own ``stalemate_games_no_game_over`` filenames, so
+    the fence and the reason for it are the same fact. An absent key (the
+    impostor and comparator rows) fences nothing.
+    """
+
+    stalled: list[str] = row.get("stalemate_games_no_game_over") or []
+    return frozenset(
+        int(name.removeprefix("replay-seed-").removesuffix(".jsonl"))
+        for name in stalled
+    )
+
+
+def _summed_across_splits(block: dict[str, Any], cell: str, field: str) -> int:
+    """One mod-5 claim cell's field, summed across the three splits."""
+
+    return sum(int(block[split][cell][field]) for split in _MOD5_RESIDUES)
 
 
 def _crew_wins_excluding(row: dict[str, Any], seed: int) -> int:
@@ -1109,6 +1165,184 @@ def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() ->
     assert gen9_parent["games_total"] == 50
     assert cell["gen9_kills_total"] < gen9_parent["kills_total"]
     assert cell["gen9_crew_witnessed_kills"] == gen9_parent["crew_witnessed_kills"]
+
+
+def test_the_seed_mod5_splits_partition_each_arms_own_games() -> None:
+    """The §6.b split views partition each arm's OWN seeds, fences included.
+
+    Every expected split size is DERIVED, never listed: count the arm's own
+    ``recording.seeds`` by ``seed % 5``, then remove the seeds its instrument
+    view fences (its declared stalemates, parsed from their own filenames).
+    That reproduces all nine arms from two facts already on the row, so the
+    three arms whose splits look "wrong" are explained rather than special-
+    cased — 7f73929d's train is 29 because seed 35 is not in its seed list at
+    all, while c1-gen0's is 29 and c2-gen9's is 29/10/9 because their stalled
+    seeds (20, and 19+20) fall in those residues. Listing the sizes would
+    hide exactly that distinction.
+
+    The three splits must also exhaust the arm's instrument view: their games
+    sum to ``kill_craft.games_total`` — the stalemate-excluded count, not
+    ``core.games_total``.
+
+    Cross-split coherence closes the loop on three cells whose parents are
+    pinned elsewhere in this module: summed over the three splits, the
+    ``{n, d}`` pairs must equal the arm's flattened parent EXACTLY — the
+    kill-craft cells, the co-present cell, and the teammate-accusation cell.
+    Verified to hold on all nine arms including the fenced ones, because
+    those parents are themselves the fenced instrument view; no case split is
+    needed.
+    """
+
+    rows = _rows()
+    carriers = {
+        entrant
+        for entrant, row in rows.items()
+        if "seed_mod5_splits" in row.get("instruments", {})
+    }
+    assert carriers == {arm.entrant for arm in _SLATE}
+
+    notes: set[str] = set()
+    for arm in _SLATE:
+        row = rows[arm.entrant]
+        block = row["instruments"]["seed_mod5_splits"]
+        assert set(block) == {"note"} | set(_MOD5_RESIDUES)
+        notes.add(block["note"])
+
+        seeds = row["recording"]["seeds"]
+        fenced = _fenced_seeds(row)
+        assert fenced == {
+            seed for seed in fenced if seed in seeds
+        }  # a fence names a seed the arm actually recorded
+
+        for split, residues in _MOD5_RESIDUES.items():
+            expected = sum(
+                1 for seed in seeds if seed % 5 in residues and seed not in fenced
+            )
+            assert block[split]["games"] == expected
+
+            cells = block[split]
+            assert set(cells) == {"games", "one_hop_point_biserial"} | set(
+                _MOD5_RATIO_CELLS
+            )
+            for name in _MOD5_RATIO_CELLS:
+                assert set(cells[name]) == {"n", "d"}
+                assert cells[name]["n"] <= cells[name]["d"]
+            assert set(cells["one_hop_point_biserial"]) == {"r", "kills_total"}
+
+        # The splits exhaust the INSTRUMENT view (fenced), not the raw games.
+        kill_craft = row["instruments"]["kill_craft"]
+        assert (
+            sum(block[split]["games"] for split in _MOD5_RESIDUES)
+            == kill_craft["games_total"]
+        )
+        assert kill_craft["games_total"] == arm.games_total - len(fenced)
+
+        # Cross-split coherence against the parents pinned elsewhere here.
+        summed = _summed_across_splits
+        assert (
+            summed(block, "crew_witnessed_kills", "n")
+            == kill_craft["crew_witnessed_kills"]
+        )
+        assert summed(block, "crew_witnessed_kills", "d") == kill_craft["kills_total"]
+
+        co_present = row["instruments"]["kill_craft_co_present_departure"]
+        assert (
+            summed(block, "co_present_departure", "n")
+            == co_present["co_present_ge1_kills"]
+        )
+        assert summed(block, "co_present_departure", "d") == co_present["kills_total"]
+
+        teammate = row["instruments"]["registered_nested_cells"]["teammate_accusations"]
+        assert summed(block, "teammate_accusations", "n") == teammate["numerator"] == 0
+        assert summed(block, "teammate_accusations", "d") == teammate["denominator"]
+
+    assert len(notes) == 1
+
+
+def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
+    """Each leg's wall clock, with the two arms that look wrong explained.
+
+    ``games_recorded_ok`` counts what the RECORDER logged, which includes
+    re-records and retried games, so it is deliberately NOT reconciled to 50
+    here — only the floor is pinned (a leg logs at least the games that were
+    scored), because tightening it would encode a semantics this block does
+    not carry.
+
+    Two arms would read as broken instrumentation and are pinned as REAL:
+
+    * ``c2-gen0``'s whole leg is **27 seconds**. That is not a missing
+      measurement — the arm is the totally-starved control where no meeting
+      ever convened, so almost no LLM call was ever made. Pinned exactly, and
+      pinned as the slate's minimum, so a genuinely missing timing (0) or a
+      silent backfill would both fail.
+    * ``7f73929d`` alone carries ``post_pr_retry_leg`` — the 4-attempt retry
+      that closed its seed-35 budget. Its last event IS the campaign's last
+      event across all nine arms, which is asserted as a uniquely-held
+      maximum and tied back to the retry leg that produced it.
+    """
+
+    rows = _rows()
+    # Checked before any value is read — and exact, so the frozen 17.14 rows
+    # (which carry no leg clock) may not sprout one either.
+    carriers = {entrant for entrant, row in rows.items() if "leg_duration" in row}
+    assert carriers == {arm.entrant for arm in _SLATE}
+
+    base_keys = {
+        "note",
+        "games_recorded_ok",
+        "retry_events",
+        "sum_wall_seconds_ok",
+        "first_event_at",
+        "last_event_at",
+    }
+
+    notes: set[str] = set()
+    for arm in _SLATE:
+        row = rows[arm.entrant]
+        leg = row["leg_duration"]
+        expected_keys = base_keys | (
+            {"post_pr_retry_leg"} if arm.entrant == "p18-imp-7f73929d" else set()
+        )
+        assert set(leg) == expected_keys
+        notes.add(leg["note"])
+
+        assert leg["sum_wall_seconds_ok"] > 0
+        assert leg["retry_events"] >= 0
+        # The recorder logged at least the games that were scored.
+        assert leg["games_recorded_ok"] >= arm.games_total
+        assert leg["first_event_at"] <= leg["last_event_at"]
+
+    assert len(notes) == 1
+
+    # c2-gen0: 27 seconds, and the slate's floor.
+    walls = {
+        arm.entrant: rows[arm.entrant]["leg_duration"]["sum_wall_seconds_ok"]
+        for arm in _SLATE
+    }
+    assert walls["p18-crew-c2-gen0"] == _C2_GEN0_WALL_SECONDS
+    assert min(walls.values()) == _C2_GEN0_WALL_SECONDS
+    assert min(walls, key=lambda entrant: walls[entrant]) == "p18-crew-c2-gen0"
+
+    # 7f73929d: the retry leg, and the campaign's last event.
+    retry = rows["p18-imp-7f73929d"]["leg_duration"]["post_pr_retry_leg"]
+    assert retry["attempts"] == 4
+    assert retry["sum_wall_seconds"] > 0
+    assert retry["first_at"] <= retry["last_event_at"]
+
+    lasts = {
+        arm.entrant: rows[arm.entrant]["leg_duration"]["last_event_at"]
+        for arm in _SLATE
+    }
+    assert max(lasts.values()) == _CAMPAIGN_LAST_EVENT_AT
+    assert [
+        entrant for entrant, stamp in lasts.items() if stamp == _CAMPAIGN_LAST_EVENT_AT
+    ] == ["p18-imp-7f73929d"]
+    # ... and that maximum is the retry leg's own last event.
+    assert retry["last_event_at"] == _CAMPAIGN_LAST_EVENT_AT
+    assert (
+        rows["p18-imp-7f73929d"]["leg_duration"]["last_event_at"]
+        == _CAMPAIGN_LAST_EVENT_AT
+    )
 
 
 def test_the_registered_nested_cells_block_is_persisted_on_every_arm() -> None:

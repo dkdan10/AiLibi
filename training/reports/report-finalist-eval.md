@@ -780,10 +780,26 @@ one, and is labelled as such wherever it appears.
 ### 14.1 Duration — the measured reading (the re-price this section committed to)
 
 The pre-statement above stands unedited; this subsection is the **measured**
-answer beside it. Every figure below is read from a committed
-`scoring/<arm>/duration.json` or computed arithmetically from the
-`~/ailibi-campaign-1826/leg-log-*.jsonl` rows. No projected hour count appears as
-a measurement.
+answer beside it. No projected hour count appears as a measurement.
+
+**Sources — the inputs are committed, not workspace-only.** Every arm's row in
+`training/reports/results-finalist-eval.jsonl` carries a **`leg_duration`** block:
+`games_recorded_ok`, `retry_events`, `sum_wall_seconds_ok`, `first_event_at` and
+`last_event_at` (with `post_pr_retry_leg` on `p18-imp-7f73929d`). Those nine
+blocks are the **committed digest of the leg logs**, and every per-arm cell and
+every aggregate below is read from them or computed arithmetically from them.
+They reconcile exactly: **Σ `sum_wall_seconds_ok` = 348488 s** and **Σ
+`games_recorded_ok` = 464** across the nine, the campaign's first and last
+`leg_duration` timestamps are `2026-07-29T07:17:48Z` and `2026-07-31T18:00:06Z`,
+and each arm's `last − first` reproduces its **leg elapsed** column to the
+third decimal.
+
+**What stays workspace-only.** The raw `~/ailibi-campaign-1826/leg-log-*.jsonl`
+rows themselves — per-seed timings, `purity-retry` / `pass-done` / `leg-abort`
+event streams — and `leg-log-stubborn.jsonl`, whose 11 stubborn-round attempts
+(7821 s) have **no row block** and are quoted from the log. Those are the
+re-derivation path; the row blocks are the evidence of record for every figure
+below except the stubborn-round line.
 
 **Per-arm, as logged.** `games_ok` is the leg's **recorded**-game count
 (retries included), not the finalized scored set — the two differ wherever a
@@ -794,7 +810,7 @@ purity retry re-recorded a seed.
 | `p18-imp-ea4bc955` | 52 | 5 | 46460 | 14.891 | 14.295 |
 | `p18-imp-bfd145cb` | 50 | 0 | 43056 | 14.352 | 12.223 |
 | `p18-imp-6d327dcb` | 50 | 2 | 44529 | 14.843 | 13.045 |
-| `p18-imp-7f73929d` ※ | 49 | 5 | 49685 | 16.900 | 14.997 |
+| `p18-imp-7f73929d` ※ | 49 | 9 | 49685 | 16.900 | 14.997 + 0.931 |
 | `p18-fsm-comparator` | 50 | 10 | 46402 | 15.467 | 16.151 |
 | `p18-crew-c1-gen9` | 50 | 0 | 54212 | 18.071 | 15.059 |
 | `p18-crew-c1-gen0` | 57 | 3 | 54775 | 16.016 | 16.241 |
@@ -809,14 +825,22 @@ margin narrower than any gauge on the board. Adding the 11 stubborn-round
 attempts (7821 s) **and the 4 owner-directed seed-35 retry passes (2981 s)**
 gives **359290 s = 99.8028 h** of leg wall for the campaign.
 
-**※ — `p18-imp-7f73929d` ran a SECOND leg after the PR opened.** Its row above is
-leg 1 only (`leg-start 2026-07-30T08:23:42Z → leg-abort 23:23:31Z`), which is
-where all 49 of its recorded games live. The owner-directed seed-35 retry is a
-second leg window (`leg-start 2026-07-31T17:04:16Z → leg-abort 18:00:06Z`,
-**0.931 h**, 4 more `purity-retry` events) that produced **zero rc-0 recordings**,
-so it changes no cell in the table and no figure in the 348488 s / 464-game
-totals — every one of its 4 passes is rc 99. It does add 2981 s of campaign leg
-wall (above) and it moves the campaign's measured endpoint (below).
+**※ — `p18-imp-7f73929d` ran a SECOND leg after the PR opened, and its row is the
+only two-window entry.** Leg 1 (`leg-start 2026-07-30T08:23:42Z → leg-abort
+23:23:31Z`, **14.997 h**) holds all 49 of its recorded games. The owner-directed
+seed-35 retry is a second window (`leg-start 2026-07-31T17:04:16Z → leg-abort
+18:00:06Z`, **0.931 h**) that produced **zero rc-0 recordings** — all 4 passes
+rc 99 — so `games_recorded_ok` (49) and `sum_wall_seconds_ok` (49685) are
+identical across the two windows, and the 348488 s / 464-game totals are
+untouched. Two cells **do** span both windows and are quoted that way: the
+**retry-events** count is **9** (5 in leg 1, 4 in the retry leg), matching the
+row's `leg_duration.retry_events`, and the elapsed column shows both windows
+rather than summing them across the 17.6 h gap between. The row's
+`first_event_at`/`last_event_at` (`08:23:42Z` → `18:00:06Z`) therefore span the
+gap by construction; the retry window's own bounds are in
+`leg_duration.post_pr_retry_leg` (`attempts` 4, `sum_wall_seconds` 2981,
+`first_at 17:20:27Z`, `last_event_at 18:00:06Z`). Those 2981 s are added to
+campaign leg wall (above) and the endpoint moves accordingly (below).
 
 The pooled rate is pulled **down** by the two starved c2 legs. Over the **seven
 meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`,
@@ -1588,11 +1612,17 @@ nothing dropped and nothing invented.**
 **Sources, exactly.** Every per-arm cell is read from the `instruments` block of
 that arm's phase-18 row in `training/reports/results-finalist-eval.jsonl` — the
 same committed row §16.a/§16.b/§16.e quote, so the overlapping cells are
-identical numbers and not a re-derivation. Every baseline cell is read from
-`training/artifacts/coevo/realpath/baseline-cells-corpus.json`,
-`baseline_cells_corpus_9p2i` — the machine-readable, baseline-6 registered
-claim-cell block (§13); the baseline-5 memo prose is not quoted anywhere here.
-Numerator/denominator is given wherever the row carries both terms.
+identical numbers and not a re-derivation; the six cells whose sources the
+flattening dropped come from that row's `instruments.registered_nested_cells`
+(‡). Every baseline cell is read from
+`training/artifacts/coevo/realpath/baseline-cells-corpus.json`, specifically the
+**top-level `deception` / `kill_craft` / `off_menu` blocks of the
+`sample_dir: replays/ml_corpus/9p2i` entry** — the baseline-6 cells, on the
+registered numerator/denominator **fields** of the pre-registration's §2.2 table.
+The `baseline_cells_corpus_9p2i` subkey inside those entries is **not** the source
+for anything here: it is the embedded **baseline-5** snapshot, and reading it as
+the baseline is the error † records. The baseline-5 memo prose is likewise not
+quoted. Numerator/denominator is given wherever the row carries both terms.
 
 Column labels are the arm suffixes of §16.a/§16.b (`c1-g9` = `p18-crew-c1-gen9`,
 and so on). A bold **(49)** / **(48)** marks the crew-block **fenced view** the
@@ -1602,7 +1632,7 @@ list are labelled **ADVISORY** and carry a Wilson 95% score interval `[low, high
 beside every rate; per that memo an advisory cell **never alone rules a claim**,
 and the reading at †† holds to it.
 
-| instrument (registered cell) | corpus baseline (9p2i, baseline-6) | ea4bc955 | bfd145cb | 6d327dcb | 7f73929d **(49)** | fsm-comp | c1-g9 | c1-g0 **(49)** | c2-g9 **(48)** | c2-g0 |
+| instrument (registered cell) | corpus baseline (9p2i, baseline-6) | ea4bc955 | bfd145cb | 6d327dcb | 7f73929d **(49)** | fsm-comp | c1-g9 ✥ | c1-g0 ✥ **(49)** | c2-g9 ✥ **(48)** | c2-g0 ✥ |
 |---|---|---|---|---|---|---|---|---|---|---|
 | false-vouch `saw_player` rate — `false_vouch_saw_player_observations / vouch_observations_impostor` | 0.12292 (74/602) | 0.12621 (26/206) | 0.13825 (30/217) | 0.18779 (40/213) | 0.14078 (29/206) | 0.10204 (20/196) | 0.06250 (12/192) | 0.11413 (21/184) | 0.10448 (7/67) | **undef** (0/0) |
 | false-vouch corroboration rate — `false_vouch_corroborations / corroboration_claims_impostor` | 0.17614 (31/176) | 0.22222 (12/54) | 0.18310 (13/71) | 0.42254 (30/71) | 0.33333 (20/60) | 0.11111 (6/54) | 0.14286 (7/49) | 0.28846 (15/52) | 0.33333 (7/21) | **undef** (0/0) |
@@ -1617,8 +1647,8 @@ and the reading at †† holds to it.
 | **co-present departure (the REGISTERED cell)** — `co_present_ge1_kills / kills_total` | 0.00000 (0/505) ◆ | 0.10152 (20/197) | 0.10345 (21/203) | 0.18653 (36/193) | 0.17500 (35/200) | **0.00000 (0/174)** | 0.10714 (21/196) | 0.12500 (25/200) | 0.10823 (25/231) | 0.07570 (19/251) |
 | witnessed point-biserial, co-present — **explicitly NOT registered** (§8 rejected it: `null` on all 863 committed kills, zero variance) | — (corpus sample: `null`) | 0.73122 | 0.77013 | 0.76781 | 0.77291 | **n/a** | 0.71486 | 0.83352 | 0.67307 | 0.65639 |
 | co-present conditional means, witnessed / unwitnessed — **presentation statistic, NOT the registered cell** | — (corpus sample: 0.0 / 0.0) | 0.66667 / 0.00599 | 0.66667 / 0.00578 | 0.88372 / 0.02000 | 0.84091 / 0.01282 | 0.00000 / 0.00000 | 0.73333 / 0.00602 | 0.78788 / 0.00000 | 0.53333 / 0.00538 | 0.50000 / 0.00465 |
-| action entropy — crew mean conditional | 0.86932 | 0.74780 | 0.74920 | 0.77148 | 0.78597 | 0.88099 | 0.74776 | 0.75497 | 0.67974 | 0.66697 |
-| action entropy — impostor mean conditional | 0.65258 | 0.60780 | 0.61543 | 0.53579 | 0.50194 | 0.66839 | 0.58359 | 0.60059 | 0.62184 | 0.64172 |
+| action entropy — crew mean conditional — **NOT-DEMONSTRATED as recorded** ✧ | 0.86932 | 0.74780 | 0.74920 | 0.77148 | 0.78597 | 0.88099 | 0.74776 | 0.75497 | 0.67974 | 0.66697 |
+| action entropy — impostor mean conditional — **NOT-DEMONSTRATED as recorded** ✧ | 0.65258 | 0.60780 | 0.61543 | 0.53579 | 0.50194 | 0.66839 | 0.58359 | 0.60059 | 0.62184 | 0.64172 |
 | off-menu rate — `off_menu_total / impostor_decisions` | 0.00000 (0/6663) | 0.00000 (0/2015) | 0.00000 (0/2083) | 0.00000 (0/2100) | 0.00000 (0/2176) | 0.00000 (0/2299) | 0.00000 (0/2027) | 0.00000 (0/1962) | 0.00000 (0/2520) | 0.00000 (0/2596) |
 | roll-call coverage mean (all) ✦ | **no corpus cell** — standing-gauge floor **0.60** | 0.84320 | 0.84192 | 0.83549 | 0.84498 | 0.85872 | 0.83846 | 0.84485 | 0.86353 | **n/a** |
 | roll-call coverage mean — crew ✦ | **no corpus cell** | 1.00000 | 0.98885 | 0.99383 | 0.99556 | 0.99735 | 0.99060 | 1.00000 | 1.00000 | **n/a** |
@@ -1660,6 +1690,32 @@ grounded/fabricated vouch split, whose counters were always plain scalars. The
 only rows here that are **not** part of that set are the three explicitly
 labelled as such: the co-present point-biserial (§8 rejected it), the co-present
 conditional means (presentation statistic), and the roll-call block (✦).
+
+**✧ — the two action-entropy rulings read NOT-DEMONSTRATED as recorded, by the
+pre-registration's own instruction.** The registered entropy cell is a **mean**
+tested with Welch, and Welch needs the per-agent variance. The memo's §6.a names
+the gap and disposes of it in advance, verbatim:
+
+> the unit is the per-agent conditional entropy, which the module computes
+> deterministically but does NOT emit — `ActionEntropyCells` carries `agents` /
+> `decisions` / the two means / pooled `buckets` only, **so s² is not recoverable
+> from committed outputs today**. This is a **named instrument gap routed back as
+> a contract** … a follow-up adds the per-agent entropy vector (or its N−1
+> variance) to `ActionEntropyCells` with re-pins, **landing BEFORE the campaigns
+> record** (the §1 substrate discipline). … **Until that field is committed and
+> pinned, an entropy claim is unjudgeable from committed outputs and reads
+> NOT-DEMONSTRATED as recorded** — an improvised out-of-report recomputation
+> never substitutes.
+
+**That follow-up did not land before this campaign recorded**, so the condition
+the memo set is unmet and both entropy rulings (crew and impostor — 2 of the 14)
+read **NOT-DEMONSTRATED as recorded**. This report therefore **does not** compute
+a variance, a Welch t, or any entropy delta: the memo forbids exactly that
+substitution, and doing it here would manufacture judgeability the committed
+outputs do not have. The means, `agents` and `decisions` persisted at
+`instruments.registered_nested_cells.action_entropy` stay in the table as
+**context** — they are what a future re-pin would be read against — and nothing
+in §16 or §17 rests on them.
 
 **‖ — the deflection baseline is quoted on the REGISTERED denominator.** The
 pre-registration's §2.2 cell is `effective_deflection.effective_deflections /
@@ -1823,8 +1879,15 @@ rate is AT corpus, not above it** — the baseline-6 anchor is **0.94384
 (437/463)** and the arms span **0.94268–1.00000**, with the all-scripted
 comparator (0.94268) sitting marginally *below* the corpus and every other arm
 within six points above. Near-universal framing is a property of this substrate
-and roster, and the arms do not depart from it. (The earlier "far above corpus"
-reading was an artifact of the baseline-5 snapshot's 0.76710 — see †.) (iii)
+and roster. (The earlier "far above corpus" reading was an artifact of the
+baseline-5 snapshot's 0.76710 — see †.) **One arm does cross the corpus-anchored
+threshold and should not be rounded away:** `6d327dcb` at **159/162** against the
+corpus **437/463** gives pooled p̂ = 0.95360, SE = 0.019201, **z = +1.9601**
+(two-sided p = **0.0500**) — **just past |z| ≥ 1.96**. Recorded on the same terms
+as the fabricated cell at ††: this is a **corpus-anchored** observation at a
+threshold, and the **claim** comparator for clause (a) is the **same-seed FSM
+arm**, not the corpus (§2.1) — against `fsm-comp`'s 148/157 the same arm's margin
+is far smaller. **It is not an emergence ruling; 18.27 rules.** (iii)
 **Both false-vouch channels straddle their corrected baselines, and the split is
 by side, not by cell.** On `saw_player` (baseline **0.12292**) the **four impostor
 arms all sit above** — `ea4bc955` 0.12621, `bfd145cb` 0.13825, `6d327dcb`
@@ -1859,6 +1922,36 @@ what is left is the impostor side and the physical layer. It is **an observation
 on a pre-registered instrument**, offered without a §6 four-part claim behind it,
 and nothing in §17 rests on it.
 
+**✥ — every CREW column's axis-2 cell reads NOT-DEMONSTRABLE as recorded, for
+want of a comparator.** The four crew columns (`c1-g9`, `c1-g0`, `c2-g9`,
+`c2-g0`) carry real, correctly computed instrument values — and **none of them
+can be ruled on under axis 2**, because the pre-registration's §2.1 requires an
+opponent-matched comparator that this slate does not contain:
+
+> **Crew claims are judged opponent-matched:** a crew claim cell's candidate arm
+> is (crew finalist vs opponent O) and its comparator is (**scripted-FSM crew vs
+> the same O**, same seeds, same substrate) — 18.26 records a scripted-crew
+> comparator row for EACH opponent a crew finalist is recorded against … **or the
+> crew claim on that opponent pairing reads NOT-DEMONSTRATED for want of a
+> comparator.**
+
+Every crew arm here was recorded against the frozen impostor champion
+`ea4bc955…` (§8.3), so the required comparator is **scripted-FSM crew vs
+`ea4bc955…` on the same 50 seeds**. The ratified slate has no such arm:
+`p18-fsm-comparator` is scripted crew **and** scripted impostor, which is a
+different pairing. The condition §2.1 names is therefore unmet on all four crew
+columns, and the shortfall is a **missing recording**, not a defect in the cells.
+
+**Owner decision (2026-07-31, ratified in-session): label, do not record.** The
+crew block was ratified as **diagnostic** from the outset — 18.25 named no crew
+finalist and §8.3 states nothing here promotes one — so the missing comparator
+costs this task no claim it was going to make. Recording a scripted-crew-vs-
+`ea4bc955…` arm is a **routed follow-up**, to be taken up only if 18.27 wants
+crew-side axis-2 claims; it is not a gap this report closes retroactively. The
+crew cells **stay in the table as context**, which is the purpose §8.3 gave them:
+they characterise how each crew lineage played, they carry §16.b's and §16.e's
+diagnostics, and they are read as measurements rather than as claims. See §17.1.
+
 **✦ — the roll-call rows are CONTEXT, not axis-2 cells.** The ratified
 pre-registration fixes the emergence set at **eight instruments** (§8: Tier A
 `false-vouch`, `frame`, `teammate-immunity`, `alibi-survival`, `deflection`;
@@ -1873,6 +1966,49 @@ among the instrument entry points; that listing is left standing as written and
 is corrected by this label and the §17.1 bullet, **not** by editing the
 pre-registration (which would be an amendment, and amendments were due before the
 campaigns recorded).
+
+### 16.g The `seed mod 5` split views (§6.b evidence, committed per row)
+
+Clause (b) of the §6 claim discipline needs each cell **recomputed on the three
+`seed mod 5` partitions**, so that a pooled delta can be checked for
+**sign reproduction in ≥ 2 of 3** splits. That evidence is **committed on every
+phase-18 row** at `instruments.seed_mod5_splits`, partitioned `{0,1,2}` /
+`{3}` / `{4}` over each arm's **own recorded seed list with its fenced exclusions
+already applied**, and carrying **all 12 registered n/d claim cells per split**
+plus the one-hop point-biserial as `r` with its `kills_total`. Nothing in this
+subsection is recomputed here.
+
+**Partition sizes, as committed** — 30/10/10 where the arm recorded a clean 50,
+carved where an exclusion lands: `7f73929d` **29**/10/10 (seed 35), `c1-g0`
+**29**/10/10 (seed 20), `c2-g9` **29**/10/**9** (seeds 19 and 20). Every other
+arm is 30/10/10.
+
+**Illustration — the two kill-craft rate cells, five arms.** The full 12-cell ×
+3-split set is in the rows; this table exists so a reader can see the shape of
+the committed evidence without opening the JSON:
+
+| arm | crew-witnessed kill rate: {0,1,2} / {3} / {4} | co-present departure: {0,1,2} / {3} / {4} |
+|---|---|---|
+| `p18-imp-ea4bc955` | 16/121 = 0.13223 · 9/39 = 0.23077 · 5/37 = 0.13514 | 12/121 = 0.09917 · 4/39 = 0.10256 · 4/37 = 0.10811 |
+| `p18-imp-bfd145cb` | 16/122 = 0.13115 · 8/43 = 0.18605 · 6/38 = 0.15789 | 12/122 = 0.09836 · 4/43 = 0.09302 · 5/38 = 0.13158 |
+| `p18-imp-6d327dcb` | 25/108 = 0.23148 · 10/41 = 0.24390 · 8/44 = 0.18182 | 20/108 = 0.18519 · 9/41 = 0.21951 · 7/44 = 0.15909 |
+| `p18-imp-7f73929d` | 26/117 = 0.22222 · 10/42 = 0.23810 · 8/41 = 0.19512 | 18/117 = 0.15385 · 9/42 = 0.21429 · 8/41 = 0.19512 |
+| `p18-fsm-comparator` | 6/102 = 0.05882 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/102 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+
+**What this report does and does not say about it.** As recorded, each of the
+four impostor arms sits **above** the same-seed comparator on **all three**
+splits for both cells — the comparator's co-present column is 0 in every split,
+so the departure's sign is positive wherever an arm has any co-present kill at
+all. That is an **observation about the committed cells**, stated so the evidence
+is legible. **This report does not apply the 2-of-3 sign rule and does not rule
+on clause (b).** Clause (b) is one of four conjunctive conditions (§6: pooled
+|z| ≥ 1.96 vs the same-seed FSM comparator, sign reproduction, a named ablation
+showing the behaviour recede, and selected-for presence in the champion's own
+recordings), and **no ablation was recorded in this campaign**, so no cell here
+can satisfy the conjunction regardless of its splits. **18.27 applies the rule**
+against the committed per-split cells; §16.f's labels carry forward unchanged —
+the crew columns are ✥ NOT-DEMONSTRABLE for want of an opponent-matched
+comparator, and the two entropy rulings are ✧ NOT-DEMONSTRATED, on both axes.
 
 ---
 
@@ -1895,6 +2031,23 @@ campaigns recorded).
   (18.25's 36 legs); everything past it is labelled a projection and is re-priced
   from the first leg pair (§14).
 
+- **The crew block's axis-2 cells are labelled NOT-DEMONSTRABLE rather than
+  rescued by a new recording — OWNER DECISION, 2026-07-31, ratified in-session.**
+  Pre-registration §2.1 judges crew claims **opponent-matched**: the comparator
+  for (crew finalist vs opponent O) is (scripted-FSM crew vs the **same** O, same
+  seeds, same substrate), "or the crew claim on that opponent pairing reads
+  NOT-DEMONSTRATED for want of a comparator". Every crew arm here ran against the
+  frozen champion `ea4bc955…`, and the ratified slate contains **no**
+  scripted-crew-vs-`ea4bc955…` row — `p18-fsm-comparator` is scripted on **both**
+  sides, a different pairing. Two options were open: record the missing arm now,
+  or label the cells. **The owner chose labelling**, because the crew block was
+  ratified as a **diagnostic** (§8.3) and 18.25 named no crew finalist, so no
+  claim this task was going to make depends on it — and recording an arm after
+  the slate closed to rescue a cell is the shape of fitting evidence to a wanted
+  conclusion. Recording scripted-crew-vs-`ea4bc955…` is therefore a **routed
+  follow-up**, taken up only if 18.27 wants crew-side axis-2 claims. The crew
+  cells stay in §16.f marked **✥** and are read as context; §16.b and §16.e's
+  crew diagnostics are unaffected, since neither was ever an axis-2 claim.
 - **Roll-call coverage is relabelled CONTEXT, not an axis-2 instrument — a
   labelling correction, not an amendment.** §13 of this report listed
   `eval.funnel.compute_pooling_funnel` among the instrument entry points. The
