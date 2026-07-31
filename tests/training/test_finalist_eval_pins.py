@@ -467,12 +467,45 @@ def _gauges(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {gauge["name"]: gauge for gauge in row["watchability"]["supply_gauges"]}
 
 
+def _assert_digest_closes_on_the_artifact_bytes(
+    artifact_dir: str, declared: str
+) -> None:
+    """A declared digest closes on the committed artifact BYTES, on disk.
+
+    Two links, both opened from disk rather than inferred from the row:
+    ``<dir>/weights.json.sha256`` (``sha256sum`` format, so the digest is the
+    line's first token) must NAME ``declared``, and ``<dir>/weights.json``
+    must HASH to it. Without the second link a sidecar could name a genome
+    that no longer sits beside it, and the row's self-consistent fields would
+    never notice.
+    """
+
+    directory = Path(artifact_dir)
+    sidecar = directory / "weights.json.sha256"
+    payload = directory / "weights.json"
+    assert sidecar.is_file(), f"missing committed sidecar: {sidecar}"
+    assert payload.is_file(), f"missing committed genome: {payload}"
+
+    recorded = sidecar.read_text(encoding="utf-8").split()[0]
+    assert recorded == declared, f"{sidecar} names {recorded}, row declares {declared}"
+    computed = hashlib.sha256(payload.read_bytes()).hexdigest()
+    assert computed == recorded, f"{payload} hashes to {computed}, sidecar {recorded}"
+
+
 def _origin_main_prior_rows() -> list[dict[str, Any]] | None:
-    """The pre-append evidence rows from ``origin/main``, or ``None``.
+    """``origin/main``'s FIRST TWO evidence rows, or ``None``.
+
+    ``origin/main`` is a MOVABLE ref: today it holds the two 17.14 rows, and
+    the moment this work merges it holds all eleven. So the comparison is
+    against the PREFIX, never the whole file — slicing here is the
+    preservation invariant itself, since the first two rows of main's file are
+    forever the 17.14 rows no matter how many phase-18 rows sit under them.
+    Comparing full files instead would pass only until merge and then fail on
+    every full clone.
 
     ``None`` when the ref does not resolve — CI checks out at
     ``fetch-depth: 1`` and carries no ``origin/main``, where the committed
-    digest pin above is the proof instead.
+    digest pin is the proof instead.
     """
 
     result = subprocess.run(
@@ -483,7 +516,8 @@ def _origin_main_prior_rows() -> list[dict[str, Any]] | None:
     )
     if result.returncode != 0:
         return None
-    return [json.loads(line) for line in result.stdout.splitlines()]
+    lines = result.stdout.splitlines()[: len(_PRIOR_ENTRANTS)]
+    return [json.loads(line) for line in lines]
 
 
 # -- file integrity: the prior record is preserved ---------------------------
@@ -494,10 +528,17 @@ def test_the_two_17_14_rows_stay_first_and_unchanged() -> None:
 
     The 17.16 ruling re-derives itself from these two rows every run, so an
     append that rewrote, re-ordered or re-scored them would silently move a
-    committed ruling. Pinned two ways: the file's two-row prefix still hashes
-    to the pre-append ``origin/main`` blob digest (always on, no git needed),
-    and — when the ref resolves — the DECODED rows compare equal as dicts,
-    which stays true across a re-serialisation where a byte compare would not.
+    committed ruling.
+
+    The PRIMARY pin is immutable: the file's two-row prefix still hashes to
+    the pre-append ``origin/main`` blob digest, which needs no git and holds
+    forever. The secondary check is against the MOVABLE ``origin/main`` ref
+    when it resolves — and it compares PREFIX to PREFIX, because that ref
+    gains the phase-18 rows the moment this work merges. Prefix-to-prefix is
+    the invariant worth stating anyway: whatever else main accumulates, its
+    first two rows stay these two. The comparison decodes both sides and
+    compares dicts, so it survives a re-serialisation a byte compare would
+    not.
     """
 
     lines = _lines()
@@ -838,6 +879,44 @@ def test_crew_rows_do_not_follow_the_realpath_v3_stamp_convention() -> None:
         # The stamps came from the two DISTINCT schema slots in the bytes.
         assert "read_policy_stamps" in row["stamp_source"]
         assert ".crew / .tactical" in row["stamp_source"]
+
+
+# -- the identity chain reaches the DISK --------------------------------------
+
+
+def test_every_committed_digest_closes_on_the_artifact_bytes_on_disk() -> None:
+    """Each declared identity is checked against the committed genome itself.
+
+    Everything above compares a row's fields to a row's other fields, which
+    proves only that a row is SELF-consistent — a row naming an artifact that
+    was never committed, or one whose sidecar drifted from the genome beside
+    it, would satisfy every one of those pins. This closes the chain on disk
+    for both links (row digest -> committed sidecar -> ``weights.json``
+    bytes), across every slot that names an artifact: each impostor arm's
+    subject dir, and each crew arm's subject dir AND its frozen opponent's
+    dir. The comparator names none — the one arm that loaded nothing.
+    """
+
+    rows = _rows()
+    checked: list[tuple[str, str]] = []
+    for arm in _SLATE:
+        row = rows[arm.entrant]
+        if arm.artifact_path is not None:
+            _assert_digest_closes_on_the_artifact_bytes(
+                arm.artifact_path, row["committed_weights_sha256"]
+            )
+            checked.append((arm.entrant, "subject"))
+        if arm.side == _CREW:
+            _assert_digest_closes_on_the_artifact_bytes(
+                row["opponent_artifact_path"],
+                row["opponent_committed_weights_sha256"],
+            )
+            checked.append((arm.entrant, "opponent"))
+
+    # Coverage is asserted, not assumed: no arm may quietly carry no dir and
+    # so skip the whole check.
+    assert len(checked) == len(_arms(_IMPOSTOR)) + 2 * len(_arms(_CREW))
+    assert [arm.artifact_path for arm in _arms(_COMPARATOR)] == [None]
 
 
 # -- honesty: the failing diagnostics say what failed -------------------------

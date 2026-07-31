@@ -417,14 +417,27 @@ uv run pytest tests/scripts/test_run_tournament_candidate_artifact.py -q
 > lever env), `$0` flat-rate. Floors: the `"baseline-6"` pin block in
 > `eval/watchability.py:787-821`; `_DEFAULT_BASELINE_ID = "baseline-6"`.
 >
-> **STATUS — this Part is a PRE-REGISTRATION, committed BEFORE ANY SEED RUNS.**
-> The slate (§8), the protocol (§9), both pre-registered cells (§10, §11), the
-> routed rider (§12), the instrument set (§13), the duration statement (§14) and
-> the row plan (§15) are recorded in advance of the first recording.
-> **Recordings are PENDING**; §16's tables are skeletons whose every result cell
-> reads *pending*, and the results tables follow in a later commit on this
-> branch. Part I above (the 17.14 baseline-5 record) is **untouched** — the
-> phase-18 rows APPEND, history preserved per the 17.14 precedent.
+> **STATUS AS PRE-REGISTERED — the historical snapshot, quoted unchanged.** The
+> paragraph that follows was committed at **`bf50f79`, before any seed ran**, and
+> is preserved verbatim as the record of what was fixed in advance:
+>
+> > **STATUS — this Part is a PRE-REGISTRATION, committed BEFORE ANY SEED RUNS.**
+> > The slate (§8), the protocol (§9), both pre-registered cells (§10, §11), the
+> > routed rider (§12), the instrument set (§13), the duration statement (§14) and
+> > the row plan (§15) are recorded in advance of the first recording.
+> > **Recordings are PENDING**; §16's tables are skeletons whose every result cell
+> > reads *pending*, and the results tables follow in a later commit on this
+> > branch. Part I above (the 17.14 baseline-5 record) is **untouched** — the
+> > phase-18 rows APPEND, history preserved per the 17.14 precedent.
+>
+> **STATUS NOW — RECORDED.** All **nine** arms are recorded and scored, and the
+> results tables landed in the later commits that paragraph anticipated (through
+> **`3b93cbf`**). §8–§15 remain exactly as pre-registered, with one appended
+> subsection (§14.1, the measured duration re-price §14 committed to). **§16 now
+> holds the selection evidence 18.27 reads** — the selection table (§16.a), the
+> crew diagnostics (§16.b), both pre-registered cells (§16.c, §16.d) and the crew
+> lineage reading with the routed rider's answer (§16.e); §17.1 records the
+> decisions taken during the operator run. Part I remains untouched.
 
 ---
 
@@ -1065,6 +1078,16 @@ because the excluded seed 35 is odd. `floor distance` and `z` are the **full-n**
 reads (§10.5), carried beside the precondition so the verdict and the noise sit
 side by side.
 
+**The halves are NOT fenced.** The split-half read is computed over each arm's
+**full recorded view**, including the non-finalized games — the byte-completeness
+fence of §13 applies only to the **instruments** (§16.e's kill-craft cells and
+the §13 emergence set), never to the watchability halves. Concretely: both arms
+carrying stalemates keep **25/25** in their halves —
+`p18-crew-c1-gen0` reads `games_total` **25** in `watchability-h1.json` and **25**
+in `watchability-h2.json`, and `p18-crew-c2-gen9` likewise **25 / 25** — even
+though their instrument views are fenced to 49 and 48 games respectively. Only
+`7f73929d`'s 24-game H2 differs, and that is a *missing recording*, not a fence.
+
 | arm | gauge | H1 (even) | H2 (odd) | measured noise | 25% of threshold | precondition | floor distance | z / clearance |
 |---|---|---|---|---|---|---|---|---|
 | `p18-imp-ea4bc955` | `witnessed_event_rate` | 0.12264 | 0.18681 | 0.06417 | 0.00847 | **UNRESOLVABLE** | +0.11839 | z = **+3.8757** |
@@ -1145,9 +1168,13 @@ Champions `6d327dcb…` and `ea4bc955…` vs runner-ups `bfd145cb…` and
 | `testimony_backed_conversion` | 0.44444 | 0.36667 | 0.35099 | 0.38926 | 0.40556 | 0.37013 | **−0.03543** | 0.08357 | (18.27 rules) |
 
 **Every margin is smaller than the largest split-half noise on its own row**, and
-on two of three rows smaller than *every* contributing arm's noise. Per §11.2 a
-margin smaller than either side's split-half noise "is reported as such and
-cannot be read as support for A".
+on **one** of three rows — `witnessed_event_rate` — smaller than *every*
+contributing arm's noise. On the other two rows the margin exceeds the quietest
+arm's noise (flags 0.08811 > `7f73929d`'s 0.01728; conversion 0.03543 >
+`bfd145cb`'s 0.01146 and `7f73929d`'s 0.00380) while still sitting under the
+loudest, as the bullets below itemise. Per §11.2 a margin smaller than either
+side's split-half noise "is reported as such and cannot be read as support for
+A".
 
 - `witnessed_event_rate`: margin **0.00365** against noises of 0.02700–0.08671 —
   the margin is **7 to 24 times smaller** than the noise. This row is also
@@ -1265,6 +1292,14 @@ baseline-6). Every scored arm's cell, read from `instruments.json`:
 | `p18-crew-c2-gen9` | 45/231 | 0.19481 | 8.20× | +4.8706 |
 | `p18-crew-c2-gen0` | 36/251 | 0.14343 | 6.04× | +3.7510 |
 
+Each cell is **that arm's own** instrument value over **its own** scored view —
+50 seeds where the arm has no stalemate, the fenced view where it does
+(`7f73929d` 49, `c1-gen0` 49, `c2-gen9` 48). These are the right numbers for
+reading one arm against the corpus, and the **wrong** numbers for reading two
+arms against each other when their views differ; the deciding cell below
+therefore re-computes the gen-9 side on the matched seed set rather than lifting
+its row from here.
+
 **The 18.25 elevation reproduces at n=50 — and two facts narrow what can cause it
 before the deciding cell is even read.** First, it is present **against SCRIPTED
 crew**: the four impostor arms play the stock FSM crew and still run
@@ -1275,24 +1310,43 @@ them. Second, it is present **in a leg with no meetings at all**: `c2-gen0` runs
 **6.04×** corpus with `meeting_rate` 0.00 and zero LLM calls, so the elevation
 cannot require the meeting economy or the language model either.
 
-**THE DECIDING CELL — the c1 gen-9-vs-gen-0 pair, measured.** §12 fixed the read
-as gen-9 vs its **own** gen-0 control at the **same frozen opponent** — that
-pairing holds the impostor constant, so any gap between them is attributable to
-the crew genome's generation and nothing else. Both arms are now in:
+**THE DECIDING CELL — the c1 gen-9-vs-gen-0 pair, on a same-seed intersection.**
+§12 fixed the read as gen-9 vs its **own** gen-0 control at the **same frozen
+opponent** — that pairing holds the impostor constant, so any gap between them is
+attributable to the crew genome's generation and nothing else.
 
-| c1 lineage arm | crew-witnessed kills / kills | rate | × corpus | z |
-|---|---|---|---|---|
-| `p18-crew-c1-gen9` (gen-9 candidate) | 30/196 | 0.15306 | 6.44× | +3.8917 |
-| `p18-crew-c1-gen0` (gen-0 control) | 33/200 | 0.16500 | 6.94× | +4.1715 |
-| **margin (gen-9 − gen-0)** | | **−0.01194** | | |
+**The sample sets must match, and they did not by default.** `c1-gen0`'s
+instrument cell is its **49-game fenced view** (seed 20 is its stalemate, §17.1),
+while `c1-gen9` has no stalemate and its instrument cell spans **all 50** seeds.
+Comparing 30/196 against 33/200 would have compared a 50-seed arm to a 49-seed
+one on a gauge whose denominator *is* the sample. So the gen-9 side is
+re-computed on the **same 49-seed intersection** — seed 20 excluded from **both**
+arms — through the committed instrument
+(`eval.kill_craft.compute_kill_craft_report` over the staged view
+`scoring/p18-crew-c1-gen9/rider-intersection-view/`, 49 replays, seed 20 absent).
+Seed 20 contributed **5 kills, 0 of them witnessed** on the gen-9 side, so the
+intersection cell is **30/191**:
+
+| c1 lineage arm | view | crew-witnessed kills / kills | rate | × corpus | z |
+|---|---|---|---|---|---|
+| `p18-crew-c1-gen9` (gen-9 candidate) | **49-seed intersection** | 30/191 | **0.15707** | 6.61× | **+3.9738** |
+| `p18-crew-c1-gen0` (gen-0 control) | **49-seed intersection** (its own fenced view) | 33/200 | **0.16500** | 6.94× | **+4.1715** |
+| **margin (gen-9 − gen-0)** | | | **−0.00793** | | |
+| *`p18-crew-c1-gen9`, for reference* | *full 50-seed, the arm's own instrument value quoted elsewhere in this Part* | *30/196* | *0.15306* | *6.44×* | *+3.8917* |
+
+The last row is the arm's own §16.b / §16.e-table instrument value and is **not**
+the comparison cell — it is quoted beside so the two numbers cannot be confused.
+Excluding seed 20 moves gen-9 by **+0.00401**, which is smaller than the margin
+it is being compared on; the correction changes no conclusion, but the
+comparison is now genuinely same-seed.
 
 **The pre-registered branch that fires is the ARTIFACT one: gen-9 ≈ gen-0, both
-above corpus.** The margin is **−0.01194** — the *untrained* gen-0 control sits
+above corpus.** The margin is **−0.00793** — the *untrained* gen-0 control sits
 marginally **higher** than the gen-9 candidate, which is the opposite of a
-learning effect and is in any case a gap of about one witnessed kill in two
-hundred. Both arms sit at ~6.4×–6.9× the 12/505 corpus cell. §12's own words for
-this outcome: "gen-9 ≈ gen-0, both above corpus" ⇒ **artifact**, not a
-learned-crew observation effect.
+learning effect and is in any case a gap of well under one witnessed kill in a
+hundred. Both arms sit at **6.61×** and **6.94×** the 12/505 corpus cell. §12's
+own words for this outcome: "gen-9 ≈ gen-0, both above corpus" ⇒ **artifact**,
+not a learned-crew observation effect.
 
 **And the artifact reading is over-determined.** Three independent cells now say
 the same thing, each removing a different candidate cause:
