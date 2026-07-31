@@ -2229,16 +2229,35 @@ on clause (b).** Clause (b) is one of four conjunctive conditions (§6: pooled
 |z| ≥ 1.96 vs the same-seed FSM comparator, sign reproduction, a named ablation
 showing the behaviour recede, and selected-for presence in the champion's own
 recordings). **This task recorded no ablations** — clause (c) is not sourced from
-the finalist eval. **The clause-(c) evidence lives in the campaign reports' own
-§6 ablation runs**: `training/reports/report-impostor-campaign.md` §6 records
-three (`ablation:*/conviction-term` on the run-01 twin,
-`ablation:*/anchor-lambda=4.0` on the run-02 twin, `ablation:off-menu/encoder-v3`)
-and `training/reports/report-crew-campaign.md` §6 records two
-(`ablation:*/conviction-term` on the run-c2 and run-c1 twins), each a byte-identical
-same-seed re-run with the lever disabled. **Whether any of them covers a given
-cell here is 18.27's inspection to make** — the naming is
-`ablation:<instrument-key>/<lever-id>` and the coverage question is per cell, not
-per campaign. **This report neither supplies clause (c) nor forecloses it.**
+the finalist eval. **The clause-(c) raw material lives in the campaign reports'
+own §6 ablation runs**, and it is worth stating what those five runs actually
+are, because an earlier draft of this paragraph listed them as though each were
+clause-(c) evidence. Two things disqualify a run on the face of the source
+reports: the registered naming is
+**`ablation:<instrument-key>/<lever-id>`** — `ablation:*/…` names no instrument —
+and the registered criterion needs **the ablated champion recorded on the claim
+cell** showing the behaviour recede. Each run's status, in its own report's words:
+
+| run | key | source report's own status |
+|---|---|---|
+| `ablation:*/conviction-term` — run-01 twin (impostor §6.1) | wildcard | recede **structurally impossible**: the twin selects the same genome, so "any sweep delta on run-01's impostor champion cannot be attributed to the conviction term … the behavior cannot recede because it is identical by construction" |
+| `ablation:*/anchor-lambda=4.0` — run-02 twin (impostor §6.2) | wildcard | lever is selection-decisive, but the claim-cell recordings are **absent**: "completing that read for a meeting-layer cell **requires the ablated champion's REAL-path recordings** (priced ~2 h, scheduled only if tranche 2 sustains the delta)" |
+| **`ablation:off-menu/encoder-v3`** (impostor §6.3) | **registered** (`off-menu`) | the only registered-key run, real path recorded, per-pair recede computed vs the same-seed comparator — **neither pair recedes** — but tranche 2 validity-FAILED and the verdict "is a **tranche-1 screen at n=3**"; "**This report therefore does NOT rule on `off-menu`** … the clause-(c) classification and any causal attribution are **deferred to 18.27**, which should resolve them against the 50-seed protocol rather than these bytes" |
+| `ablation:*/conviction-term` — run-c2 twin (crew §6.1) | wildcard | "limb (c) is therefore **PARTIAL, not complete**" — the recede recording's "real-path arms are **deliberately NOT recorded**"; claim "**NOT-DEMONSTRATED at this budget**", handed to 18.27 as **UNABLATED-on-the-claim-cell** |
+| `ablation:*/conviction-term` — run-c1 twin (crew §6.2) | wildcard | "same as §6.1 — selection-relevance recorded, **limb (c) PARTIAL** (no recede recording…), claim NOT-DEMONSTRATED at this budget and handed to 18.27 as **UNABLATED-on-the-claim-cell**" |
+
+**So, plainly: none of the five is stated by its own source report as
+clause-(c)-complete.** Four are wildcard-keyed and carry no claim-cell recede
+recording at all — two of them say so in the words "PARTIAL, not complete" and
+"UNABLATED-on-the-claim-cell". The fifth is the only one with a registered
+instrument key **and** a computed real-path recede read, and its own report
+declines to classify it, deferring clause (c) to 18.27 against the 50-seed
+protocol. What these runs do establish — lever selection-relevance, byte-level
+lineage divergence, committed twins — is real and is the material 18.27 works
+from. **Whether any of it covers a given cell here remains 18.27's inspection**;
+this report neither supplies clause (c) nor forecloses it, and now states the
+inventory accurately enough that the inspection starts from what was recorded
+rather than from a count of five.
 **18.27 applies the rule**
 against the committed per-split cells; §16.f's labels carry forward unchanged —
 the crew columns are ✥ NOT-DEMONSTRABLE for want of an opponent-matched
