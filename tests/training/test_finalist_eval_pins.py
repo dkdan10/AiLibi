@@ -283,6 +283,10 @@ class Arm:
     validity_passed: bool
     validity_failures: frozenset[str]
     stalemate_replays: tuple[str, ...] | None
+    #: The leg's IN-LEG rc99 retry wall, in seconds. Zero exactly where the
+    #: leg logged no retry event; on 7f73929d it counts the in-leg-original
+    #: attempts and is strictly larger than the separate post-PR retry leg.
+    retry_wall_seconds: int
     #: The registered co-present-departure cell's NUMERATOR — kills the
     #: mover left with at least one crewmate co-present. Its denominator is
     #: not carried here: it must equal the row's own ``kill_craft.kills_total``
@@ -321,6 +325,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=20,
+        retry_wall_seconds=3059,
     ),
     Arm(
         entrant="p18-imp-bfd145cb",
@@ -349,6 +354,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=21,
+        retry_wall_seconds=0,
     ),
     Arm(
         entrant="p18-imp-6d327dcb",
@@ -377,6 +383,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=36,
+        retry_wall_seconds=1882,
     ),
     Arm(
         entrant="p18-imp-7f73929d",
@@ -406,6 +413,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=35,
+        retry_wall_seconds=6888,
     ),
     Arm(
         entrant="p18-fsm-comparator",
@@ -430,6 +438,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=0,
+        retry_wall_seconds=7230,
     ),
     Arm(
         entrant="p18-crew-c1-gen9",
@@ -461,6 +470,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_failures=frozenset(),
         stalemate_replays=None,
         co_present_ge1_kills=21,
+        retry_wall_seconds=0,
     ),
     Arm(
         entrant="p18-crew-c1-gen0",
@@ -494,6 +504,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         ),
         stalemate_replays=("replay-seed-20.jsonl",),
         co_present_ge1_kills=25,
+        retry_wall_seconds=3035,
     ),
     Arm(
         entrant="p18-crew-c2-gen9",
@@ -529,6 +540,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         ),
         stalemate_replays=("replay-seed-19.jsonl", "replay-seed-20.jsonl"),
         co_present_ge1_kills=25,
+        retry_wall_seconds=371,
     ),
     Arm(
         entrant="p18-crew-c2-gen0",
@@ -561,6 +573,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         ),
         stalemate_replays=(),
         co_present_ge1_kills=19,
+        retry_wall_seconds=0,
     ),
 )
 
@@ -1323,6 +1336,12 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     scored), because tightening it would encode a semantics this block does
     not carry.
 
+    ``retry_wall_seconds`` (the in-leg rc99 wall) is pinned per arm and
+    reconciled rather than merely listed: it can never exceed the leg's own
+    wall, and it is zero on exactly the arms whose ``retry_events`` is zero —
+    derived from that counter, so a wall and its event count cannot drift
+    apart. The three clean legs are then named explicitly.
+
     Two arms would read as broken instrumentation and are pinned as REAL:
 
     * ``c2-gen0``'s whole leg is **27 seconds**. That is not a missing
@@ -1356,6 +1375,7 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
         "note",
         "games_recorded_ok",
         "retry_events",
+        "retry_wall_seconds",
         "sum_wall_seconds_ok",
         "first_event_at",
         "last_event_at",
@@ -1379,7 +1399,22 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
         assert leg["games_recorded_ok"] >= arm.games_total
         assert leg["first_event_at"] <= leg["last_event_at"]
 
+        # The in-leg rc99 retry wall: pinned per arm, and reconciled two ways.
+        assert leg["retry_wall_seconds"] == arm.retry_wall_seconds
+        # Time spent retrying is time spent in the leg.
+        assert leg["retry_wall_seconds"] <= leg["sum_wall_seconds_ok"]
+        # Zero wall exactly where nothing was retried — derived from the
+        # arm's own retry counter, so neither number can move alone.
+        assert (leg["retry_wall_seconds"] == 0) == (leg["retry_events"] == 0)
+
     assert len(notes) == 1
+
+    # ... and the three clean legs, named: no rc99 retry happened at all.
+    assert {arm.entrant for arm in _SLATE if arm.retry_wall_seconds == 0} == {
+        "p18-imp-bfd145cb",
+        "p18-crew-c1-gen9",
+        "p18-crew-c2-gen0",
+    }
 
     # c2-gen0: 27 seconds, and the slate's floor.
     walls = {
@@ -1414,6 +1449,14 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     # The four attempts sit inside the leg that ran them.
     assert retry["leg_start_at"] <= retry["first_at"]
     assert retry["last_event_at"] <= seventh_leg["last_event_at"]
+    # The two retry clocks are NOT the same measurement: the leg's own rc99
+    # wall STRICTLY contains the separate post-PR retry leg, and the
+    # difference is the in-leg-original attempts. Pinned as the exact
+    # subtraction, so a future block that conflated the two — reporting one
+    # clock twice — fails instead of looking merely plausible.
+    assert seventh_leg["retry_wall_seconds"] - retry["sum_wall_seconds"] == 3907
+    assert seventh_leg["retry_wall_seconds"] > retry["sum_wall_seconds"]
+
     # An observed identity worth surfacing if it ever breaks: the arm's
     # recording stamp IS the leg-1 abort moment, which dates the 49 scored
     # games to the aborted leg rather than to the later retry.

@@ -805,25 +805,49 @@ below except the stubborn-round line.
 (retries included), not the finalized scored set — the two differ wherever a
 purity retry re-recorded a seed.
 
-| arm | games_ok | retry events | summed leg wall (s) | mean min/game | leg elapsed (h) |
-|---|---|---|---|---|---|
-| `p18-imp-ea4bc955` | 52 | 5 | 46460 | 14.891 | 14.295 |
-| `p18-imp-bfd145cb` | 50 | 0 | 43056 | 14.352 | 12.223 |
-| `p18-imp-6d327dcb` | 50 | 2 | 44529 | 14.843 | 13.045 |
-| `p18-imp-7f73929d` ※ | 49 | 9 | 49685 | 16.900 | 14.997 + 0.931 |
-| `p18-fsm-comparator` | 50 | 10 | 46402 | 15.467 | 16.151 |
-| `p18-crew-c1-gen9` | 50 | 0 | 54212 | 18.071 | 15.059 |
-| `p18-crew-c1-gen0` | 57 | 3 | 54775 | 16.016 | 16.241 |
-| `p18-crew-c2-gen9` | 56 | 1 | 9342 | 2.780 | 2.774 |
-| `p18-crew-c2-gen0` | 50 | 0 | 27 | 0.009 | 0.008 |
-| stubborn rounds (both seeds) | 11 attempts | — | 7821 | — | 2.173 |
+| arm | games_ok | retry events | recorded-game wall (s) | **in-leg rc99 wall (s)** | mean min/game (recorded) | leg elapsed (h) |
+|---|---|---|---|---|---|---|
+| `p18-imp-ea4bc955` | 52 | 5 | 46460 | **3059** | 14.891 | 14.295 |
+| `p18-imp-bfd145cb` | 50 | 0 | 43056 | **0** | 14.352 | 12.223 |
+| `p18-imp-6d327dcb` | 50 | 2 | 44529 | **1882** | 14.843 | 13.045 |
+| `p18-imp-7f73929d` ※ | 49 | 9 | 49685 | **6888** | 16.900 | 14.997 + 0.931 |
+| `p18-fsm-comparator` | 50 | 10 | 46402 | **7230** | 15.467 | 16.151 |
+| `p18-crew-c1-gen9` | 50 | 0 | 54212 | **0** | 18.071 | 15.059 |
+| `p18-crew-c1-gen0` | 57 | 3 | 54775 | **3035** | 16.016 | 16.241 |
+| `p18-crew-c2-gen9` | 56 | 1 | 9342 | **371** | 2.780 | 2.774 |
+| `p18-crew-c2-gen0` | 50 | 0 | 27 | **0** | 0.009 | 0.008 |
+| **nine-leg totals** | **464** | **30** | **348488** | **22465** | 12.5175 | — |
+| stubborn rounds (both seeds), separately logged | 11 attempts | — | — | 7821 | — | 2.173 |
 
-**Summed wall.** The nine legs sum to **348488 s = 96.8022 h** over **464**
-recorded games ⇒ **12.5175 min/game serial**, **2.5% above** the pre-registered
-**12.2077 min/game** — the 18.25-derived rate transferred to this slate with a
-margin narrower than any gauge on the board. Adding the 11 stubborn-round
-attempts (7821 s) **and the 4 owner-directed seed-35 retry passes (2981 s)**
-gives **359290 s = 99.8028 h** of leg wall for the campaign.
+**Summed wall — three labelled components that sum to the campaign's full attempt
+wall.** An earlier draft added the stubborn loop and the seed-35 retry passes to
+the recorded-game wall and called the result the campaign total. That
+under-counted: **every leg's in-leg rc99 attempts cost wall too**, and only one
+leg's were being added. Each row now carries `leg_duration.retry_wall_seconds`,
+so the components are stated separately and add up:
+
+| component | wall | what it is |
+|---|---|---|
+| recorded-game wall | **348488 s = 96.8022 h** | the 464 rc-0 recordings — Σ `sum_wall_seconds_ok` |
+| in-leg rc99 attempts | **22465 s = 6.2403 h** | the 30 purity-failed attempts inside the legs — Σ `retry_wall_seconds` |
+| stubborn loop | **7821 s = 2.1725 h** | the 11 `retry-stubborn.sh` attempts, logged separately (workspace-only) |
+| **full attempt wall** | **378774 s = 105.2150 h** | **505 attempts** (464 + 30 + 11) |
+
+**The rates, each labelled by its denominator.** The **per-recorded-game** figure
+is unchanged and is the one the projection is judged against: **348488 s / 464 =
+12.5175 min/game serial**, **2.5% above** the pre-registered **12.2077** — the
+18.25-derived rate transferred to this slate with a margin narrower than any gauge
+on the board. Beside it, **attempt-inclusive**: **378774 s / 464 = 13.6054
+min/recorded game**, i.e. every finished game cost **1.09 min** of failed-attempt
+overhead on top of itself; **per attempt** the rate is **378774 s / 505 = 12.5008
+min/attempt**, almost exactly the per-recorded-game figure — a failed attempt cost
+about what a successful one did.
+
+**One caution against double-counting.** `p18-imp-7f73929d`'s **6888 s** of
+`retry_wall_seconds` **already contains** the retry leg's **2981 s**
+(`post_pr_retry_leg.sum_wall_seconds`); the retry leg is a subset of that arm's
+rc99 attempts, not a fourth component. The stubborn loop's 7821 s is the only
+attempt wall that lives outside the per-arm blocks.
 
 **※ — `p18-imp-7f73929d` ran a SECOND leg after the PR opened, and its row is the
 only two-window entry.** Leg 1 (`leg-start 2026-07-30T08:23:42Z → leg-abort
@@ -861,9 +885,12 @@ rather than from this arm's leg 1.
 The pooled rate is pulled **down** by the two starved c2 legs. Over the **seven
 meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`,
 `c1-gen0`) the serial rate is **339119 s = 94.1997 h over 358 games ⇒ 15.7877
-min/game** — **29% slower** than the pre-registered 12.2077, because 18.25's rate
-was measured on crew-vs-champion games and this slate's meeting-rich impostor
-legs run longer meetings.
+min/game per recorded game** — **29% slower** than the pre-registered 12.2077,
+because 18.25's rate was measured on crew-vs-champion games and this slate's
+meeting-rich impostor legs run longer meetings. Attempt-inclusive those same seven
+legs read **339119 + 22094 = 361213 s over 358 games ⇒ 16.8162 min/game** (they
+carry **22094** of the campaign's 22465 s of in-leg rc99 wall — the two starved c2
+legs contribute only 371 s between them).
 
 **The posture as it actually ran — two-leg rolling, not two-leg batched.** Legs
 were launched as **staggered concurrent pairs** and a new leg started as soon as
@@ -932,10 +959,19 @@ accounting below separates *exit code* from *outcome*:
   rc 0**, 4829 s of wall between them. Each run produced a complete 1002-row
   replay that reaches **tick 999** and simply never emits `game_over`. The arm
   scores at **49 finalized of 50 recorded** (§16.b, §17.1).
-- Stubborn wall: **3676 s** on comparator seed 5, **4145 s** on seed 35 in the
-  stubborn rounds plus **2981 s** in the final retry run (**7126 s** for the
-  seed in total), **10802 s** across both seeds; seed 20's 8 attempts cost a
-  further **4829 s** inside its own leg.
+- Stuck-seed wall, reconciled against the per-arm `leg_duration` blocks. In the
+  **separately-logged stubborn loop**: **3676 s** on comparator seed 5 and
+  **4145 s** on seed 35 = the **7821 s** total above. **Inside the legs**, those
+  two seeds' failures are rc 99 and sit in `retry_wall_seconds` — seed 35's
+  in-leg attempts account for the whole of `7f73929d`'s **6888 s** (4 leg-1
+  passes plus the retry leg's 2981 s), so the seed cost **4145 + 6888 = 11033 s**
+  across both books. **Seed 20 is the exception and is counted elsewhere on
+  purpose:** all 8 of its attempts returned **rc 0**, so its **4829 s** sits in
+  `c1-gen0`'s **recorded-game** wall (54775 s) and inflates its `games_ok` to
+  **57**, not in its `retry_wall_seconds` (**3035 s**, which is that leg's three
+  genuine purity retries). A seed that records cleanly and never finishes costs
+  recorded-game wall, not retry wall — which is exactly why the runner never saw
+  it as a failure (§17.1).
 
 **The c2 legs are fast because meetings are scarce, not because the provider was.**
 `c2-gen9` runs at **2.780 min/game** (**summed seed wall** 9342 s = 2.5950 h;
