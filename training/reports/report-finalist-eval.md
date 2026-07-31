@@ -784,24 +784,23 @@ purity retry re-recorded a seed.
 | `p18-imp-7f73929d` | 49 | 5 | 49685 | 16.900 | 14.997 |
 | `p18-fsm-comparator` | 50 | 10 | 46402 | 15.467 | 16.151 |
 | `p18-crew-c1-gen9` | 50 | 0 | 54212 | 18.071 | 15.059 |
+| `p18-crew-c1-gen0` | 57 | 3 | 54775 | 16.016 | 16.241 |
 | `p18-crew-c2-gen9` | 56 | 1 | 9342 | 2.780 | 2.774 |
 | `p18-crew-c2-gen0` | 50 | 0 | 27 | 0.009 | 0.008 |
-| `p18-crew-c1-gen0` | pending (recording) — 29 seeds logged so far | — | 33299 (29 seeds) | 19.137 (29 seeds) | pending |
 | stubborn rounds (both seeds) | 11 attempts | — | 7821 | — | 2.173 |
 
-**Summed wall.** The eight finalized legs sum to **293713 s = 81.5869 h** over
-**407** recorded games ⇒ **12.0276 min/game serial**. That lands **within 1.5%
-of the pre-registered 12.2077 min/game** — the 18.25-derived rate transferred to
-this slate. Adding the 11 stubborn-round attempts (7821 s) and the `c1-gen0`
-partial (33299 s over 29 seeds) gives **334833 s = 93.0092 h** of leg wall booked
-so far.
+**Summed wall.** The nine legs sum to **348488 s = 96.8022 h** over **464**
+recorded games ⇒ **12.5175 min/game serial**, **2.5% above** the pre-registered
+**12.2077 min/game** — the 18.25-derived rate transferred to this slate with a
+margin narrower than any gauge on the board. Adding the 11 stubborn-round
+attempts (7821 s) gives **356309 s = 98.9747 h** of leg wall for the campaign.
 
-The pooled rate is pulled **down** by the two starved c2 legs. Over the **six
-meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`) the
-serial rate is **284344 s = 78.9844 h over 301 games ⇒ 15.7444 min/game** —
-**29% slower** than the pre-registered 12.2077, because 18.25's rate was measured
-on crew-vs-champion games and this slate's meeting-rich impostor legs run longer
-meetings.
+The pooled rate is pulled **down** by the two starved c2 legs. Over the **seven
+meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`,
+`c1-gen0`) the serial rate is **339119 s = 94.1997 h over 358 games ⇒ 15.7877
+min/game** — **29% slower** than the pre-registered 12.2077, because 18.25's rate
+was measured on crew-vs-champion games and this slate's meeting-rich impostor
+legs run longer meetings.
 
 **The posture as it actually ran — two-leg rolling, not two-leg batched.** Legs
 were launched as **staggered concurrent pairs** and a new leg started as soon as
@@ -826,14 +825,17 @@ slept **with a seed in flight**, so each stall is absorbed into that seed's
 |---|---|---|---|---|---|
 | 1 | `2026-07-30T17:36Z` | `c1-gen9` seed 18 / `7f73929d` seed 32 | 3783 / 4335 | 884 / 923 | 2899 / 3412 |
 | 2 | `2026-07-30T21:50Z` | `c1-gen9` seed 34 | 2060 | 884 | 1176 |
-| 3 | `2026-07-31T03:21–03:24Z` | `c1-gen0` seed 5 / `c1-gen9` seed 48 | 10208 / 10164 | 840 / 884 | 9368 / 9280 |
+| 3 | `2026-07-31T03:21–03:24Z` | `c1-gen0` seed 5 / `c1-gen9` seed 48 | 10208 / 10164 | 826 / 884 | 9382 / 9280 |
 
 Interruptions 1 and 3 hit **both** concurrent legs at once, so the excess is
-booked twice in leg wall: **26135 s = 7.260 h** of leg `wall_seconds` corresponds
-to **13956 s = 3.877 h** of real wall-clock stall.
+booked twice in leg wall: **26149 s = 7.264 h** of leg `wall_seconds` corresponds
+to **13970 s = 3.881 h** of real wall-clock stall.
 
-**The stubborn-seed history.** Two seeds refused to record pure, and the
-`retry-stubborn.sh` rounds are logged separately in `leg-log-stubborn.jsonl`:
+**The stubborn-seed history.** Three seeds refused to finish clean, in **three
+different ways**. Two of them are purity failures (`rc 99`), and their
+`retry-stubborn.sh` rounds are logged separately in `leg-log-stubborn.jsonl`; the
+third never failed at all in the runner's eyes and is the reason the attempt
+accounting below separates *exit code* from *outcome*:
 
 - **`p18-fsm-comparator` seed 5 — pure on attempt 14.** One leg-1 recording
   (`2026-07-29T08:51:42Z`, rc 0, later found impure), then 4 in-leg attempts in
@@ -847,32 +849,48 @@ to **13956 s = 3.877 h** of real wall-clock stall.
   and the arm scores at **n=49** (§17). All 6 stubborn recordings are kept as
   forensics under `~/ailibi-campaign-1826/forensics/` — 10 forensic files in
   total, 4 for comparator seed 5 and 6 for seed 35.
+- **`p18-crew-c1-gen0` seed 20 — 8 attempts, every one `rc 0`, every one a
+  stalemate.** This seed never triggered a purity retry and never reached the
+  stubborn runner, because the recorder **succeeded** every time: 4 in-leg
+  attempts (leg 1 passes 1–4 at `2026-07-31T06:57:04Z`, `13:38:33Z`, `14:08:50Z`,
+  `14:35:15Z`) then a **bonus 4-pass v2 run** after the `leg-abort` (leg 2 passes
+  1–4 at `15:04:24Z`, `15:15:06Z`, `15:26:06Z`, `15:37:31Z`), **8 attempts, all
+  rc 0**, 4829 s of wall between them. Each run produced a complete 1002-row
+  replay that reaches **tick 999** and simply never emits `game_over`. The arm
+  scores at **49 finalized of 50 recorded** (§16.b, §17.1).
 - Stubborn wall: **3676 s** on comparator seed 5, **4145 s** on seed 35,
-  **7821 s** together.
+  **7821 s** together; seed 20's 8 attempts cost a further **4829 s** inside its
+  own leg.
 
 **The c2 legs are fast because meetings are scarce, not because the provider was.**
 `c2-gen9` runs at **2.780 min/game** (whole leg 2.5950 h) and `c2-gen0` at
 **0.009 min/game** — its 50 games recorded in **27 seconds total**, which is the
 duration signature of a leg that makes **zero LLM calls** (§16.b, §16.e).
 
-**The effective rate, recomputed.** Campaign span
-`2026-07-29T07:17:48Z → 2026-07-31T08:39:06Z` = **49.355 h**, of which only
-**0.117 h** is idle. Inside it: **399** finalized games across the eight scored
-arms **plus** 29 `c1-gen0` seeds = **428** games ⇒ **6.9186 min/game effective**
-at the two-leg posture, i.e. **≈ 5.77 h per 50-seed arm** and **≈ 51.9 h** for a
-450-game slate. Read per completed arm instead: **8 arms in 49.355 h = 6.169
-h/arm**.
+**The effective rate, recomputed on the complete slate.** Campaign span
+`2026-07-29T07:17:48Z → 2026-07-31T15:38:33Z` = **56.346 h**, of which only
+**0.117 h** is idle — a single 7-minute pause across two and a third days. Inside
+it the slate recorded **449** seed-games (8 arms × 50 seeds + `7f73929d`'s 49)
+⇒ **7.5295 min/game effective** at the two-leg posture, i.e. **≈ 6.27 h per
+50-seed arm** and **≈ 56.5 h** for a 450-game slate. Read per completed arm
+instead: **9 arms in 56.346 h = 6.261 h/arm** — the two readings agree to within
+a minute per arm.
 
 | unit | pre-registered (§14) | **measured** |
 |---|---|---|
-| serial rate | 12.2077 min/game | **12.0276** pooled / **15.7444** meeting-bearing legs only |
-| one 50-seed arm, two-leg effective | ≈ 5 h | **≈ 5.77 h** (6.169 h/arm by completed-arm count) |
-| the 9-arm slate (≈450 games) | ≈ 46 h | **≈ 51.9 h** |
+| serial rate | 12.2077 min/game | **12.5175** pooled / **15.7877** meeting-bearing legs only |
+| one 50-seed arm, two-leg effective | ≈ 5 h | **≈ 6.27 h** (6.261 h/arm by completed-arm count) |
+| the 9-arm slate (≈450 games) | ≈ 46 h | **≈ 56.5 h** |
 
-The two-leg effective rate the gate priced at "~5 h/finalist" came in at
-**≈ 5.77 h**; the slate projection of ≈46 h came in at **≈ 51.9 h**, **13%
-over**. The projection was honest and slightly optimistic; the gap is the
-meeting-bearing legs' 15.74 min/game, not the provider.
+**The projection was honest and optimistic by about a fifth.** The serial rate
+it was built on came in at **12.5175** against a predicted 12.2077 — **2.5%
+off**, an unusually good call. What the projection missed was the *posture*: the
+gate priced "~5 h/finalist" and the two-leg rolling posture delivered
+**≈ 6.27 h**, so the slate landed at **≈ 56.5 h** against ≈46 h, **23% over**.
+The gap is not the provider — idle time across the whole campaign is 0.117 h. It
+is the meeting-bearing legs' **15.7877 min/game**, the three sleep stalls
+(3.881 h of real wall-clock), and the **32 recording attempts** spent on three
+stuck seeds to salvage one of them.
 
 ---
 
@@ -903,10 +921,10 @@ baseline-5) stay in place** as the prior record — history preserved per the
 
 ## 16. The evidence tables — RECORDED
 
-The skeletons above are now filled from the operator run. Eight of the nine arms
-are recorded and scored; **`p18-crew-c1-gen0` is STILL RECORDING** and every one
-of its cells reads *pending (recording)* — a single later edit fills that row and
-nothing else in this section moves.
+The skeletons above are now filled from the operator run. **All nine arms are
+recorded and scored** — `p18-crew-c1-gen0`, the last leg to land, closes the
+crew block and with it §16.e's deciding cell. No cell in this section reads
+*pending*.
 
 Every cell below is read from a committed `~/ailibi-campaign-1826/scoring/<arm>/`
 JSON (`summary.json`, `validity.json`, `core.json`, `watchability*.json`,
@@ -963,18 +981,19 @@ learned mover inverted a Δ.
 ### 16.b The crew diagnostic pairs (single-opponent, frozen `ea4bc955…`)
 
 Read this table under the **gate-validity discipline**: a row whose validity gate
-FAILS is a diagnostic reading, not selection evidence. Both `c2` rows FAIL and
-are marked accordingly. The 18.25 hand-off named no crew finalist and nothing
-here promotes one (§8.3).
+FAILS is a diagnostic reading, not selection evidence. **Three of the four rows
+FAIL** — both `c2` rows and `c1-gen0` — and all three are marked accordingly.
+`c1-gen9` is the only crew arm with a clean gate. The 18.25 hand-off named no
+crew finalist and nothing here promotes one (§8.3).
 
 | crew arm | dual stamp (crew / tactical) | validity gate | meeting_rate (≥0.60) | crew win conv. | witnessed kills / kills | flags/meeting (noise verdict) |
 |---|---|---|---|---|---|---|
 | `p18-crew-c1-gen9` | 50/50 `0bf179b7…` / 50/50 `ea4bc955…`, both uniform | **PASS** (0 failed checks) | **1.0** | **26/50 = 0.52** | 30/196 = 0.15306 | 0.96644 (noise 0.17592 < 0.27273 → **clears**) |
-| `p18-crew-c1-gen0` | pending (recording) | pending (recording) | pending (recording) | pending (recording) | pending (recording) | pending (recording) |
+| `p18-crew-c1-gen0` | 49/49 `bd6fdd0a…` / 49/49 `ea4bc955…`, uniform **over the stamped games** — seed 20 carries no `game_over` | **FAIL** (`all_games_reach_game_over`, `cost_and_provenance_exact`) | **1.0** | 25/49 finalized (25 of 50 recorded) — **not readable as selection evidence** | 33/200 = 0.16500 (49-game view) | 0.92667 (noise 0.15068 < 0.27273 → **clears**) |
 | `p18-crew-c2-gen9` | 48/48 `515fc066…` / 48/48 `ea4bc955…`, uniform **over the stamped games** — seeds 19 and 20 carry no `game_over` | **FAIL** (`all_games_reach_game_over`, `cost_and_provenance_exact`) | **0.6 — EXACTLY at the floor** | 7/48 — **not readable as selection evidence** | 45/231 = 0.19481 (48-game view) | 1.75758 (noise 1.3 > 0.27273 → **UNRESOLVABLE**) |
 | `p18-crew-c2-gen0` | 50/50 `888046d0…` / 50/50 `ea4bc955…`, both uniform | **FAIL** (`meeting_rate_and_resolution`, `cost_and_provenance_exact`) | **0.0** | 1/50 — **not readable as selection evidence** | 36/251 = 0.14343 | undefined — 0 meetings (**UNRESOLVABLE**) |
 
-**The two FAIL rows, quoted verbatim from `validity.json`.** They are recorded
+**The three FAIL rows, quoted verbatim from `validity.json`.** They are recorded
 here rather than dropped, per the gate-validity discipline — a starved arm is a
 finding, and hiding the FAIL would be the laundering the discipline exists to
 prevent.
@@ -997,6 +1016,19 @@ prevent.
 >
 > `seed 20: no substrate_flags stamp on game_over`
 
+`p18-crew-c1-gen0` — **both violations trace to seed 20 and nothing else**:
+
+> `seed 20: no game_over row (game never reached game_over)`
+>
+> `seed 20: no substrate_flags stamp on game_over`
+
+Its other eight checks all PASS, including `meeting_rate_and_resolution` at
+**1.0** (150 resolved meetings, 0 unresolved),
+`no_betrayal_ballots_or_accusations` over 862 multi-impostor ballots and
+`no_railroaded_crew_ejections` over 2875 rendered crew suspicions. This is a
+**one-seed** gate FAIL on an otherwise healthy leg, and §17.1 records why the
+seed was kept in-row rather than retried away.
+
 **`c2-gen9` sits EXACTLY on the meeting floor — and passes, inclusively.** Its
 `meeting_rate` is **0.6** against `eval/validity.py::MEETING_RATE_FLOOR = 0.60`,
 and the gate's own check is `rate >= MEETING_RATE_FLOOR`
@@ -1006,10 +1038,24 @@ therefore a **PASS** check on that arm — its gate FAIL comes from the two
 stalemate seeds, not from meeting starvation. The row is a boundary case and is
 labelled as one rather than rounded into a comfortable margin.
 
+**The referee reads 0.0 on `c1-gen0` and `c2-gen9`, and that is the integrity
+layer, not a play result.** Both arms report `mean_score` **0.0** / `median_score`
+**0.0** with `integrity_ok` **false**: the scorer **zeroes** the watchability
+score whenever a non-finalized game sits in the set, because a score computed
+across a partial game is not a score. `c1-gen0`'s own `per_game` row for seed 20
+shows the mechanism — `floor_multiplier` **0.0**, `score` **0.0** — while its 49
+finalized games carry ordinary per-game scores. **These zeroes are never read as
+a referee verdict**, and they are never read without the gate that explains
+them; the arms' *supply gauges* (which the same JSON reports independently) are
+what §16.c and §16.e use.
+
 **What the FAIL rows still support.** `witnessed kills / kills` is read from
 `instruments.json` and does not depend on the meeting economy, so the kill-craft
 rider (§12, §16.e) reads those cells; `crew win conv.` is a **gate-invalid**
-reading on both c2 rows and is excluded from every selection claim in this Part.
+reading on all three FAIL rows and is excluded from every selection claim in this
+Part — including the `c1-gen0` cell that §16.e's conversion comparison quotes,
+which is offered as a diagnostic contrast and explicitly not as evidence for a
+crew champion.
 
 ### 16.c Cell 1 — the split-half noise read (§10)
 
@@ -1039,7 +1085,9 @@ side by side.
 | `p18-crew-c1-gen9` | `witnessed_event_rate` | 0.13000 | 0.17708 | 0.04708 | 0.00847 | **UNRESOLVABLE** | +0.11916 | z = **+3.8917** |
 | | `flags_per_meeting` | 0.87671 | 1.05263 | 0.17592 | 0.27273 | clears | −0.12447 | FAIL, starved supply |
 | | `testimony_backed_conversion` | 0.41667 | 0.40741 | 0.00926 | 0.16185 | clears | −0.23605 | FAIL, floor lifted to 0.64739 |
-| `p18-crew-c1-gen0` | all three | pending (recording) | pending (recording) | pending (recording) | pending (recording) | pending (recording) | pending (recording) | pending (recording) |
+| `p18-crew-c1-gen0` | `witnessed_event_rate` | 0.15686 | 0.17347 | 0.01661 | 0.00847 | **UNRESOLVABLE** | +0.13110 | z = **+4.1715** |
+| | `flags_per_meeting` | 0.84932 | 1.00000 | 0.15068 | 0.27273 | clears | −0.16424 | FAIL, starved supply |
+| | `testimony_backed_conversion` | 0.41791 | 0.41026 | 0.00765 | 0.16880 | clears | −0.26139 | FAIL, floor lifted to 0.67518 |
 | `p18-crew-c2-gen9` | `witnessed_event_rate` | 0.22807 | 0.16239 | 0.06568 | 0.00847 | **UNRESOLVABLE** | +0.16091 | z = **+4.8706** |
 | | `flags_per_meeting` | 1.16667 | 2.46667 | 1.30000 | 0.27273 | **UNRESOLVABLE** | +0.66667 | the §10.4 prediction landing (see below) |
 | | `testimony_backed_conversion` | 0.36842 | 0.35000 | 0.01842 | 0.08900 | clears | +0.00299 | inside a gate-FAIL arm |
@@ -1047,11 +1095,13 @@ side by side.
 | | `flags_per_meeting` | — | — | — | 0.27273 | **UNRESOLVABLE** (no meetings) | — | undefined |
 | | `testimony_backed_conversion` | — | — | — | 0.25000 | **UNRESOLVABLE** (no meetings) | — | undefined |
 
-**The systematic finding: `witnessed_event_rate` is UNRESOLVABLE on ALL EIGHT
-scored arms.** Not one arm's split-half noise fits inside the gauge's 25%
-ceiling of **0.00847** — the smallest witnessed-gauge noise on the board is
-`c2-gen0`'s **0.01479**, still **1.75×** the ceiling, and the largest is
-`7f73929d`'s **0.08671**, **10.2×** it. The cause is structural, not per-arm: the
+**The systematic finding: `witnessed_event_rate` is UNRESOLVABLE on ALL NINE
+scored arms — 9 of 9, the complete slate.** Not one arm's split-half noise fits
+inside the gauge's 25% ceiling of **0.00847** — the smallest witnessed-gauge
+noise on the board is `c2-gen0`'s **0.01479**, still **1.75×** the ceiling, and
+the largest is `7f73929d`'s **0.08671**, **10.2×** it. `c1-gen0`, the last leg
+in, lands at **0.01661** (1.96×) and changes nothing. The cause is structural,
+not per-arm: the
 baseline-6 threshold base for this gauge is **6/177 = 0.03390**, a rare-event
 point estimate, so its 25% ceiling is **0.00847** while every arm's per-half
 witnessed rate moves by **0.015–0.087** between 25-game halves. **At n=50 this
@@ -1073,12 +1123,13 @@ cell is **the §10.4 prediction landing**: the pre-registration named
 `flags_per_meeting` "the UNRESOLVABLE-prone gauge on the meeting-scarce crew
 lineage", quoting the committed n=3 `noise_to_threshold_ratio` **1.8333** for c2
 against **0.3303** for c1. At n=50 the measured ratio is
-**1.30 / 0.27273 = 4.767** on c2 and **0.17592 / 0.27273 = 0.645** on c1 — c2
-is worse than predicted, c1 clears. The prediction's **direction** is confirmed;
-its **magnitude** understated the c2 problem.
+**1.30 / 0.27273 = 4.767** on c2-gen9, against **0.17592 / 0.27273 = 0.645** on
+c1-gen9 and **0.15068 / 0.27273 = 0.553** on c1-gen0 — c2 is worse than
+predicted and **both** c1 arms clear. The prediction's **direction** is confirmed
+on both sides of the lineage split; its **magnitude** understated the c2 problem.
 
 `testimony_backed_conversion` **clears the precondition on every arm that has
-meetings** (7 of 7), with noise between 0.00380 and 0.08357 — it is the most
+meetings** (8 of 8), with noise between 0.00380 and 0.08357 — it is the most
 stable gauge on the board and the one 18.27 can read most safely.
 
 ### 16.d Cell 2 — the F13 champions-vs-runner-ups cell (§11)
@@ -1169,9 +1220,15 @@ conversion is **26/50 = 0.52** against the frozen champion — 24 of those wins 
 `CREWMATE_EJECT`, 2 by `CREWMATE_TASKS`, with 24 `IMPOSTOR_PARITY` losses. Its
 referee misses the same two supply gauges as every impostor arm (mean 47.99,
 flags 0.96644 below 1.09091, conversion 0.41135 below the derived 0.64739), and
-its `flags_per_meeting` **clears** the noise precondition. `p18-crew-c1-gen0`,
-the same-encoder (`crew-option-features-v2`) same-opponent control, is **still
-recording** — 29 of 50 seeds logged.
+its `flags_per_meeting` **clears** the noise precondition.
+
+`p18-crew-c1-gen0`, the same-encoder (`crew-option-features-v2`) same-opponent
+control, lands the same shape: **1.0** meeting_rate, 150 resolved meetings, dual
+stamp uniform over its 49 stamped games, `flags_per_meeting` **clears** the
+precondition, and the same two supply gauges below floor (flags 0.92667 below
+1.09091, conversion 0.41379 below the derived 0.67518). Its gate FAILS on **one
+seed** — seed 20 (§16.b, §17.1) — which is a different failure from anything on
+the c2 side: **the c1 lineage plays the game at both generations.**
 
 **The c2 lineage does not.** `p18-crew-c2-gen0` is **total starvation**:
 `meeting_rate` **0.00**, **0** meetings of any kind, **0** ejections, **0**
@@ -1204,45 +1261,90 @@ baseline-6). Every scored arm's cell, read from `instruments.json`:
 | `p18-imp-7f73929d` (n=49) | 44/200 | 0.22000 | 9.26× | +5.3170 |
 | `p18-fsm-comparator` | 8/174 | 0.04598 | 1.93× | +0.5782 |
 | `p18-crew-c1-gen9` | 30/196 | 0.15306 | 6.44× | +3.8917 |
-| `p18-crew-c1-gen0` | pending (recording) | pending | pending | pending |
+| `p18-crew-c1-gen0` | 33/200 | 0.16500 | 6.94× | +4.1715 |
 | `p18-crew-c2-gen9` | 45/231 | 0.19481 | 8.20× | +4.8706 |
 | `p18-crew-c2-gen0` | 36/251 | 0.14343 | 6.04× | +3.7510 |
 
-**The 18.25 elevation reproduces at n=50 — and two facts here narrow what can
-cause it.** First, it is present **against SCRIPTED crew**: the four impostor
-arms play the stock FSM crew and still run **6.2×–9.4×** corpus, while the
-all-scripted comparator on the same seeds runs **1.93×** (z **+0.5782**,
-within noise of the floor). So the elevation cannot be a *learned-crew*
-observation effect in those rows — there is no learned crew in them. Second, it
-is present **in a leg with no meetings at all**: `c2-gen0` runs **6.04×** corpus
-with `meeting_rate` 0.00 and zero LLM calls, so the elevation cannot require the
-meeting economy or the language model either.
+**The 18.25 elevation reproduces at n=50 — and two facts narrow what can cause it
+before the deciding cell is even read.** First, it is present **against SCRIPTED
+crew**: the four impostor arms play the stock FSM crew and still run
+**6.2×–9.4×** corpus, while the all-scripted comparator on the same seeds runs
+**1.93×** (z **+0.5782**, within noise of the floor). So the elevation cannot be
+a *learned-crew* observation effect in those rows — there is no learned crew in
+them. Second, it is present **in a leg with no meetings at all**: `c2-gen0` runs
+**6.04×** corpus with `meeting_rate` 0.00 and zero LLM calls, so the elevation
+cannot require the meeting economy or the language model either.
 
-What both facts point at is the **impostor** side and the physical layer: the
-learned movers kill where crew can see, and the scripted mover does not. The
-comparator row is the control that makes this legible — same seeds, same
-substrate, same instrument, **1.93×** vs **6.2×–9.4×**.
+**THE DECIDING CELL — the c1 gen-9-vs-gen-0 pair, measured.** §12 fixed the read
+as gen-9 vs its **own** gen-0 control at the **same frozen opponent** — that
+pairing holds the impostor constant, so any gap between them is attributable to
+the crew genome's generation and nothing else. Both arms are now in:
 
-**What the c1 gen-9-vs-gen-0 pair will decide, and why it stays pending.** §12
-fixed the read as gen-9 vs its **own** gen-0 control at the **same frozen
-opponent** — that pairing holds the impostor constant, so any gap between them is
-attributable to the crew genome's generation and nothing else. `c1-gen9` is in
-at **30/196 = 0.15306** (6.44× corpus, z +3.8917). `c1-gen0` is **still
-recording**. When it lands:
+| c1 lineage arm | crew-witnessed kills / kills | rate | × corpus | z |
+|---|---|---|---|---|
+| `p18-crew-c1-gen9` (gen-9 candidate) | 30/196 | 0.15306 | 6.44× | +3.8917 |
+| `p18-crew-c1-gen0` (gen-0 control) | 33/200 | 0.16500 | 6.94× | +4.1715 |
+| **margin (gen-9 − gen-0)** | | **−0.01194** | | |
 
-- **`c1-gen0` ≈ `c1-gen9`** (both ≈6× corpus) ⇒ the elevation is an **artifact**
-  of the frozen champion's kill placement, not crew learning — consistent with
-  everything above.
-- **`c1-gen9` materially above `c1-gen0`** ⇒ a **learned-crew observation
-  effect** survives on the c1 lineage even though it cannot explain the impostor
-  and c2-gen0 rows.
+**The pre-registered branch that fires is the ARTIFACT one: gen-9 ≈ gen-0, both
+above corpus.** The margin is **−0.01194** — the *untrained* gen-0 control sits
+marginally **higher** than the gen-9 candidate, which is the opposite of a
+learning effect and is in any case a gap of about one witnessed kill in two
+hundred. Both arms sit at ~6.4×–6.9× the 12/505 corpus cell. §12's own words for
+this outcome: "gen-9 ≈ gen-0, both above corpus" ⇒ **artifact**, not a
+learned-crew observation effect.
 
-Both outcomes are reportable and neither is a failure (§12). **This cell is
-pending and is the one cell in this Part that a later edit is expected to
-fill.** Note the c2 pair cannot substitute for it: `c2-gen0` at **6.04×** with
-zero meetings and `c2-gen9` at **8.20×** with a gate FAIL are not a clean
-generation contrast, and the c2 gen-0 arm never played a game in the sense the
-rider means.
+**And the artifact reading is over-determined.** Three independent cells now say
+the same thing, each removing a different candidate cause:
+
+- the four **impostor** arms run 6.2×–9.4× corpus against **scripted** crew —
+  removes *learned crew* as a requirement;
+- **`c2-gen0`** runs 6.04× corpus with **zero meetings and zero LLM calls** —
+  removes the *meeting economy* and the *language model* as requirements;
+- the **c1 gen-9-vs-gen-0** pair shows **no generation effect at the same frozen
+  opponent** — removes *crew training* as the driver on the one lineage that
+  could have carried it.
+
+What is left is the **impostor** side and the physical layer, with the
+`fsm-comparator` row as the control that isolates it: same seeds, same substrate,
+same instrument, **1.93×** (z +0.5782, within noise of the floor) for the
+scripted mover against **6.2×–9.4×** for every learned one. **The routed rider
+from 18.25 is answered: the elevation is an artifact of learned-impostor kill
+placement, not a learned-crew observation effect.**
+
+**The conversion read on the same pair — same-seed, 49-seed intersection.**
+`c1-gen0`'s seed 20 is the stalemate, so the honest comparison excludes it from
+**both** arms; `c1-gen9`'s seed-20 game was an `IMPOSTOR_PARITY`, so dropping it
+costs gen-9 no crew win:
+
+| c1 lineage arm | crew wins / 49-seed intersection | conversion |
+|---|---|---|
+| `p18-crew-c1-gen9` | 26/49 | 0.53061 |
+| `p18-crew-c1-gen0` | 25/49 | 0.51020 |
+| **margin** | **+1 game** | **+0.02041** |
+
+**One game.** After ten generations of crew evolution, the gen-9 candidate
+converts one more game than its own untrained gen-0 control on the same 49 seeds
+against the same frozen opponent. **There is no learning signal on the c1
+lineage** — which is consistent with 18.25 naming no crew finalist, and is
+recorded here as the n=50 confirmation of that hand-off rather than as a new
+result.
+
+**The stalemate census across the crew block.** Four arms, three distinct
+stuck-game mechanisms — worth tabulating because they are not the same failure:
+
+| crew arm | stalemates | character |
+|---|---|---|
+| `p18-crew-c1-gen9` | 0 | clean leg, gate PASS |
+| `p18-crew-c1-gen0` | 1 (seed 20) | **meeting-bearing** (2 meetings) — LLM-nondeterministic, yet **robust**: identical stalemate on all 8 attempts |
+| `p18-crew-c2-gen9` | 2 (seeds 19, 20) | **LLM-free** — engine-deterministic, unretryable by construction (§17.1) |
+| `p18-crew-c2-gen0` | 0 | no stalemates because impostors win fast — 49 of 50 by `IMPOSTOR_PARITY` |
+
+The c2 pair could never have substituted for the deciding cell: `c2-gen0` at
+**6.04×** with zero meetings and `c2-gen9` at **8.20×** with a gate FAIL are not
+a clean generation contrast, and the c2 gen-0 arm never played a game in the
+sense the rider means. It is the c1 pair — two healthy, meeting-rich legs at the
+same encoder and the same opponent — that carries the ruling above.
 
 ---
 
@@ -1325,3 +1427,36 @@ rider means.
   partial games out of the instruments while the gate keeps them visible. Every
   `c2-gen9` instrument cell in §16.b, §16.c and §16.e is the 48-game view, and is
   labelled as such where it is quoted.
+- **`p18-crew-c1-gen0` seed 20 is KEPT IN-ROW as a recorded stalemate, and the
+  row ships validity-FAIL-recorded.** The seed was attempted **8 times** — 4
+  in-leg passes plus a bonus 4-pass v2 run after the `leg-abort` — and **every
+  attempt returned rc 0** while producing the identical outcome: a complete
+  1002-row replay reaching **tick 999** with no `game_over` row (§14.1). It is
+  handled exactly like the c2 stalemates: kept in the directory, failing the gate
+  in the open (`"seed 20: no game_over row (game never reached game_over)"`,
+  `"seed 20: no substrate_flags stamp on game_over"` — both violations trace to
+  this one seed), with instruments computed over the **49-game finalized view**
+  behind the byte-completeness fence
+  (`instruments.json` `instruments_view` = `{"games": 49, "excluded_stalemates":
+  ["replay-seed-20.jsonl"]}`). It was **not** excluded the way `7f73929d` seed 35
+  was, because the two failures are not the same thing: seed 35 was an **impure
+  validation** (rc 99, nothing usable recorded), whereas seed 20 recorded
+  cleanly 8 times and the game itself is what did not finish.
+- **The stalemate finding EXTENDS to a meeting-bearing, non-deterministic
+  class — a third stuck-seed class.** The c2 stalemates were explicable: no
+  meetings, no LLM calls, engine-deterministic, so retrying was mathematically
+  hopeless. Seed 20 is **not** that. It holds **2 meetings**, so it *does* make
+  LLM calls and *is* nondeterministic between attempts — and it still stalled at
+  tick 999 on all 8 tries. **Nondeterminism is therefore not sufficient for a
+  retry to help.** The campaign's three stuck seeds are three distinct classes,
+  and the runner's single `rc != 0` retry trigger sees only one of them:
+  1. **impure validation** (`fsm-comparator` seed 5, `7f73929d` seed 35) — rc 99,
+     retryable, converged once in 14 attempts and never in 10;
+  2. **LLM-free deterministic stalemate** (`c2-gen9` seeds 19, 20) — rc 0,
+     **unretryable by construction**, reproduced byte-identically in ~80 s;
+  3. **meeting-bearing robust stalemate** (`c1-gen0` seed 20) — rc 0,
+     nondeterministic, **retryable in principle and hopeless in practice** at 8
+     attempts.
+  Classes 2 and 3 both exit `rc 0`, so the retry machinery never sees them as
+  failures at all; both were caught by the scorer's `game_over` check, not by the
+  runner. That is the operational lesson this campaign hands forward.

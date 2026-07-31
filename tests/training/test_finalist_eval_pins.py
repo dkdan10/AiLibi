@@ -19,10 +19,13 @@ What is pinned, and why:
   When that ref DOES resolve (a full local clone), the test additionally
   parses both sides and compares the decoded **dicts** — semantic identity
   that survives a re-serialisation, which a bare byte compare would not.
-* **The slate.** Every phase-18 entrant appears exactly once, in the
-  pre-registered append order (§15 appends under the §8.1 arm names). The
-  expected values all come from ONE module-level table, :data:`_SLATE`, so a
-  later arm is one entry.
+* **The slate.** All nine pre-registered arms appear exactly once, in the
+  report's own §8.1 listing order. §15 says the phase-18 rows APPEND to the
+  file, and the first eight did; the ninth (``p18-crew-c1-gen0``) recorded
+  last but was written into its §8.1 SLOT rather than at the tail, so the
+  committed row order now equals the §8.1 order exactly and is pinned as
+  such. The expected values all come from ONE module-level table,
+  :data:`_SLATE`.
 * **The stamp conventions, which DIFFER by arm side.** Impostor rows carry a
   single read-back identity (``tactical_policy_stamp``) that must equal both
   the committed sidecar digest and the sha embedded in the artifact directory
@@ -41,11 +44,11 @@ What is pinned, and why:
   ``test_the_comparator_cell_proves_the_impostor_side_is_scripted``: the
   all-scripted arm carries the canonical fsm-default stamp, ZERO learned and
   ZERO crew stamp games, and states ``opponent_absence_proven``.
-* **The honesty pins.** Two crew diagnostics FAIL their validity gate, and the
-  rows say so themselves — the failing check names, the stalemate replay
-  files, the starved meeting rate. A row that quietly flipped to ``passed``
-  while its counters stayed broken is exactly the drift these pins exist to
-  catch, so the failures are pinned as precisely as the passes.
+* **The honesty pins.** Three of the four crew diagnostics FAIL their validity
+  gate, and the rows say so themselves — the failing check names, the
+  stalemate replay files, the starved meeting rate. A row that quietly flipped
+  to ``passed`` while its counters stayed broken is exactly the drift these
+  pins exist to catch, so the failures are pinned as precisely as the passes.
 
 Floors are re-derived arithmetically from the baseline-6 pins
 (``eval/watchability.py``: witnessed 6/177, flags 180/165, conversion 78/136
@@ -103,19 +106,19 @@ _IMPOSTOR: Final[str] = "impostor"
 _COMPARATOR: Final[str] = "comparator"
 _CREW: Final[str] = "crew"
 
-#: The §8.1 roster — all nine pre-registered arms, recorded or not yet.
-_SLATE_ROSTER: Final[frozenset[str]] = frozenset(
-    {
-        "p18-imp-ea4bc955",
-        "p18-imp-bfd145cb",
-        "p18-imp-6d327dcb",
-        "p18-imp-7f73929d",
-        "p18-fsm-comparator",
-        "p18-crew-c1-gen9",
-        "p18-crew-c1-gen0",
-        "p18-crew-c2-gen9",
-        "p18-crew-c2-gen0",
-    }
+#: The §8.1 arm listing, in the report's own order — quoted from the
+#: pre-registration, not from the file, so the file is checked AGAINST the
+#: plan rather than described by itself.
+_SLATE_8_1_ORDER: Final[tuple[str, ...]] = (
+    "p18-imp-ea4bc955",
+    "p18-imp-bfd145cb",
+    "p18-imp-6d327dcb",
+    "p18-imp-7f73929d",
+    "p18-fsm-comparator",
+    "p18-crew-c1-gen9",
+    "p18-crew-c1-gen0",
+    "p18-crew-c2-gen9",
+    "p18-crew-c2-gen0",
 )
 
 
@@ -154,9 +157,9 @@ class Arm:
     stalemate_replays: tuple[str, ...] | None
 
 
-#: The pre-registered slate, in the file's APPEND order (§15). Adding a later
-#: arm is ONE entry here — every test below derives its expectations from this
-#: table, and none of them names an arm's numbers anywhere else.
+#: The pre-registered slate, in committed row order (== the §8.1 order). Every
+#: test below derives its expectations from this table, and none of them names
+#: an arm's numbers anywhere else, so an arm is ONE entry.
 _SLATE: Final[tuple[Arm, ...]] = (
     Arm(
         entrant="p18-imp-ea4bc955",
@@ -321,6 +324,38 @@ _SLATE: Final[tuple[Arm, ...]] = (
         stalemate_replays=None,
     ),
     Arm(
+        entrant="p18-crew-c1-gen0",
+        side=_CREW,
+        weights_sha256=(
+            "bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c"
+        ),
+        # The c1 CONTROL dir, named for the control and NOT sha-named — the
+        # dir-name-sha identity stays an impostor-arm pin.
+        artifact_path=(
+            "training/artifacts/coevo/realpath-crew/controls/crew-owned-tasks-es-gen0"
+        ),
+        policy_id="crew-owned-tasks-es",
+        method="crew-utility-scorer-es",
+        encoder_version="crew-option-features-v2",
+        anchor_policy="fsm-default",
+        games_total=50,
+        # One seed stalled out with no ``game_over`` row, so 49 games' bytes
+        # could prove either identity — and the referee scored NOTHING.
+        stamp_games=49,
+        missing_seeds=(),
+        impostor_wins=24,
+        impostor_win_rate=0.48,
+        meeting_rate=1.0,
+        mean_score=0.0,
+        median_score=0.0,
+        referee_passed=False,
+        validity_passed=False,
+        validity_failures=frozenset(
+            {"all_games_reach_game_over", "cost_and_provenance_exact"}
+        ),
+        stalemate_replays=("replay-seed-20.jsonl",),
+    ),
+    Arm(
         entrant="p18-crew-c2-gen9",
         side=_CREW,
         weights_sha256=(
@@ -385,38 +420,6 @@ _SLATE: Final[tuple[Arm, ...]] = (
         ),
         stalemate_replays=(),
     ),
-    # TODO(18.26): the ninth §8.1 arm, ``p18-crew-c1-gen0``, records LAST and
-    # APPENDS HERE (§15 append order, so it lands after ``p18-crew-c2-gen0``
-    # rather than in the §8.1 listing position). Uncomment this entry and fill
-    # every field from the committed row's OWN bytes — never from this comment,
-    # and never from the report's prose. §8.1 DECLARES the identity as
-    # ``bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c`` at
-    # ``training/artifacts/coevo/realpath-crew/controls/crew-owned-tasks-es-gen0``
-    # (a control dir, so NOT sha-named); if the row disagrees, the row wins and
-    # the disagreement is the finding.
-    #
-    # Arm(
-    #     entrant="p18-crew-c1-gen0",
-    #     side=_CREW,
-    #     weights_sha256="TODO",
-    #     artifact_path="TODO",
-    #     policy_id="TODO",
-    #     method="TODO",
-    #     encoder_version="TODO",  # must start with "crew-"
-    #     anchor_policy="TODO",
-    #     games_total=0,  # TODO
-    #     stamp_games=0,  # TODO
-    #     missing_seeds=(),  # TODO
-    #     impostor_wins=0,  # TODO
-    #     impostor_win_rate=0.0,  # TODO
-    #     meeting_rate=0.0,  # TODO
-    #     mean_score=0.0,  # TODO
-    #     median_score=0.0,  # TODO
-    #     referee_passed=False,  # TODO
-    #     validity_passed=False,  # TODO
-    #     validity_failures=frozenset(),  # TODO
-    #     stalemate_replays=(),  # TODO
-    # ),
 )
 
 #: The frozen impostor opponent every crew diagnostic was recorded against
@@ -520,13 +523,15 @@ def test_the_two_17_14_rows_stay_first_and_unchanged() -> None:
 
 
 def test_every_slate_arm_appears_exactly_once_in_the_pre_registered_order() -> None:
-    """The phase-18 rows are the §8.1 slate, appended in §15 order.
+    """The phase-18 rows ARE the §8.1 slate, complete and in §8.1 order.
 
-    File ORDER is the pin (not just membership): the arms append in recording
-    order and 18.27's tables join on it, so a duplicated, re-ordered or
-    unregistered row must fail here rather than be read as another arm's cell.
-    Arms not yet recorded are allowed only while they are still pre-registered
-    and pending — never as a silent omission.
+    File ORDER is the pin, not just membership: 18.27's tables join on these
+    rows, so a duplicated, re-ordered, missing or unregistered row must fail
+    here rather than be read as another arm's cell. The order is checked
+    against the report's own §8.1 listing (quoted in :data:`_SLATE_8_1_ORDER`)
+    rather than against the file describing itself — the ninth arm recorded
+    last but was written into its §8.1 SLOT, so plan and file agree exactly,
+    and equality is what says the slate is COMPLETE at nine.
     """
 
     recorded = [json.loads(line)["entrant"] for line in _lines()]
@@ -534,10 +539,7 @@ def test_every_slate_arm_appears_exactly_once_in_the_pre_registered_order() -> N
 
     assert recorded[len(_PRIOR_ENTRANTS) :] == slate
     assert len(set(recorded)) == len(recorded)
-    assert set(slate) <= _SLATE_ROSTER
-
-    pending = _SLATE_ROSTER - set(slate)
-    assert pending <= {"p18-crew-c1-gen0"}
+    assert tuple(slate) == _SLATE_8_1_ORDER
 
 
 def test_every_phase_18_row_records_the_same_substrate_and_roster() -> None:
@@ -871,8 +873,9 @@ def test_the_c2_diagnostics_report_the_stall_and_the_dead_meeting_economy() -> N
     meeting ever convened, so ejection accuracy, conversion and both flag
     gauges are UNDEFINED (``None``) rather than 0.0, and the derived
     conversion floor clamps to 1.0 against a supply that does not exist.
-    ``c1-gen9`` is the arm that DID pass its gate — pinned alongside, so
-    "everything fails" can never pass as a description of this slate.
+    ``c1-gen9`` is the ONE crew diagnostic that passed its gate — pinned
+    alongside, so "everything fails" can never pass as a description of this
+    slate either (the other three crew rows do fail, each for its own reason).
     """
 
     rows = _rows()
@@ -915,7 +918,10 @@ def test_the_headline_cells_match_the_committed_rows() -> None:
 
     Every win rate is re-derived as ``impostor_wins / games_total`` as well as
     pinned, so a rate can never drift away from the count behind it — the
-    n=49 arm in particular reads 21/49, not a 50-game rounding. Referee mean
+    n=49 arm in particular reads 21/49, not a 50-game rounding. Every game is
+    then accounted for on both sides — a decided game went to exactly one
+    side, a stalemate to neither — which pins each arm's crew count by
+    arithmetic rather than by a literal free to drift from it. Referee mean
     and median ride along because the referee verdict is read WITH the win
     edge, never alone.
     """
@@ -932,6 +938,9 @@ def test_the_headline_cells_match_the_committed_rows() -> None:
             arm.impostor_wins / arm.games_total
         )
         assert core["meeting_rate"] == pytest.approx(arm.meeting_rate)
+
+        stalemates = len(arm.stalemate_replays or ())
+        assert core["crew_wins"] + core["impostor_wins"] + stalemates == arm.games_total
 
         assert watchability["mean_score"] == pytest.approx(arm.mean_score, abs=0.01)
         assert watchability["median_score"] == pytest.approx(arm.median_score, abs=0.01)
