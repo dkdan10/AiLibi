@@ -1271,15 +1271,36 @@ removed from **all four** arms. The three full arms' intersection cells are
 `excluded_seed` 35 and each gauge's floor); `7f73929d`'s own row **is** the n=49
 view already, so it is quoted unchanged. This is the cell:
 
-| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | split-half noise (max across the four) | reads toward |
+| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | intersection split-half noise, min–max across the four | reads toward |
 |---|---|---|---|---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | 0.08671 | (18.27 rules) |
-| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | 0.29291 | (18.27 rules) |
-| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | 0.08357 | (18.27 rules) |
+| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | 0.03381 – 0.08671 | (18.27 rules) |
+| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | 0.01728 – 0.29576 | (18.27 rules) |
+| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | 0.00380 – 0.09459 | (18.27 rules) |
 
-All four columns are the **same 49 seeds**. Every margin stays **negative** — the
-hypothesis-B shape is unchanged by the composition fix, and by a hair *larger* in
-magnitude on all three gauges than the mixed-composition read below.
+All four columns are the **same 49 seeds** — **and so is the noise column**. The
+three full arms' halves were re-split on the intersection (even/odd **minus seed
+35**) and their `h1`/`h2`/`split_half_noise` are persisted beside the measured
+values in `f13_intersection_gauges`; `7f73929d`'s own `split_half` block **is**
+its 49-seed noise and is quoted from its row. Per arm:
+
+| arm | `witnessed_event_rate` | `flags_per_meeting` | `testimony_backed_conversion` |
+|---|---|---|---|
+| `ea4bc955…` | 0.07503 | 0.22134 | 0.09459 |
+| `bfd145cb…` | 0.03381 | **0.29576** (UNRESOLVABLE) | 0.01504 |
+| `6d327dcb…` | 0.06499 | 0.13782 | 0.03696 |
+| `7f73929d…` | **0.08671** | 0.01728 | 0.00380 |
+
+**No precondition verdict moves on the intersection**: `bfd145cb`'s flags noise
+reads 0.29576 against the 0.27273 ceiling (0.29291 on its full view), so it stays
+**UNRESOLVABLE**; every other flags and conversion cell still clears, and
+`witnessed_event_rate` stays UNRESOLVABLE on all four as in §16.c. §16.c's own
+table is unchanged — those halves are the arm's **full recorded view** by
+construction (§16.c), and this column is the F13 cell's matched-composition
+counterpart, not a correction to it.
+
+Every margin stays **negative** — the hypothesis-B shape is unchanged by the
+composition fix, and by a hair *larger* in magnitude on all three gauges than the
+mixed-composition read below.
 
 **The per-arm values, for reference — NOT the cell.** These are each arm's own
 full-n instrument values, quoted elsewhere in this Part (§16.a, §16.c). They mix a
@@ -1292,27 +1313,31 @@ cannot be confused:
 | `flags_per_meeting` | 0.96914 | 0.93548 | 0.90000 | 0.82840 | 0.95231 | 0.86420 | *−0.08811* |
 | `testimony_backed_conversion` | 0.44444 | 0.36667 | 0.35099 | 0.38926 | 0.40556 | 0.37013 | *−0.03543* |
 
-**Every margin is smaller than the largest split-half noise on its own row**, and
-on **one** of three rows — `witnessed_event_rate` — smaller than *every*
-contributing arm's noise. On the other two rows the margin exceeds the quietest
-arm's noise (flags 0.09189 > `7f73929d`'s 0.01728; conversion 0.03483 >
-`bfd145cb`'s 0.01146 and `7f73929d`'s 0.00380) while still sitting under the
-loudest, as the bullets below itemise. Per §11.2 a margin smaller than either
-side's split-half noise "is reported as such and cannot be read as support for
-A". (All three bullets quote the **intersection** margins; the mixed-composition
-figures differ in the third decimal and change none of these relationships.)
+**Every margin is smaller than the largest intersection noise on its own row**,
+and on **one** of three rows — `witnessed_event_rate` — smaller than *every*
+contributing arm's noise. On the other two rows the margin clears some arms'
+noise and not others, and the split is different on each row; the bullets state
+it per side, without smoothing. Per §11.2 a margin smaller than either side's
+split-half noise "is reported as such and cannot be read as support for A". Every
+figure below is the **intersection** margin against the **intersection** noise —
+matched composition on both terms.
 
-- `witnessed_event_rate`: margin **0.00650** against noises of 0.02700–0.08671 —
-  the margin is **4 to 13 times smaller** than the noise. This row is also
-  UNRESOLVABLE on all four arms (§16.c), so it carries **no** discriminating
-  weight in either direction.
-- `flags_per_meeting`: margin **0.09189** against noises of 0.01728–0.29291. It
-  exceeds `7f73929d`'s noise (0.01728) but sits well under `bfd145cb`'s
-  (0.29291), and `bfd145cb`'s cell is itself UNRESOLVABLE.
-- `testimony_backed_conversion`: margin **0.03483** against noises of
-  0.00380–0.08357. This is the **only** row where the precondition clears on all
-  four arms, and the margin still sits below the largest contributing noise
-  (0.08357) while exceeding the two smallest (0.00380, 0.01146).
+- `witnessed_event_rate`: margin **0.00650** against noises of **0.03381
+  (`bfd145cb`) – 0.08671 (`7f73929d`)** — smaller than **all four**, by **5.2× to
+  13.3×**. This row is also UNRESOLVABLE on all four arms, so it carries **no**
+  discriminating weight in either direction.
+- `flags_per_meeting`: margin **0.09189**. It **exceeds one** arm's noise —
+  `7f73929d`'s **0.01728** — and sits **inside the other three**: `6d327dcb`
+  0.13782, `ea4bc955` 0.22134, `bfd145cb` **0.29576**, and `bfd145cb`'s cell is
+  itself UNRESOLVABLE.
+- `testimony_backed_conversion`: margin **0.03483**, and this row **changed
+  materially with the composition fix**. It **exceeds two** arms' noise —
+  `7f73929d`'s **0.00380** and **`bfd145cb`'s 0.01504** — and sits **inside the
+  other two**: `6d327dcb` **0.03696** (by 0.00213, a hair) and `ea4bc955`
+  **0.09459**. This is the **only** row where the precondition clears on all four
+  arms, so it is also the only one where every side of that comparison is
+  readable. The margin is *not* uniformly inside the noise here, and the report
+  does not claim it is.
 
 **The measured answer, stated beside the verbatim hypotheses (§11.1).** Quoting
 them unchanged:
@@ -1326,30 +1351,41 @@ them unchanged:
 
 The measured cells sit with **hypothesis-B-shaped** outcomes: all three margins
 are **negative** (runner-ups score *lower*, not higher, on every gauge — the
-opposite direction to A's "one step less far along the trade") and all three are
-**smaller than the split-half noise** they must clear. **The ruling is 18.27's.**
-Nothing in this Part declares A or B confirmed.
+opposite direction to A's "one step less far along the trade") and all three sit
+**inside the loudest contributing arm's split-half noise**, with
+`witnessed_event_rate` inside **every** arm's. On the other two rows the margin
+does clear the quietest arms — one of four on flags, two of four on conversion —
+so "smaller than the noise" is true of the row as a whole and **not** of every
+pairwise comparison inside it; the bullets above give the exact split. **The
+ruling is 18.27's.** Nothing in this Part declares A or B confirmed.
 
 **The within-lineage pair** (`run-02-utility-lambda4`: `ea4bc955…` gen-2 vs
 `bfd145cb…` gen-9) — the one comparison where lineage is held constant and only
 the champion/runner-up position moves, quoted as its own cell:
 
+on the **same 49-seed intersection** as the cell above, so its noises are the
+intersection noises too:
+
 | gauge | `ea4bc955…` (gen-2, champion) | `bfd145cb…` (gen-9, runner-up) | difference (runner-up − champion) | noise `ea4bc955` | noise `bfd145cb` |
 |---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.15228 | 0.14778 | **−0.00450** | 0.06417 | 0.02700 |
-| `flags_per_meeting` | 0.93548 | 0.90000 | **−0.03548** | 0.17821 | **0.29291** (UNRESOLVABLE) |
-| `testimony_backed_conversion` | 0.36667 | 0.35099 | **−0.01567** | 0.08357 | 0.01146 |
-| impostor win rate | 0.52 | **0.56** | **+0.04** | — | — |
+| `witnessed_event_rate` | 0.15625 | 0.15075 | **−0.00550** | 0.07503 | 0.03381 |
+| `flags_per_meeting` | 0.95364 | 0.89744 | **−0.05620** | 0.22134 | **0.29576** (UNRESOLVABLE) |
+| `testimony_backed_conversion` | 0.37162 | 0.34932 | **−0.02231** | 0.09459 | 0.01504 |
+| impostor win rate *(full 50 — no intersection cell is persisted for it)* | *0.52* | ***0.56*** | ***+0.04*** | — | — |
 
 **On the cleanest read available, all three gauge differences are inside the
 noise on at least one side, and two of three are inside the noise on both.** The
 lineage-mate runner-up scores marginally *lower* on every gauge and marginally
 *higher* on wins — the same negative-margin direction as the pooled cell, at a
 magnitude **smaller than** the instrument's own wobble: on **both** sides for
-`witnessed_event_rate` and `flags_per_meeting`, and on at least one side for
-`testimony_backed_conversion` (|−0.01567| sits inside `ea4bc955`'s 0.08357 and
-outside `bfd145cb`'s 0.01146). A difference that cannot clear its own instrument's
-noise is not a within-lineage result.
+`witnessed_event_rate` (|−0.00550| inside 0.07503 and 0.03381) and
+`flags_per_meeting` (|−0.05620| inside 0.22134 and 0.29576), and on **one** side
+for `testimony_backed_conversion` — |−0.02231| sits inside `ea4bc955`'s **0.09459**
+and **outside** `bfd145cb`'s **0.01504**, so on the quieter arm the difference
+does clear the wobble. The composition fix widened that one gap (it was
+|−0.01567| against 0.01146 on the full views) without changing which side of
+which noise it falls on. A difference that cannot clear its own instrument's
+noise on both sides is not a within-lineage result.
 
 **What `bfd145cb`'s UNRESOLVABLE flags precondition excludes.** `bfd145cb…` is
 the **only** arm in the F13 quartet whose `flags_per_meeting` fails the noise
@@ -1983,6 +2019,17 @@ carved where an exclusion lands: `7f73929d` **29**/10/10 (seed 35), `c1-g0`
 **29**/10/10 (seed 20), `c2-g9` **29**/10/**9** (seeds 19 and 20). Every other
 arm is 30/10/10.
 
+**`7f73929d`'s clause-(b) pairing views are committed too, on the comparator's
+row.** Clause (b) is a **per-split delta against the same-seed comparator**, so a
+49-seed arm needs 49-seed comparator splits or the deltas compare different seed
+sets in each partition. The comparator's own `seed mod 5` views on the shared 49
+seeds are persisted at
+`instruments.intersection_49_seed_for_7f73929d.seed_mod5_splits` — **29/10/10**,
+seed 35 removed from the `{0,1,2}` partition, which is the only one it lands in.
+**Those are the views to pair with `7f73929d`; the comparator's full-50 splits
+remain the reference for the other seven arms**, all of which share its seed set.
+Both rows appear below.
+
 **Illustration — the two kill-craft rate cells, five arms.** The full 12-cell ×
 3-split set is in the rows; this table exists so a reader can see the shape of
 the committed evidence without opening the JSON:
@@ -1993,7 +2040,8 @@ the committed evidence without opening the JSON:
 | `p18-imp-bfd145cb` | 16/122 = 0.13115 · 8/43 = 0.18605 · 6/38 = 0.15789 | 12/122 = 0.09836 · 4/43 = 0.09302 · 5/38 = 0.13158 |
 | `p18-imp-6d327dcb` | 25/108 = 0.23148 · 10/41 = 0.24390 · 8/44 = 0.18182 | 20/108 = 0.18519 · 9/41 = 0.21951 · 7/44 = 0.15909 |
 | `p18-imp-7f73929d` | 26/117 = 0.22222 · 10/42 = 0.23810 · 8/41 = 0.19512 | 18/117 = 0.15385 · 9/42 = 0.21429 · 8/41 = 0.19512 |
-| `p18-fsm-comparator` | 6/102 = 0.05882 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/102 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+| `p18-fsm-comparator` — full 50, the reference for the other seven arms | 6/102 = 0.05882 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/102 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+| `p18-fsm-comparator` — **49-seed, the pairing view for `7f73929d`** | 6/98 = 0.06122 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/98 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
 
 **What this report does and does not say about it.** As recorded, each of the
 four impostor arms sits **above** the same-seed comparator on **all three**
@@ -2031,6 +2079,10 @@ comparator, and the two entropy rulings are ✧ NOT-DEMONSTRATED, on both axes.
   (18.25's 36 legs); everything past it is labelled a projection and is re-priced
   from the first leg pair (§14).
 
+- **The 18.26 contract was amended on `main` (`6f24ec3`, owner, 2026-07-31) to
+  scope the forced flip-test relaxation** — this PR carries that work as
+  **in-scope**, superseding the earlier handling that recorded it in Decisions
+  only.
 - **The crew block's axis-2 cells are labelled NOT-DEMONSTRABLE rather than
   rescued by a new recording — OWNER DECISION, 2026-07-31, ratified in-session.**
   Pre-registration §2.1 judges crew claims **opponent-matched**: the comparator

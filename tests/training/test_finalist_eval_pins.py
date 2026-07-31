@@ -49,6 +49,10 @@ What is pinned, and why:
   cell rather than recomputing one. Its rates and margin are re-derived from
   its own counts, and its excluded seed is tied back to c1-gen0's declared
   stalemate.
+* **The intersection's own split-half read.** Each F13 gauge carries halves
+  measured on the cut. Because the excluded seed is ODD, the even half cannot
+  move and the odd half must — pinned as identity on one side and inequality
+  on the other, which no wholesale copy can satisfy.
 * **The split views and the leg clocks.** The §6.b seed-mod-5 partitions,
   with every expected size DERIVED from the arm's own seed list and declared
   fences, and their cells summing back to the flattened parents; plus each
@@ -618,6 +622,16 @@ def _fenced_seeds(row: dict[str, Any]) -> frozenset[int]:
         int(name.removeprefix("replay-seed-").removesuffix(".jsonl"))
         for name in stalled
     )
+
+
+def _assert_mod5_split_shape(split: dict[str, Any]) -> None:
+    """One mod-5 split's cell shape: games + 11 ratios + the point-biserial."""
+
+    assert set(split) == {"games", "one_hop_point_biserial"} | set(_MOD5_RATIO_CELLS)
+    for name in _MOD5_RATIO_CELLS:
+        assert set(split[name]) == {"n", "d"}
+        assert split[name]["n"] <= split[name]["d"]
+    assert set(split["one_hop_point_biserial"]) == {"r", "kills_total"}
 
 
 def _summed_across_splits(block: dict[str, Any], cell: str, field: str) -> int:
@@ -1220,14 +1234,7 @@ def test_the_seed_mod5_splits_partition_each_arms_own_games() -> None:
             )
             assert block[split]["games"] == expected
 
-            cells = block[split]
-            assert set(cells) == {"games", "one_hop_point_biserial"} | set(
-                _MOD5_RATIO_CELLS
-            )
-            for name in _MOD5_RATIO_CELLS:
-                assert set(cells[name]) == {"n", "d"}
-                assert cells[name]["n"] <= cells[name]["d"]
-            assert set(cells["one_hop_point_biserial"]) == {"r", "kills_total"}
+            _assert_mod5_split_shape(block[split])
 
         # The splits exhaust the INSTRUMENT view (fenced), not the raw games.
         kill_craft = row["instruments"]["kill_craft"]
@@ -1509,6 +1516,98 @@ def test_the_comparator_carries_the_49_seed_cut_for_the_f13_axis() -> None:
     assert block["alibi_survival"] == nested["alibi_survival"]
 
 
+def test_the_comparator_intersection_carries_its_own_mod5_splits() -> None:
+    """The scripted anchor's 49-seed cut is split-reproducible too.
+
+    The comparator's intersection block carries the same §6.b split views as
+    the full-arm blocks, so 7f73929d's axis-2 reads have a same-seed AND
+    same-split baseline to pair against. Sizes are derived from the 49-seed
+    set's own mod-5 classes (29/10/10) rather than listed, the cell shape is
+    the shared one, and the splits sum back to the parent intersection's
+    witnessed cells — the same closure the full-arm blocks satisfy against
+    their flattened parents. Only the comparator carries this nested view.
+    """
+
+    rows = _rows()
+    carriers = [
+        entrant
+        for entrant, row in rows.items()
+        if "seed_mod5_splits"
+        in (row.get("instruments", {}).get("intersection_49_seed_for_7f73929d") or {})
+    ]
+    assert carriers == ["p18-fsm-comparator"]
+
+    parent = rows["p18-fsm-comparator"]["instruments"][
+        "intersection_49_seed_for_7f73929d"
+    ]
+    block = parent["seed_mod5_splits"]
+    assert set(block) == {"note"} | set(_MOD5_RESIDUES)
+
+    intersection_seeds = sorted(set(_CANONICAL_SEEDS) - {_F13_EXCLUDED_SEED})
+    for split, residues in _MOD5_RESIDUES.items():
+        expected = sum(1 for seed in intersection_seeds if seed % 5 in residues)
+        assert block[split]["games"] == expected
+        _assert_mod5_split_shape(block[split])
+    assert sum(block[split]["games"] for split in _MOD5_RESIDUES) == len(
+        intersection_seeds
+    )
+
+    # The splits close on the parent cut, exactly as the full-arm blocks close
+    # on their flattened parents.
+    assert (
+        _summed_across_splits(block, "crew_witnessed_kills", "n")
+        == parent["crew_witnessed_kills"]
+    )
+    assert (
+        _summed_across_splits(block, "crew_witnessed_kills", "d")
+        == parent["kills_total"]
+    )
+    # ... and the scripted anchor still holds, split by split.
+    assert _summed_across_splits(block, "co_present_departure", "n") == 0
+    assert _summed_across_splits(block, "teammate_accusations", "n") == 0
+
+
+def test_the_f13_intersection_gauges_carry_their_own_split_half_read() -> None:
+    """The intersection's split-half read is RE-COMPUTED, and provably so.
+
+    Each F13 gauge cell now carries its own ``h1``/``h2``/``split_half_noise``
+    measured on the intersection's halves, and the noise is re-derived here as
+    ``abs(h1 - h2)`` rather than trusted.
+
+    The anti-copy relation turns out to be structural, and is pinned at full
+    strength: the excluded seed 35 is ODD, so it lives entirely in the odd
+    half. H1 (the even half) therefore CANNOT move — and is asserted identical
+    to the row's full-arm H1 on every gauge — while H2 and the noise MUST move,
+    and are asserted different on every gauge of every arm. A block copied
+    wholesale from the full-arm read would match on all three; a block whose
+    halves were mixed up would break the H1 identity. Pinning "at least one
+    gauge differs" would have caught neither cleanly.
+    """
+
+    rows = _rows()
+    assert _F13_EXCLUDED_SEED % 2 == 1  # the odd half owns the excluded seed
+
+    for entrant in _F13_INTERSECTION_MEASURED:
+        gauges = rows[entrant]["f13_intersection_gauges"]["gauges"]
+        full = rows[entrant]["split_half"]
+        for name in gauges:
+            cell = gauges[name]
+            assert set(cell) == {"floor", "measured", "h1", "h2", "split_half_noise"}
+            assert cell["split_half_noise"] == pytest.approx(
+                abs(cell["h1"] - cell["h2"])
+            )
+            # The even half is untouched by an odd-seed exclusion...
+            assert cell["h1"] == full[name]["h1"]
+            # ... and the odd half, with the noise, provably moved.
+            assert cell["h2"] != full[name]["h2"]
+            assert cell["split_half_noise"] != full[name]["noise"]
+
+    # The fields live on exactly the three F13 carriers' blocks.
+    others = {arm.entrant for arm in _SLATE} - set(_F13_INTERSECTION_MEASURED)
+    for entrant in others:
+        assert "f13_intersection_gauges" not in rows[entrant]
+
+
 def test_the_f13_intersection_gauges_put_the_quartet_on_one_seed_set() -> None:
     """The F13 four are compared on IDENTICAL games, not near-identical ones.
 
@@ -1556,7 +1655,8 @@ def test_the_f13_intersection_gauges_put_the_quartet_on_one_seed_set() -> None:
         assert set(gauges) == set(expected)
         full = _gauges(rows[entrant])
         for name, measured in expected.items():
-            assert set(gauges[name]) == {"floor", "measured"}
+            # The split-half fields are pinned by their own test above.
+            assert {"floor", "measured"} <= set(gauges[name])
             assert gauges[name]["measured"] == pytest.approx(measured)
             # The cut MOVED the gauge — this is not the uncut block again.
             assert gauges[name]["measured"] != full[name]["measured"]
