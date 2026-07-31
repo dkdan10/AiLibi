@@ -1006,7 +1006,19 @@ referee on the same two supply gauges.** The comparator is the only referee-PASS
 row on the board (54.96 mean, all three floors cleared), and it is also the
 lowest impostor win rate (0.26). The four learned arms sit **+0.12 to +0.30**
 above it on wins while each missing `flags_per_meeting` and
-`testimony_backed_conversion`. This is the Part I §3.a shape reproduced at
+`testimony_backed_conversion`.
+
+**One correction to that sentence, for 18.27's axis-1 ruling.** All four arms
+miss both *referee floors* — that much is a plain floor comparison and is what
+the column above reports. But `p18-imp-bfd145cb`'s **`flags_per_meeting` cell is
+UNRESOLVABLE**, not FAIL, for ruling purposes: its split-half noise **0.29291
+exceeds the 0.27273 ceiling** (§16.c), so **§10.3 excludes that cell from the
+axis-1 ruling** entirely. `bfd145cb` therefore fails axis-1 **on
+`testimony_backed_conversion` alone**, with its flags cell removed by the noise
+precondition rather than counted against it. The other three arms fail on both
+gauges with both cells clearing the precondition.
+
+This is the Part I §3.a shape reproduced at
 baseline 6 and at four arms instead of one: the co-adapted impostor starves the
 flag supply, the starved supply lifts the population-relative conversion floor,
 and the conversion misses the lifted floor. Ranking by win rate gives
@@ -1191,11 +1203,28 @@ the **witnessed** gauge instead.
 cell is **the §10.4 prediction landing**: the pre-registration named
 `flags_per_meeting` "the UNRESOLVABLE-prone gauge on the meeting-scarce crew
 lineage", quoting the committed n=3 `noise_to_threshold_ratio` **1.8333** for c2
-against **0.3303** for c1. At n=50 the measured ratio is
-**1.30 / 0.27273 = 4.767** on c2-gen9, against **0.17592 / 0.27273 = 0.645** on
-c1-gen9 and **0.15068 / 0.27273 = 0.553** on c1-gen0 — c2 is worse than
-predicted and **both** c1 arms clear. The prediction's **direction** is confirmed
-on both sides of the lineage split; its **magnitude** understated the c2 problem.
+against **0.3303** for c1.
+
+**Compared like-for-like, all three arms IMPROVED.** The committed n=3 figures are
+`noise / flags_floor` (floor **1.0909090909090908**), so the n=50 comparison has
+to use the same denominator — the **25% ceiling (0.27273)** is a different
+denominator and reading one against the other inflates the n=50 side by 4×. On
+`noise / floor`:
+
+| arm | n=3 committed | n=50 measured | direction |
+|---|---|---|---|
+| c2 lineage (`c2-gen9`) | **1.8333** | **1.30 / 1.09091 = 1.192** | improved 1.54× |
+| c1 lineage (`c1-gen9`) | **0.3303** | **0.17592 / 1.09091 = 0.161** | improved 2.05× |
+| c1 lineage (`c1-gen0`) | **0.3303** | **0.15068 / 1.09091 = 0.138** | improved 2.39× |
+
+So the earlier "worse than predicted" reading was an artifact of mixed
+denominators and **does not stand**: every arm's noise fell relative to the floor
+at n=50. What **does** survive is the prediction's **direction** — the c2 lineage
+remains far noisier than c1 (**7.4×** the c1-gen9 ratio at n=50, against **5.6×**
+at n=3, so the split widened rather than closed) — and the **verdict**: on the
+precondition's own 25% ceiling, `c2-gen9` still reads **1.30 / 0.27273 = 4.767×**
+and is **UNRESOLVABLE**, while c1-gen9 (**0.645**) and c1-gen0 (**0.553**) both
+clear. The prediction landed on which lineage, not on the magnitude.
 
 `testimony_backed_conversion` **clears the precondition on every arm that has
 meetings** (8 of 8), with noise between 0.00380 and 0.08357 — it is the most
@@ -1413,31 +1442,52 @@ Excluding seed 20 moves gen-9 by **+0.00401**, which is smaller than the margin
 it is being compared on; the correction changes no conclusion, but the
 comparison is now genuinely same-seed.
 
-**The pre-registered branch that fires is the ARTIFACT one: gen-9 ≈ gen-0, both
-above corpus.** The margin is **−0.00793** — the *untrained* gen-0 control sits
-marginally **higher** than the gen-9 candidate, which is the opposite of a
-learning effect and is in any case a gap of well under one witnessed kill in a
-hundred. Both arms sit at **6.61×** and **6.94×** the 12/505 corpus cell. §12's
-own words for this outcome: "gen-9 ≈ gen-0, both above corpus" ⇒ **artifact**,
-not a learned-crew observation effect.
+**The point estimates sit with the ARTIFACT branch — and "gen-9 ≈ gen-0" was
+never given a margin, so the pair read cannot close by itself.** The measured
+margin is **−0.00793**: the *untrained* gen-0 control sits marginally **higher**
+than the gen-9 candidate, which is the opposite direction from a learning effect,
+and both arms sit at **6.61×** and **6.94×** the 12/505 corpus cell. That is the
+shape §12's artifact branch describes. **But §12 wrote the branch condition as
+"gen-9 ≈ gen-0" and never operationalized "≈" as an equivalence margin**, and a
+null difference is not by itself equivalence evidence. Quoting the uncertainty
+instead of the point alone, the independent-binomial 95% interval on the
+difference (p₁ = 30/191 = 0.15707, p₂ = 33/200 = 0.16500, SE **0.03718**) is
 
-**And the artifact reading is over-determined.** Three independent cells now say
-the same thing, each removing a different candidate cause:
+> **−0.00793, 95% CI [−0.0808, +0.0649]**
+
+— an interval **±0.073 wide** that comfortably contains zero **and** contains
+generation effects up to roughly ±8 percentage points in either direction, on a
+gauge whose corpus anchor is 0.024. At n=49 per side this pair **cannot
+distinguish "no learning effect" from "an effect this study is too small to
+see"**. So: the **point estimates** sit with the artifact branch, and the
+scripted-crew and LLM-free cells below are **independent supporting context** for
+the same reading — but the **c1 pair read is formally INCONCLUSIVE** absent a
+pre-registered equivalence margin. **Whether to adopt an equivalence criterion
+post hoc, and what to rule on this cell, is 18.27's** — this section records the
+measurement, the interval, and the gap in the pre-registration, and rules
+nothing.
+
+**The artifact reading is nonetheless supported from three independent
+directions**, each removing a different candidate cause — context for 18.27's
+ruling, not a substitute for the missing equivalence margin:
 
 - the four **impostor** arms run 6.2×–9.4× corpus against **scripted** crew —
   removes *learned crew* as a requirement;
 - **`c2-gen0`** runs 6.04× corpus with **zero meetings and zero LLM calls** —
   removes the *meeting economy* and the *language model* as requirements;
-- the **c1 gen-9-vs-gen-0** pair shows **no generation effect at the same frozen
-  opponent** — removes *crew training* as the driver on the one lineage that
-  could have carried it.
+- the **c1 gen-9-vs-gen-0** pair shows **no *detectable* generation effect at the
+  same frozen opponent** — the one lineage that could have carried crew training
+  as the driver shows none, subject to the [−0.0808, +0.0649] interval above.
 
 What is left is the **impostor** side and the physical layer, with the
 `fsm-comparator` row as the control that isolates it: same seeds, same substrate,
 same instrument, **1.93×** (z +0.5782, within noise of the floor) for the
-scripted mover against **6.2×–9.4×** for every learned one. **The routed rider
-from 18.25 is answered: the elevation is an artifact of learned-impostor kill
-placement, not a learned-crew observation effect.**
+scripted mover against **6.2×–9.4×** for every learned one. **What the routed
+rider from 18.25 gets back is this: every measured cell points at learned-impostor
+kill placement rather than a learned-crew observation effect — the scripted-crew
+and zero-meeting cells carrying most of that weight, the c1 pair adding a
+null it is underpowered to certify. The rider is answered as far as n=49 per side
+allows; the ruling is 18.27's.**
 
 **The conversion read on the same pair — same-seed, 49-seed intersection.**
 `c1-gen0`'s seed 20 is the stalemate, so the honest comparison excludes it from
@@ -1510,15 +1560,16 @@ and the reading at †† holds to it.
 | effective deflection rate ‡ | 0.23980 (47/196) | — | — | — | — | — | — | — | — | — |
 | crew-witnessed kill rate — `crew_witnessed_kills / kills_total` | 0.03339 (20/599) † | 0.15228 (30/197) | 0.14778 (30/203) | 0.22280 (43/193) | 0.22000 (44/200) | 0.04598 (8/174) | 0.15306 (30/196) | 0.16500 (33/200) | 0.19481 (45/231) | 0.14343 (36/251) |
 | witnessed point-biserial, within one hop | 0.27899 | 0.21108 | 0.20847 | 0.52142 | 0.35293 | 0.27505 | 0.23395 | 0.20536 | 0.28347 | 0.26509 |
-| witnessed point-biserial, co-present | **no registered cell** (corpus sample: `null`) | 0.73122 | 0.77013 | 0.76781 | 0.77291 | **n/a** | 0.71486 | 0.83352 | 0.67307 | 0.65639 |
-| co-present departure — mean co-present, witnessed / unwitnessed | **no registered cell** (corpus sample: 0.0 / 0.0) | 0.66667 / 0.00599 | 0.66667 / 0.00578 | 0.88372 / 0.02000 | 0.84091 / 0.01282 | 0.00000 / 0.00000 | 0.73333 / 0.00602 | 0.78788 / 0.00000 | 0.53333 / 0.00538 | 0.50000 / 0.00465 |
+| **co-present departure (the REGISTERED cell)** — `co_present_ge1_kills / kills_total` | 0.00000 (0/505) ◆ | 0.10152 (20/197) | 0.10345 (21/203) | 0.18653 (36/193) | 0.17500 (35/200) | **0.00000 (0/174)** | 0.10714 (21/196) | 0.12500 (25/200) | 0.10823 (25/231) | 0.07570 (19/251) |
+| witnessed point-biserial, co-present — **explicitly NOT registered** (§8 rejected it: `null` on all 863 committed kills, zero variance) | — (corpus sample: `null`) | 0.73122 | 0.77013 | 0.76781 | 0.77291 | **n/a** | 0.71486 | 0.83352 | 0.67307 | 0.65639 |
+| co-present conditional means, witnessed / unwitnessed — **presentation statistic, NOT the registered cell** | — (corpus sample: 0.0 / 0.0) | 0.66667 / 0.00599 | 0.66667 / 0.00578 | 0.88372 / 0.02000 | 0.84091 / 0.01282 | 0.00000 / 0.00000 | 0.73333 / 0.00602 | 0.78788 / 0.00000 | 0.53333 / 0.00538 | 0.50000 / 0.00465 |
 | action entropy — crew mean conditional ‡ | 0.91764 | — | — | — | — | — | — | — | — | — |
 | action entropy — impostor mean conditional ‡ | 0.71262 | — | — | — | — | — | — | — | — | — |
 | off-menu rate — `off_menu_total / impostor_decisions` | 0.00000 (0/7693) | 0.00000 (0/2015) | 0.00000 (0/2083) | 0.00000 (0/2100) | 0.00000 (0/2176) | 0.00000 (0/2299) | 0.00000 (0/2027) | 0.00000 (0/1962) | 0.00000 (0/2520) | 0.00000 (0/2596) |
-| roll-call coverage mean (all) | **no corpus cell** — ratified floor **0.60** | 0.84320 | 0.84192 | 0.83549 | 0.84498 | 0.85872 | 0.83846 | 0.84485 | 0.86353 | **n/a** |
-| roll-call coverage mean — crew | **no corpus cell** | 1.00000 | 0.98885 | 0.99383 | 0.99556 | 0.99735 | 0.99060 | 1.00000 | 1.00000 | **n/a** |
-| roll-call coverage mean — impostor | **no corpus cell** | 0.40968 | 0.45625 | 0.41049 | 0.42899 | 0.43949 | 0.42953 | 0.43919 | 0.57576 | **n/a** |
-| roll-call answer rate — `roll_call_answered_total / roll_call_asked_total` | **no corpus cell** | 0.85222 (767/900) | 0.85307 (778/912) | 0.84842 (806/950) | 0.85331 (826/968) | 0.86746 (805/928) | 0.85129 (727/854) | 0.85748 (728/849) | 0.86170 (162/188) | **undef** (0/0) |
+| roll-call coverage mean (all) ✦ | **no corpus cell** — standing-gauge floor **0.60** | 0.84320 | 0.84192 | 0.83549 | 0.84498 | 0.85872 | 0.83846 | 0.84485 | 0.86353 | **n/a** |
+| roll-call coverage mean — crew ✦ | **no corpus cell** | 1.00000 | 0.98885 | 0.99383 | 0.99556 | 0.99735 | 0.99060 | 1.00000 | 1.00000 | **n/a** |
+| roll-call coverage mean — impostor ✦ | **no corpus cell** | 0.40968 | 0.45625 | 0.41049 | 0.42899 | 0.43949 | 0.42953 | 0.43919 | 0.57576 | **n/a** |
+| roll-call answer rate — `roll_call_answered_total / roll_call_asked_total` ✦ | **no corpus cell** | 0.85222 (767/900) | 0.85307 (778/912) | 0.84842 (806/950) | 0.85331 (826/968) | 0.86746 (805/928) | 0.85129 (727/854) | 0.85748 (728/849) | 0.86170 (162/188) | **undef** (0/0) |
 
 **‡ — the exact set of registered cells the rows CANNOT fill, re-derived key by
 key.** The `instruments` block committed on each row is a **flattened** view of
@@ -1535,6 +1586,15 @@ else**:
   `co_present_histogram`, `one_hop_histogram`;
 - `off_menu` — **nothing**: the row carries every key the corpus block has.
 
+**`co_present_histogram` is still a dropped key, but its registered cell is no
+longer missing.** The co-present **departure** is a rate — `count(co_present_crew
+≥ 1) / kills_total` — and its numerator has been re-derived from each arm's
+histogram and **persisted in the committed evidence row** at
+`instruments.kill_craft_co_present_departure` (`co_present_ge1_kills`,
+`kills_total`, `rate`), on **all nine** phase-18 rows. The table row above is read
+from those cells, not recomputed here, so the registered cell has left the
+recompute-only list even though the histogram itself is still absent.
+
 **Every other registered cell is present as a scalar on every appended row and is
 filled in the table above** — including the grounded/fabricated vouch split,
 whose two counters (`false_vouch_fabricated`, `false_vouch_subject_events`) are
@@ -1544,6 +1604,18 @@ recoverable **only** by re-running the committed instruments
 `eval.kill_craft.compute_kill_craft_report`) over each arm's recordings, which
 this task did not do; their baseline column is filled because the corpus JSON
 carries the nested blocks in full, and their arm columns are honestly blank.
+
+**◆ — the co-present baseline is the 9p2i sample block's histogram, and only
+that one.** `baseline_cells_corpus_9p2i` registers no co-present cell, and §8 of
+the pre-registration says why it registers none for the *correlation* form:
+"**Rejected — registering the co-present point-biserial as a baseline:** the cell
+is None on all 863 committed kills (zero variance — §4.1) … **The departure is
+registered as a rate cell instead.**" The rate's corpus anchor is therefore the
+9p2i sample block's `kill_craft.co_present_histogram` = `{"0": 505}` ⇒
+**0 of 505 kills = 0.00000**. The **4p1i** block in the same file carries its own
+`{"0": 55}` (0/55) and is **not** the 9p2i anchor; neither is the sample block's
+`mean_co_present_*` pair, which is a conditional-mean *presentation* statistic and
+is labelled as such in its own row.
 
 **†† — the fabricated-vouch share has no cell in the registered block, so its
 baseline is labelled for what it is.** `baseline_cells_corpus_9p2i` carries
@@ -1624,27 +1696,49 @@ vacuous by construction for menu-bounded movers, exactly as the instrument's own
 denominator was real (1962–2596 impostor decisions per arm). (ii) **Frame-attempt
 rate is far above corpus on every arm** (0.94–1.00 vs 0.76710) including the
 all-scripted comparator, so it is a substrate property of this roster, not a
-learned trait. (iii) **The two registered false-vouch rates sit at or below corpus**
-on every arm but `6d327dcb` (corroboration 0.42254 vs 0.28261) — the deception
-channel did not run hot. The fabricated share is **advisory** and is read
-separately at ††, where every arm's Wilson interval overlaps the baseline's and
-no arm separates from the corpus; nothing here rules on it. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
-arm that held meetings** (0.8355–0.8635), with the same crew/impostor split
-everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors under-place themselves
-uniformly, learned or scripted. (v) **The one large, uniform departure is the
-kill-craft pair** — the witnessed rate (§16.e's rider) and, beside it, the
-co-present cell: every **learned** arm places witnessed kills strongly co-present
-(0.50–0.88) against a near-zero unwitnessed figure, while the **scripted**
-comparator is 0.00000/0.00000 and the corpus sample 0.0/0.0 — which the
-pre-registration anticipated in as many words, having noted that the committed
-FSM kills only when alone (co-present 0 on all 863 pinned kills) and that **any
-nonzero co-present count in a learned mover's recordings is itself a behavioural
-departure**. That is the same
-learned-mover-versus-scripted-mover split the rider ruling turns on, showing up
-on a second, independent kill-craft cell — consistent with §16.e's conclusion
-that what is left is the impostor side and the physical layer. It is **an
-observation on a pre-registered instrument, not a new pre-registered cell**, and
-nothing in §17 rests on it.
+learned trait. (iii) **`saw_player` sits below corpus on
+every arm** (0.0625–0.18779 vs 0.22819), but **corroboration runs ABOVE the
+0.28261 corpus on four of the eight arms that have meetings** — `6d327dcb`
+**0.42254**, `7f73929d` **0.33333** (a validity-PASS finalist), `c2-g9`
+**0.33333** and `c1-g0` **0.28846** — against `ea4bc955` 0.22222, `bfd145cb`
+0.18310, `fsm-comp` 0.11111 and `c1-g9` 0.14286 below it. The earlier
+one-exception reading was wrong; the deception channel is **split by channel**,
+not uniformly cool, and which way that reads is **18.27's ruling**, not this
+section's. The fabricated share is **advisory** and is read separately at ††,
+where every arm's Wilson interval overlaps the baseline's and no arm separates
+from the corpus; nothing here rules on it. (iv) **Roll-call coverage clears its
+0.60 floor on every arm that held meetings** (0.8355–0.8635), with the same
+crew/impostor split everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors
+under-place themselves uniformly, learned or scripted — read as context, per ✦.
+(v) **The one large, uniform departure is the kill-craft pair** — the witnessed
+rate (§16.e's rider) and, beside it, the **registered co-present departure rate**:
+every **learned** arm kills with at least one crewmate co-present on
+**0.07570–0.18653** of its kills, while the **scripted comparator is 0 of 174**
+and the 9p2i corpus **0 of 505**. The pre-registration anticipated exactly this,
+having noted that the committed FSM kills only when alone (co-present 0 on all
+863 pinned kills) and that **any nonzero co-present count in a learned mover's
+recordings is itself a behavioural departure** — which is why §8 registered the
+**rate** and rejected the point-biserial. That is the same
+learned-mover-versus-scripted-mover split the rider reading turns on, showing up
+on a second, independent kill-craft cell — consistent with §16.e's reading that
+what is left is the impostor side and the physical layer. It is **an observation
+on a pre-registered instrument**, offered without a §6 four-part claim behind it,
+and nothing in §17 rests on it.
+
+**✦ — the roll-call rows are CONTEXT, not axis-2 cells.** The ratified
+pre-registration fixes the emergence set at **eight instruments** (§8: Tier A
+`false-vouch`, `frame`, `teammate-immunity`, `alibi-survival`, `deflection`;
+Tier B `kill-craft`, `off-menu`, `action-entropy`) and states in §2.5 that
+"**roll-call coverage and conversion are standing eval gauges, not
+pre-registered emergence instruments**"; its §9 amendment log is **empty**, so
+nothing has been added. The roll-call cells are therefore carried here as
+**contextual diagnostics outside the ratified axis-2 set** — quoted because they
+characterise the meeting economy each arm produced, and **excluded from anything
+18.27 rules on under axis 2**. §13 of this report listed the funnel entry point
+among the instrument entry points; that listing is left standing as written and
+is corrected by this label and the §17.1 bullet, **not** by editing the
+pre-registration (which would be an amendment, and amendments were due before the
+campaigns recorded).
 
 ---
 
@@ -1666,6 +1760,24 @@ nothing in §17 rests on it.
 - **Duration is quoted only where a log derives it.** One measured rate exists
   (18.25's 36 legs); everything past it is labelled a projection and is re-priced
   from the first leg pair (§14).
+
+- **Roll-call coverage is relabelled CONTEXT, not an axis-2 instrument — a
+  labelling correction, not an amendment.** §13 of this report listed
+  `eval.funnel.compute_pooling_funnel` among the instrument entry points. The
+  ratified pre-registration does not: `audits/audit-phase-18-emergence-preregistration.md`
+  §8 fixes the emergence set at **eight** instruments (Tier A `false-vouch`,
+  `frame`, `teammate-immunity`, `alibi-survival`, `deflection`; Tier B
+  `kill-craft`, `off-menu`, `action-entropy`) and §2.5 states that "roll-call
+  coverage and conversion are standing eval gauges, not pre-registered emergence
+  instruments". Its **§9 amendment log is empty**, and §9's own rule is that
+  amendments land before the campaigns record "or not at all for this phase's
+  claims" — so roll-call **cannot** be added now. The correction taken here is the
+  minimal one: **§13's committed pre-registration text is left exactly as
+  written** (rewriting it after recording is the amendment this rule forbids), the
+  roll-call rows in §16.f are **labelled contextual diagnostics outside the
+  ratified axis-2 set** (✦), and 18.27 reads them as context only. The cells stay
+  in the report because they characterise each arm's meeting economy; they carry
+  no axis-2 weight.
 
 ### 17.1 Decisions taken during the operator run (recorded after the fact)
 

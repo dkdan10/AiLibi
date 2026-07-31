@@ -49,6 +49,11 @@ What is pinned, and why:
   cell rather than recomputing one. Its rates and margin are re-derived from
   its own counts, and its excluded seed is tied back to c1-gen0's declared
   stalemate.
+* **The co-present-departure cell.** Persisted per arm because the flattened
+  rows dropped the histogram it is cut from, so the committed number is now
+  the only copy. Its rate is re-derived from its own counts, its denominator
+  checked against the row's own ``kill_craft``, and the scripted comparator's
+  numerator pinned at exactly 0 — the anchor of the learned-vs-scripted split.
 * **The honesty pins.** Three of the four crew diagnostics FAIL their validity
   gate, and the rows say so themselves — the failing check names, the
   stalemate replay files, the starved meeting rate. A row that quietly flipped
@@ -160,6 +165,11 @@ class Arm:
     validity_passed: bool
     validity_failures: frozenset[str]
     stalemate_replays: tuple[str, ...] | None
+    #: The registered co-present-departure cell's NUMERATOR — kills the
+    #: mover left with at least one crewmate co-present. Its denominator is
+    #: not carried here: it must equal the row's own ``kill_craft.kills_total``
+    #: and is derived from it, so the two can never disagree silently.
+    co_present_ge1_kills: int
 
 
 #: The pre-registered slate, in committed row order (== the §8.1 order). Every
@@ -192,6 +202,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=20,
     ),
     Arm(
         entrant="p18-imp-bfd145cb",
@@ -219,6 +230,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=21,
     ),
     Arm(
         entrant="p18-imp-6d327dcb",
@@ -246,6 +258,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=36,
     ),
     Arm(
         entrant="p18-imp-7f73929d",
@@ -274,6 +287,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=35,
     ),
     Arm(
         entrant="p18-fsm-comparator",
@@ -297,6 +311,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=0,
     ),
     Arm(
         entrant="p18-crew-c1-gen9",
@@ -327,6 +342,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
         validity_passed=True,
         validity_failures=frozenset(),
         stalemate_replays=None,
+        co_present_ge1_kills=21,
     ),
     Arm(
         entrant="p18-crew-c1-gen0",
@@ -359,6 +375,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
             {"all_games_reach_game_over", "cost_and_provenance_exact"}
         ),
         stalemate_replays=("replay-seed-20.jsonl",),
+        co_present_ge1_kills=25,
     ),
     Arm(
         entrant="p18-crew-c2-gen9",
@@ -393,6 +410,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
             {"all_games_reach_game_over", "cost_and_provenance_exact"}
         ),
         stalemate_replays=("replay-seed-19.jsonl", "replay-seed-20.jsonl"),
+        co_present_ge1_kills=25,
     ),
     Arm(
         entrant="p18-crew-c2-gen0",
@@ -424,6 +442,7 @@ _SLATE: Final[tuple[Arm, ...]] = (
             {"meeting_rate_and_resolution", "cost_and_provenance_exact"}
         ),
         stalemate_replays=(),
+        co_present_ge1_kills=19,
     ),
 )
 
@@ -996,6 +1015,69 @@ def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() ->
     assert gen9_parent["games_total"] == 50
     assert cell["gen9_kills_total"] < gen9_parent["kills_total"]
     assert cell["gen9_crew_witnessed_kills"] == gen9_parent["crew_witnessed_kills"]
+
+
+def test_the_co_present_departure_cell_is_persisted_on_every_arm() -> None:
+    """The registered co-present-departure cell, on all nine arms.
+
+    The flattened rows had DROPPED the ``co_present_histogram`` this cell is
+    cut from, so it was re-derived and persisted per arm — which means the
+    committed number is now the only copy, and nothing downstream can
+    recompute it from a histogram that is no longer there. Presence is
+    therefore checked on every arm before any value is read: a silently
+    missing cell must fail as a missing PIN, not as a KeyError deep in a
+    consumer.
+
+    The rate is re-derived from the cell's own numerator and denominator, and
+    the denominator is checked against the row's OWN flattened
+    ``kill_craft.kills_total`` rather than carried in the table — the two
+    describe the same kills, so they may never disagree.
+
+    The anchor of the learned-vs-scripted split is pinned exactly: the
+    scripted comparator's numerator is **0** — the FSM mover never departs a
+    kill with a crewmate co-present — while every learned arm's is non-zero.
+    That contrast is what the cell exists to measure, so it is asserted as a
+    slate-wide property rather than as one arm's cell in isolation.
+    """
+
+    rows = _rows()
+    carriers = {
+        entrant
+        for entrant, row in rows.items()
+        if "kill_craft_co_present_departure" in row.get("instruments", {})
+    }
+    assert carriers == {arm.entrant for arm in _SLATE}
+
+    notes: set[str] = set()
+    for arm in _SLATE:
+        row = rows[arm.entrant]
+        cell = row["instruments"]["kill_craft_co_present_departure"]
+        assert set(cell) == {"note", "co_present_ge1_kills", "kills_total", "rate"}
+
+        assert cell["co_present_ge1_kills"] == arm.co_present_ge1_kills
+        # The denominator is the row's own kill population, not a second count.
+        assert cell["kills_total"] == row["instruments"]["kill_craft"]["kills_total"]
+        assert cell["co_present_ge1_kills"] <= cell["kills_total"]
+        assert cell["rate"] == pytest.approx(
+            cell["co_present_ge1_kills"] / cell["kills_total"]
+        )
+        notes.add(cell["note"])
+
+    # ONE registered definition across the slate, not nine ad-hoc cuts.
+    assert len(notes) == 1
+    assert "co_present_crew >= 1" in notes.pop()
+
+    # The split this cell anchors: scripted 0, every learned arm above it.
+    comparator = _arms(_COMPARATOR)[0]
+    assert comparator.co_present_ge1_kills == 0
+    comparator_cell = rows[comparator.entrant]["instruments"][
+        "kill_craft_co_present_departure"
+    ]
+    assert comparator_cell["co_present_ge1_kills"] == 0
+    assert comparator_cell["rate"] == 0.0
+    learned = [arm for arm in _SLATE if arm.side != _COMPARATOR]
+    assert len(learned) == len(_SLATE) - 1
+    assert all(arm.co_present_ge1_kills > 0 for arm in learned)
 
 
 # -- honesty: the failing diagnostics say what failed -------------------------
