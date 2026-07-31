@@ -624,14 +624,48 @@ def _fenced_seeds(row: dict[str, Any]) -> frozenset[int]:
     )
 
 
-def _assert_mod5_split_shape(split: dict[str, Any]) -> None:
-    """One mod-5 split's cell shape: games + 11 ratios + the point-biserial."""
+def _assert_mod5_split_shape(split: dict[str, Any], roster: dict[str, int]) -> None:
+    """One mod-5 split's shape: games + 11 ratios + point-biserial + entropy.
 
-    assert set(split) == {"games", "one_hop_point_biserial"} | set(_MOD5_RATIO_CELLS)
+    The action-entropy sub-block is checked against the ROSTER rather than
+    merely for positivity: a split of N games seats exactly
+    ``num_impostors * N`` impostor agents and ``(num_players - num_impostors)
+    * N`` crewmate agents. That ties the agent population to the split size,
+    so a block whose entropy cells came from a different partition (or from
+    the arm's full set) cannot pass.
+    """
+
+    assert set(split) == {"games", "one_hop_point_biserial", "action_entropy"} | set(
+        _MOD5_RATIO_CELLS
+    )
     for name in _MOD5_RATIO_CELLS:
         assert set(split[name]) == {"n", "d"}
         assert split[name]["n"] <= split[name]["d"]
     assert set(split["one_hop_point_biserial"]) == {"r", "kills_total"}
+
+    entropy = split["action_entropy"]
+    assert set(entropy) == {"IMPOSTOR", "CREWMATE"}
+    for role in ("IMPOSTOR", "CREWMATE"):
+        assert set(entropy[role]) == _ENTROPY_KEYS
+
+    if split["games"] > 0:
+        impostors = roster["num_impostors"]
+        crewmates = roster["num_players"] - impostors
+        assert entropy["IMPOSTOR"]["agents"] == impostors * split["games"]
+        assert entropy["CREWMATE"]["agents"] == crewmates * split["games"]
+        # Agents that exist also ACT — true even on the starved control, whose
+        # dead meeting economy never stopped anyone moving.
+        for role in ("IMPOSTOR", "CREWMATE"):
+            assert entropy[role]["decisions"] > 0
+            assert entropy[role]["mean_conditional_entropy"] > 0.0
+
+
+def _summed_entropy_across_splits(block: dict[str, Any], role: str, field: str) -> int:
+    """One action-entropy counter, summed across the three mod-5 splits."""
+
+    return sum(
+        int(block[split]["action_entropy"][role][field]) for split in _MOD5_RESIDUES
+    )
 
 
 def _summed_across_splits(block: dict[str, Any], cell: str, field: str) -> int:
@@ -1234,7 +1268,7 @@ def test_the_seed_mod5_splits_partition_each_arms_own_games() -> None:
             )
             assert block[split]["games"] == expected
 
-            _assert_mod5_split_shape(block[split])
+            _assert_mod5_split_shape(block[split], row["recording"]["roster"])
 
         # The splits exhaust the INSTRUMENT view (fenced), not the raw games.
         kill_craft = row["instruments"]["kill_craft"]
@@ -1262,6 +1296,20 @@ def test_the_seed_mod5_splits_partition_each_arms_own_games() -> None:
         teammate = row["instruments"]["registered_nested_cells"]["teammate_accusations"]
         assert summed(block, "teammate_accusations", "n") == teammate["numerator"] == 0
         assert summed(block, "teammate_accusations", "d") == teammate["denominator"]
+
+        # The action stream closes too: the parent nested block is itself the
+        # FENCED view, so the splits sum to it exactly on every arm — the
+        # fenced ones included, with no separate relation needed.
+        parent_entropy = row["instruments"]["registered_nested_cells"]["action_entropy"]
+        for role in ("IMPOSTOR", "CREWMATE"):
+            assert (
+                _summed_entropy_across_splits(block, role, "decisions")
+                == parent_entropy[role]["decisions"]
+            )
+            assert (
+                _summed_entropy_across_splits(block, role, "agents")
+                == parent_entropy[role]["agents"]
+            )
 
     assert len(notes) == 1
 
@@ -1544,10 +1592,11 @@ def test_the_comparator_intersection_carries_its_own_mod5_splits() -> None:
     assert set(block) == {"note"} | set(_MOD5_RESIDUES)
 
     intersection_seeds = sorted(set(_CANONICAL_SEEDS) - {_F13_EXCLUDED_SEED})
+    roster = rows["p18-fsm-comparator"]["recording"]["roster"]
     for split, residues in _MOD5_RESIDUES.items():
         expected = sum(1 for seed in intersection_seeds if seed % 5 in residues)
         assert block[split]["games"] == expected
-        _assert_mod5_split_shape(block[split])
+        _assert_mod5_split_shape(block[split], roster)
     assert sum(block[split]["games"] for split in _MOD5_RESIDUES) == len(
         intersection_seeds
     )
@@ -1565,6 +1614,17 @@ def test_the_comparator_intersection_carries_its_own_mod5_splits() -> None:
     # ... and the scripted anchor still holds, split by split.
     assert _summed_across_splits(block, "co_present_departure", "n") == 0
     assert _summed_across_splits(block, "teammate_accusations", "n") == 0
+
+    # The action stream closes on the parent cut as well.
+    for role in ("IMPOSTOR", "CREWMATE"):
+        assert (
+            _summed_entropy_across_splits(block, role, "decisions")
+            == parent["action_entropy"][role]["decisions"]
+        )
+        assert (
+            _summed_entropy_across_splits(block, role, "agents")
+            == parent["action_entropy"][role]["agents"]
+        )
 
 
 def test_the_f13_intersection_gauges_carry_their_own_split_half_read() -> None:

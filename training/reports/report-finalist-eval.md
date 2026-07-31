@@ -1514,7 +1514,9 @@ same-seed pairing view for `7f73929d`, persisted at
 `instruments.intersection_49_seed_for_7f73929d` — reads **8/170 = 0.04706**
 (1.98× corpus), so the comparator's near-floor position is unchanged on either
 seed set and the contrast with `7f73929d`'s 0.22000 is not a composition
-artifact. The full-50 cell stays the slate-wide reference for the other arms.
+artifact. The full-50 cell is the comparator's own row in this corpus-anchored
+table and is quoted as such; it is **not** a clause-(b) pairing for every arm —
+§16.g scopes which arm pairs which comparator view.
 
 Each cell is **that arm's own** instrument value over **its own** scored view —
 50 seeds where the arm has no stalemate, the fenced view where it does
@@ -1938,9 +1940,12 @@ against `7f73929d`:
 
 Every cell moves in the third decimal or not at all, so **no reading in this
 section changes** — which is itself the useful result: the `7f73929d` column can
-be read against the comparator column above without a composition correction. The
-**full-50 comparator cells stay the slate-wide reference** for the other eight
-arms, all of which share its seed set.
+be read against the comparator column above without a composition correction.
+**The full-50 comparator cells stay the reference for the other three impostor
+arms** — `ea4bc955`, `bfd145cb`, `6d327dcb` — which are the arms that actually
+share its 50-seed set. The crew columns do not: `c1-g0` (49) and `c2-g9` (48) are
+fenced differently again, and in any case no comparator here is a valid
+opponent-matched reference for a crew arm (§2.1, ✥).
 
 **The fenced views, and the one column that is not a fence.** `7f73929d` is a
 49-game arm because seed 35 was never recorded (§14.1, §17); `c1-g0` (49, seed 20)
@@ -2061,9 +2066,23 @@ Clause (b) of the §6 claim discipline needs each cell **recomputed on the three
 **sign reproduction in ≥ 2 of 3** splits. That evidence is **committed on every
 phase-18 row** at `instruments.seed_mod5_splits`, partitioned `{0,1,2}` /
 `{3}` / `{4}` over each arm's **own recorded seed list with its fenced exclusions
-already applied**, and carrying **all 12 registered n/d claim cells per split**
-plus the one-hop point-biserial as `r` with its `kills_total`. Nothing in this
-subsection is recomputed here.
+already applied**, and carrying **the complete registered claim surface per
+split**: the **11 rate cells as n/d**, the one-hop point-biserial as `r` with its
+`kills_total`, **and the per-side action-entropy means with their `agents` and
+`decisions`** — the pre-registration's **13 claim cells / 14 rulings** in full,
+on every one of the nine arms and on the comparator's nested 49-seed block too.
+Nothing in this subsection is recomputed here.
+
+**What the entropy splits do and do not change.** Their arrival means the **mean
+cells' clause-(b) inputs are now committed** — a per-side entropy delta can be
+read on each of the three partitions from the rows alone, with no recomputation.
+It does **not** make the entropy rulings judgeable. Clause (a) needs a Welch test
+and Welch needs the per-agent variance, which §6.a says is "not recoverable from
+committed outputs today"; the field that would fix it never landed. §6 is
+**conjunctive**, so a missing clause (a) kills the ruling regardless of how clean
+clause (b) is. **Both entropy rulings therefore stay NOT-DEMONSTRATED as
+recorded** (✧ in §16.f), and the per-split entropy means are **context** — what a
+future re-pin would be read against — not evidence toward a claim.
 
 **Partition sizes, as committed** — 30/10/10 where the arm recorded a clean 50,
 carved where an exclusion lands: `7f73929d` **29**/10/10 (seed 35), `c1-g0`
@@ -2101,8 +2120,9 @@ the committed evidence without opening the JSON:
 | `p18-imp-bfd145cb` | 16/122 = 0.13115 · 8/43 = 0.18605 · 6/38 = 0.15789 | 12/122 = 0.09836 · 4/43 = 0.09302 · 5/38 = 0.13158 |
 | `p18-imp-6d327dcb` | 25/108 = 0.23148 · 10/41 = 0.24390 · 8/44 = 0.18182 | 20/108 = 0.18519 · 9/41 = 0.21951 · 7/44 = 0.15909 |
 | `p18-imp-7f73929d` | 26/117 = 0.22222 · 10/42 = 0.23810 · 8/41 = 0.19512 | 18/117 = 0.15385 · 9/42 = 0.21429 · 8/41 = 0.19512 |
-| `p18-fsm-comparator` — full 50, the reference for the other seven arms | 6/102 = 0.05882 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/102 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
-| `p18-fsm-comparator` — **49-seed, the pairing view for `7f73929d`** | 6/98 = 0.06122 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/98 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+| `p18-fsm-comparator` — full 50, **pairs `ea4bc955` / `bfd145cb` / `6d327dcb` only** | 6/102 = 0.05882 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/102 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+| `p18-fsm-comparator` — **49-seed, pairs `7f73929d` only** | 6/98 = 0.06122 · 1/36 = 0.02778 · 1/36 = 0.02778 | 0/98 = 0.00000 · 0/36 = 0.00000 · 0/36 = 0.00000 |
+| *(no comparator row pairs the four crew arms — §2.1, ✥)* | *their split cells are committed and read as diagnostics only* | *—* |
 
 **What this report does and does not say about it.** As recorded, each of the
 four impostor arms sits **above** the same-seed comparator on **all three**
