@@ -1265,7 +1265,11 @@ the champion/runner-up position moves, quoted as its own cell:
 noise on at least one side, and two of three are inside the noise on both.** The
 lineage-mate runner-up scores marginally *lower* on every gauge and marginally
 *higher* on wins — the same negative-margin direction as the pooled cell, at a
-magnitude no smaller than the instrument's own wobble.
+magnitude **smaller than** the instrument's own wobble: on **both** sides for
+`witnessed_event_rate` and `flags_per_meeting`, and on at least one side for
+`testimony_backed_conversion` (|−0.01567| sits inside `ea4bc955`'s 0.08357 and
+outside `bfd145cb`'s 0.01146). A difference that cannot clear its own instrument's
+noise is not a within-lineage result.
 
 **What `bfd145cb`'s UNRESOLVABLE flags precondition excludes.** `bfd145cb…` is
 the **only** arm in the F13 quartet whose `flags_per_meeting` fails the noise
@@ -1488,17 +1492,21 @@ Numerator/denominator is given wherever the row carries both terms.
 
 Column labels are the arm suffixes of §16.a/§16.b (`c1-g9` = `p18-crew-c1-gen9`,
 and so on). A bold **(49)** / **(48)** marks the crew-block **fenced view** the
-arm's instruments were computed over.
+arm's instruments were computed over. Rows the ratified pre-registration
+(`audits/audit-phase-18-emergence-preregistration.md` §7) puts on the **advisory**
+list are labelled **ADVISORY** and carry a Wilson 95% score interval `[low, high]`
+beside every rate; per that memo an advisory cell **never alone rules a claim**,
+and the reading at †† holds to it.
 
 | instrument (registered cell) | corpus baseline (9p2i, baseline-6) | ea4bc955 | bfd145cb | 6d327dcb | 7f73929d **(49)** | fsm-comp | c1-g9 | c1-g0 **(49)** | c2-g9 **(48)** | c2-g0 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | false-vouch `saw_player` rate — `false_vouch_saw_player_observations / vouch_observations_impostor` | 0.22819 (34/149) | 0.12621 (26/206) | 0.13825 (30/217) | 0.18779 (40/213) | 0.14078 (29/206) | 0.10204 (20/196) | 0.06250 (12/192) | 0.11413 (21/184) | 0.10448 (7/67) | **undef** (0/0) |
 | false-vouch corroboration rate — `false_vouch_corroborations / corroboration_claims_impostor` | 0.28261 (13/46) | 0.22222 (12/54) | 0.18310 (13/71) | 0.42254 (30/71) | 0.33333 (20/60) | 0.11111 (6/54) | 0.14286 (7/49) | 0.28846 (15/52) | 0.33333 (7/21) | **undef** (0/0) |
-| fabricated-vouch share — `false_vouch_fabricated / false_vouch_subject_events` | 0.25397 (16/63) †† | 0.23810 (5/21) | 0.26087 (6/23) | 0.45455 (15/33) | 0.34783 (8/23) | 0.47368 (9/19) | 0.16667 (2/12) | 0.41176 (7/17) | 0.00000 (0/6) | **undef** (0/0) |
+| fabricated-vouch share — `false_vouch_fabricated / false_vouch_subject_events` — **ADVISORY** †† | 0.25397 (16/63) [0.1628, 0.3734] | 0.23810 (5/21) [0.1063, 0.4509] | 0.26087 (6/23) [0.1255, 0.4647] | 0.45455 (15/33) [0.2984, 0.6201] | 0.34783 (8/23) [0.1881, 0.5511] | 0.47368 (9/19) [0.2733, 0.6829] | 0.16667 (2/12) [0.0470, 0.4480] | 0.41176 (7/17) [0.2161, 0.6399] | 0.00000 (0/6) [0.0000, 0.3903] | **undef** (0/0) |
 | frame attempt rate — `frame_attempt_meetings / meetings_total` | 0.76710 (415/541) | 0.97419 (151/155) | 0.95625 (153/160) | 0.98148 (159/162) | 0.97041 (164/169) | 0.94268 (148/157) | 0.97315 (145/149) | 0.97973 (145/148) | 1.00000 (33/33) | **undef** (0/0) |
-| frame conversion rate ‡ | 0.01205 (5/415) | — | — | — | — | — | — | — | — | — |
-| teammate accusation rate ‡ | 0.00000 (0/455) | — | — | — | — | — | — | — | — | — |
-| alibi survival rate ‡ | 0.78571 (11/14) | — | — | — | — | — | — | — | — | — |
+| frame conversion rate ‡ — **ADVISORY** | 0.01205 (5/415) [0.0052, 0.0279] | — | — | — | — | — | — | — | — | — |
+| teammate accusation rate ‡ — **ADVISORY** | 0.00000 (0/455) [0.0000, 0.0084] | — | — | — | — | — | — | — | — | — |
+| alibi survival rate ‡ — **ADVISORY** | 0.78571 (11/14) [0.5241, 0.9243] | — | — | — | — | — | — | — | — | — |
 | effective deflection rate ‡ | 0.23980 (47/196) | — | — | — | — | — | — | — | — | — |
 | crew-witnessed kill rate — `crew_witnessed_kills / kills_total` | 0.03339 (20/599) † | 0.15228 (30/197) | 0.14778 (30/203) | 0.22280 (43/193) | 0.22000 (44/200) | 0.04598 (8/174) | 0.15306 (30/196) | 0.16500 (33/200) | 0.19481 (45/231) | 0.14343 (36/251) |
 | witnessed point-biserial, within one hop | 0.27899 | 0.21108 | 0.20847 | 0.52142 | 0.35293 | 0.27505 | 0.23395 | 0.20536 | 0.28347 | 0.26509 |
@@ -1546,10 +1554,39 @@ partitioning **subject events** rather than the observation-level numerator, per
 the 18.1–18.3 batch finding. The **7/28 = 0.25000** figure that circulates in the
 phase-18 contract prose is the **baseline-5** corpus and is **not** quoted here,
 per §13's rule that baseline cells come from the JSON and the memo prose is
-stale. Read against 16/63, the fabricated share is **not** a departure on any
-arm: six arms sit at 0.167–0.348 and the two above it (`6d327dcb` 0.45455,
-`c1-g0` 0.41176) are matched by the **scripted comparator** at **0.47368**, so
-whatever lifts it is not learned.
+stale.
+
+**Read as the ratified pre-registration requires — advisory, with the interval,
+ruling nothing.** `audits/audit-phase-18-emergence-preregistration.md` registers
+this cell **advisory** (§3.1 by the 18.1 numerator rule, numerator 7 ≤ 7, and by
+the one cross-set disagreement in its §5; §7 carries it on the advisory list):
+an advisory cell is "quoted with its Wilson interval, never alone ruling a
+claim", and what the flag bars is **baseline-anchored** reading and short-circuit
+readings of the fragile point rate. So, stated at that standard: **every arm's
+Wilson 95% interval overlaps the baseline's [0.1628, 0.3734]** — arm intervals
+run 0.32–0.42 wide on denominators of 6 to 33 — and therefore **no arm separates
+from the corpus on this cell**. The point spread (0.00000 to 0.47368) is what
+intervals that wide are expected to produce and is **not** evidence of anything
+on its own. The observation worth carrying forward, offered as an observation:
+the two arms with the highest point rates (`6d327dcb` 0.45455, `c1-g0` 0.41176)
+are topped by the **scripted** comparator at 0.47368, which is *consistent with*
+the lift not being learned — but on overlapping advisory intervals that is a
+**direction to check, not a finding**. **The ruling is 18.27's**, and by the
+pre-registration's own rule it must come from the arm-vs-arm §6 discipline, never
+from this baseline anchor.
+
+**The same treatment applies to every other advisory-registered cell in this
+table, and is now applied.** `frame conversion` (5/415), `teammate accusation`
+(0/455) and `alibi survival` (11/14) are all on the pre-registration's §7
+advisory list; each is marked **ADVISORY** with its Wilson interval in the table
+above. They are ‡ rows, so only their baselines are quoted here — and an advisory
+baseline anchors no ruling either. The **grounded-vouch share** is registered
+advisory as well; it is the exact complement of the fabricated share on the same
+denominator (corpus 47/63 = **0.74603**, [0.6266, 0.8372]) and per §7 is "not a
+separate registration", so it gets no separate row. Every interval in this
+section is computed by the production helper the pre-registration names,
+`eval.deception_instruments._wilson_interval`, which reproduces the memo's own
+pinned intervals exactly (7/28 → [0.1268, 0.4336]; 0/455 → [0.0, 0.00837]).
 
 **† — the two corpus blocks in that file disagree on the witnessed kill rate, and
 this table names it rather than picking one silently.** The registered
@@ -1589,8 +1626,9 @@ rate is far above corpus on every arm** (0.94–1.00 vs 0.76710) including the
 all-scripted comparator, so it is a substrate property of this roster, not a
 learned trait. (iii) **The two registered false-vouch rates sit at or below corpus**
 on every arm but `6d327dcb` (corroboration 0.42254 vs 0.28261) — the deception
-channel did not run hot; the fabricated share is read separately at ††, where the
-scripted comparator's 0.47368 rules out a learned cause. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
+channel did not run hot. The fabricated share is **advisory** and is read
+separately at ††, where every arm's Wilson interval overlaps the baseline's and
+no arm separates from the corpus; nothing here rules on it. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
 arm that held meetings** (0.8355–0.8635), with the same crew/impostor split
 everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors under-place themselves
 uniformly, learned or scripted. (v) **The one large, uniform departure is the
@@ -1632,8 +1670,9 @@ nothing in §17 rests on it.
 ### 17.1 Decisions taken during the operator run (recorded after the fact)
 
 - **Seed 35 is EXCLUDED from `p18-imp-7f73929d`, and the Δ is taken on the
-  49-seed intersection.** The seed returned rc 99 on **10 logged attempts** — 4
-  in-leg passes ending in a `leg-abort`, then 6 `retry-stubborn.sh` rounds
+  49-seed intersection.** The seed returned rc 99 on **14 logged attempts** — 4
+  in-leg passes ending in a `leg-abort`, 6 `retry-stubborn.sh` rounds, and a
+  final owner-directed 4-pass retry leg dispatched after this task's PR opened
   (§14.1) — while the other stubborn seed on the board, `p18-fsm-comparator`
   seed 5, came clean on attempt 14 and kept that arm at n=50. This **extends the
   owner's comparator ruling** (a stubborn seed is retried, and only excluded once
@@ -1687,8 +1726,12 @@ nothing in §17 rests on it.
   the full 50-game directory precisely so it can *see* the stalemates — reports
   **238** total kills. The two numbers disagree **by design**; the fence keeps
   partial games out of the instruments while the gate keeps them visible. Every
-  `c2-gen9` instrument cell in §16.b, §16.c and §16.e is the 48-game view, and is
-  labelled as such where it is quoted.
+  `c2-gen9` **instrument** cell — §16.b's kill-craft column, §16.e's rider row
+  and the §13 emergence set in §16.f — is the 48-game view, and is labelled as
+  such where it is quoted. **§16.c is deliberately NOT in that list:** the
+  split-half halves are computed over the arm's **full recorded view** and stay
+  at **25/25**, because the byte-completeness fence applies to the instruments
+  only, never to the watchability halves (§16.c states this in its own words).
 - **`p18-crew-c1-gen0` seed 20 is KEPT IN-ROW as a recorded stalemate, and the
   row ships validity-FAIL-recorded.** The seed was attempted **8 times** — 4
   in-leg passes plus a bonus 4-pass v2 run after the `leg-abort` — and **every
@@ -1713,7 +1756,9 @@ nothing in §17 rests on it.
   retry to help.** The campaign's three stuck seeds are three distinct classes,
   and the runner's single `rc != 0` retry trigger sees only one of them:
   1. **impure validation** (`fsm-comparator` seed 5, `7f73929d` seed 35) — rc 99,
-     retryable, converged once in 14 attempts and never in 10;
+     retryable, and the two seeds took the same 14 attempts to opposite ends —
+     `fsm-comparator` seed 5 converged on attempt 14, `7f73929d` seed 35 never
+     converged in 14;
   2. **LLM-free deterministic stalemate** (`c2-gen9` seeds 19, 20) — rc 0,
      **unretryable by construction**, reproduced byte-identically in ~80 s;
   3. **meeting-bearing robust stalemate** (`c1-gen0` seed 20) — rc 0,
