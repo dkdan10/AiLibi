@@ -126,7 +126,10 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     """
 
     rows = _finalist_rows()
-    assert set(rows) == {"utility-es", "policy-es"}
+    # Task 18.26 APPENDS the phase-18 rows (baseline-6) to this file; the 17.14
+    # pins below hold unchanged, so this ruling reads its two rows by name.
+    assert {"utility-es", "policy-es"} <= set(rows)
+    rows = {entrant: rows[entrant] for entrant in ("utility-es", "policy-es")}
     fsm_rate = _fsm_comparator_win_rate()
     # The FSM comparator win rate reads the LIVE 9p2i samples; the Task-18.12
     # baseline-6 re-record moves it 0.36 -> 0.30 (15/50 IMPOSTORS). The finalist-eval
