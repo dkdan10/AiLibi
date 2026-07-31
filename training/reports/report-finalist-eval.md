@@ -794,7 +794,7 @@ purity retry re-recorded a seed.
 | `p18-imp-ea4bc955` | 52 | 5 | 46460 | 14.891 | 14.295 |
 | `p18-imp-bfd145cb` | 50 | 0 | 43056 | 14.352 | 12.223 |
 | `p18-imp-6d327dcb` | 50 | 2 | 44529 | 14.843 | 13.045 |
-| `p18-imp-7f73929d` | 49 | 5 | 49685 | 16.900 | 14.997 |
+| `p18-imp-7f73929d` ※ | 49 | 5 | 49685 | 16.900 | 14.997 |
 | `p18-fsm-comparator` | 50 | 10 | 46402 | 15.467 | 16.151 |
 | `p18-crew-c1-gen9` | 50 | 0 | 54212 | 18.071 | 15.059 |
 | `p18-crew-c1-gen0` | 57 | 3 | 54775 | 16.016 | 16.241 |
@@ -806,7 +806,17 @@ purity retry re-recorded a seed.
 recorded games ⇒ **12.5175 min/game serial**, **2.5% above** the pre-registered
 **12.2077 min/game** — the 18.25-derived rate transferred to this slate with a
 margin narrower than any gauge on the board. Adding the 11 stubborn-round
-attempts (7821 s) gives **356309 s = 98.9747 h** of leg wall for the campaign.
+attempts (7821 s) **and the 4 owner-directed seed-35 retry passes (2981 s)**
+gives **359290 s = 99.8028 h** of leg wall for the campaign.
+
+**※ — `p18-imp-7f73929d` ran a SECOND leg after the PR opened.** Its row above is
+leg 1 only (`leg-start 2026-07-30T08:23:42Z → leg-abort 23:23:31Z`), which is
+where all 49 of its recorded games live. The owner-directed seed-35 retry is a
+second leg window (`leg-start 2026-07-31T17:04:16Z → leg-abort 18:00:06Z`,
+**0.931 h**, 4 more `purity-retry` events) that produced **zero rc-0 recordings**,
+so it changes no cell in the table and no figure in the 348488 s / 464-game
+totals — every one of its 4 passes is rc 99. It does add 2981 s of campaign leg
+wall (above) and it moves the campaign's measured endpoint (below).
 
 The pooled rate is pulled **down** by the two starved c2 legs. Over the **seven
 meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`,
@@ -858,9 +868,12 @@ accounting below separates *exit code* from *outcome*:
 - **`p18-imp-7f73929d` seed 35 — excluded, forensics kept.** **14 logged
   attempts, every one rc 99**: 4 in-leg (passes 1–4, ending in `leg-abort` at
   `2026-07-30T23:23:31Z`), 6 stubborn rounds (rounds 1–6, last at
-  `2026-07-31T08:33:09Z`), and a **final owner-directed retry run** of 4 more
-  in-leg passes (all rc 99, 2981 s summed wall, `leg-abort` after the last at
-  `2026-07-31T17:58:35Z`). The failure anatomy is **identical in every kept
+  `2026-07-31T08:33:09Z`), and a **final owner-directed retry run** — **dispatched
+  after this task's PR was already open**, as a last check on the exclusion — of 4
+  more in-leg passes in a second leg (`leg-start 17:04:16Z`, passes recorded
+  `17:20:27Z`, `17:31:47Z`, `17:43:26Z`, `17:58:35Z`, all rc 99, 970 + 587 + 607 +
+  817 = **2981 s** summed wall, `leg-abort 2026-07-31T18:00:06Z`). The failure
+  anatomy is **identical in every kept
   forensic copy**: the game's first meeting (`meeting-0`, tick 10), opening
   turn 0, agent `p-8`, defaults on **validation** ("p-8 submitted no turn").
   The pre-meeting prefix is engine-deterministic, so every attempt presents
@@ -889,30 +902,54 @@ accounting below separates *exit code* from *outcome*:
 **0.009 min/game** — its 50 games recorded in **27 seconds total**, which is the
 duration signature of a leg that makes **zero LLM calls** (§16.b, §16.e).
 
-**The effective rate, recomputed on the complete slate.** Campaign span
-`2026-07-29T07:17:48Z → 2026-07-31T15:38:33Z` = **56.346 h**, of which only
-**0.117 h** is idle — a single 7-minute pause across two and a third days. Inside
-it the slate recorded **449** seed-games (8 arms × 50 seeds + `7f73929d`'s 49)
-⇒ **7.5295 min/game effective** at the two-leg posture, i.e. **≈ 6.27 h per
-50-seed arm** and **≈ 56.5 h** for a 450-game slate. Read per completed arm
-instead: **9 arms in 56.346 h = 6.261 h/arm** — the two readings agree to within
-a minute per arm.
+**The effective rate, recomputed on the complete slate — through the final
+retry.** The campaign's last logged event across all nine leg logs is the seed-35
+retry leg's `leg-abort`, so the measured span runs
+`2026-07-29T07:17:48Z → 2026-07-31T18:00:06Z` = **58.705 h**. (To the last
+*recording* at `17:58:35Z` it reads 58.680 h; the `leg-abort` is the honest
+endpoint and is what every figure below uses.)
+
+**Idle, extended alongside the span — two windows now, not one:**
+
+| idle window | duration | what it is |
+|---|---|---|
+| `2026-07-30T01:55:27Z → 02:02:30Z` | **0.1175 h** | the single app restart (the only >5 min gap inside the slate itself) |
+| `2026-07-31T15:38:33Z → 17:04:16Z` | **1.4286 h** | between the last slate leg's `leg-abort` (`c1-gen0`) and the retry leg's `leg-start` — nothing was recording while the PR sat open |
+| **total idle** | **1.5461 h** | |
+
+**Busy span = 58.705 − 1.5461 = 57.1589 h.** The slate recorded **449**
+seed-games (8 arms × 50 seeds + `7f73929d`'s 49) and the retry added **none**, so
+on the busy span the effective rate is **7.6382 min/game** at the two-leg
+posture, i.e. **≈ 6.37 h per 50-seed arm** and **≈ 57.3 h** for a 450-game slate.
+Read per completed arm instead: **9 arms in 57.1589 h = 6.351 h/arm** — the two
+readings still agree to within a minute per arm.
+
+**The full-span figures, so the post-PR idle neither inflates the rate nor
+vanishes from it.** On the raw **58.705 h** span with idle included, the same 449
+games read **7.8448 min/game**, **≈ 6.54 h per 50-seed arm**, **≈ 58.8 h** for a
+450-game slate, **6.523 h/arm**. The busy figures are the throughput number, the
+full-span figures are the calendar number, and the **1.4286 h** between them is
+the post-PR dispatch gap and nothing else. The endpoint reported before the retry
+(`15:38:33Z`, 56.346 h, 7.5295 min/game, ≈ 6.27 h/arm) was correct for the slate
+as it then stood and is **superseded** here rather than deleted.
 
 | unit | pre-registered (§14) | **measured** |
 |---|---|---|
 | serial rate | 12.2077 min/game | **12.5175** pooled / **15.7877** meeting-bearing legs only |
-| one 50-seed arm, two-leg effective | ≈ 5 h | **≈ 6.27 h** (6.261 h/arm by completed-arm count) |
-| the 9-arm slate (≈450 games) | ≈ 46 h | **≈ 56.5 h** |
+| one 50-seed arm, two-leg effective | ≈ 5 h | **≈ 6.37 h** busy-span (6.351 h/arm by completed-arm count); **≈ 6.54 h** on the full 58.705 h span |
+| the 9-arm slate (≈450 games) | ≈ 46 h | **≈ 57.3 h** busy-span / **≈ 58.8 h** full span |
 
 **The projection was honest and optimistic by about a fifth.** The serial rate
 it was built on came in at **12.5175** against a predicted 12.2077 — **2.5%
 off**, an unusually good call. What the projection missed was the *posture*: the
 gate priced "~5 h/finalist" and the two-leg rolling posture delivered
-**≈ 6.27 h**, so the slate landed at **≈ 56.5 h** against ≈46 h, **23% over**.
-The gap is not the provider — idle time across the whole campaign is 0.117 h. It
-is the meeting-bearing legs' **15.7877 min/game**, the three sleep stalls
-(3.881 h of real wall-clock), and the **32 recording attempts** spent on three
-stuck seeds to salvage one of them.
+**≈ 6.37 h**, so the slate landed at **≈ 57.3 h** against ≈46 h, **25% over** —
+**≈ 58.8 h** and **28% over** if the post-PR idle is counted as calendar time.
+The gap is not the provider: recording-idle **inside** the slate is **0.1175 h**,
+and the campaign's other **1.4286 h** of idle is the gap before the owner-directed
+seed-35 retry, not provider downtime. It is the meeting-bearing legs' **15.7877
+min/game**, the three sleep stalls (3.881 h of real wall-clock), and the **36
+recording attempts** spent on three stuck seeds to salvage one of them.
 
 ---
 
@@ -1457,6 +1494,7 @@ arm's instruments were computed over.
 |---|---|---|---|---|---|---|---|---|---|---|
 | false-vouch `saw_player` rate — `false_vouch_saw_player_observations / vouch_observations_impostor` | 0.22819 (34/149) | 0.12621 (26/206) | 0.13825 (30/217) | 0.18779 (40/213) | 0.14078 (29/206) | 0.10204 (20/196) | 0.06250 (12/192) | 0.11413 (21/184) | 0.10448 (7/67) | **undef** (0/0) |
 | false-vouch corroboration rate — `false_vouch_corroborations / corroboration_claims_impostor` | 0.28261 (13/46) | 0.22222 (12/54) | 0.18310 (13/71) | 0.42254 (30/71) | 0.33333 (20/60) | 0.11111 (6/54) | 0.14286 (7/49) | 0.28846 (15/52) | 0.33333 (7/21) | **undef** (0/0) |
+| fabricated-vouch share — `false_vouch_fabricated / false_vouch_subject_events` | 0.25397 (16/63) †† | 0.23810 (5/21) | 0.26087 (6/23) | 0.45455 (15/33) | 0.34783 (8/23) | 0.47368 (9/19) | 0.16667 (2/12) | 0.41176 (7/17) | 0.00000 (0/6) | **undef** (0/0) |
 | frame attempt rate — `frame_attempt_meetings / meetings_total` | 0.76710 (415/541) | 0.97419 (151/155) | 0.95625 (153/160) | 0.98148 (159/162) | 0.97041 (164/169) | 0.94268 (148/157) | 0.97315 (145/149) | 0.97973 (145/148) | 1.00000 (33/33) | **undef** (0/0) |
 | frame conversion rate ‡ | 0.01205 (5/415) | — | — | — | — | — | — | — | — | — |
 | teammate accusation rate ‡ | 0.00000 (0/455) | — | — | — | — | — | — | — | — | — |
@@ -1474,23 +1512,44 @@ arm's instruments were computed over.
 | roll-call coverage mean — impostor | **no corpus cell** | 0.40968 | 0.45625 | 0.41049 | 0.42899 | 0.43949 | 0.42953 | 0.43919 | 0.57576 | **n/a** |
 | roll-call answer rate — `roll_call_answered_total / roll_call_asked_total` | **no corpus cell** | 0.85222 (767/900) | 0.85307 (778/912) | 0.84842 (806/950) | 0.85331 (826/968) | 0.86746 (805/928) | 0.85129 (727/854) | 0.85748 (728/849) | 0.86170 (162/188) | **undef** (0/0) |
 
-**‡ — the six registered cells this table CANNOT fill from the rows, and why.**
-The `instruments` block committed on each row is a **flattened** view: it keeps
-the scalar and counter keys of each instrument report and **drops every
-nested/dict-valued sub-object**. The dropped sub-objects are exactly where these
-six cells live — `deception.frame_conversions` (frame conversion rate),
-`deception.teammate_accusations` (teammate accusation rate),
-`deception.alibi_fabrication` (alibi survival rate),
-`deception.effective_deflection` (effective deflection rate), and
-`kill_craft.entropy_by_side` (both action-entropy cells, per side). The same
-flattening also dropped `kill_craft.co_present_histogram` and
-`kill_craft.one_hop_histogram`. **No per-arm value is stated for any of them,
-because none is available without recomputation** — they are recoverable only by
-re-running the committed instruments
+**‡ — the exact set of registered cells the rows CANNOT fill, re-derived key by
+key.** The `instruments` block committed on each row is a **flattened** view of
+the four instrument reports: it keeps every scalar and counter key and **drops
+every nested/dict-valued sub-object**. Differencing one impostor row's blocks
+(`p18-imp-ea4bc955`) against the corpus JSON's own blocks gives the **complete**
+list of what is missing, and it is short — **seven nested keys, and nothing
+else**:
+
+- `deception` — `frame_conversions`, `teammate_accusations`,
+  `alibi_fabrication`, `effective_deflection`: the four keys carrying the frame
+  conversion, teammate accusation, alibi survival and effective deflection cells;
+- `kill_craft` — `entropy_by_side` (both per-side action-entropy cells),
+  `co_present_histogram`, `one_hop_histogram`;
+- `off_menu` — **nothing**: the row carries every key the corpus block has.
+
+**Every other registered cell is present as a scalar on every appended row and is
+filled in the table above** — including the grounded/fabricated vouch split,
+whose two counters (`false_vouch_fabricated`, `false_vouch_subject_events`) are
+plain scalars on every row and are quoted per arm. The six ‡ cells are
+recoverable **only** by re-running the committed instruments
 (`eval.deception_instruments.compute_deception_instruments`,
 `eval.kill_craft.compute_kill_craft_report`) over each arm's recordings, which
-this task did not do. The baseline column is filled because the corpus JSON
-carries the nested blocks in full; the arm columns are honestly blank.
+this task did not do; their baseline column is filled because the corpus JSON
+carries the nested blocks in full, and their arm columns are honestly blank.
+
+**†† — the fabricated-vouch share has no cell in the registered block, so its
+baseline is labelled for what it is.** `baseline_cells_corpus_9p2i` carries
+twelve cells and this is not one of them. The figure quoted, **16/63 =
+0.25397**, is the same JSON's `sample_dir: replays/ml_corpus/9p2i` `deception`
+block — fabricated **16** + grounded **47** = **63** subject events, the split
+partitioning **subject events** rather than the observation-level numerator, per
+the 18.1–18.3 batch finding. The **7/28 = 0.25000** figure that circulates in the
+phase-18 contract prose is the **baseline-5** corpus and is **not** quoted here,
+per §13's rule that baseline cells come from the JSON and the memo prose is
+stale. Read against 16/63, the fabricated share is **not** a departure on any
+arm: six arms sit at 0.167–0.348 and the two above it (`6d327dcb` 0.45455,
+`c1-g0` 0.41176) are matched by the **scripted comparator** at **0.47368**, so
+whatever lifts it is not learned.
 
 **† — the two corpus blocks in that file disagree on the witnessed kill rate, and
 this table names it rather than picking one silently.** The registered
@@ -1528,16 +1587,21 @@ vacuous by construction for menu-bounded movers, exactly as the instrument's own
 denominator was real (1962–2596 impostor decisions per arm). (ii) **Frame-attempt
 rate is far above corpus on every arm** (0.94–1.00 vs 0.76710) including the
 all-scripted comparator, so it is a substrate property of this roster, not a
-learned trait. (iii) **The false-vouch cells sit at or below corpus** on every
-arm but `6d327dcb` (corroboration 0.42254 vs 0.28261) — the deception channel did
-not run hot. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
+learned trait. (iii) **The two registered false-vouch rates sit at or below corpus**
+on every arm but `6d327dcb` (corroboration 0.42254 vs 0.28261) — the deception
+channel did not run hot; the fabricated share is read separately at ††, where the
+scripted comparator's 0.47368 rules out a learned cause. (iv) **Roll-call coverage clears the ratified 0.60 floor on every
 arm that held meetings** (0.8355–0.8635), with the same crew/impostor split
 everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors under-place themselves
 uniformly, learned or scripted. (v) **The one large, uniform departure is the
 kill-craft pair** — the witnessed rate (§16.e's rider) and, beside it, the
 co-present cell: every **learned** arm places witnessed kills strongly co-present
 (0.50–0.88) against a near-zero unwitnessed figure, while the **scripted**
-comparator is 0.00000/0.00000 and the corpus sample 0.0/0.0. That is the same
+comparator is 0.00000/0.00000 and the corpus sample 0.0/0.0 — which the
+pre-registration anticipated in as many words, having noted that the committed
+FSM kills only when alone (co-present 0 on all 863 pinned kills) and that **any
+nonzero co-present count in a learned mover's recordings is itself a behavioural
+departure**. That is the same
 learned-mover-versus-scripted-mover split the rider ruling turns on, showing up
 on a second, independent kill-craft cell — consistent with §16.e's conclusion
 that what is left is the impostor side and the physical layer. It is **an
