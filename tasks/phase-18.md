@@ -1967,6 +1967,7 @@ derivable figures only).
 **Files in scope:**
 - training/reports/results-finalist-eval.jsonl + training/reports/report-finalist-eval.md (the phase-18 rows/reading — history preserved per the 17.14 precedent)
 - tests/training/test_finalist_eval_pins.py (new — the jsonl-row pins)
+- tests/scripts/test_champion_flip_ruling.py (the minimal set-assertion relaxation forced by the phase-18 row append — every 17.14 value pin unchanged)
 
 **Files NOT in scope:**
 - scripts/run_tournament.py + training/ machinery (recorders froze earlier)
