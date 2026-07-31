@@ -49,6 +49,10 @@ What is pinned, and why:
   cell rather than recomputing one. Its rates and margin are re-derived from
   its own counts, and its excluded seed is tied back to c1-gen0's declared
   stalemate.
+* **The registered nested cells.** The six rulings' nested sources, persisted
+  per arm because the flattened rows dropped them — shape pinned at every
+  level, plus the standing no-betrayal invariant (no arm accuses a teammate),
+  asserted only where it has content and with the one vacuous arm named.
 * **The same-seed comparison blocks.** The F13 quartet's gauges re-measured
   on one common 49-seed set (carried by the three FULL impostor arms; absent
   from ``7f73929d``, whose own block already IS that view), and the c1 pair's
@@ -147,6 +151,38 @@ _F13_INTERSECTION_MEASURED: Final[dict[str, dict[str, float]]] = {
         "flags_per_meeting": 0.9559748427672956,
         "testimony_backed_conversion": 0.43661971830985913,
     },
+}
+
+#: The shape of ``registered_nested_cells`` — the six registered rulings whose
+#: nested sources the flattened rows dropped, re-persisted verbatim.
+_NESTED_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "note",
+        "frame_conversions",
+        "teammate_accusations",
+        "alibi_survival",
+        "effective_deflection",
+        "action_entropy",
+    }
+)
+_RATIO_KEYS: Final[frozenset[str]] = frozenset({"numerator", "denominator"})
+_ENTROPY_KEYS: Final[frozenset[str]] = frozenset(
+    {"mean_conditional_entropy", "agents", "decisions"}
+)
+
+#: Spot pins on the two slate-critical arms' frame-conversion cell.
+_NESTED_FRAME_CONVERSIONS: Final[dict[str, tuple[int, int]]] = {
+    "p18-imp-ea4bc955": (10, 151),
+    "p18-fsm-comparator": (6, 148),
+}
+
+#: The comparator's cells re-cut onto the F13 49-seed intersection.
+_COMPARATOR_INTERSECTION_COUNTS: Final[dict[str, int]] = {
+    "crew_witnessed_kills": 8,
+    "kills_total": 170,
+    "co_present_ge1_kills": 0,
+    "impostor_decisions": 2219,
+    "off_menu_total": 0,
 }
 
 #: The c1 pair's paired per-seed crew-win table (McNemar-style discordant
@@ -1073,6 +1109,170 @@ def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() ->
     assert gen9_parent["games_total"] == 50
     assert cell["gen9_kills_total"] < gen9_parent["kills_total"]
     assert cell["gen9_crew_witnessed_kills"] == gen9_parent["crew_witnessed_kills"]
+
+
+def test_the_registered_nested_cells_block_is_persisted_on_every_arm() -> None:
+    """The six registered rulings' nested sources, re-persisted per arm.
+
+    The flattened rows dropped the nested structures these rulings are cut
+    from, so — as with the co-present cell — the committed block is now the
+    only copy and nothing downstream can rebuild it. Presence is checked as a
+    set over all nine arms before any value is read, the field-set SHAPE is
+    pinned at every level (the ratio pairs, the two survival cells, and both
+    action-entropy roles), and the note must be a single shared definition.
+
+    Two spot values anchor the slate-critical arms, and ``c2-gen0``'s
+    starvation shape is pinned in full — with the distinction that matters:
+    its meeting-economy cells are all zero because no meeting ever convened,
+    but its ACTION-entropy cells are NOT, because agents still acted. A
+    blanket-zero block would be a different (and wrong) claim about that arm.
+
+    The standing no-betrayal invariant rides along: no arm accuses a teammate.
+    It is asserted only where it has content — an arm with a zero denominator
+    satisfies it vacuously — and WHICH arm is vacuous is pinned too, so a
+    denominator silently collapsing elsewhere cannot quietly empty the check.
+    """
+
+    rows = _rows()
+    carriers = {
+        entrant
+        for entrant, row in rows.items()
+        if "registered_nested_cells" in row.get("instruments", {})
+    }
+    assert carriers == {arm.entrant for arm in _SLATE}
+
+    notes: set[str] = set()
+    vacuous: set[str] = set()
+    for arm in _SLATE:
+        block = rows[arm.entrant]["instruments"]["registered_nested_cells"]
+        assert set(block) == _NESTED_KEYS
+        notes.add(block["note"])
+
+        for name in ("frame_conversions", "teammate_accusations"):
+            assert set(block[name]) == _RATIO_KEYS
+            assert block[name]["numerator"] <= block[name]["denominator"]
+        assert set(block["alibi_survival"]) == {"survived", "total_impostor_alibis"}
+        assert (
+            block["alibi_survival"]["survived"]
+            <= block["alibi_survival"]["total_impostor_alibis"]
+        )
+        assert set(block["effective_deflection"]) == {
+            "effective_deflections",
+            "active_survivals",
+        }
+        assert (
+            block["effective_deflection"]["effective_deflections"]
+            <= block["effective_deflection"]["active_survivals"]
+        )
+        assert set(block["action_entropy"]) == {"IMPOSTOR", "CREWMATE"}
+        for role in ("IMPOSTOR", "CREWMATE"):
+            assert set(block["action_entropy"][role]) == _ENTROPY_KEYS
+            assert block["action_entropy"][role]["decisions"] > 0
+
+        # The standing no-betrayal invariant, where it has content.
+        teammate = block["teammate_accusations"]
+        if teammate["denominator"] > 0:
+            assert teammate["numerator"] == 0
+        else:
+            vacuous.add(arm.entrant)
+
+        if arm.entrant in _NESTED_FRAME_CONVERSIONS:
+            numerator, denominator = _NESTED_FRAME_CONVERSIONS[arm.entrant]
+            assert block["frame_conversions"]["numerator"] == numerator
+            assert block["frame_conversions"]["denominator"] == denominator
+
+    assert len(notes) == 1
+    # Exactly one arm satisfies the invariant vacuously — the dead-meeting
+    # control. Anywhere else, a zero denominator would be a new finding.
+    assert vacuous == {"p18-crew-c2-gen0"}
+
+    # c2-gen0: the meeting economy is empty, the ACTION stream is not.
+    starved = rows["p18-crew-c2-gen0"]["instruments"]["registered_nested_cells"]
+    assert starved["frame_conversions"] == {"numerator": 0, "denominator": 0}
+    assert starved["teammate_accusations"] == {"numerator": 0, "denominator": 0}
+    assert starved["alibi_survival"] == {"survived": 0, "total_impostor_alibis": 0}
+    assert starved["effective_deflection"] == {
+        "effective_deflections": 0,
+        "active_survivals": 0,
+    }
+    for role in ("IMPOSTOR", "CREWMATE"):
+        assert starved["action_entropy"][role]["decisions"] > 0
+        assert starved["action_entropy"][role]["mean_conditional_entropy"] > 0.0
+
+
+def test_the_comparator_carries_the_49_seed_cut_for_the_f13_axis() -> None:
+    """The scripted anchor re-cut onto the F13 intersection, and only there.
+
+    ``7f73929d``'s axis-2 reads pair against the comparator, so the comparator
+    needs a same-seed view of its own instrument cells — the same 49-seed cut
+    the F13 gauge block uses, which is asserted by deriving the excluded seed
+    from that block rather than restating 35.
+
+    The scripted anchor is the load-bearing pin: ``co_present_ge1_kills`` is 0
+    on the intersection exactly as it is on the full 50, so the
+    learned-vs-scripted split does not depend on which seed set is read. The
+    no-betrayal invariant holds on the cut too. Counts are then reconciled
+    against the comparator's own full-50 instruments — a cut may only remove,
+    never add — and the two the cut did NOT move (witnessed kills, alibi
+    survival) are pinned as equal rather than glossed as "roughly the same".
+    """
+
+    rows = _rows()
+    carriers = [
+        entrant
+        for entrant, row in rows.items()
+        if "intersection_49_seed_for_7f73929d" in row.get("instruments", {})
+    ]
+    assert carriers == ["p18-fsm-comparator"]
+
+    comparator = rows["p18-fsm-comparator"]
+    block = comparator["instruments"]["intersection_49_seed_for_7f73929d"]
+
+    # The same cut the F13 gauge block uses, derived not restated.
+    assert block["excluded_seed"] == _F13_EXCLUDED_SEED
+    assert (
+        block["excluded_seed"]
+        == rows["p18-imp-ea4bc955"]["f13_intersection_gauges"]["excluded_seed"]
+    )
+
+    for name, count in _COMPARATOR_INTERSECTION_COUNTS.items():
+        assert block[name] == count
+    assert block["frame_attempts"] == {"numerator": 146, "denominator": 154}
+    assert block["frame_conversions"] == {"numerator": 5, "denominator": 146}
+
+    # THE ANCHOR: the scripted mover never departs a kill co-present — on the
+    # full 50 and on the cut alike, so the split survives the seed set.
+    full_co_present = comparator["instruments"]["kill_craft_co_present_departure"]
+    assert block["co_present_ge1_kills"] == 0
+    assert full_co_present["co_present_ge1_kills"] == 0
+
+    # The no-betrayal invariant holds on the cut too.
+    assert block["teammate_accusations"]["numerator"] == 0
+
+    # A cut may only REMOVE. Strictly-less where the excluded seed had
+    # content, equal where it had none.
+    kill_craft = comparator["instruments"]["kill_craft"]
+    off_menu = comparator["instruments"]["off_menu"]
+    nested = comparator["instruments"]["registered_nested_cells"]
+    assert block["kills_total"] < kill_craft["kills_total"]
+    assert block["impostor_decisions"] < off_menu["impostor_decisions"]
+    assert block["off_menu_total"] == off_menu["off_menu_total"] == 0
+    assert (
+        block["teammate_accusations"]["denominator"]
+        < nested["teammate_accusations"]["denominator"]
+    )
+    assert (
+        block["frame_conversions"]["numerator"]
+        <= nested["frame_conversions"]["numerator"]
+    )
+    assert (
+        block["effective_deflection"]["active_survivals"]
+        < nested["effective_deflection"]["active_survivals"]
+    )
+    # Untouched by the cut: the excluded seed carried neither a witnessed kill
+    # nor an impostor alibi.
+    assert block["crew_witnessed_kills"] == kill_craft["crew_witnessed_kills"]
+    assert block["alibi_survival"] == nested["alibi_survival"]
 
 
 def test_the_f13_intersection_gauges_put_the_quartet_on_one_seed_set() -> None:

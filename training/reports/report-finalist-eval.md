@@ -898,7 +898,9 @@ accounting below separates *exit code* from *outcome*:
   further **4829 s** inside its own leg.
 
 **The c2 legs are fast because meetings are scarce, not because the provider was.**
-`c2-gen9` runs at **2.780 min/game** (whole leg 2.5950 h) and `c2-gen0` at
+`c2-gen9` runs at **2.780 min/game** (**summed seed wall** 9342 s = 2.5950 h;
+**elapsed leg** `03:34:31Z → 06:20:58Z` = **2.774 h**, the figure in the table
+above) and `c2-gen0` at
 **0.009 min/game** — its 50 games recorded in **27 seconds total**, which is the
 duration signature of a leg that makes **zero LLM calls** (§16.b, §16.e).
 
@@ -1396,6 +1398,13 @@ baseline-6). Every scored arm's cell, read from `instruments.json`:
 | `p18-crew-c2-gen9` | 45/231 | 0.19481 | 8.20× | +4.8706 |
 | `p18-crew-c2-gen0` | 36/251 | 0.14343 | 6.04× | +3.7510 |
 
+The comparator's row is its **full-50** cell. Its **49-seed** counterpart — the
+same-seed pairing view for `7f73929d`, persisted at
+`instruments.intersection_49_seed_for_7f73929d` — reads **8/170 = 0.04706**
+(1.98× corpus), so the comparator's near-floor position is unchanged on either
+seed set and the contrast with `7f73929d`'s 0.22000 is not a composition
+artifact. The full-50 cell stays the slate-wide reference for the other arms.
+
 Each cell is **that arm's own** instrument value over **its own** scored view —
 50 seeds where the arm has no stalemate, the fenced view where it does
 (`7f73929d` 49, `c1-gen0` 49, `c2-gen9` 48). These are the right numbers for
@@ -1599,56 +1608,68 @@ and the reading at †† holds to it.
 | false-vouch corroboration rate — `false_vouch_corroborations / corroboration_claims_impostor` | 0.17614 (31/176) | 0.22222 (12/54) | 0.18310 (13/71) | 0.42254 (30/71) | 0.33333 (20/60) | 0.11111 (6/54) | 0.14286 (7/49) | 0.28846 (15/52) | 0.33333 (7/21) | **undef** (0/0) |
 | fabricated-vouch share — `false_vouch_fabricated / false_vouch_subject_events` — **ADVISORY** †† | 0.25397 (16/63) [0.1628, 0.3734] | 0.23810 (5/21) [0.1063, 0.4509] | 0.26087 (6/23) [0.1255, 0.4647] | 0.45455 (15/33) [0.2984, 0.6201] | 0.34783 (8/23) [0.1881, 0.5511] | 0.47368 (9/19) [0.2733, 0.6829] | 0.16667 (2/12) [0.0470, 0.4480] | 0.41176 (7/17) [0.2161, 0.6399] | 0.00000 (0/6) [0.0000, 0.3903] | **undef** (0/0) |
 | frame attempt rate — `frame_attempt_meetings / meetings_total` | 0.94384 (437/463) | 0.97419 (151/155) | 0.95625 (153/160) | 0.98148 (159/162) | 0.97041 (164/169) | 0.94268 (148/157) | 0.97315 (145/149) | 0.97973 (145/148) | 1.00000 (33/33) | **undef** (0/0) |
-| frame conversion rate ‡ — **ADVISORY** | 0.05263 (23/437) [0.0353, 0.0777] | — | — | — | — | — | — | — | — | — |
-| teammate accusation rate ‡ — **ADVISORY** | 0.00000 (0/549) [0.0000, 0.0069] | — | — | — | — | — | — | — | — | — |
-| alibi survival rate ‡ — **ADVISORY** | 0.76623 (59/77) [0.6605, 0.8467] | — | — | — | — | — | — | — | — | — |
-| effective deflection rate ‡ | 0.16587 (69/416) | — | — | — | — | — | — | — | — | — |
+| frame conversion rate — **ADVISORY** | 0.05263 (23/437) [0.0353, 0.0777] | 0.06623 (10/151) [0.0364, 0.1176] | 0.08497 (13/153) [0.0503, 0.1399] | 0.08805 (14/159) [0.0532, 0.1424] | 0.07317 (12/164) [0.0423, 0.1235] | 0.04054 (6/148) [0.0187, 0.0856] | 0.11034 (16/145) [0.0691, 0.1717] | 0.05517 (8/145) [0.0282, 0.1051] | 0.12121 (4/33) [0.0482, 0.2733] | **undef** (0/0) |
+| teammate accusation rate — **ADVISORY** | 0.00000 (0/549) [0.0000, 0.0069] | 0.00000 (0/214) [0.0000, 0.0176] | 0.00000 (0/217) [0.0000, 0.0174] | 0.00000 (0/225) [0.0000, 0.0168] | 0.00000 (0/223) [0.0000, 0.0169] | 0.00000 (0/190) [0.0000, 0.0198] | 0.00000 (0/197) [0.0000, 0.0191] | 0.00000 (0/196) [0.0000, 0.0192] | 0.00000 (0/55) [0.0000, 0.0653] | **undef** (0/0) |
+| alibi survival rate — **ADVISORY** | 0.76623 (59/77) [0.6605, 0.8467] | 0.78788 (26/33) [0.6225, 0.8932] | 0.87879 (29/33) [0.7267, 0.9518] | 0.75862 (22/29) [0.5789, 0.8778] | 0.86667 (26/30) [0.7032, 0.9469] | 0.76667 (23/30) [0.5907, 0.8821] | 0.84375 (27/32) [0.6825, 0.9314] | 0.83333 (25/30) [0.6644, 0.9266] | 1.00000 (3/3) [0.4385, 1.0000] | **undef** (0/0) |
+| deflection efficacy — `effective_deflections / active_survivals` | 0.45395 (69/152) ‖ | 0.44211 (42/95) | 0.39583 (38/96) | 0.36842 (28/76) | 0.42222 (38/90) | 0.38983 (23/59) | 0.44706 (38/85) | 0.39744 (31/78) | 0.54167 (13/24) | **undef** (0/0) |
 | crew-witnessed kill rate — `crew_witnessed_kills / kills_total` | 0.02376 (12/505) † | 0.15228 (30/197) | 0.14778 (30/203) | 0.22280 (43/193) | 0.22000 (44/200) | 0.04598 (8/174) | 0.15306 (30/196) | 0.16500 (33/200) | 0.19481 (45/231) | 0.14343 (36/251) |
 | witnessed point-biserial, within one hop | 0.25852 | 0.21108 | 0.20847 | 0.52142 | 0.35293 | 0.27505 | 0.23395 | 0.20536 | 0.28347 | 0.26509 |
 | **co-present departure (the REGISTERED cell)** — `co_present_ge1_kills / kills_total` | 0.00000 (0/505) ◆ | 0.10152 (20/197) | 0.10345 (21/203) | 0.18653 (36/193) | 0.17500 (35/200) | **0.00000 (0/174)** | 0.10714 (21/196) | 0.12500 (25/200) | 0.10823 (25/231) | 0.07570 (19/251) |
 | witnessed point-biserial, co-present — **explicitly NOT registered** (§8 rejected it: `null` on all 863 committed kills, zero variance) | — (corpus sample: `null`) | 0.73122 | 0.77013 | 0.76781 | 0.77291 | **n/a** | 0.71486 | 0.83352 | 0.67307 | 0.65639 |
 | co-present conditional means, witnessed / unwitnessed — **presentation statistic, NOT the registered cell** | — (corpus sample: 0.0 / 0.0) | 0.66667 / 0.00599 | 0.66667 / 0.00578 | 0.88372 / 0.02000 | 0.84091 / 0.01282 | 0.00000 / 0.00000 | 0.73333 / 0.00602 | 0.78788 / 0.00000 | 0.53333 / 0.00538 | 0.50000 / 0.00465 |
-| action entropy — crew mean conditional ‡ | 0.86932 | — | — | — | — | — | — | — | — | — |
-| action entropy — impostor mean conditional ‡ | 0.65258 | — | — | — | — | — | — | — | — | — |
+| action entropy — crew mean conditional | 0.86932 | 0.74780 | 0.74920 | 0.77148 | 0.78597 | 0.88099 | 0.74776 | 0.75497 | 0.67974 | 0.66697 |
+| action entropy — impostor mean conditional | 0.65258 | 0.60780 | 0.61543 | 0.53579 | 0.50194 | 0.66839 | 0.58359 | 0.60059 | 0.62184 | 0.64172 |
 | off-menu rate — `off_menu_total / impostor_decisions` | 0.00000 (0/6663) | 0.00000 (0/2015) | 0.00000 (0/2083) | 0.00000 (0/2100) | 0.00000 (0/2176) | 0.00000 (0/2299) | 0.00000 (0/2027) | 0.00000 (0/1962) | 0.00000 (0/2520) | 0.00000 (0/2596) |
 | roll-call coverage mean (all) ✦ | **no corpus cell** — standing-gauge floor **0.60** | 0.84320 | 0.84192 | 0.83549 | 0.84498 | 0.85872 | 0.83846 | 0.84485 | 0.86353 | **n/a** |
 | roll-call coverage mean — crew ✦ | **no corpus cell** | 1.00000 | 0.98885 | 0.99383 | 0.99556 | 0.99735 | 0.99060 | 1.00000 | 1.00000 | **n/a** |
 | roll-call coverage mean — impostor ✦ | **no corpus cell** | 0.40968 | 0.45625 | 0.41049 | 0.42899 | 0.43949 | 0.42953 | 0.43919 | 0.57576 | **n/a** |
 | roll-call answer rate — `roll_call_answered_total / roll_call_asked_total` ✦ | **no corpus cell** | 0.85222 (767/900) | 0.85307 (778/912) | 0.84842 (806/950) | 0.85331 (826/968) | 0.86746 (805/928) | 0.85129 (727/854) | 0.85748 (728/849) | 0.86170 (162/188) | **undef** (0/0) |
 
-**‡ — the exact set of registered cells the rows CANNOT fill, re-derived key by
-key.** The `instruments` block committed on each row is a **flattened** view of
-the four instrument reports: it keeps every scalar and counter key and **drops
-every nested/dict-valued sub-object**. Differencing one impostor row's blocks
-(`p18-imp-ea4bc955`) against the corpus JSON's own blocks gives the **complete**
-list of what is missing, and it is short — **seven nested keys, and nothing
-else**:
+**‡ — nothing registered is missing any more. Here is the accounting.** The
+`instruments` block committed on each row is a **flattened** view of the four
+instrument reports: it keeps every scalar and counter key and **drops every
+nested/dict-valued sub-object**. Differencing one impostor row
+(`p18-imp-ea4bc955`) against the corpus JSON's blocks gives **seven** dropped
+nested keys — `deception.{frame_conversions, teammate_accusations,
+alibi_fabrication, effective_deflection}` and `kill_craft.{entropy_by_side,
+co_present_histogram, one_hop_histogram}`; `off_menu` loses nothing. **Six
+registered rulings lived in those keys, and all six are now persisted** on every
+phase-18 row at `instruments.registered_nested_cells` — `frame_conversions`
+(n/d), `teammate_accusations` (n/d), `alibi_survival`
+(`survived`/`total_impostor_alibis`), `effective_deflection`
+(`effective_deflections`/`active_survivals`) and `action_entropy` per side
+(`mean_conditional_entropy` with its `agents`/`decisions`). The co-present
+departure numerator is persisted separately at
+`instruments.kill_craft_co_present_departure`. **Every one of those rows above is
+read from the committed cells, not recomputed here.**
 
-- `deception` — `frame_conversions`, `teammate_accusations`,
-  `alibi_fabrication`, `effective_deflection`: the four keys carrying the frame
-  conversion, teammate accusation, alibi survival and effective deflection cells;
-- `kill_craft` — `entropy_by_side` (both per-side action-entropy cells),
-  `co_present_histogram`, `one_hop_histogram`;
-- `off_menu` — **nothing**: the row carries every key the corpus block has.
+**What remains recompute-only is two DISTRIBUTIONS, and no registered ruling.**
+`kill_craft.co_present_histogram` and `kill_craft.one_hop_histogram` are still
+absent from the rows as full histograms. Neither is a claim cell: the
+pre-registration registers the co-present **rate** derived from the first
+(persisted) and the within-one-hop **point-biserial** (a scalar, already on every
+row). The histograms would only be needed to re-plot the distributions, and are
+recoverable by re-running `eval.kill_craft.compute_kill_craft_report` over each
+arm's recordings.
 
-**`co_present_histogram` is still a dropped key, but its registered cell is no
-longer missing.** The co-present **departure** is a rate — `count(co_present_crew
-≥ 1) / kills_total` — and its numerator has been re-derived from each arm's
-histogram and **persisted in the committed evidence row** at
-`instruments.kill_craft_co_present_departure` (`co_present_ge1_kills`,
-`kills_total`, `rate`), on **all nine** phase-18 rows. The table row above is read
-from those cells, not recomputed here, so the registered cell has left the
-recompute-only list even though the histogram itself is still absent.
+**So the table above now carries the complete registered set.** The
+pre-registration enumerates **13 claim cells, 14 rulings** (`action-entropy`
+ruled once per side); all 13 appear above, per arm, on the registered
+numerator/denominator fields of its own §2.2 table — including the
+grounded/fabricated vouch split, whose counters were always plain scalars. The
+only rows here that are **not** part of that set are the three explicitly
+labelled as such: the co-present point-biserial (§8 rejected it), the co-present
+conditional means (presentation statistic), and the roll-call block (✦).
 
-**Every other registered cell is present as a scalar on every appended row and is
-filled in the table above** — including the grounded/fabricated vouch split,
-whose two counters (`false_vouch_fabricated`, `false_vouch_subject_events`) are
-plain scalars on every row and are quoted per arm. The six ‡ cells are
-recoverable **only** by re-running the committed instruments
-(`eval.deception_instruments.compute_deception_instruments`,
-`eval.kill_craft.compute_kill_craft_report`) over each arm's recordings, which
-this task did not do; their baseline column is filled because the corpus JSON
-carries the nested blocks in full, and their arm columns are honestly blank.
+**‖ — the deflection baseline is quoted on the REGISTERED denominator.** The
+pre-registration's §2.2 cell is `effective_deflection.effective_deflections /
+effective_deflection.active_survivals` — *active* survivals, never the raw
+accused-impostor events, because "skip-saved survival is never deflection" (§3.5).
+On the baseline-6 top-level 9p2i block that is **69/152 = 0.45395**, and every
+arm column uses the same two fields from its own row. (Quoting
+`effective_deflections / accused_impostor_events` would give 69/416 and compare
+an arm against a corpus figure computed on a different denominator; the
+pre-registered denominator is a **field**, and it re-anchors with the cells.)
 
 **◆ — the co-present baseline is the 9p2i sample block's histogram, and only
 that one.** `baseline_cells_corpus_9p2i` registers no co-present cell, and §8 of
@@ -1679,25 +1700,41 @@ this cell **advisory** (§3.1 by the 18.1 numerator rule, numerator 7 ≤ 7, and
 the one cross-set disagreement in its §5; §7 carries it on the advisory list):
 an advisory cell is "quoted with its Wilson interval, never alone ruling a
 claim", and what the flag bars is **baseline-anchored** reading and short-circuit
-readings of the fragile point rate. So, stated at that standard: **every arm's
-Wilson 95% interval overlaps the baseline's [0.1628, 0.3734]** — arm intervals
-run 0.32–0.42 wide on denominators of 6 to 33 — and therefore **no arm separates
-from the corpus on this cell**. The point spread (0.00000 to 0.47368) is what
-intervals that wide are expected to produce and is **not** evidence of anything
-on its own. The observation worth carrying forward, offered as an observation:
-the two arms with the highest point rates (`6d327dcb` 0.45455, `c1-g0` 0.41176)
-are topped by the **scripted** comparator at 0.47368, which is *consistent with*
-the lift not being learned — but on overlapping advisory intervals that is a
-**direction to check, not a finding**. **The ruling is 18.27's**, and by the
-pre-registration's own rule it must come from the arm-vs-arm §6 discipline, never
-from this baseline anchor.
+readings of the fragile point rate. **That advisory flag — not any arithmetic
+below — is why this cell cannot rule.** The intervals are quoted beside every
+rate because the memo requires it, and the arm intervals run 0.32–0.42 wide on
+denominators of 6 to 33, which is the honest measure of how little a single
+point rate here is worth.
+
+**A correction to how an earlier draft read those intervals.** It inferred from
+"every arm's interval overlaps the baseline's [0.1628, 0.3734]" that **no arm
+separates from the corpus**. That inference is **invalid**: overlapping marginal
+confidence intervals are not a difference test, and two overlapping intervals can
+still sit on a significant difference. Run the actual test the pre-registration
+names for rates — the pooled two-proportion z — and `6d327dcb`'s cell is right
+at the bar: **15/33 vs 16/63, pooled p̂ = 0.32292, SE = 0.10048, z = +1.9962**
+(two-sided p = **0.0459**), i.e. **just past |z| ≥ 1.96**. The overlap-based
+"no separation" claim is therefore withdrawn.
+
+**What that z does and does not license.** It is a **baseline-anchored** read on
+an **advisory** cell, which is precisely the reading §7's advisory rule bars from
+ruling — and it is one cell of a conjunctive four-part §6 discipline
+(pooled z **against the same-seed scripted comparator**, sign reproduction on the
+`seed mod 5` splits, a named ablation, and selected-for presence), not a claim on
+its own. So it is recorded **as an observation beside the interval**, together
+with the neighbouring observation that the two highest point rates (`6d327dcb`
+0.45455, `c1-g0` 0.41176) are topped by the **scripted** comparator at 0.47368.
+**The ruling is 18.27's**, and by the pre-registration's own rule it must come
+from the arm-vs-arm §6 discipline, never from this baseline anchor.
 
 **The same treatment applies to every other advisory-registered cell in this
-table, and is now applied.** `frame conversion` (5/415), `teammate accusation`
-(0/455) and `alibi survival` (11/14) are all on the pre-registration's §7
-advisory list; each is marked **ADVISORY** with its Wilson interval in the table
-above. They are ‡ rows, so only their baselines are quoted here — and an advisory
-baseline anchors no ruling either. The **grounded-vouch share** is registered
+table, and is now applied.** `frame conversion` (baseline 23/437),
+`teammate accusation` (0/549) and `alibi survival` (59/77) are all on the
+pre-registration's §7 advisory list; each is marked **ADVISORY** in the table
+above and now carries a Wilson interval on **every arm cell as well as the
+baseline**, since all three are filled from `registered_nested_cells`. An
+advisory baseline anchors no ruling on any of them, on the same terms as ††.
+The **grounded-vouch share** is registered
 advisory as well; it is the exact complement of the fabricated share on the same
 denominator (corpus 47/63 = **0.74603**, [0.6266, 0.8372]) and per §7 is "not a
 separate registration", so it gets no separate row. Every interval in this
@@ -1730,6 +1767,37 @@ read; quoting the embedded baseline-5 snapshot was the error.
 **6.2×–9.4×** multiples, the comparator's **1.93×**, and the c1 gen-9-minus-gen-0
 margin all stand exactly as recorded. The correction lands on the *other* rows of
 this table, and §16.f's readings below are rewritten against the corrected column.
+
+**The same-seed comparator view for the `7f73929d` column.** `7f73929d`'s cells
+are its 49-seed view while the comparator column is the full 50, so reading the
+two against each other directly compares different seed sets — the same hazard
+§16.a's Δ column and §16.e's deciding cell each had to correct for. **The
+comparator's own instrument cells recomputed on that 49-seed view are persisted**
+on its committed row at `instruments.intersection_49_seed_for_7f73929d`
+(`excluded_seed` 35), and are the right comparator reference for any axis-2 read
+against `7f73929d`:
+
+| cell | comparator, full 50 | **comparator, 49-seed (vs `7f73929d`)** | `7f73929d` (49) |
+|---|---|---|---|
+| crew-witnessed kill rate | 0.04598 (8/174) | **0.04706 (8/170)** | 0.22000 (44/200) |
+| co-present departure | 0.00000 (0/174) | **0.00000 (0/170)** | 0.17500 (35/200) |
+| frame attempt rate | 0.94268 (148/157) | **0.94805 (146/154)** | 0.97041 (164/169) |
+| `saw_player` rate | 0.10204 (20/196) | **0.09794 (19/194)** | 0.14078 (29/206) |
+| corroboration rate | 0.11111 (6/54) | **0.11321 (6/53)** | 0.33333 (20/60) |
+| fabricated-vouch share | 0.47368 (9/19) | **0.44444 (8/18)** | 0.34783 (8/23) |
+| frame conversion rate | 0.04054 (6/148) | **0.03425 (5/146)** | 0.07317 (12/164) |
+| teammate accusation rate | 0.00000 (0/190) | **0.00000 (0/187)** | 0.00000 (0/223) |
+| alibi survival rate | 0.76667 (23/30) | **0.76667 (23/30)** | 0.86667 (26/30) |
+| deflection efficacy | 0.38983 (23/59) | **0.38596 (22/57)** | 0.42222 (38/90) |
+| off-menu rate | 0.00000 (0/2299) | **0.00000 (0/2219)** | 0.00000 (0/2176) |
+| one-hop point-biserial | 0.27505 | **0.28164** | 0.35293 |
+| action entropy, crew / impostor | 0.88099 / 0.66839 | **0.87723 / 0.66472** | 0.78597 / 0.50194 |
+
+Every cell moves in the third decimal or not at all, so **no reading in this
+section changes** — which is itself the useful result: the `7f73929d` column can
+be read against the comparator column above without a composition correction. The
+**full-50 comparator cells stay the slate-wide reference** for the other eight
+arms, all of which share its seed set.
 
 **The fenced views, and the one column that is not a fence.** `7f73929d` is a
 49-game arm because seed 35 was never recorded (§14.1, §17); `c1-g0` (49, seed 20)
@@ -1771,8 +1839,8 @@ every arm but one", then a four-arm count against the stale 0.28261); the
 corrected picture is a **majority of arms above corpus on corroboration** and a
 **learned-impostor-vs-everything-else split on `saw_player`**. Which way either
 reads is **18.27's ruling**, not this section's. The fabricated share is **advisory** and is read separately at ††,
-where every arm's Wilson interval overlaps the baseline's and no arm separates
-from the corpus; nothing here rules on it. (iv) **Roll-call coverage clears its
+where its per-arm intervals and a pooled-z observation are recorded and the
+**advisory flag** — not any arithmetic — is the reason nothing here rules on it. (iv) **Roll-call coverage clears its
 0.60 floor on every arm that held meetings** (0.8355–0.8635), with the same
 crew/impostor split everywhere (~0.99 crew vs 0.41–0.58 impostor): impostors
 under-place themselves uniformly, learned or scripted — read as context, per ✦.
