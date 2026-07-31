@@ -2086,8 +2086,18 @@ finalist), `c2-g9` **0.33333**, `c1-g0` **0.28846**, `ea4bc955` **0.22222**,
 `bfd145cb` **0.18310** — with only `c1-g9` (0.14286) and `fsm-comp` (0.11111)
 below. Two earlier readings of this row were wrong (first "at or below corpus on
 every arm but one", then a four-arm count against the stale 0.28261); the
-corrected picture is a **majority of arms above corpus on corroboration** and a
-**learned-impostor-vs-everything-else split on `saw_player`**. Which way either
+corrected picture is a **majority of arms above corpus on corroboration** and, on
+`saw_player`, a clean partition that is **descriptive, not causal**: the arms
+above the baseline are the four recorded as **impostor candidate vs scripted
+crew**, and the arms below it are the comparator plus the three meeting-bearing
+arms recorded as **learned crew vs the frozen champion**. It is tempting to read
+that as learned-impostor-vs-everything-else, and **an earlier draft did — wrongly**.
+The crew arms face `ea4bc955…`, a **learned** impostor, and still sit below the
+baseline, so "learned impostor present" cannot be what separates the two groups.
+What the partition actually tracks is the **game context** — which side is the
+candidate, and therefore which opponent, roster and meeting economy each leg ran
+— so an **opponent/context confound** is in play and no causal reading is
+available from this cell. Which way either
 reads is **18.27's ruling**, not this section's. The fabricated share is **advisory** and is read separately at ††,
 where its per-arm intervals and a pooled-z observation are recorded and the
 **advisory flag** — not any arithmetic — is the reason nothing here rules on it. (iv) **Roll-call coverage clears its
@@ -2262,6 +2272,62 @@ rather than from a count of five.
 against the committed per-split cells; §16.f's labels carry forward unchanged —
 the crew columns are ✥ NOT-DEMONSTRABLE for want of an opponent-matched
 comparator, and the two entropy rulings are ✧ NOT-DEMONSTRATED, on both axes.
+
+### 16.h Clause (a) — the pooled z against the same-seed FSM comparator
+
+§6.a's convention is that "the campaign/finalist report quotes the computed z with
+its inputs beside it", so the clause-(a) statistic is computed here for **every
+registered rate cell on every impostor arm**, against that arm's **same-seed**
+comparator pairing: the comparator's **full-50** cells for `ea4bc955`,
+`bfd145cb` and `6d327dcb`, and its **persisted 49-seed** cells
+(`instruments.intersection_49_seed_for_7f73929d`) for `7f73929d` (§16.g). Both
+numerators and denominators come from the committed rows and are printed per arm
+in **§16.f**; each entry below is **pooled p̂ · z**, with **✱** marking
+**|z| ≥ 1.96**. The correlation cell uses **Fisher's r-to-z** on the committed `r`
+and `kills_total` per side, as §6.a registers for the non-rate cells.
+
+| registered cell | `ea4bc955` | `bfd145cb` | `6d327dcb` | `7f73929d` (49) | arms at/over the bar |
+|---|---|---|---|---|---|
+| false-vouch `saw_player` | 0.11443 · +0.7610 | 0.12107 · +1.1264 | 0.14670 · **+2.4487 ✱** | 0.12000 · +1.3177 | **1** |
+| false-vouch corroboration | 0.16667 · +1.5492 | 0.15200 · +1.1105 | 0.28800 · **+3.8088 ✱** | 0.23009 · **+2.7745 ✱** | **2** |
+| fabricated-vouch share *(advisory)* | 0.35000 · −1.5600 | 0.35714 · −1.4326 | 0.46154 · −0.1333 | 0.39024 · −0.6294 | 0 |
+| frame-attempt rate | 0.95833 · +1.3930 | 0.94953 · +0.5520 | 0.96238 · +1.8211 | 0.95975 · +1.0213 | 0 |
+| frame-conversion rate *(advisory)* | 0.05351 · +0.9867 | 0.06312 · +1.5845 | 0.06515 · +1.6855 | 0.05484 · +1.5026 | 0 |
+| teammate-accusation rate *(advisory)* | **degenerate** | **degenerate** | **degenerate** | **degenerate** | — |
+| alibi survival *(advisory)* | 0.77778 · +0.2023 | 0.82540 · +1.1708 | 0.76271 · −0.0726 | 0.81667 · +1.0009 | 0 |
+| deflection efficacy | 0.42208 · +0.6385 | 0.39355 · +0.0743 | 0.37778 · −0.2545 | 0.40816 · +0.4358 | 0 |
+| crew-witnessed kill rate | 0.10243 · **+3.3701 ✱** | 0.10080 · **+3.2732 ✱** | 0.13896 · **+4.8898 ✱** | 0.14054 · **+4.7701 ✱** | **4** |
+| co-present departure | 0.05391 · **+4.3211 ✱** | 0.05570 · **+4.3660 ✱** | 0.09809 · **+5.9988 ✱** | 0.09459 · **+5.7322 ✱** | **4** |
+| off-menu rate | **degenerate** | **degenerate** | **degenerate** | **degenerate** | — |
+| one-hop point-biserial *(Fisher)* | −0.6484 | −0.6792 | **+2.8078 ✱** | +0.7541 | **1** |
+| **cells at/over the bar, per arm** | **2** | **2** | **5** | **3** | |
+
+**The two degenerate rows are honest no-claim reads, per §6.a's own rule.**
+`off-menu` is **0/N on both sides** (0/2015–0/2176 arm, 0/2299 and 0/2219
+comparator) and `teammate-accusation` is likewise **0 on both sides** (0/214–0/225
+arm, 0/190 and 0/187 comparator). A pooled rate of exactly 0 has no standard
+error, so **no z exists** — not a z of 0, and not a pass. Both cells report
+**no difference measurable**, which for `off-menu` is the vacuity its own
+`scope_note` predicts for menu-bounded movers and for `teammate-accusation` is the
+scripted structural invariant the pre-registration names. **The co-present cell is
+NOT degenerate** even though the comparator is 0/174: the *pooled* rate is
+nonzero, so the z is defined and is computed above.
+
+**Crew arms are absent from this table because clause (a) is not computable for
+them.** §2.1 requires the comparator to be **scripted-FSM crew against the same
+opponent**, and no such row exists in this slate (✥, §16.f, §17.1). There is no
+denominator to pool against, so no z is quoted — **NOT-DEMONSTRABLE stands**, and
+substituting `p18-fsm-comparator` (scripted on both sides) would be the improvised
+comparator §2.1 forbids.
+
+**What this table is, and what it is not.** It is the **quoted clause-(a)
+statistic**, nothing more. §6 is **conjunctive**: clause (b)'s split evidence is in
+§16.g, clause (c)'s ablation inventory is in §16.g and **none of the five runs is
+clause-(c)-complete as recorded**, and clause (d) (selected-for presence in the
+champion's own recordings) is not evaluated here at all. A ✱ above therefore
+marks **one limb of four**, on one cell, for one arm — it is **not** an emergence
+finding, and two cells clearing the bar on all four arms is not four findings.
+**18.27 rules**; this report computes and quotes.
 
 ---
 
