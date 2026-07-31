@@ -835,12 +835,28 @@ identical across the two windows, and the 348488 s / 464-game totals are
 untouched. Two cells **do** span both windows and are quoted that way: the
 **retry-events** count is **9** (5 in leg 1, 4 in the retry leg), matching the
 row's `leg_duration.retry_events`, and the elapsed column shows both windows
-rather than summing them across the 17.6 h gap between. The row's
-`first_event_at`/`last_event_at` (`08:23:42Z` → `18:00:06Z`) therefore span the
-gap by construction; the retry window's own bounds are in
-`leg_duration.post_pr_retry_leg` (`attempts` 4, `sum_wall_seconds` 2981,
-`first_at 17:20:27Z`, `last_event_at 18:00:06Z`). Those 2981 s are added to
-campaign leg wall (above) and the endpoint moves accordingly (below).
+rather than summing them across the gap between.
+
+**Both window boundaries are now committed, so the decomposition is readable from
+the row alone.** `leg_duration` carries `leg1_abort_at` and
+`post_pr_retry_leg.leg_start_at` alongside the outer bounds, giving two **active**
+windows and the idle stretch between them:
+
+| segment | committed fields | duration |
+|---|---|---|
+| window 1 (leg 1) | `first_event_at 2026-07-30T08:23:42Z` → `leg1_abort_at 2026-07-30T23:23:31Z` | **14.997 h** |
+| inter-leg gap (idle) | `leg1_abort_at` → `post_pr_retry_leg.leg_start_at 2026-07-31T17:04:16Z` | **17.679 h** |
+| window 2 (retry leg) | `leg_start_at` → `last_event_at 2026-07-31T18:00:06Z` | **0.931 h** |
+| **first-to-last span** | `first_event_at` → `last_event_at` | **33.607 h** |
+
+14.997 + 17.679 + 0.931 = **33.607 h**, which closes on the outer span exactly.
+The retry window also carries `attempts` 4, `sum_wall_seconds` 2981 and
+`first_at 17:20:27Z` (its first recorded pass, 16 min after the leg started).
+Those 2981 s are added to campaign leg wall (above) and the endpoint moves
+accordingly (below); note the 17.679 h inter-leg gap is **this arm's own** idle
+and is not the same quantity as the campaign-wide **1.4286 h** post-PR gap below,
+which is measured from the last leg of the *slate* (`c1-gen0`, `15:38:33Z`)
+rather than from this arm's leg 1.
 
 The pooled rate is pulled **down** by the two starved c2 legs. Over the **seven
 meeting-bearing** legs (the four impostor arms, the comparator, `c1-gen9`,
@@ -1271,11 +1287,11 @@ removed from **all four** arms. The three full arms' intersection cells are
 `excluded_seed` 35 and each gauge's floor); `7f73929d`'s own row **is** the n=49
 view already, so it is quoted unchanged. This is the cell:
 
-| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | **POOLED-margin split-half noise** | per-arm noise, min–max (context only) | reads toward |
+| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | **§11.2 test — champion-side / runner-up-side noise** | per-arm noise, min–max (context only) | reads toward |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | **0.00975** | 0.03381 – 0.08671 | (18.27 rules) |
-| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | **0.02306** | 0.01728 – 0.29576 | (18.27 rules) |
-| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | **0.07520** | 0.00380 – 0.09459 | (18.27 rules) |
+| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | **0.07001 / 0.06026** — below both | 0.03381 – 0.08671 | (18.27 rules) |
+| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | **0.17958 / 0.15652** — below both | 0.01728 – 0.29576 | (18.27 rules) |
+| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | **0.06578 / 0.00942** — below champion side, **3.70× above runner-up side** | 0.00380 – 0.09459 | (18.27 rules) |
 
 All four columns are the **same 49 seeds** — **and so is the noise column**. The
 three full arms' halves were re-split on the intersection (even/odd **minus seed
@@ -1298,49 +1314,69 @@ table is unchanged — those halves are the arm's **full recorded view** by
 construction (§16.c), and this column is the F13 cell's matched-composition
 counterpart, not a correction to it.
 
-**The POOLED-margin noise, and why the per-arm column could not stand in for
-it.** The min–max of four individual arms' wobbles is the noise of *those arms*,
-not the noise of **the margin between two pooled means** — the quantity this cell
-actually reports. The margin's own split-half read is derived here **purely from
-committed cells**: the three full arms' `h1`/`h2` in `f13_intersection_gauges`
-plus `7f73929d`'s own `split_half` `h1`/`h2`, pooled per half exactly as the
-margin is pooled, with `noise = |margin_h1 − margin_h2|`:
+**The POOLED-side noises — the quantity §11.2 actually registers — and why the
+per-arm column could not stand in for them.** §11.2's rule is stated on the
+**pooled sides**: "A margin smaller than **either side's** split-half noise is
+reported as such and cannot be read as support for A." The min–max of four
+individual arms' wobbles is the noise of *those arms*, not of the two pooled
+means the margin is taken between. Both pooled-side noises are derived here
+**purely from committed cells** — the three full arms' `h1`/`h2` in
+`f13_intersection_gauges` plus `7f73929d`'s own `split_half` `h1`/`h2`, pooled
+per half exactly as the margin is pooled:
 
-| gauge | champ H1 | runner H1 | **margin H1** | champ H2 | runner H2 | **margin H2** | **pooled noise** | pooled margin (49 seeds) |
-|---|---|---|---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.15926 | 0.15693 | **−0.00233** | 0.22927 | 0.21719 | **−0.01208** | **0.00975** | −0.00650 |
-| `flags_per_meeting` | 0.86780 | 0.78963 | **−0.07817** | 1.04738 | 0.94615 | **−0.10123** | **0.02306** | −0.09189 |
-| `testimony_backed_conversion` | 0.37162 | 0.37422 | **+0.00260** | 0.43740 | 0.36480 | **−0.07260** | **0.07520** | −0.03483 |
+| gauge | champ H1 | champ H2 | **champion-side noise** | runner H1 | runner H2 | **runner-up-side noise** | margin H1 | margin H2 | *margin stability* | pooled margin (49 seeds) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `witnessed_event_rate` | 0.15926 | 0.22927 | **0.07001** | 0.15693 | 0.21719 | **0.06026** | −0.00233 | −0.01208 | *0.00975* | **−0.00650** |
+| `flags_per_meeting` | 0.86780 | 1.04738 | **0.17958** | 0.78963 | 0.94615 | **0.15652** | −0.07817 | −0.10123 | *0.02306* | **−0.09189** |
+| `testimony_backed_conversion` | 0.37162 | 0.43740 | **0.06578** | 0.37422 | 0.36480 | **0.00942** | +0.00260 | −0.07260 | *0.07520* | **−0.03483** |
 
 (Champion mean = (`ea4bc955` + `6d327dcb`)/2, runner-up mean = (`bfd145cb` +
-`7f73929d`)/2, per half. The pooled margin is computed on the full 49-seed set
-and is not the average of the two half-margins — the halves carry different
-denominators.)
+`7f73929d`)/2, per half; each side's noise is |H2 − H1| of that side's pooled
+mean. The pooled margin is computed on the full 49-seed set and is **not** the
+average of the two half-margins — the halves carry different denominators. The
+italic ***margin stability*** column is `|margin_h1 − margin_h2|`: it measures how
+steady the **margin itself** is between halves and is **an observation about
+reproducibility, NOT the §11.2 test** — the §11.2 test is the two bolded
+side-noise columns.)
 
-**The three reads, stated exactly as they land:**
+**Applying §11.2 as registered.** On **`witnessed_event_rate`** (|−0.00650| vs
+0.07001 / 0.06026) and **`flags_per_meeting`** (|−0.09189| vs 0.17958 / 0.15652)
+the margin sits **below both** pooled sides' noise, so both are "reported as such
+and cannot be read as support for A". **`testimony_backed_conversion` does not
+behave that way and is not smoothed here:** |−0.03483| sits below the champion
+side's **0.06578** but runs **3.70× above** the runner-up side's **0.00942** —
+the runner-up pair happens to be unusually steady between halves (0.37422 →
+0.36480). **It does not matter for hypothesis A, and the reason is the sign, not
+the noise:** A predicts runner-ups sitting **higher** ("one step less far along
+the trade") and **all three margins are negative**, so no gauge on this cell
+points toward A whatever its noise does. **No F13 gauge can be read as supporting
+hypothesis A** — two by §11.2's noise test, the third by direction.
 
-- **`witnessed_event_rate`** — pooled margin **−0.00650** sits **inside** its
-  pooled noise **0.00975** (0.67×), and the sign is **consistent** across halves
-  (both negative). A margin inside its own noise is not a result.
-- **`flags_per_meeting`** — pooled margin **−0.09189** **EXCEEDS** its pooled
-  noise **0.02306** by **4.0×**, with the sign **consistent** across halves
-  (−0.07817, −0.10123). This is the one row where the pooled margin is large
-  relative to the margin's own wobble. **And**, separately, `bfd145cb`'s per-arm
-  flags cell remains **UNRESOLVABLE** on the noise precondition (0.29576 >
-  0.27273), so §10.3 excludes that arm's cell from the axis-1 ruling — both facts
-  hold at once and neither cancels the other.
-- **`testimony_backed_conversion`** — pooled margin **−0.03483** sits **inside**
-  its pooled noise **0.07520** (0.46×), **and its sign does not reproduce across
-  the halves**: **+0.00260** in H1, **−0.07260** in H2. In the flavour of §6.b's
-  sign rule, a margin that flips direction between halves is not reproducing.
+**The margin-stability and sign reads, kept as separate observations:**
 
-**None of this is a ruling**; it is the margin's own noise recorded beside the
-margin so 18.27 is not left inferring it from per-arm wobbles. **The ruling is
-18.27's.**
+- **`witnessed_event_rate`** — margin stability **0.00975**, sign **consistent**
+  across halves (−0.00233, −0.01208).
+- **`flags_per_meeting`** — margin stability **0.02306**, sign **consistent**
+  (−0.07817, −0.10123); the pooled margin is **4.0× larger** than that stability
+  figure, i.e. the margin is steady between halves even though it sits inside
+  both sides' noise. **Separately**, `bfd145cb`'s per-arm flags cell remains
+  **UNRESOLVABLE** on the noise precondition (0.29576 > 0.27273), so §10.3
+  excludes that arm's cell from the axis-1 ruling — all of these hold at once and
+  none cancels the others.
+- **`testimony_backed_conversion`** — margin stability **0.07520**, and the
+  **sign does not reproduce across the halves**: **+0.00260** in H1, **−0.07260**
+  in H2. In the flavour of §6.b's sign rule, a margin that flips direction
+  between halves is not reproducing.
+
+**None of this is a ruling**; it is the registered test applied to committed
+cells, with the stability and sign observations recorded beside it. **The ruling
+is 18.27's.**
 
 Every margin stays **negative** — the hypothesis-B shape is unchanged by the
-composition fix, and by a hair *larger* in magnitude on all three gauges than the
-mixed-composition read below.
+composition fix. The magnitudes move only in the third decimal, and **not all in
+the same direction**: `witnessed_event_rate` grew a hair (0.00365 → 0.00650) and
+`flags_per_meeting` grew a hair (0.08811 → 0.09189), while
+`testimony_backed_conversion` **shrank** a hair (0.03543 → 0.03483).
 
 **The per-arm values, for reference — NOT the cell.** These are each arm's own
 full-n instrument values, quoted elsewhere in this Part (§16.a, §16.c). They mix a
@@ -1361,10 +1397,12 @@ it per side, without smoothing. Per §11.2 a margin smaller than either side's
 split-half noise "is reported as such and cannot be read as support for A". Every
 figure below is the **intersection** margin against the **intersection** noise —
 matched composition on both terms. **These bullets read the margin against the
-individual arms' wobbles; the pooled-margin read above is the one that tests the
-margin against its OWN noise, and on `flags_per_meeting` the two point different
-ways** (inside three of four per-arm noises, but 4.0× outside the pooled noise).
-Both are recorded; neither is a ruling.
+individual arms' wobbles, which is context — §11.2's registered test is the
+pooled-side one applied above**, and the two can differ: on
+`testimony_backed_conversion` the margin clears two of four per-arm noises here
+*and* the runner-up side's pooled noise there, while on `flags_per_meeting` it
+clears one per-arm noise but sits inside both pooled sides'. All of it is
+recorded; none of it is a ruling.
 
 - `witnessed_event_rate`: margin **0.00650** against noises of **0.03381
   (`bfd145cb`) – 0.08671 (`7f73929d`)** — smaller than **all four**, by **5.2× to
@@ -1400,12 +1438,19 @@ opposite direction to A's "one step less far along the trade") and all three sit
 `witnessed_event_rate` inside **every** arm's. On the other two rows the margin
 does clear the quietest arms — one of four on flags, two of four on conversion —
 so "smaller than the noise" is true of the row as a whole and **not** of every
-pairwise comparison inside it; the bullets above give the exact split. **Against
-the pooled margin's own noise the picture is different again**: witnessed and
-conversion sit inside it, `flags_per_meeting` runs **4.0× outside** it with a
-consistent sign, and conversion's sign **flips between halves**. Neither the
-B-shaped direction nor the flags exception is declared here. **The ruling is
-18.27's.** Nothing in this Part declares A or B confirmed.
+pairwise comparison inside it; the bullets above give the exact split.
+
+**Under §11.2's registered test the statement is cleaner than any of that.** The
+rule is the margin against **either pooled side's** split-half noise, and
+`witnessed_event_rate` and `flags_per_meeting` sit **below both** sides' noise, so
+both are disqualified from supporting A by the rule itself.
+`testimony_backed_conversion` clears the runner-up side's 0.00942 — and is
+disqualified anyway, because **its margin is negative**, which is A's opposite.
+**So no F13 gauge supports hypothesis A**: two by the noise test, the third by
+direction. That is the whole of what the cell establishes; the B-shaped reading it
+leaves standing is *not* thereby confirmed, since "A unsupported" is not "B
+demonstrated". **The ruling is 18.27's.** Nothing in this Part declares A or B
+confirmed.
 
 **The within-lineage pair** (`run-02-utility-lambda4`: `ea4bc955…` gen-2 vs
 `bfd145cb…` gen-9) — the one comparison where lineage is held constant and only

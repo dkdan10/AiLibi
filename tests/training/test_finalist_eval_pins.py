@@ -1330,10 +1330,20 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
       ever convened, so almost no LLM call was ever made. Pinned exactly, and
       pinned as the slate's minimum, so a genuinely missing timing (0) or a
       silent backfill would both fail.
-    * ``7f73929d`` alone carries ``post_pr_retry_leg`` — the 4-attempt retry
-      that closed its seed-35 budget. Its last event IS the campaign's last
-      event across all nine arms, which is asserted as a uniquely-held
-      maximum and tied back to the retry leg that produced it.
+    * ``7f73929d`` alone carries ``leg1_abort_at`` and ``post_pr_retry_leg`` —
+      the aborted first leg, and the 4-attempt retry that closed its seed-35
+      budget. Its last event IS the campaign's last event across all nine
+      arms, which is asserted as a uniquely-held maximum and tied back to the
+      retry leg that produced it.
+
+    That arm's leg is therefore the only one with an interrupted shape, and
+    its four stamps are pinned as a STRICTLY increasing chain — first event,
+    leg-1 abort, retry-leg start, last event — with the retry's own attempt
+    window contained inside ``[leg_start_at, last_event_at]``. Ordering is
+    what makes the block a history rather than four unrelated timestamps: an
+    abort recorded after the retry started, or attempts falling outside the
+    leg that ran them, would be incoherent no matter how plausible each
+    stamp looked alone.
     """
 
     rows = _rows()
@@ -1356,7 +1366,9 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
         row = rows[arm.entrant]
         leg = row["leg_duration"]
         expected_keys = base_keys | (
-            {"post_pr_retry_leg"} if arm.entrant == "p18-imp-7f73929d" else set()
+            {"post_pr_retry_leg", "leg1_abort_at"}
+            if arm.entrant == "p18-imp-7f73929d"
+            else set()
         )
         assert set(leg) == expected_keys
         notes.add(leg["note"])
@@ -1379,10 +1391,43 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     assert min(walls, key=lambda entrant: walls[entrant]) == "p18-crew-c2-gen0"
 
     # 7f73929d: the retry leg, and the campaign's last event.
-    retry = rows["p18-imp-7f73929d"]["leg_duration"]["post_pr_retry_leg"]
+    seventh_leg = rows["p18-imp-7f73929d"]["leg_duration"]
+    retry = seventh_leg["post_pr_retry_leg"]
+    assert set(retry) == {
+        "attempts",
+        "first_at",
+        "last_event_at",
+        "leg_start_at",
+        "sum_wall_seconds",
+    }
     assert retry["attempts"] == 4
     assert retry["sum_wall_seconds"] > 0
     assert retry["first_at"] <= retry["last_event_at"]
+
+    # The interrupted leg's history, in order: run, abort, restart, finish.
+    assert (
+        seventh_leg["first_event_at"]
+        < seventh_leg["leg1_abort_at"]
+        < retry["leg_start_at"]
+        < seventh_leg["last_event_at"]
+    )
+    # The four attempts sit inside the leg that ran them.
+    assert retry["leg_start_at"] <= retry["first_at"]
+    assert retry["last_event_at"] <= seventh_leg["last_event_at"]
+    # An observed identity worth surfacing if it ever breaks: the arm's
+    # recording stamp IS the leg-1 abort moment, which dates the 49 scored
+    # games to the aborted leg rather than to the later retry.
+    assert (
+        rows["p18-imp-7f73929d"]["recording"]["recorded_at_utc"]
+        == seventh_leg["leg1_abort_at"]
+    )
+
+    # Both interrupted-leg fields belong to that arm alone.
+    for arm in _SLATE:
+        if arm.entrant == "p18-imp-7f73929d":
+            continue
+        assert "leg1_abort_at" not in rows[arm.entrant]["leg_duration"]
+        assert "post_pr_retry_leg" not in rows[arm.entrant]["leg_duration"]
 
     lasts = {
         arm.entrant: rows[arm.entrant]["leg_duration"]["last_event_at"]
