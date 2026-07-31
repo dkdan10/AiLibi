@@ -1271,11 +1271,11 @@ removed from **all four** arms. The three full arms' intersection cells are
 `excluded_seed` 35 and each gauge's floor); `7f73929d`'s own row **is** the n=49
 view already, so it is quoted unchanged. This is the cell:
 
-| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | intersection split-half noise, min–max across the four | reads toward |
-|---|---|---|---|---|---|---|---|---|---|
-| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | 0.03381 – 0.08671 | (18.27 rules) |
-| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | 0.01728 – 0.29576 | (18.27 rules) |
-| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | 0.00380 – 0.09459 | (18.27 rules) |
+| gauge | `6d327dcb…` | `ea4bc955…` | `bfd145cb…` | `7f73929d…` | champion mean | runner-up mean | margin | **POOLED-margin split-half noise** | per-arm noise, min–max (context only) | reads toward |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `witnessed_event_rate` | 0.22751 | 0.15625 | 0.15075 | 0.22000 | 0.19188 | 0.18538 | **−0.00650** | **0.00975** | 0.03381 – 0.08671 | (18.27 rules) |
+| `flags_per_meeting` | 0.95597 | 0.95364 | 0.89744 | 0.82840 | 0.95481 | 0.86292 | **−0.09189** | **0.02306** | 0.01728 – 0.29576 | (18.27 rules) |
+| `testimony_backed_conversion` | 0.43662 | 0.37162 | 0.34932 | 0.38926 | 0.40412 | 0.36929 | **−0.03483** | **0.07520** | 0.00380 – 0.09459 | (18.27 rules) |
 
 All four columns are the **same 49 seeds** — **and so is the noise column**. The
 three full arms' halves were re-split on the intersection (even/odd **minus seed
@@ -1297,6 +1297,46 @@ reads 0.29576 against the 0.27273 ceiling (0.29291 on its full view), so it stay
 table is unchanged — those halves are the arm's **full recorded view** by
 construction (§16.c), and this column is the F13 cell's matched-composition
 counterpart, not a correction to it.
+
+**The POOLED-margin noise, and why the per-arm column could not stand in for
+it.** The min–max of four individual arms' wobbles is the noise of *those arms*,
+not the noise of **the margin between two pooled means** — the quantity this cell
+actually reports. The margin's own split-half read is derived here **purely from
+committed cells**: the three full arms' `h1`/`h2` in `f13_intersection_gauges`
+plus `7f73929d`'s own `split_half` `h1`/`h2`, pooled per half exactly as the
+margin is pooled, with `noise = |margin_h1 − margin_h2|`:
+
+| gauge | champ H1 | runner H1 | **margin H1** | champ H2 | runner H2 | **margin H2** | **pooled noise** | pooled margin (49 seeds) |
+|---|---|---|---|---|---|---|---|---|
+| `witnessed_event_rate` | 0.15926 | 0.15693 | **−0.00233** | 0.22927 | 0.21719 | **−0.01208** | **0.00975** | −0.00650 |
+| `flags_per_meeting` | 0.86780 | 0.78963 | **−0.07817** | 1.04738 | 0.94615 | **−0.10123** | **0.02306** | −0.09189 |
+| `testimony_backed_conversion` | 0.37162 | 0.37422 | **+0.00260** | 0.43740 | 0.36480 | **−0.07260** | **0.07520** | −0.03483 |
+
+(Champion mean = (`ea4bc955` + `6d327dcb`)/2, runner-up mean = (`bfd145cb` +
+`7f73929d`)/2, per half. The pooled margin is computed on the full 49-seed set
+and is not the average of the two half-margins — the halves carry different
+denominators.)
+
+**The three reads, stated exactly as they land:**
+
+- **`witnessed_event_rate`** — pooled margin **−0.00650** sits **inside** its
+  pooled noise **0.00975** (0.67×), and the sign is **consistent** across halves
+  (both negative). A margin inside its own noise is not a result.
+- **`flags_per_meeting`** — pooled margin **−0.09189** **EXCEEDS** its pooled
+  noise **0.02306** by **4.0×**, with the sign **consistent** across halves
+  (−0.07817, −0.10123). This is the one row where the pooled margin is large
+  relative to the margin's own wobble. **And**, separately, `bfd145cb`'s per-arm
+  flags cell remains **UNRESOLVABLE** on the noise precondition (0.29576 >
+  0.27273), so §10.3 excludes that arm's cell from the axis-1 ruling — both facts
+  hold at once and neither cancels the other.
+- **`testimony_backed_conversion`** — pooled margin **−0.03483** sits **inside**
+  its pooled noise **0.07520** (0.46×), **and its sign does not reproduce across
+  the halves**: **+0.00260** in H1, **−0.07260** in H2. In the flavour of §6.b's
+  sign rule, a margin that flips direction between halves is not reproducing.
+
+**None of this is a ruling**; it is the margin's own noise recorded beside the
+margin so 18.27 is not left inferring it from per-arm wobbles. **The ruling is
+18.27's.**
 
 Every margin stays **negative** — the hypothesis-B shape is unchanged by the
 composition fix, and by a hair *larger* in magnitude on all three gauges than the
@@ -1320,7 +1360,11 @@ noise and not others, and the split is different on each row; the bullets state
 it per side, without smoothing. Per §11.2 a margin smaller than either side's
 split-half noise "is reported as such and cannot be read as support for A". Every
 figure below is the **intersection** margin against the **intersection** noise —
-matched composition on both terms.
+matched composition on both terms. **These bullets read the margin against the
+individual arms' wobbles; the pooled-margin read above is the one that tests the
+margin against its OWN noise, and on `flags_per_meeting` the two point different
+ways** (inside three of four per-arm noises, but 4.0× outside the pooled noise).
+Both are recorded; neither is a ruling.
 
 - `witnessed_event_rate`: margin **0.00650** against noises of **0.03381
   (`bfd145cb`) – 0.08671 (`7f73929d`)** — smaller than **all four**, by **5.2× to
@@ -1356,8 +1400,12 @@ opposite direction to A's "one step less far along the trade") and all three sit
 `witnessed_event_rate` inside **every** arm's. On the other two rows the margin
 does clear the quietest arms — one of four on flags, two of four on conversion —
 so "smaller than the noise" is true of the row as a whole and **not** of every
-pairwise comparison inside it; the bullets above give the exact split. **The
-ruling is 18.27's.** Nothing in this Part declares A or B confirmed.
+pairwise comparison inside it; the bullets above give the exact split. **Against
+the pooled margin's own noise the picture is different again**: witnessed and
+conversion sit inside it, `flags_per_meeting` runs **4.0× outside** it with a
+consistent sign, and conversion's sign **flips between halves**. Neither the
+B-shaped direction nor the flags exception is declared here. **The ruling is
+18.27's.** Nothing in this Part declares A or B confirmed.
 
 **The within-lineage pair** (`run-02-utility-lambda4`: `ea4bc955…` gen-2 vs
 `bfd145cb…` gen-9) — the one comparison where lineage is held constant and only
@@ -1396,9 +1444,12 @@ read as a within-lineage result at all** — the within-lineage pair is exactly
 survives the within-lineage read is `testimony_backed_conversion` (both sides
 clear) and, formally, `witnessed_event_rate` — except that gauge is
 UNRESOLVABLE on **every** arm (§16.c). **So the within-lineage cell rests on one
-gauge: `testimony_backed_conversion`, difference −0.01567.** That is the honest
-width of the cleanest F13 read this campaign produced, and 18.27 should read it
-knowing it is one gauge wide.
+gauge: `testimony_backed_conversion`, difference −0.02231** on the
+composition-clean 49-seed intersection (the full-view figure, −0.01567, is the
+labelled reference table's and is not the cell). That is the honest width of the
+cleanest F13 read this campaign produced, and 18.27 should read it knowing it is
+one gauge wide — and that the difference **exceeds `bfd145cb`'s own intersection
+noise (0.01504)** while sitting inside `ea4bc955`'s (0.09459).
 
 ### 16.e The crew lineage reading (c1 vs c2) and the routed rider
 
@@ -2026,9 +2077,19 @@ sets in each partition. The comparator's own `seed mod 5` views on the shared 49
 seeds are persisted at
 `instruments.intersection_49_seed_for_7f73929d.seed_mod5_splits` — **29/10/10**,
 seed 35 removed from the `{0,1,2}` partition, which is the only one it lands in.
-**Those are the views to pair with `7f73929d`; the comparator's full-50 splits
-remain the reference for the other seven arms**, all of which share its seed set.
-Both rows appear below.
+**Which arm pairs which comparator splits, exactly.** The comparator's **full-50**
+splits pair the **three full impostor arms** — `ea4bc955`, `bfd145cb`,
+`6d327dcb` — and those three only, since they alone share its 50-seed set.
+**`7f73929d` pairs the committed 49-seed splits** above. The **four crew arms
+pair neither**: `c1-g0` and `c2-g9` read their own fenced views (49 and 48), so
+their splits are carved differently again — but the decisive point is upstream of
+composition. Per §2.1 a crew claim's comparator must be **scripted-FSM crew
+against the same opponent**, and no such row exists in this slate (✥ in §16.f);
+`p18-fsm-comparator` is scripted on both sides, a different pairing. **All four
+crew arms therefore have no valid clause-(b) comparator at all**, and their
+axis-2 cells already read NOT-DEMONSTRABLE for that reason. Their per-split cells
+are committed and quoted as diagnostics, never as pairings. Both comparator rows
+appear below.
 
 **Illustration — the two kill-craft rate cells, five arms.** The full 12-cell ×
 3-split set is in the rows; this table exists so a reader can see the shape of
