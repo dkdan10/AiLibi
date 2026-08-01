@@ -35,6 +35,29 @@ diagnostic-only and the campaigns unaffected. 18.21 gains the optional runner-fa
 seam, 18.24 the swap-boundary adoption note, 18.28 the close edge. Locked decisions
 unchanged.
 
+**18.27 flip + emergence reading — RULED: NO-FLIP + zero EMERGENT + NO crew adoption
+(owner, 2026-08-01, `audits/audit-phase-18-flip-emergence.md` §13).** Axis 1 FAIL on the
+whole slate: the champion candidate `ea4bc955…` (the §4.1 designation; every other
+finalist archive for clause (d)) retains the win edge (0.52 vs the same-seed FSM
+comparator 0.26, Δ +0.26) and fails the baseline-6 referee on both live supply gauges
+(flags 0.93548 < 1.09091; conversion 0.36667 < its derived floor 0.66882), and so does
+every finalist (+0.12 to +0.30 win edges, referee FAIL ×4 — `bfd145cb…` on conversion
+alone, its flags cell UNRESOLVABLE; `7f73929d…` at n=49 vs 12/49 = 0.24490) — the
+scripted FSM stays the default mover, the champion stays opt-in and unswapped, and
+**18.28 closes NO-FLIP** (no mover record; the battery re-runs at HEAD). The witnessed
+gauge is UNRESOLVABLE on all nine arms (structural at n=50); the bar stays as ratified,
+re-pricing an owner decision outside the memo. F13: hypothesis A REJECTED as unsupported
+(all three pooled margins negative and noise-barred; zero referee passes on any
+finalist arm at n=50), B
+operative but not demonstrated, no selection-rule fix contract routes. Axis 2: all
+fourteen pre-registered rulings NOT-DEMONSTRATED (ten fail clause (a) or admit no
+delta; the crew-witnessed-kill rate z = +3.37 and co-present-kill departure z = +4.32
+pass (a)/(b)/(d) and fail (c) unablated — recorded as named findings N1/N2; both entropy
+rulings unjudgeable as recorded). The crew-adoption slot closes NO-ADOPTION (`0bf179b7…`
+considered; c1 pair null at n=49, McNemar p = 1.0; the routed scripted-crew comparator
+arm declined). The ruling pins live in `tests/scripts/test_champion_flip_ruling.py`; the
+deferral ledger (memo §12) routes to 18.28.
+
 ## Locked decisions (owner-ratified 2026-07-18)
 
 1. **Training signal: layered — conviction-economy proxy + real-path selection.** A
