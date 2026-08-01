@@ -57,6 +57,37 @@ general-base impostor (flat anchor + oscillating co-matchup), owned-task crew re
 progress, its impostor plateaus. Any crew-adoption slot rests on 18.26 evidence alone —
 18.25 supplies none that clears a bar.
 
+The 18.26 evidence map (merged 384effc, verified — the memo quotes THESE rows and cells,
+never report prose): rows `p18-imp-{ea4bc955,bfd145cb,6d327dcb,7f73929d}`,
+`p18-fsm-comparator`, `p18-crew-{c1-gen9,c1-gen0,c2-gen9,c2-gen0}` in
+`training/reports/results-finalist-eval.jsonl`; persisted cells
+`f13_intersection_gauges`, `instruments.kill_craft_rider_intersection`,
+`instruments.conversion_paired_49_seed`, `instruments.intersection_49_seed_for_7f73929d`,
+`instruments.registered_nested_cells`, `instruments.seed_mod5_splits`,
+`instruments.kill_craft_co_present_departure`. Axis-1 mechanics the ruling must carry:
+`witnessed_event_rate` is UNRESOLVABLE on ALL NINE arms (structural — the rare-event
+floor's 25% noise ceiling is unclearable at n=50), so the ratified three-gauge referee is
+EFFECTIVELY TWO GAUGES, and on `bfd145cb…` (whose flags cell is also UNRESOLVABLE at a 7%
+overshoot) the axis-1 FAIL rests on conversion alone; `7f73929d…` reads against the
+49-seed intersection comparator 12/49 = 0.24490, never 0.26 (its n=49 seed-35 exclusion
+is owner-sanctioned and annotated everywhere); the comparator-pairing map is full-50 for
+the three full arms, the 49-seed block for `7f73929d…`, nothing for crew arms. The
+measured axis-1 material: every learned arm beats the comparator on wins (+0.12 to
++0.30) and every one fails the referee supply gauges — NO candidate satisfies the §1.3
+conjunction as measured. F13 under §11.2's either-side noise rule: all three pooled
+runner-up-minus-champion margins NEGATIVE and noise-barred from supporting hypothesis A
+(the hypothesis-B shape; one residual within-lineage conversion cell survives —
+"A unsupported" ≠ "B demonstrated", the ruling is this memo's). Axis-2 scoping: ablation
+clause (c) is complete on ZERO of the five campaign runs as recorded — inspect per cell;
+crew axis-2 columns are NOT-DEMONSTRABLE for want of an opponent-matched comparator
+(owner 2026-07-31: label, do not record), with a scripted-crew-vs-`ea4bc955…` comparator
+arm ROUTED as an owner-optional follow-up if this memo wants crew claims;
+roll-call is CONTEXT, not a ratified instrument; both action-entropy rulings arrive
+NOT-DEMONSTRATED (the variance field never landed). Two post-hoc-criterion questions are
+put to this memo explicitly rather than answered below it: the equivalence margin
+("gen-9 ≈ gen-0" was never operationalized) on both the rider and conversion pairs, and
+nothing else — every other cell reads through pre-registered semantics.
+
 **Files in scope:**
 - audits/audit-phase-18-flip-emergence.md (new: the two-axis memo + rulings)
 - agents/tactical/learned/; (PASS branch only: the artifact-surface productization swap — the default-selector files flip at 18.28's record)

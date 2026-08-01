@@ -85,7 +85,17 @@ prices any future general-base crew work), the missing generator family for swee
 (sweep tables stay hand-assembled — the one table class 18.31 didn't cover), and
 duration honesty for the close's accounting: quote the derivable real-path figures
 (6.76–7.32 h) from the committed leg logs, never the report header's ~8.7 h (its §12
-erratum 2). The Phase-19 hand-off section
+erratum 2). The 18.26 additions: the three stuck-seed classes (rc-0 meeting-bearing
+stalemates are INVISIBLE to `rc != 0` retry triggers — caught only by the scorer's
+game_over check; a runner-level check is the routed fix), the seed-35 content-triggered
+validation pathology (14/14 identical rc-99 at p-8/meeting-0/turn-0 — a substrate
+finding, not a transient), the rare-event-floor structural finding (a gauge whose floor
+is a rare event cannot clear a 25% noise precondition at n=50 — witnessed read
+UNRESOLVABLE on all nine arms; any future bar re-pricing is an owner decision), the
+routed scripted-crew-vs-`ea4bc955…` comparator arm + the equivalence-margin
+pre-registration gap (both owner-optional), and 18.26 duration honesty (57.3 h busy vs
+the 46 h projection — 25% over, attributed to posture/sleep-stalls/stuck-seeds; the
+serial per-game prediction landed within 2.5%). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
