@@ -48,14 +48,14 @@ adopted baseline-6 floors (three arms on both live gauges, `bfd145cb…` on conv
 alone with its flags cell UNRESOLVABLE), so no candidate satisfies referee-PASS AND
 win-edge; the scripted FSM stays the default mover, the champion stays opt-in, nothing
 swaps, and 18.28 closes NO-FLIP. **Axis 2 rules zero EMERGENT:** all fourteen
-pre-registered rulings read NOT-DEMONSTRATED — eleven fail clause (a) or admit no delta,
+pre-registered rulings read NOT-DEMONSTRATED — ten fail clause (a) or admit no delta,
 two (crew-witnessed-kill rate z = +3.37, co-present-kill departure z = +4.32) pass
 clauses (a)/(b)/(d) and fail on clause (c) because no campaign lever enables them and no
 ablation exists (unablated ⇒ NOT-DEMONSTRATED by construction — they are recorded as the
 phase's two named behavioral findings), and the two entropy rulings are unjudgeable as
 recorded. **F13:** hypothesis A is REJECTED as unsupported (all three pooled
-runner-up-minus-champion margins negative and noise-barred; zero referee passes anywhere
-at n=50); hypothesis B stands as the operative reading without being itself demonstrated;
+runner-up-minus-champion margins negative and noise-barred; zero referee passes on any
+finalist arm at n=50); hypothesis B stands as the operative reading without being itself demonstrated;
 no selection-rule fix contract routes. **The crew-adoption slot is put and closes
 NO-ADOPTION.**
 
@@ -146,7 +146,7 @@ The four candidates **[VERIFIED]**:
 | `p18-imp-6d327dcb` | `coevo/run-01-utility-champion/impostor/gen-3` | the incumbent control (byte-identical to the committed opt-in champion), re-recorded at baseline 6 (slate 3) | `fsm-default` |
 | `p18-imp-7f73929d` | `coevo/runnerups/run-03-utility-bcanchor/gen-8` | run-03 runner-up gen-8, the F13 test arm (slate 4) | `filtered-bc-anchor` |
 
-### 2.2 The three mechanics this ruling carries **[VERIFIED]**
+### 2.2 The three mechanics this ruling carries **[VERIFIED cells; the ratio multiples INFERRED]**
 
 **(i) `witnessed_event_rate` is UNRESOLVABLE on ALL NINE arms — structural.** The 18.26
 pre-registered noise precondition (a gauge whose split-half noise exceeds 25% of its
@@ -167,7 +167,7 @@ alone.** Its `split_half.flags_per_meeting` noise is 0.29291 against the 0.27273
 from the ruling, so `bfd145cb…` fails axis 1 on `testimony_backed_conversion` alone —
 its numeric flags miss (0.90000 < 1.09091) is reported but not counted.
 `testimony_backed_conversion` clears the precondition on all eight arms that have
-meetings (noise 0.00380–0.09459) and is the gauge this ruling reads most safely.
+meetings (noise 0.00380–0.08357) and is the gauge this ruling reads most safely.
 
 **(iii) `7f73929d…` scores at n=49.** Seed 35 is excluded (owner-sanctioned: 14 logged
 attempts all rc 99, a content-triggered validation pathology on the deterministic
@@ -183,7 +183,7 @@ the §1.2 formula on the arm's measured flags cell.
 
 | arm | witnessed (floor 0.03390) | flags (floor 1.09091) | conversion (derived floor) | referee | mean/median | impostor win | comparator | win edge |
 |---|---|---|---|---|---|---|---|---|
-| `ea4bc955…` | 0.15228 PASS† | **0.93548 FAIL** (−0.15542) | **0.36667 FAIL** vs 0.66882 (−0.30215) | **FAIL** | 48.90 / 50.15 | 26/50 = 0.52 | 13/50 = 0.26 | **+0.26** |
+| `ea4bc955…` | 0.15228 PASS† | **0.93548 FAIL** (−0.15543) | **0.36667 FAIL** vs 0.66882 (−0.30215) | **FAIL** | 48.90 / 50.15 | 26/50 = 0.52 | 13/50 = 0.26 | **+0.26** |
 | `bfd145cb…` | 0.14778 PASS† | 0.90000 — UNRESOLVABLE (excluded) | **0.35099 FAIL** vs 0.69519 (−0.34419) | **FAIL** (conversion alone) | 47.24 / 48.00 | 28/50 = 0.56 | 13/50 = 0.26 | **+0.30** |
 | `6d327dcb…` | 0.22280 PASS† | **0.96914 FAIL** (−0.12177) | **0.44444 FAIL** vs 0.64559 (−0.20115) | **FAIL** | 51.15 / 63.95 | 19/50 = 0.38 | 13/50 = 0.26 | **+0.12** |
 | `7f73929d…` (n=49) | 0.22000 PASS† | **0.82840 FAIL** (−0.26251) | **0.38926 FAIL** vs 0.75527 (−0.36601) | **FAIL** | 52.49 / 53.70 | 21/49 = 0.42857 | 12/49 = 0.24490 | **+0.18367** |
@@ -207,7 +207,7 @@ slate.**
 
 The pre-registration defines the champion as *"the SINGLE candidate put to axis 1 of
 18.27 (impostor side) … regardless of whether the flip or adoption passes; every other
-18.26 finalist counts as archive for clause (d)."* Neither 18.24 (closed STOPPED, §8 a
+18.26 finalist counts as archive for clause (d) …"* Neither 18.24 (closed STOPPED, §8 a
 screening shortlist) nor 18.26 (which computes and quotes, ruling nothing) named one, so
 the designation is this memo's:
 
@@ -235,7 +235,7 @@ axis 2's clause-(d) surface (§6.2).
 > (`utility-es`, sha `6d327dcb…` — no finalist referee-dominates it: none passes the
 > referee at all, and the incumbent control carries the least-bad margin on BOTH live
 > gauges — flags −0.12177 and conversion −0.20115 against every alternative's
-> −0.15542/−0.30215 (`ea4bc955…`), −0.34419 (`bfd145cb…`, conversion alone), and
+> −0.15543/−0.30215 (`ea4bc955…`), −0.34419 (`bfd145cb…`, conversion alone), and
 > −0.26251/−0.36601 (`7f73929d…`, whose higher referee mean rides floor margins
 > farther below the bar));
 > the ARTIFACT surface under `agents/tactical/learned/` does not move; **18.28 closes
@@ -288,10 +288,10 @@ came from a runner-up (0 passes across 14 evaluated champions, 3 across 18 runne
 all at n≤6). The 18.26 pre-registered cell measures the two hypotheses, quoted verbatim
 from the contract (`tasks/phase-18.md`, Task 18.26):
 
-> **hypothesis A** (the ES trades evidence-supply for wins; runner-ups sit one step
-> less far along the trade — predicts the runner-ups' gauge margins **PERSIST** at
-> n=50) … **hypothesis B** (n≤6 referee reads are noise — predicts the
-> champion/runner-up gauge gap **VANISHES** at n=50)
+> hypothesis A (the ES trades evidence-supply for wins; runner-ups sit one step
+> less far along the trade — predicts the runner-ups' gauge margins PERSIST at
+> n=50), hypothesis B (n≤6 referee reads are noise — predicts the
+> champion/runner-up gauge gap VANISHES at n=50)
 
 The cell: champions (`6d327dcb…`, `ea4bc955…`) vs runner-ups (`bfd145cb…`,
 `7f73929d…`) on the referee gauges, on the composition-clean 49-seed intersection (seed
@@ -315,7 +315,7 @@ pooled-side split-half noises (mean of the two member arms' noise) beside them:
 All three margins are NEGATIVE — the runner-ups sit *below* the champions on every
 pooled gauge, hypothesis A's opposite — and all three are noise-barred from supporting
 A under the registered either-side rule. Corroborating shape: at n=50 there are **zero
-referee passes anywhere on the slate** — the three n≤6 runner-up passes (including
+referee passes on any finalist arm** — the three n≤6 runner-up passes (including
 `7f73929d…`'s own screening PASS) did not persist. One residual cell survives the
 within-lineage read (`ea4bc955…` vs `bfd145cb…`, both run-02, the one
 lineage-held-constant pair): `testimony_backed_conversion` difference **−0.02231**,
@@ -329,8 +329,8 @@ exceeding `bfd145cb…`'s own intersection noise (0.01504) while sitting inside
 > referee PASS failed to reproduce at n=50. "A unsupported" ≠ "B demonstrated":
 > hypothesis B stands as the OPERATIVE reading — the n≤6 referee reads were noise, the
 > F12 lesson now measured at claim scale — without being ruled a demonstrated claim of
-> its own (it is the null the evidence fails to reject, and the §10.3 UNRESOLVABLE
-> census prices how much this instrument can say at any n this phase recorded).
+> its own (it is the null the evidence fails to reject, and the 18.26 report's §10.3
+> verdict rule — the UNRESOLVABLE census of §2.2.i — prices how much this instrument can say at any n this phase recorded).
 > **Consequence: no selection-rule defect is demonstrated, so no next-campaign/Phase-19
 > selection-rule FIX contract routes from F13.** The residual within-lineage conversion
 > cell (−0.02231, one gauge wide, one pair) is recorded to 18.28's ledger as an
@@ -364,8 +364,8 @@ is `p18-imp-ea4bc955` against the full-50 comparator cells, and **every other 18
 finalist arm is archive for clause (d)** — the `6d327dcb…`/`bfd145cb…`/`7f73929d…`
 deltas are archive observations (§8.4), reportable and never EMERGENT. Crew side: the
 candidate named in the crew-adoption slot is `0bf179b7…` (§10); every crew axis-2
-column reads NOT-DEMONSTRABLE for want of a §2.1 opponent-matched comparator — labeled,
-not recorded, per the owner's 2026-07-31 decision — so no crew cell reaches clause (a)
+column reads NOT-DEMONSTRABLE for want of a §2.1 opponent-matched comparator — labeled
+✥, not recorded, per the owner's 2026-07-31 decision — so no crew cell reaches clause (a)
 at all. Roll-call cells are CONTEXT, not a ratified instrument (the pre-registration's
 §2.5; its §9 amendment log is empty), and nothing here rules on them.
 
@@ -392,7 +392,9 @@ registered rule, an unablated candidate reads NOT-DEMONSTRATED by construction.
 Candidate arm = `p18-imp-ea4bc955` (champion, §6.2); comparator arm =
 `p18-fsm-comparator` (full-50 pairing). Clause (b) reads the committed
 `instruments.seed_mod5_splits` views on both arms (splits of 30/10/10 games); "n/3" is
-sign-reproduction of the pooled delta's sign, per-split deltas in §15. Clause (c) reads
+sign-reproduction of the pooled delta's sign; §15 reproduces the per-split inputs for
+the two passing cells, and the remaining counts re-derive from the same committed
+views. Clause (c) reads
 §6.3. Clause (d) is satisfied by construction wherever (a) is read on the champion's
 arm.
 
@@ -413,7 +415,7 @@ arm.
 | 13 | `action-entropy` · impostor mean conditional entropy | 0.60780 (100 agents / 2015 decisions) | 0.66839 (100 / 2299) | **unjudgeable** — the §6.a per-agent variance field never landed; the registered rule forbids out-of-report recomputation | context only | none | **NOT-DEMONSTRATED as recorded** |
 | 14 | `action-entropy` · crew mean conditional entropy | 0.74780 (350 / 6128) | 0.88099 (350 / 7767) | **unjudgeable** — same routed variance gap; additionally the registered crew claim surface (a learned crew) has no §2.1 comparator in the slate (✥ label, §6.2) | context only | none | **NOT-DEMONSTRATED as recorded** |
 
-**Tally: 0 EMERGENT, 14 NOT-DEMONSTRATED.** Eleven rulings fail clause (a) outright or
+**Tally: 0 EMERGENT, 14 NOT-DEMONSTRATED.** Ten rulings fail clause (a) outright or
 admit no delta; rulings 9 and 11 pass (a), (b), and (d) and fail only on the missing
 ablation — they are the phase's two named behavioral findings (§8.3), ruled honestly
 under the registered discipline rather than crowned; rulings 13–14 are unjudgeable as
@@ -447,9 +449,10 @@ for clause-(c) classification. **Ruled: NOT-DEMONSTRATED**, on two independent l
 **(d) fails** — the behavior lives in archive arms only (`27f852fe…` is a named
 non-finalist exhibit; no free-policy arm is the champion, and the champion is menu-bounded,
 for which the instrument is vacuous by construction); **(c) is incomplete** — the
-recorded ablation is a tranche-1 n=3 screen (no recession observed: the v2-reverted
-champion still steps off-menu at 0.61, consistent with the action space rather than the
-encoder being the enabler), tranche 2 VALIDITY-FAILED and never re-recorded, so the
+recorded ablation is a tranche-1 n=3 screen (no recede on either committed per-pair
+cell: the gen-9 pair reads 79/101 = 0.7822 vs the ablated 136/186 = 0.7312, and the
+gen-3 pair 114/120 = 0.9500 vs 86/179 = 0.4804 — a halving that still misses the
+recede-to-half bar by 0.0054), tranche 2 VALIDITY-FAILED and never re-recorded, so the
 registered recede criterion was never evaluated at claim grade. The classification the
 18.24 report deferred is hereby resolved: **the ablation reads UNFINISHED-as-recorded,
 and no causal attribution (encoder-v3 vs action space) is made.** The standing exhibit
@@ -466,8 +469,9 @@ Crew-witnessed-kill rate 30/197 = 0.15228 vs the comparator's 8/174 = 0.04598
 scripted FSM cannot: co-present kills.** 20/197 = 0.10152 vs 0/174 (z = +4.321, 3/3;
 the committed FSM kills only when alone — 0 co-present kills on all 863 corpus-pinned
 kills and 0/174 here). Both are selected-for (present on the champion's own arm — and,
-as archive corroboration, on every learned arm of the slate: witnessed 0.147–0.220,
-co-present departure 0.076–0.187). Both are **NOT-DEMONSTRATED under the registered
+as archive corroboration, on all eight arms that carry a learned impostor — the four
+finalist arms plus the four crew-block arms recorded against the frozen champion:
+witnessed 0.143–0.223, co-present departure 0.076–0.187). Both are **NOT-DEMONSTRATED under the registered
 discipline** because clause (c) is unsatisfiable by construction: the behaviors appear
 on the un-levered incumbent control (`6d327dcb…`: witnessed 43/193, co-present 36/193),
 so no campaign lever enables them and no `ablation:kill-craft/<lever-id>` exists to
@@ -485,8 +489,8 @@ reaching this reading (**NOT-DEMONSTRATED**, no live candidacy).
 
 ### 8.4 Archive observations (clause (d) fails; recorded, never EMERGENT) **[INFERRED from verified cells]**
 
-On non-champion finalist arms, three cells clear the clause-(a) bar with 3/3 sign
-reproduction and would still fail clause (c): `6d327dcb…` saw_player false-vouch rate
+On non-champion finalist arms, four cells clear the clause-(a) bar (three at 3/3 sign
+reproduction, one at 2/3) and would still fail clause (c): `6d327dcb…` saw_player false-vouch rate
 40/213 = 0.18779 vs 20/196 (z = +2.449), corroboration false-vouch rate 30/71 = 0.42254
 vs 6/54 (z = +3.809), and within-one-hop point-biserial r = 0.52142 @ 193 vs 0.27505 @
 174 (Fisher z = +2.808); `7f73929d…` corroboration rate 20/60 = 0.33333 vs 6/53
@@ -516,14 +520,14 @@ other cell reads through pre-registered semantics.
 > future phase wants an equivalence read on a generation pair, the margin is
 > pre-registered there before recording (routed note, §12).
 
-**The routed rider question resolves against crew learning.** The crew-witnessed-kill
-elevation (6.5×–15× corpus across the 18.25 arms) appears at BOTH generations against
-the same learned opponent (0.157 gen-9, 0.165 gen-0 — the untrained control) while the
-scripted-vs-scripted comparator reads 8/174 = 0.046 and the corpus 0.0238–0.0334: the
-elevation tracks the **opponent**, and the champion's own arm carries the mechanism
-(findings N1/N2 — learned-impostor kill placement). It is an impostor-side behavioral
-departure, not a learned-crew observation effect; the crew-side claim column stays
-NOT-DEMONSTRABLE (✥) regardless (§6.2).
+**The routed rider question reads toward learned-impostor kill placement, on
+arm-vs-arm cells alone.** The crew-witnessed-kill elevation appears at BOTH generations
+against the same learned opponent (gen-9 0.157, gen-0 0.165 — the untrained control)
+while the scripted-vs-scripted comparator reads 8/174 = 0.046, and the champion's own
+arm carries the mechanism (findings N1/N2 — learned-impostor kill placement). The
+18.25-era corpus multiples (6.5×–15×) are context only and rule nothing. It is an
+impostor-side behavioral departure, not a learned-crew observation effect; the
+crew-side claim column stays NOT-DEMONSTRABLE (✥) regardless (§6.2).
 
 ## 10. THE CREW-ADOPTION SLOT (owner) — put and recorded explicitly
 
@@ -536,8 +540,9 @@ crew finalist** ("no crew finalist clears the bars … a ranked list would laund
 noise into a hand-off") and 18.25 supplies nothing that clears a bar (inherited (f) —
 the crew-adoption slot rests on 18.26 evidence alone); the 18.26 crew block is
 owner-directed DIAGNOSTIC (2026-07-29); on that diagnostic the c1 pair reads null at
-n=49 (win conversion 26/50 = 0.52 vs its same-opponent gen-0 control — paired margin +1
-game, McNemar p = 1.0; rider margin −0.00793, §9), the c2 lineage is gate-invalid at
+n=49 (26/49 = 0.53061 vs the same-opponent gen-0 control's 25/49 on the 49 paired
+seeds — +1 game, 6–5 discordant, McNemar p = 1.0; the full-row cell is 26/50 = 0.52;
+rider margin −0.00793, §9), the c2 lineage is gate-invalid at
 both generations (gen-9 meeting rate at the 0.60 floor with two learned deterministic
 stalemates; gen-0 total starvation, zero LLM calls), and no crew arm has a §2.1
 comparator for any axis-2 claim.
@@ -578,7 +583,10 @@ standing 17.16 pins, which re-run green unchanged):
   noise bar, re-derived from `f13_intersection_gauges` + `7f73929d…`'s n=49 blocks;
 - **the axis-2 tally pinned** — the champion-arm clause-(a) statistics re-derived from
   the persisted cells (the two passing z values and every failing one), the split-sign
-  counts for the two named findings, and the 0-EMERGENT / 14-NOT-DEMONSTRATED tally;
+  counts for the two named findings, the absence of any per-agent entropy variance
+  field, and the clause-(c) gap derived from the committed report bytes (no
+  `ablation:kill-craft/<lever-id>` exists in either campaign report — the §6.c naming
+  convention), which together pin the 0-EMERGENT / 14-NOT-DEMONSTRATED tally;
 - **the FAIL branch pinned** — the default-selector surfaces still select the scripted
   FSM, the absent-stamp fallback is untouched, and the opt-in artifacts are unswapped
   (`committed_weights_sha256()` == `6d327dcb…`, `committed_crew_weights_sha256()` ==
@@ -636,7 +644,7 @@ standing 17.16 pins, which re-run green unchanged):
   attribution fences honored (§8.1–§8.2), and the archive observations recorded as
   archive (§8.4).
 - **B2 — the post-hoc questions:** no post-hoc equivalence criterion; both paired cells
-  INCONCLUSIVE as recorded; the rider resolves toward learned-impostor kill placement
+  INCONCLUSIVE as recorded; the rider reads toward learned-impostor kill placement
   (§9).
 - **B3 — THE CREW-ADOPTION SLOT: NO-ADOPTION** (§10, verbatim there); the routed
   comparator arm declined for this phase.

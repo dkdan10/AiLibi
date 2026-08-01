@@ -649,10 +649,12 @@ def test_18_27_axis_2_champion_arm_rulings_read_zero_emergent() -> None:
     co-present-kill departure (+4.321) — and both sign-reproduce 3/3 on the
     committed ``seed_mod5_splits``. Clause (c) is complete on ZERO campaign
     runs as recorded (the committed campaign reports' §6 ledgers — memo
-    §6.3), so the clause-(c)-complete set is empty and no ruling reads
-    EMERGENT: the two passing cells are unablated (NOT-DEMONSTRATED by
-    construction, the phase's named findings N1/N2) and the entropy cells
-    carry no variance field (unjudgeable as recorded).
+    §6.3), and in particular no ``ablation:kill-craft/<lever-id>`` exists
+    in either committed report (the §6.c naming convention, grepped here
+    from the report bytes), so no ruling reads EMERGENT: the two passing
+    cells are unablated (NOT-DEMONSTRATED by construction, the phase's
+    named findings N1/N2) and the entropy cells carry no variance field
+    (unjudgeable as recorded).
     """
 
     rows = _p18_rows()
@@ -781,12 +783,20 @@ def test_18_27_axis_2_champion_arm_rulings_read_zero_emergent() -> None:
         ]
         assert set(entropy) == {"mean_conditional_entropy", "agents", "decisions"}
 
-    # Clause (c): complete on ZERO of the five impostor campaign runs and
-    # zero crew runs as recorded (the committed campaign reports' §6
-    # ablation ledgers, quoted in the memo §6.3) — the conjunctive
-    # discipline therefore rules nothing EMERGENT.
-    clause_c_complete: frozenset[str] = frozenset()
-    assert not (clause_a_pass & clause_c_complete)  # 0 EMERGENT, 14 rulings
+    # Clause (c), derived from committed bytes rather than restated: the
+    # ratified naming convention (18.4 §6.c) requires any kill-craft
+    # ablation to be named ``ablation:kill-craft/<lever-id>`` in the
+    # campaign reports' §6 ledgers, and no such ablation exists in either
+    # committed report — so both clause-(a)/(b)-passing cells are UNABLATED
+    # and read NOT-DEMONSTRATED by construction (memo §6.3/§8.3): 0
+    # EMERGENT across the 14 rulings. If a future campaign commits a
+    # kill-craft ablation, this pin fails and the ruling must be re-read.
+    for report_path in (
+        Path("training/reports/report-impostor-campaign.md"),
+        Path("training/reports/report-crew-campaign.md"),
+    ):
+        report_text = report_path.read_text(encoding="utf-8")
+        assert "ablation:kill-craft/" not in report_text
 
 
 def test_18_27_fail_branch_swaps_nothing_and_names_the_frozen_champion() -> None:

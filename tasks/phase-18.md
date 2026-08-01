@@ -47,9 +47,10 @@ scripted FSM stays the default mover, the champion stays opt-in and unswapped, a
 **18.28 closes NO-FLIP** (no mover record; the battery re-runs at HEAD). The witnessed
 gauge is UNRESOLVABLE on all nine arms (structural at n=50); the bar stays as ratified,
 re-pricing an owner decision outside the memo. F13: hypothesis A REJECTED as unsupported
-(all three pooled margins negative and noise-barred; zero referee passes at n=50), B
+(all three pooled margins negative and noise-barred; zero referee passes on any
+finalist arm at n=50), B
 operative but not demonstrated, no selection-rule fix contract routes. Axis 2: all
-fourteen pre-registered rulings NOT-DEMONSTRATED (eleven fail clause (a) or admit no
+fourteen pre-registered rulings NOT-DEMONSTRATED (ten fail clause (a) or admit no
 delta; the crew-witnessed-kill rate z = +3.37 and co-present-kill departure z = +4.32
 pass (a)/(b)/(d) and fail (c) unablated — recorded as named findings N1/N2; both entropy
 rulings unjudgeable as recorded). The crew-adoption slot closes NO-ADOPTION (`0bf179b7…`
