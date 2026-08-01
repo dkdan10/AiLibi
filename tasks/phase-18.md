@@ -2241,7 +2241,19 @@ UNRESOLVABLE on all nine arms; any future bar re-pricing is an owner decision), 
 routed scripted-crew-vs-`ea4bc955…` comparator arm + the equivalence-margin
 pre-registration gap (both owner-optional), and 18.26 duration honesty (57.3 h busy vs
 the 46 h projection — 25% over, attributed to posture/sleep-stalls/stuck-seeds; the
-serial per-game prediction landed within 2.5%). The Phase-19 hand-off section
+serial per-game prediction landed within 2.5%). The 18.27 additions (memo §12, the five
+items its ledger routes here that the folds above do not already name): the F13 residual
+(the within-lineage conversion cell, −0.02231, one gauge one pair — an observation, no
+contract); findings N1/N2 (learned-impostor kill placement: witnessed ×3.3 + co-present
+departure from a structural zero — selected-for, split-reproduced, UNABLATABLE this
+phase; a §6.c-satisfiable claim needs a LEVER-SCOPED contract in a future campaign,
+never a retro-read); the conviction-term recede recording (withheld under F12 — belongs
+to a 50-seed venue as a routed contract if the claim is pursued); the entropy variance
+field (the 18.4-routed `ActionEntropyCells` per-agent variance contract remains
+unlanded — entropy claims stay unjudgeable until it lands with re-pins); and the
+cycling-detector context for Phase 19 (Red-Queen signature PRESENT on the general-base
+impostor — flat anchor, oscillating co-matchup; the owned-task crew reads progress, its
+impostor plateaus). The Phase-19 hand-off section
 matters more than usual: Phase 19 is REVIEW-AND-REFRESH — the close audit should hand it
 the dead-spot candidates this phase noticed (duplicated walks, retired seams, the
 `episode_boundary` orphan, the three eval/ walk implementations, the recorder lock-race
