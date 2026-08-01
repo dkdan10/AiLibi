@@ -1,14 +1,38 @@
 # Phase 18 — The ML phase: emergent deception and deduction under environmental pressure
 
-STATUS: OPEN 2026-07-18. The owner re-chartered this phase (recorded in
-`audits/audit-phase-18-planning.md`): Phase 18 is the ML phase — advance the learned agents
-until deception and deduction arise from environmental pressure rather than scripting.
-Presentation is DEFERRED; Phase 19 is re-chartered as REVIEW-AND-REFRESH (deep code review +
-frontend/data-display refresh); the human seat is OUT; heterogeneous-model lobbies are not in
-Phase 19 either (a later decision, after the review/refresh work). The five locked decisions
-below were ratified by the owner on 2026-07-18 at the planning session's decision menu
-(`audits/audit-phase-18-planning.md` §8), sign-off additionally riding the merge of this
-phase doc (the 15.18 convention).
+STATUS: CLOSED 2026-08-01 with NO mover record (Task 18.28) — the ladder tip STANDS at
+baseline 6 (the 18.12 CREW-ONLY adopting record) and baseline 7 is NOT recorded. The §1.3
+flip bar (locked decision 4) failed the WHOLE slate at the 18.26 real-LLM eval, ruled at
+18.27 (the ruling banner below; `audits/audit-phase-18-flip-emergence.md` §13): every
+learned arm retains a win edge over the same-seed FSM comparator (+0.12 to +0.30; the
+champion candidate `ea4bc955…` 0.52 vs 0.26, Δ +0.26) and every arm FAILS the baseline-6
+referee on the live supply gauges (champion flags/meeting 0.93548 < 1.09091;
+testimony-backed conversion 0.36667 < its derived floor 0.66882) — the Phase-17
+starved-supply shape reproduced on a co-adapted slate — so the scripted FSM STAYS the
+default mover and the champion stays OPT-IN and unswapped (sha `6d327dcb…`). EMERGENCE:
+zero EMERGENT — all fourteen pre-registered rulings NOT-DEMONSTRATED, with the two
+clause-(c)-blocked cells recorded as the phase's named behavioral findings N1/N2
+(learned-impostor kill placement: crew-witnessed rate ×3.3 at z = +3.37; co-present kills
+from a structural zero at z = +4.32 — selected-for, split-reproduced, unablatable this
+phase); the crew-adoption slot closed NO-ADOPTION. The close re-verified all four committed
+sets at HEAD (validity 10/10 each; bare byte-identity; referee PASS at exact floor equality
+on the canonical samples) and re-anchored the canary-family cells on the baseline-6 corpus
+denominator (the re-anchor the 18.13 verification flagged, owned by this close). What
+STANDS: baseline 6 + the re-recorded corpus (the canonical canary denominator), the
+conviction-economy model (GO, decision accuracy 0.938) + the composed meeting-outcome
+runner (18.29 GO), the co-evolution stack (18.19–18.23, 18.31), and both campaigns'
+measured findings (18.24 STOPPED at a screening shortlist; 18.25's CF2 general-base
+starvation finding; the Red-Queen cycling signature recorded for Phase 19). Everything the
+phase trained, fitted, selected, or pinned is BASELINE-6-SUBSTRATE-ANCHORED (staleness
+rules: close audit §5). Presentation stays DEFERRED; Phase 19 is REVIEW-AND-REFRESH (deep
+code review + frontend/data-display refresh; the human seat is OUT; heterogeneous-model
+lobbies a later decision) — its review inputs are handed off in the close audit §7. The
+five locked decisions below were ratified by the owner on 2026-07-18 at the planning
+session's decision menu (`audits/audit-phase-18-planning.md` §8), sign-off additionally
+riding the merge of the phase doc (the 15.18 convention). Full close:
+`audits/audit-phase-18-close.md` (the finding §1, the HEAD reads §2, the baseline-6 corpus
+canary anchors §3, the evidence chain §4, the Phase-19 staleness rules §5, the routed
+contracts + deferral ledger §6, the Phase-19 hand-off §7, Q5 §8).
 
 **18.11 meeting-layer gate — RULED: CREW-ONLY package (owner, 2026-07-19,
 `audits/audit-phase-18-meeting-gate.md` §9).** The probe ran 2026-07-19 (two 25-seed 9p2i

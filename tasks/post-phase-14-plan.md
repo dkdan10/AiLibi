@@ -68,13 +68,16 @@ baseline 5                      scripted movers (champion opt-in) · upgraded me
         │   Phase 17 — co-adaptation: re-ground the meeting surrogate on baseline 5, re-run the
         │   bake-off recipe (cheap now — the Phase-15 harness makes this a re-run, not a rebuild)
         ▼
-baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
- 2026-07-18: Phase 17's          → the evidence-gated flip ruled FAIL — utility-es keeps a
- evidence-gated flip ruled         +0.16 win edge but fails the conversion-economy floors;
- FAIL; the champion stays          policy-es passes the referee at a 0.02 win rate — so the
- opt-in and baseline 5             scripted FSM stays the default mover and no mover baseline
- stands as the ladder tip —        exists; a mover baseline re-enters only via a future
- audits/audit-phase-17-close.md)   adopting record that passes the referee + win-edge bar
+baseline 6 (NOT RECORDED at     co-adapted movers · upgraded meetings
+ the Phase-17 close,             → the evidence-gated flip ruled FAIL — utility-es keeps a
+ 2026-07-18: Phase 17's            +0.16 win edge but fails the conversion-economy floors;
+ evidence-gated flip ruled         policy-es passes the referee at a 0.02 win rate — so the
+ FAIL; the champion stays          scripted FSM stays the default mover and no mover baseline
+ opt-in and baseline 5             exists; a mover baseline re-enters only via a future
+ stood as the ladder tip —         adopting record that passes the referee + win-edge bar
+ audits/audit-phase-17-close.md;   (the NUMBER was then taken by a different record class:
+ superseded two nodes down)        18.12's meeting-layer adopting record became baseline 6 —
+                                   two nodes down; the mover record itself never landed)
         │
         │   Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18,
         │   audits/audit-phase-18-planning.md; tasks/phase-18.md): emergent
@@ -85,8 +88,22 @@ baseline 6 (NOT RECORDED,       co-adapted movers · upgraded meetings
         │   instruments; an evidence-gated mover flip at the close records the
         │   next baseline number after whatever the phase adopted
         ▼
-baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 gate's
-        │                       ruling; mover record only on a §1.3-bar PASS at 18.27
+baseline 6 (RECORDED at the     meeting layer upgraded — the 18.11 gate ruled CREW-ONLY,
+ 18.12 adopting record;          and 18.12 graduated the roll-call round, the endpoint-band
+ audits/                         exemption, the vent variant/widening, and the absence
+ audit-phase-18-baseline-6.md;   prior (`impostor_roll_call` stays a default-OFF toggle);
+ the ladder tip at the           the ML corpus re-recorded on it at 18.13 — the canonical
+ Phase-18 close, 2026-08-01)     canary denominator at the standing substrate
+        │
+baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
+ 2026-08-01: 18.27 read the      → the §1.3 bar failed the WHOLE slate: every learned arm
+ §1.3 bar against the 18.26        wins more than the same-seed FSM comparator (+0.12 to
+ real-LLM slate and ruled          +0.30) and every arm fails the baseline-6 referee on
+ FAIL — the scripted FSM           the supply/conversion gauges — so the scripted FSM
+ stays the default mover,          stays the default mover, no mover baseline exists, and
+ the champion stays opt-in —       a mover baseline re-enters only via a future adopting
+ audits/                           record that passes the referee + win-edge bar
+ audit-phase-18-close.md)
         │
         │   Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18): a deep
         │   review of the existing code (dead spots, dead code, refactor
@@ -138,7 +155,16 @@ baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 g
   work, the crew deployment surface, and the detector-band relaxation route to Phase 18 as
   recorded contracts (the close audit §6).
 - **Phase 18 — THE ML PHASE (re-chartered, owner 2026-07-18; `tasks/phase-18.md`, opened
-  2026-07-18).** The owner ruled presentation DEFERRED and re-chartered Phase 18 as the ML phase:
+  2026-07-18, CLOSED 2026-08-01 with NO mover flip: the 18.27 two-axis ruling read the §1.3
+  bar against the 18.26 real-LLM slate and ruled FAIL on every arm — the champion candidate
+  `ea4bc955…` retains a +0.26 win edge (0.52 vs the same-seed FSM comparator 0.26) but fails
+  the baseline-6 referee on both live supply gauges, and so does every finalist (+0.12 to
+  +0.30 win edges, referee FAIL ×4) — so the scripted FSM stays the default mover, the
+  champion stays opt-in, baseline 7 is NOT recorded, and the ladder tip stands at baseline 6
+  (the 18.12 adopting record); zero of the fourteen pre-registered emergence rulings
+  demonstrated — the two clause-(c)-blocked kill-placement cells are the phase's named
+  behavioral findings N1/N2 — and the crew-adoption slot closed NO-ADOPTION;
+  `audits/audit-phase-18-close.md`).** The owner ruled presentation DEFERRED and re-chartered Phase 18 as the ML phase:
   advance the learned agents until deception and deduction arise from environmental pressure rather
   than scripting. Five owner-ratified locked decisions (`audits/audit-phase-18-planning.md` §8):
   layered training signal (a conviction-economy proxy model in the loop + per-generation real-path
@@ -147,7 +173,17 @@ baseline 6 (+7)                 conditional: meeting-layer record at the 18.11 g
   graduation, with pre-registered bars and a crew-only fallback), alternating-freeze co-evolution
   with the stabilizer stack impostor-first, the §1.3 flip bar as target with pre-registered
   emergence instruments co-equal, and encoder work riding the co-evolution wave (first-principles
-  primitives rejected on code evidence).
+  primitives rejected on code evidence). What STANDS from the phase: baseline 6 (the CREW-ONLY
+  meeting-layer graduation, 18.12) with the ML corpus re-recorded on it (18.13 — the canonical
+  canary denominator restored at the standing substrate; the close computes the fresh anchors),
+  the conviction-economy model (GO, decision accuracy 0.938 on its held-out split) composed
+  with the surrogate's retained ranking channel into the meeting-outcome runner (18.29, GO), the
+  co-evolution stack (dual-role rollouts + two-identity stamps, hall-of-fame/PFSP, the
+  alternating-freeze driver, scenario staging, campaign ergonomics), and both campaigns closed
+  as measured findings (18.24 STOPPED at a screening-tier shortlist; 18.25 with the CF2
+  general-base starvation finding; the Red-Queen cycling signature recorded for Phase 19). The
+  deferral ledger routes through the close audit §6; the Phase-19 review inputs (dead-spot
+  candidates, instrument residuals) through its §7.
 - **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18).** Not a feature phase: (a) a
   deep review of the code that already exists — dead spots, dead code, refactor opportunities; (b)
   an updated presentation of the frontend and the data displays. The human seat is OUT (not
