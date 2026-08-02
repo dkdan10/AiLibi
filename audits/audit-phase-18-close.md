@@ -965,6 +965,29 @@ provider**, so the clause resolves as a recorded **NOT-ADOPTED** on both sides:
   layer** (every meeting resolves SKIPPED); the composed runner is GO but was **NOT adopted** for the
   fake-path runs.
 
+### 6.6 The roadmap's standing physical-channels deferral — re-evaluated at this close, as its trigger demands
+
+`tasks/post-phase-14-plan.md` §5 carries a pre-Phase-15 deferral whose re-evaluation trigger names
+this close: *"New physical information channels (cameras/door logs, task-visual confirmation as soft
+alibis, sabotage retune so meetings happen under pressure) → still deferred; re-evaluate at the
+Phase-18 close against the evidence economy that phase leaves behind."* The re-evaluation, against
+the evidence economy this phase measured:
+
+- **The demand side these channels would feed now exists and is priced.** Baseline 6 doubled the
+  flag-supply floor (0.50279 → 1.09091, §1.2), the learned movers starve it on every arm (§1.1), and
+  the `witnessed_event_rate` gauge is the rare-event channel the phase found structurally
+  unresolvable at n = 50 (§6.1 L2; 12 witnessed events over 505 corpus kills, §2.2) — new physical
+  witness channels are exactly the class of witnessed-supply widening a future substrate wave could
+  price against those gauges, with the §3 corpus anchors as the before-column.
+- **No contract can route to Phase 19**: Phase 19 is REVIEW-AND-REFRESH by owner charter — not a
+  feature phase — and this close adds no new evidence beyond the battery, so authoring a substrate
+  wave here would be exactly the surprise the two-owner-gate compression forbids.
+- **Disposition: REMAINS DEFERRED, trigger refreshed** — re-evaluate at the authoring of the next
+  FEATURE phase (the first phase after the Phase-19 review/refresh), reading §6.1 L2 (the
+  witnessed-gauge unresolvability), §2.2 (the supply economy at baseline 6), and the §3 anchors as
+  its inputs. The roadmap §5 bullet is refreshed to this disposition in this PR — a named deferral
+  with a live trigger, not a silent gap.
+
 ---
 
 ## 7. The Phase-19 hand-off — REVIEW INPUTS, NOT CONTRACTS
@@ -977,17 +1000,17 @@ carries a bar, a budget, or a due gate.
 |---|---|---|---|
 | 1 | Three `eval/` per-game walk implementations | `eval/funnel.py:287` `_walk_game`, `:1138` `_walk_game_vj`, `:1857` `_walk_set_vj`; `eval/kill_craft.py:414` `_walk_game`; `eval/off_menu.py:323` `_walk_game` | three independent per-game reconstruction walks |
 | 2 | The disclosed duplication (self-reported by the modules) | `eval/kill_craft.py:104-118` module docstring — *"the walk is duplicated locally, and the duplication is noted for Phase 19's review"*; repeated `:405-407`; `eval/off_menu.py:36-44`; `eval/deception_instruments.py:166` (the one module that DOES import the shared walk) | a deliberate, documented duplication — review it as a design question, not a bug |
-| 3 | "Retired seams" | `tasks/phase-18.md:2258` (contract text only) | **no in-repo anchor exists** — see the note below |
+| 3 | "Retired seams" | `tasks/phase-18.md:2282` (contract text only) | **no in-repo anchor exists** — see the note below |
 | 4 | The `episode_boundary` orphan | `training/rollout.py:71` (the type alias), validator `:77`, branch `:588`; `training/env.py:577,587,612,630,725,958,1037,1140`; `training/rewards.py:287` | every production caller passes `"full_game"` explicitly (`training/crew/scorer.py:946`, `training/bakeoff/harness.py:722`, `training/coevo/rollout.py:214`); `"first_meeting"` is exercised **only in tests** — a deliberate truncation mode with no live consumer |
 | 5 | The recorder lock-race | `scripts/record_ml_corpus.sh:966-999` | the portable `mkdir` mutex with dead-owner detection; the recorded limitation: *"On 3.2 every worker shares `$$` … so dead-owner detection degrades to a no-op — the mkdir mutex + release still serialize correctly; only the rare 'a worker was SIGKILLed mid-critical-section' safety net is lost."* Related historical finding: `audits/audit-2026-05-30-0059-mvp-close.md:96` |
 | 6 | The un-unit-tested `deadline_default` freeze-guard branch | `scripts/record_ml_corpus.sh:581-600` | grep-verified: `tests/scripts/test_record_ml_corpus.py` contains **zero** occurrences of `deadline_default` — the branch has no unit test. Both shapes are documented at `replays/ml_corpus/README.md:240-251` |
 | 7 | The validity-gate `deadline_default` blindness (unassigned) | grep-verified: `scripts/validity_gate.py` and `eval/validity.py` contain **zero** occurrences of `deadline_default` | in-repo statement: *"`scripts/validity_gate.py` has no `deadline_default` check at all; it rejects the sentinel shape only incidentally, via the model column. The corpus recorder is deliberately stricter than the gate here."* Routed by PR #299 and marked "inherited by the close if unclaimed" — **this close does not claim it; it hands it to Phase 19 as a review input** |
 | 8 | The stamped-substrate question for LLM-free meeting paths | `eval/validity.py:864` `check_cost_and_provenance` (check emitted `:982` / `:1209`) | the machine-readable statement already exists in `training/artifacts/composed/verdict.json.adoption_constraints[0]` (quoted in §4): composed-substrate probe reads are diagnostic-grade *"until the provenance check has a stamped-substrate answer for LLM-free meeting paths (an eval-side question)"*. A composed meeting makes zero LLM calls, so no model row exists to stamp — structural for ANY zero-LLM meeting path, not behavioral; every behavioral check passes on the same set |
-| 9 | The platform-sensitive `test_es` hash pin | `tests/training/test_es.py:74` (`:85-89` — *"digest is a fixed constant. If this changes, the ES core drifted"*) | grep-verified: no platform guard (`sys.platform` / `platform.system` absent). In-repo record of the failure mode: `tasks/phase-18.md:2635` — *"(the macOS-only ES hash pin verified pre-existing on bare main, identical digest; CI Linux green)"* |
+| 9 | The platform-sensitive `test_es` hash pin | `tests/training/test_es.py:74` (`:85-89` — *"digest is a fixed constant. If this changes, the ES core drifted"*) | grep-verified: no platform guard (`sys.platform` / `platform.system` absent). In-repo record of the failure mode: `tasks/phase-18.md:2659` — *"(the macOS-only ES hash pin verified pre-existing on bare main, identical digest; CI Linux green)"* |
 | 10 | The `composed_artifact_dir` type-annotation-only escape | `training/coevo/driver.py:80-81`, `:426`, `:437`, consumed `:1531-1533` | the "structurally unreachable" guarantee is the **type annotation only** — `training/composed_runner.py:342` still declares `composed_artifact_dir: Path \| None` and `:372-396` implements the `None` diagnostic branch |
 | 11 | The silently-overwritable `campaign-plan.json` | `training/coevo/driver.py:323` `CAMPAIGN_PLAN_FILENAME`, `:118` (the write), `:340` + `:1206` (path-collision commentary), pinned `tests/training/test_coevo_driver.py:973,1003` | the no-clobber preflight covers `WORK_DIR_OWNED_NAMES`; the plan file itself is written per run |
-| 12 | The scenario selector seam's unenforced delegation convention | `tasks/phase-18.md:1799-1801`; restated `report-crew-campaign.md:86-88` | *"the selector seam drives EVERY seat including the opponents under an unenforced delegation convention and is never a campaign configuration"* — never exercised: both campaigns' rows carry `scenario_labels: []` |
-| 13 | Resume refuses non-canonical maps (18.31 residual) | `training/realpath.py:4158-4167`; recorded `tasks/phase-18.md:2553-2554` | *"custom-map campaigns have no resume path without an eval/ change"* |
+| 12 | The scenario selector seam's unenforced delegation convention | `tasks/phase-18.md:1823-1825`; restated `report-crew-campaign.md:86-88` | *"the selector seam drives EVERY seat including the opponents under an unenforced delegation convention and is never a campaign configuration"* — never exercised: both campaigns' rows carry `scenario_labels: []` |
+| 13 | Resume refuses non-canonical maps (18.31 residual) | `training/realpath.py:4158-4167`; recorded `tasks/phase-18.md:2577-2578` | *"custom-map campaigns have no resume path without an eval/ change"* |
 | 14 | Hand-maintained `WORK_DIR_OWNED_NAMES` (18.31 residual) | `training/coevo/driver.py:350`, consumers `:1202`/`:1223`, export `:2240`, pins `tests/training/test_coevo_driver.py:983,994` | *"any future driver-owned path must be declared there or the collision class re-opens"*; its twin is `scripts/generate_campaign_tables.py:105 DEFAULT_RANKING_ROOTS` (§6.3 C4) |
 
 **On item 3, stated plainly: "retired seams" has no in-repo anchor.** It appears only in the 18.28
@@ -1178,9 +1201,48 @@ contradiction-flag table. The §3 anchors are computed from the same `eval/` fol
 / impostor win, `eval.vote_correctness.compute_supplied_channel_conversion` for the successor,
 `eval.funnel.compute_pooling_funnel` for roll-call and whereabouts lies), so every anchor cell
 equals the CLI output above cell-for-cell. All canary statistics — Wilson 95% score interval,
-pooled two-proportion z, and the band-fire threshold search (largest k at the anchor's own n with
-pooled z ≤ −1.96) — are the standard formulas computed numerically from the CLI-equal cells quoted
-beside them in §3, and re-derivable from those tables' own numerators/denominators alone: **zero
-hand-computed figures anywhere in this audit.** The §1 evidence cells are read from the committed
+pooled two-proportion z, and the band-fire threshold search — are computed numerically by the
+snippet below from the §3.1 table's own k/n cells (its output reproduces every §3.1 CI/z column and
+every §3.2/§3.3 threshold row cell-for-cell): **zero hand-computed figures anywhere in this
+audit.**
+
+```python
+# §3 — the canary statistics, from the §3.1 table's own k/n cells (no other inputs)
+from math import sqrt
+
+Z = 1.959963984540054  # two-sided 95%
+
+def wilson(k: int, n: int) -> tuple[float, float]:
+    p, z2 = k / n, Z * Z
+    c = (p + z2 / (2 * n)) / (1 + z2 / n)
+    h = (Z / (1 + z2 / n)) * sqrt(p * (1 - p) / n + z2 / (4 * n * n))
+    return c - h, c + h
+
+def pooled_z(k_new: int, n_new: int, k_anchor: int, n_anchor: int) -> float:
+    pp = (k_new + k_anchor) / (n_new + n_anchor)
+    se = sqrt(pp * (1 - pp) * (1 / n_new + 1 / n_anchor))
+    return (k_new / n_new - k_anchor / n_anchor) / se
+
+def band_fire(k_anchor: int, n_anchor: int) -> int:
+    # largest future k at the anchor's own n with pooled z <= -1.96 (the REGRESSION arm)
+    return max(k for k in range(k_anchor) if pooled_z(k, n_anchor, k_anchor, n_anchor) <= -1.96)
+
+CELLS = [  # name, corpus k/n (anchor), samples k/n (continuity)
+    ("R1 eject-decided win share", 106, 150, 31, 50),
+    ("genuine-class successor",    222, 259, 70, 79),
+    ("ejection accuracy",          248, 302, 78, 101),
+    ("impostor win rate",           38, 150, 15, 50),
+    ("whereabouts-lie mint rate",  147, 2380, 50, 843),
+    ("roll-call coverage (crew)", 2035, 2042, 723, 726),
+    ("roll-call coverage (imp)",   342, 684, 120, 245),
+    ("roll-call answer rate",     2377, 2726, 843, 971),
+]
+for name, kc, nc, ks, ns in CELLS:
+    lo, hi = wilson(kc, nc)                            # §3.1 Wilson CI (corpus)
+    z = pooled_z(ks, ns, kc, nc)                       # §3.1 cross-set z (samples vs anchor)
+    t_c, t_s = band_fire(kc, nc), band_fire(ks, ns)    # §3.2 corpus / §3.3 samples thresholds
+    print(name, (round(lo, 4), round(hi, 4)), round(z, 3),
+          f"{t_c}/{nc}", round(kc / nc - t_c / nc, 3), f"{t_s}/{ns}", round(ks / ns - t_s / ns, 3))
+``` The §1 evidence cells are read from the committed
 `training/reports/results-finalist-eval.jsonl` and `report-finalist-eval.md` §16.a, and the ruling
 itself from `audits/audit-phase-18-flip-emergence.md` §3–§13.

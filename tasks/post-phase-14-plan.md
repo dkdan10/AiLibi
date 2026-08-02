@@ -214,8 +214,12 @@ baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
   elicitation); the residual uptake/turn-taking gap (53% of living player-meetings never take a
   turn) is now Phase 18's Wave-1 meeting-layer package (`tasks/phase-18.md` 18.8–18.12).
 - New physical information channels (cameras/door logs, task-visual confirmation as soft alibis,
-  sabotage retune so meetings happen under pressure) → still deferred; re-evaluate at the
-  Phase-18 close against the evidence economy that phase leaves behind.
+  sabotage retune so meetings happen under pressure) → re-evaluated at the Phase-18 close as this
+  entry demanded (`audits/audit-phase-18-close.md` §6.6): the demand side now exists and is priced
+  (the baseline-6 supply floors; the witnessed gauge's rare-event unresolvability at n=50 is the
+  close's L2 finding), but Phase 19 is review-and-refresh, not a feature phase — so REMAINS
+  DEFERRED with the trigger refreshed: re-evaluate at the authoring of the next FEATURE phase,
+  reading the close audit's §6.1 L2 + §2.2 + §3 anchors as inputs.
 - Crew owned-task-set observation surface (task-ordering learnability) → LANDED at 15.22 (pause
   decision 5); the crew DEPLOYMENT surface (production opt-in) is Phase 18's 18.7, adoption
   gated.
