@@ -1,0 +1,210 @@
+# Phase-19 planning — the review-and-refresh plan (planning session, 2026-08-03)
+
+Produced by the Phase-19 planning/coordination session against `main` @ `67166b3`. The
+research is already done — `audits/audit-phase-19-triage.md` (the spine), the two input
+audits, and `audits/audit-phase-18-close.md` §6–§7 — so this dossier is deliberately SHORT:
+it records the phase shape, the owner's decision-menu answers, and every divergence from
+the triage's §7 work-list, with reasons. The dispatchable contracts live in
+`tasks/phase-19.md`; the owner's merge of that document ratifies this plan (the 15.18
+convention).
+
+---
+
+## 1. Inputs and baseline
+
+- **Reading list consumed in order:** triage (§7 work-list + §8 claim-verification table),
+  `audit-phase-19-input-claude.md`, `audit-phase-19-input-codex.md`,
+  `audit-phase-18-close.md` §6–§7, `tasks/phase-18.md` (contract conventions),
+  `tasks/post-phase-14-plan.md` (the charter).
+- **Anchor validity:** `git diff 8873e99..HEAD` touches only the two committed audit files —
+  the code tree at HEAD is byte-identical to the commit every triage VERIFIED ruling was
+  checked against, so triage-verified anchors are current. Anchors the triage did **not**
+  independently re-run were re-verified at HEAD by this session's fan-out pass before being
+  pinned into any contract (§6); contracts inheriting still-unexecuted source-specific
+  claims carry verify-then-fix as their first DoD step, per the triage §8 row 20 rule.
+- **Gate baseline re-confirmed this session:** `bash scripts/check.sh` → pytest
+  **4531 passed / 20 skipped / 3 xfailed** (identical to both audits' Linux baseline). The
+  frontend `tsc` TS2688 `vite/client` failure in this cloud container is the known
+  environment artifact (the Python line is the gate); the same frontend leg passes on the
+  audited hosts and in CI.
+- **Ratified rulings inherited, not relitigated:** the review-and-refresh charter, the
+  triage §7 NOT-list, prerequisite 0 (small scoped contracts, hard cut line, no mega-PR),
+  the evidence-label discipline, and the ML freeze (Wave 3 is closure, zero new
+  recordings).
+
+## 2. The decision menu (owner, 2026-08-03 — these are now locked decisions)
+
+Six questions were put to the owner with costed recommendations; all six answers ratify the
+recommended option:
+
+1. **ML component tier map: EVIDENCE-FIRST HYBRID.** KEEP what committed evidence and
+   always-on gates still execute (compact learned inference + parity, corpus
+   verifier/splits, the conviction model, the surrogate **ranking** channel, the ES core +
+   champion acceptance). FREEZE with labels: the composed runner (optional-diagnostic), the
+   crew stack, co-evolution/campaign machinery (campaign-only test families behind opt-in
+   markers). RETIRE after consumer verification: `training/realpath.py`, the standalone
+   surrogate decision path (96/96 held-out SKIP), the unused `first_meeting` boundary, and
+   new-search machinery. Retired code stays in git history.
+2. **ML re-open fork: RECORD THE FORK, DECIDE LATER.** The reopening checklist documents
+   both routes (floor re-pricing vs real-path conviction signal) plus the four mandatory
+   pre-campaign checks (interval-aware floors, weak-flag Goodhart probe, run-variance
+   treatment, screening replication), and states the owner picks a route only when a
+   concrete re-open proposal exists. The phase stays frozen either way.
+3. **License and public posture: MIT + minimal CONTRIBUTING/SECURITY.** MIT license; a
+   short CONTRIBUTING stating the solo agent-built workflow; SECURITY.md documenting the
+   local-only trust boundary of the unauthenticated replay API.
+4. **Artifact retention: PRUNE COEVO ONLY.** `replays/samples/` and `replays/ml_corpus`
+   stay in-tree (everything live gates recompute from remains self-contained). The ~109MB
+   of closed-campaign co-evolution intermediates move to an evidence branch/release asset
+   with manifests + hashes + the pinned stability summary staying in-tree. Partial clone
+   (`--filter=blob:none`) is documented as the fast path. Stated honestly: full-history
+   clones stay heavy until a future deliberate rewrite, which this phase does not do.
+5. **Evidence-honesty substrate fixes: DECIDE AFTER THE METRICS.** Phase 19 ships the
+   proof-vs-inference metrics, injustice fixtures, and per-mechanism labels; whether the
+   substrate behavior fixes become the first post-19 phase is decided at the phase close,
+   reading those metrics. Nothing behavioral changes in-phase (the NOT-list stands).
+6. **Cut line: THE BALANCED PHASE.** All of Wave 1 (truth/gate); all of Wave 2 (spectator
+   coherence + metrics + demo) with the ticker/cost chips as a dependency-gated tail;
+   Wave 3 = ML close docs + tier map + retirements + artifact prune + one parameterized
+   replay walker migrating the live eval consumers + vote-tally parity + test-suite
+   structure + boundary hardening + freeze labels. OUT to the backlog (§5): monolith
+   decompositions, API/training walker migration, typed ballot/suspicion telemetry.
+
+## 3. The phase shape
+
+**28 contracts, three waves, no recordings.** Every task is $0/offline; the only
+operator-machine work is 19.21 (checking whether the finalist raw slate still exists on the
+owner's machine) and the owner-ratified close. No baseline is recorded: the ladder tip
+remains baseline 6, and every derived artifact this phase regenerates (eval reports, rubric
+scores, generated goldens) is recomputed from committed bytes — replay bytes never move.
+
+- **Wave 1 — truth and the gate (19.1–19.8):** the front-door truth sweep + generated-fact
+  checks; the in-code truth sweep + graduation-sweep convention; ES portability; the reward
+  claim; metric/data-display truth (conversion family + dashboard); the one-line defects;
+  public/build hygiene + MIT; corpus truth disclosures.
+- **Wave 2 — the spectator tells one coherent game (19.9–19.17):** curated 9p2i default +
+  featured path; playback coherence (meeting pause, unspoiled mode, finale card, frame-time
+  labels); the evidence taxonomy in DTO + UI; the frontend test baseline (Vitest + ESLint +
+  one Playwright journey); README proof + the static demo artifact; the deduction metrics
+  (proof-vs-inference); guard-rationale redaction (dormant); the outsider reading guide;
+  the gated ticker/cost tail.
+- **Wave 3 — ML close and consolidation (19.18–19.27):** tier map + freeze-label sweep +
+  reopening checklist; retirements + dead-code sweep; ML report honesty (paired statistics,
+  terminology errata); the raw-slate recovery/label (owner); artifact classes + the coevo
+  prune; `verify-ml-evidence`; boundary hardening; the parameterized replay walker; vote-
+  tally parity; test-suite structure. **19.28 closes the phase** with the close audit and
+  the post-19 decision menu (substrate fixes vs presentation), read against the 19.14
+  metrics per locked decision 5.
+
+**Model assignments** follow the phase-18 standing rule — Opus for loud-failure work
+(mechanical fixes, re-pins, deletions with consumer greps, test scaffolding, generated
+docs), Fable for silent-failure work (metric semantics, evidence taxonomy, docstring truth,
+tier-map wording, statistical honesty, the spectator narrative). The per-task split is in
+the phase-doc preamble.
+
+**Collision discipline** (the phase doc's block is authoritative): the truth-sweep,
+dashboard, walker, and frontend tasks share files and are serialized by dependency edges —
+notably README.md (19.1 → 19.16 → 19.13 → 19.22), `api/replay_loader.py` (19.9 → 19.10 →
+19.11), `frontend/src/types/api.ts` + `api/schemas.py` (19.10 → 19.11 → 19.24),
+`meetings/manager.py` (19.2 → 19.15 → 19.26), `eval/leak_test.py` (19.24 → 19.25),
+`pyproject.toml` (19.6 → 19.7 → 19.27), and the regenerated eval reports (19.5 → 19.14).
+
+## 4. Divergences from the triage §7 (recorded, with reasons)
+
+1. **Item 12's "prompts" surface is excluded from the in-phase evidence-taxonomy work
+   (19.11).** Prompt-template edits are substrate behavior: they break the prompt
+   byte-golden against committed bytes and change model behavior on any future recording —
+   exactly what the NOT-list forbids beyond instrumentation/labels. The prompt-side flag
+   naming ("VERIFIED evidence") routes to the post-19 decision (locked decision 5) with the
+   other three mechanisms; Phase 19 fixes the UI/DTO/metric surfaces only and preserves the
+   four mechanisms as separate fixtures/labels per triage item 20.
+2. **Item 29 (typed telemetry) resolves as freeze-labels, not code** — ratified by the cut
+   line: nothing records again this phase, so the rendered-prose metrics are labeled frozen
+   and unreliable under prompt-shape change (folded into 19.18). The typed-telemetry
+   migration is backlogged against any future recording decision.
+3. **Item 30 (monolith extraction) routes to the backlog whole** — both audits deprioritize
+   it below truth/demo work and it is only safe after the walker/tally/test seams exist.
+4. **Item 25 (walker consolidation) is scoped to the live eval consumers** (nine loop
+   bodies less the frozen `off_menu.py`); the API and training reconstruction walks are
+   backlogged per the cut line. `off_menu.py` gets a freeze label instead of a migration.
+5. **Merges relative to §7's item boundaries:** items 5+6 → 19.5 (one metric+display truth
+   contract — same files, one review); items 19+21+the label halves of 29/31 → 19.18 (one
+   tier-map/labels/checklist contract — `training/README.md` hosts both the tier table and
+   the reopening checklist); item 26 lands as 19.24 (boundary hardening); item 8 absorbs
+   the license ruling. Item 4's report erratum rides 19.20 (not 19.4) to avoid a
+   `training/reports/` collision — 19.4 confines itself to code + tests.
+6. **DESIGN.md needs a chartered exception:** dispatched agents are barred from DESIGN.md
+   by the prompt generator (a hard constraint line in every prompt;
+   `tasks/post-phase-14-plan.md` §5 records the bar). 19.1 therefore scope-gates that
+   generator rule ("Do not modify DESIGN.md **unless this task explicitly lists it in
+   scope**" — mirroring the existing tasks/phase-*.md rule) so the demotion/banner work is
+   contractable; existing prompts stay byte-identical because no other task lists
+   DESIGN.md. The owner's merge of the phase doc ratifies this control-surface change.
+7. **A phase-close contract (19.28) is added** though §7 lists none — phase conventions
+   (the close audit, the STATUS banner, the roadmap tick, the routed decision menu) require
+   it.
+8. **Contract count is 28 against the menu's "~24–26"** — the close contract and the
+   owner-kept ticker tail account for the delta. Recorded, not silent.
+9. **The rubric re-score (item 10) is confirmed $0** — this session verified the scorer is
+   `experiments/lab/rubric_score.py`, offline over committed bytes with no LLM/provider
+   imports — so 19.9 re-scores as an ordinary contract step to clear the staleness banner.
+   The Highlights ordering is still hand-curated and the scalar labeled narrowly (triage
+   singleton 29): a fresh score does not validate human-interest ordering.
+
+## 5. The backlog (routed out, not dropped)
+
+Tracked here so nothing lives only in a PR body; each re-enters only through a future
+owner-chartered phase:
+
+- Monolith decompositions: `orchestrator/game.py`, `api/replay_loader.py`,
+  `meetings/manager.py`, `meetings/transcript.py` (characterization tests first; after the
+  Phase-19 seams).
+- Replay-walk migration of the API (`api/replay_loader.py`) and training (`training/env.py`)
+  reconstruction paths onto the 19.25 walker.
+- Typed per-ballot suspicion/ballot telemetry (replaces the frozen rendered-prose scrapes if
+  any recording ever happens again).
+- The evidence-honesty substrate behavior fixes (sighting provenance, content-vs-memory
+  validation, interval/weighting, prompt-side flag naming) — the pre-chartered candidate
+  for the first post-19 phase, decided at the 19.28 close per locked decision 5.
+- Equal-response-shape prototype behind a measured gate (Codex singleton; behavior change,
+  same post-19 route).
+- GuidedTour focus-trap dedup + the duplicated initial list fetch; SWC-plugin swap; npm
+  advisory triage (ordinary dependency hygiene).
+- Engine frozen-debt documentation beyond labels (unused RNG draw apparatus, dead schema
+  fields — byte-frozen; labeled in 19.18, never churned).
+- The Bash recorder port to Python (explicitly frozen; freeze-labeled in 19.18).
+- A hosted (non-static) demo with a real trust boundary; heterogeneous-model lobbies; the
+  human seat (charter-excluded).
+
+## 6. Verification record (this session)
+
+- `bash scripts/check.sh` re-run at HEAD: green on the Python gate (4531/20/3; §1).
+- Anchor re-verification: a six-agent fan-out re-checked at HEAD every file:line anchor
+  pinned in `tasks/phase-19.md` that the triage had not itself re-executed (the meetings/
+  agents cluster, eval cluster, frontend cluster, api/scripts cluster, training cluster,
+  tests/observation cluster — 60+ claims). Anchors that drifted from the source audits'
+  citations were corrected before pinning; claims that could not be re-confirmed kept
+  their source tag and a verify-then-fix first DoD step in the owning contract.
+- **Source-audit claims corrected by this session's verification** (folded into the
+  contracts; recorded here so the corrections are not lost):
+  1. `eval/determinism_test.py` is NOT dead — bare pytest collects it (the `*_test.py`
+     pattern) and README cites it as the engine-purity proof. The Claude audit's
+     "exercised by nothing" is REFUTED; the module is excluded from 19.19's retirements,
+     and the mandatory consumer-check discipline cites this as its motivating case.
+  2. The surrogate "standalone decision path" has live consumers:
+     `training/composed_runner.py:122-124` and the bake-off harness import
+     `SurrogateMeetingRunner`. The retirement (19.19) is therefore scoped to the
+     standalone factory/CLI arm only; the class stays as the composed runner's
+     dependency, and 19.18's tier map states the boundary.
+  3. `tests/scripts/test_champion_flip_ruling.py` carries ~136 exact-literal pin lines,
+     not "~580 of 831" — the audit counted the interleaved logic. 19.27's pin-to-golden
+     conversion is scoped to the pin dicts accordingly.
+  4. The rubric scorer (`experiments/lab/rubric_score.py`) is offline/$0 (no LLM
+     imports), so 19.9's re-score is an ordinary contract step.
+  5. Minor anchor drifts corrected in place (the replay store lives at
+     `frontend/src/store/`, not `src/state/`; the harness provenance `/Users` path is at
+     line 11, not 12).
+- Validator/generator/frontier all green at authoring: 321 tasks ↔ 321 prompts
+  (293 + 28), `generate_prompts.py --check` in sync, and
+  `scripts/compute_next_task.py --phase 19` reports exactly the designed frontier
+  (eight roots — 19.1–19.6, 19.8, 19.9 — dispatchable, twenty blocked).

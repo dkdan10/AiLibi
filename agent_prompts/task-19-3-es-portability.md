@@ -1,0 +1,83 @@
+# Agent Prompt — 19.3 ES portability: a portable sampler or a narrowed claim
+
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task 19.3 — ES portability: a portable sampler or a narrowed claim, anchored to audits/audit-phase-19-triage.md C1 + §7 item 3 [S-Codex, platform-scoped; §8 row 1]; training/bakeoff/es.py:24-26 (the "bit-stable across machines" promise), :184-193 (`rng.gauss` in `_mutate` and `_random_genome`); tests/training/test_es.py:74-91 (the fixed digest pin, no platform guard); tasks/phase-18.md:2656-2659 (the recorded Darwin-arm64 divergence); the three reproducibility scopes (19.1). Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+**Branch:** `phase-19-es-portability`
+**Depends on:** none (root)
+**Section refs:** audits/audit-phase-19-triage.md C1 + §7 item 3 [S-Codex, platform-scoped; §8 row 1]; training/bakeoff/es.py:24-26 (the "bit-stable across machines" promise), :184-193 (`rng.gauss` in `_mutate` and `_random_genome`); tests/training/test_es.py:74-91 (the fixed digest pin, no platform guard); tasks/phase-18.md:2656-2659 (the recorded Darwin-arm64 divergence); the three reproducibility scopes (19.1)
+**Complexity:** Medium
+
+The standing gate is green on Linux and recorded red on Darwin-arm64 twice (the Codex
+audit run and the phase-18 close note): `es.py` promises a cross-machine bit-stable
+stream while `random.Random.gauss()` rides libm, the leading — but unisolated — cause.
+FIRST DoD step (verify-then-fix): reproduce the promise/pin relationship at HEAD and
+identify which operations in the sample path are platform-sensitive by construction.
+Then, primary path: implement a specified portable normal sampler (pure arithmetic over
+`random()` draws — IEEE-754 basic ops and `math.sqrt` are correctly rounded and portable;
+`log`/`exp`/libm transcendentals are not) and regenerate the golden digest. Fallback path
+(only if bit-portability cannot be established): narrow the in-code claim to the
+supported pin and platform-guard the test. Never just re-pin the hash — that conceals the
+unsupported promise. The ES program is frozen: no artifact retrains, the shipped champion
+weights and acceptance gates are untouched (the golden pins the OPTIMIZER stream, not any
+shipped artifact).
+
+**Files in scope:**
+- training/bakeoff/es.py
+- tests/training/test_es.py
+
+**Files NOT in scope:**
+- agents/tactical/learned/ (shipped weights and parity gates untouched)
+- training/bakeoff/harness.py + training/bakeoff/utility_es.py (consumers of the ES core, not edited)
+
+**Definition of done:**
+- [ ] Verify-then-fix recorded: the platform-sensitive call(s) identified with the reasoning in the module docstring, and the old promise text quoted in the PR.
+- [ ] Primary path: the sampler's algorithm is documented (name + why each operation is portable), a double-run on this host is digest-identical, and the new golden is pinned. Fallback path: the claim text states exactly what is guaranteed (same-runtime repeatability) and the test carries an explicit platform pin/guard with the Darwin divergence cited.
+- [ ] The in-code claim and README's reproducibility-scopes text (19.1) agree — coordinate wording, not files.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+## Implementation hint
+
+Inverse-CDF via a rational approximation (Acklam, or Wichura's AS241) needs only +, −, ×,
+÷, and sqrt if you choose the polynomial form carefully — evaluate with explicit float64
+arithmetic and document coefficient provenance. Keep the `rng.gauss` path available
+nowhere (one sampler, one stream); regenerating the golden is a deliberate, documented ES
+drift — say so in the pin's comment, quoting this task id.
+
+## Pre-flight checklist
+- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+
+## Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify AGENT_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
+Do not implement work outside this task.
+
+## Verification checklist
+- Run every command listed in the Definition of done.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `phase-19-es-portability` with a title like `task 19.3: es portability: a portable sampler or a narrowed claim`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md C1 + §7 item 3 [S-Codex, platform-scoped; §8 row 1]; training/bakeoff/es.py:24-26 (the "bit-stable across machines" promise), :184-193 (`rng.gauss` in `_mutate` and `_random_genome`); tests/training/test_es.py:74-91 (the fixed digest pin, no platform guard); tasks/phase-18.md:2656-2659 (the recorded Darwin-arm64 divergence); the three reproducibility scopes (19.1)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
