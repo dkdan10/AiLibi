@@ -40,6 +40,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/alibi_fabrication.py
 - eval/prompt_regression.py; (the None convention propagates — `alibi_survival_rate` is consumed at :257 into a required `float` at :161, so the regression metrics model widens with it)
 - tests/eval/test_prompt_regression.py
+- tests/api/test_leak.py; (`EXPECTED_EVAL_REPORT_FIELDS` is an exact field-set snapshot — the canary cell's addition updates the reviewed pin)
+- api/routes/eval.py; (only if the mirrored `_TournamentEvalReportView` chain surfaces the new nested cell — its `extra="forbid"` revalidation must accept the regenerated report; record whether an edit was needed)
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)

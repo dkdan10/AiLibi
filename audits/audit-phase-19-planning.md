@@ -232,6 +232,21 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The sixth Codex review round (7 findings)** was verified claim-by-claim — all seven
+  reproduced — and absorbed: the generated-type ripple reaches the Storybook fixtures
+  that construct complete `ReplayView`/`ContradictionView` literals
+  (MeetingView/MapStage stories join 19.10; MeetingView/MindInspector stories join
+  19.11); 19.3's implementation hint was UNREALIZABLE as written (inverse-CDF tails
+  need `ln` — no polynomial removes it) and is rewritten to the realizable rule: libm
+  is the hazard, not the mathematics, so any needed transcendental is a documented
+  in-module pure-arithmetic routine; the post-flip stale-default copy sweep is
+  assigned to the downstream owners of each file (HighlightCard comments → 19.10,
+  dashboard copy + BeliefMatrix comment → 19.13, both ordered after 19.9);
+  `tests/api/test_leak.py`'s exact field-set snapshot and the
+  `_TournamentEvalReportView` mirror join both report-extension tasks (19.5/19.14);
+  `tests/eval/test_wave2_metrics.py` (five independent report builds) joins 19.27's
+  fixture adoption; and 19.9's test scope narrows to `tests/api/test_sets.py` so the
+  two Wave-1 roots stay unordered.
 - **The fifth Codex review round (9 findings)** was verified claim-by-claim — all nine
   reproduced — and absorbed: 19.27's no-cross-test-imports DoD narrows to the four
   named `test_manager` importers (the other three repo cross-test imports are

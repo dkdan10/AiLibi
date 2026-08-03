@@ -32,7 +32,7 @@ pacing/structure heuristic — not a human rating").
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
-- tests/api/
+- tests/api/test_sets.py; (the default-set pin — exact file, keeping this root unordered vs 19.5's tests/api/test_leak.py edit)
 
 **Files NOT in scope:**
 - frontend/src/hooks/usePlayback.ts + frontend/src/App.tsx (19.10's files)

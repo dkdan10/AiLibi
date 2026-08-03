@@ -143,7 +143,9 @@ views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 19.24 (the report cells and DTO-version constant ride the same generated surfaces —
 BOTH generator artifacts regenerate together);
 `frontend/src/stories/TournamentDashboard.stories.tsx` 19.5 → 19.14 (the typed
-fixture);
+fixture); `frontend/src/stories/MeetingView.stories.tsx` 19.10 → 19.11 (finale field,
+then the contradiction category); `tests/api/test_leak.py` 19.5 → 19.14 (the field-set
+snapshot, twice); `api/routes/eval.py` 19.5 → 19.14 (the mirrored view);
 `frontend/src/App.tsx` 19.10 → 19.17;
 `frontend/src/api/client.ts` 19.9 → 19.13 → 19.24; `frontend/e2e/` 19.12 → 19.17;
 `frontend/src/components/ReplayPicker.tsx` 19.9 → 19.10 → 19.12 (copy, then the
@@ -341,7 +343,9 @@ FIRST DoD step (verify-then-fix): reproduce the promise/pin relationship at HEAD
 identify which operations in the sample path are platform-sensitive by construction.
 Then, primary path: implement a specified portable normal sampler (pure arithmetic over
 `random()` draws — IEEE-754 basic ops and `math.sqrt` are correctly rounded and portable;
-`log`/`exp`/libm transcendentals are not) and regenerate the golden digest. Fallback path
+LIBM-backed `math.log`/`math.exp` are not, so any transcendental the algorithm needs is
+implemented in-module as a documented pure-arithmetic routine; see the hint) and
+regenerate the golden digest. Fallback path
 (only if bit-portability cannot be established): narrow the in-code claim to the
 supported pin and platform-guard the test. Never just re-pin the hash — that conceals the
 unsupported promise. The ES program is frozen: no artifact retrains, the shipped champion
@@ -371,11 +375,19 @@ shipped artifact).
 
 **Implementation hint:**
 
-Inverse-CDF via a rational approximation (Acklam, or Wichura's AS241) needs only +, −, ×,
-÷, and sqrt if you choose the polynomial form carefully — evaluate with explicit float64
-arithmetic and document coefficient provenance. Keep the `rng.gauss` path available
-nowhere (one sampler, one stream); regenerating the golden is a deliberate, documented ES
-drift — say so in the pin's comment, quoting this task id.
+The platform hazard is LIBM, not the mathematics: inverse-CDF approximations (Acklam,
+AS241) are rational in the central region but their tail transform needs
+`sqrt(-2·ln p)` — no polynomial choice removes the logarithm, so "avoid transcendentals"
+is unrealizable as an instruction. The realizable rule: any transcendental the sample
+path needs (ln, for the tails) is implemented IN-MODULE as a documented pure-arithmetic
+routine over IEEE-754 basic ops — `math.frexp` (exact) for range reduction plus a
+series/polynomial evaluated in explicit float64 — never `math.log`/libm; `math.sqrt` is
+correctly rounded per IEEE-754 and portable. Document coefficient provenance and the
+approximation's bounded deviation, and pin the distribution-quality assertions from the
+DoD. Keep the `rng.gauss` path available nowhere (one sampler, one stream); regenerating
+the golden is a deliberate, documented ES drift — say so in the pin's comment, quoting
+this task id. If the pure-arithmetic route proves unreasonable in practice, the narrowed
+fallback is the honest exit, not a libm call.
 
 **Ready-to-paste prompt:** `agent_prompts/task-19-3-es-portability.md`
 
@@ -446,6 +458,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/alibi_fabrication.py
 - eval/prompt_regression.py; (the None convention propagates — `alibi_survival_rate` is consumed at :257 into a required `float` at :161, so the regression metrics model widens with it)
 - tests/eval/test_prompt_regression.py
+- tests/api/test_leak.py; (`EXPECTED_EVAL_REPORT_FIELDS` is an exact field-set snapshot — the canary cell's addition updates the reviewed pin)
+- api/routes/eval.py; (only if the mirrored `_TournamentEvalReportView` chain surfaces the new nested cell — its `extra="forbid"` revalidation must accept the regenerated report; record whether an edit was needed)
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
@@ -671,7 +685,7 @@ pacing/structure heuristic — not a human rating").
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
-- tests/api/
+- tests/api/test_sets.py; (the default-set pin — exact file, keeping this root unordered vs 19.5's tests/api/test_leak.py edit)
 
 **Files NOT in scope:**
 - frontend/src/hooks/usePlayback.ts + frontend/src/App.tsx (19.10's files)
@@ -720,8 +734,10 @@ resolving the deliberate mix the loader documents.
 **Files in scope:**
 - frontend/src/hooks/usePlayback.ts
 - frontend/src/App.tsx
-- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186)
+- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186 — and the stale "4p1i default" comments at :16-17/:33 are rewritten post-flip)
 - frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
+- frontend/src/stories/MeetingView.stories.tsx; (its complete `ReplayView` fixture gains the finale field or tsc fails)
+- frontend/src/stories/MapStage.stories.tsx; (same — `FIXTURE` constructs the full generated type)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
@@ -737,7 +753,7 @@ resolving the deliberate mix the loader documents.
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
-- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
+- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -795,6 +811,8 @@ naming routes to the post-19 decision.
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/components/MeetingView.tsx
+- frontend/src/stories/MeetingView.stories.tsx; (`CHAIN_CONTRADICTIONS` constructs `ContradictionView` literals — the category field lands in the fixture or tsc fails)
+- frontend/src/stories/MindInspector.stories.tsx; (same — `CONTRADICTION` at :89)
 - frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
 - tests/api/
 
@@ -925,8 +943,8 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - docs/media/ (new — the committed captures)
 - scripts/build_demo_bundle.py (new)
 - frontend/src/api/client.ts; (the static-data seam only)
-- frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass)
-- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam — same)
+- frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
+- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - tests/scripts/test_build_demo_bundle.py (new)
 
@@ -936,6 +954,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 
 **Definition of done:**
 - [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; opening it via a static server plays the featured journey end-to-end (pause → finale) with zero API calls (test asserts no non-static fetch paths in bundle mode).
+- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
 - [ ] `uv run mypy .` passes.
@@ -985,6 +1004,8 @@ the evidence the 19.28 close puts in front of the owner.
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
 - frontend/src/stories/TournamentDashboard.stories.tsx; (the typed `baseReport()` fixture gains the deduction block)
+- tests/api/test_leak.py; (the field-set snapshot updates again for the deduction block)
+- api/routes/eval.py; (the `_TournamentEvalReportView` mirror gains the new top-level deduction block — `extra="forbid"` rejects it otherwise and `/eval/tournament-report` raises)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated)
 - replays/ml_corpus/4p1i/tournament-eval-report.json; (regenerated)
@@ -1761,6 +1782,7 @@ Quote the default-gate runtime before/after in the PR.
 - scripts/regen_test_goldens.py (new)
 - tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
 - tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
+- tests/eval/test_wave2_metrics.py; (the clearest measured re-walk consumer — five independent `build_report(_COMMITTED_9P2I_DIR)` calls adopt the shared fixture)
 - .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**

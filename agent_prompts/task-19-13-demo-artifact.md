@@ -32,8 +32,8 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - docs/media/ (new — the committed captures)
 - scripts/build_demo_bundle.py (new)
 - frontend/src/api/client.ts; (the static-data seam only)
-- frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass)
-- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam — same)
+- frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
+- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - tests/scripts/test_build_demo_bundle.py (new)
 
@@ -43,6 +43,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 
 **Definition of done:**
 - [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; opening it via a static server plays the featured journey end-to-end (pause → finale) with zero API calls (test asserts no non-static fetch paths in bundle mode).
+- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
 - [ ] `uv run mypy .` passes.

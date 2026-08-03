@@ -23,7 +23,9 @@ FIRST DoD step (verify-then-fix): reproduce the promise/pin relationship at HEAD
 identify which operations in the sample path are platform-sensitive by construction.
 Then, primary path: implement a specified portable normal sampler (pure arithmetic over
 `random()` draws — IEEE-754 basic ops and `math.sqrt` are correctly rounded and portable;
-`log`/`exp`/libm transcendentals are not) and regenerate the golden digest. Fallback path
+LIBM-backed `math.log`/`math.exp` are not, so any transcendental the algorithm needs is
+implemented in-module as a documented pure-arithmetic routine; see the hint) and
+regenerate the golden digest. Fallback path
 (only if bit-portability cannot be established): narrow the in-code claim to the
 supported pin and platform-guard the test. Never just re-pin the hash — that conceals the
 unsupported promise. The ES program is frozen: no artifact retrains, the shipped champion
@@ -53,11 +55,19 @@ shipped artifact).
 
 ## Implementation hint
 
-Inverse-CDF via a rational approximation (Acklam, or Wichura's AS241) needs only +, −, ×,
-÷, and sqrt if you choose the polynomial form carefully — evaluate with explicit float64
-arithmetic and document coefficient provenance. Keep the `rng.gauss` path available
-nowhere (one sampler, one stream); regenerating the golden is a deliberate, documented ES
-drift — say so in the pin's comment, quoting this task id.
+The platform hazard is LIBM, not the mathematics: inverse-CDF approximations (Acklam,
+AS241) are rational in the central region but their tail transform needs
+`sqrt(-2·ln p)` — no polynomial choice removes the logarithm, so "avoid transcendentals"
+is unrealizable as an instruction. The realizable rule: any transcendental the sample
+path needs (ln, for the tails) is implemented IN-MODULE as a documented pure-arithmetic
+routine over IEEE-754 basic ops — `math.frexp` (exact) for range reduction plus a
+series/polynomial evaluated in explicit float64 — never `math.log`/libm; `math.sqrt` is
+correctly rounded per IEEE-754 and portable. Document coefficient provenance and the
+approximation's bounded deviation, and pin the distribution-quality assertions from the
+DoD. Keep the `rng.gauss` path available nowhere (one sampler, one stream); regenerating
+the golden is a deliberate, documented ES drift — say so in the pin's comment, quoting
+this task id. If the pure-arithmetic route proves unreasonable in practice, the narrowed
+fallback is the honest exit, not a libm call.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

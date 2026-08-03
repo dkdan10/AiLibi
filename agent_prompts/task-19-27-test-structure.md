@@ -43,6 +43,7 @@ Quote the default-gate runtime before/after in the PR.
 - scripts/regen_test_goldens.py (new)
 - tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
 - tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
+- tests/eval/test_wave2_metrics.py; (the clearest measured re-walk consumer — five independent `build_report(_COMMITTED_9P2I_DIR)` calls adopt the shared fixture)
 - .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**

@@ -31,8 +31,10 @@ resolving the deliberate mix the loader documents.
 **Files in scope:**
 - frontend/src/hooks/usePlayback.ts
 - frontend/src/App.tsx
-- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186)
+- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186 — and the stale "4p1i default" comments at :16-17/:33 are rewritten post-flip)
 - frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
+- frontend/src/stories/MeetingView.stories.tsx; (its complete `ReplayView` fixture gains the finale field or tsc fails)
+- frontend/src/stories/MapStage.stories.tsx; (same — `FIXTURE` constructs the full generated type)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
@@ -48,7 +50,7 @@ resolving the deliberate mix the loader documents.
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
-- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
+- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
