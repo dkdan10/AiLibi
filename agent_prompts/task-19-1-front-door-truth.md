@@ -34,9 +34,10 @@ Featherless canonical. `.env.example` rewritten from the live lever registry (th
 retired levers move to a "graduated — always ON" note; the one live toggle documented).
 `scripts/check_doc_facts.py` (new): a cheap offline check that fails when README's checked
 claims drift from committed sources (manifest dates/win rates, the lever registry, the
-named ladder tip); wire it into `scripts/check.sh` is NOT in scope (19.7 owns check.sh) —
-it runs via pytest. Finally, scope-gate the generator's DESIGN.md rule so this task's own
-prompt drops the bar while every other prompt stays byte-identical.
+named ladder tip); wiring it into `scripts/check.sh` is NOT in scope (19.7 owns check.sh) —
+it runs via pytest. The generator's DESIGN.md rule was already scope-gated in the
+planning PR (locked decision 8), so this task's prompt permits the DESIGN.md edits; the
+generator itself is not touched here.
 
 **Files in scope:**
 - README.md
@@ -45,13 +46,12 @@ prompt drops the bar while every other prompt stays byte-identical.
 - docs/architecture.md (new)
 - llm/README.md
 - .env.example
-- scripts/generate_prompts.py; (the DESIGN.md constraint becomes scope-gated; all other prompts must remain byte-identical)
-- agent_prompts/task-19-1-front-door-truth.md; (regenerated — the only prompt whose bytes move)
 - scripts/check_doc_facts.py (new)
 - tests/scripts/test_check_doc_facts.py (new)
 
 **Files NOT in scope:**
 - scripts/check.sh; (19.7 owns it — the fact check runs as a test)
+- scripts/generate_prompts.py (the DESIGN.md scope-gate landed in the planning PR)
 - orchestrator/replay.py (the lever registry is read, never edited)
 - training/reports/ (report errata belong to 19.20)
 
@@ -60,7 +60,6 @@ prompt drops the bar while every other prompt stays byte-identical.
 - [ ] `scripts/check_doc_facts.py` passes at HEAD, fails when a checked README fact is perturbed (test-pinned both ways), and runs offline in seconds.
 - [ ] `.env.example` documents exactly the live toggleable levers from `orchestrator/replay.py:570-572` and labels the `_RETIRED_ALWAYS_ON_LEVERS` set as graduated/always-ON, cross-checked by a test importing the registry.
 - [ ] DESIGN.md opens with the demotion banner; `docs/architecture.md` describes the CURRENT layering (engine → observation → agents/meetings ← orchestrator; llm behind the Protocol; eval/api privileged; frontend on generated types) in ≤2 pages; AGENTS.md routes readers to it and carries the graduation-sweep convention.
-- [ ] `git diff` over `agent_prompts/` shows exactly one changed file (this task's own prompt).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -71,13 +70,10 @@ prompt drops the bar while every other prompt stays byte-identical.
 
 ## Implementation hint
 
-For the generator: change the `_ConstraintRule` for DESIGN.md from `applies=True` to
-`applies` iff "DESIGN.md" is not in `task.files_in_scope` (mirroring the existing
-tasks/phase-*.md rule's wording) — since no existing task lists DESIGN.md, their rendered
-prompts cannot change. For the fact check: prefer deleting volatile absolute counts from
-README over generating them; where a number stays (win rates, dates, ladder tip), read it
-from the manifest/registry and compare. Do not call the GitHub API — the PR count becomes
-prose ("300+; see GitHub") or is dropped.
+For the fact check: prefer deleting volatile absolute counts from README over generating
+them; where a number stays (win rates, dates, ladder tip), read it from the
+manifest/registry and compare. Do not call the GitHub API — the PR count becomes prose
+("300+; see GitHub") or is dropped.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
@@ -85,7 +81,6 @@ prose ("300+; see GitHub") or is dropped.
 - Identify the existing local patterns for the files in scope and follow them.
 
 ## Constraints and non-goals
-Do not modify DESIGN.md.
 Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.

@@ -12,7 +12,7 @@ Implement Task 19.23 — `verify-ml-evidence`: one command, anchored to audits/a
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-verify-ml-evidence`
-**Depends on:** 19.19, 19.20, 19.22
+**Depends on:** 19.19, 19.20, 19.21, 19.22 (the availability report consumes the recorded raw-slate ruling)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 24 [S-Codex/S-Claude]; the Codex audit's executed-evidence table (each recomputation exists piecemeal today: sidecar/sha verification, corpus reconstruction, surrogate 0.7667/0.375, conviction 0.9375, composed 0.8646/0.7917); training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt:11 (`_REPO = "/Users/danielkeinan/projects/AiLibi"` — the invocation folklore); scripts/paired_stats.py (19.20)
 **Complexity:** Medium
 
@@ -57,6 +57,7 @@ samples if the full walk exceeds that budget, with the sampling disclosed in out
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist

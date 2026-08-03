@@ -101,7 +101,6 @@ Ready-to-paste prompt path).
 - Identify the existing local patterns for the files in scope and follow them.
 
 ## Constraints and non-goals
-Do not modify DESIGN.md.
 Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.

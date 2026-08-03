@@ -128,7 +128,11 @@ def _constraints_for(task: TaskDoc) -> list[str]:
     in_scope = task.files_in_scope
     touches_agents = any(item.startswith("agents/") for item in in_scope)
     rules = (
-        _ConstraintRule("Do not modify DESIGN.md.", True),
+        # Scope-gated at the Phase-19 planning PR (tasks/phase-19.md locked
+        # decision 8): a task that explicitly lists DESIGN.md in its Files in
+        # scope is exempt from the bar; every other prompt keeps the line
+        # byte-identically.
+        _ConstraintRule("Do not modify DESIGN.md.", "DESIGN.md" not in in_scope),
         _ConstraintRule("Do not modify AGENT_IMPLEMENTATION.md.", True),
         _ConstraintRule(
             "Do not modify tasks/phase-*.md unless this task explicitly lists "

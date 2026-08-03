@@ -12,7 +12,7 @@ Implement Task 19.19 — The retirements + the dead-code sweep (consumer-verifie
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-retirements`
-**Depends on:** 19.6, 19.18
+**Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
@@ -25,7 +25,15 @@ verified boundary respected: `load_surrogate_runner_factory` and
 `composed_runner.py:266` and the harness at `:159/:1763/:2072` consume them, AST-pinned)
 — the retire candidate is any config/CLI arm that runs the surrogate ALONE as a meeting
 runner, and if the consumer grep proves no such consumer-free exposure exists, the
-outcome is a recorded no-op for this item, not a forced deletion; the `first_meeting` episode
+outcome is a recorded no-op for this item, not a forced deletion. The realpath deletion
+carries a verified consumer migration: `scripts/generate_campaign_tables.py:76` imports
+`RealPathRerankRow` from the module (its test imports the script), so the ranking-row
+schema RELOCATES to a small surviving module (`training/realpath_schema.py`, new) and
+the script + test migrate onto it — the committed rankings' row contract survives the
+campaign machinery. The `first_meeting` removal updates ALL its test constructors
+(test_env.py:227-239, test_env_fast_path.py:141-154, test_rewards.py:115 — verified
+list), and the cache deletion removes `llm/README.md`'s advertisement of the module
+(:20-21) so 19.1's rewritten README does not point at a deleted API; the `first_meeting` episode
 boundary (env + rollout plumbing; tests-only consumer); the stale crew-dir CLI
 advertisement in run_tournament (the honest fail-loud behavior stays; the advertisement
 of a stampless directory goes); `llm/cache.py` (+ its import in test_client);
@@ -38,6 +46,13 @@ history; the PR lists each with its consumer-check output.
 **Files in scope:**
 - training/realpath.py; (deleted)
 - tests/training/test_realpath.py; (deleted)
+- training/realpath_schema.py (new — the relocated RealPathRerankRow row contract)
+- scripts/generate_campaign_tables.py; (the import migration onto the relocated schema)
+- tests/scripts/test_generate_campaign_tables.py; (same)
+- tests/training/test_env.py; (the first_meeting constructors)
+- tests/training/test_env_fast_path.py; (same)
+- tests/training/test_rewards.py; (the :115 boundary constructor)
+- llm/README.md; (the cache.py advertisement removed with the module)
 - training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)
 - training/surrogate/; (ripple from the arm removal)
 - training/bakeoff/harness.py; (only if a retired exposure ripples — record if touched)
@@ -67,7 +82,8 @@ history; the PR lists each with its consumer-check output.
 **Definition of done:**
 - [ ] Every deletion carries its consumer-check grep output in the PR; every skipped candidate (failed grep) is named with the blocking consumer.
 - [ ] The surrogate boundary is proven: `load_surrogate_runner_factory`/`SurrogateMeetingRunner` and every verified consumer (composed runner fence, harness, the AST pins) are untouched and green; the surrogate-only exposure is either retired with its consumer grep quoted or recorded as no-consumer-free-exposure (a documented no-op), never force-deleted.
-- [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and their tests green.
+- [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
+- [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -85,13 +101,19 @@ the consumer surfaces are: `prompt_set`/set-name strings in committed replay sta
 (grep the JSONL), `loader.py` set references, tests, and the byte-golden's coverage —
 run all four greps per set and paste the outputs.
 
+## Public types this task introduces
+- `training.realpath_schema.RealPathRerankRow`
+
+These are the symbols downstream tasks will import. Keep their signatures stable.
+
 ## Integration risk
 
 Deletions across five packages in one branch. The guards: leaf-first commit ordering with
 the suite green at each step, the consumer-check discipline (nothing deleted on an
-audit's say-so alone — the audits themselves got `eval/determinism_test.py` wrong, which
-is why the check is mandatory), and the composed-runner dependency boundary pinned by its
-existing tests before the standalone arm is removed.
+audit's say-so alone — the audits themselves got `eval/determinism_test.py` wrong, and
+the first Codex review caught two more unlisted consumers, which is why the check is
+mandatory), and the composed-runner dependency boundary pinned by its existing tests
+before the standalone arm is removed.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

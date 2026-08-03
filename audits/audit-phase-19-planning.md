@@ -218,6 +218,27 @@ owner-chartered phase:
   5. Minor anchor drifts corrected in place (the replay store lives at
      `frontend/src/store/`, not `src/state/`; the harness provenance `/Users` path is at
      line 11, not 12).
+  6. **The triage C6 mechanism is refuted** (surfaced by the first Codex review round,
+     verified in-session): the conversion partition ALREADY imports
+     `UNCITED_ZERO_FLAG_EJECT_MARKER` (`eval/meeting_quality.py:179`) and censuses the
+     class separately — the committed 9p2i report carries
+     `citation_coerced_skip_ballots = 1` beside `threshold_inversions = 87`, so the 87
+     are not unrecognized citation-gated SKIPs. The three-surface doctrine disagreement
+     (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
+     work, but the contract is rewritten recount-first: measure the 87's cause mix from
+     committed bytes, then re-doctrine to what the recount supports.
+- **The first Codex review round (10 findings, PR #322)** was verified claim-by-claim
+  against the bytes — all ten reproduced — and absorbed: the planning PR itself now
+  carries the generator's DESIGN.md scope-gate (resolving the 19.1 bootstrap
+  contradiction; locked decision 8 — five historical prompts whose contracts listed
+  DESIGN.md in the pre-demotion era drop the constraint line under the same rule,
+  recorded in the register), 19.19 gained the verified consumer migrations
+  (`RealPathRerankRow` relocation for `generate_campaign_tables`, the full
+  `first_meeting` test list, the `llm/README.md` cache line), 19.14 gained the
+  `TournamentEvalReport` wrapper ownership (`extra="forbid"` — the cells must live on
+  the canonical owner), 19.9/19.12 gained the client-contract comment and the
+  error-field consumers, 19.7 states the pytest/leak_test boundary, and 19.23 now
+  depends on the raw-slate ruling.
 - Validator/generator/frontier all green at authoring: 321 tasks ↔ 321 prompts
   (293 + 28), `generate_prompts.py --check` in sync, and
   `scripts/compute_next_task.py --phase 19` reports exactly the designed frontier

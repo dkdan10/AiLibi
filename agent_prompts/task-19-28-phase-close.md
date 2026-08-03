@@ -12,7 +12,7 @@ Implement Task 19.28 — The phase close (owner), anchored to [L] the phase-18 c
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-close`
-**Depends on:** 19.3, 19.8, 19.14, 19.17, 19.21, 19.23, 19.26, 19.27
+**Depends on:** 19.8, 19.17, 19.23, 19.26, 19.27
 **Section refs:** [L] the phase-18 close conventions (audits/audit-phase-18-close.md — the exemplar); locked decision 6 (the post-19 menu reads the 19.14 metrics); tasks/post-phase-14-plan.md (the roadmap tick this close owns)
 **Complexity:** Medium
 
@@ -59,6 +59,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import eval.replay_walk"`
 - `uv run python -c "import eval.leak_scan"`
+- `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import api.schemas"`
 

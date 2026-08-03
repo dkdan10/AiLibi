@@ -12,7 +12,7 @@ Implement Task 19.14 — The deduction metrics: what "deduction" means, instrume
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-deduction-metrics`
-**Depends on:** 19.5, 19.11
+**Depends on:** 19.5, 19.11, 19.18 (the last is the eval/meeting_quality.py serialization edge — labels land before the wrapper extension)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 15 [S-Codex/S-Claude convergent objective; §8 rows 3, 10, 14; the roll-call split and the 13-redirected-ejects cells are source-specific and NOT independently re-run — verify-then-fix] + item 24 disclosure twin (19.8); the headline cross-tab (9p2i samples: 70 flagged meetings → 68 imp/2 inn ejected, 95 unflagged → 10/21; corpus: 213/248; non-direct accuracy 30.3%/39.3%); tests/eval/test_kill_craft.py:66-135 (the witnessed-supply pins to adopt); the C5 lesson (define the metric before counting)
 **Complexity:** Medium
 
@@ -34,6 +34,7 @@ the evidence the 19.28 close puts in front of the owner.
 - eval/deduction_metrics.py (new)
 - tests/eval/test_deduction_metrics.py (new)
 - scripts/build_sample_report.py; (report wiring)
+- eval/meeting_quality.py; (ONLY the persisted `TournamentEvalReport` wrapper/assembler extension — the report model is `extra="forbid"`, so the new cells must be real fields on the canonical owner; no metric logic moves here)
 - api/schemas.py; (the new report cells' DTO surface — additive)
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
@@ -46,7 +47,7 @@ the evidence the 19.28 close puts in front of the owner.
 
 **Files NOT in scope:**
 - meetings/ + agents/ (measurement only — zero substrate movement)
-- eval/vote_correctness.py + eval/meeting_quality.py (consumed, not edited; 19.5 already landed their truth pass)
+- eval/vote_correctness.py (consumed, not edited; 19.5 already landed its truth pass)
 - eval/kill_craft.py (its cells are imported/adopted, not reimplemented)
 
 **Definition of done:**

@@ -28,6 +28,7 @@ pacing/structure heuristic — not a human rating").
 
 **Files in scope:**
 - api/replay_loader.py; (the DEFAULT_SET constant + the featured-list serving, if served)
+- frontend/src/api/client.ts; (ONLY the omitted-set contract comment at :62-65 — it documents the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
@@ -39,7 +40,7 @@ pacing/structure heuristic — not a human rating").
 - replays/**/replay-seed-*.jsonl (frozen)
 
 **Definition of done:**
-- [ ] The API default set is 9p2i (pinned in tests/api/) and the picker's 4p1i copy quotes recomputed meeting-count facts with the fixture relabel.
+- [ ] The API default set is 9p2i (pinned in tests/api/), the client's omitted-set contract comment states it, and the picker's 4p1i copy quotes recomputed meeting-count facts with the fixture relabel.
 - [ ] The rubric re-score is committed, the staleness banner is clear at HEAD, and the regeneration command is recorded in the PR.
 - [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and every rendered rubric scalar carries the narrow label.
 - [ ] `uv run mypy .` passes.

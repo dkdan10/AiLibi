@@ -37,12 +37,14 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/src/store/replayStore.test.ts (new)
 - frontend/e2e/ (new)
 - frontend/playwright.config.ts (new)
+- frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer at :358)
+- frontend/src/components/MindInspector.tsx; (same — verified consumer at :758)
 - .github/workflows/ci.yml
 - scripts/check.sh
 
 **Files NOT in scope:**
 - frontend/src/App.tsx + usePlayback.ts (19.10's files — tested here, not edited; if a race guard fix requires an edit there, coordinate as a follow-up, don't fold it in)
-- frontend/src/components/ (behavior pinned, not changed)
+- frontend/src/components/ (beyond the two named selector updates — behavior pinned, not changed)
 
 **Definition of done:**
 - [ ] `npm run test` (vitest) and `npm run lint` exist and pass; the two pre-existing disables reference rules the config enables; new lint debt is zero or explicitly inline-justified.

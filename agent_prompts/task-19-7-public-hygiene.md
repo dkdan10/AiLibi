@@ -22,7 +22,11 @@ pin every action to a full SHA (tag in a comment), and deduplicate the frontend 
 build, not two paths building the same thing per run. Packaging: partition dev tools
 (pytest, ruff, mypy, hypothesis, import-linter) into the dev group, keep runtime deps
 minimal, regenerate the lock, and make CI/setup install the dev group; delete the dead
-root `package-lock.json`. Posture (locked decision 4): LICENSE (MIT), a short
+root `package-lock.json`. Known, accepted boundary: `eval/leak_test.py` imports pytest at
+module level and `training.bakeoff.harness` imports from it, so training/eval remain
+dev-environment surfaces until 19.24 promotes the scanners to a pytest-free library — the
+runtime-only claim below covers the production packages ONLY, and the contract says so
+rather than hiding it. Posture (locked decision 4): LICENSE (MIT), a short
 CONTRIBUTING.md (agent-built experiment; the contract workflow; issues welcome, PRs are
 not the workflow), and SECURITY.md (the replay API is an intentionally unauthenticated GM
 view — loopback only; how to report).
@@ -44,7 +48,7 @@ view — loopback only; how to report).
 
 **Definition of done:**
 - [ ] CI runs green with the permissions block, SHA-pinned actions, and exactly one frontend build per run.
-- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and a runtime-only environment smoke-imports the production packages (`uv run python -c "import engine, orchestrator, api, agents, meetings, llm"`) with no dev tool installed.
+- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and a runtime-only environment smoke-imports the production packages (`uv run python -c "import engine, orchestrator, api, agents, meetings, llm"`) with no dev tool installed — training/eval are explicitly excluded from that claim until 19.24 (the known `eval.leak_test` pytest import, stated in the partition's notes).
 - [ ] LICENSE is MIT with the owner's copyright line; CONTRIBUTING and SECURITY match locked decision 4's posture and the deployment doc's trust boundary.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

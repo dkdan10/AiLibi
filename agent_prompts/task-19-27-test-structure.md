@@ -72,6 +72,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import eval.replay_walk"`
 - `uv run python -c "import eval.leak_scan"`
+- `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import api.schemas"`
 
