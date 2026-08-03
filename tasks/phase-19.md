@@ -53,15 +53,16 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
 7. **The cut line: the balanced phase.** 28 contracts across three waves; the backlog
    (monolith decompositions, API/training walker migration, typed ballot telemetry, and
    the rest of `audit-phase-19-planning.md` §5) is out and recorded, not silent.
-8. **DESIGN.md is contractable this phase.** Dispatched agents are barred from DESIGN.md
-   by a prompt-generator constraint; THIS PLANNING PR scope-gates that rule (a task
-   explicitly listing DESIGN.md in scope is exempt), so 19.1's generated prompt already
-   carries the exception — resolving the bootstrap contradiction the first Codex review
-   round flagged. Recorded, not silent: five HISTORICAL prompts (tasks 1.9, 2.10,
-   2.10.5, 2.13, 2.14 — the era when DESIGN.md was the living spec and their contracts
-   listed it in scope) also drop the constraint line under the same rule; every prompt
-   whose task does not list DESIGN.md is byte-identical. The merge of this document
-   ratifies the control-surface change.
+8. **DESIGN.md and AGENT_IMPLEMENTATION.md are contractable this phase.** Dispatched
+   agents are barred from both by prompt-generator constraints; THIS PLANNING PR
+   scope-gates both rules (a task explicitly listing the file in scope is exempt), so
+   19.1's generated prompt already carries the exceptions — resolving the bootstrap
+   contradictions the Codex review rounds flagged. Recorded, not silent: five HISTORICAL
+   prompts (tasks 1.9, 2.10, 2.10.5, 2.13, 2.14 — the era when DESIGN.md was the living
+   spec and their contracts listed it in scope) drop the DESIGN.md line under the same
+   rule; no parsed task lists AGENT_IMPLEMENTATION.md, so that gate changes only 19.1's
+   prompt. Every other prompt is byte-identical. The merge of this document ratifies the
+   control-surface change.
 
 ## Designer rulings (recorded here so contracts inherit them)
 
@@ -99,7 +100,7 @@ Wave 2 (the spectator + the deduction instrument):
   (the 19.5 edge is api/schemas.py + generated-types serialization — the report cells
    19.5 adds flow through the same DTO surface the 19.10 chain edits)
   (19.7, 19.10) -> 19.12 (frontend test baseline)
-  19.1 -> 19.16 (reading guide)
+  (19.1, 19.9) -> 19.16 (reading guide — the demo path quotes 19.9's curation)
   (19.1, 19.9, 19.10, 19.14, 19.16) -> 19.13 (README proof + static demo; the 19.14
    edge is TournamentDashboard serialization for the fetch-seam routing)
   (19.5, 19.11, 19.18) -> 19.14 (deduction metrics; the 19.18 edge is
@@ -153,7 +154,11 @@ rewrite); `meetings/manager.py`
 advertisement leaves with the module); `eval/leak_test.py` 19.24 → 19.25;
 `eval/watchability.py` 19.18 → 19.25 (transitive); `pyproject.toml` + `uv.lock`
 19.6 → 19.7 → 19.27; `scripts/check.sh` + `.github/workflows/ci.yml` 19.7 → 19.12;
-`training/bakeoff/harness.py` 19.19 → 19.24;
+`training/bakeoff/harness.py` 19.19 → 19.24; `training/crew/` 19.18 (labels) → 19.24
+(the scorer import swap, transitive via 19.19); `eval/leak_scan.py` 19.24 → 19.25 (the
+relocated walk migrates from its new home); `.github/workflows/ci.yml`
+19.7 → 19.12 → 19.27 (permissions/pins, the test jobs, then the campaign-tier
+automation);
 `training/README.md` 19.18 → 19.23 (transitive); `training/reports/report-finalist-eval.md`
 19.20 → 19.21; `docs/artifacts.md` 19.22 → 19.21; the four
 `tournament-eval-report.json` derived views 19.5 → 19.14; `scripts/build_sample_report.py`
@@ -214,8 +219,13 @@ generator itself is not touched here. The demotion must also reach the DISPATCH 
 the source of truth" — rewrite that authority line (AGENTS.md remains the rulebook;
 docs/architecture.md is the current-architecture note; DESIGN.md is historical) and
 regenerate ALL prompts in the same PR so no dispatched agent is ever told to obey the
-document this task demotes. The README's third reproducibility scope quotes 19.3's
-recorded outcome (the dependency edge exists for exactly this sentence).
+document this task demotes. The onboarding plan gets the same treatment:
+AGENT_IMPLEMENTATION.md is onboarding-mandatory (AGENTS.md:8-12) and calls DESIGN.md
+"the single source of truth" four times (:39-47 and the stale AGENTS template at
+:530-537) — update its authority prose so a newly onboarded agent never receives the
+demoted routing and the live one in contradiction. The README's third reproducibility
+scope quotes 19.3's recorded outcome (the dependency edge exists for exactly this
+sentence).
 
 **Files in scope:**
 - README.md
@@ -224,6 +234,7 @@ recorded outcome (the dependency edge exists for exactly this sentence).
 - docs/architecture.md (new)
 - llm/README.md
 - .env.example
+- AGENT_IMPLEMENTATION.md; (the authority prose + the stale embedded AGENTS template — historical mechanics stay)
 - scripts/prompt_template.md.j2; (the DESIGN.md authority line only)
 - agent_prompts/; (regenerated — the authority line changes in every prompt, atomically with the demotion)
 - scripts/check_doc_facts.py (new)
@@ -241,6 +252,7 @@ recorded outcome (the dependency edge exists for exactly this sentence).
 - [ ] `.env.example` documents exactly the live toggleable levers from `orchestrator/replay.py:570-572` and labels the `_RETIRED_ALWAYS_ON_LEVERS` set as graduated/always-ON, cross-checked by a test importing the registry.
 - [ ] DESIGN.md opens with the demotion banner; `docs/architecture.md` describes the CURRENT layering (engine → observation → agents/meetings ← orchestrator; llm behind the Protocol; eval/api privileged; frontend on generated types) in ≤2 pages; AGENTS.md routes readers to it and carries the graduation-sweep convention.
 - [ ] The dispatch template's authority line no longer asserts DESIGN.md as the source of truth; all prompts are regenerated in this PR and `generate_prompts.py --check` is green — a repo grep proves zero generated prompts still carry the old sentence.
+- [ ] AGENT_IMPLEMENTATION.md's authority prose matches the demoted routing (a grep for its "single source of truth" claims returns only historical-context usages, none normative).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -422,6 +434,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/meeting_quality.py
 - eval/vote_correctness.py
 - eval/alibi_fabrication.py
+- eval/prompt_regression.py; (the None convention propagates — `alibi_survival_rate` is consumed at :257 into a required `float` at :161, so the regression metrics model widens with it)
+- tests/eval/test_prompt_regression.py
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
@@ -1026,7 +1040,7 @@ and 19.8 discloses — this fixes only the guard-originated class.
 
 ### Task 19.16 — The outsider reading guide + the audit-idiom glossary
 **Branch:** `phase-19-reading-guide`
-**Depends on:** 19.1
+**Depends on:** 19.1, 19.9 (the guide's demo path quotes 19.9's featured curation — it cannot publish before the curation exists)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 17 [S-Claude] + rows 23 (N1/N2 and the clean negatives), the legibility-cliff finding (audit-phase-19-input-claude.md §3.2 item 5: the corpus is case law with no glossary); the named good-tail seeds (19.9's featured list)
 **Complexity:** Medium
 
@@ -1149,6 +1163,7 @@ zero behavior bytes.
 - training/conviction/fidelity.py; (FROZEN header only)
 - training/surrogate/fidelity.py; (FROZEN header only)
 - training/composed_runner.py; (the frozen optional-diagnostic label)
+- training/crew/; (FROZEN headers only — the crew stack is the FREEZE column's clean negative)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
 - experiments/; (FROZEN headers)
 - eval/off_menu.py; (label)
@@ -1232,7 +1247,8 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_env.py; (the first_meeting constructors)
 - tests/training/test_env_fast_path.py; (same)
 - tests/training/test_rewards.py; (the :115 boundary constructor)
-- llm/README.md; (the cache.py advertisement removed with the module)
+- llm/README.md; (EVERY PromptCache reference leaves with the module — the :20-21 inventory line AND the whole "Cache and budget composition" worked example at :126-147)
+- training/coevo/driver.py; (the realpath reference rewrites only — :207, :281-283, :949)
 - training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)
 - training/surrogate/; (ripple from the arm removal)
 - training/bakeoff/harness.py; (only if a retired exposure ripples — record if touched)
@@ -1244,7 +1260,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - training/rollout.py
 - tests/training/test_rollout.py
 - tests/training/test_surrogate_runner.py
-- tests/training/test_coevo_driver.py; (only if the realpath removal ripples — record if touched)
+- tests/training/test_coevo_driver.py; (the :1764 realpath docstring reference + any removal ripple)
 - scripts/run_tournament.py
 - tests/scripts/test_run_tournament.py
 - scripts/record_meeting_gate_probe.py; (deleted)
@@ -1266,6 +1282,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
 - [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
+- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) — the four already-verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764) plus any the closing grep surfaces.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1508,6 +1525,7 @@ constant, so 19.13's artifact keeps working).
 - eval/leak_scan.py (new)
 - eval/leak_test.py
 - training/bakeoff/harness.py; (the import swap at :107 only)
+- training/crew/scorer.py; (the same import swap at :113 — a second verified production consumer, transitively imported by the coevo stack and run_tournament)
 - tests/observation/test_leak_property.py
 - tests/observation/
 - orchestrator/game.py; (the one-line validation + test hook)
@@ -1525,7 +1543,7 @@ constant, so 19.13's artifact keeps working).
 
 **Definition of done:**
 - [ ] Verify-then-fix for the DTO-cast claim: re-confirm the unvalidated cast at HEAD before adding rejection (re-verified by the planning session; re-run in-session).
-- [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); the harness path imports no pytest; every pre-existing planted-leak self-test still fails when its leak is planted.
+- [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); NEITHER production consumer (the harness at :107, the crew scorer at :113) transitively imports pytest after the swap — proven with the `--no-dev --exact` probe from 19.7's idiom; every pre-existing planted-leak self-test still fails when its leak is planted.
 - [ ] The `moved_players` property sweep runs in the leak suite with its planted-leak proof; the leak-suite gap named by the audits is closed.
 - [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side and the demo bundle still passes its 19.13 test.
 - [ ] `uv run mypy .` passes.
@@ -1539,7 +1557,9 @@ constant, so 19.13's artifact keeps working).
 **Implementation hint:**
 
 The scanner move: `leak_scan.py` takes the scanner functions and constants verbatim
-(`_walk_json`, the forbidden-field/value scanners, `scan_factory_packets`);
+(`_walk_json`, the forbidden-field/value scanners, `scan_factory_packets` AND its
+reconstruction dependencies — `collect_factory_packet_records` /
+`_reconstruct_factory_records`, i.e. the replay walk the scan path needs);
 `leak_test.py` re-exports for its tests and keeps every test body. The property sweep
 already imports production scanners (tests/observation/test_leak_property.py:59-66) —
 point those imports at the library. For `moved_players`: the docstring at
@@ -1584,7 +1604,8 @@ may change — parity is the deliverable. `off_menu.py` stays frozen and unmigra
 - eval/kill_craft.py
 - eval/win_condition_selfcheck.py
 - eval/balance_eval.py
-- eval/leak_test.py
+- eval/leak_scan.py; (after 19.24 the leak walk lives HERE — the migration targets the relocated loop)
+- eval/leak_test.py; (the thin wrapper — only if walk residue remains)
 - tests/eval/test_replay_walk.py (new)
 - tests/eval/test_watchability.py
 - tests/eval/test_validity.py
@@ -1710,14 +1731,15 @@ Quote the default-gate runtime before/after in the PR.
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
 - scripts/regen_test_goldens.py (new)
+- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**
-- scripts/check.sh + .github/workflows/ci.yml (the default gate's INVOCATION is unchanged — markers make the campaign tier opt-in via registration defaults, not CI edits; if an invocation change becomes necessary, coordinate, don't fold)
+- scripts/check.sh (the default LOCAL gate's invocation is unchanged — markers make the campaign tier opt-in via registration defaults)
 - tests/meetings/test_prompt_byte_golden.py (always-on; consumes the fixture only if the migration is zero-risk — otherwise untouched)
 
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
-- [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in (`-m campaign` runs them green too — nothing is orphaned); the always-on list in the contract is asserted by a meta-test.
+- [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
 - [ ] No test module imports another test module as a library (grep-pinned); the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
@@ -1730,9 +1752,9 @@ Quote the default-gate runtime before/after in the PR.
 
 **Implementation hint:**
 
-Marker defaults via `addopts = -m "not campaign"` keeps CI invocations untouched — but
-then `-m campaign` must be exercised in CI weekly or on the training paths' PRs; note
-the chosen posture in conftest. The helper extraction is mechanical: move, re-export
+Marker defaults via `addopts = -m "not campaign"` keeps the default invocations
+untouched; the standing `-m campaign` home is this contract's ci.yml job (weekly
+schedule or training-path filter — pick one and note the posture in conftest). The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
 if all four importers migrate cleanly.
 

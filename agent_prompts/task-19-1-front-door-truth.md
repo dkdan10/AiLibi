@@ -42,8 +42,13 @@ generator itself is not touched here. The demotion must also reach the DISPATCH 
 the source of truth" — rewrite that authority line (AGENTS.md remains the rulebook;
 docs/architecture.md is the current-architecture note; DESIGN.md is historical) and
 regenerate ALL prompts in the same PR so no dispatched agent is ever told to obey the
-document this task demotes. The README's third reproducibility scope quotes 19.3's
-recorded outcome (the dependency edge exists for exactly this sentence).
+document this task demotes. The onboarding plan gets the same treatment:
+AGENT_IMPLEMENTATION.md is onboarding-mandatory (AGENTS.md:8-12) and calls DESIGN.md
+"the single source of truth" four times (:39-47 and the stale AGENTS template at
+:530-537) — update its authority prose so a newly onboarded agent never receives the
+demoted routing and the live one in contradiction. The README's third reproducibility
+scope quotes 19.3's recorded outcome (the dependency edge exists for exactly this
+sentence).
 
 **Files in scope:**
 - README.md
@@ -52,6 +57,7 @@ recorded outcome (the dependency edge exists for exactly this sentence).
 - docs/architecture.md (new)
 - llm/README.md
 - .env.example
+- AGENT_IMPLEMENTATION.md; (the authority prose + the stale embedded AGENTS template — historical mechanics stay)
 - scripts/prompt_template.md.j2; (the DESIGN.md authority line only)
 - agent_prompts/; (regenerated — the authority line changes in every prompt, atomically with the demotion)
 - scripts/check_doc_facts.py (new)
@@ -69,6 +75,7 @@ recorded outcome (the dependency edge exists for exactly this sentence).
 - [ ] `.env.example` documents exactly the live toggleable levers from `orchestrator/replay.py:570-572` and labels the `_RETIRED_ALWAYS_ON_LEVERS` set as graduated/always-ON, cross-checked by a test importing the registry.
 - [ ] DESIGN.md opens with the demotion banner; `docs/architecture.md` describes the CURRENT layering (engine → observation → agents/meetings ← orchestrator; llm behind the Protocol; eval/api privileged; frontend on generated types) in ≤2 pages; AGENTS.md routes readers to it and carries the graduation-sweep convention.
 - [ ] The dispatch template's authority line no longer asserts DESIGN.md as the source of truth; all prompts are regenerated in this PR and `generate_prompts.py --check` is green — a repo grep proves zero generated prompts still carry the old sentence.
+- [ ] AGENT_IMPLEMENTATION.md's authority prose matches the demoted routing (a grep for its "single source of truth" claims returns only historical-context usages, none normative).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -90,7 +97,6 @@ manifest/registry and compare. Do not call the GitHub API — the PR count becom
 - Identify the existing local patterns for the files in scope and follow them.
 
 ## Constraints and non-goals
-Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
 

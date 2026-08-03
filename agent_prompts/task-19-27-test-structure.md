@@ -41,14 +41,15 @@ Quote the default-gate runtime before/after in the PR.
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
 - scripts/regen_test_goldens.py (new)
+- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**
-- scripts/check.sh + .github/workflows/ci.yml (the default gate's INVOCATION is unchanged — markers make the campaign tier opt-in via registration defaults, not CI edits; if an invocation change becomes necessary, coordinate, don't fold)
+- scripts/check.sh (the default LOCAL gate's invocation is unchanged — markers make the campaign tier opt-in via registration defaults)
 - tests/meetings/test_prompt_byte_golden.py (always-on; consumes the fixture only if the migration is zero-risk — otherwise untouched)
 
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
-- [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in (`-m campaign` runs them green too — nothing is orphaned); the always-on list in the contract is asserted by a meta-test.
+- [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
 - [ ] No test module imports another test module as a library (grep-pinned); the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
@@ -61,9 +62,9 @@ Quote the default-gate runtime before/after in the PR.
 
 ## Implementation hint
 
-Marker defaults via `addopts = -m "not campaign"` keeps CI invocations untouched — but
-then `-m campaign` must be exercised in CI weekly or on the training paths' PRs; note
-the chosen posture in conftest. The helper extraction is mechanical: move, re-export
+Marker defaults via `addopts = -m "not campaign"` keeps the default invocations
+untouched; the standing `-m campaign` home is this contract's ci.yml job (weekly
+schedule or training-path filter — pick one and note the posture in conftest). The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
 if all four importers migrate cleanly.
 

@@ -50,6 +50,7 @@ zero behavior bytes.
 - training/conviction/fidelity.py; (FROZEN header only)
 - training/surrogate/fidelity.py; (FROZEN header only)
 - training/composed_runner.py; (the frozen optional-diagnostic label)
+- training/crew/; (FROZEN headers only — the crew stack is the FREEZE column's clean negative)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
 - experiments/; (FROZEN headers)
 - eval/off_menu.py; (label)

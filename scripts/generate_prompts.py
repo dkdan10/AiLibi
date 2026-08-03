@@ -133,7 +133,10 @@ def _constraints_for(task: TaskDoc) -> list[str]:
         # scope is exempt from the bar; every other prompt keeps the line
         # byte-identically.
         _ConstraintRule("Do not modify DESIGN.md.", "DESIGN.md" not in in_scope),
-        _ConstraintRule("Do not modify AGENT_IMPLEMENTATION.md.", True),
+        _ConstraintRule(
+            "Do not modify AGENT_IMPLEMENTATION.md.",
+            "AGENT_IMPLEMENTATION.md" not in in_scope,
+        ),
         _ConstraintRule(
             "Do not modify tasks/phase-*.md unless this task explicitly lists "
             "those files in scope.",

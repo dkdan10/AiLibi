@@ -35,6 +35,7 @@ constant, so 19.13's artifact keeps working).
 - eval/leak_scan.py (new)
 - eval/leak_test.py
 - training/bakeoff/harness.py; (the import swap at :107 only)
+- training/crew/scorer.py; (the same import swap at :113 — a second verified production consumer, transitively imported by the coevo stack and run_tournament)
 - tests/observation/test_leak_property.py
 - tests/observation/
 - orchestrator/game.py; (the one-line validation + test hook)
@@ -52,7 +53,7 @@ constant, so 19.13's artifact keeps working).
 
 **Definition of done:**
 - [ ] Verify-then-fix for the DTO-cast claim: re-confirm the unvalidated cast at HEAD before adding rejection (re-verified by the planning session; re-run in-session).
-- [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); the harness path imports no pytest; every pre-existing planted-leak self-test still fails when its leak is planted.
+- [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); NEITHER production consumer (the harness at :107, the crew scorer at :113) transitively imports pytest after the swap — proven with the `--no-dev --exact` probe from 19.7's idiom; every pre-existing planted-leak self-test still fails when its leak is planted.
 - [ ] The `moved_players` property sweep runs in the leak suite with its planted-leak proof; the leak-suite gap named by the audits is closed.
 - [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side and the demo bundle still passes its 19.13 test.
 - [ ] `uv run mypy .` passes.
@@ -66,7 +67,9 @@ constant, so 19.13's artifact keeps working).
 ## Implementation hint
 
 The scanner move: `leak_scan.py` takes the scanner functions and constants verbatim
-(`_walk_json`, the forbidden-field/value scanners, `scan_factory_packets`);
+(`_walk_json`, the forbidden-field/value scanners, `scan_factory_packets` AND its
+reconstruction dependencies — `collect_factory_packet_records` /
+`_reconstruct_factory_records`, i.e. the replay walk the scan path needs);
 `leak_test.py` re-exports for its tests and keeps every test body. The property sweep
 already imports production scanners (tests/observation/test_leak_property.py:59-66) —
 point those imports at the library. For `moved_players`: the docstring at

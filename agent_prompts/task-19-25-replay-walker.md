@@ -35,7 +35,8 @@ may change — parity is the deliverable. `off_menu.py` stays frozen and unmigra
 - eval/kill_craft.py
 - eval/win_condition_selfcheck.py
 - eval/balance_eval.py
-- eval/leak_test.py
+- eval/leak_scan.py; (after 19.24 the leak walk lives HERE — the migration targets the relocated loop)
+- eval/leak_test.py; (the thin wrapper — only if walk residue remains)
 - tests/eval/test_replay_walk.py (new)
 - tests/eval/test_watchability.py
 - tests/eval/test_validity.py

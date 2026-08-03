@@ -38,6 +38,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/meeting_quality.py
 - eval/vote_correctness.py
 - eval/alibi_fabrication.py
+- eval/prompt_regression.py; (the None convention propagates — `alibi_survival_rate` is consumed at :257 into a required `float` at :161, so the regression metrics model widens with it)
+- tests/eval/test_prompt_regression.py
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)

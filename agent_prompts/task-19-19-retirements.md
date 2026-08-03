@@ -52,7 +52,8 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_env.py; (the first_meeting constructors)
 - tests/training/test_env_fast_path.py; (same)
 - tests/training/test_rewards.py; (the :115 boundary constructor)
-- llm/README.md; (the cache.py advertisement removed with the module)
+- llm/README.md; (EVERY PromptCache reference leaves with the module — the :20-21 inventory line AND the whole "Cache and budget composition" worked example at :126-147)
+- training/coevo/driver.py; (the realpath reference rewrites only — :207, :281-283, :949)
 - training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)
 - training/surrogate/; (ripple from the arm removal)
 - training/bakeoff/harness.py; (only if a retired exposure ripples — record if touched)
@@ -64,7 +65,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - training/rollout.py
 - tests/training/test_rollout.py
 - tests/training/test_surrogate_runner.py
-- tests/training/test_coevo_driver.py; (only if the realpath removal ripples — record if touched)
+- tests/training/test_coevo_driver.py; (the :1764 realpath docstring reference + any removal ripple)
 - scripts/run_tournament.py
 - tests/scripts/test_run_tournament.py
 - scripts/record_meeting_gate_probe.py; (deleted)
@@ -86,6 +87,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
 - [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
+- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) — the four already-verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764) plus any the closing grep surfaces.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

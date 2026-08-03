@@ -12,7 +12,7 @@ Implement Task 19.16 — The outsider reading guide + the audit-idiom glossary, 
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-reading-guide`
-**Depends on:** 19.1
+**Depends on:** 19.1, 19.9 (the guide's demo path quotes 19.9's featured curation — it cannot publish before the curation exists)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 17 [S-Claude] + rows 23 (N1/N2 and the clean negatives), the legibility-cliff finding (audit-phase-19-input-claude.md §3.2 item 5: the corpus is case law with no glossary); the named good-tail seeds (19.9's featured list)
 **Complexity:** Medium
 

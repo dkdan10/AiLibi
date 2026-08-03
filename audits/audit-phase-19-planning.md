@@ -227,6 +227,20 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The third Codex review round (8 findings)** was verified claim-by-claim — all eight
+  reproduced — and absorbed: AGENT_IMPLEMENTATION.md joins 19.1's authority demotion
+  (with the generator's second constraint scope-gated in the planning PR; zero parsed
+  tasks list the file, so only 19.1's prompt changes); the campaign test tier gets a
+  standing automated CI home in 19.27 (a scheduled/path-filtered `-m campaign` job —
+  never orphaned by promise alone); `training/crew/scorer.py:113` is a second verified
+  production consumer of the leak scanners and joins 19.24's import swap (and
+  `training/crew/` joins 19.18's freeze-label scope — a gap the finding exposed); the
+  whole `llm/README.md` cache worked example (:126-147) leaves with the module; the
+  `survival_rate` None convention propagates through `eval/prompt_regression.py:257`
+  (+ its metrics model and test) in 19.5; 19.25 targets the leak walk at its post-19.24
+  home (`eval/leak_scan.py`); 19.16 depends on 19.9 (the guide quotes the curation);
+  and three more realpath reference sites (driver:207/:281-283/:949,
+  test_coevo_driver:1764) join 19.19 with a closing repo-wide-grep DoD.
 - **The second Codex review round (6 findings)** was likewise verified claim-by-claim —
   all six reproduced — and absorbed. Two more source-audit refutations came out of it:
   7. **The five bespoke prompt sets are LIVE**, not dead-code candidates: all five are
