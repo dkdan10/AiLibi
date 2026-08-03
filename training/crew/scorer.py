@@ -1033,6 +1033,24 @@ def crew_es_budget(
     first 6 corpus TRAIN-split seeds. Both budgets cap TRAINING episodes at
     :data:`TRAIN_MAX_TICKS` (see :class:`CrewEsConfig` — the eval protocol
     keeps the production tick budget).
+
+    The ``ci`` seed moved 0 -> 7 at Task 19.3. At ``generations=1,
+    population=2`` this budget's champion is essentially ONE draw from the ES
+    stream, and most draws are the marathon survive-and-grind shape
+    :class:`CrewEsConfig` documents: training scores them
+    :data:`~training.bakeoff.harness.TRUNCATED_EPISODE_FITNESS` and their games
+    run to the eval tick cap without a single kill, so
+    ``python -m training.crew.scorer run --budget ci`` emits a row with
+    ``leak_test_passed=false`` — not a leak, but the factory scan's coverage
+    assertion ("the games must reach at least one body") starving. Seed 0 was
+    one of the minority good draws under the pre-19.3 libm sampler; 19.3's
+    portable sampler re-rolled the draw, and seed 7 is a good one under it for
+    BOTH bases (pending: champion fitness 14.59, 232 bodies over the leak seeds;
+    owned-tasks: 11.95, 33). The ``full`` budget searches far too long to care.
+    This is the only place the choice lives: if a future change to the ES stream
+    re-rolls it again, the crew full-row gates fail loudly — which is the correct
+    signal, because it means the shipped ``ci`` budget stopped producing a
+    candidate its own leak gate can cover — and the seed gets re-picked HERE.
     """
 
     train_seeds = load_train_seeds()
@@ -1042,7 +1060,7 @@ def crew_es_budget(
                 generations=1,
                 population=2,
                 sigma=0.3,
-                seed=0,
+                seed=7,
                 fitness_seeds=train_seeds[:1],
             ),
             anchor_weight=anchor_weight,

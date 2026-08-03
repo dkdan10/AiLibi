@@ -48,7 +48,7 @@ from agents.perception import (
     PROVENANCE_OBSERVED,
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy
-from engine.world import Map, load_canonical_map
+from engine.world import load_canonical_map
 from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
@@ -65,7 +65,7 @@ from observation.packet import (
 )
 from observation.public_map import PublicMapView, RoomId
 from orchestrator.game import TacticalAgent
-from training.bakeoff.harness import TrainedCandidate, intent_key
+from training.bakeoff.harness import intent_key
 from training.crew.options import (
     CREW_OPTION_FEATURE_NAMES,
     CREW_OPTION_KINDS,
@@ -125,44 +125,6 @@ def _weights_favoring_owned(kind: str, *, weight: float = 100.0) -> tuple[float,
     weights = [0.0] * owned_task_genome_length()
     weights[OWNED_TASK_OPTION_KINDS.index(kind)] = weight
     return tuple(weights)
-
-
-def _fixed_row_candidate(game_map: Map) -> TrainedCandidate:
-    """A widened-basis candidate on a FIXED genome, for the row pin below.
-
-    The same reasoning as the 15.16 sibling
-    (``tests/training/test_crew_scorer.py::_fixed_row_candidate``): the eval
-    twin's leak-scan factory mode asserts COVERAGE (its games must reach a body),
-    and ``crew_es_budget("ci")`` is ``generations=1, population=2``, so a trained
-    candidate here is one draw from the ES stream — most draws are the marathon
-    shape whose games never terminate, which leaves the scan nothing to cover. A
-    ``continue_task``-favouring genome task-rushes, so the games terminate and
-    reach bodies by construction on any sampler (measured: 488 packets / 21 bodies
-    over the two leak seeds). The widened entrant's own training path stays pinned
-    by :func:`test_owned_entrant_ci_budget_is_deterministic`.
-    """
-
-    weights = _weights_favoring_owned("continue_task")
-    budget = crew_es_budget("ci")
-    policy = CrewOptionScorer(
-        weights=weights, game_map=game_map, basis=OwnedTaskOptionBasis()
-    )
-    return TrainedCandidate(
-        entrant=CREW_OWNED_TASKS_ENTRANT_NAME,
-        policy=policy,
-        weights=weights,
-        config={
-            "entrant": CREW_OWNED_TASKS_ENTRANT_NAME,
-            "anchor_weight": budget.anchor_weight,
-            "es": budget.es.model_dump(mode="json"),
-            "train_max_ticks": budget.max_ticks,
-            "feature_names": list(OWNED_TASK_OPTION_FEATURE_NAMES),
-            "genome_length": owned_task_genome_length(),
-            "encoder_version": policy.encoder_version,
-        },
-        train_wall_clock_s=0.0,
-        train_metadata={"warm_start_used": False},
-    )
 
 
 def _packet(
@@ -738,10 +700,9 @@ def test_owned_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
         leak_seeds=(0, 1),
         repeat_n=2,
     )
-    # A FIXED genome, not a freshly trained one: the leak scan's coverage bar
-    # needs games that reach a body, which a one-draw CI budget cannot promise —
-    # see :func:`_fixed_row_candidate`.
-    candidate = _fixed_row_candidate(game_map)
+    basis = OwnedTaskOptionBasis()
+    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map, basis=basis)
+    candidate = entrant.train()
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map
     )
