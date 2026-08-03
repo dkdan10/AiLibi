@@ -11003,6 +11003,22 @@
       "conversion_rate": null,
       "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins)."
     },
+    "supplied_channel_conversion": {
+      "supplied": 20,
+      "converted": 20,
+      "conversion_rate": 1.0,
+      "witnessed_vent_supplied": 20,
+      "witnessed_vent_converted": 20,
+      "sighting_contradiction_supplied": 0,
+      "sighting_contradiction_converted": 0,
+      "whereabouts_lie_supplied": 0,
+      "whereabouts_lie_converted": 0,
+      "legacy_alibi_supplied": 0,
+      "legacy_alibi_converted": 0,
+      "legacy_alibi_conversion_rate": null,
+      "note": "supplied_channel_conversion is the Task-17.6 successor of genuine_class_conversion and the ONLY canary-eligible genuine-class cell from baseline 5 onward (audits/audit-phase-16-close.md §8: re-anchor on channels this substrate actually supplies). It reads the RECORDED contradiction rows — witnessed vents (vent_sighting), sighting contradictions (interior non-proxy alibi_vs_sighting), and whereabouts-lies (recorded flags naming a whereabouts claim by event id) — and measures the same question as the legacy cell: supplied hard evidence against a true impostor -> that impostor's ejection. The legacy alibi-anchored cell rides along as a reported column only; see legacy_note.",
+      "legacy_note": "legacy_alibi_* is the Phase-10 alibi-anchored genuine-class cell (compute_genuine_class_conversion), preserved as a labeled REPORTED column: STARVED on this substrate and NEVER a canary. The alibi-lie supply collapsed across baselines 4 and 5 (alibi claims 281 -> 109, alibi_vs_* transcript flags 190 -> 7, every one crew-subject; audits/audit-phase-16-baseline-4.md §6) and single-tick roll-call placements are endpoint-banded out of the CANON-interior class, so the cell reads 0/0 (NO-DATA, not REGRESSION) on both sets. A future substrate that re-supplies checkable alibi lies re-examines this cell (audits/audit-phase-16-close.md §8)."
+    },
     "lost_opening_accusations": 0,
     "cap_defaulted_turns": 0,
     "accused_impostor_events": 35,

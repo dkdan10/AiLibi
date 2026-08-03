@@ -45,6 +45,13 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     assert report.genuine_class_supplied == 4
     assert report.genuine_class_converted == 3
     assert report.genuine_class_conversion == pytest.approx(0.75)
+    # Task 19.5 wires the Task-17.6 successor here too: the CANARY cell, the
+    # only canary-eligible genuine-class instrument from baseline 5 onward.
+    # 79 supplied (meeting, impostor) pairs across the three recorded channels,
+    # 70 converted -> 0.8861.
+    assert report.supplied_channel_supplied == 79
+    assert report.supplied_channel_converted == 70
+    assert report.supplied_channel_conversion == pytest.approx(70 / 79)
     # Impostor win 0.30; win split CREW 35 / IMP 15 (unchanged by the widening).
     assert report.crew_wins == 35
     assert report.impostor_wins == 15
@@ -67,6 +74,10 @@ def test_4p1i_reproduces_baseline_6_exactly() -> None:
     assert report.genuine_class_supplied == 1
     assert report.genuine_class_converted == 1
     assert report.genuine_class_conversion == pytest.approx(1.0)
+    # The Task-19.5 canary cell on this set: 11 supplied, 10 converted -> 0.9091.
+    assert report.supplied_channel_supplied == 11
+    assert report.supplied_channel_converted == 10
+    assert report.supplied_channel_conversion == pytest.approx(10 / 11)
     # Meeting rate 0.78 / 39.
     assert report.meeting_rate == pytest.approx(0.78)
     assert report.resolved_meetings == 39
@@ -82,6 +93,9 @@ def test_default_measures_both_canonical_sets(
     # The load-bearing numbers surface in the human output.
     assert "31/50" in out
     assert "78 impostor / 23 crew of 101 ejections" in out
+    # Task 19.5: the canary line renders for BOTH sets, rate then headline pair.
+    assert "supplied-channel conversion (canary): 0.8861  (70/79)" in out
+    assert "supplied-channel conversion (canary): 0.9091  (10/11)" in out
 
 
 def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None:
@@ -93,6 +107,9 @@ def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None
     assert nine["ejection_accuracy"] == pytest.approx(78 / 101)
     assert nine["reason_histogram"]["CREWMATE_EJECT"] == 31
     assert nine["r1_eject_decided_wins"] == 31
+    # Task 19.5: the canary trio ships on the JSON surface too (payload[0] is 9p2i).
+    assert nine["supplied_channel_supplied"] == 79
+    assert "supplied_channel_conversion" in nine
 
 
 def test_explicit_dir_measures_one_set(capsys: pytest.CaptureFixture[str]) -> None:

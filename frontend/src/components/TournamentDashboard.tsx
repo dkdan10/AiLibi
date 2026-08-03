@@ -11,9 +11,14 @@
 //
 // Binding honesty rule ("no false precision", design/phase-12/claude-design-brief
 // .md): every under-powered / sentinel number renders its caveat ATTACHED — the
-// small-n vote-correctness flag, the low-power / populated-bins calibration
-// badges, and the conversion / gate sentinels each carry their qualifier in
-// place, never as a bare metric.
+// small-n vote-correctness flag (on the ejection count that powers it), the
+// low-power / populated-bins calibration badges, and the conversion / gate
+// sentinels each carry their qualifier in place, never as a bare metric. Task
+// 19.5 re-anchored what those sentinels SAY: the vote-correctness rate is a
+// bug-sentinel structurally pinned to 1.0 (not overall vote quality), threshold
+// inversions are sanctioned crew discretion at the advisory line (NOT a gate
+// bug), and the gate canary is supplied-channel conversion — the alibi-anchored
+// genuine-class cell is a starved historical column.
 //
 // Split (mirrors the sibling chrome slices): `TournamentDashboard` is the
 // connected component (store + rubric fetch); `TournamentDashboardView` is the
@@ -193,7 +198,7 @@ function BalanceSummary({
 }
 
 // ---------------------------------------------------------------------------
-// Vote correctness — with the small-n + contradictions-ignored honesty caveats
+// Vote correctness — a BUG-SENTINEL rate, with its structural + small-n caveats
 // ---------------------------------------------------------------------------
 
 function VoteCorrectness({
@@ -201,8 +206,13 @@ function VoteCorrectness({
 }: {
   report: TournamentEvalReport["vote_correctness"];
 }) {
-  // The small-n flag rides ATTACHED to the rate it qualifies (never a bare
-  // number): the rate over too few impostor ejections is under-powered as a gate.
+  // Two caveats, each ATTACHED to the number it actually qualifies (never a bare
+  // metric). StatTile takes ONE caveat node per tile, so they are placed where
+  // they belong rather than stacked: the small-n flag rides on "Impostor
+  // ejections" — that tile IS the denominator, so the n lives there — while the
+  // rate tile ALWAYS carries the sentinel note, because vote_correctness_rate is
+  // structurally pinned to 1.0 by the live §4.6 pipeline (eval/vote_correctness
+  // .py) and so measures the engine's own trigger, not voting quality.
   const smallN = report.vote_correctness_small_n ? (
     <MetricCaveat
       tone="warn"
@@ -215,19 +225,27 @@ function VoteCorrectness({
   return (
     <MetricSection
       title="Vote correctness"
-      description="Share of impostor ejections actually driven by real evidence (a naming contradiction or a kill-witness chain). 'n/a' when no impostors were ejected."
+      description="The evidence-backed share of impostor ejections (a naming contradiction or kill-witness chain behind each one) — a bug-sentinel, not overall vote correctness: crewmate ejections sit outside its denominator, and the live §4.6 pipeline pins it to 1.0 by construction. 'n/a' when no impostors were ejected."
     >
       <TileGrid>
         <StatTile
-          label="Correctness rate"
+          label="Evidence-backed share"
           value={formatPct(report.vote_correctness_rate)}
           hint={`${formatInt(report.evidence_backed_impostor_ejections)} / ${formatInt(report.impostor_ejections)} evidence-backed`}
-          caveat={smallN}
+          caveat={
+            <MetricCaveat
+              tone="note"
+              title="Structurally 1.0 on recorded sets: the §4.6 gate only crosses when the detector already flagged the ejected player, so this measures the engine's own trigger, not voting quality. Below 1.0 means a detector/recording bug to chase — the precision lead is ejection accuracy in the Conversion section."
+            >
+              sentinel — not a KPI
+            </MetricCaveat>
+          }
         />
         <StatTile label="Total ejections" value={formatInt(report.total_ejections)} />
         <StatTile
           label="Impostor ejections"
           value={formatInt(report.impostor_ejections)}
+          caveat={smallN}
         />
         <StatTile
           label="Crewmate ejections"
@@ -257,8 +275,11 @@ function VoteCorrectness({
 function ConversionSection({ report }: { report: TournamentEvalReport["conversion"] }) {
   // `missed_skip_ballots` is a SENTINEL, not a down-is-good metric — it
   // partitions into impostor-voter (sanctioned adversarial play) + invalid-target
-  // (normalized hallucinations) + threshold-inversions (the real gate bug). The
-  // caveat carries that "read the partition, not the total" warning in place.
+  // (normalized hallucinations) + threshold-inversions (crew discretion at the
+  // advisory line: since Task 13.13 de-imperatived the §4.6 verdict, declining a
+  // met threshold is sanctioned, so a nonzero count is INTENDED — not a gate
+  // bug). The caveat carries that "read the partition, not the total" note in
+  // place.
   return (
     <MetricSection
       title="Conversion"
@@ -287,7 +308,7 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
           caveat={
             <MetricCaveat
               tone="note"
-              title="A sentinel, not a down-is-good metric: most missed skips are sanctioned impostor-voter play or normalized invalid targets. Read the partition; only threshold_inversions is a real crew gate bug."
+              title="A sentinel, not a down-is-good metric: most missed skips are sanctioned impostor-voter play or normalized invalid targets; the remainder (threshold inversions) is crew discretion at the advisory line — see its tile. Read the partition, not the total."
             >
               sentinel — read the split
             </MetricCaveat>
@@ -296,17 +317,17 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
         <StatTile
           label="Threshold inversions"
           value={formatInt(report.threshold_inversions)}
-          hint="crew gate-obedience"
+          hint="crew declines at the advisory line"
           caveat={
             report.threshold_inversions > 0 ? (
               <MetricCaveat
-                tone="warn"
-                title="A crew voter shown a met §4.6 threshold over a living target who SKIPped anyway, with no by-design excuse — a gate-render/obedience bug, expected ~0."
+                tone="note"
+                title="A crew voter whose rendered §4.6 max met the 0.60 reference yet SKIPped. Since Task 13.13 the vote gate is non-directive (the verdict is evidence, not a command), so declining is sanctioned discretion — a nonzero count is intended on recorded sets, not a gate bug. The 19.5 recount found every committed inversion marker-free and concentrated at the line; a marker-bearing ballot in this bucket would be the actual bug."
               >
-                gate bug — expect 0
+                discretionary — nonzero intended
               </MetricCaveat>
             ) : (
-              <MetricCaveat tone="note">clean (0 expected)</MetricCaveat>
+              <MetricCaveat tone="note">no declines recorded</MetricCaveat>
             )
           }
         />
@@ -325,23 +346,37 @@ function GateMetricsSection({
   report: TournamentEvalReport["gate_metrics"];
 }) {
   const gcc = report.genuine_class_conversion;
+  const scc = report.supplied_channel_conversion;
   return (
     <MetricSection
       title="Gate metrics"
-      description="The Phase-10 progress gate surface (Task 10.4). The PRIMARY gate is genuine-class conversion — raw ejection-accuracy parity with pre-repair eras is an invalid comparison."
+      description="The Phase-10 gate surface (Task 10.4), re-anchored by 19.5: the canary cell is supplied-channel conversion (the Task-17.6 successor); the alibi-anchored genuine-class cell is historical — starved on this substrate and never a canary."
     >
       <TileGrid>
         <StatTile
           lead
-          label="Genuine-class conversion"
-          value={formatPct(gcc.conversion_rate)}
-          hint={`${formatInt(gcc.converted)} / ${formatInt(gcc.supplied)} genuine-class flags converted`}
+          label="Supplied-channel conversion"
+          value={formatPct(scc.conversion_rate)}
+          hint={`${formatInt(scc.converted)} / ${formatInt(scc.supplied)} supplied impostors ejected · vent ${formatInt(scc.witnessed_vent_converted)}/${formatInt(scc.witnessed_vent_supplied)} · sighting ${formatInt(scc.sighting_contradiction_converted)}/${formatInt(scc.sighting_contradiction_supplied)} · whereabouts ${formatInt(scc.whereabouts_lie_converted)}/${formatInt(scc.whereabouts_lie_supplied)}`}
           caveat={
             <MetricCaveat
               tone="note"
-              title={gcc.note}
+              title={scc.note}
             >
-              primary gate · why not ejection-accuracy?
+              canary — the successor cell
+            </MetricCaveat>
+          }
+        />
+        <StatTile
+          label="Genuine-class conversion (historical)"
+          value={formatPct(gcc.conversion_rate)}
+          hint={`${formatInt(gcc.converted)} / ${formatInt(gcc.supplied)} alibi-anchored flags — the Phase-10 cell`}
+          caveat={
+            <MetricCaveat
+              tone="note"
+              title={scc.legacy_note}
+            >
+              historical — starved, never a canary
             </MetricCaveat>
           }
         />
@@ -420,10 +455,9 @@ function AlibiFabrication({
 }: {
   report: TournamentEvalReport["alibi_fabrication"];
 }) {
-  // survival_rate is a division-safe 0.0 when there are no impostor alibis, but
-  // the rate is semantically undefined then — gate on the denominator and show
-  // "n/a" so an empty tournament does not read as "0% survived".
-  const rate = report.total_impostor_alibis > 0 ? report.survival_rate : null;
+  // survival_rate is null EXACTLY when no impostor alibis were filed (the
+  // eval-side None-iff-undefined convention), so formatPct's "n/a" already
+  // covers the empty case — no frontend denominator special-case needed.
   return (
     <MetricSection
       title="Alibi fabrication"
@@ -432,7 +466,7 @@ function AlibiFabrication({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile
           label="Survival rate"
-          value={formatPct(rate)}
+          value={formatPct(report.survival_rate)}
           hint={`${formatInt(report.survived)} / ${formatInt(report.total_impostor_alibis)} survived`}
         />
         <StatTile
@@ -463,7 +497,7 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
   return (
     <MetricSection
       title="Interestingness"
-      description="Distribution of the rubric's 0–100 interestingness score (9p2i). Click a bucket to open those seeds in the Highlights reel."
+      description="Distribution of the rubric's 0–100 score (9p2i) — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel."
       action={staleAction}
     >
       {rubric.status === "loading" ? (

@@ -468,7 +468,7 @@ export interface CalibrationBin {
 export interface AlibiFabricationReport {
   total_impostor_alibis: number;
   survived: number;
-  survival_rate: number;
+  survival_rate: number | null;
 }
 
 export interface CostDashboard {
@@ -519,6 +519,7 @@ export interface ConversionReport {
 
 export interface GateMetricsReport {
   genuine_class_conversion: GenuineClassConversionReport;
+  supplied_channel_conversion: SuppliedChannelConversionReport;
   lost_opening_accusations: number;
   cap_defaulted_turns: number;
   accused_impostor_events: number;
@@ -533,6 +534,23 @@ export interface GenuineClassConversionReport {
   converted: number;
   conversion_rate: number | null;
   note: string;
+}
+
+export interface SuppliedChannelConversionReport {
+  supplied: number;
+  converted: number;
+  conversion_rate: number | null;
+  witnessed_vent_supplied: number;
+  witnessed_vent_converted: number;
+  sighting_contradiction_supplied: number;
+  sighting_contradiction_converted: number;
+  whereabouts_lie_supplied: number;
+  whereabouts_lie_converted: number;
+  legacy_alibi_supplied: number;
+  legacy_alibi_converted: number;
+  legacy_alibi_conversion_rate: number | null;
+  note: string;
+  legacy_note: string;
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;

@@ -212,9 +212,14 @@ def test_delta_exceeds_manual_real_provider_tolerance() -> None:
     summary_a = _run_fixture("v_a")
     summary_b = _run_fixture("v_b")
 
-    delta = abs(
-        summary_a.metrics.alibi_survival_rate - summary_b.metrics.alibi_survival_rate
-    )
+    # ``alibi_survival_rate`` is ``float | None`` since Task 19.5 (None means
+    # the rate is undefined — no impostor alibis). Both fixtures have a
+    # denominator of 8, so narrow before the arithmetic rather than assuming.
+    rate_a = summary_a.metrics.alibi_survival_rate
+    rate_b = summary_b.metrics.alibi_survival_rate
+    assert rate_a is not None and rate_b is not None
+
+    delta = abs(rate_a - rate_b)
     assert delta == pytest.approx(1 / 8)
     assert delta > REAL_PROVIDER_REGRESSION_TOLERANCE
 

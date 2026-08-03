@@ -4,14 +4,18 @@ The R-gate is a MEASUREMENT on a valid baseline (audits/audit-phase-14-close.md
 §3, §8), not a gate: it folds a replay set's committed bytes into the numbers the
 Phase-14 close reports (ejection accuracy, genuine-class conversion, meeting rate,
 win split + reason histogram, accusation calibration). It reproduces baseline 2
-EXACTLY from committed bytes and re-runs unchanged on baseline 3 (Task 15.7).
+EXACTLY from committed bytes and re-runs unchanged on baseline 3 (Task 15.7). Task
+19.5 wires the Task-17.6 successor canary — supplied-channel conversion, the only
+canary-eligible genuine-class cell from baseline 5 onward — beside the historical
+genuine-class cell, so the measurement CLI reports the cell the canary bands read.
 
 This module owns the CORE-folds region. The Task-15.2 watchability folds and the
 Task-15.3 information-funnel folds are LATER, disjoint regions added to this same
 file. Everything here WIRES existing tested folds — it never re-implements a
 metric that already has a home:
 
-* ejection accuracy / genuine-class conversion — :mod:`eval.vote_correctness`
+* ejection accuracy / genuine-class conversion / supplied-channel conversion —
+  :mod:`eval.vote_correctness`
 * meeting rate — :func:`eval.meeting_quality.compute_meeting_rate`
 * accusation calibration — :func:`eval.accusation_calibration`
 * win split + reason histogram — the ``GameReport.winner`` / ``.reason``
@@ -53,6 +57,8 @@ JSON report schema (one object per measured set) — STABLE::
       "ejection_accuracy": float | null,        # impostor_ejections / total_ejections
       "genuine_class_supplied": int, "genuine_class_converted": int,
       "genuine_class_conversion": float | null,
+      "supplied_channel_supplied": int, "supplied_channel_converted": int,
+      "supplied_channel_conversion": float | null,   # Task-17.6 successor canary
       "meeting_rate": float | null, "resolved_meetings": int,
       "accusation_claim_ece": float | null, "accusation_claim_total": int,
       "vote_ballot_ece": float | null, "vote_ballot_total": int
@@ -101,6 +107,7 @@ from eval.vj_instruments import (  # noqa: E402
 )
 from eval.vote_correctness import (  # noqa: E402
     compute_genuine_class_conversion,
+    compute_supplied_channel_conversion,
     compute_vote_correctness,
 )
 from eval.watchability import (  # noqa: E402
@@ -144,6 +151,18 @@ class BaselineMeasurementReport(BaseModel):
     genuine_class_supplied: int
     genuine_class_converted: int
     genuine_class_conversion: float | None
+    # The Task-17.6 successor cell wired by 19.5 — the ONLY canary-eligible
+    # genuine-class cell from baseline 5 onward (audits/audit-phase-16-close.md
+    # §8), the historical genuine-class trio above having read 0/0 on two
+    # consecutive substrates. Computed by the owning
+    # :func:`eval.vote_correctness.compute_supplied_channel_conversion` and
+    # never re-derived here. The headline pair only: the per-channel cells
+    # (witnessed vent / sighting contradiction / whereabouts lie) and the
+    # legacy alibi-anchored column live on the shipped report's gate_metrics
+    # block, not on this measurement row.
+    supplied_channel_supplied: int
+    supplied_channel_converted: int
+    supplied_channel_conversion: float | None
     meeting_rate: float | None
     resolved_meetings: int
     accusation_claim_ece: float | None
@@ -174,6 +193,7 @@ def measure_baseline(sample_dir: Path) -> BaselineMeasurementReport:
     balance = _balance_report_from_tournament(report)
     vote = compute_vote_correctness(report)
     genuine = compute_genuine_class_conversion(report)
+    supplied_channel = compute_supplied_channel_conversion(report)
     meeting = compute_meeting_rate(report)
     calibration = compute_accusation_calibration(report)
     histogram = _reason_histogram(report)
@@ -196,6 +216,9 @@ def measure_baseline(sample_dir: Path) -> BaselineMeasurementReport:
         genuine_class_supplied=genuine.supplied,
         genuine_class_converted=genuine.converted,
         genuine_class_conversion=genuine.conversion_rate,
+        supplied_channel_supplied=supplied_channel.supplied,
+        supplied_channel_converted=supplied_channel.converted,
+        supplied_channel_conversion=supplied_channel.conversion_rate,
         meeting_rate=meeting.meeting_rate,
         resolved_meetings=meeting.meetings_total,
         accusation_claim_ece=calibration.accusation_claim_ece,
@@ -209,6 +232,7 @@ def _render_human(report: BaselineMeasurementReport) -> str:
     n = report.games_total
     acc = report.ejection_accuracy
     conv = report.genuine_class_conversion
+    canary = report.supplied_channel_conversion
     rate = report.meeting_rate
     claim_ece = report.accusation_claim_ece
     ballot_ece = report.vote_ballot_ece
@@ -226,6 +250,10 @@ def _render_human(report: BaselineMeasurementReport) -> str:
             f"  genuine-class conversion: "
             f"{conv if conv is None else round(conv, 4)}"
             f"  ({report.genuine_class_converted}/{report.genuine_class_supplied})",
+            f"  supplied-channel conversion (canary): "
+            f"{canary if canary is None else round(canary, 4)}"
+            f"  ({report.supplied_channel_converted}/"
+            f"{report.supplied_channel_supplied})",
             f"  meeting rate: {rate if rate is None else round(rate, 4)}"
             f"  ({report.resolved_meetings} resolved meetings)",
             f"  accusation-claim ECE: "

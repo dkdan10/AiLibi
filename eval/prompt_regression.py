@@ -141,6 +141,10 @@ class PromptRegressionMetrics(_FrozenModel):
       version.
     * ``alibi_survival_rate`` / ``total_impostor_alibis`` —
       :class:`eval.alibi_fabrication.AlibiFabricationReport`.
+      ``alibi_survival_rate`` is ``None`` when the fixture set recorded no
+      impostor alibis (the None-iff-undefined convention, Task 19.5: the rate
+      is undefined, and the retired ``0.0`` would have read as "alibis were
+      filed and none survived").
     * ``accusation_claim_ece`` / ``vote_ballot_ece`` — the two expected
       calibration errors from
       :class:`eval.accusation_calibration.AccusationCalibrationReport` (each
@@ -158,7 +162,7 @@ class PromptRegressionMetrics(_FrozenModel):
     ejection_accuracy: float | None
     impostor_accused_conversion_rate: float | None
     missed_skip_ballots: int
-    alibi_survival_rate: float
+    alibi_survival_rate: float | None
     total_impostor_alibis: int
     accusation_claim_ece: float | None
     vote_ballot_ece: float | None

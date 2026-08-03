@@ -6,6 +6,15 @@ or LLM is involved. The tests pin the chosen **subject-membership** join rule in
 both directions (survived vs caught), its accepted cross-author failure mode,
 the author-not-subject denominator semantics, per-meeting multiplicity dedup,
 and partial-replay robustness.
+
+**The None-iff-undefined rate convention (Task 19.5).** ``survival_rate`` is
+``None`` — not ``0.0`` — when no impostor filed an alibi: the rate is
+*undefined*, and the pre-19.5 division-safe ``0.0`` is retired because it read
+as "impostors filed alibis and NONE survived", the strongest possible detector
+result, when it actually meant there was nothing to measure
+(audits/audit-phase-19-triage.md §7 item 6). The zero-denominator fixtures
+below therefore pin ``None``, and the model's validator enforces the
+biconditional fail-loud in both directions.
 """
 
 from __future__ import annotations
@@ -297,7 +306,7 @@ def test_crewmate_alibi_is_excluded_from_numerator_and_denominator() -> None:
     )
 
     assert compute_alibi_fabrication_rate(report) == AlibiFabricationReport(
-        total_impostor_alibis=0, survived=0, survival_rate=0.0
+        total_impostor_alibis=0, survived=0, survival_rate=None
     )
 
 
@@ -463,7 +472,7 @@ def test_meeting_with_no_alibis_contributes_nothing() -> None:
     )
 
     assert compute_alibi_fabrication_rate(report) == AlibiFabricationReport(
-        total_impostor_alibis=0, survived=0, survival_rate=0.0
+        total_impostor_alibis=0, survived=0, survival_rate=None
     )
 
 
@@ -488,17 +497,20 @@ def test_game_with_no_meetings_contributes_nothing() -> None:
     report = _tournament(_game(meetings=()))
 
     assert compute_alibi_fabrication_rate(report) == AlibiFabricationReport(
-        total_impostor_alibis=0, survived=0, survival_rate=0.0
+        total_impostor_alibis=0, survived=0, survival_rate=None
     )
 
 
-def test_empty_tournament_has_zero_rate() -> None:
+def test_empty_tournament_has_undefined_rate() -> None:
+    # No games -> no impostor alibis -> the rate is UNDEFINED (``None``), not
+    # 0.0: there was nothing to measure, so the metric must not report the
+    # strongest possible detector result (Task 19.5).
     report = TournamentReport(
         format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=()
     )
 
     assert compute_alibi_fabrication_rate(report) == AlibiFabricationReport(
-        total_impostor_alibis=0, survived=0, survival_rate=0.0
+        total_impostor_alibis=0, survived=0, survival_rate=None
     )
 
 
@@ -578,3 +590,37 @@ def test_result_model_is_frozen() -> None:
 
     with pytest.raises(ValidationError):
         result.survived = 5
+
+
+def test_zero_denominator_with_a_numeric_rate_fails_loud() -> None:
+    """The None-iff-undefined biconditional, forward direction (Task 19.5).
+
+    The retired ``0.0`` cannot be smuggled back in by a caller: with no
+    impostor alibis the rate is undefined, so any float — including the old
+    division-safe 0.0 — is a construction error, not a papered-over value
+    (AGENTS.md "no silent fallbacks").
+    """
+
+    with pytest.raises(ValidationError, match="undefined, not 0.0"):
+        AlibiFabricationReport(total_impostor_alibis=0, survived=0, survival_rate=0.0)
+
+
+def test_nonzero_denominator_without_a_rate_fails_loud() -> None:
+    """The biconditional's other direction: a defined rate may not be ``None``.
+
+    ``None`` means undefined, so it must not double as "not computed" once
+    impostor alibis exist.
+    """
+
+    with pytest.raises(ValidationError, match="must be set"):
+        AlibiFabricationReport(total_impostor_alibis=1, survived=1, survival_rate=None)
+
+
+def test_out_of_range_rate_fails_loud() -> None:
+    with pytest.raises(ValidationError, match=r"must be in \[0.0, 1.0\]"):
+        AlibiFabricationReport(total_impostor_alibis=2, survived=1, survival_rate=1.5)
+
+
+def test_survived_exceeding_the_denominator_fails_loud() -> None:
+    with pytest.raises(ValidationError, match="cannot exceed total_impostor_alibis"):
+        AlibiFabricationReport(total_impostor_alibis=1, survived=2, survival_rate=1.0)

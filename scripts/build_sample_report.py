@@ -196,11 +196,17 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
         else "n/a"
     )
     # The Task 10.4 Phase-10 gate surface (gp-7), led by the PRIMARY gate:
-    # genuine-class conversion. ejection_accuracy stays printed above but is
+    # genuine-class conversion. The Task 19.5 successor canary
+    # (supplied-channel conversion, the Task-17.6 re-anchor) prints beside that
+    # historical genuine-class cell: the successor is the only canary-eligible
+    # genuine-class cell from baseline 5 onward
+    # (audits/audit-phase-16-close.md §8), the historical pair staying printed
+    # as the era it anchors. ejection_accuracy stays printed above but is
     # NOT a gate against pre-repair eras (the 0.63 was artifact-built — see
     # eval.vote_correctness.GENUINE_CLASS_GATE_NOTE on the report itself).
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
+    scc = gate.supplied_channel_conversion
     # The Task 10.6 gp-7 companions: the multi-signal conversion split and
     # the supply gauges, derived fresh per run (they live on no committed
     # report block until the 10.9 re-record). The win split prints with an
@@ -261,6 +267,7 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
         f"{conversion.impostor_accused_meetings}) | "
         f"missed_skip {conversion.missed_skip_ballots} | "
         f"genuine_class {genuine.converted}/{genuine.supplied} | "
+        f"supplied_channel {scc.converted}/{scc.supplied} | "
         f"multi_signal {multi.multi_signal_conversions}/{multi.impostor_ejections} | "
         f"lost_openings {gate.lost_opening_accusations} "
         f"(defaults {gate.cap_defaulted_turns}) | "
