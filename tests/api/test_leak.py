@@ -371,6 +371,23 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # citation-gate coercions diverted out of the correct/missed/unclassified
 # partition. It is a pure aggregate count (no roles, transcripts, or engine
 # types), so it stays out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
+# Task 19.5 (DESIGN.md §11.3; audits/audit-phase-19-triage.md §7 item 5) wires
+# the Task-17.6 successor onto the ``gate_metrics`` block:
+# ``supplied_channel_conversion``
+# (``eval.vote_correctness.SuppliedChannelConversionReport``) — the ONLY
+# canary-eligible genuine-class cell from baseline 5 onward. It adds the three
+# per-channel pairs (``witnessed_vent_supplied`` / ``witnessed_vent_converted``,
+# ``sighting_contradiction_supplied`` / ``sighting_contradiction_converted``,
+# ``whereabouts_lie_supplied`` / ``whereabouts_lie_converted``), the preserved
+# legacy alibi-anchored column (``legacy_alibi_supplied`` /
+# ``legacy_alibi_converted`` / ``legacy_alibi_conversion_rate``), and a second
+# pinned documentation literal (``legacy_note``). Its headline pair reuses the
+# names already present for the genuine-class block (``supplied`` /
+# ``converted`` / ``conversion_rate`` / ``note``), so those need no new entry —
+# this set is a flat name census, not a per-block one. All are pure aggregate
+# counts, rates, and pinned strings (no roles, transcripts, or engine types),
+# so they stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -445,6 +462,10 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "kill_gifted",
         "kill_gifted_wins",
         "kind",
+        "legacy_alibi_conversion_rate",
+        "legacy_alibi_converted",
+        "legacy_alibi_supplied",
+        "legacy_note",
         "llm_calls",
         "lo",
         "lost_opening_accusations",
@@ -485,12 +506,15 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "room",
         "seed",
         "seeds_used",
+        "sighting_contradiction_converted",
+        "sighting_contradiction_supplied",
         "skip_ballots",
         "skipped_meetings",
         "speaker",
         "subject",
         "subjects",
         "supplied",
+        "supplied_channel_conversion",
         "supports",
         "survival_rate",
         "survivals_rendered_met",
@@ -527,7 +551,11 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "vote_correctness_rate",
         "vote_correctness_small_n",
         "voter",
+        "whereabouts_lie_converted",
+        "whereabouts_lie_supplied",
         "winner",
+        "witnessed_vent_converted",
+        "witnessed_vent_supplied",
     }
 )
 

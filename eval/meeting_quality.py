@@ -28,7 +28,9 @@ analyzer defined in this module:
   leads (``ejection_accuracy``, the precision lead, and the
   impostor-accused -> impostor-ejected conversion rate, the recall lead) plus
   the SKIP-ballot sentinels (``missed_skip_ballots`` with its CORRECT/MISSED
-  partition, and ``threshold_inversions`` as a §4.6 gate-obedience sentinel)
+  partition, and ``threshold_inversions`` as the crew discretionary-decline
+  census at the rendered §4.6 reference line — nonzero INTENDED post-13.13,
+  see the Phase 19 Wave 1 block below)
   (:func:`compute_conversion_report`; DESIGN.md §11.3, §5.5; audit
   audit-2026-06-09-0347 gp-2). This is the ruler fix that BLOCKS the Wave-1
   A/B: the old headline ``vote_correctness_rate`` is structurally pinned to
@@ -42,7 +44,10 @@ ruler defined in this module:
   audit-2026-06-10-1820 gp-7 (:func:`compute_gate_metrics` /
   :class:`GateMetricsReport`): the genuine-class conversion pair (the
   phase's PRIMARY progress gate, computed by the owning
-  :func:`eval.vote_correctness.compute_genuine_class_conversion`), the
+  :func:`eval.vote_correctness.compute_genuine_class_conversion` — Phase 19
+  (Task 19.5) wires the Task-17.6 successor ``supplied_channel_conversion``
+  beside it on this surface, and the legacy cell is a labeled historical
+  column from then on), the
   lost-opening-accusation count split from cap-defaulted turns (H-H-5 vs
   H-H-2 — different causes, same chain-killing symptom, so an A/B must read
   them separately), and accused-impostor survival partitioned by the
@@ -121,6 +126,35 @@ coercion in this module:
   the committed single-era reports (predating the field) still parse until
   the 17.9 re-record.
 
+Phase 19 Wave 1 (Task 19.5, metric truth) rewires the gate surface and
+retires a doctrine in this module (audits/audit-phase-19-triage.md §7 items
+5+6, row C6):
+
+* *The canary joins the gate surface* — :class:`GateMetricsReport` gains
+  ``supplied_channel_conversion``, the Task-17.6 successor instrument
+  (:func:`eval.vote_correctness.compute_supplied_channel_conversion`) and the
+  ONLY canary-eligible genuine-class cell from baseline 5 onward
+  (audits/audit-phase-16-close.md §8 re-anchor). The declared canary had been
+  wired to nothing; the Phase-10 ``genuine_class_conversion`` cell it succeeds
+  stays computed beside it as a labeled HISTORICAL column — starved (0/0 on
+  baselines 4 and 5), reported only, never a canary.
+* *The ``threshold_inversions`` re-doctrine* — Task 13.13 de-imperatived the
+  §4.6 vote gate (``vote_ballot.j2`` renders the voter's max suspicion and the
+  0.60 reference threshold as a NON-directive evidence line; only the
+  deterministic tally floor in :func:`meetings.voting.tally_ballots`
+  constrains outcomes), so a crew voter who declines over a met reference line
+  is exercising sanctioned discretion. The bucket is a conservatism gauge and
+  its nonzero value is INTENDED on post-13.13 recordings — the old "expected
+  ~0 … a gate-render/obedience bug to chase" reading is retired (see the
+  :class:`ConversionReport` bullet for the 19.5 recount that grounds it).
+* *The recount analyzer* — :func:`recount_threshold_inversions` /
+  :class:`ThresholdInversionRecount`, the by-cause table behind that
+  re-doctrine: marker-freedom, the rendered-max bands, and the meeting
+  outcomes the inversions sit in. It folds the SAME module-private per-ballot
+  classification :func:`compute_conversion_report` consumes
+  (:func:`_iter_skip_ballot_views`), so the recount can never drift from the
+  partition it recounts.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -138,8 +172,8 @@ module, never re-derived here.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
-from typing import Final
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Final, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -167,8 +201,10 @@ from eval.cost_dashboard import CostDashboard, compute_cost_dashboard
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.vote_correctness import (
     GenuineClassConversionReport,
+    SuppliedChannelConversionReport,
     VoteCorrectnessReport,
     compute_genuine_class_conversion,
+    compute_supplied_channel_conversion,
     compute_vote_correctness,
     genuine_class_subjects,
 )
@@ -180,7 +216,7 @@ from meetings.manager import (
     VOTE_PARSE_DEFAULT_MARKER,
     derive_belief_evidence,
 )
-from meetings.schemas import AccusationClaim, ContradictionRef, PlayerId
+from meetings.schemas import AccusationClaim, ContradictionRef, PlayerId, VoteBallot
 from meetings.transcript import detect_contradictions, is_weak_contradiction
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
@@ -600,10 +636,10 @@ class ConversionReport(BaseModel):
       crew gate bug), ``missed_skip_invalid_target`` (a hallucinated
       out-of-roster target normalized to SKIP, identified by the pinned
       :data:`~meetings.manager.INVALID_VOTE_TARGET_MARKER` audit trail), and
-      ``threshold_inversions`` (the genuine remainder). On the audited 9.5
-      baseline the partition is 38 = 34 impostor-voter + 4 invalid-target +
-      0 genuine — driving the count down would mostly mean breaking impostor
-      play, so read the partition, not the total.
+      ``threshold_inversions`` (the crew discretionary-decline remainder).
+      On the audited 9.5 baseline the partition is 38 = 34 impostor-voter +
+      4 invalid-target + 0 genuine — driving the count down would mostly mean
+      breaking impostor play, so read the partition, not the total.
     * ``missed_skip_teammate_coerced`` annotates the impostor bucket (a
       sub-count, NOT a fourth partition bucket): how many of those missed
       skips carry the pinned
@@ -615,13 +651,33 @@ class ConversionReport(BaseModel):
       in-character decline — so this count is what keeps deterministic
       coercions and voluntary declines from being fused under one number in
       a later A/B.
-    * ``threshold_inversions`` is the **§4.6 gate-obedience (firewall)
-      sentinel**, scoped to CREW voters: a crew voter shown a met threshold
-      over a living target who SKIPped anyway with no by-design excuse.
-      Expected ~0 on a clean baseline; a nonzero count is a
-      gate-render/obedience bug to chase, NOT a conversion knob to optimize
-      (the old facts-only name read as "the model obeyed the verdict", audit
-      F-F-5).
+    * ``threshold_inversions`` is the **crew DISCRETIONARY-DECLINE census at
+      the rendered §4.6 reference line**, scoped to CREW voters: a crew voter
+      whose rendered max met
+      :data:`~eval._suspicion_parse.SKIP_SUSPICION_THRESHOLD` over a living
+      target who SKIPped anyway, carrying no normalization marker. Since Task
+      13.13 de-imperatived the vote gate — ``vote_ballot.j2`` renders the max
+      and the 0.60 reference threshold as ONE non-directive evidence line
+      beside the transcript, the contradiction flags, and the memory view,
+      and only the deterministic tally floor
+      (:func:`meetings.voting.tally_ballots`) constrains the outcome — such a
+      decline is sanctioned voter discretion, not disobedience. The count is
+      therefore **EXPECTED NONZERO on post-13.13 recordings** and the
+      pre-13.13 reading ("expected ~0 on a clean baseline; a nonzero count is
+      a gate-render/obedience bug to chase") is RETIRED
+      (audits/audit-phase-19-triage.md row C6).
+      The Task-19.5 recount (:func:`recount_threshold_inversions`) is what
+      grounds the re-doctrine: over ALL FOUR committed sets every recorded
+      inversion is marker-free, and the rendered mass sits AT the advisory
+      line rather than deep above it (samples 9p2i: 81 of 87 in
+      ``[0.60, 0.70)``, 36 of those exactly at 0.60). So the bucket is a
+      CONSERVATISM GAUGE — read its distribution, not its total. It is not a
+      conversion knob to optimize and it is not a gate-obedience firewall.
+      What WOULD be a bug is a MARKER-BEARING ballot landing here: the
+      diversions above (invalid target, teammate coercion, parse default,
+      citation gate) exist precisely to keep by-design rewrites out of this
+      remainder, which is why the recount's ``marker_free`` cell measures
+      exactly that.
 
     **Leak-safety.** Every field is a pure aggregate (two rates and thirteen
     integers). The report carries no roles, no transcripts, and no
@@ -741,6 +797,147 @@ class ConversionReport(BaseModel):
                 raise ValueError(f"{name} must be in [0.0, 1.0]: {rate}")
 
 
+_SkipBallotCategory = Literal[
+    "diverted_defaulted",
+    "citation_coerced",
+    "unclassified",
+    "correct_skip",
+    "missed_impostor",
+    "missed_invalid_target",
+    "threshold_inversion",
+]
+
+
+class _SkipBallotView(NamedTuple):
+    """One SKIP ballot with its decision-census classification (Task 19.5).
+
+    The carrier of the ONE per-ballot partition: the decision census
+    (:func:`compute_conversion_report`) and the by-cause recount
+    (:func:`recount_threshold_inversions`) both fold
+    :func:`_iter_skip_ballot_views`, so a recount can never disagree with the
+    partition it recounts. ``rendered_max`` is the voter's recovered §4.6
+    verdict (``None`` when none was recoverable); ``category`` is the bucket
+    the census assigns, with the two by-design diversions
+    (``diverted_defaulted``, ``citation_coerced``) named rather than dropped
+    so a consumer can tell "excluded from ``skip_ballots``" from "counted in a
+    by-design bucket".
+    """
+
+    meeting: MeetingReport
+    ballot: VoteBallot
+    rendered_max: float | None
+    category: _SkipBallotCategory
+
+
+def _iter_skip_ballot_views(game: GameReport) -> Iterator[_SkipBallotView]:
+    """Classify every SKIP ballot in one game (the Task 9.6 decision census).
+
+    Pure generator over recorded artifacts; the classification order IS the
+    census order, so the buckets are exactly what
+    :func:`compute_conversion_report` publishes (see its docstring and the
+    :class:`ConversionReport` bullets for what each bucket means).
+    """
+
+    # Persisted §4.6 verdict for each DEFAULTED vote (Task 10.12, audit
+    # H-H-2): the same map :func:`compute_defaulted_ballots` reads, so a
+    # defaulted MUST-skip ballot whose vote prompt never logged still lands
+    # in correct_skip_ballots (the documented overlap) and a defaulted
+    # MUST-vote ballot still diverts -- never a missed skip / inversion.
+    rendered_from_failed = _persisted_vote_verdict_maxes(game)
+    for meeting in game.meetings:
+        # Recover each voter's rendered §4.6 gate verdict from the meeting's
+        # vote-prompt calls. A voter can have both a turn call and a vote
+        # call; only the vote call carries the line, so non-vote prompts
+        # parse to None and never overwrite.
+        rendered_max_by_voter: dict[PlayerId, float] = {}
+        for call in meeting.llm_calls:
+            if call.agent_id is None:
+                continue
+            rendered = parse_rendered_max_suspicion(call.prompt)
+            if rendered is not None:
+                rendered_max_by_voter[call.agent_id] = rendered
+        for ballot in meeting.ballots:
+            if ballot.target != "SKIP":
+                continue
+            rendered_max = rendered_max_by_voter.get(ballot.voter)
+            is_marked_default = (
+                _VOTE_PARSE_DEFAULT_MARKER_PREFIX in ballot.rationale_text
+            )
+            if rendered_max is None and is_marked_default:
+                # A parse-defaulted vote logged no prompt; recover its
+                # rendered §4.6 max from the persisted failed-call field
+                # (Task 10.12). Gated on the marker: an UNMARKED deadline
+                # default (interactive vote_seconds miss -- plain
+                # ``DEFAULT_VOTE_RATIONALE``, no marker) also stamps a
+                # ``rendered_vote_max`` on its failed-call row, but the
+                # divert below is marker-gated and cannot catch it, so
+                # lending it a rendered max would falsely score it as a
+                # missed skip / threshold inversion. Unmarked defaults keep
+                # ``rendered_max is None`` and stay ``unclassified``, exactly
+                # as before this field existed.
+                rendered_max = rendered_from_failed.get(
+                    (meeting.meeting_id, ballot.voter)
+                )
+            category: _SkipBallotCategory
+            # DEFAULTED diversion (Task 10.9.1; PR #147 F1): a SKIP
+            # stamped with the parse-default marker is the manager's
+            # fail-soft net, never the voter's decision, so it enters
+            # this decision census only when it coincides with a
+            # correct skip -- under a MUST-skip render the recorded
+            # SKIP complies with the verdict and counts correct as
+            # ever. Under a MUST-vote render, or with no rendered
+            # verdict at all (a defaulted ballot whose persisted field
+            # is absent -- a committed single-era replay), the ballot
+            # is censused by :func:`compute_defaulted_ballots` instead:
+            # NEVER a missed skip and NEVER a threshold inversion -- a
+            # degraded SKIP miscounted as a genuine inversion would
+            # poison the §4.6 0-inversion HARD line on the very
+            # re-record the fail-soft exists to unblock.
+            if is_marked_default and (
+                rendered_max is None or rendered_max >= SKIP_SUSPICION_THRESHOLD
+            ):
+                category = "diverted_defaulted"
+            # CITATION-COERCED diversion (Task 17.2; audit §8 routed
+            # contract (b)): a SKIP whose rationale is anchored by the
+            # 16.6 citation-gate coercion marker is the gate working,
+            # never the voter's decision, so it is diverted to its own
+            # by-design bucket BEFORE the correct/missed/unclassified
+            # tri-split and stays out of every decision read -- an
+            # impostor's coerced SKIP is not an in-character decline, a
+            # crew voter's is not a threshold inversion, and a
+            # sub-threshold one is not a chosen correct skip (the 17.10
+            # ruling: a forced eject poisons the decision channel the
+            # verdict hinges on). The role- and verdict-blind divert
+            # matches the invalid-target / teammate precedent. The
+            # anchored match is sound because the citation gate is the
+            # LAST guard in the manager's ballot chain, so this marker is
+            # always the outermost prefix; any stacked 16.5/16.6 markers
+            # ride inside it.
+            elif _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text):
+                category = "citation_coerced"
+            elif rendered_max is None:
+                category = "unclassified"
+            elif rendered_max < SKIP_SUSPICION_THRESHOLD:
+                category = "correct_skip"
+            # MISSED ballots split role-first: an impostor voter is the
+            # audited exclusion class regardless of any normalization
+            # marker (in-character voting is sanctioned by the vote
+            # prompt), then invalid-target normalizations, then the crew
+            # discretionary-decline remainder.
+            elif game.roles[ballot.voter] == "IMPOSTOR":
+                category = "missed_impostor"
+            elif _INVALID_VOTE_MARKER_PREFIX in ballot.rationale_text:
+                category = "missed_invalid_target"
+            else:
+                category = "threshold_inversion"
+            yield _SkipBallotView(
+                meeting=meeting,
+                ballot=ballot,
+                rendered_max=rendered_max,
+                category=category,
+            )
+
+
 def compute_conversion_report(
     report: TournamentReport | Sequence[GameReport],
     *,
@@ -791,8 +988,9 @@ def compute_conversion_report(
     role-first: an impostor voter lands in ``missed_skip_impostor_voters``
     regardless of any normalization marker (the audited exclusion class —
     impostor in-character voting is sanctioned by the vote prompt, so it is
-    never a crew gate bug), then invalid-target normalizations, then the
-    genuine ``threshold_inversions`` remainder. Within the impostor bucket,
+    never a crew gate bug), then invalid-target normalizations, then the crew
+    discretionary-decline ``threshold_inversions`` remainder. Within the
+    impostor bucket,
     ballots stamped with the §7.12
     :data:`~meetings.manager.TEAMMATE_VOTE_TARGET_MARKER` are additionally
     counted as ``missed_skip_teammate_coerced`` — the guard-rewritten
@@ -817,12 +1015,6 @@ def compute_conversion_report(
     threshold_inversions = 0
 
     for game in games:
-        # Persisted §4.6 verdict for each DEFAULTED vote (Task 10.12, audit
-        # H-H-2): the same map :func:`compute_defaulted_ballots` reads, so a
-        # defaulted MUST-skip ballot whose vote prompt never logged still lands
-        # in correct_skip_ballots (the documented overlap) and a defaulted
-        # MUST-vote ballot still diverts -- never a missed skip / inversion.
-        rendered_from_failed = _persisted_vote_verdict_maxes(game)
         for meeting in game.meetings:
             # RECALL lead: did the meeting verbally accuse a true impostor,
             # and did it convert that into an impostor ejection?
@@ -842,92 +1034,33 @@ def compute_conversion_report(
                 ):
                     impostor_accused_conversions += 1
 
-            # SKIP sentinels: recover each voter's rendered §4.6 gate verdict
-            # from the meeting's vote-prompt calls. A voter can have both a
-            # turn call and a vote call; only the vote call carries the line,
-            # so non-vote prompts parse to None and never overwrite.
-            rendered_max_by_voter: dict[PlayerId, float] = {}
-            for call in meeting.llm_calls:
-                if call.agent_id is None:
-                    continue
-                rendered = parse_rendered_max_suspicion(call.prompt)
-                if rendered is not None:
-                    rendered_max_by_voter[call.agent_id] = rendered
-            for ballot in meeting.ballots:
-                if ballot.target != "SKIP":
-                    continue
-                rendered_max = rendered_max_by_voter.get(ballot.voter)
-                is_marked_default = (
-                    _VOTE_PARSE_DEFAULT_MARKER_PREFIX in ballot.rationale_text
-                )
-                if rendered_max is None and is_marked_default:
-                    # A parse-defaulted vote logged no prompt; recover its
-                    # rendered §4.6 max from the persisted failed-call field
-                    # (Task 10.12). Gated on the marker: an UNMARKED deadline
-                    # default (interactive vote_seconds miss -- plain
-                    # ``DEFAULT_VOTE_RATIONALE``, no marker) also stamps a
-                    # ``rendered_vote_max`` on its failed-call row, but the
-                    # divert below is marker-gated and cannot catch it, so
-                    # lending it a rendered max would falsely score it as a
-                    # missed skip / threshold inversion. Unmarked defaults keep
-                    # ``rendered_max is None`` and stay ``unclassified``, exactly
-                    # as before this field existed.
-                    rendered_max = rendered_from_failed.get(
-                        (meeting.meeting_id, ballot.voter)
-                    )
-                # DEFAULTED diversion (Task 10.9.1; PR #147 F1): a SKIP
-                # stamped with the parse-default marker is the manager's
-                # fail-soft net, never the voter's decision, so it enters
-                # this decision census only when it coincides with a
-                # correct skip -- under a MUST-skip render the recorded
-                # SKIP complies with the verdict and counts correct as
-                # ever. Under a MUST-vote render, or with no rendered
-                # verdict at all (a defaulted ballot whose persisted field
-                # is absent -- a committed single-era replay), the ballot
-                # is censused by :func:`compute_defaulted_ballots` instead:
-                # NEVER a missed skip and NEVER a threshold inversion -- a
-                # degraded SKIP miscounted as a genuine inversion would
-                # poison the §4.6 0-inversion HARD line on the very
-                # re-record the fail-soft exists to unblock.
-                if is_marked_default and (
-                    rendered_max is None or rendered_max >= SKIP_SUSPICION_THRESHOLD
-                ):
-                    continue
-                # CITATION-COERCED diversion (Task 17.2; audit §8 routed
-                # contract (b)): a SKIP whose rationale is anchored by the
-                # 16.6 citation-gate coercion marker is the gate working,
-                # never the voter's decision, so it is diverted to its own
-                # by-design bucket BEFORE the correct/missed/unclassified
-                # tri-split and stays out of every decision read -- an
-                # impostor's coerced SKIP is not an in-character decline, a
-                # crew voter's is not a threshold inversion, and a
-                # sub-threshold one is not a chosen correct skip (the 17.10
-                # ruling: a forced eject poisons the decision channel the
-                # verdict hinges on). The role- and verdict-blind divert
-                # matches the invalid-target / teammate precedent. The
-                # anchored match is sound because the citation gate is the
-                # LAST guard in the manager's ballot chain, so this marker is
-                # always the outermost prefix; any stacked 16.5/16.6 markers
-                # ride inside it.
-                if _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text):
-                    skip_ballots += 1
-                    citation_coerced_skip_ballots += 1
-                    continue
-                skip_ballots += 1
-                if rendered_max is None:
-                    unclassified_skip_ballots += 1
-                elif rendered_max < SKIP_SUSPICION_THRESHOLD:
-                    correct_skip_ballots += 1
+        # SKIP sentinels: fold the one-home per-ballot classification. The
+        # DEFAULTED diversion is excluded from ``skip_ballots`` entirely
+        # (it is censused by :func:`compute_defaulted_ballots`); the
+        # citation-gate diversion IS a bucket of the partition.
+        for view in _iter_skip_ballot_views(game):
+            if view.category == "diverted_defaulted":
+                continue
+            skip_ballots += 1
+            if view.category == "citation_coerced":
+                citation_coerced_skip_ballots += 1
+            elif view.category == "unclassified":
+                unclassified_skip_ballots += 1
+            elif view.category == "correct_skip":
+                correct_skip_ballots += 1
+            else:
+                missed_skip_ballots += 1
+                if view.category == "missed_impostor":
+                    missed_skip_impostor_voters += 1
+                    # The §7.12 guard-rewritten betrayal ballots, read off
+                    # the impostor bucket's marker prefix so deterministic
+                    # coercions and voluntary declines stay separable.
+                    if _TEAMMATE_VOTE_MARKER_PREFIX in view.ballot.rationale_text:
+                        missed_skip_teammate_coerced += 1
+                elif view.category == "missed_invalid_target":
+                    missed_skip_invalid_target += 1
                 else:
-                    missed_skip_ballots += 1
-                    if game.roles[ballot.voter] == "IMPOSTOR":
-                        missed_skip_impostor_voters += 1
-                        if _TEAMMATE_VOTE_MARKER_PREFIX in ballot.rationale_text:
-                            missed_skip_teammate_coerced += 1
-                    elif _INVALID_VOTE_MARKER_PREFIX in ballot.rationale_text:
-                        missed_skip_invalid_target += 1
-                    else:
-                        threshold_inversions += 1
+                    threshold_inversions += 1
 
     conversion_rate = (
         impostor_accused_conversions / impostor_accused_meetings
@@ -951,6 +1084,208 @@ def compute_conversion_report(
         missed_skip_teammate_coerced=missed_skip_teammate_coerced,
         missed_skip_invalid_target=missed_skip_invalid_target,
         threshold_inversions=threshold_inversions,
+    )
+
+
+class ThresholdInversionRecount(BaseModel):
+    """The by-cause table behind the 19.5 re-doctrine (Task 19.5; triage C6).
+
+    Frozen value object recounting :attr:`ConversionReport.threshold_inversions`
+    by CAUSE — the instrument the post-13.13 reading of that bucket rests on
+    (see the :class:`ConversionReport` bullet). The triage's proposed mechanism
+    for the committed 87 was "unrecognized citation-gated SKIPs"; this recount
+    refutes it over the bytes (the partition already diverts that marker and
+    censuses it as ``citation_coerced_skip_ballots``) and replaces it with the
+    measured shape: marker-free declines whose rendered mass sits at the
+    advisory line.
+
+    * ``threshold_inversions`` — the recount's own total, folded from the same
+      per-ballot classification the census publishes, so it equals the
+      published count by construction.
+    * ``marker_free`` — inversions whose ``rationale_text`` carries NONE of the
+      five manager markers this module pins (invalid target, teammate
+      coercion, parse default, ballot redirect, citation gate). This is the
+      bug cell: the diversions exist to keep by-design rewrites out of the
+      remainder, so ``marker_free < threshold_inversions`` means a rewrite
+      leaked in. It is FULL on all four committed sets.
+    * ``rendered_below_0_70`` / ``rendered_0_70_to_0_80`` /
+      ``rendered_at_or_above_0_80`` — the rendered-max distribution, a
+      partition of the total. 0.70 and 0.80 are DESCRIPTIVE decimal band
+      edges for reading the mass, NOT thresholds with semantics; the only
+      threshold in the partition is
+      :data:`~eval._suspicion_parse.SKIP_SUSPICION_THRESHOLD`, which is the
+      lower edge of the first band by construction.
+    * ``rendered_at_threshold`` — inversions rendered EXACTLY at the reference
+      threshold (a sub-count of ``rendered_below_0_70``): the voters who
+      declined at the advisory line itself, not above it.
+    * ``in_skipped_meetings`` / ``in_crew_ejected_meetings`` /
+      ``in_impostor_ejected_meetings`` — the outcome the meeting the ballot
+      sat in actually reached, also a partition of the total: a discretionary
+      decline in a meeting that still ejected an impostor cost nothing, while
+      the SKIPPED mass is where the conservatism reads. A malformed
+      ``EJECTED`` row with no ``ejected_player_id`` resolved nothing, so it
+      counts as SKIPPED here — the module's malformed-EJECTED convention.
+
+    Standalone, like the gp-7 companions: this is an analysis instrument
+    pinned over committed bytes by its fixture test, NOT a field on
+    :class:`TournamentEvalReport` (the committed wrapper shape is untouched).
+
+    **Leak-safety.** Nine integers; no roles, transcripts, or engine-owned
+    types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    threshold_inversions: int
+    marker_free: int
+    rendered_at_threshold: int
+    rendered_below_0_70: int
+    rendered_0_70_to_0_80: int
+    rendered_at_or_above_0_80: int
+    in_skipped_meetings: int
+    in_crew_ejected_meetings: int
+    in_impostor_ejected_meetings: int
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> ThresholdInversionRecount:
+        counts = (
+            self.threshold_inversions,
+            self.marker_free,
+            self.rendered_at_threshold,
+            self.rendered_below_0_70,
+            self.rendered_0_70_to_0_80,
+            self.rendered_at_or_above_0_80,
+            self.in_skipped_meetings,
+            self.in_crew_ejected_meetings,
+            self.in_impostor_ejected_meetings,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("threshold-inversion recount cells must be non-negative")
+        bands = (
+            self.rendered_below_0_70
+            + self.rendered_0_70_to_0_80
+            + self.rendered_at_or_above_0_80
+        )
+        if bands != self.threshold_inversions:
+            raise ValueError(
+                "the three rendered bands must equal threshold_inversions: "
+                f"{self.rendered_below_0_70} + {self.rendered_0_70_to_0_80} + "
+                f"{self.rendered_at_or_above_0_80} != {self.threshold_inversions}"
+            )
+        outcomes = (
+            self.in_skipped_meetings
+            + self.in_crew_ejected_meetings
+            + self.in_impostor_ejected_meetings
+        )
+        if outcomes != self.threshold_inversions:
+            raise ValueError(
+                "the three outcome cells must equal threshold_inversions: "
+                f"{self.in_skipped_meetings} + {self.in_crew_ejected_meetings} + "
+                f"{self.in_impostor_ejected_meetings} != {self.threshold_inversions}"
+            )
+        # The at-threshold cell is a sub-count of the first band, not a
+        # fourth band: the threshold IS that band's lower edge.
+        if self.rendered_at_threshold > self.rendered_below_0_70:
+            raise ValueError(
+                "rendered_at_threshold cannot exceed rendered_below_0_70: "
+                f"{self.rendered_at_threshold} > {self.rendered_below_0_70}"
+            )
+        if self.marker_free > self.threshold_inversions:
+            raise ValueError(
+                "marker_free cannot exceed threshold_inversions: "
+                f"{self.marker_free} > {self.threshold_inversions}"
+            )
+        return self
+
+
+def recount_threshold_inversions(
+    report: TournamentReport | Sequence[GameReport],
+) -> ThresholdInversionRecount:
+    """Recount the §4.6 threshold inversions by cause (Task 19.5).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport` (matching the other
+    analyzers' signature). Pure: no I/O, no engine/agent/LLM calls.
+
+    Folds the SAME module-private per-ballot classification the decision
+    census consumes (:func:`_iter_skip_ballot_views`) and keeps only the
+    ``threshold_inversion`` bucket, so ``threshold_inversions`` here is the
+    published count by construction and the recount cannot drift from the
+    partition it recounts. ``marker_free`` tests the five marker anchors this
+    module pins; the rendered bands read the voter's recovered §4.6 max (never
+    ``None`` in this bucket — the classification is defined over one, so a
+    missing max fails loud); and the outcome cells read each ballot's meeting
+    outcome plus ``roles[ejected_player_id]``, with a malformed ``EJECTED``
+    row (no ejected id) counted as SKIPPED because it resolved nothing.
+
+    See :class:`ThresholdInversionRecount` for what the cells mean and why
+    0.70 / 0.80 are descriptive band edges rather than thresholds.
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    threshold_inversions = 0
+    marker_free = 0
+    rendered_at_threshold = 0
+    rendered_below_0_70 = 0
+    rendered_0_70_to_0_80 = 0
+    rendered_at_or_above_0_80 = 0
+    in_skipped_meetings = 0
+    in_crew_ejected_meetings = 0
+    in_impostor_ejected_meetings = 0
+
+    for game in games:
+        for view in _iter_skip_ballot_views(game):
+            if view.category != "threshold_inversion":
+                continue
+            threshold_inversions += 1
+
+            rationale = view.ballot.rationale_text
+            if not (
+                _INVALID_VOTE_MARKER_PREFIX in rationale
+                or _TEAMMATE_VOTE_MARKER_PREFIX in rationale
+                or _VOTE_PARSE_DEFAULT_MARKER_PREFIX in rationale
+                or _BALLOT_REDIRECT_MARKER_PREFIX in rationale
+                or _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(rationale)
+            ):
+                marker_free += 1
+
+            rendered_max = view.rendered_max
+            if rendered_max is None:
+                raise ValueError(
+                    "a threshold-inversion ballot cannot lack a rendered §4.6 "
+                    "max: the classification is defined over one, so a missing "
+                    f"value is a partition bug ({view.ballot.voter!r} in meeting "
+                    f"{view.meeting.meeting_id!r})"
+                )
+            if rendered_max == SKIP_SUSPICION_THRESHOLD:
+                rendered_at_threshold += 1
+            if rendered_max < 0.70:
+                rendered_below_0_70 += 1
+            elif rendered_max < 0.80:
+                rendered_0_70_to_0_80 += 1
+            else:
+                rendered_at_or_above_0_80 += 1
+
+            ejected = view.meeting.ejected_player_id
+            if view.meeting.outcome == "EJECTED" and ejected is not None:
+                if game.roles[ejected] == "IMPOSTOR":
+                    in_impostor_ejected_meetings += 1
+                else:
+                    in_crew_ejected_meetings += 1
+            else:
+                in_skipped_meetings += 1
+
+    return ThresholdInversionRecount(
+        threshold_inversions=threshold_inversions,
+        marker_free=marker_free,
+        rendered_at_threshold=rendered_at_threshold,
+        rendered_below_0_70=rendered_below_0_70,
+        rendered_0_70_to_0_80=rendered_0_70_to_0_80,
+        rendered_at_or_above_0_80=rendered_at_or_above_0_80,
+        in_skipped_meetings=in_skipped_meetings,
+        in_crew_ejected_meetings=in_crew_ejected_meetings,
+        in_impostor_ejected_meetings=in_impostor_ejected_meetings,
     )
 
 
@@ -1215,14 +1550,31 @@ class GateMetricsReport(BaseModel):
     calibration cleared (monotone bins, informative spread), so no
     quantization caveat ships either.
 
-    * ``genuine_class_conversion`` — the phase's PRIMARY progress gate,
-      computed by the owning
+    * ``genuine_class_conversion`` — the HISTORICAL Phase-10 cell. It WAS
+      the phase's PRIMARY progress gate, computed by the owning
       :func:`eval.vote_correctness.compute_genuine_class_conversion` (the
       CANON-class definition imports the Task 10.1 detector classifier — one
       home, never a parallel implementation) and carried here so the whole
-      gate surface reads from one block. Its ``note`` field documents why
+      gate surface reads from one block; its ``note`` field documents why
       raw ``ejection_accuracy`` parity with the artifact-era 0.63 is an
-      invalid gate.
+      invalid gate. Since Task 17.6 it is preserved as a LABELED,
+      REPORTED-ONLY column: STARVED on this substrate (0/0 on baselines 4 and
+      5 — the NO-DATA branch, not a regression) and NEVER a canary. The
+      successor cell beside it is what canary bands read; see
+      :data:`~eval.vote_correctness.LEGACY_ALIBI_CELL_NOTE`, which rides on
+      that successor's ``legacy_note``.
+    * ``supplied_channel_conversion`` — the Task-17.6 SUCCESSOR instrument,
+      wired onto this gate surface by Task 19.5: the ONLY canary-eligible
+      genuine-class cell from baseline 5 onward
+      (audits/audit-phase-16-close.md §8 re-anchor, on the channels this
+      substrate actually supplies — vents, sightings, whereabouts-lies). It
+      is computed by the owning
+      :func:`eval.vote_correctness.compute_supplied_channel_conversion` and
+      never re-derived here; its ``note`` / ``legacy_note`` fields ship the
+      pinned documentation strings
+      (:data:`~eval.vote_correctness.SUPPLIED_CHANNEL_GATE_NOTE`,
+      :data:`~eval.vote_correctness.LEGACY_ALIBI_CELL_NOTE`) so a reader of
+      the report alone can tell the live canary from the historical column.
     * ``lost_opening_accusations`` — meetings whose opening turn carries
       ZERO accusation claims (the chain dies on turn 0: ``chain_length=1``
       SKIP; H-H-5). Counted SEPARATELY from ``cap_defaulted_turns`` —
@@ -1264,10 +1616,12 @@ class GateMetricsReport(BaseModel):
       - ``survivals_unevidenced`` — the remainder: no rendered row at all,
         or sub-gate with zero flags. Evidence starvation, not deception.
 
-    **Leak-safety.** Pure aggregates (counts plus the nested genuine-class
-    block: two counts, a rate, and a pinned documentation string). No roles,
-    no transcripts, no engine-owned types, so the block adds no leak risk to
-    the ``/eval/tournament-report`` surface (``tests/api/test_leak.py``).
+    **Leak-safety.** Pure aggregates (counts plus two nested blocks: the
+    genuine-class cell's two counts, a rate, and a pinned documentation
+    string, and the supplied-channel cell's per-channel counts, two rates,
+    and two pinned documentation strings). No roles, no transcripts, no
+    engine-owned types, so the blocks add no leak risk to the
+    ``/eval/tournament-report`` surface (``tests/api/test_leak.py``).
 
     The post-init validator enforces the partition invariants fail-loud so an
     inconsistent result can never be constructed (mirrors
@@ -1277,6 +1631,7 @@ class GateMetricsReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     genuine_class_conversion: GenuineClassConversionReport
+    supplied_channel_conversion: SuppliedChannelConversionReport
     lost_opening_accusations: int
     cap_defaulted_turns: int
     accused_impostor_events: int
@@ -1331,8 +1686,11 @@ def compute_gate_metrics(
     surface and the audited numbers share one definition.
 
     The genuine-class pair is produced by the owning
-    :func:`eval.vote_correctness.compute_genuine_class_conversion`, never
-    re-derived here. Lost openings count meetings whose first turn carries no
+    :func:`eval.vote_correctness.compute_genuine_class_conversion`, and the
+    Task-17.6 successor canary beside it by the owning
+    :func:`eval.vote_correctness.compute_supplied_channel_conversion` (Task
+    19.5) — never re-derived here. Lost openings count meetings whose first
+    turn carries no
     :class:`~meetings.schemas.AccusationClaim` (an empty transcript vacuously
     counts — its opening supplied nothing). Cap-defaults walk each game's
     ``failed_calls`` for ``deadline_default`` rows and dedupe parsed turn
@@ -1439,6 +1797,7 @@ def compute_gate_metrics(
 
     return GateMetricsReport(
         genuine_class_conversion=compute_genuine_class_conversion(games),
+        supplied_channel_conversion=compute_supplied_channel_conversion(games),
         lost_opening_accusations=lost_opening_accusations,
         cap_defaulted_turns=len(defaulted_turn_keys),
         accused_impostor_events=accused_impostor_events,
@@ -2691,6 +3050,7 @@ __all__ = [
     "MeetingRateReport",
     "MultiSignalConversionReport",
     "SupplyGaugesReport",
+    "ThresholdInversionRecount",
     "TournamentEvalReport",
     "build_tournament_eval_report",
     "compute_ballot_target_redirects",
@@ -2704,4 +3064,5 @@ __all__ = [
     "compute_multi_signal_conversion",
     "compute_supply_gauges",
     "decompose_ejection_channels",
+    "recount_threshold_inversions",
 ]

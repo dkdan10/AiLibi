@@ -246,6 +246,9 @@ def test_partial_run_without_game_over_yields_none_winner(tmp_path: Path) -> Non
     eval_report = build_tournament_eval_report(report)
     assert eval_report.vote_correctness.total_ejections == 0
     assert eval_report.alibi_fabrication.total_impostor_alibis == 0
+    # Task 19.5's None-iff-undefined convention: with no impostor alibis the
+    # survival rate is undefined (None), never the retired division-safe 0.0.
+    assert eval_report.alibi_fabrication.survival_rate is None
     # Two games, neither reaching a meeting: rate is a defined 0.0 (games ran),
     # not None (None is reserved for the zero-games case).
     mr = eval_report.meeting_rate

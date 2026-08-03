@@ -15,6 +15,21 @@ never a re-spelled string.
 Fixtures instantiate ``report_schema`` / ``meetings.schemas`` models directly
 (no tournament run), mirroring ``tests/eval/test_vote_correctness.py``; the
 marker literals come from :mod:`meetings.manager`, never re-spelled.
+
+Task 19.5 extends this file with the ``threshold_inversions`` RE-DOCTRINE and
+the fixture that grounds it (audits/audit-phase-19-triage.md §7 item 5, row
+C6). Task 13.13 de-imperatived the §4.6 vote gate — ``vote_ballot.j2`` renders
+the voter's max suspicion and the 0.60 reference threshold as ONE non-directive
+evidence line, and only the deterministic tally floor constrains the outcome —
+so a crew voter who declines over a met reference line is exercising
+**sanctioned discretion**, not disobeying a gate. The bucket is a conservatism
+gauge whose nonzero value is INTENDED on post-13.13 recordings; the pre-13.13
+"expect ~0, a nonzero count is a gate-render/obedience bug" reading is retired.
+The tests below therefore call an unmarked met-threshold SKIP a *discretionary
+decline* rather than a bug, with the counts unchanged: what they still pin is
+that the divert is MARKER-KEYED, so a by-design rewrite never lands in the
+remainder. :func:`~eval.meeting_quality.recount_threshold_inversions` is the
+by-cause table behind the re-doctrine, pinned here over the committed bytes.
 """
 
 from __future__ import annotations
@@ -28,8 +43,10 @@ from pydantic import ValidationError
 from engine.entities import Role
 from eval.meeting_quality import (
     ConversionReport,
+    ThresholdInversionRecount,
     TournamentEvalReport,
     compute_conversion_report,
+    recount_threshold_inversions,
 )
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -181,10 +198,12 @@ def _one_meeting_report(meeting: MeetingReport) -> TournamentReport:
 def test_crew_coerced_skip_diverts_and_is_never_an_inversion() -> None:
     """A crew voter's marker-anchored SKIP is coerced, not a threshold inversion.
 
-    The CONTROL is the same ballot WITHOUT the marker: a crew voter shown a
-    met threshold who SKIPs with no by-design excuse is a genuine inversion.
-    The only difference is the marker, so the pin proves the divert is
-    marker-keyed (mirroring the defaulted-class control style).
+    The CONTROL is the same ballot WITHOUT the marker: a crew voter shown a met
+    reference line who SKIPs on their own lands in the discretionary-decline
+    remainder (post-13.13 the §4.6 line is advisory, so that is sanctioned
+    discretion, not a bug). The only difference is the marker, so the pin proves
+    the divert is marker-keyed (mirroring the defaulted-class control style) —
+    a by-design rewrite must never be filed as a voter's own decline.
     """
 
     coerced = _meeting(
@@ -212,7 +231,8 @@ def test_crew_coerced_skip_diverts_and_is_never_an_inversion() -> None:
     assert result.correct_skip_ballots == 0
     assert result.unclassified_skip_ballots == 0
 
-    # CONTROL: identical ballot without the marker -> genuine inversion.
+    # CONTROL: identical ballot without the marker -> the voter's own
+    # discretionary decline, so it stays in the threshold_inversions remainder.
     control = _meeting(
         outcome="SKIPPED",
         ejected=None,
@@ -343,9 +363,9 @@ def test_coerced_skip_without_vote_prompt_still_diverts() -> None:
 def test_marker_inside_prose_does_not_divert() -> None:
     """The divert is anchored: a marker not at position 0 classifies normally.
 
-    A crew voter shown a met threshold whose rationale merely mentions the
-    marker mid-prose (not as the outermost prefix) is a genuine inversion, not
-    a coercion.
+    A crew voter shown a met reference line whose rationale merely mentions the
+    marker mid-prose (not as the outermost prefix) was never coerced, so the
+    ballot stays their own discretionary decline in the remainder.
     """
 
     meeting = _meeting(
@@ -375,7 +395,8 @@ def test_unquoted_payload_does_not_divert() -> None:
 
     The production marker interpolates ``{target!r}`` -- always a quoted repr
     -- so an unquoted payload is a different string that the repr-aware pattern
-    must reject. Built from the imported literal's head/tail, never re-spelled.
+    must reject, leaving the ballot as the voter's own discretionary decline.
+    Built from the imported literal's head/tail, never re-spelled.
     """
 
     head = UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0]
@@ -404,7 +425,8 @@ def test_double_quoted_repr_target_diverts() -> None:
 
     ``repr("p'6")`` is ``"p'6"`` (double-quoted because the value holds a
     single quote); the repr-aware alternation matches both quote forms, so the
-    coerced ballot still diverts.
+    coerced ballot still diverts and never pollutes the discretionary-decline
+    remainder.
     """
 
     meeting = _meeting(
@@ -604,3 +626,76 @@ def test_extended_invariant_holds_over_every_committed_meeting(
             total_coerced += per_meeting.citation_coerced_skip_ballots
 
     assert total_coerced == expected_coerced
+
+
+# ---------------------------------------------------------------------------
+# The Task-19.5 by-cause recount (the fixture behind the re-doctrine)
+# ---------------------------------------------------------------------------
+
+# The recount tables over the two committed sample sets, measured from the
+# committed bytes. The ml_corpus tables are recorded in the PR rather than
+# pinned here (this file's committed-bytes pins are the samples sets).
+_EXPECTED_RECOUNTS: Mapping[str, ThresholdInversionRecount] = {
+    "9p2i": ThresholdInversionRecount(
+        threshold_inversions=87,
+        marker_free=87,
+        rendered_at_threshold=36,
+        rendered_below_0_70=81,
+        rendered_0_70_to_0_80=5,
+        rendered_at_or_above_0_80=1,
+        in_skipped_meetings=78,
+        in_crew_ejected_meetings=8,
+        in_impostor_ejected_meetings=1,
+    ),
+    "4p1i": ThresholdInversionRecount(
+        threshold_inversions=1,
+        marker_free=1,
+        rendered_at_threshold=0,
+        rendered_below_0_70=1,
+        rendered_0_70_to_0_80=0,
+        rendered_at_or_above_0_80=0,
+        in_skipped_meetings=1,
+        in_crew_ejected_meetings=0,
+        in_impostor_ejected_meetings=0,
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (_COMMITTED_9P2I_REPORT, _EXPECTED_RECOUNTS["9p2i"]),
+        (_COMMITTED_4P1I_REPORT, _EXPECTED_RECOUNTS["4p1i"]),
+    ],
+    ids=["9p2i", "4p1i"],
+)
+def test_committed_recount_pins_the_by_cause_table(
+    path: Path, expected: ThresholdInversionRecount
+) -> None:
+    """The Task-19.5 by-cause table over committed bytes — the pinned fixture
+    behind the ``threshold_inversions`` re-doctrine.
+
+    The triage proposed "unrecognized citation-gated SKIPs" as the mechanism
+    behind the committed 87; the recount refutes it over the bytes.
+    ``marker_free == threshold_inversions`` on both sets is the load-bearing
+    cell: it pins that NO by-design rewrite (invalid target, teammate coercion,
+    parse default, ballot redirect, citation gate) leaks into the remainder, so
+    what is left is genuinely the voter's own decision. The rendered bands then
+    say what kind of decision it was — on samples/9p2i the mass sits AT the
+    advisory line (81 of 87 below 0.70, 36 of those exactly at the 0.60
+    reference) rather than deep above it, which is a conservatism reading, not
+    a disobedience reading. The two ml_corpus tables are recorded in the PR.
+
+    Equality against a whole :class:`ThresholdInversionRecount` literal (not
+    field-by-field asserts) makes a new cell a loud failure rather than a
+    silently unpinned one.
+    """
+
+    report = TournamentEvalReport.model_validate_json(path.read_text(encoding="utf-8"))
+
+    recount = recount_threshold_inversions(report.report.games)
+
+    assert recount == expected
+    # Cross-pin: the recount folds the SAME per-ballot classification the
+    # published census folds, so its total cannot drift from the stored block.
+    assert recount.threshold_inversions == report.conversion.threshold_inversions

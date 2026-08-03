@@ -210,6 +210,23 @@ function baseReport(): TournamentEvalReport {
         conversion_rate: 0.45,
         note: "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 was built on detector artifacts, so parity with those numbers would be railroading regained, not detection recovered.",
       },
+      supplied_channel_conversion: {
+        supplied: 14,
+        converted: 9,
+        conversion_rate: 9 / 14,
+        witnessed_vent_supplied: 9,
+        witnessed_vent_converted: 6,
+        sighting_contradiction_supplied: 3,
+        sighting_contradiction_converted: 2,
+        whereabouts_lie_supplied: 4,
+        whereabouts_lie_converted: 1,
+        // The legacy_alibi_* cells mirror the genuine_class fixture above.
+        legacy_alibi_supplied: 20,
+        legacy_alibi_converted: 9,
+        legacy_alibi_conversion_rate: 0.45,
+        note: "supplied_channel_conversion is the Task-17.6 successor of genuine_class_conversion and the ONLY canary-eligible genuine-class cell from baseline 5 onward … it reads the RECORDED contradiction rows — witnessed vents, sighting contradictions, and whereabouts-lies — and measures the same question as the legacy cell: supplied hard evidence against a true impostor → that impostor's ejection. …",
+        legacy_note: "legacy_alibi_* is the Phase-10 alibi-anchored genuine-class cell … STARVED on this substrate and NEVER a canary. …",
+      },
       lost_opening_accusations: 3,
       cap_defaulted_turns: 3,
       accused_impostor_events: 101,
@@ -253,8 +270,9 @@ export const Loaded: Story = {
   },
 };
 
-// The same surface with the warn caveats lit: small-n vote correctness, both
-// calibration curves low-power, and a non-zero threshold inversion (gate bug).
+// The same surface with the warn caveats lit: small-n vote correctness and both
+// calibration curves low-power, plus a non-zero threshold inversion (sanctioned
+// crew discretion since 13.13 — a note, not a warn).
 export const UnderPowered: Story = {
   args: {
     report: ((): TournamentEvalReport => {

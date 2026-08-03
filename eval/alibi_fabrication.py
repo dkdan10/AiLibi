@@ -87,11 +87,22 @@ is a distinct alibi and counts again.
 
 Rate convention
 ---------------
-``survival_rate = survived / total_impostor_alibis``, or ``0.0`` when there are
-no impostor alibis (a vacuous, division-safe value chosen over ``None`` so
-downstream rendering (Task 5.7) and the regression suite (Task 5.8) need not
-special-case it). Callers should gate interpretation on
-``total_impostor_alibis > 0``.
+``survival_rate = survived / total_impostor_alibis``, or ``None`` when there are
+no impostor alibis: the rate is **undefined, not 0.0** — the package's
+None-iff-undefined convention, shared with
+:attr:`eval.vote_correctness.VoteCorrectnessReport.vote_correctness_rate`,
+:attr:`eval.meeting_quality.MeetingRateReport.meeting_rate`, and every rate on
+:class:`eval.meeting_quality.ConversionReport`.
+
+The pre-19.5 ``0.0`` is RETIRED (Task 19.5; audits/audit-phase-19-triage.md §7
+item 6). It was chosen as a vacuous, division-safe value so Task 5.7 rendering
+and the Task 5.8 regression suite need not special-case it, and that trade
+inverted: a ``0.0`` here reads as "impostors filed alibis and NONE survived" —
+the strongest possible detector result — when it actually means no impostor
+filed an alibi at all. The dashboard's null-safe formatter renders ``None`` as
+``n/a`` with no special case (so the papering-over is deleted, not moved), and
+:class:`eval.prompt_regression.PromptRegressionMetrics` widens its
+``alibi_survival_rate`` with it.
 
 Partial-replay robustness: meetings with no alibis, no contradictions, or no
 impostor participants contribute zero without raising, and a game with no
@@ -103,7 +114,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from engine.entities import Role
 from eval.report_schema import MeetingReport, TournamentReport
@@ -139,15 +150,47 @@ class AlibiFabricationReport(_FrozenModel):
       tournament, deduped per meeting by their value tuple.
     * ``survived`` -- how many of those were *not* caught by any ``alibi_*``
       contradiction under the subject-membership rule.
-    * ``survival_rate`` -- ``survived / total_impostor_alibis``, or ``0.0`` when
-      there are no impostor alibis. This is the fabrication-survival rate: high
-      means impostors get away with fabricated cover, low means the §5.4
-      detector catches it.
+    * ``survival_rate`` -- ``survived / total_impostor_alibis``, or ``None``
+      when there are no impostor alibis -- the rate is undefined, not 0.0 (the
+      package's None-iff-undefined convention; the pre-19.5 division-safe 0.0
+      is retired). This is the fabrication-survival rate: high means impostors
+      get away with fabricated cover, low means the §5.4 detector catches it.
+
+    The post-init validator enforces the count and rate invariants fail-loud so
+    an inconsistent result can never be constructed, mirroring
+    :class:`eval.meeting_quality.ConversionReport`'s None-iff-undefined
+    enforcement (AGENTS.md "no silent fallbacks").
     """
 
     total_impostor_alibis: int
     survived: int
-    survival_rate: float
+    survival_rate: float | None
+
+    @model_validator(mode="after")
+    def _validate_rate(self) -> AlibiFabricationReport:
+        if self.total_impostor_alibis < 0 or self.survived < 0:
+            raise ValueError("alibi-fabrication counts must be non-negative")
+        if self.survived > self.total_impostor_alibis:
+            raise ValueError(
+                "survived cannot exceed total_impostor_alibis: "
+                f"{self.survived} > {self.total_impostor_alibis}"
+            )
+        if self.total_impostor_alibis == 0:
+            if self.survival_rate is not None:
+                raise ValueError(
+                    "survival_rate must be None when there are no impostor "
+                    "alibis: the rate is undefined, not 0.0"
+                )
+        else:
+            if self.survival_rate is None:
+                raise ValueError(
+                    "survival_rate must be set when total_impostor_alibis > 0"
+                )
+            if not 0.0 <= self.survival_rate <= 1.0:
+                raise ValueError(
+                    f"survival_rate must be in [0.0, 1.0]: {self.survival_rate}"
+                )
+        return self
 
 
 def compute_alibi_fabrication_rate(report: TournamentReport) -> AlibiFabricationReport:
@@ -173,7 +216,7 @@ def compute_alibi_fabrication_rate(report: TournamentReport) -> AlibiFabrication
                 if subject not in caught_subjects:
                     survived += 1
 
-    survival_rate = survived / total if total > 0 else 0.0
+    survival_rate = survived / total if total > 0 else None
     return AlibiFabricationReport(
         total_impostor_alibis=total,
         survived=survived,
