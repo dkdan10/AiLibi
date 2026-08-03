@@ -33,6 +33,7 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/vitest.config.ts (new)
 - frontend/eslint.config.js (new)
 - frontend/src/lib/playback.test.ts (new)
+- frontend/src/tokens.test.ts (new — the durable ramp-integrity check 19.6 defers here)
 - frontend/src/store/replayStore.ts
 - frontend/src/store/replayStore.test.ts (new)
 - frontend/e2e/ (new)

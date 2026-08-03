@@ -42,7 +42,7 @@ pacing/structure heuristic — not a human rating").
 **Definition of done:**
 - [ ] The API default set is 9p2i (pinned in tests/api/), the client's omitted-set contract comment states it, and the picker's 4p1i copy quotes recomputed meeting-count facts with the fixture relabel.
 - [ ] The rubric re-score is committed, the staleness banner is clear at HEAD, and the regeneration command is recorded in the PR.
-- [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and every rendered rubric scalar carries the narrow label.
+- [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and the rubric scalar carries the narrow label on THE SURFACES THIS TASK OWNS (the picker); the other two rendering surfaces are labeled by their owning tasks — HighlightCard's score badge by 19.10 and the dashboard's rubric histogram by 19.5 (each carries a matching DoD line).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

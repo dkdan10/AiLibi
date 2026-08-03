@@ -170,6 +170,11 @@ owner-chartered phase:
 - Dead frontend api-client methods (singleton-31 inventory): they collide with
   19.13/19.24's `client.ts` work this phase, so their deletion is deferred to this
   backlog rather than folded in.
+- The three remaining cross-test library imports outside 19.27's narrowed scope
+  (`tests/agents/test_absence_prior.py:958` → test_prompt_byte_golden;
+  `tests/llm/test_real_provider.py:56` → test_client;
+  `tests/observation/test_leak_property.py:68` → test_tick_properties) — the same
+  helper-extraction treatment, next structure pass.
 - Replay-walk migration of the API (`api/replay_loader.py`) and training (`training/env.py`)
   reconstruction paths onto the 19.25 walker.
 - Typed per-ballot suspicion/ballot telemetry (replaces the frozen rendered-prose scrapes if
@@ -227,6 +232,20 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The fifth Codex review round (9 findings)** was verified claim-by-claim — all nine
+  reproduced — and absorbed: 19.27's no-cross-test-imports DoD narrows to the four
+  named `test_manager` importers (the other three repo cross-test imports are
+  enumerated and backlogged below); `training/rewards.py`'s first-meeting docstring
+  joins 19.19; 19.6 regenerates the token CSS output (`index.css` via
+  `gen-tokens-css.ts` — tokens.ts alone resolves nothing) with the durable ramp vitest
+  deferred to 19.12; 19.10's stale ReplayPicker exclusion line is removed (a
+  contradiction introduced by the round-4 fix itself); BOTH generator artifacts
+  (`api.ts` + `api.fidelity.ts`) regenerate in 19.10/19.11/19.24; the rubric-label DoD
+  is split across the three owning tasks (19.9 picker, 19.10 HighlightCard, 19.5
+  dashboard histogram); 19.24 depends on 19.12 and ships an executable vitest
+  rejection test; the typed dashboard story fixture joins 19.5/19.14; and 19.3 gains
+  pinned distribution-quality assertions so a portable-but-degenerate sampler cannot
+  silently replace the Gaussian.
 - **The fourth Codex review round (8 findings)** was verified claim-by-claim — all
   eight reproduced (one, the ballot-chip disclosure, verifies as data flow rather than
   at the cited literal: `teammate_coerced` reaches `BallotCard` inside

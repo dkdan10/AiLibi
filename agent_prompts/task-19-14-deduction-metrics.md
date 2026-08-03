@@ -38,6 +38,7 @@ the evidence the 19.28 close puts in front of the owner.
 - api/schemas.py; (the new report cells' DTO surface — additive)
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
+- frontend/src/stories/TournamentDashboard.stories.tsx; (the typed `baseReport()` fixture gains the deduction block)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated)
 - replays/ml_corpus/4p1i/tournament-eval-report.json; (regenerated)

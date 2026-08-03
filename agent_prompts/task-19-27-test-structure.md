@@ -52,7 +52,7 @@ Quote the default-gate runtime before/after in the PR.
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
 - [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
-- [ ] No test module imports another test module as a library (grep-pinned); the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
+- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER three repo cross-test imports (test_absence_prior → test_prompt_byte_golden:958, test_real_provider → test_client:56, test_leak_property → test_tick_properties:68) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -75,9 +75,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import eval.replay_walk"`
 - `uv run python -c "import eval.leak_scan"`
+- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
-- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

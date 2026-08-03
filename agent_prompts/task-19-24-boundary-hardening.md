@@ -12,7 +12,7 @@ Implement Task 19.24 — Boundary hardening: the leak-scan library, `moved_playe
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-boundary-hardening`
-**Depends on:** 19.2, 19.11, 19.13, 19.14, 19.19
+**Depends on:** 19.2, 19.11, 19.12, 19.13, 19.14, 19.19 (the 19.12 edge: the client-side rejection test needs the vitest baseline to exist)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
 **Complexity:** Integration
 
@@ -44,7 +44,9 @@ constant, so 19.13's artifact keeps working).
 - tests/api/
 - scripts/gen_frontend_types.py; (the version-constant emission)
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/api/client.ts
+- frontend/src/api/client.test.ts (new — the executable mismatch-rejection test on 19.12's vitest baseline)
 
 **Files NOT in scope:**
 - observation/service.py (covered, not changed)
@@ -55,7 +57,7 @@ constant, so 19.13's artifact keeps working).
 - [ ] Verify-then-fix for the DTO-cast claim: re-confirm the unvalidated cast at HEAD before adding rejection (re-verified by the planning session; re-run in-session).
 - [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); NEITHER production consumer (the harness at :107, the crew scorer at :113) transitively imports pytest after the swap — proven with the `--no-dev --exact` probe from 19.7's idiom; every pre-existing planted-leak self-test still fails when its leak is planted.
 - [ ] The `moved_players` property sweep runs in the leak suite with its planted-leak proof; the leak-suite gap named by the audits is closed.
-- [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side and the demo bundle still passes its 19.13 test.
+- [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side — proven by an executable vitest case (`client.test.ts`), not a cast replacement — and the demo bundle still passes its 19.13 test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -92,9 +94,9 @@ generated constant keeps client and server in lockstep through the same codegen.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
-- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

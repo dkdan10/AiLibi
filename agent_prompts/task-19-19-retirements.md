@@ -52,6 +52,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_env.py; (the first_meeting constructors)
 - tests/training/test_env_fast_path.py; (same)
 - tests/training/test_rewards.py; (the :115 boundary constructor)
+- training/rewards.py; (docstring only — :278-281 still narrates a live "first-meeting opt-in episode" after the boundary retires; ordered behind 19.4's edit of the same file)
 - llm/README.md; (EVERY PromptCache reference leaves with the module — the :20-21 inventory line AND the whole "Cache and budget composition" worked example at :126-147)
 - training/coevo/driver.py; (the realpath reference rewrites only — :207, :281-283, :949)
 - training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)

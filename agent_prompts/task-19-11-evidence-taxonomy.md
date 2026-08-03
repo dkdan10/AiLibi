@@ -35,6 +35,7 @@ naming routes to the post-19 decision.
 - api/schemas.py
 - api/replay_loader.py
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/components/MeetingView.tsx
 - frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
 - tests/api/

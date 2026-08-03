@@ -37,16 +37,18 @@ resolving the deliberate mix the loader documents.
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — the generator emits BOTH artifacts and the drift test checks both)
 - tests/api/
 
 **Files NOT in scope:**
 - frontend/src/components/MeetingView.tsx (19.11's file)
-- frontend/src/components/ReplayPicker.tsx + GuidedTour.tsx (19.9's files)
+- frontend/src/components/GuidedTour.tsx (19.9's file — ReplayPicker.tsx is IN scope above, for the entry-card winner gating only)
 - replays/ (frozen)
 
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
+- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

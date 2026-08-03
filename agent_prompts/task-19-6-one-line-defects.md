@@ -31,6 +31,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 - uv.lock; (regenerated for the new declaration)
 - llm/provider.py
 - frontend/src/tokens.ts
+- frontend/src/index.css; (regenerated — tokens.ts is only the SOURCE; `frontend/scripts/gen-tokens-css.ts` writes the `@theme` variables here, and `--color-ink-600` does not exist in the generated block today)
 - agents/strategic/prompts/loader.py
 - tests/llm/test_provider.py
 - tests/llm/test_client.py; (the existing `test_unknown_model_uses_fallback_pricing` at :481-503 asserts the behavior this task removes — it flips to asserting the raise)
@@ -44,7 +45,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 **Definition of done:**
 - [ ] Unknown-model pricing raises with the model name (test-pinned); known models unchanged.
 - [ ] `httpx` is a declared dependency and the lock regenerates cleanly.
-- [ ] `text-ink-600` resolves to a real token (or the two call sites use a real step) with a ramp-integrity test.
+- [ ] `text-ink-600` resolves to a real token: the ramp entry lands in tokens.ts AND the regenerated `index.css` carries `--color-ink-600` (grep-proven in the PR; `tsc:check` + build green). The durable ramp-integrity vitest rides 19.12's baseline — this task has no frontend test surface yet and says so rather than promising one.
 - [ ] The loader emits the fallback notice exactly when the env override is absent (test-pinned) and prompt bytes are unchanged (byte-golden green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

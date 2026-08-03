@@ -116,7 +116,8 @@ Wave 3 (ML close + consolidation):
   (19.13, 19.19) -> 19.22 (artifact classes + coevo prune)
   (19.20, 19.22) -> 19.21 (raw slate — OWNER)
   (19.19, 19.20, 19.21, 19.22) -> 19.23 (verify-ml-evidence — after the raw-slate ruling)
-  (19.2, 19.11, 19.13, 19.14, 19.19) -> 19.24 (boundary hardening)
+  (19.2, 19.11, 19.12, 19.13, 19.14, 19.19) -> 19.24 (boundary hardening — the 19.12
+   edge carries the client rejection test onto the vitest baseline)
   19.24 -> 19.25 (the replay walker)
   19.15 -> 19.26 (vote-tally parity)
   (19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25) -> 19.27 (test-suite structure)
@@ -138,8 +139,11 @@ views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 
 **Collision discipline.** `README.md` 19.1 → 19.16 → 19.13 → 19.22 (dep-ordered);
 `api/replay_loader.py` 19.9 → 19.10 → 19.11; `api/schemas.py` 19.5 → 19.10 → 19.11 →
-19.14; `frontend/src/types/api.ts` 19.5 → 19.10 → 19.11 → 19.14 → 19.24 (the report
-cells and DTO-version constant ride the same generated surface);
+19.14; `frontend/src/types/api.ts` + `api.fidelity.ts` 19.5 → 19.10 → 19.11 → 19.14 →
+19.24 (the report cells and DTO-version constant ride the same generated surfaces —
+BOTH generator artifacts regenerate together);
+`frontend/src/stories/TournamentDashboard.stories.tsx` 19.5 → 19.14 (the typed
+fixture);
 `frontend/src/App.tsx` 19.10 → 19.17;
 `frontend/src/api/client.ts` 19.9 → 19.13 → 19.24; `frontend/e2e/` 19.12 → 19.17;
 `frontend/src/components/ReplayPicker.tsx` 19.9 → 19.10 → 19.12 (copy, then the
@@ -354,6 +358,7 @@ shipped artifact).
 
 **Definition of done:**
 - [ ] Verify-then-fix recorded: the platform-sensitive call(s) identified with the reasoning in the module docstring, and the old promise text quoted in the PR.
+- [ ] The replacement sampler is provably GAUSSIAN, not merely deterministic: pinned distribution-quality assertions over the fixed stream (symmetry, mean, variance, and a sigma-scaled tail check at minimum) guard against a portable-but-degenerate sampler silently replacing the documented isotropic mutation distribution.
 - [ ] Primary path: the sampler's algorithm is documented (name + why each operation is portable), a double-run on this host is digest-identical, and the new golden is pinned — but the CROSS-PLATFORM claim is not advertised until the digest is confirmed on the divergent platform: an owner-assisted Darwin-arm64 run (minutes — the recorded failure host) matches the Linux digest, recorded in the test's comment. Until that comparison exists the in-code claim uses the narrowed wording even on the primary path (designed-portable, cross-platform digest pending). Fallback path: the claim text states exactly what is guaranteed (same-runtime repeatability) and the test carries an explicit platform pin/guard with the Darwin divergence cited.
 - [ ] The in-code claim and README's reproducibility-scopes text (19.1) agree — coordinate wording, not files.
 - [ ] `uv run mypy .` passes.
@@ -446,6 +451,7 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx
+- frontend/src/stories/TournamentDashboard.stories.tsx; (its `baseReport()` constructs the typed report explicitly — new required fields must land in the fixture or tsc fails)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated derived view)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated derived view)
 - replays/ml_corpus/4p1i/tournament-eval-report.json; (regenerated derived view)
@@ -464,7 +470,7 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 **Definition of done:**
 - [ ] Verify-then-fix for the one previously-unverified element: confirm the 0.0-vs-None behavior at `eval/alibi_fabrication.py:88-94` before changing it (it is re-verified at HEAD; re-run the check in-session and quote it).
 - [ ] The recount of the committed 87 inversions is recorded (a by-cause table in the PR + a pinned fixture over committed bytes); the partition's docstring and the dashboard badge state the post-13.13 doctrine consistent with the recount; any bucket split ships only if the recount supports it; the existing marker consumption (`meeting_quality.py:179` ← `meetings.manager`) is pinned as already-wired, not re-derived.
-- [ ] `supplied_channel_conversion` appears in the regenerated reports and in `measure_baseline` output; the dashboard's gate tile shows it; the starved cell is labeled historical; the correctness tile is renamed/explained; the alibi tile renders n/a from a true `None`.
+- [ ] `supplied_channel_conversion` appears in the regenerated reports and in `measure_baseline` output; the dashboard's gate tile shows it; the starved cell is labeled historical; the correctness tile is renamed/explained; the alibi tile renders n/a from a true `None`; the dashboard's rubric histogram section (:452-541) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
 - [ ] Every regenerated view is byte-reproducible from committed replays with the exact command recorded in the PR; `bash scripts/verify_samples.sh` stays green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -506,6 +512,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 - uv.lock; (regenerated for the new declaration)
 - llm/provider.py
 - frontend/src/tokens.ts
+- frontend/src/index.css; (regenerated — tokens.ts is only the SOURCE; `frontend/scripts/gen-tokens-css.ts` writes the `@theme` variables here, and `--color-ink-600` does not exist in the generated block today)
 - agents/strategic/prompts/loader.py
 - tests/llm/test_provider.py
 - tests/llm/test_client.py; (the existing `test_unknown_model_uses_fallback_pricing` at :481-503 asserts the behavior this task removes — it flips to asserting the raise)
@@ -519,7 +526,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 **Definition of done:**
 - [ ] Unknown-model pricing raises with the model name (test-pinned); known models unchanged.
 - [ ] `httpx` is a declared dependency and the lock regenerates cleanly.
-- [ ] `text-ink-600` resolves to a real token (or the two call sites use a real step) with a ramp-integrity test.
+- [ ] `text-ink-600` resolves to a real token: the ramp entry lands in tokens.ts AND the regenerated `index.css` carries `--color-ink-600` (grep-proven in the PR; `tsc:check` + build green). The durable ramp-integrity vitest rides 19.12's baseline — this task has no frontend test surface yet and says so rather than promising one.
 - [ ] The loader emits the fallback notice exactly when the env override is absent (test-pinned) and prompt bytes are unchanged (byte-golden green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -674,7 +681,7 @@ pacing/structure heuristic — not a human rating").
 **Definition of done:**
 - [ ] The API default set is 9p2i (pinned in tests/api/), the client's omitted-set contract comment states it, and the picker's 4p1i copy quotes recomputed meeting-count facts with the fixture relabel.
 - [ ] The rubric re-score is committed, the staleness banner is clear at HEAD, and the regeneration command is recorded in the PR.
-- [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and every rendered rubric scalar carries the narrow label.
+- [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and the rubric scalar carries the narrow label on THE SURFACES THIS TASK OWNS (the picker); the other two rendering surfaces are labeled by their owning tasks — HighlightCard's score badge by 19.10 and the dashboard's rubric histogram by 19.5 (each carries a matching DoD line).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -719,16 +726,18 @@ resolving the deliberate mix the loader documents.
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — the generator emits BOTH artifacts and the drift test checks both)
 - tests/api/
 
 **Files NOT in scope:**
 - frontend/src/components/MeetingView.tsx (19.11's file)
-- frontend/src/components/ReplayPicker.tsx + GuidedTour.tsx (19.9's files)
+- frontend/src/components/GuidedTour.tsx (19.9's file — ReplayPicker.tsx is IN scope above, for the entry-card winner gating only)
 - replays/ (frozen)
 
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
+- [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -784,6 +793,7 @@ naming routes to the post-19 decision.
 - api/schemas.py
 - api/replay_loader.py
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/components/MeetingView.tsx
 - frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
 - tests/api/
@@ -850,6 +860,7 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/vitest.config.ts (new)
 - frontend/eslint.config.js (new)
 - frontend/src/lib/playback.test.ts (new)
+- frontend/src/tokens.test.ts (new — the durable ramp-integrity check 19.6 defers here)
 - frontend/src/store/replayStore.ts
 - frontend/src/store/replayStore.test.ts (new)
 - frontend/e2e/ (new)
@@ -973,6 +984,7 @@ the evidence the 19.28 close puts in front of the owner.
 - api/schemas.py; (the new report cells' DTO surface — additive)
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
+- frontend/src/stories/TournamentDashboard.stories.tsx; (the typed `baseReport()` fixture gains the deduction block)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated)
 - replays/ml_corpus/4p1i/tournament-eval-report.json; (regenerated)
@@ -1259,6 +1271,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_env.py; (the first_meeting constructors)
 - tests/training/test_env_fast_path.py; (same)
 - tests/training/test_rewards.py; (the :115 boundary constructor)
+- training/rewards.py; (docstring only — :278-281 still narrates a live "first-meeting opt-in episode" after the boundary retires; ordered behind 19.4's edit of the same file)
 - llm/README.md; (EVERY PromptCache reference leaves with the module — the :20-21 inventory line AND the whole "Cache and budget composition" worked example at :126-147)
 - training/coevo/driver.py; (the realpath reference rewrites only — :207, :281-283, :949)
 - training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)
@@ -1515,7 +1528,7 @@ samples if the full walk exceeds that budget, with the sampling disclosed in out
 
 ### Task 19.24 — Boundary hardening: the leak-scan library, `moved_players`, `intent.actor`, the API factory, DTO versions
 **Branch:** `phase-19-boundary-hardening`
-**Depends on:** 19.2, 19.11, 19.13, 19.14, 19.19
+**Depends on:** 19.2, 19.11, 19.12, 19.13, 19.14, 19.19 (the 19.12 edge: the client-side rejection test needs the vitest baseline to exist)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
 **Complexity:** Integration
 
@@ -1547,7 +1560,9 @@ constant, so 19.13's artifact keeps working).
 - tests/api/
 - scripts/gen_frontend_types.py; (the version-constant emission)
 - frontend/src/types/api.ts; (regenerated)
+- frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/api/client.ts
+- frontend/src/api/client.test.ts (new — the executable mismatch-rejection test on 19.12's vitest baseline)
 
 **Files NOT in scope:**
 - observation/service.py (covered, not changed)
@@ -1558,7 +1573,7 @@ constant, so 19.13's artifact keeps working).
 - [ ] Verify-then-fix for the DTO-cast claim: re-confirm the unvalidated cast at HEAD before adding rejection (re-verified by the planning session; re-run in-session).
 - [ ] `import eval.leak_scan` succeeds without pytest installed in the environment probe (test-pinned); NEITHER production consumer (the harness at :107, the crew scorer at :113) transitively imports pytest after the swap — proven with the `--no-dev --exact` probe from 19.7's idiom; every pre-existing planted-leak self-test still fails when its leak is planted.
 - [ ] The `moved_players` property sweep runs in the leak suite with its planted-leak proof; the leak-suite gap named by the audits is closed.
-- [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side and the demo bundle still passes its 19.13 test.
+- [ ] A forged `intent.actor` fails loud at the boundary (test); the API imports and serves from a foreign CWD (test); a version-mismatched payload is rejected loudly client-side — proven by an executable vitest case (`client.test.ts`), not a cast replacement — and the demo bundle still passes its 19.13 test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1755,7 +1770,7 @@ Quote the default-gate runtime before/after in the PR.
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
 - [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
-- [ ] No test module imports another test module as a library (grep-pinned); the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
+- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER three repo cross-test imports (test_absence_prior → test_prompt_byte_golden:958, test_real_provider → test_client:56, test_leak_property → test_tick_properties:68) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

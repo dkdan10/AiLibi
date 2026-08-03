@@ -45,6 +45,7 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx
+- frontend/src/stories/TournamentDashboard.stories.tsx; (its `baseReport()` constructs the typed report explicitly — new required fields must land in the fixture or tsc fails)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated derived view)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated derived view)
 - replays/ml_corpus/4p1i/tournament-eval-report.json; (regenerated derived view)
@@ -63,7 +64,7 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 **Definition of done:**
 - [ ] Verify-then-fix for the one previously-unverified element: confirm the 0.0-vs-None behavior at `eval/alibi_fabrication.py:88-94` before changing it (it is re-verified at HEAD; re-run the check in-session and quote it).
 - [ ] The recount of the committed 87 inversions is recorded (a by-cause table in the PR + a pinned fixture over committed bytes); the partition's docstring and the dashboard badge state the post-13.13 doctrine consistent with the recount; any bucket split ships only if the recount supports it; the existing marker consumption (`meeting_quality.py:179` ← `meetings.manager`) is pinned as already-wired, not re-derived.
-- [ ] `supplied_channel_conversion` appears in the regenerated reports and in `measure_baseline` output; the dashboard's gate tile shows it; the starved cell is labeled historical; the correctness tile is renamed/explained; the alibi tile renders n/a from a true `None`.
+- [ ] `supplied_channel_conversion` appears in the regenerated reports and in `measure_baseline` output; the dashboard's gate tile shows it; the starved cell is labeled historical; the correctness tile is renamed/explained; the alibi tile renders n/a from a true `None`; the dashboard's rubric histogram section (:452-541) carries the narrow internal-heuristic label (19.9's labeling rule, applied here because this task owns the file).
 - [ ] Every regenerated view is byte-reproducible from committed replays with the exact command recorded in the PR; `bash scripts/verify_samples.sh` stays green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

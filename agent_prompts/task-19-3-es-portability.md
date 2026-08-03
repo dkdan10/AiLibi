@@ -40,6 +40,7 @@ shipped artifact).
 
 **Definition of done:**
 - [ ] Verify-then-fix recorded: the platform-sensitive call(s) identified with the reasoning in the module docstring, and the old promise text quoted in the PR.
+- [ ] The replacement sampler is provably GAUSSIAN, not merely deterministic: pinned distribution-quality assertions over the fixed stream (symmetry, mean, variance, and a sigma-scaled tail check at minimum) guard against a portable-but-degenerate sampler silently replacing the documented isotropic mutation distribution.
 - [ ] Primary path: the sampler's algorithm is documented (name + why each operation is portable), a double-run on this host is digest-identical, and the new golden is pinned — but the CROSS-PLATFORM claim is not advertised until the digest is confirmed on the divergent platform: an owner-assisted Darwin-arm64 run (minutes — the recorded failure host) matches the Linux digest, recorded in the test's comment. Until that comparison exists the in-code claim uses the narrowed wording even on the primary path (designed-portable, cross-platform digest pending). Fallback path: the claim text states exactly what is guaranteed (same-runtime repeatability) and the test carries an explicit platform pin/guard with the Darwin divergence cited.
 - [ ] The in-code claim and README's reproducibility-scopes text (19.1) agree — coordinate wording, not files.
 - [ ] `uv run mypy .` passes.
