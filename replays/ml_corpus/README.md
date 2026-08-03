@@ -214,8 +214,8 @@ husks in train and test only.
    19: seed 16 `p-4`, ticks 8–26), C4 1/200. **Ping-pong pathing** (a minted
    definition, disclosed as such: ≥4 consecutive-tick `move` actions strictly
    alternating between exactly two rooms): **124/2,200 player-games (5.6%),
-   119/124 of them impostors** — 26.4% of impostor player-games vs 0.3% of
-   crew. Longest: 24 alternating moves (C9 seed 1016 `p-4`,
+   119/124 of them impostors** — 119/500 = 23.8% of impostor player-games vs
+   5/1,700 = 0.29% of crew. Longest: 24 alternating moves (C9 seed 1016 `p-4`,
    REACTOR↔ENGINEERING); S9's longest is 14 (seed 10 `p-3`, ending in a kill).
    The two artifacts are mirror images: crew theater is standing still,
    impostor theater is pacing.
@@ -231,11 +231,14 @@ husks in train and test only.
    the impostor. Voting is futile." is the bluntest. Player-visible
    `free_text` carries exactly **one** genuine fourth-wall leak in 3,934 turns
    (C9 seed 1023, an impostor saying "my teammate" aloud). Model-originated
-   *machinery quotation* splits by register. Literal implementation tokens are
-   near-nil: of the audit-suggested tokens (`vent_sighting`,
+   *machinery quotation* splits by register. Literal implementation tokens in
+   model output: **zero**. Of the audit-suggested tokens (`vent_sighting`,
    `alibi_vs_sighting`, `[weak signal`, `roll_call`, …) none appears in any
-   player-visible or rationale text; only `primary_reason` shows up, in
-   5/3,934 ballots. But *natural-language* machinery talk is common in ballot
+   player-visible or rationale text, and the only `primary_reason` occurrences
+   in persisted text (5/3,934 ballots) are guard-injected `[invalid
+   primary_reason… nulled]` prefixes — item 3's vote-guard husk surface, not
+   quotation: the corresponding raw `llm_calls[].response_text` rationales
+   carry zero such tokens. But *natural-language* machinery talk is common in ballot
    rationales: "threshold" in **90/971 = 9.3% (S9)** and **208/2,726 = 7.6%
    (C9)**, "suspicion" in 85/971 and 244/2,726, and a quoted internal decimal
    (`0.NN`) in **39/971 = 4.0%** and **94/2,726 = 3.4%** — S9 seed 38's "my
