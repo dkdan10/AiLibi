@@ -76,7 +76,10 @@ against the corpus README's own no-husk doctrine (a recorded deviation);
 ballots are exact-duplicate template copies; wait streaks of ≥10 ticks appear
 in 53/450 player-games (all crew, worst 36) while ping-pong pathing appears in
 32/450 (31 of 32 impostors); 29/245 impostor ballots name a partner and 8
-state the role outright in the recorded (non-player-visible) rationale;
+state the role outright in the recorded (non-player-visible) rationale, and
+machinery language reaches the same rationales ("threshold" in 90/971
+ballots, "suspicion" in 85/971, a quoted internal decimal in 39/971 —
+literal implementation tokens are near-nil);
 roll-call whereabouts coverage is crew 723/726 = 99.6% vs impostor 120/245 =
 49.0%; and of 177 kills, 6 were crew-witnessed and zero had a non-victim crew
 co-present at the decision frame. Disclosures record capability limitations —

@@ -204,8 +204,9 @@ husks in train and test only.
    Transcript `free_text`, by contrast, is byte-unique: 3,934/3,934 distinct
    across all four sets, zero exact repeats anywhere.
 
-6. **Wait-streak and ping-pong mover theater.** Two scripted-mover artifacts,
-   perfectly role-split. **Wait streaks** (longest run of consecutive-tick
+6. **Wait-streak and ping-pong mover theater.** Two scripted-mover artifacts
+   with mirror-image role signatures — one absolute, one strong but not
+   perfect. **Wait streaks** (longest run of consecutive-tick
    `wait` actions per player-game; meetings do not break a run): **170/2,200
    player-games (7.7%) idle ≥10 consecutive ticks — 170/170 of them crew, 0
    impostor**. Per set: S9 53/450 (worst 36 ticks: seed 32 `p-9`, ticks 20–55,

@@ -77,7 +77,10 @@ skip pressure is the highest of the four sets — 90/117 = 76.9% of ballots are
 SKIP, with 11/90 exact-duplicate template copies; the worst wait streak is 19
 consecutive ticks (seed 16, `p-4`, ticks 8–26) and 6/200 player-games show
 ping-pong pathing (all the impostor); partner-naming is structurally absent
-(single impostor) and 0 ballots state the role; roll-call whereabouts coverage
+(single impostor) and 0 ballots state the role, though machinery language
+reaches ballot rationales here too ("threshold" in 13/117 ballots,
+"suspicion" in 16/117, a quoted internal decimal in 4/117); roll-call
+whereabouts coverage
 is crew 78/78 = 100% vs impostor 8/39 = 20.5%; and of 61 kills, 1 was
 crew-witnessed and zero had a non-victim crew co-present at the decision
 frame. Disclosures record capability limitations — zero gameplay tuning; the
