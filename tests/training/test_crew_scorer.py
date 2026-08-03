@@ -49,7 +49,7 @@ from agents.tactical.crewmate_policy import (
     CrewmatePolicy,
 )
 from engine.entities import Role
-from engine.world import load_canonical_map
+from engine.world import Map, load_canonical_map
 from observation.action_intent import (
     EmergencyMeetingIntent,
     ReportBodyIntent,
@@ -90,6 +90,7 @@ from training.conviction.model import (
     write_conviction_model_artifact,
 )
 from training.crew.options import (
+    CREW_OPTION_FEATURE_NAMES,
     CREW_OPTION_KINDS,
     crew_genome_length,
 )
@@ -138,6 +139,51 @@ def _weights_favoring(kind: str, *, weight: float = 100.0) -> tuple[float, ...]:
     weights = [0.0] * crew_genome_length()
     weights[CREW_OPTION_KINDS.index(kind)] = weight
     return tuple(weights)
+
+
+def _fixed_row_candidate(game_map: Map) -> TrainedCandidate:
+    """A candidate on a FIXED genome, for the row pin that needs lively games.
+
+    The eval twin's leak-scan factory mode asserts COVERAGE — the games it scans
+    must reach at least one body (``eval/leak_test.py``) — so a candidate whose
+    games never terminate leaves the scan with nothing to cover. A freshly TRAINED
+    candidate cannot carry that reliably: ``crew_es_budget("ci")`` is
+    ``generations=1, population=2``, so its champion is essentially ONE draw from
+    the ES stream, and most draws are the marathon survive-and-grind shape
+    :class:`~training.crew.scorer.CrewEsConfig` documents — training scores those
+    the truncation sentinel and their games run to the tick cap with no kills, on
+    every leak seed. That made this pin ride the draw: 6 of 10 ES seeds were
+    already marathon BEFORE Task 19.3, and 19.3's portable sampler merely re-rolled
+    which ones are not.
+
+    A ``continue_task``-favouring genome plays the crew close to the scripted
+    task-rush, so its games terminate and reach bodies BY CONSTRUCTION, under any
+    sampler (measured: 505 packets / 116 bodies over the two leak seeds, against
+    9000 packets / 0 bodies for a marathon draw) — and the scan gets faster, not
+    just deterministic. The committed CI budget's training path keeps its own pin
+    in :func:`test_crew_es_entrant_ci_budget_is_deterministic`; what THIS test
+    exists for is the eval twin's row, whose shape is the same either way.
+    """
+
+    weights = _weights_favoring("continue_task")
+    budget = crew_es_budget("ci")
+    policy = CrewOptionScorer(weights=weights, game_map=game_map)
+    return TrainedCandidate(
+        entrant=CREW_ENTRANT_NAME,
+        policy=policy,
+        weights=weights,
+        config={
+            "entrant": CREW_ENTRANT_NAME,
+            "anchor_weight": budget.anchor_weight,
+            "es": budget.es.model_dump(mode="json"),
+            "train_max_ticks": budget.max_ticks,
+            "feature_names": list(CREW_OPTION_FEATURE_NAMES),
+            "genome_length": crew_genome_length(),
+            "encoder_version": policy.encoder_version,
+        },
+        train_wall_clock_s=0.0,
+        train_metadata={"warm_start_used": False},
+    )
 
 
 def _packet(
@@ -648,6 +694,10 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     coverage bar needs games that reach bodies). This is the committed pin
     that the crew wrapper passes the leak-test factory mode (the
     observable-only DoD) and that every protocol column populates.
+
+    The candidate is a FIXED genome rather than a freshly trained one, so the
+    coverage bar is met by construction on any sampler — see
+    :func:`_fixed_row_candidate` for why a trained one cannot carry it.
     """
 
     game_map = load_canonical_map()
@@ -657,8 +707,7 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
         leak_seeds=(0, 1),
         repeat_n=2,
     )
-    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map)
-    candidate = entrant.train()
+    candidate = _fixed_row_candidate(game_map)
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map
     )

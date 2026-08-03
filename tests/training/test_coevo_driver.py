@@ -658,6 +658,68 @@ def test_staleness_cap_retires_and_exhausted_pool_stops_loudly(
 # --------------------------------------------------------------------------- #
 
 
+# The two standing champions that
+# ``test_founders_seed_the_pool_and_exploits_join_the_hall`` seeds its sides with
+# (Task 19.3). Inlined as LITERALS, not drawn through ``random_genome``, which is
+# the whole point: the fixture's exploit-found assertions must not move when the ES
+# sampler changes. The values were recorded from ``random_genome(27|19, seed=1|0,
+# scale=0.5)`` on this PR's portable sampler and then frozen here; what earns them
+# the slot is not their provenance but the regime they sit in — the scripted FSM
+# truncates against this crew champion while this impostor champion does not, so the
+# exploiter starts ABOVE the baseline and ``evolve``'s elitism keeps it there. Any
+# pair with that property would serve; these are the measured ones.
+_SEEDED_CREW_CHAMPION: tuple[float, ...] = (
+    -0.5529977256154904,
+    0.5127444861702768,
+    0.3592486094707157,
+    -0.32931137402128424,
+    -0.005721394738286979,
+    -0.06347363729696026,
+    0.19481237046980265,
+    0.4009997065610933,
+    -0.6586782219652707,
+    -0.9528276087312725,
+    0.4886003594688759,
+    -0.08466687170190586,
+    0.3568280689498929,
+    -1.4309120249622138,
+    -0.06866219785932089,
+    0.29371128790878465,
+    -0.37146468545719885,
+    0.8003156422766748,
+    0.6448640424875667,
+    -0.9360962870986711,
+    -0.976195831977869,
+    0.05199640500603937,
+    0.7738351952480913,
+    -0.151159775701606,
+    -0.3918647965476439,
+    -0.09824085231491198,
+    -0.9475408633212199,
+)
+_SEEDED_IMPOSTOR_CHAMPION: tuple[float, ...] = (
+    0.5063993759980193,
+    0.34986879699012047,
+    -0.10021572710223542,
+    -0.3233443016134593,
+    0.01413264928616828,
+    -0.12029798436966217,
+    0.3925432776589207,
+    -0.25744817460424607,
+    -0.029348211597632238,
+    0.10527660860611582,
+    0.6646117721304333,
+    0.0058742377862850215,
+    -0.28869525110371896,
+    0.34643463855871204,
+    0.15059998896724688,
+    -0.33644860859191766,
+    0.6695970570622944,
+    1.0575052763233654,
+    0.4393485531965374,
+)
+
+
 def _founder_cells(base: Path) -> Path:
     """Persist three 19-gene founder cells through the public 18.6 writer."""
 
@@ -687,14 +749,33 @@ def _founder_cells(base: Path) -> Path:
 def test_founders_seed_the_pool_and_exploits_join_the_hall(tmp_path: Path) -> None:
     # A one-swap crew campaign against a founder-seeded impostor pool: the
     # founders ingest through the substrate fence BEFORE any sampling, the
-    # payoff row exactly covers them, and (fixture-pinned under these seeds)
-    # the exploiter probe finds an impostor exploit and freezes it.
+    # payoff row exactly covers them, and the exploiter probe finds an impostor
+    # exploit and freezes it.
+    #
+    # Both standing champions are SEEDED (the 18.24 ``initial_genome`` knob) with
+    # the literals below rather than drawn from the ES stream. Without that, the
+    # exploit-found assertions rode the draw: a one-population side takes what the
+    # stream hands it, and most draws are the marathon shape whose games never
+    # terminate — every fitness collapses onto the truncation sentinel, the
+    # landscape goes flat, and no exploiter can strictly beat the scripted-FSM
+    # baseline (measured: 0 of 20 fixed crew draws produced an exploit, and
+    # widening the exploiter budget to 12x4 or sigma to 0.6 did not help). Seeding
+    # puts the fixture in the regime it exists to exercise — the FSM truncates
+    # against the frozen crew champion while the impostor champion does not — and
+    # since ``evolve`` is elitist, the seeded impostor already scoring above the
+    # baseline makes the freeze CONSTRUCTION, not luck. Verified identical
+    # (frozen / 7.0 vs -10.0) under both this repo's portable sampler and the
+    # pre-19.3 libm one, so the pin no longer moves when the ES stream does.
     cells = _founder_cells(tmp_path)
     config = _make_config(
         tmp_path,
         substrate_sha256=bakeoff_substrate_sha(),
-        impostor=_impostor_side(population=1, founder_cells_dir=cells),
-        crew=_crew_side(population=1),
+        impostor=_impostor_side(
+            population=1,
+            founder_cells_dir=cells,
+            initial_genome=_SEEDED_IMPOSTOR_CHAMPION,
+        ),
+        crew=_crew_side(population=1, initial_genome=_SEEDED_CREW_CHAMPION),
         master_seed=42,
         num_swaps=1,
         first_side="crew",
