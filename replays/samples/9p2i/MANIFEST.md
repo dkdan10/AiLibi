@@ -59,3 +59,33 @@ byte-identically under the current engine.
 | 47 | Qwen/Qwen3.6-27B | accusation_round.qwen3_6_27b.v3, crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, vote_ballot.qwen3_6_27b.v3 | absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, movement_perception, observation_id_rendering, reporter_exculpation, roll_call_round, testimony_as_content, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence | fsm-default | 2026-07-20 | 545f361 | 0.0000 | IMPOSTORS |
 | 48 | Qwen/Qwen3.6-27B | accusation_round.qwen3_6_27b.v3, crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, vote_ballot.qwen3_6_27b.v3 | absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, movement_perception, observation_id_rendering, reporter_exculpation, roll_call_round, testimony_as_content, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence | fsm-default | 2026-07-20 | 545f361 | 0.0000 | IMPOSTORS |
 | 49 | Qwen/Qwen3.6-27B | accusation_round.qwen3_6_27b.v3, crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, vote_ballot.qwen3_6_27b.v3 | absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, movement_perception, observation_id_rendering, reporter_exculpation, roll_call_round, testimony_as_content, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence | fsm-default | 2026-07-20 | 545f361 | 0.0000 | CREWMATES |
+
+## Capability disclosures (Task 19.8 mirror)
+
+This set carries the measured capability limitations disclosed in full in
+`replays/ml_corpus/README.md` ("Capability disclosures"). The set-specific
+figures, recomputed from these committed bytes (commands in the Task-19.8 PR):
+all 165 meetings are crew-triggered and crew-opened (the structural
+reporter-innocence prior — the scripted impostor cannot report or call
+meetings, `agents/tactical/impostor_policy.py:39-40`); 48/225 = 21.3% of kill
+submissions do not resolve (42 engine-rejected, all on the same-room check;
+6 pre-empted by a same-tick meeting; 177 resolved); 53/971 = 5.5% of
+player-visible transcript turns carry an `[invalid accusation target …]` husk,
+against the corpus README's own no-husk doctrine (a recorded deviation);
+56/165 meetings re-litigate an already-ejected impostor's vent; 30/451 skip
+ballots are exact-duplicate template copies; wait streaks of ≥10 ticks appear
+in 53/450 player-games (all crew, worst 36) while ping-pong pathing appears in
+32/450 (31 of 32 impostors); 29/245 impostor ballots name a partner and 8
+state the role outright in the recorded (non-player-visible) rationale, and
+machinery language reaches the same rationales ("threshold" in 90/971
+ballots, "suspicion" in 85/971, a quoted internal decimal in 39/971 —
+model-originated literal-token quotation is zero; the set's two persisted
+`[invalid primary_reason_id … nulled]` hits are vote-guard husks, not model
+output);
+roll-call whereabouts coverage is crew 723/726 = 99.6% vs impostor 120/245 =
+49.0%; and of 177 kills, 6 were crew-witnessed and zero had a non-victim crew
+co-present at the decision frame. Disclosures record capability limitations —
+zero gameplay tuning; the replay bytes are untouched. Note: this section is
+maintained by hand; a `refresh_samples.sh` manifest rewrite regenerates the
+table only and would drop it (and a re-record invalidates its numbers), so
+re-measure and re-add it after any refresh.
