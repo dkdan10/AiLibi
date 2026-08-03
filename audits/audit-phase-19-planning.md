@@ -233,6 +233,14 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **Codex round 11 (4 findings)** — all reproduced and absorbed: the recovered
+  raw-slate bytes get a real handoff (the owner step pushes a manifest-verified
+  `evidence/raw-slate-staging` ref; the artifact task folds and retires it — hashes
+  alone cannot materialize files on a fresh checkout); the rubric scorer's two tracked
+  lab outputs join 19.9 (its `main()` rewrites both alongside the served copy); the
+  duplicate-id diagnostic prints `path:line` for BOTH headers (the parser now records
+  header lines); and the dossier's frontier command is invocable as written
+  (`uv run python …` — the script is mode 100644).
 - **Codex round 10 (2 findings, over the owner-round absorption)** — both reproduced
   and absorbed: the walker's "shared core" still over-mandated (the leak-scan walk at
   `leak_test.py:593-600` performs NEITHER state-hash verification nor duplicate-row
@@ -378,6 +386,7 @@ owner-chartered phase:
   depends on the raw-slate ruling.
 - Validator/generator/frontier all green at authoring and after both review rounds:
   321 tasks ↔ 321 prompts (293 + 28), `generate_prompts.py --check` in sync, and
-  `scripts/compute_next_task.py --phase 19` reports exactly the designed frontier
+  `uv run python scripts/compute_next_task.py --phase 19` reports exactly the designed
+  frontier
   (seven roots — 19.2–19.6, 19.8, 19.9 — dispatchable, twenty-one blocked; 19.1 waits
   on 19.3's recorded portability outcome).

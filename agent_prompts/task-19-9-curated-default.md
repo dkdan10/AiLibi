@@ -40,6 +40,8 @@ pacing/structure heuristic — not a human rating").
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - experiments/lab/rubric_score.py; (the provenance-key change only — `_set_manifest_sha` learns the set fingerprint the loader also learns)
+- experiments/lab/results-rubric-score.json; (regenerated — the scorer's `main()` rewrites BOTH tracked lab artifacts alongside the served copy)
+- experiments/lab/results-rubric-geomean.json; (same)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
 - tests/api/test_sets.py; (the default-set pin — exact file, keeping this root unordered vs 19.5's tests/api/test_leak.py edit)
 

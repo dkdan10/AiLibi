@@ -700,6 +700,8 @@ pacing/structure heuristic — not a human rating").
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - experiments/lab/rubric_score.py; (the provenance-key change only — `_set_manifest_sha` learns the set fingerprint the loader also learns)
+- experiments/lab/results-rubric-score.json; (regenerated — the scorer's `main()` rewrites BOTH tracked lab artifacts alongside the served copy)
+- experiments/lab/results-rubric-geomean.json; (same)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
 - tests/api/test_sets.py; (the default-set pin — exact file, keeping this root unordered vs 19.5's tests/api/test_leak.py edit)
 
@@ -1468,9 +1470,13 @@ The 449-game slate behind the phase-18 adoption decision exists only on the owne
 machine, if at all. OWNER STEP (minutes): check whether `~/ailibi-campaign-1826/scoring/`
 still exists — BEFORE 19.22 creates the evidence commit, so preservation is one
 transaction. If YES: content-address it — per-file sha-256 manifest committed under
-`training/reports/_finalist_eval_raw/` (manifest only; 19.22 carries the BYTES into the
-single evidence commit as class (c)) — and a dated erratum records the recovery and
-where the bytes will live. If NO: a dated erratum labels event-level finalist lineage
+`training/reports/_finalist_eval_raw/` — AND stage the bytes where the dispatched
+artifact task can reach them: the owner step pushes a temporary
+`evidence/raw-slate-staging` ref carrying the slate bytes (one scripted command,
+manifest-verified on push), because an agent on a fresh checkout cannot materialize
+files from their hashes; the artifact-classes task folds the staging ref into the
+single immutable evidence commit and retires it. A dated erratum records the recovery
+and where the bytes will live. If NO: a dated erratum labels event-level finalist lineage
 NON-REPRODUCIBLE (the flattened rows and every derived statistic remain reproducible
 from committed cells — state exactly that boundary). Either way: do NOT re-record — the
 ~57-busy-hour price is named and declined by charter.
@@ -1484,7 +1490,7 @@ from committed cells — state exactly that boundary). Either way: do NOT re-rec
 - training/artifacts/ (19.22's surface)
 
 **Definition of done:**
-- [ ] One of the two outcomes is recorded with a dated erratum; on recovery, the manifest's shas cover every file and the evidence-store location is named; on loss, the reproducibility boundary is stated exactly.
+- [ ] One of the two outcomes is recorded with a dated erratum; on recovery, the manifest's shas cover every file, the staging ref is pushed and verifies against the manifest, and the evidence-store destination is named; on loss, the reproducibility boundary is stated exactly.
 - [ ] No re-recording occurred or is scheduled.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1509,7 +1515,9 @@ prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
 orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
-carries the recovered finalist raw slate if 19.21's ruling found it — with a per-file
+carries the recovered finalist raw slate if 19.21's ruling found it (consumed from the
+`evidence/raw-slate-staging` ref the owner step pushed, verified against the committed
+manifest, with the staging ref retired after the fold) — with a per-file
 sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
 in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
 branch name — the pin is the immutability guarantee), registering the class-(c) rows in

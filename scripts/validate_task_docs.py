@@ -111,9 +111,9 @@ def validate_dependency_graph(tasks: list[TaskDoc], errors: list[str]) -> None:
             other = seen_ids[task.task_id]
             errors.append(
                 f"Duplicate task id {task.task_id}: "
-                f"{relative(other.phase_path)} and {relative(task.phase_path)} "
-                "both define it — downstream id-keyed state would silently "
-                "collapse them."
+                f"{relative(other.phase_path)}:{other.header_line} and "
+                f"{relative(task.phase_path)}:{task.header_line} both define "
+                "it — downstream id-keyed state would silently collapse them."
             )
         else:
             seen_ids[task.task_id] = task

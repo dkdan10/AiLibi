@@ -20,9 +20,13 @@ The 449-game slate behind the phase-18 adoption decision exists only on the owne
 machine, if at all. OWNER STEP (minutes): check whether `~/ailibi-campaign-1826/scoring/`
 still exists — BEFORE 19.22 creates the evidence commit, so preservation is one
 transaction. If YES: content-address it — per-file sha-256 manifest committed under
-`training/reports/_finalist_eval_raw/` (manifest only; 19.22 carries the BYTES into the
-single evidence commit as class (c)) — and a dated erratum records the recovery and
-where the bytes will live. If NO: a dated erratum labels event-level finalist lineage
+`training/reports/_finalist_eval_raw/` — AND stage the bytes where the dispatched
+artifact task can reach them: the owner step pushes a temporary
+`evidence/raw-slate-staging` ref carrying the slate bytes (one scripted command,
+manifest-verified on push), because an agent on a fresh checkout cannot materialize
+files from their hashes; the artifact-classes task folds the staging ref into the
+single immutable evidence commit and retires it. A dated erratum records the recovery
+and where the bytes will live. If NO: a dated erratum labels event-level finalist lineage
 NON-REPRODUCIBLE (the flattened rows and every derived statistic remain reproducible
 from committed cells — state exactly that boundary). Either way: do NOT re-record — the
 ~57-busy-hour price is named and declined by charter.
@@ -36,7 +40,7 @@ from committed cells — state exactly that boundary). Either way: do NOT re-rec
 - training/artifacts/ (19.22's surface)
 
 **Definition of done:**
-- [ ] One of the two outcomes is recorded with a dated erratum; on recovery, the manifest's shas cover every file and the evidence-store location is named; on loss, the reproducibility boundary is stated exactly.
+- [ ] One of the two outcomes is recorded with a dated erratum; on recovery, the manifest's shas cover every file, the staging ref is pushed and verifies against the manifest, and the evidence-store destination is named; on loss, the reproducibility boundary is stated exactly.
 - [ ] No re-recording occurred or is scheduled.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

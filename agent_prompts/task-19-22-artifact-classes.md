@@ -23,7 +23,9 @@ prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
 orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
-carries the recovered finalist raw slate if 19.21's ruling found it — with a per-file
+carries the recovered finalist raw slate if 19.21's ruling found it (consumed from the
+`evidence/raw-slate-staging` ref the owner step pushed, verified against the committed
+manifest, with the staging ref retired after the fold) — with a per-file
 sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
 in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
 branch name — the pin is the immutability guarantee), registering the class-(c) rows in

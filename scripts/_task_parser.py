@@ -50,6 +50,9 @@ class TaskDoc:
     implementation_hint: str | None
     integration_risk: str | None
     dependency_check: tuple[str, ...]
+    # 1-indexed line of the ``### Task`` header in ``phase_path`` — duplicate-id
+    # diagnostics print it so two headers in one file are distinguishable.
+    header_line: int = 0
 
 
 def parse_all_tasks(errors: list[str] | None = None) -> list[TaskDoc]:
@@ -115,6 +118,7 @@ def parse_phase_file(phase_path: Path, errors: list[str]) -> list[TaskDoc]:
                 implementation_hint=implementation_hint,
                 integration_risk=integration_risk,
                 dependency_check=dependency_check,
+                header_line=text.count("\n", 0, match.start()) + 1,
             )
         )
 
