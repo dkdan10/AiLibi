@@ -2650,13 +2650,16 @@ class TacticalAgent:
         mapped field-by-name onto the widened :class:`SuspicionEntry` (the
         render-contract leaf mirrors the provenance shape without importing
         ``agents.*``). It rode the graph inertly until Task 16.15; since the
-        16.15 elicitation batch the vote-ballot template renders the split per
-        row (the J2a provenance surface), fed from HERE, the one production
-        builder. Populating it here keeps ``0.5 + sum(the eight fields) ==
-        suspicion`` on every live row (the belief store's own invariant, on the
-        STORED belief -- an entirely-soft row's RENDERED scalar is gate-clamped
-        below that sum, see Task 16.4 below), so the 16.15 surface reads real
-        hard/soft data rather than defaults.
+        16.15 elicitation batch the ``qwen3_6_27b`` vote-ballot template
+        renders the split per row (the J2a provenance surface). The surface is
+        TEMPLATE-GATED: no other set's ballot references
+        ``suspicion_provenance``, so under the default ``qwen3_5_9b`` set or
+        the other bespoke sets the split still rides the graph inertly. Fed
+        from HERE, the one production builder, populating it keeps ``0.5 +
+        sum(the eight fields) == suspicion`` on every live row (the belief
+        store's own invariant, on the STORED belief -- an entirely-soft row's
+        RENDERED scalar is gate-clamped below that sum, see Task 16.4 below),
+        so the 16.15 surface reads real hard/soft data rather than defaults.
 
         Task 16.4 (the J1 render clamp). The hard-evidence-gate lever is
         UNCONDITIONAL since the Task-16.17 baseline-5 record (was default-OFF at
