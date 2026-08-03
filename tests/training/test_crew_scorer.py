@@ -32,7 +32,6 @@ from __future__ import annotations
 import ast
 import json
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -658,21 +657,7 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
         leak_seeds=(0, 1),
         repeat_n=2,
     )
-    # The CI budget is generations=1 / population=2, so the "candidate" is
-    # essentially ONE random draw — and most draws are the marathon
-    # survive-and-grind shape `CrewEsConfig` documents: training scores them the
-    # TRUNCATED sentinel (-10.0) and their games never terminate or reach a body,
-    # which starves the leak scan's coverage bar ("the games must reach at least
-    # one body"). Task 19.3 replaced the ES core's libm-backed `rng.gauss` with a
-    # portable inverse-CDF sampler, which re-rolled that draw, so the ES seed moves
-    # 0 -> 7 to keep the fixture on a terminating candidate (champion_fitness
-    # 14.59, 232 bodies across the leak seeds). The fragility is pre-existing, not
-    # new: measured over es.seed 0..9, the old libm sampler landed a terminating
-    # candidate on 4 seeds and the portable one on 1 — the majority marathon under
-    # BOTH. Every assertion below is unchanged.
-    ci_budget = crew_es_budget("ci")
-    budget = replace(ci_budget, es=ci_budget.es.model_copy(update={"seed": 7}))
-    entrant = CrewEsEntrant(config=budget, game_map=game_map)
+    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map)
     candidate = entrant.train()
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map

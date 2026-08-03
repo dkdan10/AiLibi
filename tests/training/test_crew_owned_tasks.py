@@ -34,7 +34,6 @@ from __future__ import annotations
 import json
 import tempfile
 from collections.abc import Mapping
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -702,15 +701,7 @@ def test_owned_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
         repeat_n=2,
     )
     basis = OwnedTaskOptionBasis()
-    # ES seed 0 -> 2, for the reason spelled out at the sibling fixture
-    # (tests/training/test_crew_scorer.py::test_evaluate_crew_candidate_full_row):
-    # a generations=1 / population=2 budget makes the candidate one random draw,
-    # most draws are the marathon shape whose games never reach a body, and Task
-    # 19.3's portable ES sampler re-rolled which seed lands a terminating one.
-    # Seed 2 does here (champion_fitness 13.34, 21 bodies across the leak seeds).
-    ci_budget = crew_es_budget("ci")
-    budget = replace(ci_budget, es=ci_budget.es.model_copy(update={"seed": 2}))
-    entrant = CrewEsEntrant(config=budget, game_map=game_map, basis=basis)
+    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map, basis=basis)
     candidate = entrant.train()
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map
