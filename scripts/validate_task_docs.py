@@ -105,7 +105,20 @@ def validate_dependency_graph(tasks: list[TaskDoc], errors: list[str]) -> None:
     frontier at dispatch time.
     """
 
-    known = {task.task_id for task in tasks}
+    seen_ids: dict[str, TaskDoc] = {}
+    for task in tasks:
+        if task.task_id in seen_ids:
+            other = seen_ids[task.task_id]
+            errors.append(
+                f"Duplicate task id {task.task_id}: "
+                f"{relative(other.phase_path)} and {relative(task.phase_path)} "
+                "both define it — downstream id-keyed state would silently "
+                "collapse them."
+            )
+        else:
+            seen_ids[task.task_id] = task
+
+    known = set(seen_ids)
     for task in tasks:
         for dependency_id in task.depends_on:
             if dependency_id not in known:

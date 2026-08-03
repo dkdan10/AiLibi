@@ -22,9 +22,12 @@ owner review established the differences are partly DELIBERATE, not drift:
 `eval/funnel.py:398` fails it loudly, and funnel's comment declares its divergence
 deliberate. A union of checks would therefore CHANGE validation behavior — exactly what
 locked decision 1 forbids. Build `eval/replay_walk.py` as shared MECHANICS with
-per-consumer PROFILES: one typed walker owns the reconstruction core (re-seed →
-`advance_tick` → `apply_meeting_result`, state-hash verification, doubled-record
-detection) with pluggable fact collectors, and each consumer declares a NAMED validation
+per-consumer PROFILES: the walker's core is the reconstruction MECHANICS ONLY (re-seed →
+`advance_tick` → `apply_meeting_result`, pluggable fact collectors) — EVERY integrity
+check, state-hash verification and doubled-record detection included, is a
+profile-declared OPTION, because at least one consumer (the leak-scan walk at
+`leak_test.py:593-600`) performs neither today and mandatory core checks would change
+what it accepts — and each consumer declares a NAMED validation
 profile that preserves its current, deliberate semantics — the drift record documents
 per profile which checks it enforces, which it deliberately relaxes, and why, each with
 a negative fixture proving the profile still bites (or still tolerates) what it did
@@ -57,7 +60,7 @@ a profile-semantics change is out of scope. `off_menu.py` stays frozen and unmig
 - eval/deception_instruments.py (already consumes a shared walk; not churned)
 
 **Definition of done:**
-- [ ] The walker's docstring tables the shared core plus every named profile: which checks each profile enforces, which it deliberately relaxes (validity's partial-meeting tolerance vs funnel's fail-loud is the canonical pair), and why — with a negative fixture per profile proving its semantics are unchanged.
+- [ ] The walker's docstring tables the mechanics core plus every named profile: which checks each profile enforces, which it deliberately omits or relaxes (validity's partial-meeting tolerance vs funnel's fail-loud; leak-scan's no-hash-no-dedup walk), and why — with a negative fixture per profile proving its semantics are unchanged; NO check is core-mandatory.
 - [ ] All eight call sites consume the walker under their own profile; a repo grep proves no independent `advance_tick` reconstruction loop remains in the migrated modules.
 - [ ] BYTE-PARITY: every committed pin and regenerated-report byte is unchanged across the migration (the four derived reports regenerate identical; the diff proves it); any behavior difference discovered between a consumer's old walk and its declared profile STOPS the migration and is recorded as a finding — never silently reconciled in either direction.
 - [ ] `uv run mypy .` passes.

@@ -94,6 +94,13 @@ class TestDependencyGraphValidation:
         )
         assert any("Dependency cycle" in error for error in errors)
 
+    def test_duplicate_task_id_is_an_error(self) -> None:
+        errors: list[str] = []
+        validate_task_docs.validate_dependency_graph(
+            [_task("99.1"), _task("99.1")], errors
+        )
+        assert any("Duplicate task id 99.1" in error for error in errors)
+
     def test_clean_graph_produces_no_errors(self) -> None:
         errors: list[str] = []
         validate_task_docs.validate_dependency_graph(

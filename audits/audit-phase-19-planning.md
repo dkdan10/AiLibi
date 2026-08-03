@@ -233,6 +233,13 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **Codex round 10 (2 findings, over the owner-round absorption)** — both reproduced
+  and absorbed: the walker's "shared core" still over-mandated (the leak-scan walk at
+  `leak_test.py:593-600` performs NEITHER state-hash verification nor duplicate-row
+  detection, so even those become profile OPTIONS — the core is reconstruction
+  mechanics only), and the new dependency validator gains a duplicate-task-id check
+  reporting both source locations (id-keyed state downstream would silently collapse
+  duplicates), with a guard test.
 - **The owner's own review round (8 findings + 6 improvements, after Codex converged
   clean at round 9)** was verified claim-by-claim — all eight reproduced, several in a
   class the automated rounds never reached (semantic defeat rather than scope ripple) —
