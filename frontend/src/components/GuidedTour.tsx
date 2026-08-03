@@ -3,8 +3,8 @@
 // teaching the perspective switcher + the two-truth grammar"). Hand-coded from
 // tokens (no Claude Design pass — see tasks/phase-12.md Wave-B note).
 //
-// On the first visit it auto-opens, loads a high-interestingness 9p2i replay
-// (the rubric's best-ranked game, so the walkthrough has real drama to point at),
+// On the first visit it auto-opens, loads the head of the hand-curated FEATURED
+// list for 9p2i (Task 19.9 — so the walkthrough has real drama to point at),
 // and steps through the viewer's load-bearing ideas: the two-truth grammar, the
 // perspective switcher + fog firewall, the Belief × Truth hero, and the
 // keyboard-operable transport. It is dismissible and remembers that via
@@ -25,8 +25,9 @@ import { tokens } from "../tokens";
 
 const SEEN_KEY = "ailibi.guidedTourSeen.v1";
 const OPEN_EVENT = "ailibi:open-guided-tour";
-// The rubric is the 9p2i interestingness surface; the flat 4p1i default has none
-// (mostly zero-meeting). Teach on 9p2i so the walkthrough lands on a real game.
+// 9p2i is the curated spectator set (and, since Task 19.9, the server default);
+// 4p1i is the fast fixture — at most one meeting per game, no rubric. Teach on
+// 9p2i so the walkthrough lands on a game with meetings in it.
 const TARGET_SET = "9p2i";
 
 /** Re-open the guided tour from anywhere in the shell (the header "Tour" button). */
@@ -34,16 +35,20 @@ export function openGuidedTour(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
 
-// Best-effort: pick the highest-interestingness 9p2i replay and open it. The
-// rubric `per_game` list is served sorted best-first (Task 12.2 / 12.9), so the
-// head is the most interesting game. Falls back to the first replay if the rubric
-// is absent, and to nothing (the legend still teaches the grammar) on any error.
+// Best-effort: open the head of the CURATED featured list for the target set
+// (Task 19.9). It used to open the rubric's top-ranked game, but the rubric is an
+// internal pacing/structure heuristic whose ordering both Phase-19 audits found
+// inverts the human-interest tails — a fresh re-score clears staleness, it does
+// not validate watchability. The curated head is a hand-read game; the rubric's
+// best-ranked game is the fallback when the served set carries no featured seed,
+// and the first replay when it ships no rubric either. Any error → nothing loads
+// (the legend still teaches the grammar).
 //
 // Cancellation (Task 12.11 review): `/sets` + `/replays` are async, so re-check
 // the live store right before the navigation and bail if the user moved on —
 // dismissed the tour, opened a replay, or switched the set — so a slow load can't
 // yank them back to the teaching seed and clobber their URL/workspace state.
-async function loadHighInterestSeed(): Promise<void> {
+async function loadCuratedSeed(): Promise<void> {
   const store = useReplayStore.getState();
   const aborted = (set: string): boolean => {
     const now = useReplayStore.getState();
@@ -69,6 +74,17 @@ async function loadHighInterestSeed(): Promise<void> {
       const match = list.find((meta) => meta.seed === bestSeed);
       if (match !== undefined) {
         gameId = match.game_id;
+      }
+    }
+    // The curated head wins over the rubric head where the set has one. The
+    // featured list is imported DYNAMICALLY: App.tsx lazy-loads ReplayPicker, and
+    // a static import here would pull the whole browser into the entry chunk.
+    const { featuredForSet } = await import("./ReplayPicker");
+    for (const game of featuredForSet(set)) {
+      const match = list.find((meta) => meta.seed === game.seed);
+      if (match !== undefined) {
+        gameId = match.game_id;
+        break;
       }
     }
     if (aborted(set)) {
@@ -239,8 +255,8 @@ export function GuidedTour() {
     setOpen(false);
   }, []);
 
-  // First-run auto-open: show the tour and load a high-interestingness 9p2i seed
-  // so the walkthrough has a real game behind it. A first-time visitor who
+  // First-run auto-open: show the tour and load the curated 9p2i seed so the
+  // walkthrough has a real game behind it. A first-time visitor who
   // arrived via a SHARED deep link (a `game_id` in the URL) keeps that moment —
   // the tour still opens to annotate it, but it must NOT clobber the shared
   // replay with its own seed (the URL hydration in usePlaybackEngine owns that).
@@ -259,14 +275,14 @@ export function GuidedTour() {
     // Only auto-load the teaching seed on a truly EMPTY URL. ANY shared query
     // state is an explicit destination the visitor opened — a deep-linked game
     // (`game_id`/`tick`), OR a shared view/filter/set (`view`/`winner`/
-    // `scoreBucket`/`set`/…). `loadHighInterestSeed()` calls `selectReplay()`,
+    // `scoreBucket`/`set`/…). `loadCuratedSeed()` calls `selectReplay()`,
     // which forces `view=workspace`, and the URL sync would then clobber that
     // shared page/filter. Leave any such URL in place (its hydration owns it) and
     // just open the tour to annotate it.
     const hasUrlState =
       [...new URLSearchParams(window.location.search).keys()].length > 0;
     if (!hasUrlState) {
-      void loadHighInterestSeed();
+      void loadCuratedSeed();
     }
   }, []);
 

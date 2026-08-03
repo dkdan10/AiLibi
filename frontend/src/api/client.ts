@@ -61,9 +61,12 @@ function seg(value: string): string {
 
 // Multi-set serving (Task 12.12; design/phase-12/stage-1-design.md §2.1, §7). The
 // backend serves all recorded sets in one run; the `set` query param selects which
-// (`<parent>/<set>/`), defaulting server-side to the flat 4p1i baseline so a call
-// that omits it still resolves. `set` is threaded through `/replays`,
-// `/replays/{game_id}/*`, `/eval/rubric`, and `/eval/tournament-report`.
+// (`<parent>/<set>/`), defaulting server-side to the CURATED 9p2i set (Task 19.9 —
+// flipped from the flat 4p1i fixture) so a call that omits it still resolves, now
+// onto the set that has meetings and a rubric. `set` is threaded through
+// `/replays`, `/replays/{game_id}/*`, `/eval/rubric`, and `/eval/tournament-report`.
+// The server default is resolved from what is on disk, so `GET /sets`.default is
+// the authority — never hard-code a set name as "the default" on this side.
 function withSet(path: string, set?: string): string {
   if (set === undefined || set === "") {
     return path;
@@ -139,9 +142,12 @@ export function getTournamentReport(
 
 // The per-set interestingness rubric served by the eval surface (Task 12.2,
 // DESIGN.md §3.1, §7). The rubric is per served set and staleness-guarded; a set
-// with no co-located `results-rubric-score.json` (the 4p1i default) yields a
-// 404, surfaced as `ApiError` with `status === 404` so the Highlights reel can
-// render its first-class "no rubric" empty state rather than an error.
+// with no co-located `results-rubric-score.json` — 4p1i, the fast fixture, which
+// an omitted `set` no longer resolves to (Task 19.9: the default is 9p2i, which
+// ships one) — yields a 404, surfaced as `ApiError` with `status === 404` so the
+// Highlights reel can render its first-class "no rubric" empty state rather than
+// an error. The score itself is an internal pacing/structure heuristic, not a
+// human rating: render it labelled, and never as a watchability ranking.
 export function getRubric(set?: string): Promise<RubricView> {
   return getJson<RubricView>(withSet("/eval/rubric", set));
 }
