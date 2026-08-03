@@ -35,6 +35,7 @@ def main() -> int:
 
     validate_complexity(tasks, errors)
     validate_public_types_unique(tasks, errors)
+    validate_dependency_graph(tasks, errors)
     validate_hint_symbol_resolution(tasks)
     validate_prompt_set(tasks, errors)
     validate_prompts(tasks, errors)
@@ -94,6 +95,60 @@ def validate_public_types_unique(tasks: list[TaskDoc], errors: list[str]) -> Non
                 )
                 continue
             seen[symbol] = task.task_id
+
+
+def validate_dependency_graph(tasks: list[TaskDoc], errors: list[str]) -> None:
+    """Reject unknown dependency ids and dependency cycles.
+
+    Duplicate ids are already collapsed by the parser's order-preserving
+    dedupe; unknown ids and cycles would otherwise surface only as a wedged
+    frontier at dispatch time.
+    """
+
+    seen_ids: dict[str, TaskDoc] = {}
+    for task in tasks:
+        if task.task_id in seen_ids:
+            other = seen_ids[task.task_id]
+            errors.append(
+                f"Duplicate task id {task.task_id}: "
+                f"{relative(other.phase_path)}:{other.header_line} and "
+                f"{relative(task.phase_path)}:{task.header_line} both define "
+                "it — downstream id-keyed state would silently collapse them."
+            )
+        else:
+            seen_ids[task.task_id] = task
+
+    known = set(seen_ids)
+    for task in tasks:
+        for dependency_id in task.depends_on:
+            if dependency_id not in known:
+                errors.append(
+                    f"{relative(task.phase_path)}: Task {task.task_id} depends "
+                    f"on unknown task {dependency_id}."
+                )
+
+    by_id = {task.task_id: task for task in tasks}
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {task_id: WHITE for task_id in by_id}
+
+    def visit(task_id: str, stack: list[str]) -> None:
+        color[task_id] = GRAY
+        stack.append(task_id)
+        for dependency_id in by_id[task_id].depends_on:
+            if dependency_id not in by_id:
+                continue
+            if color[dependency_id] == GRAY:
+                cycle_start = stack.index(dependency_id)
+                cycle = " -> ".join(stack[cycle_start:] + [dependency_id])
+                errors.append(f"Dependency cycle: {cycle}.")
+            elif color[dependency_id] == WHITE:
+                visit(dependency_id, stack)
+        stack.pop()
+        color[task_id] = BLACK
+
+    for task_id in by_id:
+        if color[task_id] == WHITE:
+            visit(task_id, [])
 
 
 def validate_hint_symbol_resolution(tasks: list[TaskDoc]) -> None:

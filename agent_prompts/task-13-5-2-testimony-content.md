@@ -1,9 +1,9 @@
 # Agent Prompt — 13.5.2 Testimony as reported episodic content (+ wire alibi_map)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13-5.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13-5.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.5.2 — Testimony as reported episodic content (+ wire alibi_map), anchored to the 2026-06-25 memory diagnosis (workflow `wg54kfoxy`; the "social info is a scalar, not content" root) + this file's Wave C; meetings/schemas.py (`MeetingTurn.claims`/`observations`, the `Claim`/`ObservationClaim` unions); meetings/manager.py (`derive_belief_evidence` / `extract_belief_evidence`, the scalar twin this mirrors, ~:2630-2740); agents/perception.py (`PROVENANCE_OBSERVED`/`INFERRED`); agents/memory/store.py (`absorb_meeting_evidence` ~:204, `render_for_prompt` ~:127, the `_SALIENCE_*` band, `_known_roster_ids`, `_latest_self_guard_fields`); agents/memory/beliefs.py (`record_alibi`, `PlayerBelief.alibis` — wired here, not modified); orchestrator/game.py (`extract_belief_evidence`→`absorb_meeting_evidence` per living agent, ~:1539); api/replay_loader.py (~:839-843); llm/provider.py (the `AILIBI_*` env-flag convention, ~:31). Do not implement work outside these references.
@@ -52,7 +52,7 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 Cross-module, multi-consumer: a new episodic event type + provenance flows into the salience-budgeted render (token competition — the band must keep first-hand facts), the alibi_map render, and the live + replay per-agent folds (determinism). Behind `AILIBI_TESTIMONY_AS_CONTENT` (default OFF) so the merge is byte-identical and the existing golden/regression suite is untouched; the lever's gameplay value is measured for the first time on the new model in Phase 14's combined re-record, not here. The one hard invariant: reported content is ADDITIVE narrative — it must never touch the scalar suspicion graph, the §4.6 eject gate, or the teammate scalar firewall, so "no single signal ejects" and replay byte-identity both hold. The self-framing (`CLAIM … (unverified)`) is load-bearing: without it a weaker model may treat reported sightings as things it witnessed.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 8.4 api/frontend task-count mirrors
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.4 — api/frontend task-count mirrors, anchored to DESIGN.md §3.2; audits/restructure-impact-map-2026-06-04-0223.md §2a (api), §2f (mirrors). Do not implement work outside these references.
@@ -44,7 +44,7 @@ Update the spectator task-count surface for the uncapped per-player denominator:
 Pure follow-on from 8.1's keyspace: the loader already enumerates `state.tasks.values()` and filters by `owner`, so the logic survives — only the denominator scales. Keep the api/frontend type mirror in lockstep or the field-set checks fail. Do not touch meeting DTOs here (8.10 owns those + the `test_leak.py` snapshot).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

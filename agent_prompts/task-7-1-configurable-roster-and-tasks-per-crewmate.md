@@ -1,9 +1,9 @@
 # Agent Prompt — 7.1 Configurable roster + tasks-per-crewmate knob
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-7.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-7.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 7.1 — Configurable roster + tasks-per-crewmate knob, anchored to Phase 7 plan W0.1 + decisions 1, 2; diagnosis audit `audits/audit-2026-05-30-1952-phase-7-meeting-frequency-diagnosis.md` §1, §3, §4; DESIGN.md §1.4, §3.1, §11.3. Do not implement work outside these references.
@@ -211,7 +211,7 @@ import of the script) and the `main([...])` driving idiom in
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

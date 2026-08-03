@@ -1,9 +1,9 @@
 # Agent Prompt — 8.5 9p/2i roster knobs + CLI/script threading
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.5 — 9p/2i roster knobs + CLI/script threading, anchored to DESIGN.md §3.5 (9p/2i canonical roster), §8.1; audits/restructure-impact-map-2026-06-04-0223.md §2c, §5 decision 11. Do not implement work outside these references.
@@ -47,7 +47,7 @@ Make 9p/2i a first-class roster (decision 11: rename `7p2i`→`9p2i`, presets `{
 `run_game.py` exposes `--num-players`/`--num-impostors` but not `--tasks-per-crewmate` — add it (default `DEFAULT_TASKS_PER_CREWMATE`) so a single 9p/2i game runs at the eval count. The `7p2i`→`9p2i` directory rename + `roster.json` rewrite is NOT here; this task only changes the in-code preset + CLI knobs (the committed-data move is 8.12). Grep for `7p2i` / `RosterPreset(7` across tests to find every pin.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

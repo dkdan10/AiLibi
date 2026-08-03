@@ -1,9 +1,9 @@
 # Agent Prompt — 16.13 The bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.13 — The bespoke set `qwen3_6_27b` v1: semantics ported exactly, restyled to the new model, anchored to audits/audit-phase-16-model-lock.md; experiments/lab/qwen36_prompt_scratch/ (the v0→v5 ladder + README — the style base and its open caveats, incl. the detector-aligned phrasing note); agents/strategic/prompts/qwen3_32b/ (the v5/v6 source MECHANICS the merge must preserve); agent_prompts/task-14-5-new-model-prompts.md (the bespoke-set precedent); orchestrator/game.py PROMPT_VERSION_SETS (:317 — the registry the new entry joins); experiments/lab/featherless_sweep.py (the A/B instrument, --prompt-set axis). Do not implement work outside these references.
@@ -84,7 +84,7 @@ structure), which is a STYLE choice both mechanics permit. Non-thinking pinned t
 (the probe's default-reasoning finding). Keep every section anchor the loader/tests reference.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

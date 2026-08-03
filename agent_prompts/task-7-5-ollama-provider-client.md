@@ -1,9 +1,9 @@
 # Agent Prompt — 7.5 Ollama provider client + wiring
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-7.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-7.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 7.5 — Ollama provider client + wiring, anchored to tasks/phase-7-plan.md "Provider / eval-infra track", Q2 (now superseded — provider = local Ollama); the Phase 7 Ollama-enablement plan (model = `qwen2.5:7b-instruct`); DESIGN.md §5, §7 (LLM client contract). Do not implement work outside these references.
@@ -175,7 +175,7 @@ local model can emit schema-invalid JSON, so the FailedCall path (not an excepti
 must be exercised by a unit test here, with the deeper normalization landing in 7.6.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

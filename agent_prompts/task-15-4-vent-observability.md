@@ -1,9 +1,9 @@
 # Agent Prompt — 15.4 Vent observability: make the game's hardest evidence speakable end-to-end
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.4 — Vent observability: make the game's hardest evidence speakable end-to-end, anchored to tasks/post-phase-14-clean-up.md H4; meetings/schemas.py:57-90 (the three-type observation union this task extends); meetings/transcript.py (contradiction detection + chain relevance); agents/memory/store.py:1239 (vent_witnessed is already remembered and rendered); audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 (the C3/C8 private-evidence citation catches). Do not implement work outside these references.
@@ -121,7 +121,7 @@ the fabricated-observation fixture as the task's most important test, and make t
 comparison deterministic (reconstructed memory, not LLM judgment).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

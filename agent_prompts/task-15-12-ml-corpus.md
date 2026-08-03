@@ -1,9 +1,9 @@
 # Agent Prompt — 15.12 The ML-calibration corpus at baseline-3 config: record, validate, freeze (operator-run, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.12 — The ML-calibration corpus at baseline-3 config: record, validate, freeze (operator-run, $0), anchored to audits/post-phase-14-ML-training-signal.md §5.6, §7.2 (the frozen-corpus doctrine + the data gap); tasks/post-phase-14-plan.md §4 (nothing trains against a layer scheduled to change); scripts/refresh_samples.sh (the recording pattern to compose); api/replay_loader.py + api/main.py (set-discovery semantics the layout must not collide with). Do not implement work outside these references.
@@ -88,7 +88,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.watchability"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

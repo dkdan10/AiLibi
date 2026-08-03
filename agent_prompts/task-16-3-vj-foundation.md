@@ -1,9 +1,9 @@
 # Agent Prompt — 16.3 Foundation: suspicion provenance + inert render-contract widening + the prompt-byte golden
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.3 — Foundation: suspicion provenance + inert render-contract widening + the prompt-byte golden, anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.2 + task "15.0" (the foundation design + the C4/C9 catches); agents/memory/beliefs.py (the accumulator this task decomposes); meetings/render_contract.py:38-195 (the three Protocols + SuspicionEntry); agents/strategic/prompts/loader.py (the four wrappers); meetings/manager.py (render seams + MeetingParticipant). Do not implement work outside these references.
@@ -90,7 +90,7 @@ manager edit sits in the same file four later tasks touch: keep to the render-se
 preamble maps to this task.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

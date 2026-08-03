@@ -1,9 +1,9 @@
 # Agent Prompt — 13.5.5 Align the ballot belief lines with the pre-vote-folded suspicion
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13-5.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13-5.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.5.5 — Align the ballot belief lines with the pre-vote-folded suspicion, anchored to the 2026-06-25 diagnosis + PR #198 review (the vote-ballot prompt carries BOTH the open-tick `rendered_memory` belief lines AND the recomputed pre-vote `suspicion_graph` kwarg, so the two suspicion numbers diverge); the PR #201 review finding (re-rendering the agent's STANDING memory is a no-op — the pre-vote fold is a throwaway manager-side `BeliefState`, never written to the agent's store: `meetings/manager.py` ~:1988 `BeliefState()` seeded + `apply_meeting_evidence_rules(phase="pre_vote")`, "discarded with the meeting"); agents/memory/store.py (`render_for_prompt` / `_build_belief_lines` / `_format_belief_score`); orchestrator/game.py (`render_memory_for_meeting`, `_memory_rerender_hook`, `unfreeze_memory_enabled`); meetings/manager.py (`MeetingParticipant`, `_collect_one_ballot`, the `suspicion_graph` it derives); [[project_substrate_cadence_doctrine]]. Do not implement work outside these references.
@@ -96,7 +96,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.perception"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

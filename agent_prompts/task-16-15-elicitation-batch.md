@@ -1,9 +1,9 @@
 # Agent Prompt — 16.15 The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.15 — The elicitation batch: citations, roll-call, provenance surface, the vent tail, the self-accusation fix, anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2a/J3 (the surface design); audits/audit-phase-15-close.md §11 (the vent-tail cells: samples 53/73 mentioned; corpus 188/255) + §5.2 of the wave-0 close (the self-accusation artifact, 3/851); audits/audit-phase-16-baseline-4.md §6 (the two baseline-4 findings this batch inherits: the alibi-supply starvation the roll-call ask re-supplies; the missed-skip shape the J3 rewrite must respect); experiments/lab/qwen36_prompt_scratch/README.md (the model's proven style manual on the GO path — structural contracts over prohibitions, positive phrasing, one worked example per ask, hard length caps); the locked set directory per 16.2 (GO: agents/strategic/prompts/qwen3_6_27b/; the NO-GO rewrite is 16.2's surgery). Do not implement work outside these references.
@@ -93,7 +93,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.memory.store"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

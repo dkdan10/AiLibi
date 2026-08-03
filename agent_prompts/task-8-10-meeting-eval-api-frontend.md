@@ -1,9 +1,9 @@
 # Agent Prompt — 8.10 Meeting eval-metric re-pointing + api meeting DTOs + frontend
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.10 — Meeting eval-metric re-pointing + api meeting DTOs + frontend, anchored to DESIGN.md §11.3 (eval metrics), §5.2; audits/restructure-impact-map-2026-06-04-0223.md §2b, §2f, §4 couplings 9 & 10. Do not implement work outside these references.
@@ -53,7 +53,7 @@ Lock 8.7's `MeetingTranscript` first, then re-point. The risk metric is `vote_co
 This is the meeting reshape's largest reader surface and it owns the leak snapshot tripwires for BOTH the task-model and meeting changes — they must update in lockstep or a leaked field slips in silently. The api↔frontend mirror + `tsc` is a separate gate from pytest. A moved observation field silently zeroing `vote_correctness` is the subtle failure to test against.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

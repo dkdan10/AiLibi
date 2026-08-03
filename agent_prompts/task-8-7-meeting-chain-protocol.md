@@ -1,9 +1,9 @@
 # Agent Prompt — 8.7 Meeting accusation-chain protocol + record schema
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.7 — Meeting accusation-chain protocol + record schema, anchored to DESIGN.md §5.2 (chain protocol), §5.3 (turn record), §5.4 (contradictions), Appendix A (`MeetingTurn`); audits/restructure-impact-map-2026-06-04-0223.md §2b, §3.1, §5 decisions 6–9. Do not implement work outside these references.
@@ -54,7 +54,7 @@ The chain's next speaker is a pure function of the prior turn's accusation targe
 This is the second byte-breaker and the single biggest meeting-side change; its `MeetingTranscript` shape is consumed by the four §11.3 eval metrics (8.10), the api meeting views (8.10), and the LLM `format=` schema (8.8/8.9), so lock the schema first. The deterministic termination + replay-walk is load-bearing (a non-deterministic chain breaks replay). Do not relax `extra='forbid'` to absorb old rows — they are intentionally re-recorded in 8.12.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

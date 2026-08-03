@@ -1,9 +1,9 @@
 # Agent Prompt — 17.4 Roll-call uptake breakdown (who is not answering)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.4 — Roll-call uptake breakdown (who is not answering), anchored to audits/audit-phase-16-close.md §6 (roll-call coverage 0.363 — the aggregate the gate cannot rule on) + §0.1.4 (the calibration question the breakdown answers); eval/funnel.py (the 16.10 pooling-folds region — `_roll_call_placed` and the whereabouts census); meetings/schemas.py `WhereaboutsClaim`. Do not implement work outside these references.
@@ -43,7 +43,7 @@ reads the committed baseline-5 sets as-is.
 - [ ] `bash scripts/check.sh` passes locally.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

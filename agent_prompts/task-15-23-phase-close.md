@@ -1,9 +1,9 @@
 # Agent Prompt — 15.23 Phase close: gates on the shipped end-state, the close audit, the banner flip (operator-run, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.23 — Phase close: gates on the shipped end-state, the close audit, the banner flip (operator-run, $0), anchored to audits/audit-phase-15-pause.md (the decisions this close verifies + the finalist recipe §3.1 re-run here through the CLI); tasks/phase-14.md 14.12 + audits/audit-phase-14-close.md (the close-audit pattern); audits/review-phase-15-midwave.md Q3 (corpus canary denominators) + Q5 (the provenance-durability convention this record follows). Do not implement work outside these references.
@@ -111,7 +111,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.tactical.learned.factory"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

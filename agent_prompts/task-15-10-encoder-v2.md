@@ -1,9 +1,9 @@
 # Agent Prompt — 15.10 Encoder v2 (memory-carrying), the determinism harness, and the leak-test factory mode
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.10 — Encoder v2 (memory-carrying), the determinism harness, and the leak-test factory mode, anchored to audits/post-phase-14-ML-planning.md §6 (observation surface, encoder shape, determinism hazards); observation/packet.py:159-188; observation/public_map.py:14-32; agents/memory/beliefs.py + agents/memory/working.py (the carried state); experiments/lab/ml_spike/core.py:60-83 (the 34-dim memoryless baseline); eval/leak_test.py; tests/test_firewall.py:64-75. Do not implement work outside these references.
@@ -99,7 +99,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

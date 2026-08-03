@@ -1,9 +1,9 @@
 # Agent Prompt — 17.5 Vent-placement widening: the mechanism (inert) + the double-count counterfactual
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.5 — Vent-placement widening: the mechanism (inert) + the double-count counterfactual, anchored to audits/audit-phase-16-close.md §0.1.4 + §8 (the PR #264 question, routed WITH the absence decision); meetings/transcript.py:1205 `absent_players` + `reconstruct_stated_paths` (the placement substrate — `saw_player` observations only, by contract); the 15.4 vent-grounding chokepoint (grounded vent sightings — the only class that may place); tests/agents/test_absence_prior.py `TestAbsencePriorOnCommittedBytes` (the counterfactual harness the new column extends). Do not implement work outside these references.
@@ -56,7 +56,7 @@ The grounding predicate exists — reuse the 15.4/16.7 chokepoint logic (the ven
 stated-paths surface is the alibi-contradiction substrate and must not learn vents.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 16.17 Baseline 5: the graduation slate, the atomic re-record, the phase close (operator + owner, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.17 — Baseline 5: the graduation slate, the atomic re-record, the phase close (operator + owner, $0), anchored to tasks/phase-15.md 15.7 + 15.23 (the graduate-at-record runbook + the close-gates pattern); the Wave-1 counterfactuals (16.4/16.6/16.8's committed reports — the graduation evidence); eval/vj_instruments.py (16.10 — the before/after instrument); audits/audit-phase-16-baseline-4.md (the BEFORE column, GO path; NO-GO: the baseline-3 measure file per 16.2's rewrite). Do not implement work outside these references.
@@ -119,7 +119,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

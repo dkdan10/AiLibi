@@ -1,9 +1,9 @@
 # Agent Prompt — 9.8 Suspicion accumulator and decay
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-9.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-9.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 9.8 — Suspicion accumulator and decay, anchored to DESIGN.md §6.3 (belief Rules 3 + 5), §4.6; audits/audit-2026-06-09-0347-gameplay-data.md gp-1 (recall). Do not implement work outside these references.
@@ -64,7 +64,7 @@ teammate-firewall invariant (9.3) and crew byte-identity for non-accusation path
 Expect muted measured effect in 9.11 (short games); that is known and accepted, not a failure.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

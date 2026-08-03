@@ -1,9 +1,9 @@
 # Agent Prompt — 16.2 The model lock: owner decision + the conditional-wave surgery
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.2 — The model lock: owner decision + the conditional-wave surgery, anchored to agent_prompts/task-14-6-lock-decision.md (the LOCKED-DECISION shape); experiments/lab/report-featherless-sweep-qwen3-6-27b.md + experiments/lab/qwen36_prompt_scratch/README.md (the TWO evidence sets — the held-constant probe AND the owner-directed from-scratch v0→v5 ladder whose v5 validation posts 0/32 self-co-location, 0/32 self-flag, 8/8 conversion at ~20.5s non-thinking; the lock audit weighs both); tasks/phase-15.md 15.18 (the pause precedent for phase-doc surgery + prompt regeneration); scripts/validate_task_docs.py + scripts/generate_prompts.py (the tooling the surgery must keep green). Do not implement work outside these references.
@@ -66,7 +66,7 @@ task's agent prepares the audit from the sweep evidence and presents both branch
 merge IS the sign-off. Keep the surgery minimal: contracts not named in the decision do not change.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

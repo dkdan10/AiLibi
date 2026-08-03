@@ -1,9 +1,9 @@
 # Agent Prompt — 13.12 ONE combined re-record under redistribute + the Wave-E substrate + close-audit gate + era-pin re-anchor
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.12 — ONE combined re-record under redistribute + the Wave-E substrate + close-audit gate + era-pin re-anchor, anchored to the cadence doctrine ([[project_substrate_cadence_doctrine]] — ONE combined re-record; era-pin re-anchor precedent `dbe1827`); engine/maps/canonical_1.yaml:40 (`dead_task_rule: drop` → flip to `redistribute`); the merged Wave-E substrate (13.13 de-imperatived gate / 13.14 detector — R7 now LIT 25/114 @ 74% on the pre-re-record set / 13.15 geomean rubric); experiments/lab/results-rubric-score.json (regenerate with the geomean); experiments/lab/forward_redesign_conversion_probe.py (the R4 prediction = +2 worst-case). Do not implement work outside these references.
@@ -39,7 +39,7 @@ run LOCALLY (real Ollama, overnight) — a recording, not a Web-session task. `r
 this is the BASELINE the whole forward-redesign is judged on — the abandon-branch is LOAD-BEARING (never merge a re-record that fails the gate). The conversion probe predicts +2 worst-case wrong crew (deterministic-gate upper bound; 13.13 de-imperative should reduce it) — if the real R4 exceeds +2, the lone-STRONG trade did not hold on the live LLM and must be revisited, NOT merged. Freeze the substrate during the measurement (no code changes mid-re-record). The era-pin re-anchor is the standard substrate-change consequence (cadence doctrine), not scope creep.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -50,6 +50,9 @@ class TaskDoc:
     implementation_hint: str | None
     integration_risk: str | None
     dependency_check: tuple[str, ...]
+    # 1-indexed line of the ``### Task`` header in ``phase_path`` — duplicate-id
+    # diagnostics print it so two headers in one file are distinguishable.
+    header_line: int = 0
 
 
 def parse_all_tasks(errors: list[str] | None = None) -> list[TaskDoc]:
@@ -115,6 +118,7 @@ def parse_phase_file(phase_path: Path, errors: list[str]) -> list[TaskDoc]:
                 implementation_hint=implementation_hint,
                 integration_risk=integration_risk,
                 dependency_check=dependency_check,
+                header_line=text.count("\n", 0, match.start()) + 1,
             )
         )
 
@@ -183,7 +187,12 @@ def extract_optional_field(body: str, field_name: str) -> str:
 def parse_depends_on(value: str) -> tuple[str, ...]:
     if value.lower() in {"", "none"}:
         return ()
-    return tuple(match.group("task_id") for match in TASK_ID_RE.finditer(value))
+    # Order-preserving dedupe: explanatory parentheticals in a Depends line may
+    # repeat a task id already listed; a dependency is a set membership, and
+    # duplicated blockers confuse frontier displays downstream.
+    return tuple(
+        dict.fromkeys(match.group("task_id") for match in TASK_ID_RE.finditer(value))
+    )
 
 
 def is_future_phase_task_id(task_id: str) -> bool:

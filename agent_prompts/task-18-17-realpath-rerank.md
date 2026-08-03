@@ -1,9 +1,9 @@
 # Agent Prompt — 18.17 The real-path re-rank recorder (selection designs B/C, productized)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.17 — The real-path re-rank recorder (selection designs B/C, productized), anchored to audits/audit-phase-18-planning.md §2.2 (the cost table; design B ~2 h/gen, design C ~21 h/run); eval/balance_eval.py:241 (the `meeting_runner_factory` seam); training/bakeoff/es.py:154 (`champion_trace`); scripts/run_tournament.py --candidate-artifact (the 17.14 recorder whose stamp discipline this inherits); orchestrator/game.py:397-399 (deadline-free headless meetings — the timeout gap). Do not implement work outside these references.
@@ -59,7 +59,7 @@ channel.
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

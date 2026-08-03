@@ -1,9 +1,9 @@
 # Agent Prompt — 9.4 qwen3.5:9b client compat (think:false, fail-loud)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-9.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-9.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 9.4 — qwen3.5:9b client compat (think:false, fail-loud), anchored to DESIGN.md §11.4 (recording provenance); owner decision 2026-06-07 (canonical model qwen2.5:7b-instruct → qwen3.5:9b, thinking disabled). Do not implement work outside these references.
@@ -59,13 +59,12 @@ tournament reports, and the tests/scripts pins that assert those committed rows)
 the old model string until 9.5 re-records; that is provenance, not staleness. Leave those for 9.5.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 
 ## Constraints and non-goals
 Do not modify DESIGN.md.
-Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
 

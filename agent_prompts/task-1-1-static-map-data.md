@@ -1,9 +1,9 @@
 # Agent Prompt — 1.1 Static map data
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-1.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-1.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 1.1 — Static map data, anchored to DESIGN.md §3, DESIGN.md §8.1. Do not implement work outside these references.
@@ -46,7 +46,7 @@ engine/world.py::Map, room graph, vent network. Use the human-provided engine/ma
 See DESIGN.md §3 + §8.1. The canonical map ships at `engine/maps/canonical_1.yaml`; the loader lives in `engine/world.py::load_canonical_map`. Use PyYAML's `safe_load` — do not write a custom YAML parser. Validation happens via Pydantic model validators on `Map`.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

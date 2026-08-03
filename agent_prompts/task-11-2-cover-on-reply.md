@@ -1,9 +1,9 @@
 # Agent Prompt — 11.2 Cover-consistency directive on the reply turn
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-11.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-11.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 11.2 — Cover-consistency directive on the reply turn, anchored to DESIGN.md §5.2 (accusation round); experiments/lab/report-vent-escape-lab.md (the 3 residual self-pair-drift flags). Do not implement work outside these references.
@@ -56,7 +56,7 @@ together or generate_prompts --check / the version test fails. The recorded repl
 11.4, so the prompt-regression baseline must NOT be regenerated in this task.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

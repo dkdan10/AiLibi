@@ -1,9 +1,9 @@
 # Agent Prompt — 17.11 Selection-bar re-pins: the bake-off flips to the baseline-5 floors
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.11 — Selection-bar re-pins: the bake-off flips to the baseline-5 floors, anchored to training/bakeoff/harness.py:114 `CORPUS_SPLITS_PATH` + :125 `BAKEOFF_BASELINE_ID` + :165 `GOODHART_9P2I_BASELINE` (the three baseline-3 anchors); eval/watchability.py:799 `_DEFAULT_BASELINE_ID` (already baseline-5 — the note at :795 says the bake-off constant lags deliberately until this task); training/crew/scorer.py (imports the constant); training/bakeoff/goodhart.py (the default baseline_id). Do not implement work outside these references.
@@ -47,7 +47,7 @@ the floors the phase selects on.
 - [ ] `bash scripts/check.sh` passes locally.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

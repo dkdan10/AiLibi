@@ -1,9 +1,9 @@
 # Agent Prompt — 13.7 Graduated corroboration-aware testimony spread (R1/R3 lever)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.7 — Graduated corroboration-aware testimony spread (R1/R3 lever), anchored to experiments/lab/report-phase-b-plan.md (testimony-spread); agents/memory/beliefs.py (the pre-vote inform fold, `apply_meeting_evidence_rules`, `MeetingBeliefEvidence`, `TESTIMONY_INDEPENDENCE_BAR`); meetings/transcript.py (`independent_voices` — REUSED unchanged). Do not implement work outside these references.
@@ -50,7 +50,7 @@ railroad across rounds). The 1-voice byte-identical pin guards the no-regression
 tally / SKIP edit, no re-record, firewall + determinism intact.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

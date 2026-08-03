@@ -1,9 +1,9 @@
 # Agent Prompt — 11.5 Task-gating sabotage: engine gate + reactor kind + public repair channel
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-11.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-11.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 11.5 — Task-gating sabotage: engine gate + reactor kind + public repair channel, anchored to DESIGN.md §3.1 (tick loop), §3.5 (win order), §8.3 (sabotage); engine/win_conditions.py:30-35 (the dormant IMPOSTOR_SABOTAGE). Do not implement work outside these references.
@@ -77,7 +77,7 @@ for crew, too high is unreachable — derive from geometry and validate at the 1
 frozen task clock to compensate.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

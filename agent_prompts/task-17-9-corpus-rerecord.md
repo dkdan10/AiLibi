@@ -1,9 +1,9 @@
 # Agent Prompt — 17.9 The corpus re-record at the final meeting layer (operator, ~14–15h, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.9 — The corpus re-record at the final meeting layer (operator, ~14–15h, $0), anchored to scripts/record_ml_corpus.sh (the pin block — already baseline-5-coupled: model + set + v3, moved by 16.17; its freeze-path guards refuse stale bytes); replays/ml_corpus/README.md (baseline-3 prose — stale against the script, refreshed here); tasks/phase-15.md 15.12 (the operator-session precedent); audits/audit-phase-16-close.md §0.5 (concurrency notes) + §8 (the staleness rule this task discharges). Do not implement work outside these references.
@@ -70,7 +70,7 @@ re-pin ONLY what this record moves, in this PR, so the suite is green at merge (
 17.11 constants stay 17.11's).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

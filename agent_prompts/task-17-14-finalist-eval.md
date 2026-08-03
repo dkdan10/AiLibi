@@ -1,9 +1,9 @@
 # Agent Prompt — 17.14 The multi-finalist recorder + the real-LLM finalist eval (operator, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.14 — The multi-finalist recorder + the real-LLM finalist eval (operator, $0), anchored to audits/audit-phase-15-pause.md:145-184 (the uncommitted per-finalist driver this task productizes); scripts/run_tournament.py:244-265 (`--agent-factory learned-champion` — loads only the ONE committed artifact today); tasks/phase-16.md 16.14 §5 (the stamp-proven champion-row precedent); audits/audit-phase-16-close.md §0.5 (operator concurrency notes). Do not implement work outside these references.
@@ -62,7 +62,7 @@ leaks between runs. Real-path concurrency: champion games collide in ballot phas
 (the 16.14 finding) — single-worker tails or staggering, attempts ≥8.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

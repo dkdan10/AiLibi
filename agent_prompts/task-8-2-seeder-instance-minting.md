@@ -1,9 +1,9 @@
 # Agent Prompt — 8.2 Seeder cap removal + deterministic instance minting
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.2 — Seeder cap removal + deterministic instance minting, anchored to DESIGN.md §3.2 (per-player tasks), §3.5 (no seed cap); audits/restructure-impact-map-2026-06-04-0223.md §2a (seeder), §4 coupling 1. Do not implement work outside these references.
@@ -46,7 +46,7 @@ Remove the fail-loud cap in `orchestrator/seeder.py::_build_tasks` (`required = 
 Keep the deal a pure function of the seed: shuffle once, then for each crewmate take `tasks_per_crewmate` map ids *with replacement allowed across crewmates* (e.g. `map_task_ids[i % len(map_task_ids)]` over a global cursor, or a per-crewmate independent slice) and mint `TaskState(id=f"{owner}:{map_task_id}", owner=..., map_task_id=...)`. The 4p/1i flat path must mint the same instances it dealt before (so only the key shape, not the assignment, changes for that roster) — pin it with a golden test. Grep `_manifest_writer.py` for the seedable check so the two cap sites drop together. Confirm `engine/maps/canonical_1.yaml` stays at 12 tasks (no map growth — DESIGN.md §3.5); the cap removal, not a bigger pool, is what carries 9p/2i.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

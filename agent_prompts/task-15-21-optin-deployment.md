@@ -1,9 +1,9 @@
 # Agent Prompt — 15.21 Deployment, branch A: the opt-in learned factory across the recording/eval surfaces
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.21 — Deployment, branch A: the opt-in learned factory across the recording/eval surfaces, anchored to audits/audit-phase-15-pause.md decision 2 (branch A locked; branch B's rejection rationale) + the finalist recipe (the seam this task turns into a CLI); orchestrator/game.py (the `agent_factory` seam); scripts/run_tournament.py (the stamp flag that today has no factory counterpart); tasks/phase-15.md 15.9 (the provenance stamp this task auto-wires). Do not implement work outside these references.
@@ -99,7 +99,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.crew.scorer"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 
