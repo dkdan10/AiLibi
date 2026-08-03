@@ -18,11 +18,14 @@ a HARD/SOFT cross-meeting carry split and an ``unattributed`` residual). It is
 ACCUMULATED beside each existing write, never re-derived post hoc: the fold's
 ordering and caps make after-the-fact attribution wrong (the audit §3.2 C4
 catch), so every site that moves the scalar tags the APPLIED (clamped) delta
-with its source at the moment it lands. The decomposition is a pure record on
-the fold side -- no fold arithmetic reads it, and it changes no stored scalar
-and no fold result (byte-inertness the Task 16.3 prompt-byte golden pinned at
-the 16.3 landing; render-inertness ended with the J1 gate and the Task 16.15
-surface below). The module-level invariant (documented on
+with its source at the moment it lands. On the fold side the decomposition is
+a pure DOWNSTREAM record: influence flows scalar-to-provenance only -- each
+applied delta is tagged, and Rule-5 decay rescales the record to track its
+shrunken scalar (:meth:`BeliefState.decay_suspicion`) -- never
+provenance-to-scalar, so it changes no stored scalar and no fold result
+(byte-inertness the Task 16.3 prompt-byte golden pinned at the 16.3 landing;
+render-inertness ended with the J1 gate and the Task 16.15 surface below).
+The module-level invariant (documented on
 :class:`SuspicionProvenance` and pinned by :data:`SUSPICION_PROVENANCE_ATOL`)
 is that for every belief row
 ``_DEFAULT_SUSPICION + provenance.total == suspicion`` to within tolerance. The
