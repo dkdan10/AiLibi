@@ -1,9 +1,14 @@
 """Tests for the potential-based reward channel (Task 15.8).
 
-Pins: the shaping is potential-based (it TELESCOPES to Φ(terminal) − Φ(initial)
-over any episode, so it cannot change the optimal policy — Ng et al. 1999); the
-channel REFUSES to score a truncated / incomplete episode as a full game; and the
-side-specific tactically-reachable terms are read from the typed event log.
+Pins: the shaping TELESCOPES to Φ(terminal) − Φ(initial) over any episode — and
+telescoping is ALL these tests prove (Task 19.4). Ng-1999 policy invariance would
+additionally require Φ(terminal) to be trajectory-INdependent (canonically Φ = 0 at
+the absorbing state); here Φ is a CUMULATIVE count (impostor: kills; crew: completed
+tasks) starting at 0, so the shaping sum EQUALS the episode's terminal kill /
+completed-task count — a real +1-per-kill (+1-per-task) incentive on the return, NOT
+policy-invariant. Also pinned: the channel REFUSES to score a truncated / incomplete
+episode as a full game; and the side-specific tactically-reachable terms are read
+from the typed event log.
 """
 
 from __future__ import annotations
@@ -68,7 +73,11 @@ def _rollout(*, truncated: bool, winner: str | None) -> EpisodeRollout:
 
 
 def _frame(
-    *, tasks_completed: int, alive_crew: int, alive_impostors: int
+    *,
+    tasks_completed: int,
+    alive_crew: int,
+    alive_impostors: int,
+    cumulative_kills: int = 0,
 ) -> EpisodeFrame:
     return EpisodeFrame(
         tick=1,
@@ -79,7 +88,7 @@ def _frame(
         tasks_total=max(1, tasks_completed),
         alive_crew=alive_crew,
         alive_impostors=alive_impostors,
-        cumulative_kills=0,
+        cumulative_kills=cumulative_kills,
     )
 
 
@@ -150,8 +159,44 @@ def _meeting(*, trigger: str, triggered_by: str, ejected: str | None) -> Meeting
     )
 
 
+def _kill_count_rollout(terminal_kills: int) -> EpisodeRollout:
+    """A complete impostor-win rollout whose ONLY free variable is Φ(terminal).
+
+    Everything the ENVIRONMENT reward reads is fixed: the winner (the ±1 terminal),
+    the roster, the empty event log and meeting log, and the last frame's
+    ``alive_impostors`` / task scalars — i.e. every input to the impostor dense
+    terms. Only ``cumulative_kills`` at the terminal frame varies, so two of these
+    differ in environment reward by exactly nothing and in Φ(terminal) by
+    ``terminal_kills``. Two frames, so one shaping transition exists (Task 19.4).
+
+    Synthetic by construction: a REAL ``terminal_kills=2`` episode would also carry
+    two ``KilledEvent``s and so move the dense ``kills`` term with it. The reward
+    channel's domain is the typed :class:`EpisodeRollout` — exactly what this
+    exercises — and the seed-0 value pin corroborates the same +1-per-kill identity
+    on a real engine rollout (``shaping_sum == dense kills == 5.0``)."""
+
+    return _make_rollout(
+        truncated=False,
+        winner="IMPOSTORS",
+        roles={"p0": "IMPOSTOR", "c1": "CREWMATE"},
+        events=(),
+        meetings=(),
+        frames=(
+            _frame(
+                tasks_completed=0, alive_crew=1, alive_impostors=1, cumulative_kills=0
+            ),
+            _frame(
+                tasks_completed=0,
+                alive_crew=1,
+                alive_impostors=1,
+                cumulative_kills=terminal_kills,
+            ),
+        ),
+    )
+
+
 # --------------------------------------------------------------------------- #
-# Potential-based shaping telescopes (policy invariance)                       #
+# Potential-based shaping telescopes (telescoping ONLY — not invariance)       #
 # --------------------------------------------------------------------------- #
 
 
@@ -162,8 +207,11 @@ def test_shaping_telescopes_to_phi_terminal_minus_initial(seed: int, side: str) 
     shaper = PotentialShaper(side=side, gamma=1.0)  # type: ignore[arg-type]
     phi = shaper.potentials(rollout)
     assert phi.shape[0] == len(rollout.frames)
-    # The Ng-1999 identity: with gamma == 1 the shaping sum equals the endpoint
-    # potential difference for ANY episode, so shaping cannot change the optimum.
+    # The telescoping identity: with gamma == 1 the shaping sum equals the endpoint
+    # potential difference for ANY episode. That identity — and NOTHING more — is
+    # what this pins (Task 19.4): Ng-1999 invariance would also need Φ(terminal) to
+    # be trajectory-INdependent, and a cumulative count is not (see
+    # ``test_shaping_is_not_policy_invariant_across_equal_env_reward_episodes``).
     expected = float(phi[-1] - phi[0]) if phi.shape[0] else 0.0
     assert shaper.shaping_sum(rollout) == pytest.approx(expected)
 
@@ -187,6 +235,42 @@ def test_discounted_shaping_does_not_telescope_to_endpoints() -> None:
     endpoint = float(phi[-1] - phi[0]) if phi.shape[0] else 0.0
     if phi.shape[0] >= 2 and float(phi[-1]) != float(phi[0]):
         assert shaper.shaping_sum(rollout) != pytest.approx(endpoint)
+
+
+# --------------------------------------------------------------------------- #
+# ...but telescoping is NOT policy invariance (Task 19.4)                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_shaping_is_not_policy_invariant_across_equal_env_reward_episodes() -> None:
+    """The shaping is a real +1-per-kill incentive (Task 19.4).
+
+    Ng-1999 policy invariance needs MORE than telescoping: it needs Φ(terminal) to
+    be trajectory-INdependent (canonically Φ = 0 at the absorbing state). Φ here is
+    a cumulative kill count opening at 0, so the γ=1 shaping sum IS the episode's
+    terminal kill count. Two trajectories carrying IDENTICAL environment reward —
+    same sparse terminal, same dense terms — therefore receive DIFFERENT shaped
+    returns, ranked by kills, which is exactly what an invariant transform may not
+    do (audits/audit-phase-19-triage.md §7 item 4; §8 row 2 VERIFIED). The finding
+    is DOCUMENTED, not repaired: the ML program is frozen and this pins the real
+    behavior rather than changing it."""
+
+    quiet = compute_shaped_reward(_kill_count_rollout(0), "IMPOSTOR")
+    lethal = compute_shaped_reward(_kill_count_rollout(2), "IMPOSTOR")
+
+    # The environment reward is identical on both channels: sparse and dense.
+    assert quiet.terminal_reward == 1.0
+    assert lethal.terminal_reward == 1.0
+    assert quiet.dense_terms == lethal.dense_terms
+
+    # The shaping is not: each side's sum is exactly its terminal kill count, so
+    # the "invariant" term prices kills at +1 apiece.
+    assert quiet.shaping_sum == 0.0
+    assert lethal.shaping_sum == 2.0
+    assert quiet.shaping_sum != lethal.shaping_sum
+
+    # ...and the scalar an optimizer maximizes differs by exactly the kill delta.
+    assert lethal.total() - quiet.total() == 2.0
 
 
 # --------------------------------------------------------------------------- #
@@ -351,3 +435,48 @@ def test_patrol_coverage_rewards_shadowing_without_a_report() -> None:
     assert terms["patrol_coverage"] == pytest.approx(3 / 4)  # 3 of 4 PLAY ticks
     # No meetings at all, so shadowing alone produces the coverage signal.
     assert terms["correct_reports"] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Frozen-ML value pin: not one computed number moved (Task 19.4)               #
+# --------------------------------------------------------------------------- #
+
+
+def test_shaped_reward_values_on_seed_zero_are_byte_identical() -> None:
+    """Every computed value of the reward channel, pinned EXACTLY (Task 19.4).
+
+    Task 19.4 corrects the false policy-invariance PROSE and adds tests — nothing
+    else: the ML program is frozen, no retraining happens, and no computed value
+    may move. These literals are seed 0's shaped reward at the pre-19.4 HEAD, read
+    off the deterministic engine, so the guard is the diff-proof that the docstring
+    correction was prose-only. They are exact IEEE doubles from a byte-deterministic
+    rollout, so they are compared with ``==`` — never ``pytest.approx``, which would
+    let a real drift in Φ, the dense terms, or the weighting slip through."""
+
+    rollout = _env().rollout(0)
+
+    impostor = compute_shaped_reward(rollout, "IMPOSTOR")
+    assert impostor.terminal_reward == 1.0
+    assert impostor.dense_terms == {
+        "kills": 5.0,
+        "unwitnessed_kills": 3.0,
+        "survival": 1.0,
+        "meetings_survived": 4.0,
+    }
+    assert impostor.shaping_sum == 5.0
+    assert impostor.potential_initial == 0.0
+    assert impostor.potential_terminal == 5.0
+    assert impostor.total() == 19.0
+
+    crew = compute_shaped_reward(rollout, "CREWMATE")
+    assert crew.terminal_reward == -1.0
+    assert crew.dense_terms == {
+        "task_progress": 0.8571428571428571,
+        "survival": 0.2857142857142857,
+        "correct_reports": 0.0,
+        "patrol_coverage": 0.782608695652174,
+    }
+    assert crew.shaping_sum == 12.0
+    assert crew.potential_initial == 0.0
+    assert crew.potential_terminal == 12.0
+    assert crew.total() == 12.925465838509316
