@@ -15,13 +15,30 @@ post-phase-14-ML-training-signal.md §3; DESIGN.md §"balance is a finding"):
    terminal win as a sparse reward. These are the only quantities any optimizer
    maximizes.
 
-2. **Potential-based shaping (Ng et al. 1999, policy-invariant).** A per-step
-   shaping term ``F(s_t, s_{t+1}) = γ·Φ(s_{t+1}) − Φ(s_t)`` over a side-specific
-   potential Φ read from the per-step engine-state scalars
+2. **Potential-based shaping (the Ng et al. 1999 FORM — NOT policy-invariant
+   here).** A per-step shaping term ``F(s_t, s_{t+1}) = γ·Φ(s_{t+1}) − Φ(s_t)``
+   over a side-specific potential Φ read from the per-step engine-state scalars
    (:class:`training.rollout.EpisodeFrame`). At ``γ = 1`` the shaping TELESCOPES:
-   ``Σ_t F = Φ(terminal) − Φ(initial)`` for ANY episode, so it cannot change the
-   optimal policy. Φ is a pure integer count (impostor: cumulative kills; crew:
-   completed task instances) — no float belief state — so the identity is exact.
+   ``Σ_t F = Φ(terminal) − Φ(initial)`` for ANY episode. Φ is a pure integer count
+   (impostor: cumulative kills; crew: completed task instances) — no float belief
+   state — so the identity is exact.
+
+   TELESCOPING IS NOT INVARIANCE. Ng-1999 policy invariance needs one more
+   hypothesis this module does not satisfy: a trajectory-INdependent terminal
+   potential (canonically ``Φ ≡ 0`` at the absorbing/terminal state, or an
+   infinite-horizon discounted setting). Here Φ is a CUMULATIVE count, so
+   ``Φ(terminal)`` is trajectory-DEPENDENT: with ``Φ(initial) = 0`` the shaping sum
+   EQUALS the episode's terminal kill count (impostor) / completed-task count
+   (crew). The shaping is therefore exactly a real ``+1``-per-kill (impostor) /
+   ``+1``-per-completed-task (crew) incentive added to the return — two episodes
+   with equal environment reward and different terminal counts get different shaped
+   returns — and it CAN change the optimal policy. The prior claim here ("so it
+   cannot change the optimal policy") was mathematically FALSE; the telescoping
+   test pinned telescoping only, never invariance. Finding + disposition: Task 19.4,
+   audits/audit-phase-19-triage.md §7 item 4 (§8 row 2, VERIFIED) — DOCUMENTED, NOT
+   REPAIRED. The ML program is frozen: nothing was retrained and no computed value
+   moved, so the shaping term below still carries this real per-kill / per-task
+   incentive by design-of-record.
 
 The reward channel REFUSES to score a truncated episode as a full game
 (:class:`TruncatedEpisodeError`): :func:`compute_shaped_reward` gates on
@@ -85,7 +102,15 @@ def _side_potential(side: Role, frame: EpisodeFrame) -> float:
     A pure, monotonic integer count of engine-truth progress toward the side's
     win — impostor: cumulative resolved kills; crew: completed task instances.
     No float belief state crosses into Φ, so the telescoping identity is exact
-    and byte-stable (the §7 determinism note)."""
+    and byte-stable (the §7 determinism note).
+
+    Being CUMULATIVE is precisely why the shaping is NOT policy-invariant (Task
+    19.4; module docstring item 2): a cumulative count makes ``Φ(terminal)``
+    trajectory-DEPENDENT, which is the one hypothesis Ng-1999 invariance requires
+    and this Φ does not supply. From ``Φ(initial) = 0`` the γ = 1 shaping sum is
+    the terminal kill count / completed-task count itself — a real ``+1``-per-kill
+    / ``+1``-per-completed-task incentive, not a wash. Left exactly as-is by
+    disposition (documented, not repaired; the ML program is frozen)."""
 
     if side == "IMPOSTOR":
         return float(frame.cumulative_kills)
@@ -93,11 +118,15 @@ def _side_potential(side: Role, frame: EpisodeFrame) -> float:
 
 
 class PotentialShaper:
-    """Potential-based shaping over a side-specific potential Φ (Ng 1999).
+    """Shaping in the Ng-1999 FORM over a side-specific potential Φ.
 
     ``F(s_t, s_{t+1}) = γ·Φ(s_{t+1}) − Φ(s_t)``. At ``γ = 1`` the per-episode
-    shaping sum telescopes to ``Φ(terminal) − Φ(initial)`` — the policy-invariance
-    guarantee the telescoping test pins. numpy carries the per-step vector math
+    shaping sum telescopes to ``Φ(terminal) − Φ(initial)`` — the identity the
+    telescoping test pins, and ALL it pins. That is NOT a policy-invariance
+    guarantee: Φ is a cumulative count, so ``Φ(terminal)`` is trajectory-dependent
+    and the shaping is a real ``+1``-per-kill (impostor) / ``+1``-per-completed-task
+    (crew) incentive (Task 19.4; module docstring item 2 carries the finding and its
+    documented-not-repaired disposition). numpy carries the per-step vector math
     (numpy is training-confined by the import-linter contract).
     """
 
@@ -136,8 +165,14 @@ class PotentialShaper:
     def shaping_sum(self, rollout: EpisodeRollout) -> float:
         """Total shaping over the episode.
 
-        At ``γ = 1`` this equals ``Φ(terminal) − Φ(initial)`` for ANY episode
-        (the telescoping identity), so shaping cannot change the optimal policy.
+        At ``γ = 1`` this equals ``Φ(terminal) − Φ(initial)`` for ANY episode —
+        the telescoping identity, which is true and pinned by test. Telescoping is
+        NOT invariance: ``Φ(terminal)`` is a trajectory-dependent cumulative count,
+        so from ``Φ(initial) = 0`` this total IS the episode's kill count (impostor)
+        / completed-task count (crew). Two trajectories with equal environment
+        reward and different terminal counts therefore get different shaped returns
+        — the shaping CAN change the optimal policy (Task 19.4; module docstring
+        item 2).
         """
 
         return float(self.shaping_series(rollout).sum())
