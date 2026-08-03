@@ -1,9 +1,9 @@
 # Agent Prompt — 16.14 Baseline 4: the model-only atomic re-record + the champion re-audit (operator-run, $0)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.14 — Baseline 4: the model-only atomic re-record + the champion re-audit (operator-run, $0), anchored to tasks/phase-15.md 15.7 (the atomic re-record runbook this clones); audits/audit-phase-16-model-lock.md (the substrate this records); eval/watchability.py (16.11's re-anchored referee + the per-baseline floors block); training/reports/results-champion-close.jsonl (the stamp-proof row convention the re-audit follows). Do not implement work outside these references.
@@ -91,7 +91,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.memory.beliefs"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

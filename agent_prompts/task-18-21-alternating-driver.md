@@ -1,9 +1,9 @@
 # Agent Prompt — 18.21 The alternating-freeze driver + stabilizers
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.21 — The alternating-freeze driver + stabilizers, anchored to audits/audit-phase-18-planning.md §4 (#8) + §6 (the stabilizer kit); audits/audit-phase-15-pause.md decision 4 (the barred naive form; the entry condition this satisfies); experiments/lab/ml_spike/fo2_coevolution.py (the absolute-anchor cycling detector precedent); training/coevo/ (18.19/18.20's seams). Do not implement work outside these references.
@@ -125,7 +125,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.realpath"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

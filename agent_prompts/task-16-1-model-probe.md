@@ -1,9 +1,9 @@
 # Agent Prompt — 16.1 Qwen3.6-27b sweep probe: the new Qwen generation on the committed contexts
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.1 — Qwen3.6-27b sweep probe: the new Qwen generation on the committed contexts, anchored to experiments/lab/featherless_sweep.py (SLATE :247-275, ModelSpec :226-243, preflight :904-957, corpora/detectors :1-96); agent_prompts/task-14-4-model-sweep.md (the precedent probe); llm/featherless_client.py:18-32 (the response_format_mode posture the probe must re-verify); audits/audit-phase-16-model-lock.md (the 16.2 consumer). Do not implement work outside these references.
@@ -66,7 +66,7 @@ first-class NO-GO outcome for 16.2, not a task failure. Operator gate: `FEATHERL
 hours-scale, $0 flat-rate.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

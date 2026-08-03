@@ -1,9 +1,9 @@
 # Agent Prompt — 12.8 Mind inspector
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-12.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-12.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 12.8 — Mind inspector, anchored to design/phase-12/stage-1-design.md §3.5, slice 6; the firewall + Omniscient-gating rules in `design/phase-12/claude-design-brief.md`. NO converge screen exists for this surface — it needs a NEW Claude-Design pass (grounded on the brief + `tokens-seed`, via the §9.5 handoff; not a sync).. Do not implement work outside these references.
@@ -76,7 +76,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

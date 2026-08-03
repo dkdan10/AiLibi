@@ -1,9 +1,9 @@
 # Agent Prompt — 19.12 The frontend test baseline: Vitest, ESLint, one Playwright journey
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.12 — The frontend test baseline: Vitest, ESLint, one Playwright journey, anchored to audits/audit-phase-19-triage.md §7 item 13 [C]; frontend/package.json:6-14 (no test script); the two `eslint-disable` comments with no linter (frontend/src/components/MapView.tsx:329, AgentToken.tsx:142 — verified: no eslint config or dependency exists); frontend/src/store/replayStore.ts:445 + :488 (one error field, three meanings) [S-Claude — re-verified at HEAD]; frontend/src/lib/playback.ts (407 LOC of pure functions, the natural unit-test target). Do not implement work outside these references.
@@ -63,9 +63,11 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 ## Implementation hint
 
 Keep the journey to ONE spec file with generous, condition-based waits (no sleeps) and a
-single retry in CI; flake here poisons the whole gate's credibility. The store race
-guards are testable without the DOM — drive the store directly with out-of-order promise
-resolutions.
+single retry in CI; flake here poisons the whole gate's credibility. The browser is
+SPECIFIED, not assumed: either `channel: "chrome"` against the system browser or a
+pinned Playwright browser version with an explicit CI cache — "preinstalled Chromium"
+is an environment observation, not a configuration. The store race guards are testable
+without the DOM — drive the store directly with out-of-order promise resolutions.
 
 ## Integration risk
 
@@ -80,7 +82,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

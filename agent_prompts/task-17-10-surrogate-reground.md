@@ -1,9 +1,9 @@
 # Agent Prompt — 17.10 Surrogate re-ground + re-verdict on the recorded bar
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.10 — Surrogate re-ground + re-verdict on the recorded bar, anchored to training/surrogate/ballots.py (the fit pipeline + `BALLOT_FEATURE_NAMES` — the 6-feature live-parity fence, kept by locked decision 4); training/surrogate/dataset.py (the reconstruction walk + the hand-mirrored belief pins); training/reports/report-ballot-surrogate.md (the baseline-3 report this regenerates end-to-end, incl. the three-axis bar + the always-eject anchor); training/artifacts/surrogate/ (the artifact bundle + max-uses.json). Do not implement work outside these references.
@@ -71,7 +71,7 @@ end-to-end cross-check against the production fold on real corpus meetings (the 
 walk precedent: measure fidelity, don't assume it) before any fit is trusted.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

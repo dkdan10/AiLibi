@@ -1,9 +1,9 @@
 # Agent Prompt — 12.7 Meeting view
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-12.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-12.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 12.7 — Meeting view, anchored to design/phase-12/stage-1-design.md §3.4, slice 5; the rendered target `design/phase-12/playful-system/screens/05-meeting.png` and the accusation-chain / ballots / `verdict` code in `playful-system/playful-system.dc.html`; the firewall (role-neutral outcome) + the REAL §4.6 rule in `design/phase-12/claude-design-brief.md`. Do not implement work outside these references.
@@ -73,7 +73,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

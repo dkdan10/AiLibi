@@ -1,9 +1,9 @@
 # Agent Prompt — 15.3 Information-funnel diagnostics: commit the oracle / possession / transmission folds
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.3 — Information-funnel diagnostics: commit the oracle / possession / transmission folds, anchored to tasks/post-phase-14-clean-up.md §2 (the charter measurement this task reproduces), H3; api/replay_loader.py:804-1035 (the `_walk` reconstruction recipe); orchestrator/seeder.py; engine/visibility.py:98-127 (crew same-room-only vision); meetings/manager.py:1821-1870 (the opt-in eligibility gate). Do not implement work outside these references.
@@ -77,7 +77,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.validity"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

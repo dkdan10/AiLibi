@@ -1,9 +1,9 @@
 # Agent Prompt — 19.28 The phase close (owner)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.28 — The phase close (owner), anchored to [L] the phase-18 close conventions (audits/audit-phase-18-close.md — the exemplar); locked decision 6 (the post-19 menu reads the 19.14 metrics); tasks/post-phase-14-plan.md (the roadmap tick this close owns). Do not implement work outside these references.
@@ -36,7 +36,7 @@ this file; the roadmap gets its tick.
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
 
 **Definition of done:**
-- [ ] The gate, verify_samples, and verify-ml-evidence are green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
+- [ ] The close's gate rerun is the WHOLE gate, not the default subset: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `scripts/fetch_evidence.sh` followed by `verify_ml_evidence --complete` (every archived hash verified, nothing absent) AND `verify_samples` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
 - [ ] The post-19 decision menu is framed from the committed 19.14 cells with a recommendation; the owner's ruling is recorded in the close audit.
 - [ ] The STATUS banner and roadmap reflect the close.
 - [ ] `uv run mypy .` passes.
@@ -59,12 +59,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import eval.replay_walk"`
 - `uv run python -c "import eval.leak_scan"`
-- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
+- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

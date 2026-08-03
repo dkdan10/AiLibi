@@ -1,9 +1,9 @@
 # Agent Prompt — 13.10 Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.10 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated, anchored to experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule). Do not implement work outside these references.
@@ -70,7 +70,7 @@ DETERMINISM: lowest-id recipient + carry progress → assert a redistribute game
 Win-conditions unchanged: a redistributed instance still counts, so the crew can still win by tasks (harder).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

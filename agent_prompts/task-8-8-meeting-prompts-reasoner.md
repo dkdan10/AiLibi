@@ -1,9 +1,9 @@
 # Agent Prompt — 8.8 Meeting prompts + reasoner chain producers + version bump
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.8 — Meeting prompts + reasoner chain producers + version bump, anchored to DESIGN.md §4.4 (strategic policy turns), §5.2, §6.6 (prompt rendering); audits/restructure-impact-map-2026-06-04-0223.md §2b, §4 couplings 2 & 4. Do not implement work outside these references.
@@ -51,7 +51,7 @@ The reasoner already branches the opener on role and runs the 7.12 guard + leak 
 The four-template version bump is atomic — a partial bump fails the replay/manifest provenance cross-check. The 7.12 firewall must hold on every turn-kind (not just the old statement slot). The `Statement`→`MeetingTurn` schema edit changes the JSON the provider is constrained by, so 8.9 must land with/after this.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

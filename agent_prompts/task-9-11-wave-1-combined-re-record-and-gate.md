@@ -1,9 +1,9 @@
 # Agent Prompt — 9.11 Wave-1 combined re-record and gate
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-9.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-9.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 9.11 — Wave-1 combined re-record and gate, anchored to DESIGN.md §11.4, §3.5; audits/audit-2026-06-09-0347-gameplay-data.md (the Wave-1 set). Do not implement work outside these references.
@@ -61,7 +61,7 @@ work in this task. If the floor fails, STOP and fix upstream rather than paperin
 2048 turn cap stays frozen (9.9 is the turn-verbosity fix).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

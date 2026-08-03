@@ -1,9 +1,9 @@
 # Agent Prompt — 15.19 Referee hardening: conversion-coupled D2 separation + subject-aware observation backing
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.19 — Referee hardening: conversion-coupled D2 separation + subject-aware observation backing, anchored to audits/audit-phase-15-pause.md §4 (the per-channel re-verdict) + decision blocks; training/reports/report-goodhart-probe.md (the kill-lever D2-separation exploit, 6.51 → 16.62, and the recommended floor); training/reports/report-impostor-bakeoff.md §6 (the surrogate-path HELD-for-the-wrong-reason delta); audits/review-phase-15-midwave.md Q2 (the owner-ratified subject-aware re-anchoring, 2026-07-09); eval/watchability.py (`_observation_backed_conversion`, the per-baseline floor blocks). Do not implement work outside these references.
@@ -100,7 +100,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.crew.scorer"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

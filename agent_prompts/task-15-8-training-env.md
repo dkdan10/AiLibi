@@ -1,9 +1,9 @@
 # Agent Prompt — 15.8 The `training/` package: rollout env, legal-action mask, reward channel (numpy lands here)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.8 — The `training/` package: rollout env, legal-action mask, reward channel (numpy lands here), anchored to audits/post-phase-14-ML-planning.md §5, §7, §11 (action space, injection seam, env wrapper); orchestrator/game.py (AgentFactory :93, HeadlessGame :1121, MeetingAwareAgent :425-450); experiments/lab/ml_spike/core.py (the SpikeAgent interposition pattern :148-200); engine/rules.py + engine/tick.py (the legality predicates); engine/events.py (the reward-source event types). Do not implement work outside these references.
@@ -121,7 +121,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

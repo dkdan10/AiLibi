@@ -1,9 +1,9 @@
 # Agent Prompt — 17.12 The impostor bake-off re-run (full slate) + finalist selection
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.12 — The impostor bake-off re-run (full slate) + finalist selection, anchored to tasks/phase-15.md 15.15 (the recipe this re-runs verbatim); training/bakeoff/harness.py (the protocol: surrogate path + fake-provider real path, `--entrant all`); audits/audit-phase-15-pause.md (the decisions binding re-runs: methods in, torch out, stabilizers); the 16.11 referee floors via 17.11's constants. Do not implement work outside these references.
@@ -68,7 +68,7 @@ staleness cap is live: the harness must respect the re-derived max-uses budget, 
 report quotes consumption.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

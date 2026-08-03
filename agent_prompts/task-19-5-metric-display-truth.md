@@ -1,9 +1,9 @@
 # Agent Prompt — 19.5 Metric and data-display truth: the conversion family and the dashboard
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.5 — Metric and data-display truth: the conversion family and the dashboard, anchored to audits/audit-phase-19-triage.md §7 items 5+6 [S-Claude; §8 rows 7, 8; the alibi 0.0-vs-None row was UNVERIFIED in the triage and is now re-verified at HEAD: eval/alibi_fabrication.py:88-94]; eval/meeting_quality.py:618-624 ("Expected ~0 … bug to chase") — CORRECTED PREMISE: the partition ALREADY imports `UNCITED_ZERO_FLAG_EJECT_MARKER` (eval/meeting_quality.py:179, censused as `citation_coerced_skip_ballots`), and the committed 9p2i report carries `citation_coerced_skip_ballots = 1` BESIDE `threshold_inversions = 87` — so the 87 are NOT unrecognized citation-gated SKIPs (the triage C6 mechanism is refuted; the three-surface doctrine disagreement stands); frontend/src/components/TournamentDashboard.tsx:296-312 (the "gate bug — expect 0" badge), :327-344 (the starved `genuine_class_conversion` labeled "PRIMARY gate"), :423-426 (the survival_rate n/a special case); eval/vote_correctness.py:11-25 (the sentinel demotion the dashboard ignores), :676-688 (`supplied_channel_conversion` — "the ONLY canary-eligible genuine-class cell"); scripts/measure_baseline.py (zero canary references — grep-verified). Do not implement work outside these references.
@@ -88,7 +88,7 @@ shows the shape contract). The frontend n/a special case to delete sits at
 `TournamentDashboard.tsx:423-426`.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

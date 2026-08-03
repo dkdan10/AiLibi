@@ -1,9 +1,9 @@
 # Agent Prompt — 13.5.4 Movement perception (perceive room transitions; wire last_seen)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13-5.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13-5.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.5.4 — Movement perception (perceive room transitions; wire last_seen), anchored to the 2026-06-25 memory diagnosis (workflow `wg54kfoxy`: "movement is never perceived — agents learn only an actor's CURRENT room; the engine emits `MovedEvent` + maintains `last_action` but the observation layer reads neither"); engine/tick.py (`MovedEvent` from_room/to_room ~:261-267, `PlayerState.last_action`); observation/service.py (`_observed_actions_for_agent`, the witness gate); observation/packet.py (`PlayerView`); agents/perception.py (`ingest_packet`, the `EVENT_*` types); agents/memory/store.py (`render_for_prompt`, the existing within-vision `_collect_transitions` / `_SALIENCE_TRANSITION` + `_collect_movement_breadcrumbs`, and the dead `last_seen` render hook ~:1323); agents/memory/working.py (`record_sighting` / `last_seen`, dead — wired here, earmarked by 13.5.1). Do not implement work outside these references.
@@ -85,7 +85,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.perception"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

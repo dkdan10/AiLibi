@@ -1,9 +1,9 @@
 # Agent Prompt — 19.2 The in-code truth sweep: docstrings match the bytes
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.2 — The in-code truth sweep: docstrings match the bytes, anchored to audits/audit-phase-19-triage.md §7 item 2 [S-Claude; §8 rows 5, 16 — every anchor re-verified at HEAD by the planning session]; agents/memory/beliefs.py:916-928 + :1102-1116 (the false "DEAD in production" pair) vs agents/memory/store.py:455-545 (the live write path, unconditional since 14.9); beliefs.py:1395-1399, :433, :1653, :1689-1692, :1791 (stale default-OFF claims) vs the four resolvers :183-197/:217/:285/:400 (hard-return True); meetings/transcript.py:2386-2387 + :2918-2920 vs resolvers :1360-1409 ("now always True"); meetings/manager.py:301-302, :1900, :1935-1946 (stale "default-OFF" citation-gate claims; the lever is always-ON at meetings/constants.py:54); orchestrator/game.py:12-13 (the false only-importer claim). Do not implement work outside these references.
@@ -58,7 +58,7 @@ same-file instance of the same class you can verify against a resolver in the sa
 sitting; do not free-hunt across the repo.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

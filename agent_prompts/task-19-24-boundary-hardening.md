@@ -1,9 +1,9 @@
 # Agent Prompt — 19.24 Boundary hardening: the leak-scan library, `moved_players`, `intent.actor`, the API factory, DTO versions
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.24 — Boundary hardening: the leak-scan library, `moved_players`, `intent.actor`, the API factory, DTO versions, anchored to audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`). Do not implement work outside these references.
@@ -89,17 +89,21 @@ Touching the leak suite and the champion-gate import path in one PR. The invaria
 cannot regress: every scanner that could bite before still bites (run the planted-leak
 matrix before and after the move and diff the outcomes — identical or the PR stops).
 The DTO version rejection risks breaking the demo bundle and dev flows on skew — the
-generated constant keeps client and server in lockstep through the same codegen.
+generated constant keeps client and server in lockstep through the same codegen. Five
+seams in one contract is reviewable only in pieces: this contract MAY land as a reviewed
+sequence of stacked PRs on the task branch (scanner move → moved_players coverage →
+actor validation → API factory → DTO rejection is the natural order); the coordination
+session sanctions the split at dispatch, and the DoD applies to the sequence's tip.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
-- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
+- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

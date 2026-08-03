@@ -1,9 +1,9 @@
 # Agent Prompt — 7.12 Teammate-aware impostor meeting behavior (J-5)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-7.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-7.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 7.12 — Teammate-aware impostor meeting behavior (J-5), anchored to audits/audit-2026-06-02-2112-gameplay-data.md (gp-imp-1, D-D-1, D-D-2, D-D-3, D-D-4, C-C-6); DESIGN.md §5.2–§5.3 (meeting protocol / reports), §6.6 (prompt rendering + leak firewall); the J-5 deferral marker at `agents/perception.py:196`. Do not implement work outside these references.
@@ -62,7 +62,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "from meetings.manager import MeetingParticipant"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

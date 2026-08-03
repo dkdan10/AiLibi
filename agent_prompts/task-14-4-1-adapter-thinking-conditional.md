@@ -1,9 +1,9 @@
 # Agent Prompt — 14.4.1 Make the Featherless adapter's `enable_thinking` kwarg conditional (unblock non-Qwen models)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-14.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-14.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 14.4.1 — Make the Featherless adapter's `enable_thinking` kwarg conditional (unblock non-Qwen models), anchored to llm/featherless_client.py (the 14.1 adapter; the request-time `chat_template_kwargs.enable_thinking` field); experiments/lab/report-featherless-sweep.md (14.4 finding: the mandatory field collapses GLM to `{}` and 400/504s Cydonia); experiments/lab/featherless_sweep.py (`_bare_send`, the harness workaround this task makes unnecessary in production). Do not implement work outside these references.
@@ -69,7 +69,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import llm.provider"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

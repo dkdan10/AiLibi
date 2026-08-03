@@ -1,9 +1,9 @@
 # Agent Prompt — 19.10 Playback coherence: the meeting pause, the unspoiled mode, the finale card
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.10 — Playback coherence: the meeting pause, the unspoiled mode, the finale card, anchored to audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1188-1195 (the loader's own deliberate-mix comment). Do not implement work outside these references.
@@ -20,8 +20,16 @@ The app's core content cannot be consumed on the default Play path: a meeting ge
 500 ms frame, the header spoils the winner from frame zero, the game simply stops with no
 resolution, and a meeting frame carries two different times. Fix the narrative spine:
 (a) autoplay pauses on meeting entry with Resume and next-beat affordances; (b) unspoiled
-mode is the default — the winner render and any outcome-revealing chrome are deferred
-until the finale or an explicit reveal toggle; (c) a real finale card — winner, win
+mode is the default AND INDEPENDENT OF PERSPECTIVE — outcome reveal is its own store
+state, defaulted off, NOT implied by omniscient view (the store currently defaults to
+OMNISCIENT and resets every selected replay to it at `replayStore.ts:223/:301`, which
+would defeat "unspoiled by default" if perspective implied reveal; omniscient governs
+what the CURRENT FRAME shows, reveal governs the FUTURE/OUTCOME) — and every
+outcome-derived surface is gated by it: the header, the finale card, the entry cards'
+full outcome copy (win shape and ejection counts at `HighlightCard.tsx:94`, not just the
+WinnerTag), and the outcome FILTERS (`ReplayFilters.tsx` — winner/winShape/ejection
+options render behind the reveal affordance with an explicit spoiler warning, and URL
+state carries the reveal flag deliberately, never accidentally); (c) a real finale card — winner, win
 reason, the decisive events, a compact per-agent "what they knew vs the truth" recap, and
 the reveal toggle — built from data already recorded in the replay (exposed as additive
 DTO fields where the view model lacks them); (d) one frame, one time: model the meeting's
@@ -33,6 +41,8 @@ resolving the deliberate mix the loader documents.
 - frontend/src/App.tsx
 - frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186 — and the stale "4p1i default" comments at :16-17/:33 are rewritten post-flip)
 - frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
+- frontend/src/components/ReplayFilters.tsx; (the outcome filters gate behind the reveal affordance — winner/winShape/ejection expose outcomes pre-open)
+- frontend/src/store/replayStore.ts; (ONLY the reveal state: independent of perspective, default off, preserved across the per-replay perspective reset — 19.12's error-field split is untouched)
 - frontend/src/stories/MeetingView.stories.tsx; (its complete `ReplayView` fixture gains the finale field or tsc fails)
 - frontend/src/stories/MapStage.stories.tsx; (same — `FIXTURE` constructs the full generated type)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
@@ -48,7 +58,7 @@ resolving the deliberate mix the loader documents.
 - replays/ (frozen)
 
 **Definition of done:**
-- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
+- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; outcome reveal is a store state INDEPENDENT of perspective, defaults off for every replay (the per-replay perspective reset does not re-reveal — pinned), and no outcome-derived surface renders without it: header, finale, entry-card outcome copy (win shape/ejection counts included), outcome filters (spoiler-warned), and URL state.
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
 - [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
@@ -82,7 +92,7 @@ interactions that already work (keyboard transport, fog enforcement, URL state).
 the DTO change is additive-only so older committed fixtures keep parsing.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

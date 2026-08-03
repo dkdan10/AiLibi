@@ -1,9 +1,9 @@
 # Agent Prompt — 19.25 The parameterized replay walker + the eval consumer migration
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.25 — The parameterized replay walker + the eval consumer migration, anchored to audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:166 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18). Do not implement work outside these references.
@@ -16,15 +16,21 @@ The authoritative task contract is copied below from tasks/phase-19.md. Follow i
 **Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:166 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
 **Complexity:** Integration
 
-"Reconstructs cleanly" currently denotes eight subtly different predicates — each copy of
-the walk enforces a different subset of the integrity checks, which is a semantic-drift
-hazard, not just duplication. Build `eval/replay_walk.py`: one typed, fail-loud walker
-(re-seed → `advance_tick` over recorded actions → `apply_meeting_result`) enforcing the
-UNION of the integrity checks the copies enforce (state-hash verification per tick,
-doubled-tick/doubled-game-over detection, meeting-result application rules), with
-pluggable per-tick and per-meeting fact collectors. Migrate the eight live call sites
-one consumer at a time with BYTE-PARITY: no committed pin, report cell, or metric value
-may change — parity is the deliverable. `off_menu.py` stays frozen and unmigrated
+"Reconstructs cleanly" currently denotes eight subtly different predicates — and the
+owner review established the differences are partly DELIBERATE, not drift:
+`eval/validity.py:430` tolerates a partial-meeting replay by design while
+`eval/funnel.py:398` fails it loudly, and funnel's comment declares its divergence
+deliberate. A union of checks would therefore CHANGE validation behavior — exactly what
+locked decision 1 forbids. Build `eval/replay_walk.py` as shared MECHANICS with
+per-consumer PROFILES: one typed walker owns the reconstruction core (re-seed →
+`advance_tick` → `apply_meeting_result`, state-hash verification, doubled-record
+detection) with pluggable fact collectors, and each consumer declares a NAMED validation
+profile that preserves its current, deliberate semantics — the drift record documents
+per profile which checks it enforces, which it deliberately relaxes, and why, each with
+a negative fixture proving the profile still bites (or still tolerates) what it did
+before. Migrate the eight live call sites one consumer at a time with BYTE-PARITY: no
+committed pin, report cell, or metric value may change — parity is the deliverable, and
+a profile-semantics change is out of scope. `off_menu.py` stays frozen and unmigrated
 (labeled by 19.18); the API and training walks are backlog by the cut line.
 
 **Files in scope:**
@@ -51,9 +57,9 @@ may change — parity is the deliverable. `off_menu.py` stays frozen and unmigra
 - eval/deception_instruments.py (already consumes a shared walk; not churned)
 
 **Definition of done:**
-- [ ] The walker's docstring tables the union of integrity checks with, per retired copy, which checks it had and which it lacked (the drift record).
-- [ ] All eight call sites consume the walker; a repo grep proves no independent `advance_tick` reconstruction loop remains in the migrated modules.
-- [ ] BYTE-PARITY: every committed pin and regenerated-report byte is unchanged across the migration (the four derived reports regenerate identical; the diff proves it); if any committed byte fails the union of checks, the migration STOPS and records the finding — the union is never weakened silently.
+- [ ] The walker's docstring tables the shared core plus every named profile: which checks each profile enforces, which it deliberately relaxes (validity's partial-meeting tolerance vs funnel's fail-loud is the canonical pair), and why — with a negative fixture per profile proving its semantics are unchanged.
+- [ ] All eight call sites consume the walker under their own profile; a repo grep proves no independent `advance_tick` reconstruction loop remains in the migrated modules.
+- [ ] BYTE-PARITY: every committed pin and regenerated-report byte is unchanged across the migration (the four derived reports regenerate identical; the diff proves it); any behavior difference discovered between a consumer's old walk and its declared profile STOPS the migration and is recorded as a finding — never silently reconciled in either direction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -79,22 +85,22 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 ## Integration risk
 
 Eight load-bearing eval modules on one branch. The parity discipline is the guard
-(committed pins are the oracle at every step), plus the stop-rule: any committed byte
-that fails the union of integrity checks is a recorded finding and a halt, never a
-silently-relaxed check. If the branch runs long, land the walker + the first three
-consumers and split the rest into a follow-up on the same contract (coordination notes
-the split) rather than letting the branch drift.
+(committed pins are the oracle at every step), plus the profile discipline: deliberate
+per-consumer semantics are preserved, never unified — a union would be an
+evidence-validation behavior change, which locked decision 1 forbids. If the branch runs
+long, land the walker + the first three consumers and split the rest into a follow-up on
+the same contract (coordination notes the split) rather than letting the branch drift.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import eval.leak_scan"`
-- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
+- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

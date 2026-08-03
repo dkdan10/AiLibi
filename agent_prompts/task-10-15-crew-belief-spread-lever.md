@@ -1,9 +1,9 @@
 # Agent Prompt — 10.15 Crew belief-spread lever (single-witness inform)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-10.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-10.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 10.15 — Crew belief-spread lever (single-witness inform), anchored to DESIGN.md §5.2, §6.3, §4.6; audits/audit-2026-06-13-1816-gameplay-data.md C-C-1 + H-4; the owner belief-spread-first decision (2026-06-14); [[project_ejection_suspicion_principle]]. Do not implement work outside these references.
@@ -70,7 +70,7 @@ EJECTS a baseline listener — the baseline-listener pin is the tripwire wired t
 The render-reads-post-fold seam must keep threshold_inversions at 0. Recording-side only.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 13.2 Meeting-time position-reconstruction helper (transcript-only)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.2 — Meeting-time position-reconstruction helper (transcript-only), anchored to experiments/lab/report-phase-b-plan.md (the spine); experiments/lab/inference_feasibility_probe.py (the `reconstruct` logic to promote); meetings/transcript.py (`is_relevant_sighting`). Do not implement work outside these references.
@@ -37,7 +37,7 @@ port the probe's `reconstruct` semantics (engine actor-id order) but over STATED
 pure function (transcript in → paths out, no side effects); reuse `is_relevant_sighting` for which sightings count.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

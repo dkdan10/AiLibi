@@ -1,9 +1,9 @@
 # Agent Prompt — 16.4 J1: the hard-evidence render gate (default-OFF lever)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-16.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-16.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 16.4 — J1: the hard-evidence render gate (default-OFF lever), anchored to audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1 (the measured 24/31 vs 6/16 trade — baseline-2-era, re-measure); agents/memory/beliefs.py (the 0.60 gate discipline + REPORTER_EXCULPATION precedent); orchestrator/replay.py:395-431 (_TOGGLEABLE_LEVER_RESOLVERS, currently empty, + _RETIRED_ALWAYS_ON_LEVERS). Do not implement work outside these references.
@@ -87,7 +87,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import agents.memory.beliefs"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

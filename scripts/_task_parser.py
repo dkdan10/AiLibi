@@ -183,7 +183,12 @@ def extract_optional_field(body: str, field_name: str) -> str:
 def parse_depends_on(value: str) -> tuple[str, ...]:
     if value.lower() in {"", "none"}:
         return ()
-    return tuple(match.group("task_id") for match in TASK_ID_RE.finditer(value))
+    # Order-preserving dedupe: explanatory parentheticals in a Depends line may
+    # repeat a task id already listed; a dependency is a set membership, and
+    # duplicated blockers confuse frontier displays downstream.
+    return tuple(
+        dict.fromkeys(match.group("task_id") for match in TASK_ID_RE.finditer(value))
+    )
 
 
 def is_future_phase_task_id(task_id: str) -> bool:

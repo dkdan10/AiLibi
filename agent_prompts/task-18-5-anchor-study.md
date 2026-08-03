@@ -1,9 +1,9 @@
 # Agent Prompt — 18.5 The anchor study: λ sweep + filtered-BC anchor refinement
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.5 — The anchor study: λ sweep + filtered-BC anchor refinement, anchored to audits/audit-phase-18-planning.md §2.4 (the two levers) + §6 (the piKL reading); training/bakeoff/harness.py `inner_episode_fitness` (:569-590, the anchor penalty seam); training/bakeoff/utility_es.py:708-718 (the full budget: 285 s/run on the fake path); replays/ml_corpus/ (the filtered-BC source). Do not implement work outside these references.
@@ -67,7 +67,7 @@ CPU — resist any urge to subsample the protocol. The filtered-BC fit mirrors t
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 19.22 Artifact classes + the coevo prune + the fast-clone path
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.22 — Artifact classes + the coevo prune + the fast-clone path, anchored to audits/audit-phase-19-triage.md §7 item 23 [C; VERIFIED §8 row 11] + locked decision 5; the verified consumer set (planning session): exactly two test files read coevo bytes — tests/scripts/test_generate_campaign_tables.py (pins `measurement-stability.json` key-for-key) and tests/training/test_finalist_eval_pins.py (pins weights under `intermediates/`, `runnerups/`, run-01/run-c1/run-c2 generation dirs, and `realpath-crew/controls/…`); the tree: training/artifacts/coevo = ~109MB / 1,473 files, the realpath* subtrees ~104MB / 403 files; audits/audit-phase-18-close.md §6.3 C4 (the coevo namespace rules — the prune must not disturb `DEFAULT_RANKING_ROOTS` semantics). Do not implement work outside these references.
@@ -12,7 +12,7 @@ Implement Task 19.22 — Artifact classes + the coevo prune + the fast-clone pat
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-artifact-classes`
-**Depends on:** 19.13, 19.19
+**Depends on:** 19.13, 19.19, 19.21 (the raw-slate ruling precedes the ONE immutable evidence commit this task creates)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 23 [C; VERIFIED §8 row 11] + locked decision 5; the verified consumer set (planning session): exactly two test files read coevo bytes — tests/scripts/test_generate_campaign_tables.py (pins `measurement-stability.json` key-for-key) and tests/training/test_finalist_eval_pins.py (pins weights under `intermediates/`, `runnerups/`, run-01/run-c1/run-c2 generation dirs, and `realpath-crew/controls/…`); the tree: training/artifacts/coevo = ~109MB / 1,473 files, the realpath* subtrees ~104MB / 403 files; audits/audit-phase-18-close.md §6.3 C4 (the coevo namespace rules — the prune must not disturb `DEFAULT_RANKING_ROOTS` semantics)
 **Complexity:** Medium
 
@@ -22,11 +22,16 @@ immutable evidence in the evidence branch; (d) disposable regenerated views. The
 prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
-orphan evidence branch `evidence/phase-18-coevo` with a per-file sha-256 manifest
-committed in-tree. Pinned bytes, `measurement-stability.json`, and the provenance
-records stay in-tree. `replays/` does not move (locked decision 5). README and the
-reading guide document `git clone --filter=blob:none` as the fast path, with the honest
-caveat that full-history clones stay heavy absent a future deliberate rewrite.
+orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
+carries the recovered finalist raw slate if 19.21's ruling found it — with a per-file
+sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
+in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
+branch name — the pin is the immutability guarantee), registering the class-(c) rows in
+`docs/artifacts.md` including 19.21's outcome. Pinned bytes,
+`measurement-stability.json`, and the provenance records stay in-tree. `replays/` does
+not move (locked decision 5). README and the reading guide document
+`git clone --filter=blob:none` as the fast path, with the honest caveat that
+full-history clones stay heavy absent a future deliberate rewrite.
 
 **Files in scope:**
 - training/artifacts/coevo/; (the prune — unpinned bytes removed from the working tree)
@@ -43,7 +48,7 @@ caveat that full-history clones stay heavy absent a future deliberate rewrite.
 **Definition of done:**
 - [ ] The consumer enumeration is committed (the manifest marks each retained path with its pinning test); the full suite passes with NO test edits — the prune provably removed only unpinned bytes.
 - [ ] Moved weight/sidecar PAIRS stay paired in the evidence branch and the in-tree manifest carries their hashes — verification-after-fetch must work (19.23 depends on it); a weight whose sidecar went one way while it went the other is a manifest error.
-- [ ] The evidence branch exists, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them; the working-tree size reduction is quoted in the PR.
+- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate per 19.21's ruling), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them by that pinned sha; the working-tree size reduction is quoted in the PR.
 - [ ] The fast-clone path is documented with the honest history caveat.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -69,7 +74,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 8.3 Task-id propagation: observation + agents + memory
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.3 — Task-id propagation: observation + agents + memory, anchored to DESIGN.md §3.2 (agent-facing map id), §1.3 (observation firewall); audits/restructure-impact-map-2026-06-04-0223.md §2a, §3.2, §4 coupling 5. Do not implement work outside these references.
@@ -55,7 +55,7 @@ The agent-facing id is the MAP id (8.1's decision), so most of this layer is a r
 The leak firewall is load-bearing: a crewmate's packet must never carry another player's task ownership. The render/field/reader legs must move together — a drift makes `do_task` silently advance the wrong owner's instance (a determinism + correctness bug invisible to the type checker). Land the do_task round-trip test + the leak coverage together.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

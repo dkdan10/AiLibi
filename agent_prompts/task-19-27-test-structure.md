@@ -1,9 +1,9 @@
 # Agent Prompt — 19.27 Test-suite structure: markers, the shared fixture, pins to goldens
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens, anchored to audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:45-46 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines). Do not implement work outside these references.
@@ -44,7 +44,7 @@ Quote the default-gate runtime before/after in the PR.
 - tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
 - tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
 - tests/eval/test_wave2_metrics.py; (the clearest measured re-walk consumer — five independent `build_report(_COMMITTED_9P2I_DIR)` calls adopt the shared fixture)
-- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
+- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a SCHEDULED job running `-m campaign` (weekly), optionally augmented by a training-path filter; a path filter alone is insufficient because the tier must also catch rot introduced from outside training/)
 
 **Files NOT in scope:**
 - scripts/check.sh (the default LOCAL gate's invocation is unchanged — markers make the campaign tier opt-in via registration defaults)
@@ -66,8 +66,10 @@ Quote the default-gate runtime before/after in the PR.
 ## Implementation hint
 
 Marker defaults via `addopts = -m "not campaign"` keeps the default invocations
-untouched; the standing `-m campaign` home is this contract's ci.yml job (weekly
-schedule or training-path filter — pick one and note the posture in conftest). The helper extraction is mechanical: move, re-export
+untouched; the standing `-m campaign` home is this contract's SCHEDULED ci.yml job
+(weekly; a path filter may be added on top but never substitutes). Note in conftest that
+`check.sh` is henceforth the DEFAULT gate and the close runs both tiers — the phase-close
+contract (19.28) pins that. The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
 if all four importers migrate cleanly.
 
@@ -76,12 +78,12 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import eval.replay_walk"`
 - `uv run python -c "import eval.leak_scan"`
-- `uv run python -c "import api.schemas"`
 - `uv run python -c "import training.realpath_schema"`
 - `uv run python -c "import eval.deduction_metrics"`
+- `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -233,6 +233,36 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The owner's own review round (8 findings + 6 improvements, after Codex converged
+  clean at round 9)** was verified claim-by-claim — all eight reproduced, several in a
+  class the automated rounds never reached (semantic defeat rather than scope ripple) —
+  and absorbed: (F1) the rubric staleness KEY is broken for mixed-provenance sets
+  (three recording SHAs → `manifest_sha=None` → unconditionally stale), so 19.9 now
+  fixes the key (set fingerprint or an honest mixed-provenance notice) with
+  `rubric_score.py` in scope; (F2) artifact preservation became one transaction —
+  19.21's availability ruling precedes 19.22's single immutable, pushed, SHA-pinned
+  evidence commit, `fetch_evidence.sh` fetches by pin, and 19.23 gains a `--complete`
+  mode the 19.28 close must run after fetching; (F3) outcome reveal is now independent
+  of perspective (the store defaults to and resets to OMNISCIENT — perspective-implied
+  reveal would defeat unspoiled-by-default), gating cards' win-shape copy, the outcome
+  filters, and URL state; (F4) 19.25's union-of-checks mandate was itself a charter
+  violation (validity/funnel divergences are DELIBERATE per funnel's own comment) —
+  replaced with shared mechanics + named per-consumer validation profiles with negative
+  fixtures; (F5) the dispatch template's authority line is neutralized in THIS planning
+  PR via AGENTS.md indirection (true before and after 19.1), removing the
+  authority-contradiction window without a bootstrap task; (F6) the 19.28 close runs
+  BOTH pytest tiers and the campaign CI job is scheduled, not merely path-filtered;
+  (F7) the ticker renders through the perspective projection with four pinned fog cases
+  and frame-bounded cost chips (the served event views carry privileged attribution);
+  (F8) the realpath schema relocation carries its full dependency closure
+  (`RealPathSeedTelemetry`, proof validators) and its round-trip/invalid-proof tests
+  into a surviving test module. Improvements absorbed: the demo bundle is
+  browser-tested with a zero-`/api` interception (19.13 deps 19.12); the Playwright
+  browser is specified (channel or pinned+cached), never assumed; 19.19/19.24 may land
+  as sanctioned stacked-PR sequences; the task parser dedupes Depends ids and the
+  validator now rejects unknown dependencies and cycles (with guard tests, this PR);
+  19.15's forward-recording redaction is ratified by name in locked decision 1; and the
+  scope-gated constraint rules gained focused tests.
 - **The eighth Codex review round (2 findings)** was verified claim-by-claim — both
   reproduced — and absorbed: the coevo prune would have stranded 268 of the 313
   training sidecars away from 19.23's flat verification promise, so 19.22 now keeps

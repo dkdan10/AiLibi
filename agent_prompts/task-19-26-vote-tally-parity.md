@@ -1,9 +1,9 @@
 # Agent Prompt — 19.26 Vote-tally parity (consolidation optional)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.26 — Vote-tally parity (consolidation optional), anchored to audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1956-2004 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only. Do not implement work outside these references.
@@ -55,7 +55,7 @@ their markers. Consolidation, if taken, should leave `_tally` as a thin delegati
 delete the call site.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

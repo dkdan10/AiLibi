@@ -1,9 +1,9 @@
 # Agent Prompt — 15.14 Adversarial Goodhart probe: red-team the referee, and the shared ES core
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.14 — Adversarial Goodhart probe: red-team the referee, and the shared ES core, anchored to audits/post-phase-14-ML-training-signal.md §3.2, §7.1.9 (the un-run charter guardrail); experiments/lab/ml-spike-charter.md (gap 3); experiments/lab/ml_spike/fo3_rubric_goodhart.py (the prior probe shape); audits/post-phase-14-ML-planning.md §12.2 (reward-hacking guards). Do not implement work outside these references.
@@ -89,7 +89,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.watchability"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

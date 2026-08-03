@@ -1,9 +1,9 @@
 # Agent Prompt — 19.7 Public and build hygiene + the MIT posture
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.7 — Public and build hygiene + the MIT posture, anchored to audits/audit-phase-19-triage.md §7 item 8 [S-Codex/S-Claude; §8 rows 12, 16] + locked decision 4 (MIT + minimal); .github/workflows/ci.yml (no `permissions:` block; checkout@v6/setup-python@v6/setup-uv@v7/setup-node@v4 by tag; the frontend-checks job :32-57 repeating scripts/check.sh:17-24); pyproject.toml:7-21 (pytest/ruff/mypy/hypothesis/import-linter in RUNTIME deps) vs :48-51 (dev group = one stub); package-lock.json (a 10-line dead root lockfile); the absent LICENSE/CONTRIBUTING/SECURITY (verified absent at HEAD). Do not implement work outside these references.
@@ -67,7 +67,7 @@ other copy. For the partition, `uv`'s dependency groups + `uv sync --group dev` 
 shape; CI must install the group explicitly.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

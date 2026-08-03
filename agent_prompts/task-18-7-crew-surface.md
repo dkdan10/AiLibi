@@ -1,9 +1,9 @@
 # Agent Prompt — 18.7 The crew deployment surface (opt-in, adoption gated)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.7 — The crew deployment surface (opt-in, adoption gated), anchored to audits/audit-phase-18-planning.md §4 (#7); agents/tactical/learned/factory.py:141-152 (the impostor-only wrapper), :199-232 (the factory + stamp); training/crew/scorer.py:197-230, 681-745 (the crew menu's re-validation + emergency bookkeeping the shipped wrapper must carry), :747-769 (`_CrewCandidateAgent`, the hook precedent); training/crew/options.py (the portable menu); audits/audit-phase-15-pause.md decision 6 (the Q4 bit-exact gate). Do not implement work outside these references.
@@ -73,7 +73,7 @@ bytes), and the stamp conflation guard (a crew recording must never wear the imp
 champion's stamp — assert distinct `policy_id`/`weights_sha256` namespaces in the CLI arm).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

@@ -1,9 +1,9 @@
 # Agent Prompt — 13.1 Repair the rubric scorer (R2/R3/R7 perverse gradients)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.1 — Repair the rubric scorer (R2/R3/R7 perverse gradients), anchored to experiments/lab/report-grounding-audit.md (the audit findings + punch-list; on main via PR #181); experiments/lab/rubric_score.py; eval/meeting_quality.py; audits/workflows/extract_gameplay_facts.py; agents/strategic/../transcript.py (`is_weak_contradiction`). Do not implement work outside these references.
@@ -73,7 +73,7 @@ untouched. Validate against the audit's SPECIFIC cases (the Pearson sign on R2, 
 a repair that does not flip those has not fixed the gradient.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

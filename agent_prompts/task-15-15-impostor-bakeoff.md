@@ -1,9 +1,9 @@
 # Agent Prompt — 15.15 The impostor bake-off: BC/DAgger, utility-scorer+ES, policy-net+ES, MAP-Elites
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-15.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 15.15 — The impostor bake-off: BC/DAgger, utility-scorer+ES, policy-net+ES, MAP-Elites, anchored to audits/post-phase-14-ML-planning.md §5.2, §9 (the option vocabulary + paradigm comparison); audits/post-phase-14-ML-training-signal.md §4 (the objective spine: competence + anchor-KL + QD; referee as gate); agents/tactical/impostor_policy.py (_scored_targets :937-1009, the ladder :261); experiments/lab/ml_spike/check2_learnability.py + fo9_diversity.py (the ES priors). Do not implement work outside these references.
@@ -136,7 +136,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import engine.rng"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

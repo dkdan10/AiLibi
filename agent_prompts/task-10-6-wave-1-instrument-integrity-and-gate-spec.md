@@ -1,9 +1,9 @@
 # Agent Prompt — 10.6 Wave-1 instrument integrity and gate spec
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-10.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-10.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 10.6 — Wave-1 instrument integrity and gate spec, anchored to DESIGN.md §5.4, §6.3; audits/audit-2026-06-11-2218-gameplay-data.md gp-1 (C-C-5, C-C-4), C-C-3, gp-5 (H-H-1, H-H-2), gp-6 (H-H-4), gp-7 (C-C-6). Do not implement work outside these references.
@@ -73,7 +73,7 @@ conflicts with both the sighting and the subject's own account, and it lands wea
 cannot eject alone. Recording-side only; committed reconstruction unaffected.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

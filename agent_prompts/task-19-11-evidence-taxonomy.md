@@ -1,9 +1,9 @@
 # Agent Prompt — 19.11 The evidence taxonomy: proof is not a contradiction
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.11 — The evidence taxonomy: proof is not a contradiction, anchored to audits/audit-phase-19-triage.md §7 item 12 [S-Codex/S-Claude; §8 rows 10, 14] + item 20 (the four mechanisms preserved as separate fixtures); meetings/schemas.py:442-456 (vent_sighting: "both event ids reference the SAME spoken observation"); meetings/transcript.py:2878-2906 (the self-linked emission); frontend/src/components/MeetingView.tsx:303-385 with :348 (every flag rendered `A ↔ B`, so grounded vent proof shows as `p-X ↔ p-X` under "Contradictions"); the traced injustice exhibits (§8 row 14: seed 17 M0, seed 47; plus seed 12 M0, seed 23 M1, 4p1i seeds 41/49). Do not implement work outside these references.
@@ -89,7 +89,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

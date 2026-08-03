@@ -1,9 +1,9 @@
 # Agent Prompt — 10.16 Wave-2 metrics and gate spec
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-10.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-10.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 10.16 — Wave-2 metrics and gate spec, anchored to DESIGN.md §9, §11; audits/audit-2026-06-13-1816-gameplay-data.md (B-B-2 pacing inversion, D-D-1/D-D-2 toolkit + active-deflection, C-C-1 conversion); experiments/lab/report-deception-battery*.md. Do not implement work outside these references.
@@ -66,7 +66,7 @@ read as zero on W1 bytes). The one real seam is the per-tick action ingest — k
 role-from-seeder. Standalone-off-the-wrapper keeps the committed single-era reports byte-stable.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

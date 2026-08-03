@@ -1,9 +1,9 @@
 # Agent Prompt — 18.9 The endpoint-band whereabouts exemption + the vent-placement flag variant (default-OFF) + counterfactuals
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.9 — The endpoint-band whereabouts exemption + the vent-placement flag variant (default-OFF) + counterfactuals, anchored to audits/audit-phase-18-planning.md §3.3 (why roll-call lies can never mint STRONG flags); meetings/transcript.py:529 (`WEAK_REASON_ENDPOINT_TICK`), :2262-2270 (the band application), :1927-1945 (the single-tick self-alibi indexing); audits/audit-phase-17-close.md §6 item 4 (BOTH halves of the routed detector package: the endpoint relaxation AND the grounded-vent flag-minting variant); tasks/phase-17.md §Designer rulings (the 17.5 grounding chokepoint the variant reuses). Do not implement work outside these references.
@@ -67,7 +67,7 @@ transcripts, the 17.5 pin pattern.
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

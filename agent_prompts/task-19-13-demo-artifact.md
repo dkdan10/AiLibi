@@ -1,9 +1,9 @@
 # Agent Prompt — 19.13 Proof above the fold + the static demo artifact
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.13 — Proof above the fold + the static demo artifact, anchored to audits/audit-phase-19-triage.md §7 item 14 [C]; docs/deployment.md:10-33 (the unauthenticated-GM-view trust boundary — preserved verbatim in spirit); docker-compose.yml:31-37 (loopback binding); the verified gap: `vite build` output is never served, no StaticFiles mount, no screenshot/GIF anywhere in README. Do not implement work outside these references.
@@ -12,7 +12,7 @@ Implement Task 19.13 — Proof above the fold + the static demo artifact, anchor
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-demo-artifact`
-**Depends on:** 19.1, 19.9, 19.10, 19.14, 19.16 (the 19.14 edge is TournamentDashboard.tsx serialization — the metrics panel lands before the fetch-seam routing)
+**Depends on:** 19.1, 19.9, 19.10, 19.12, 19.14, 19.16 (the TournamentDashboard serialization edge — the metrics panel lands before the fetch-seam routing — and the Playwright-baseline edge: the bundle is browser-tested, not just built)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 14 [C]; docs/deployment.md:10-33 (the unauthenticated-GM-view trust boundary — preserved verbatim in spirit); docker-compose.yml:31-37 (loopback binding); the verified gap: `vite build` output is never served, no StaticFiles mount, no screenshot/GIF anywhere in README
 **Complexity:** Medium
 
@@ -35,6 +35,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
+- frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)
 - tests/scripts/test_build_demo_bundle.py (new)
 
 **Files NOT in scope:**
@@ -42,7 +43,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - docker-compose.yml (loopback stance stands)
 
 **Definition of done:**
-- [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; opening it via a static server plays the featured journey end-to-end (pause → finale) with zero API calls (test asserts no non-static fetch paths in bundle mode).
+- [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; a Playwright case serves the BUILT bundle statically and plays the featured journey end-to-end (pause → finale) with network interception asserting ZERO `/api` requests — the browser test exercises the artifact itself, not only its Python builder.
 - [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
@@ -69,7 +70,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

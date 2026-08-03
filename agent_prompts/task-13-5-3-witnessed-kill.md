@@ -1,9 +1,9 @@
 # Agent Prompt — 13.5.3 Witnessed kill becomes real evidence (witness belief + kill-scene STRONG flag)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13-5.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13-5.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.5.3 — Witnessed kill becomes real evidence (witness belief + kill-scene STRONG flag), anchored to the 2026-06-25 design-thread eyewitness-strength decision (a first-hand kill view makes the WITNESS near-certain); agents/memory/beliefs.py (`apply_observation_rules` Rule 4 vent precedent + `VENTING_SUSPICION_DELTA`, `apply_contradiction_rule`); observation/service.py (the witness-gated kill stamp `PlayerView.action == "kill"`, ~:351); meetings/transcript.py (`_detect_alibi_vs_physical` / `reconstruct_stated_paths` ~:833 / `detect_contradictions` ~:922 / `PHYSICAL_CONTRADICTION_MIN_VOICES` ~:517 / `WEAK_REASON_LONE_PHYSICAL` ~:502 / `triggering_body_rooms` / `is_weak_contradiction` ~:610); audits/workflows/extract_gameplay_facts.py (the $0 R7 re-extraction); [[project_ejection_suspicion_principle]]. Do not implement work outside these references.
@@ -104,7 +104,7 @@ holds, and the (b)-strictness keeps a lone forgeable kill-accusation sub-gate. B
 re-record. No re-record here (the $0 R7 re-extraction is the gate, per the Phase-13 cadence).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

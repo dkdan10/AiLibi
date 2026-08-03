@@ -1,9 +1,9 @@
 # Agent Prompt — 18.32 The crew re-rank arm: crew candidates, frozen-opponent seam, dual stamps
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-18.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-18.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 18.32 — The crew re-rank arm: crew candidates, frozen-opponent seam, dual stamps, anchored to training/realpath.py (`RealPathCandidate`, `_build_agent_factory`, `_verify_stamps` — the impostor-only surfaces this task widens); training/coevo/factory.py (`build_coevo_factory` + the 18.19 conflation guard, consumed not edited); scripts/run_tournament.py (`--crew-artifact` — the dual-stamp semantics this task mirrors, NOT edited); orchestrator/replay.py (`CrewTacticalPolicyStamp`). Do not implement work outside these references.
@@ -113,7 +113,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.anchor_study"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

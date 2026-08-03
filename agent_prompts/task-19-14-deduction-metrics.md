@@ -1,9 +1,9 @@
 # Agent Prompt — 19.14 The deduction metrics: what "deduction" means, instrumented
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.14 — The deduction metrics: what "deduction" means, instrumented, anchored to audits/audit-phase-19-triage.md §7 item 15 [S-Codex/S-Claude convergent objective; §8 rows 3, 10, 14; the roll-call split and the 13-redirected-ejects cells are source-specific and NOT independently re-run — verify-then-fix] + item 24 disclosure twin (19.8); the headline cross-tab under its TWO distinct partitions, both pinned separately — MEETING-flag (9p2i samples: 70 flagged meetings → 68 imp/2 inn ejected, 95 unflagged → 10 imp/21 inn; unflagged-meeting accuracy 10/31 = 32.3%) and EJECTEE-specific-proof (68/101 ejections proof-present; accuracy among the 33 without ejectee-specific proof 10/33 = 30.3%; corpus twin 35/89 = 39.3%) — the fourth Codex round caught the two denominators being mixed in one sentence, which is exactly the C5 define-before-counting lesson; tests/eval/test_kill_craft.py:66-135 (the witnessed-supply pins to adopt). Do not implement work outside these references.
@@ -87,7 +87,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

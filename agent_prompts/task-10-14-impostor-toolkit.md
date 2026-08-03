@@ -1,9 +1,9 @@
 # Agent Prompt — 10.14 Impostor toolkit (blending + anticipatory cover + kill discipline)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-10.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-10.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 10.14 — Impostor toolkit (blending + anticipatory cover + kill discipline), anchored to DESIGN.md §3.4, §4.5, §5.3; audits/audit-2026-06-13-1816-gameplay-data.md D-D-1/D-D-2/D-D-7 + MECH-B-1; experiments/lab/report-deception-battery-2.md. Do not implement work outside these references.
@@ -68,7 +68,7 @@ impostors help the crew win) — pin it explicitly. The firewall stays the deter
 the EMERGENCY_COOLDOWN_TICKS anchor is re-derived against the toolkit-shifted kill cadence.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

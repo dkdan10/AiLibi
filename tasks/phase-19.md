@@ -25,8 +25,13 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
    `orchestrator/game.py:343-350`, parametrically validated by
    `tests/agents/test_bespoke_prompt_sets.py`) — the source audits' deletion candidacy
    is refuted and no prompt-set directory is deleted. The agent-dispatch template
-   (`scripts/prompt_template.md.j2`) is not a game template; 19.1 updates its authority
-   line with the DESIGN.md demotion.
+   (`scripts/prompt_template.md.j2`) is not a game template; its authority line was
+   neutralized in THIS planning PR (AGENTS.md indirection — true both before and after
+   19.1's demotion), so no dispatched agent is ever told DESIGN.md is authoritative.
+   One explicitly ratified FORWARD-RECORDING exception: 19.15's guard-rationale
+   redaction changes what a future recording's coerced ballots carry (committed bytes
+   unaffected) — sanctioned here, by name, as the phase's only gameplay-adjacent
+   behavior change.
 2. **ML component tier map: the evidence-first hybrid.** KEEP what committed evidence and
    always-on gates still execute (compact learned inference + parity, the corpus
    verifier/splits, the conviction model, the surrogate RANKING channel, the ES core +
@@ -101,21 +106,23 @@ Wave 2 (the spectator + the deduction instrument):
    HighlightCard.tsx — the entry-card unspoiled gating follows the token fix)
   (19.7, 19.10) -> 19.12 (frontend test baseline)
   (19.1, 19.9) -> 19.16 (reading guide — the demo path quotes 19.9's curation)
-  (19.1, 19.9, 19.10, 19.14, 19.16) -> 19.13 (README proof + static demo; the 19.14
-   edge is TournamentDashboard serialization for the fetch-seam routing)
+  (19.1, 19.9, 19.10, 19.12, 19.14, 19.16) -> 19.13 (README proof + static demo; the
+   TournamentDashboard serialization edge plus the Playwright baseline — the bundle is
+   browser-tested)
   (19.5, 19.11, 19.18) -> 19.14 (deduction metrics; the 19.18 edge is
    eval/meeting_quality.py serialization — the report wrapper lives there)
   19.2 -> 19.15 (guard-rationale redaction)
-  (19.10, 19.12) -> 19.17 (ticker + cost chips — the gated tail)
+  (19.10, 19.12, 19.13) -> 19.17 (ticker + cost chips — the gated tail)
 
 Wave 3 (ML close + consolidation):
-  19.5 -> 19.18 (tier map + freeze labels + reopening checklist)
+  (19.5, 19.9) -> 19.18 (tier map + freeze labels + reopening checklist; the second
+   edge is experiments/ serialization — rubric_score.py stays live and unlabeled)
   (19.1, 19.4, 19.6, 19.18) -> 19.19 (retirements; 19.1/19.4/19.6 are llm-README,
    test_rewards, and test_client serialization edges)
   19.4 -> 19.20 (report honesty)
-  (19.13, 19.19) -> 19.22 (artifact classes + coevo prune)
-  (19.20, 19.22) -> 19.21 (raw slate — OWNER)
-  (19.19, 19.20, 19.21, 19.22) -> 19.23 (verify-ml-evidence — after the raw-slate ruling)
+  19.20 -> 19.21 (raw slate — OWNER; the availability ruling precedes the evidence commit)
+  (19.13, 19.19, 19.21) -> 19.22 (artifact classes + the ONE immutable evidence commit)
+  (19.19, 19.20, 19.22) -> 19.23 (verify-ml-evidence; the raw-slate ruling arrives transitively)
   (19.2, 19.11, 19.12, 19.13, 19.14, 19.19) -> 19.24 (boundary hardening — the 19.12
    edge carries the client rejection test onto the vitest baseline)
   19.24 -> 19.25 (the replay walker)
@@ -147,7 +154,7 @@ fixture); `frontend/src/stories/MeetingView.stories.tsx` 19.10 → 19.11 (finale
 then the contradiction category); `tests/api/test_leak.py` 19.5 → 19.14 (the field-set
 snapshot, twice); `api/routes/eval.py` 19.5 → 19.14 (the mirrored view);
 `frontend/src/App.tsx` 19.10 → 19.17;
-`frontend/src/api/client.ts` 19.9 → 19.13 → 19.24; `frontend/e2e/` 19.12 → 19.17;
+`frontend/src/api/client.ts` 19.9 → 19.13 → 19.24;
 `frontend/src/components/ReplayPicker.tsx` 19.9 → 19.10 → 19.12 (copy, then the
 entry-card unspoiled gating, then the error selector);
 `frontend/src/components/HighlightCard.tsx` 19.6 → 19.10;
@@ -171,7 +178,9 @@ relocated walk migrates from its new home); `.github/workflows/ci.yml`
 19.7 → 19.12 → 19.27 (permissions/pins, the test jobs, then the campaign-tier
 automation);
 `training/README.md` 19.18 → 19.23 (transitive); `training/reports/report-finalist-eval.md`
-19.20 → 19.21; `docs/artifacts.md` 19.22 → 19.21; the four
+19.20 → 19.21; `docs/artifacts.md` 19.22 only; `frontend/src/store/replayStore.ts`
+19.10 (the reveal state) → 19.12 (the error split); `frontend/e2e/`
+19.12 → 19.13 → 19.17; the four
 `tournament-eval-report.json` derived views 19.5 → 19.14; `scripts/build_sample_report.py`
 19.5 → 19.14; `tests/eval/test_report_schema.py` + `test_tournament_report.py`
 19.5 → 19.14; `tests/api/` 19.9 → 19.10 → 19.11 → 19.24;
@@ -225,12 +234,11 @@ claims drift from committed sources (manifest dates/win rates, the lever registr
 named ladder tip); wiring it into `scripts/check.sh` is NOT in scope (19.7 owns check.sh) —
 it runs via pytest. The generator's DESIGN.md rule was already scope-gated in the
 planning PR (locked decision 8), so this task's prompt permits the DESIGN.md edits; the
-generator itself is not touched here. The demotion must also reach the DISPATCH surface:
-`scripts/prompt_template.md.j2:19` currently tells every generated prompt "DESIGN.md is
-the source of truth" — rewrite that authority line (AGENTS.md remains the rulebook;
-docs/architecture.md is the current-architecture note; DESIGN.md is historical) and
-regenerate ALL prompts in the same PR so no dispatched agent is ever told to obey the
-document this task demotes. The onboarding plan gets the same treatment:
+generator itself is not touched here. The DISPATCH surface is already truthful: the
+planning PR neutralized the template's authority line via AGENTS.md indirection
+("AGENTS.md names the authoritative architecture routing" — true before this task, and
+after it the routing lands on docs/architecture.md), so this task's demotion needs NO
+template or prompt regeneration. The onboarding plan gets the demotion treatment:
 AGENT_IMPLEMENTATION.md is onboarding-mandatory (AGENTS.md:8-12) and calls DESIGN.md
 "the single source of truth" four times (:39-47 and the stale AGENTS template at
 :530-537) — update its authority prose so a newly onboarded agent never receives the
@@ -246,8 +254,6 @@ sentence).
 - llm/README.md
 - .env.example
 - AGENT_IMPLEMENTATION.md; (the authority prose + the stale embedded AGENTS template — historical mechanics stay)
-- scripts/prompt_template.md.j2; (the DESIGN.md authority line only)
-- agent_prompts/; (regenerated — the authority line changes in every prompt, atomically with the demotion)
 - scripts/check_doc_facts.py (new)
 - tests/scripts/test_check_doc_facts.py (new)
 
@@ -262,8 +268,7 @@ sentence).
 - [ ] `scripts/check_doc_facts.py` passes at HEAD, fails when a checked README fact is perturbed (test-pinned both ways), and runs offline in seconds.
 - [ ] `.env.example` documents exactly the live toggleable levers from `orchestrator/replay.py:570-572` and labels the `_RETIRED_ALWAYS_ON_LEVERS` set as graduated/always-ON, cross-checked by a test importing the registry.
 - [ ] DESIGN.md opens with the demotion banner; `docs/architecture.md` describes the CURRENT layering (engine → observation → agents/meetings ← orchestrator; llm behind the Protocol; eval/api privileged; frontend on generated types) in ≤2 pages; AGENTS.md routes readers to it and carries the graduation-sweep convention.
-- [ ] The dispatch template's authority line no longer asserts DESIGN.md as the source of truth; all prompts are regenerated in this PR and `generate_prompts.py --check` is green — a repo grep proves zero generated prompts still carry the old sentence.
-- [ ] AGENT_IMPLEMENTATION.md's authority prose matches the demoted routing (a grep for its "single source of truth" claims returns only historical-context usages, none normative).
+- [ ] AGENT_IMPLEMENTATION.md's authority prose matches the demoted routing (a grep for its "single source of truth" claims returns only historical-context usages, none normative); AGENTS.md's routing (which the neutral dispatch template defers to) lands on docs/architecture.md.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -674,8 +679,16 @@ wins and the delta is noted — generated facts beat copied facts.
 The weakest set is the product default and its copy is false. Flip `DEFAULT_SET` to
 `"9p2i"`; relabel 4p1i honestly ("fast technical fixture — median ~12 ticks, at most one
 meeting, most games decided by the task timer"); replace the false picker copy with
-recomputed facts; re-run the rubric scorer at HEAD to clear the staleness banner (a $0
-offline regeneration of the committed derived view); and add a hand-curated FEATURED list
+recomputed facts; fix the staleness KEY and re-score — CORRECTED PREMISE (owner review,
+verified by executable probe): the 9p2i manifest carries THREE distinct recording SHAs,
+both the producer (`rubric_score.py::_set_manifest_sha`) and the loader
+(`replay_loader.py::_manifest_git_sha`) return `None` for a mixed-SHA set, and `None`
+reads as stale unconditionally — so NO re-score can clear the banner under the scalar
+key. Replace the scalar provenance stamp with a stable SET FINGERPRINT (a digest of the
+sorted per-seed recording SHAs, produced and checked identically on both sides), OR, if
+the fingerprint is judged over-engineering, retain the banner as an explicit
+MIXED-PROVENANCE notice that says what it means instead of falsely reading "stale";
+then re-score at HEAD ($0, offline). Add a hand-curated FEATURED list
 — the named good-tail seeds with a one-line why-watch label each. Curation is editorial
 and by hand: a fresh rubric score clears staleness but does NOT validate human-interest
 ordering, so wherever the rubric scalar renders it is labeled narrowly ("internal
@@ -686,17 +699,17 @@ pacing/structure heuristic — not a human rating").
 - frontend/src/api/client.ts; (ONLY the omitted-set contract comment at :62-65 — it documents the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
+- experiments/lab/rubric_score.py; (the provenance-key change only — `_set_manifest_sha` learns the set fingerprint the loader also learns)
 - replays/samples/9p2i/results-rubric-score.json; (regenerated at HEAD — derived view)
 - tests/api/test_sets.py; (the default-set pin — exact file, keeping this root unordered vs 19.5's tests/api/test_leak.py edit)
 
 **Files NOT in scope:**
 - frontend/src/hooks/usePlayback.ts + frontend/src/App.tsx (19.10's files)
-- experiments/lab/rubric_score.py (run, not edited)
 - replays/**/replay-seed-*.jsonl (frozen)
 
 **Definition of done:**
 - [ ] The API default set is 9p2i (pinned in tests/api/), the client's omitted-set contract comment states it, and the picker's 4p1i copy quotes recomputed meeting-count facts with the fixture relabel.
-- [ ] The rubric re-score is committed, the staleness banner is clear at HEAD, and the regeneration command is recorded in the PR.
+- [ ] The rubric re-score is committed with the regeneration command recorded, and the banner's semantics are HONEST at HEAD: either the set-fingerprint key matches (banner clear) or the mixed-provenance notice states the actual condition — the unconditional false "stale" state is gone either way (probe-pinned: producer and loader agree on the key for the committed manifest).
 - [ ] The featured list exists (the named seeds + editorial labels), the tour lands on a featured game, and the rubric scalar carries the narrow label on THE SURFACES THIS TASK OWNS (the picker); the other two rendering surfaces are labeled by their owning tasks — HighlightCard's score badge by 19.10 and the dashboard's rubric histogram by 19.5 (each carries a matching DoD line).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -725,8 +738,16 @@ The app's core content cannot be consumed on the default Play path: a meeting ge
 500 ms frame, the header spoils the winner from frame zero, the game simply stops with no
 resolution, and a meeting frame carries two different times. Fix the narrative spine:
 (a) autoplay pauses on meeting entry with Resume and next-beat affordances; (b) unspoiled
-mode is the default — the winner render and any outcome-revealing chrome are deferred
-until the finale or an explicit reveal toggle; (c) a real finale card — winner, win
+mode is the default AND INDEPENDENT OF PERSPECTIVE — outcome reveal is its own store
+state, defaulted off, NOT implied by omniscient view (the store currently defaults to
+OMNISCIENT and resets every selected replay to it at `replayStore.ts:223/:301`, which
+would defeat "unspoiled by default" if perspective implied reveal; omniscient governs
+what the CURRENT FRAME shows, reveal governs the FUTURE/OUTCOME) — and every
+outcome-derived surface is gated by it: the header, the finale card, the entry cards'
+full outcome copy (win shape and ejection counts at `HighlightCard.tsx:94`, not just the
+WinnerTag), and the outcome FILTERS (`ReplayFilters.tsx` — winner/winShape/ejection
+options render behind the reveal affordance with an explicit spoiler warning, and URL
+state carries the reveal flag deliberately, never accidentally); (c) a real finale card — winner, win
 reason, the decisive events, a compact per-agent "what they knew vs the truth" recap, and
 the reveal toggle — built from data already recorded in the replay (exposed as additive
 DTO fields where the view model lacks them); (d) one frame, one time: model the meeting's
@@ -738,6 +759,8 @@ resolving the deliberate mix the loader documents.
 - frontend/src/App.tsx
 - frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186 — and the stale "4p1i default" comments at :16-17/:33 are rewritten post-flip)
 - frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
+- frontend/src/components/ReplayFilters.tsx; (the outcome filters gate behind the reveal affordance — winner/winShape/ejection expose outcomes pre-open)
+- frontend/src/store/replayStore.ts; (ONLY the reveal state: independent of perspective, default off, preserved across the per-replay perspective reset — 19.12's error-field split is untouched)
 - frontend/src/stories/MeetingView.stories.tsx; (its complete `ReplayView` fixture gains the finale field or tsc fails)
 - frontend/src/stories/MapStage.stories.tsx; (same — `FIXTURE` constructs the full generated type)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
@@ -753,7 +776,7 @@ resolving the deliberate mix the loader documents.
 - replays/ (frozen)
 
 **Definition of done:**
-- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
+- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; outcome reveal is a store state INDEPENDENT of perspective, defaults off for every replay (the per-replay perspective reset does not re-reveal — pinned), and no outcome-derived surface renders without it: header, finale, entry-card outcome copy (win shape/ejection counts included), outcome filters (spoiler-warned), and URL state.
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
 - [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
@@ -912,9 +935,11 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 **Implementation hint:**
 
 Keep the journey to ONE spec file with generous, condition-based waits (no sleeps) and a
-single retry in CI; flake here poisons the whole gate's credibility. The store race
-guards are testable without the DOM — drive the store directly with out-of-order promise
-resolutions.
+single retry in CI; flake here poisons the whole gate's credibility. The browser is
+SPECIFIED, not assumed: either `channel: "chrome"` against the system browser or a
+pinned Playwright browser version with an explicit CI cache — "preinstalled Chromium"
+is an environment observation, not a configuration. The store race guards are testable
+without the DOM — drive the store directly with out-of-order promise resolutions.
 
 **Integration risk:**
 
@@ -927,7 +952,7 @@ and its CI job must reuse the preinstalled browser rather than downloading one p
 
 ### Task 19.13 — Proof above the fold + the static demo artifact
 **Branch:** `phase-19-demo-artifact`
-**Depends on:** 19.1, 19.9, 19.10, 19.14, 19.16 (the 19.14 edge is TournamentDashboard.tsx serialization — the metrics panel lands before the fetch-seam routing)
+**Depends on:** 19.1, 19.9, 19.10, 19.12, 19.14, 19.16 (the TournamentDashboard serialization edge — the metrics panel lands before the fetch-seam routing — and the Playwright-baseline edge: the bundle is browser-tested, not just built)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 14 [C]; docs/deployment.md:10-33 (the unauthenticated-GM-view trust boundary — preserved verbatim in spirit); docker-compose.yml:31-37 (loopback binding); the verified gap: `vite build` output is never served, no StaticFiles mount, no screenshot/GIF anywhere in README
 **Complexity:** Medium
 
@@ -950,6 +975,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
+- frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)
 - tests/scripts/test_build_demo_bundle.py (new)
 
 **Files NOT in scope:**
@@ -957,7 +983,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - docker-compose.yml (loopback stance stands)
 
 **Definition of done:**
-- [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; opening it via a static server plays the featured journey end-to-end (pause → finale) with zero API calls (test asserts no non-static fetch paths in bundle mode).
+- [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; a Playwright case serves the BUILT bundle statically and plays the featured journey end-to-end (pause → finale) with network interception asserting ZERO `/api` requests — the browser test exercises the artifact itself, not only its Python builder.
 - [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
@@ -1136,15 +1162,23 @@ capability section stated exactly — the guide's credibility rests on volunteer
 
 ### Task 19.17 — The event ticker + cost chips (the gated tail)
 **Branch:** `phase-19-ticker-cost`
-**Depends on:** 19.10, 19.12
+**Depends on:** 19.10, 19.12, 19.13 (the last is frontend/e2e/ serialization — the bundle journey lands before the ticker extends it)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 18 + singleton 29 [S-Claude — "subordinate to pause/finale/temporal-coherence work, not silently discarded"]; the per-call token counts already recorded in replay bytes and served client-side
 **Complexity:** Small
 
 The two cheap visible wins, landed deliberately LAST in the frontend chain (the
 dependency edges are the point: narrative correctness shipped first). An event ticker
-(kills, reports, meetings, ejections as they play) and cost/token chips (per-meeting and
-cumulative LLM token counts — the data is already client-side). Both are additive chrome;
-neither may regress the pause/finale flow, and both extend the existing test baseline.
+(kills, reports, meetings, ejections as they play) and cost/token chips. Both are
+additive chrome — but the ticker touches PRIVILEGED data: the served event views carry
+killer identity (`api/schemas.py` `KillEventView` — "privileged kill attribution") and
+unwitnessed vent identity/routes (`VentEventView`), so unspoiled-mode gating alone is
+NOT the firewall. The ticker renders through the SAME perspective projection the map and
+roster enforce: in as-agent view only what that agent's fog admits (an unwitnessed kill
+surfaces as body discovery, never as attribution; unwitnessed vents don't surface at
+all), with fog tests pinning one witnessed and one unwitnessed case each for kills and
+vents. Cost chips are FRAME-BOUNDED (cumulative-to-current-frame, never the game total —
+a total is an outcome-shape leak under unspoiled mode). Neither surface may regress the
+pause/finale flow, and both extend the existing test baseline.
 
 **Files in scope:**
 - frontend/src/components/EventTicker.tsx (new)
@@ -1157,7 +1191,7 @@ neither may regress the pause/finale flow, and both extend the existing test bas
 - frontend/src/hooks/usePlayback.ts (consumed, not edited)
 
 **Definition of done:**
-- [ ] Ticker and chips render from already-served data, respect unspoiled mode (no outcome leakage before the finale), and the extended journey still passes.
+- [ ] Ticker and chips render from already-served data through the active perspective projection: the four fog cases (witnessed/unwitnessed × kill/vent) are test-pinned in as-agent view, unspoiled mode leaks no outcome, cost chips are frame-bounded, and the extended journey still passes.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1174,7 +1208,7 @@ neither may regress the pause/finale flow, and both extend the existing test bas
 
 ### Task 19.18 — The tier map, the freeze-label sweep, and the reopening checklist
 **Branch:** `phase-19-tier-map`
-**Depends on:** 19.5
+**Depends on:** 19.5, 19.9 (the second edge is experiments/ serialization — `rubric_score.py` is LIVE, stays unlabeled, and belongs to the curation task)
 **Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
 **Complexity:** Medium
 
@@ -1214,7 +1248,7 @@ zero behavior bytes.
 - training/composed_runner.py; (the frozen optional-diagnostic label)
 - training/crew/; (FROZEN headers only — the crew stack is the FREEZE column's clean negative)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
-- experiments/; (FROZEN headers)
+- experiments/; (FROZEN headers — EXCEPT experiments/lab/rubric_score.py, which is live and owned by the curation task; it gets no frozen header)
 - eval/off_menu.py; (label)
 - eval/deception_instruments.py; (label)
 - eval/_suspicion_parse.py; (the frozen-metric label)
@@ -1272,9 +1306,13 @@ runner, and if the consumer grep proves no such consumer-free exposure exists, t
 outcome is a recorded no-op for this item, not a forced deletion. The realpath deletion
 carries a verified consumer migration: `scripts/generate_campaign_tables.py:76` imports
 `RealPathRerankRow` from the module (its test imports the script), so the ranking-row
-schema RELOCATES to a small surviving module (`training/realpath_schema.py`, new) and
-the script + test migrate onto it — the committed rankings' row contract survives the
-campaign machinery. The `first_meeting` removal updates ALL its test constructors
+schema RELOCATES to a small surviving module (`training/realpath_schema.py`, new) with
+its COMPLETE dependency closure — `RealPathSeedTelemetry` and the proof-block validators
+the row model carries (`realpath.py:694/:760`) — and the script + test migrate onto it;
+the schema's own defensive tests (the round-trip and invalid-proof cases currently
+inside the deleted `test_realpath.py:4434` region) MOVE into a surviving
+`tests/training/test_realpath_schema.py` rather than dying with the campaign tests — the
+committed rankings' row contract survives the campaign machinery, validators and all. The `first_meeting` removal updates ALL its test constructors
 (test_env.py:227-239, test_env_fast_path.py:141-154, test_rewards.py:115 — verified
 list), and the cache deletion removes `llm/README.md`'s advertisement of the module
 (:20-21) so 19.1's rewritten README does not point at a deleted API; the `first_meeting` episode
@@ -1290,7 +1328,8 @@ recoverable from git history; the PR lists each with its consumer-check output.
 **Files in scope:**
 - training/realpath.py; (deleted)
 - tests/training/test_realpath.py; (deleted)
-- training/realpath_schema.py (new — the relocated RealPathRerankRow row contract)
+- training/realpath_schema.py (new — the relocated row contract with its full dependency closure: RealPathRerankRow + RealPathSeedTelemetry + the proof-block validators)
+- tests/training/test_realpath_schema.py (new — the schema's round-trip + invalid-proof tests, MOVED from the deleted file)
 - scripts/generate_campaign_tables.py; (the import migration onto the relocated schema)
 - tests/scripts/test_generate_campaign_tables.py; (same)
 - tests/training/test_env.py; (the first_meeting constructors)
@@ -1331,7 +1370,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - [ ] Every deletion carries its consumer-check grep output in the PR; every skipped candidate (failed grep) is named with the blocking consumer.
 - [ ] The surrogate boundary is proven: `load_surrogate_runner_factory`/`SurrogateMeetingRunner` and every verified consumer (composed runner fence, harness, the AST pins) are untouched and green; the surrogate-only exposure is either retired with its consumer grep quoted or recorded as no-consumer-free-exposure (a documented no-op), never force-deleted.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
-- [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
+- [ ] `RealPathRerankRow` lives in the surviving schema module WITH its complete closure (`RealPathSeedTelemetry`, the proof-block validators) and its defensive tests (round-trip, invalid-proof) alive in `test_realpath_schema.py`; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
 - [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) and outside `realpath-crew/` ARTIFACT paths (data, not module references) — the verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764, test_finalist_eval_pins:35-36/:40/:921/:1086-1087) plus any the closing grep surfaces.
 - [ ] `uv run mypy .` passes.
@@ -1357,10 +1396,14 @@ the suite green at each step, the consumer-check discipline (nothing deleted on 
 audit's say-so alone — the audits themselves got `eval/determinism_test.py` wrong, and
 the first Codex review caught two more unlisted consumers, which is why the check is
 mandatory), and the composed-runner dependency boundary pinned by its existing tests
-before the standalone arm is removed.
+before the standalone arm is removed. This contract MAY land as a reviewed sequence of
+stacked PRs on the task branch (leaf-first boundaries are natural cut points); the
+coordination session sanctions the split at dispatch, and the DoD applies to the
+sequence's tip.
 
 **Public types introduced:**
 - `training.realpath_schema.RealPathRerankRow`
+- `training.realpath_schema.RealPathSeedTelemetry`
 
 **Ready-to-paste prompt:** `agent_prompts/task-19-19-retirements.md`
 
@@ -1417,24 +1460,24 @@ pure stdlib via `math.comb`. Follow the repo's existing errata idiom (the crew r
 
 ### Task 19.21 — The finalist raw slate: recover or label (owner)
 **Branch:** `phase-19-raw-slate`
-**Depends on:** 19.20, 19.22
+**Depends on:** 19.20 (the availability check runs BEFORE the evidence commit — the artifact-classes task consumes this ruling so the phase creates ONE immutable evidence commit, not two)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 22 [C; VERIFIED §8 row 11]; training/reports/report-finalist-eval.md:115-118 ("the raw recordings … live outside the repo tree") + :1066-1070 (`~/ailibi-campaign-1826/scoring/…`); `git ls-files training/reports/_finalist_eval_raw` → empty; the 19.22 artifact classes (the store that would receive a recovered slate)
 **Complexity:** Small
 
 The 449-game slate behind the phase-18 adoption decision exists only on the owner's
 machine, if at all. OWNER STEP (minutes): check whether `~/ailibi-campaign-1826/scoring/`
-still exists. If YES: content-address it — per-file sha-256 manifest committed under
-`training/reports/_finalist_eval_raw/` (manifest only; the bytes go to the 19.22
-evidence store as class (c)) — and a dated erratum records the recovery and where the
-bytes live. If NO: a dated erratum labels event-level finalist lineage NON-REPRODUCIBLE
-(the flattened rows and every derived statistic remain reproducible from committed
-cells — state exactly that boundary). Either way: do NOT re-record — the ~57-busy-hour
-price is named and declined by charter.
+still exists — BEFORE 19.22 creates the evidence commit, so preservation is one
+transaction. If YES: content-address it — per-file sha-256 manifest committed under
+`training/reports/_finalist_eval_raw/` (manifest only; 19.22 carries the BYTES into the
+single evidence commit as class (c)) — and a dated erratum records the recovery and
+where the bytes will live. If NO: a dated erratum labels event-level finalist lineage
+NON-REPRODUCIBLE (the flattened rows and every derived statistic remain reproducible
+from committed cells — state exactly that boundary). Either way: do NOT re-record — the
+~57-busy-hour price is named and declined by charter.
 
 **Files in scope:**
 - training/reports/report-finalist-eval.md; (the availability erratum)
 - training/reports/_finalist_eval_raw/MANIFEST.md (new, only on the recovery path)
-- docs/artifacts.md; (the class-(c) registry row)
 
 **Files NOT in scope:**
 - replays/ (nothing is recorded)
@@ -1455,7 +1498,7 @@ price is named and declined by charter.
 
 ### Task 19.22 — Artifact classes + the coevo prune + the fast-clone path
 **Branch:** `phase-19-artifact-classes`
-**Depends on:** 19.13, 19.19
+**Depends on:** 19.13, 19.19, 19.21 (the raw-slate ruling precedes the ONE immutable evidence commit this task creates)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 23 [C; VERIFIED §8 row 11] + locked decision 5; the verified consumer set (planning session): exactly two test files read coevo bytes — tests/scripts/test_generate_campaign_tables.py (pins `measurement-stability.json` key-for-key) and tests/training/test_finalist_eval_pins.py (pins weights under `intermediates/`, `runnerups/`, run-01/run-c1/run-c2 generation dirs, and `realpath-crew/controls/…`); the tree: training/artifacts/coevo = ~109MB / 1,473 files, the realpath* subtrees ~104MB / 403 files; audits/audit-phase-18-close.md §6.3 C4 (the coevo namespace rules — the prune must not disturb `DEFAULT_RANKING_ROOTS` semantics)
 **Complexity:** Medium
 
@@ -1465,11 +1508,16 @@ immutable evidence in the evidence branch; (d) disposable regenerated views. The
 prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
-orphan evidence branch `evidence/phase-18-coevo` with a per-file sha-256 manifest
-committed in-tree. Pinned bytes, `measurement-stability.json`, and the provenance
-records stay in-tree. `replays/` does not move (locked decision 5). README and the
-reading guide document `git clone --filter=blob:none` as the fast path, with the honest
-caveat that full-history clones stay heavy absent a future deliberate rewrite.
+orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
+carries the recovered finalist raw slate if 19.21's ruling found it — with a per-file
+sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
+in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
+branch name — the pin is the immutability guarantee), registering the class-(c) rows in
+`docs/artifacts.md` including 19.21's outcome. Pinned bytes,
+`measurement-stability.json`, and the provenance records stay in-tree. `replays/` does
+not move (locked decision 5). README and the reading guide document
+`git clone --filter=blob:none` as the fast path, with the honest caveat that
+full-history clones stay heavy absent a future deliberate rewrite.
 
 **Files in scope:**
 - training/artifacts/coevo/; (the prune — unpinned bytes removed from the working tree)
@@ -1486,7 +1534,7 @@ caveat that full-history clones stay heavy absent a future deliberate rewrite.
 **Definition of done:**
 - [ ] The consumer enumeration is committed (the manifest marks each retained path with its pinning test); the full suite passes with NO test edits — the prune provably removed only unpinned bytes.
 - [ ] Moved weight/sidecar PAIRS stay paired in the evidence branch and the in-tree manifest carries their hashes — verification-after-fetch must work (19.23 depends on it); a weight whose sidecar went one way while it went the other is a manifest error.
-- [ ] The evidence branch exists, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them; the working-tree size reduction is quoted in the PR.
+- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate per 19.21's ruling), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them by that pinned sha; the working-tree size reduction is quoted in the PR.
 - [ ] The fast-clone path is documented with the honest history caveat.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1508,7 +1556,7 @@ only the moved bytes + a README naming the manifest commit.
 
 ### Task 19.23 — `verify-ml-evidence`: one command
 **Branch:** `phase-19-verify-ml-evidence`
-**Depends on:** 19.19, 19.20, 19.21, 19.22 (the availability report consumes the recorded raw-slate ruling)
+**Depends on:** 19.19, 19.20, 19.22 (the raw-slate ruling arrives transitively — the availability report consumes it via the evidence commit)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 24 [S-Codex/S-Claude]; the Codex audit's executed-evidence table (each recomputation exists piecemeal today: sidecar/sha verification, corpus reconstruction, surrogate 0.7667/0.375, conviction 0.9375, composed 0.8646/0.7917); training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt:11 (`_REPO = "/Users/danielkeinan/projects/AiLibi"` — the invocation folklore); scripts/paired_stats.py (19.20)
 **Complexity:** Medium
 
@@ -1537,6 +1585,7 @@ repo-relative.
 
 **Definition of done:**
 - [ ] The command runs green at HEAD in one invocation, listing every check with its measured value vs the committed verdict, and the availability class of every named evidence artifact (including the 19.21 outcome); on a post-prune checkout WITHOUT the evidence branch fetched it stays green with the moved sidecars reported as their own class (count quoted), and after `fetch_evidence.sh` the same command verifies them hash-for-hash.
+- [ ] A `--complete` mode exists that FAILS if any evidence class is absent (nothing skippable) — the 19.28 close runs `fetch_evidence.sh` then `--complete`, so the phase cannot close without every archived hash verified once.
 - [ ] It is read-only (no artifact writes outside a temp dir) and offline; a perturbed-input test proves it fails loud.
 - [ ] The invocation appendix reproduces the recorded harness invocations repo-relative, citing the provenance files it replaces.
 - [ ] `uv run mypy .` passes.
@@ -1630,7 +1679,11 @@ Touching the leak suite and the champion-gate import path in one PR. The invaria
 cannot regress: every scanner that could bite before still bites (run the planted-leak
 matrix before and after the move and diff the outcomes — identical or the PR stops).
 The DTO version rejection risks breaking the demo bundle and dev flows on skew — the
-generated constant keeps client and server in lockstep through the same codegen.
+generated constant keeps client and server in lockstep through the same codegen. Five
+seams in one contract is reviewable only in pieces: this contract MAY land as a reviewed
+sequence of stacked PRs on the task branch (scanner move → moved_players coverage →
+actor validation → API factory → DTO rejection is the natural order); the coordination
+session sanctions the split at dispatch, and the DoD applies to the sequence's tip.
 
 **Public types introduced:**
 - `eval.leak_scan.scan_factory_packets`
@@ -1643,15 +1696,21 @@ generated constant keeps client and server in lockstep through the same codegen.
 **Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:166 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
 **Complexity:** Integration
 
-"Reconstructs cleanly" currently denotes eight subtly different predicates — each copy of
-the walk enforces a different subset of the integrity checks, which is a semantic-drift
-hazard, not just duplication. Build `eval/replay_walk.py`: one typed, fail-loud walker
-(re-seed → `advance_tick` over recorded actions → `apply_meeting_result`) enforcing the
-UNION of the integrity checks the copies enforce (state-hash verification per tick,
-doubled-tick/doubled-game-over detection, meeting-result application rules), with
-pluggable per-tick and per-meeting fact collectors. Migrate the eight live call sites
-one consumer at a time with BYTE-PARITY: no committed pin, report cell, or metric value
-may change — parity is the deliverable. `off_menu.py` stays frozen and unmigrated
+"Reconstructs cleanly" currently denotes eight subtly different predicates — and the
+owner review established the differences are partly DELIBERATE, not drift:
+`eval/validity.py:430` tolerates a partial-meeting replay by design while
+`eval/funnel.py:398` fails it loudly, and funnel's comment declares its divergence
+deliberate. A union of checks would therefore CHANGE validation behavior — exactly what
+locked decision 1 forbids. Build `eval/replay_walk.py` as shared MECHANICS with
+per-consumer PROFILES: one typed walker owns the reconstruction core (re-seed →
+`advance_tick` → `apply_meeting_result`, state-hash verification, doubled-record
+detection) with pluggable fact collectors, and each consumer declares a NAMED validation
+profile that preserves its current, deliberate semantics — the drift record documents
+per profile which checks it enforces, which it deliberately relaxes, and why, each with
+a negative fixture proving the profile still bites (or still tolerates) what it did
+before. Migrate the eight live call sites one consumer at a time with BYTE-PARITY: no
+committed pin, report cell, or metric value may change — parity is the deliverable, and
+a profile-semantics change is out of scope. `off_menu.py` stays frozen and unmigrated
 (labeled by 19.18); the API and training walks are backlog by the cut line.
 
 **Files in scope:**
@@ -1678,9 +1737,9 @@ may change — parity is the deliverable. `off_menu.py` stays frozen and unmigra
 - eval/deception_instruments.py (already consumes a shared walk; not churned)
 
 **Definition of done:**
-- [ ] The walker's docstring tables the union of integrity checks with, per retired copy, which checks it had and which it lacked (the drift record).
-- [ ] All eight call sites consume the walker; a repo grep proves no independent `advance_tick` reconstruction loop remains in the migrated modules.
-- [ ] BYTE-PARITY: every committed pin and regenerated-report byte is unchanged across the migration (the four derived reports regenerate identical; the diff proves it); if any committed byte fails the union of checks, the migration STOPS and records the finding — the union is never weakened silently.
+- [ ] The walker's docstring tables the shared core plus every named profile: which checks each profile enforces, which it deliberately relaxes (validity's partial-meeting tolerance vs funnel's fail-loud is the canonical pair), and why — with a negative fixture per profile proving its semantics are unchanged.
+- [ ] All eight call sites consume the walker under their own profile; a repo grep proves no independent `advance_tick` reconstruction loop remains in the migrated modules.
+- [ ] BYTE-PARITY: every committed pin and regenerated-report byte is unchanged across the migration (the four derived reports regenerate identical; the diff proves it); any behavior difference discovered between a consumer's old walk and its declared profile STOPS the migration and is recorded as a finding — never silently reconciled in either direction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1700,11 +1759,11 @@ fold rather than subclass.
 **Integration risk:**
 
 Eight load-bearing eval modules on one branch. The parity discipline is the guard
-(committed pins are the oracle at every step), plus the stop-rule: any committed byte
-that fails the union of integrity checks is a recorded finding and a halt, never a
-silently-relaxed check. If the branch runs long, land the walker + the first three
-consumers and split the rest into a follow-up on the same contract (coordination notes
-the split) rather than letting the branch drift.
+(committed pins are the oracle at every step), plus the profile discipline: deliberate
+per-consumer semantics are preserved, never unified — a union would be an
+evidence-validation behavior change, which locked decision 1 forbids. If the branch runs
+long, land the walker + the first three consumers and split the rest into a follow-up on
+the same contract (coordination notes the split) rather than letting the branch drift.
 
 **Public types introduced:**
 - `eval.replay_walk.walk_replay`
@@ -1792,7 +1851,7 @@ Quote the default-gate runtime before/after in the PR.
 - tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
 - tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
 - tests/eval/test_wave2_metrics.py; (the clearest measured re-walk consumer — five independent `build_report(_COMMITTED_9P2I_DIR)` calls adopt the shared fixture)
-- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
+- .github/workflows/ci.yml; (ONLY the campaign-tier automation — a SCHEDULED job running `-m campaign` (weekly), optionally augmented by a training-path filter; a path filter alone is insufficient because the tier must also catch rot introduced from outside training/)
 
 **Files NOT in scope:**
 - scripts/check.sh (the default LOCAL gate's invocation is unchanged — markers make the campaign tier opt-in via registration defaults)
@@ -1814,8 +1873,10 @@ Quote the default-gate runtime before/after in the PR.
 **Implementation hint:**
 
 Marker defaults via `addopts = -m "not campaign"` keeps the default invocations
-untouched; the standing `-m campaign` home is this contract's ci.yml job (weekly
-schedule or training-path filter — pick one and note the posture in conftest). The helper extraction is mechanical: move, re-export
+untouched; the standing `-m campaign` home is this contract's SCHEDULED ci.yml job
+(weekly; a path filter may be added on top but never substitutes). Note in conftest that
+`check.sh` is henceforth the DEFAULT gate and the close runs both tiers — the phase-close
+contract (19.28) pins that. The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
 if all four importers migrate cleanly.
 
@@ -1847,7 +1908,7 @@ this file; the roadmap gets its tick.
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
 
 **Definition of done:**
-- [ ] The gate, verify_samples, and verify-ml-evidence are green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
+- [ ] The close's gate rerun is the WHOLE gate, not the default subset: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `scripts/fetch_evidence.sh` followed by `verify_ml_evidence --complete` (every archived hash verified, nothing absent) AND `verify_samples` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
 - [ ] The post-19 decision menu is framed from the committed 19.14 cells with a recommendation; the owner's ruling is recorded in the close audit.
 - [ ] The STATUS banner and roadmap reflect the close.
 - [ ] `uv run mypy .` passes.

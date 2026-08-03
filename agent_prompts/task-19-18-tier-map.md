@@ -1,9 +1,9 @@
 # Agent Prompt — 19.18 The tier map, the freeze-label sweep, and the reopening checklist
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.18 — The tier map, the freeze-label sweep, and the reopening checklist, anchored to audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements. Do not implement work outside these references.
@@ -12,7 +12,7 @@ Implement Task 19.18 — The tier map, the freeze-label sweep, and the reopening
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-tier-map`
-**Depends on:** 19.5
+**Depends on:** 19.5, 19.9 (the second edge is experiments/ serialization — `rubric_score.py` is LIVE, stays unlabeled, and belongs to the curation task)
 **Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
 **Complexity:** Medium
 
@@ -52,7 +52,7 @@ zero behavior bytes.
 - training/composed_runner.py; (the frozen optional-diagnostic label)
 - training/crew/; (FROZEN headers only — the crew stack is the FREEZE column's clean negative)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
-- experiments/; (FROZEN headers)
+- experiments/; (FROZEN headers — EXCEPT experiments/lab/rubric_score.py, which is live and owned by the curation task; it gets no frozen header)
 - eval/off_menu.py; (label)
 - eval/deception_instruments.py; (label)
 - eval/_suspicion_parse.py; (the frozen-metric label)
@@ -91,7 +91,7 @@ etc. by line). The reopening checklist's four checks come from triage §8 row 21
 the mechanism, not just the name.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

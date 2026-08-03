@@ -1,9 +1,9 @@
 # Agent Prompt — 19.16 The outsider reading guide + the audit-idiom glossary
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.16 — The outsider reading guide + the audit-idiom glossary, anchored to audits/audit-phase-19-triage.md §7 item 17 [S-Claude] + rows 23 (N1/N2 and the clean negatives), the legibility-cliff finding (audit-phase-19-input-claude.md §3.2 item 5: the corpus is case law with no glossary); the named good-tail seeds (19.9's featured list). Do not implement work outside these references.
@@ -56,7 +56,7 @@ ejections ride an ejectee-specific vent sighting; ~30–39% otherwise) belongs i
 capability section stated exactly — the guide's credibility rests on volunteering it.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

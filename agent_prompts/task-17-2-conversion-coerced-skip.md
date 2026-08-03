@@ -1,9 +1,9 @@
 # Agent Prompt — 17.2 The conversion report learns the coerced SKIP (a by-design bucket)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.2 — The conversion report learns the coerced SKIP (a by-design bucket), anchored to audits/audit-phase-16-close.md §8 (routed contract (b): 2 of 99 inversions on the baseline-5 samples are J2-coerced SKIPs); eval/meeting_quality.py `compute_conversion_report` (the SKIP partition + its invariant); meetings/manager.py `UNCITED_ZERO_FLAG_EJECT_MARKER` (the literal + the `{x!r}` marker shape); the invalid-target/teammate by-design-bucket precedent in the same report. Do not implement work outside these references.
@@ -52,7 +52,7 @@ before any prose-level reads, and remember 16.6's stacking order (gate prefix ou
 the redirect marker).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

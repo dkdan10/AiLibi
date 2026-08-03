@@ -1,9 +1,9 @@
 # Agent Prompt — 13.13 De-imperative the §4.6 vote gate (non-directive prompt; deterministic tally floor stays)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-13.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 13.13 — De-imperative the §4.6 vote gate (non-directive prompt; deterministic tally floor stays), anchored to DESIGN.md §4.6 + §5.5 (reconciled — the gate is a deterministic tally backstop, the prompt non-directive); experiments/lab/report-forward-redesign-probes.md Probe 1 (the imperative is an OUTCOME lever: 9/39 ejections accused-by-nobody, 13–38/39 flip to SKIP without it); agents/strategic/prompts/vote_ballot.j2:131-149 (the pre-computed MUST-vote/MUST-skip block); meetings/voting.py:120-213 (`tally_ballots` — the floor that STAYS); orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS`). Do not implement work outside these references.
@@ -69,7 +69,7 @@ stay). The version-bump cascade is ONE pin (`test_strategic_prompts.py:1223`, in
 pins; the manifest/regression tests read as-recorded literals and are unaffected.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

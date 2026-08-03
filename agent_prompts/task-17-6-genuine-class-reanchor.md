@@ -1,9 +1,9 @@
 # Agent Prompt — 17.6 The genuine-class instrument re-anchors on supplied channels
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-17.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-17.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 17.6 — The genuine-class instrument re-anchors on supplied channels, anchored to audits/audit-phase-16-close.md §8 (the NO-DATA routing: re-anchor "on channels this substrate actually supplies (vents, sightings, whereabouts-lies)") + §6 (the second consecutive 0/0); eval/vote_correctness.py (the genuine-class definition + `genuine_class_subjects`'s endpoint-band exclusion); audits/audit-phase-16-baseline-4.md §6 (the supply collapse anatomy: alibi flags 190 → 7). Do not implement work outside these references.
@@ -57,7 +57,7 @@ second-hand; split the denominator by witness-vs-testimony if the committed byte
 the distinction measurable, and say so in the report either way.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

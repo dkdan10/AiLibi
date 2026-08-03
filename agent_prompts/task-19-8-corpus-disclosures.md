@@ -1,9 +1,9 @@
 # Agent Prompt — 19.8 Corpus truth disclosures
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-19.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 19.8 — Corpus truth disclosures, anchored to audits/audit-phase-19-triage.md §7 item 9 [S-Claude/S-Codex; §8 rows 12, 13 VERIFIED; the roll-call coverage split is S-Codex and NOT independently re-run — verify-then-fix]; agents/tactical/impostor_policy.py:39-40 ("after the kill … the impostor must not file a report" — the structural reporter-innocence prior); replays/ml_corpus/README.md:228-236 (the no-husk doctrine the committed husks violate), :91-102 (the by-game split); the verified counts: 21.3% engine-rejected 9p kill submissions (48/225 samples), ~5% husk turns (53/971 samples; 137/2,726 corpus), 19/798 crew-witnessed kills with zero non-victim co-present at the decision frame. Do not implement work outside these references.
@@ -58,7 +58,7 @@ the outputs into the PR. Where your recount differs from an audit's figure, the 
 wins and the delta is noted — generated facts beat copied facts.
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 

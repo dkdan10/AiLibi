@@ -1,9 +1,9 @@
 # Agent Prompt — 8.6 Leak firewall at 2-of-9 + per-player-task sweep fixture
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-8.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-8.md.
 
 ## Role and context
-You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
 Implement Task 8.6 — Leak firewall at 2-of-9 + per-player-task sweep fixture, anchored to DESIGN.md §1.3, §11.2 (the leak test); audits/restructure-impact-map-2026-06-04-0223.md §2e, §3.2, §5 decision 13. Do not implement work outside these references.
@@ -43,7 +43,7 @@ Extend the project's strongest leak guard to the new substrate (decision 13). Th
 The sweep's `_roster_initial_state` builds `tasks={}` — add per-player task instances (via the 8.2 seeder or a hand-built fixture) so `pending_task_id` is non-empty and the own-task-only path is actually swept. Widen `_ROSTER_PLAYER_IDS` and keep `_VALID_IMPOSTOR_COUNTS` covering 2 and 3. This task TESTS the firewall; it does not change `observation/` (that is 8.1/8.3).
 
 ## Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
 - Inspect the current implementation before editing.
 - Identify the existing local patterns for the files in scope and follow them.
 
