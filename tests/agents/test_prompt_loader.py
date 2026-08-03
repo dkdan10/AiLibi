@@ -12,6 +12,11 @@ seam introduced in :mod:`agents.strategic.prompts.loader`:
 * an unknown set fails loud (no silent fallback, AGENTS.md);
 * the per-set version registry (:data:`orchestrator.game.PROMPT_VERSION_SETS`)
   keeps the 9B set's recorded ``prompt_versions`` byte-identical.
+
+Task 19.6 adds :class:`TestBareEnvironmentFallbackIsLoud`: the default VALUE
+still resolves to ``qwen3_5_9b`` (byte-identity is the whole point of the owner
+decision), but taking it with no ``AILIBI_PROMPT_SET`` override now emits a
+one-line stderr notice naming the variable and the operational baseline set.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from agents.strategic.prompts.loader import (
     ACCUSATION_ROUND_TEMPLATE,
     CREWMATE_REPORT_TEMPLATE,
     IMPOSTOR_REPORT_TEMPLATE,
+    OPERATIONAL_BASELINE_PROMPT_SET,
     VOTE_BALLOT_TEMPLATE,
     _ENV,  # noqa: PLC2701
 )
@@ -67,6 +73,83 @@ class TestResolvePromptSet:
             resolve_prompt_set("explicit", env={ENV_PROMPT_SET: "ignored"})
             == "explicit"
         )
+
+
+class TestBareEnvironmentFallbackIsLoud:
+    """Task 19.6: the bare-environment fallback emits a one-line stderr notice.
+
+    The default VALUE is unchanged and must stay unchanged — moving it would
+    move committed prompt bytes (the byte-golden suite proves those stand).
+    What changes is the silence: a bare shell used to take the frozen 9B set
+    with no signal at all, two generations behind the
+    :data:`OPERATIONAL_BASELINE_PROMPT_SET` every report's recording env names.
+    The notice fires on exactly one path — no explicit argument AND no
+    ``AILIBI_PROMPT_SET`` override.
+    """
+
+    def test_fallback_emits_the_notice_on_stderr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert resolve_prompt_set(env={}) == DEFAULT_PROMPT_SET
+        captured = capsys.readouterr()
+        assert ENV_PROMPT_SET in captured.err
+        assert OPERATIONAL_BASELINE_PROMPT_SET in captured.err
+        assert DEFAULT_PROMPT_SET in captured.err
+        # stdout stays clean: CLI surfaces emit machine-readable JSON there.
+        assert captured.out == ""
+
+    def test_notice_is_exactly_one_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        resolve_prompt_set(env={})
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_blank_env_value_also_notifies(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Whitespace-only is "absent" for the fallback, so it is "absent" for
+        # the notice too -- the two must not disagree.
+        assert resolve_prompt_set(env={ENV_PROMPT_SET: "   "}) == DEFAULT_PROMPT_SET
+        assert ENV_PROMPT_SET in capsys.readouterr().err
+
+    def test_env_override_is_silent(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert (
+            resolve_prompt_set(env={ENV_PROMPT_SET: OPERATIONAL_BASELINE_PROMPT_SET})
+            == OPERATIONAL_BASELINE_PROMPT_SET
+        )
+        assert capsys.readouterr().err == ""
+
+    def test_env_override_naming_the_default_set_is_silent(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Choosing the 9B set deliberately is a choice, not a fallback.
+        assert (
+            resolve_prompt_set(env={ENV_PROMPT_SET: DEFAULT_PROMPT_SET})
+            == DEFAULT_PROMPT_SET
+        )
+        assert capsys.readouterr().err == ""
+
+    def test_explicit_argument_is_silent(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A caller pinning its own set (build_prompt_renderers, the runner's
+        # one-resolution binding) has not fallen back to anything.
+        assert resolve_prompt_set(DEFAULT_PROMPT_SET, env={}) == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err == ""
+
+    def test_operational_baseline_names_a_real_set(self) -> None:
+        # A notice pointing at a set that does not exist would be worse than
+        # silence: the suggested export would fail loud in build_environment.
+        assert OPERATIONAL_BASELINE_PROMPT_SET != DEFAULT_PROMPT_SET
+        set_dir = (
+            Path(__file__).resolve().parents[2]
+            / "agents"
+            / "strategic"
+            / "prompts"
+            / OPERATIONAL_BASELINE_PROMPT_SET
+        )
+        assert set_dir.is_dir()
+        build_environment(OPERATIONAL_BASELINE_PROMPT_SET)
 
 
 class TestDefaultSetRendersByteIdentically:

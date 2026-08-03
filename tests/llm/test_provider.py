@@ -13,6 +13,12 @@ Task 8.9 moved the structured meeting schema to :class:`~meetings.schemas.Meetin
 feeds the provider as ``format=`` -- so the fixtures here are turn-shaped, and
 ``_MEETING_SCHEMAS`` is ``(MeetingTurn, VoteBallot)``: the structured-output
 kinds the provider is constrained by.
+
+Task 19.6 adds :class:`TestPricingFailsLoudOnUnknownModel` at the bottom: the
+unit-level pin on the OTHER shared seam in ``llm/provider.py``,
+``_compute_cost_usd``, which all three adapters route their cost through. The
+end-to-end pin (the raise surfacing out of ``AnthropicClient.complete``) rides
+in ``tests/llm/test_client.py``.
 """
 
 from __future__ import annotations
@@ -29,8 +35,14 @@ from pydantic import BaseModel, ValidationError
 
 from llm.ollama_client import OllamaClient, OllamaRawResponse
 from llm.provider import (
+    DEFAULT_MEETING_MODEL,
+    DEFAULT_TRIGGER_MODEL,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_FEATHERLESS,
+    PROVIDER_OLLAMA,
     AnthropicClient,
     AnthropicRawResponse,
+    _compute_cost_usd,
     _extract_json_block,
     _normalize_json_text,
     extract_parse_failure,
@@ -438,3 +450,82 @@ class TestNoOpOnCommittedBaseline:
                     saw_union = True
                     break
         assert saw_union
+
+
+class TestPricingFailsLoudOnUnknownModel:
+    """Task 19.6: ``_compute_cost_usd`` has no Anthropic fallback rate.
+
+    The Anthropic table used to carry a ``(3.00, 15.00)`` Sonnet-shaped
+    default, so an unpriced model — a new release, a typo'd
+    ``AILIBI_LLM_MEETING_MODEL``, a dated alias resolution echoed back in
+    ``raw.model`` — was billed at frontier rates and the recorded
+    ``cost_usd`` became fiction. Cost accounting is exactly where AGENTS.md
+    §"No silent fallbacks" binds hardest, so the lookup now raises with the
+    model name. The two PROVIDER-keyed zero fallbacks (Ollama, Featherless)
+    are a different mechanism and are pinned here as unchanged: they key on
+    provider, not model, so they cannot substitute one model's rate for
+    another's.
+    """
+
+    def test_known_models_price_exactly_as_before(self) -> None:
+        # Sonnet: $3/Mtok in + $15/Mtok out.
+        assert _compute_cost_usd(
+            model=DEFAULT_MEETING_MODEL,
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+        ) == pytest.approx(18.0)
+        # Haiku: $1/Mtok in + $5/Mtok out.
+        assert _compute_cost_usd(
+            model=DEFAULT_TRIGGER_MODEL,
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+        ) == pytest.approx(6.0)
+
+    def test_unknown_anthropic_model_raises_naming_the_model(self) -> None:
+        with pytest.raises(ValueError, match="claude-sonnet-9-9") as excinfo:
+            _compute_cost_usd(
+                model="claude-sonnet-9-9",
+                input_tokens=2_000_000,
+                output_tokens=0,
+                provider=PROVIDER_ANTHROPIC,
+            )
+        message = str(excinfo.value)
+        # Actionable: names where to declare the rate and what IS priced.
+        assert "_ANTHROPIC_PRICING_USD_PER_MTOK" in message
+        assert DEFAULT_MEETING_MODEL in message
+        assert DEFAULT_TRIGGER_MODEL in message
+
+    def test_unknown_model_raises_on_the_default_provider_arg(self) -> None:
+        # The Anthropic call site omits ``provider=``; the raise must reach it.
+        with pytest.raises(ValueError, match="unknown-model-id"):
+            _compute_cost_usd(model="unknown-model-id", input_tokens=1, output_tokens=1)
+
+    def test_zero_token_call_on_an_unknown_model_still_raises(self) -> None:
+        # The defect is the missing RATE, not the amount: a zero-token call
+        # that would have "cost $0.00 anyway" must not launder an unpriced
+        # model past the check.
+        with pytest.raises(ValueError, match="unknown-model-id"):
+            _compute_cost_usd(model="unknown-model-id", input_tokens=0, output_tokens=0)
+
+    def test_provider_keyed_zero_fallbacks_are_unchanged(self) -> None:
+        # Ollama and Featherless stay free for ANY model name: their fallback
+        # is keyed by provider (a deliberate flat-rate/local-$0 statement),
+        # not a guess at another model's price.
+        assert (
+            _compute_cost_usd(
+                model="qwen3.5:9b",
+                input_tokens=5_000_000,
+                output_tokens=5_000_000,
+                provider=PROVIDER_OLLAMA,
+            )
+            == 0.0
+        )
+        assert (
+            _compute_cost_usd(
+                model="Qwen/Qwen3.6-27B",
+                input_tokens=5_000_000,
+                output_tokens=5_000_000,
+                provider=PROVIDER_FEATHERLESS,
+            )
+            == 0.0
+        )

@@ -36,9 +36,19 @@ const paper = {
   3: "#EBDFC8",
 } as const;
 
+// The seed sheet (design/phase-12/tokens-seed.md:17) declared seven ink stops —
+// 900/700/500/400/300/200/100, no 600 — but two components already reach for
+// `text-ink-600` (MeetingView.tsx:517, HighlightCard.tsx:60). Tailwind emits no
+// rule for an undeclared token, so those two spans silently inherited the
+// `--color-ink-900` body colour instead of the intended secondary-text step.
+// Task 19.6 adds the missing stop rather than remapping the call sites: both
+// want a step BETWEEN 700 and 500, which is exactly the gap. The hex is the
+// arithmetic midpoint of ink[700] (#443D34) and ink[500] (#6E6556), keeping the
+// ramp evenly spaced; it clears AA on paper-0 at ~7.7:1.
 const ink = {
   900: "#1B1814",
   700: "#443D34",
+  600: "#595145",
   500: "#6E6556",
   400: "#8A8170",
   300: "#A89E8A",
