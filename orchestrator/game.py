@@ -9,8 +9,19 @@ dispatches to :class:`~meetings.manager.MeetingManager` (via a
 to engine-owned world state through :func:`apply_meeting_result`, and
 resumes the tick loop at tick ``t+1`` per DESIGN.md §3.1.
 
-The orchestrator is the only non-``engine/`` module that imports from
-``engine/`` and the only module that mutates engine-owned state.
+The engine firewall guards the ENGINE-FREE side, not this one:
+``agents/``, ``meetings/`` and ``llm/`` import nothing from ``engine/``
+(the ``agents/`` ban is a contract -- import-linter's "Agents must not
+import engine"; ``meetings/`` and ``llm/`` are engine-free in fact, with
+no contract of their own). Many privileged modules DO import
+``engine/`` -- ``orchestrator/``, ``observation/``, ``api/``, ``eval/``,
+``training/``, ``scripts/`` -- so the orchestrator is one importer among
+several; what it owns is the meeting-apply seam itself:
+:func:`apply_meeting_result` is DEFINED here, and every consumer (the
+replay loader, the eval/training reconstruction walkers) re-applies a
+meeting to engine-owned world state through this one function.
+(Historical note: the "only non-``engine/`` importer, only mutator"
+claim described the Phase-3 layout, before those consumers landed.)
 ``MeetingManager`` is engine-pure: it receives agent-side inputs
 (rendered memory, suspicion graphs) and returns a
 :class:`MeetingResult` DTO. Applying that result to the world is the
@@ -2638,28 +2649,36 @@ class TacticalAgent:
         :class:`~agents.memory.beliefs.SuspicionProvenance` decomposition,
         mapped field-by-name onto the widened :class:`SuspicionEntry` (the
         render-contract leaf mirrors the provenance shape without importing
-        ``agents.*``). It rides the graph inertly today -- no template renders
-        it until Task 16.15 -- but populating it HERE, at the one production
-        builder, keeps ``0.5 + sum(the eight fields) == suspicion`` on every live
-        row (the belief store's own invariant, lever-OFF), so 16.15's surface has
-        real hard/soft data rather than defaults.
+        ``agents.*``). It rode the graph inertly until Task 16.15; since the
+        16.15 elicitation batch the vote-ballot template renders the split per
+        row (the J2a provenance surface), fed from HERE, the one production
+        builder. Populating it here keeps ``0.5 + sum(the eight fields) ==
+        suspicion`` on every live row (the belief store's own invariant, on the
+        STORED belief -- an entirely-soft row's RENDERED scalar is gate-clamped
+        below that sum, see Task 16.4 below), so the 16.15 surface reads real
+        hard/soft data rather than defaults.
 
-        Task 16.4 (the J1 render clamp; ``env`` resolves the default-OFF
-        hard-evidence-gate lever, ``None`` reads the process environment). With the
-        lever ON, a row whose typed provenance is entirely soft renders its
+        Task 16.4 (the J1 render clamp). The hard-evidence-gate lever is
+        UNCONDITIONAL since the Task-16.17 baseline-5 record (was default-OFF at
+        Task 16.4; graduated at that record), so
+        :func:`~agents.memory.beliefs.hard_evidence_gate_enabled` hard-returns
+        True and the clamp ALWAYS applies; ``env`` is still threaded through so
+        the resolver stays the single source of truth, but it is accepted and
+        ignored. A row whose typed provenance is entirely soft renders its
         ``suspicion`` scalar clamped to
         :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL`, just below
         the §4.6 gate; hard-backed rows and the stored :class:`BeliefState` are
         untouched. The eight provenance kwargs stay the RAW 16.3 decomposition --
         the true evidence record -- so a clamped row's scalar deliberately renders
-        below its decomposition sum (the ``0.5 + sum == suspicion`` invariant is
-        qualified to the lever-OFF case; ON, the manager's ``seed_player``
-        reconciles the shortfall as an ``unattributed`` residual). OFF (the default)
-        is byte-identical to pre-task HEAD.
+        below its decomposition sum, and the manager's ``seed_player`` reconciling
+        that shortfall as an ``unattributed`` residual is the ALWAYS-ON
+        reconciliation, not a lever-ON special case.
         """
 
-        # Task 16.4: resolve the default-OFF hard-evidence-gate lever ONCE; OFF
-        # leaves the row loop byte-identical to pre-task HEAD.
+        # Task 16.4: resolve the hard-evidence-gate lever ONCE. UNCONDITIONAL
+        # since the Task-16.17 baseline-5 record (was default-OFF at Task 16.4),
+        # so gate_on is always True in production and every entirely-soft row
+        # takes the clamp; the call stays the single source of truth.
         gate_on = hard_evidence_gate_enabled(env)
         entries: list[SuspicionEntry] = []
         for player_id in sorted(self._memory.beliefs.known_players()):

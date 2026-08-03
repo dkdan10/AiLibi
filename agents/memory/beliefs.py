@@ -18,11 +18,13 @@ a HARD/SOFT cross-meeting carry split and an ``unattributed`` residual). It is
 ACCUMULATED beside each existing write, never re-derived post hoc: the fold's
 ordering and caps make after-the-fact attribution wrong (the audit §3.2 C4
 catch), so every site that moves the scalar tags the APPLIED (clamped) delta
-with its source at the moment it lands. The decomposition is a pure record --
-it is read by no arithmetic in this module, changes no scalar value, no fold
-result, and no rendered byte (the Task 16.3 prompt-byte golden is the OFF-path
-proof). The module-level invariant (documented on :class:`SuspicionProvenance`
-and pinned by :data:`SUSPICION_PROVENANCE_ATOL`) is that for every belief row
+with its source at the moment it lands. The decomposition is a pure record on
+the fold side -- no fold arithmetic reads it, and it changes no stored scalar
+and no fold result (byte-inertness the Task 16.3 prompt-byte golden pinned at
+the 16.3 landing; render-inertness ended with the J1 gate and the Task 16.15
+surface below). The module-level invariant (documented on
+:class:`SuspicionProvenance` and pinned by :data:`SUSPICION_PROVENANCE_ATOL`)
+is that for every belief row
 ``_DEFAULT_SUSPICION + provenance.total == suspicion`` to within tolerance. The
 J1 hard-render gate (Task 16.4) classifies on the HARD/SOFT split -- an
 entirely-soft conviction-grade row renders clamped just below the §4.6 gate, a
@@ -153,8 +155,10 @@ Phase-10 Rule-1 body-proximity prior (0.70 = 0.50 +
 in all 5 pinned railroad rows the 1.00-renderers are the impostors,
 handed a false "certain guilt" row on an innocent. This ceiling, just
 below the clamp, extends the 13.14 joint-cap discipline with a third
-bound: with the :data:`ENV_EVIDENCE_QUALITY_LIFT` lever ON, a subject's
-flag/testimony-driven transient lift renders at most
+bound: under the now-unconditional :func:`evidence_quality_lift_enabled`
+lever (was default-OFF at Task 14.10; graduated to always-on at the
+Task-14.12 close), a subject's flag/testimony-driven transient lift
+ALWAYS renders at most
 ``min(lifted, prior + 0.3, max(prior, CONTRADICTION_RENDER_CEIL))`` --
 no same-meeting stack can reach the 1.0 clamp. Zero conversion cost:
 every 0.97 stays a §4.6 MUST-vote (the gate is 0.60). The ``max(prior,
@@ -429,12 +433,13 @@ pooling program; the phase-16 "visibility as a resource" channel).
 At the pre-vote fold, every subject in the meeting's ABSENT set -- the living
 roster minus :func:`meetings.transcript.reconstruct_stated_paths` keys, i.e.
 the players whom NOBODY's public testimony (sighting or Task 16.7 whereabouts
-answer) placed anywhere this meeting -- takes this delta, behind the
-default-OFF :func:`absence_prior_enabled` lever. Answering roll-call removes a
-player from the set, so impostors gain a reason to account for their time
-(lying creates the contradiction material the alibi rules prosecute), and
-staying unseen finally has a price -- the incentive Phase 17's retraining
-climbs.
+answer) placed anywhere this meeting -- takes this delta, under the
+now-unconditional :func:`absence_prior_enabled` lever (was default-OFF at
+Task 16.8; graduated to always-on at the Task-18.12 baseline-6 record).
+Answering roll-call removes a player from the set, so impostors gain a reason
+to account for their time (lying creates the contradiction material the alibi
+rules prosecute), and staying unseen finally has a price -- the incentive
+Phase 17's retraining climbs.
 
 THE SIZING IS THE CONTRACT (the :data:`WEAK_CONTRADICTION_SUSPICION_DELTA`
 lone-weak-signal discipline, applied to a second weak channel). Alone, the
@@ -917,14 +922,21 @@ class SuspicionProvenance:
 class PlayerBelief:
     """Immutable snapshot of beliefs about a single other player.
 
-    ``alibis`` is DEAD in production today (2026-06-25 memory-pipeline
-    diagnosis, workflow `wg54kfoxy`): its only writer is :meth:`BeliefState.record_alibi`,
-    which has zero non-test callers, and the §6.6 memory render
-    (``agents/memory/store.py``) reads this field nowhere -- testimony reaches
-    beliefs only as a scalar suspicion delta, never as stored alibi content. It
-    is scaffolding, NOT dead code to delete: Wave C (Task 13.5.2,
-    testimony-as-content) is the lever that wires it (the ``"reported"``
-    provenance write path → ``record_alibi`` → render).
+    ``alibis`` is LIVE in production: the ``"reported"`` provenance write path
+    lands each public alibi statement here --
+    :func:`agents.memory.store.absorb_reported_testimony` calls
+    :meth:`BeliefState.record_alibi` once per ``alibi`` statement, and the
+    orchestrator and the replay loader run that absorb per LIVING agent in the
+    SAME loop as :func:`agents.memory.store.absorb_meeting_evidence`,
+    unconditionally since Task 14.9 (the ``AILIBI_TESTIMONY_AS_CONTENT`` gate is
+    retired). The §6.6 memory render (``agents/memory/store.py``) reads the field
+    too -- the belief line's alibi suffix
+    (:func:`agents.memory.store._format_alibi_suffix`, capped per subject) --
+    so testimony reaches beliefs as CONTENT, not only as a scalar suspicion
+    delta. History: the field was declared DEAD by the 2026-06-25
+    memory-pipeline diagnosis (workflow `wg54kfoxy`) and kept as scaffolding,
+    NOT dead code to delete; Wave C (Task 13.5.2, testimony-as-content) was the
+    lever that wired it (write path → ``record_alibi`` → render).
     """
 
     trust: float = _DEFAULT_TRUST
@@ -1102,13 +1114,20 @@ class BeliefState:
     def record_alibi(self, claim: AlibiClaim) -> PlayerBelief:
         """Append an alibi claim to ``claim.player_id``'s belief row.
 
-        DEAD in production today (2026-06-25 memory-pipeline diagnosis,
-        workflow `wg54kfoxy`): this method has zero non-test callers, so no
-        live path writes the ``PlayerBelief.alibis`` list, and the §6.6 render
-        does not read it -- testimony currently reaches beliefs only as a
-        scalar suspicion delta. Kept as scaffolding (NOT dead code to delete):
-        Wave C (Task 13.5.2, testimony-as-content) wires this as the persistence
-        target for the ``"reported"`` provenance write path.
+        LIVE in production: the caller is
+        :func:`agents.memory.store.absorb_reported_testimony`, which invokes this
+        once per public ``alibi`` statement (skipping the listener's own), and
+        the orchestrator and the replay loader run that absorb per LIVING agent
+        in the SAME loop as :func:`agents.memory.store.absorb_meeting_evidence`,
+        unconditionally since Task 14.9 (the ``AILIBI_TESTIMONY_AS_CONTENT`` gate
+        is retired). The §6.6 render reads what this writes, via the belief
+        line's alibi suffix (:func:`agents.memory.store._format_alibi_suffix`,
+        capped per subject), so testimony reaches beliefs as CONTENT, not only as
+        a scalar suspicion delta. History: this method was declared DEAD by the
+        2026-06-25 memory-pipeline diagnosis (workflow `wg54kfoxy`) and kept as
+        scaffolding (NOT dead code to delete); Wave C (Task 13.5.2,
+        testimony-as-content) wired it as the persistence target for the
+        ``"reported"`` provenance write path.
         """
 
         belief = self._ensure(claim.player_id)
@@ -1392,11 +1411,12 @@ def apply_contradiction_rule(
     about the score, never the information (§5.4 "flags are
     information").
 
-    Evidence-quality bounds (Task 14.10; audit 2026-07-01 §3a). Behind the
-    default-OFF :func:`evidence_quality_lift_enabled` lever (``env``-resolved,
-    defaulting to the process environment -- the retired 13.5 pattern), two
-    MEASURED bounds tighten the lift; OFF is byte-identical to the pre-14.10
-    fold:
+    Evidence-quality bounds (Task 14.10; audit 2026-07-01 §3a). Under the
+    now-unconditional :func:`evidence_quality_lift_enabled` lever (was
+    default-OFF at Task 14.10 on the retired 13.5 env pattern; graduated to
+    always-on at the Task-14.12 phase close, so ``env`` is accepted and
+    ignored), two MEASURED bounds ALWAYS tighten the lift -- the lever-OFF
+    byte-identity with the pre-14.10 fold is history:
 
     * **Self-refuted-alibi downgrade (bound 2).** A flag whose referenced
       alibi claim is self-refuted -- the subject's OWN same-turn
@@ -1650,18 +1670,19 @@ def apply_meeting_evidence_rules(
     impostor.
 
     **Certain-guilt exclusion on the spread (Task 14.10 bound 1; audit
-    2026-07-01 §3a).** With the default-OFF
-    :func:`evidence_quality_lift_enabled` lever ON (``env``-resolved,
-    defaulting to the process environment), the ``pre_vote`` bump is
-    additionally bounded so a bumped subject renders at or under
+    2026-07-01 §3a).** Under the now-unconditional
+    :func:`evidence_quality_lift_enabled` lever (was default-OFF at Task
+    14.10; graduated to always-on at the Task-14.12 phase close, ``env``
+    accepted and ignored), the ``pre_vote`` bump is ALWAYS additionally
+    bounded so a bumped subject renders at or under
     ``max(prior, CONTRADICTION_RENDER_CEIL)`` -- testimony-driven transient
     lift can never reach the 1.0 clamp, mirroring the contradiction-lift
     ceiling in :func:`apply_contradiction_rule` (the two channels stack on
     one graph at vote time, so both must respect the render bound). ONLY the
     ``pre_vote`` half is ceilinged: the ``post_vote`` and composed halves are
     the persistent absorb, whose flat +0.05 across-meeting accumulation is
-    the legitimate 9.8 channel and stays untouched (lever ON or OFF). OFF is
-    byte-identical to the pre-14.10 fold.
+    the legitimate 9.8 channel and stays untouched. The pre-14.10 fold's
+    byte-identity under a lever-OFF path is history.
 
     **Reporter exculpation (Task 15.5; unconditional since Task 15.7; H5 /
     audit-phase-14-close §4).** ``reporter`` names the body-report meeting's own
@@ -1686,11 +1707,13 @@ def apply_meeting_evidence_rules(
     caught by a real flag still crosses the §4.6 gate (the over-damping canary:
     zero hard-flag-backed conviction outcomes change).
 
-    **Absence prior (Task 16.8; default-OFF).** ``absent`` names the meeting's
-    publicly UNPLACED living players (:func:`meetings.transcript.absent_players`
-    -- the roster minus the stated-paths keys), threaded by the manager's
-    vote-time fold. Behind the default-OFF :func:`absence_prior_enabled` lever
-    (``env``-resolved, the 15.5 ``reporter`` gating pattern), every absent
+    **Absence prior (Task 16.8; unconditional since Task 18.12).** ``absent``
+    names the meeting's publicly UNPLACED living players
+    (:func:`meetings.transcript.absent_players` -- the roster minus the
+    stated-paths keys), threaded by the manager's vote-time fold. Under the
+    now-unconditional :func:`absence_prior_enabled` lever (was default-OFF at
+    Task 16.8 on the 15.5 ``reporter`` gating pattern; graduated to always-on
+    at the Task-18.12 baseline-6 record), every absent
     subject takes :data:`ABSENCE_SUSPICION_DELTA` in the ``pre_vote`` half ONLY
     -- the delta is TRANSIENT exactly like the 13.7 spread graduation (the
     ``post_vote`` and composed halves ignore ``absent`` entirely, so a
@@ -1700,8 +1723,9 @@ def apply_meeting_evidence_rules(
     reporter cap (the reporter takes no absence lift), the teammate/self/roster
     guards, and -- downstream -- the manager's joint cap. Applied AFTER the
     testimony bumps and BEFORE the corroborations, so a vouched-but-unplaced
-    subject still gets the corroboration's clamp-ceiling last word. Lever OFF
-    (the default) or ``absent`` empty is byte-identical to the pre-16.8 fold.
+    subject still gets the corroboration's clamp-ceiling last word. An EMPTY
+    ``absent`` set is still byte-identical to the pre-16.8 fold -- that is the
+    live no-op condition; the lever-OFF path is history.
 
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
@@ -1785,23 +1809,23 @@ def apply_meeting_evidence_rules(
                 result.drop_player(player_id)
     # Task 14.10 bound 1: the render ceiling applies to the TRANSIENT
     # pre-vote half only (the graph the ballot reads); the persistent
-    # halves never consult the lever, so the 9.8 across-meeting
-    # accumulator -- and the OFF-branch byte-identity -- are untouched.
+    # halves never take the ceiling (the resolver is unconditional since
+    # 14.12), so the 9.8 across-meeting accumulator is untouched.
     ceil_lift = phase == "pre_vote" and evidence_quality_lift_enabled(env)
-    # Task 15.5 reporter exculpation (default-OFF): cap the soft accusation lift
-    # against a body-report meeting's own reporter, TRANSIENT pre-vote half only.
-    # ``reporter=None`` (every caller but the manager's vote-time fold) or the
-    # lever OFF makes this a no-op, so the persistent absorb and the OFF path
-    # stay byte-identical.
+    # Task 15.5 reporter exculpation (unconditional since Task 15.7): cap the
+    # soft accusation lift against a body-report meeting's own reporter,
+    # TRANSIENT pre-vote half only. ``reporter=None`` (every caller but the
+    # manager's vote-time fold) still makes this a no-op, so the persistent
+    # absorb stays byte-identical; the lever-OFF path is history.
     exculpate_reporter = (
         phase == "pre_vote"
         and reporter is not None
         and reporter_exculpation_enabled(env)
     )
-    # Task 16.8 absence prior (default-OFF): the TRANSIENT pre-vote half only,
-    # like the 13.7 spread graduation -- the persistent halves never consult
-    # the lever or the set, so absence can never accumulate across meetings
-    # and the OFF path (or an empty set) is byte-identical by construction.
+    # Task 16.8 absence prior (unconditional since Task 18.12): the TRANSIENT
+    # pre-vote half only, like the 13.7 spread graduation -- the persistent
+    # halves never read the absent set, so absence can never accumulate across
+    # meetings and an EMPTY set is byte-identical by construction.
     absence_now = phase == "pre_vote" and bool(absent) and absence_prior_enabled(env)
     for subject in sorted(bump_now):
         # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a

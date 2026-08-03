@@ -202,13 +202,13 @@ env-gated at Wave 1 (cloning the 16.8 absence-prior resolver's shape) and retire
 to always-on once baseline 6 adopted them (the 16.17 move). (1) The endpoint-band
 whereabouts exemption (:func:`whereabouts_interior_flags_enabled`): a spoken
 :class:`~meetings.schemas.WhereaboutsClaim` indexes as a DEGENERATE SINGLE-TICK
-SELF-ALIBI (``from_tick == to_tick``, speaker is subject), so a contradicting
-first-hand sighting today sits on an endpoint tick and is banded WEAK -- §3.3's
-finding that roll-call lies can NEVER mint a STRONG flag (25 corpus lies, all
-weak). ON, the exemption adjudicates that single tick as the claim's INTERIOR
-(not its edge) for exactly this class: the narrow-window and endpoint-tick weak
-reasons drop and a contradicting sighting mints a STRONG ``alibi_vs_sighting``
-flag. Genuine multi-tick alibis keep the endpoint band and the two-source
+SELF-ALIBI (``from_tick == to_tick``, speaker is subject), so BEFORE the exemption
+a contradicting first-hand sighting sat on an endpoint tick and was banded WEAK --
+§3.3's finding that roll-call lies could NEVER mint a STRONG flag (25 corpus lies,
+all weak). The exemption adjudicates that single tick as the claim's INTERIOR (not
+its edge) for exactly this class: the narrow-window and endpoint-tick weak reasons
+drop and a contradicting sighting mints a STRONG ``alibi_vs_sighting`` flag.
+Genuine multi-tick alibis keep the endpoint band and the two-source
 discipline unchanged; a genuine single-tick self-stated
 :class:`~meetings.schemas.AlibiClaim` is the SAME class by construction and is
 exempted too. (2) The vent-placement flag variant
@@ -875,9 +875,11 @@ def self_refuted_alibi_claim_ids(transcript: MeetingTranscript) -> frozenset[str
     untouched: flags are still detected and recorded identically; only the
     Rule-2 WEIGHT read by
     :func:`agents.memory.beliefs.apply_contradiction_rule` (behind the
-    Task-14.10 default-OFF lever) consumes this. Pure and deterministic --
-    a function of the transcript alone, so the replay-side re-derivation
-    folds the identical classification.
+    Task-14.10 lever, UNCONDITIONAL since the Task-14.12 phase close -- it
+    was default-OFF and env-gated at 14.10, adopted by the baseline-2
+    re-record) consumes this. Pure and deterministic -- a function of the
+    transcript alone, so the replay-side re-derivation folds the identical
+    classification.
 
     The classification is a function of the ACCOUNT, never the copy: once
     a self-stated copy is refuted by its own turn's observation, EVERY
@@ -1650,9 +1652,11 @@ def detect_contradictions(
         # vent flags -- and, like them, after the 10.10 proxy-intra-turn guard.
         # The join point is deliberate (grounded evidence must never be
         # re-targeted; structurally the guard could not hit these flags anyway --
-        # two distinct speakers: the venter subject and the witness). Gated on
-        # the default-OFF lever, so OFF the block is never entered and the bytes
-        # are identical.
+        # two distinct speakers: the venter subject and the witness). The lever is
+        # UNCONDITIONAL since the Task-18.12 baseline-6 record (it was default-OFF
+        # and env-gated at Wave 1), so production ALWAYS enters this block when
+        # vent witness records exist; the ``if`` below reads the always-True
+        # verdict resolved once above (the function's single resolver read).
         if vent_placement_contradictions:
             guarded.extend(
                 _detect_vent_placement_contradictions(
@@ -2383,13 +2387,14 @@ def _detect_alibi_vs_sightings(
     for alibi in alibis:
         if not alibi.rooms:
             continue
-        # Task 18.9 lever 1 (DEFAULT OFF): the endpoint-band whereabouts
-        # exemption. A DEGENERATE SINGLE-TICK SELF-ALIBI -- ``from_tick ==
+        # Task 18.9 lever 1 (UNCONDITIONAL since the Task-18.12 baseline-6 record;
+        # it was default-OFF and env-gated at Wave 1): the endpoint-band
+        # whereabouts exemption. A DEGENERATE SINGLE-TICK SELF-ALIBI -- ``from_tick ==
         # to_tick`` AND the speaker is its own subject -- is exactly how a
         # :class:`~meetings.schemas.WhereaboutsClaim` roll-call answer indexes
         # per :func:`_iter_alibis` (and how a genuine single-tick self-stated
         # :class:`~meetings.schemas.AlibiClaim` reads too -- the same class by
-        # construction, exempted identically). ON, the exemption adjudicates
+        # construction, exempted identically). The exemption adjudicates
         # the single tick as the claim's INTERIOR, not its edge: a contradicting
         # first-hand sighting mints a STRONG flag. For this class the only weak
         # reason ``base_reasons`` could ever carry is WEAK_REASON_NARROW_WINDOW
@@ -2398,8 +2403,11 @@ def _detect_alibi_vs_sightings(
         # ``base_reasons`` is emptied and the endpoint-tick append below is
         # skipped. Proxy alibis (speaker != subject) never satisfy the class, so
         # the re-targeted-proxy path is structurally untouched; multi-tick
-        # alibis keep the endpoint band and narrow-window band verbatim. OFF
-        # (the default): byte-identical to the pre-18.9 path.
+        # alibis keep the endpoint band and narrow-window band verbatim.
+        # :func:`detect_contradictions` reads the resolver ONCE and threads True,
+        # so production ALWAYS takes the exemption; the ``False`` parameter branch
+        # (byte-identical to the pre-18.9 path) survives only for direct callers
+        # of this private helper.
         interior_exempt = whereabouts_interior_flags and (
             alibi.claim.from_tick == alibi.claim.to_tick
             and alibi.speaker == alibi.claim.subject
@@ -2630,13 +2638,14 @@ def _detect_alibi_vs_physical(
         )
         # Task 13.5.3: kill-scene contradicting placements -- co-presences at the
         # body's room (``body_rooms``) the relevance gate normally DROPS, recovered
-        # via ``kill_scene_paths`` (the kill-scene-inclusive reconstruction) ONLY
-        # when the lever is ON. Same soundness filters as the regular set, plus
+        # via ``kill_scene_paths`` (the kill-scene-inclusive reconstruction; the
+        # 13.5.3 lever is unconditional since Task 14.9, so a kill-scene meeting
+        # always supplies it). Same soundness filters as the regular set, plus
         # ``placement.rooms & body_rooms`` (it IS the scene) and disjoint-from-alibi
         # (the accused claimed elsewhere). The body-room filter makes this set
         # DISJOINT from ``contradicting`` above (which excludes scene placements by
         # the relevance gate), so the union never double-counts a placement. Empty
-        # when the lever is OFF / the meeting has no kill scene -> byte-identical.
+        # when the meeting has no kill scene -> byte-identical to the 13.4 path.
         kill_scene_contradicting: tuple[StatedPlacement, ...] = ()
         if kill_scene_paths is not None and body_rooms:
             kill_scene_contradicting = tuple(
@@ -2915,11 +2924,15 @@ def _detect_vent_placement_contradictions(
 ) -> Iterator[ContradictionRef]:
     """Yield STRONG ``alibi_vs_physical`` flags for grounded vent placements.
 
-    Task 18.9 lever 2 (DEFAULT OFF; audit-phase-17-close.md §6 item 4): the 17.5
-    scope firewall's flag-minting arm. Today the vent-placement widening feeds
-    only :func:`absent_players`' absent-set derivation; ON, this arm feeds the
-    DETECTOR. For every spoken :class:`~meetings.schemas.SawVentObservation` on
-    any turn (indexed with :func:`_turn_observation_id`) whose subject is in the
+    Task 18.9 lever 2 (UNCONDITIONAL since the Task-18.12 baseline-6 record; it
+    was default-OFF and env-gated at Wave 1; audit-phase-17-close.md §6 item 4):
+    the 17.5 scope firewall's flag-minting arm. Since 18.12 this arm ALWAYS feeds
+    the DETECTOR on the production path; the absent-set derivation the widening
+    once fed alone (:func:`absent_players`) now takes its Task-18.12 production
+    driver from :func:`grounded_vent_subjects_from_flags`, reading the
+    ``vent_sighting`` flag channel. For every spoken
+    :class:`~meetings.schemas.SawVentObservation` on any turn (indexed with
+    :func:`_turn_observation_id`) whose subject is in the
     roster, the SPEAKER'S OWN typed records must exist; for each of the
     SUBJECT'S OWN de-echoed self-alibis (``self_alibis``, the tuple
     :func:`detect_contradictions` already computes) with non-empty canonical
