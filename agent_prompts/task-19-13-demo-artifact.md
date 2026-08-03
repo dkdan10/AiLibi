@@ -12,7 +12,7 @@ Implement Task 19.13 — Proof above the fold + the static demo artifact, anchor
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-demo-artifact`
-**Depends on:** 19.1, 19.9, 19.10, 19.16
+**Depends on:** 19.1, 19.9, 19.10, 19.14, 19.16 (the 19.14 edge is TournamentDashboard.tsx serialization — the metrics panel lands before the fetch-seam routing)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 14 [C]; docs/deployment.md:10-33 (the unauthenticated-GM-view trust boundary — preserved verbatim in spirit); docker-compose.yml:31-37 (loopback binding); the verified gap: `vite build` output is never served, no StaticFiles mount, no screenshot/GIF anywhere in README
 **Complexity:** Medium
 
@@ -32,6 +32,8 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - docs/media/ (new — the committed captures)
 - scripts/build_demo_bundle.py (new)
 - frontend/src/api/client.ts; (the static-data seam only)
+- frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass)
+- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam — same)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - tests/scripts/test_build_demo_bundle.py (new)
 
@@ -62,6 +64,7 @@ footage at modest resolution to respect the media budget.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist

@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 19.19 — The retirements + the dead-code sweep (consumer-verified), anchored to audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.. Do not implement work outside these references.
+Implement Task 19.19 — The retirements + the dead-code sweep (consumer-verified), anchored to audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-retirements`
-**Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
+**Depends on:** 19.1, 19.4, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
 Implement the tier map's RETIRE column plus the verified dead-code list, one deletion at
@@ -37,11 +37,11 @@ list), and the cache deletion removes `llm/README.md`'s advertisement of the mod
 boundary (env + rollout plumbing; tests-only consumer); the stale crew-dir CLI
 advertisement in run_tournament (the honest fail-loud behavior stays; the advertisement
 of a stampless directory goes); `llm/cache.py` (+ its import in test_client);
-`scripts/record_meeting_gate_probe.py`; `frontend/src/ui/SectionLabel.tsx`; and any of
-the five bake-off prompt-set directories that a grep over committed replay stamps,
-loader references, and tests proves unreferenced — a set that fails the grep is labeled
-bake-off-archive instead, never deleted on hope. Every deletion is recoverable from git
-history; the PR lists each with its consumer-check output.
+`scripts/record_meeting_gate_probe.py`; `frontend/src/ui/SectionLabel.tsx`; and the
+realpath docstring references left in surviving modules (hall_of_fame, conviction
+serving — rewritten as historical notes, not left pointing at deleted APIs). The
+bespoke prompt sets are NOT touched (live — see Section refs). Every deletion is
+recoverable from git history; the PR lists each with its consumer-check output.
 
 **Files in scope:**
 - training/realpath.py; (deleted)
@@ -71,11 +71,12 @@ history; the PR lists each with its consumer-check output.
 - llm/cache.py; (deleted)
 - tests/llm/test_client.py; (the cache import removed)
 - frontend/src/ui/SectionLabel.tsx; (deleted)
-- agents/strategic/prompts/; (unreferenced bake-off set dirs only; loader.py is NOT edited — a set needing a loader edit is skipped and recorded)
+- training/coevo/hall_of_fame.py; (the :279 realpath docstring reference only)
+- training/conviction/serving.py; (the :301 realpath docstring reference only)
 
 **Files NOT in scope:**
 - eval/determinism_test.py (NOT dead — see Section refs; it stays)
-- agents/strategic/prompts/loader.py (19.6's file; any set requiring a loader edit is skipped)
+- agents/strategic/prompts/ (all sets live; nothing here moves)
 - training/composed_runner.py + the conviction/compact-inference surfaces (KEEP column)
 - frontend/src/api/ (dead client methods are backlog — they collide with 19.13/19.24)
 
@@ -96,10 +97,10 @@ history; the PR lists each with its consumer-check output.
 ## Implementation hint
 
 Order the deletions leaf-first (cache → gate probe → SectionLabel → first_meeting →
-standalone arm → realpath) so each gate run isolates one removal. For the prompt sets,
-the consumer surfaces are: `prompt_set`/set-name strings in committed replay stamps
-(grep the JSONL), `loader.py` set references, tests, and the byte-golden's coverage —
-run all four greps per set and paste the outputs.
+standalone arm → realpath) so each gate run isolates one removal. The realpath docstring
+rewrites in hall_of_fame/serving land in the same commit as the module deletion so no
+intermediate state points at a missing API; keep the historical facts, change the tense
+and drop the dotted-path references.
 
 ## Public types this task introduces
 - `training.realpath_schema.RealPathRerankRow`
@@ -125,9 +126,6 @@ Do not modify DESIGN.md.
 Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
-Do not add LLM calls inside agents/tactical/.
-Do not import engine/ from agents/.
-If the task mentions engine-free boundary schemas, keep agents/ free of engine imports and put engine translation only in orchestrator-owned code.
 
 ## Verification checklist
 - Run every command listed in the Definition of done.
@@ -140,4 +138,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-19-retirements` with a title like `task 19.19: the retirements + the dead-code sweep (consumer-verified)`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

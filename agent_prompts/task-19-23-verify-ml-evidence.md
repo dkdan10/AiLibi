@@ -58,6 +58,7 @@ samples if the full walk exceeds that budget, with the sampling disclosed in out
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import training.realpath_schema"`
+- `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist

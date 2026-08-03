@@ -227,6 +227,25 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The second Codex review round (6 findings)** was likewise verified claim-by-claim —
+  all six reproduced — and absorbed. Two more source-audit refutations came out of it:
+  7. **The five bespoke prompt sets are LIVE**, not dead-code candidates: all five are
+     registered in `orchestrator/game.py:343-350` and parametrically loaded/validated by
+     `tests/agents/test_bespoke_prompt_sets.py`. The deletion item is removed from
+     19.19 entirely (nothing in `agents/strategic/prompts/` moves this phase).
+  8. **The dispatch surface asserted the demoted authority**: every generated prompt's
+     template line ("DESIGN.md is the source of truth",
+     `scripts/prompt_template.md.j2:19`) now changes atomically with the demotion —
+     19.1 rewrites the authority line and regenerates all prompts in the same PR.
+  The remaining four: realpath docstring references in surviving modules
+  (hall_of_fame:279, conviction/serving:301) join 19.19's scope; the runtime-partition
+  smoke becomes `uv run --no-dev --exact` (a bare `uv run` re-syncs the dev group and
+  proves nothing); 19.1 now depends on 19.3 (the README's portability claim quotes
+  19.3's recorded outcome — the frontier drops to seven roots and the critical path is
+  the nine-task 19.5 → 19.10 → 19.11 → 19.14 → 19.13 → 19.24 → 19.25 → 19.27 → 19.28);
+  and the static demo routes the two verified direct-fetch bypasses
+  (BeliefMatrix.tsx:30-46, TournamentDashboard.tsx:753) through the data seam, with
+  19.13 ordered behind 19.14 on the shared dashboard file.
 - **The first Codex review round (10 findings, PR #322)** was verified claim-by-claim
   against the bytes — all ten reproduced — and absorbed: the planning PR itself now
   carries the generator's DESIGN.md scope-gate (resolving the 19.1 bootstrap
@@ -239,7 +258,8 @@ owner-chartered phase:
   the canonical owner), 19.9/19.12 gained the client-contract comment and the
   error-field consumers, 19.7 states the pytest/leak_test boundary, and 19.23 now
   depends on the raw-slate ruling.
-- Validator/generator/frontier all green at authoring: 321 tasks ↔ 321 prompts
-  (293 + 28), `generate_prompts.py --check` in sync, and
+- Validator/generator/frontier all green at authoring and after both review rounds:
+  321 tasks ↔ 321 prompts (293 + 28), `generate_prompts.py --check` in sync, and
   `scripts/compute_next_task.py --phase 19` reports exactly the designed frontier
-  (eight roots — 19.1–19.6, 19.8, 19.9 — dispatchable, twenty blocked).
+  (seven roots — 19.2–19.6, 19.8, 19.9 — dispatchable, twenty-one blocked; 19.1 waits
+  on 19.3's recorded portability outcome).

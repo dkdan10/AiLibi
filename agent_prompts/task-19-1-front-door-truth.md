@@ -12,7 +12,7 @@ Implement Task 19.1 — The front-door truth sweep + generated-fact checks, anch
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-front-door-truth`
-**Depends on:** none (root)
+**Depends on:** 19.3 (the README's cross-platform reproducibility claim states 19.3's measured outcome — portable sampler vs narrowed guarantee — so the front door cannot publish before that outcome exists)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 1 [C; §8 rows 6, 16]; README.md:13 (219 PRs / ~2,500 tests), :48 vs :100 (the ladder-tip self-contradiction), :69 (the 0.938 mislabel), :104 ("intentionally minimal"), :158-175 (no Node/npm); AGENTS.md:16-19 (DESIGN.md declared authoritative), :64-79 (three-providers + stale baseline text); llm/README.md:32 (two providers) vs llm/provider.py:41-44 (four); .env.example:63-186 (six retired levers as LIVE default-OFF; zero `AILIBI_IMPOSTOR_ROLL_CALL`) vs orchestrator/replay.py:531-545 (`_RETIRED_ALWAYS_ON_LEVERS`), :570-572 (`_TOGGLEABLE_LEVER_RESOLVERS`), :590-625; scripts/generate_prompts.py:131-137 (the DESIGN.md constraint rule); the three reproducibility scopes (audit-phase-19-input-codex.md §6.1)
 **Complexity:** Medium
 
@@ -37,7 +37,13 @@ claims drift from committed sources (manifest dates/win rates, the lever registr
 named ladder tip); wiring it into `scripts/check.sh` is NOT in scope (19.7 owns check.sh) —
 it runs via pytest. The generator's DESIGN.md rule was already scope-gated in the
 planning PR (locked decision 8), so this task's prompt permits the DESIGN.md edits; the
-generator itself is not touched here.
+generator itself is not touched here. The demotion must also reach the DISPATCH surface:
+`scripts/prompt_template.md.j2:19` currently tells every generated prompt "DESIGN.md is
+the source of truth" — rewrite that authority line (AGENTS.md remains the rulebook;
+docs/architecture.md is the current-architecture note; DESIGN.md is historical) and
+regenerate ALL prompts in the same PR so no dispatched agent is ever told to obey the
+document this task demotes. The README's third reproducibility scope quotes 19.3's
+recorded outcome (the dependency edge exists for exactly this sentence).
 
 **Files in scope:**
 - README.md
@@ -46,6 +52,8 @@ generator itself is not touched here.
 - docs/architecture.md (new)
 - llm/README.md
 - .env.example
+- scripts/prompt_template.md.j2; (the DESIGN.md authority line only)
+- agent_prompts/; (regenerated — the authority line changes in every prompt, atomically with the demotion)
 - scripts/check_doc_facts.py (new)
 - tests/scripts/test_check_doc_facts.py (new)
 
@@ -60,6 +68,7 @@ generator itself is not touched here.
 - [ ] `scripts/check_doc_facts.py` passes at HEAD, fails when a checked README fact is perturbed (test-pinned both ways), and runs offline in seconds.
 - [ ] `.env.example` documents exactly the live toggleable levers from `orchestrator/replay.py:570-572` and labels the `_RETIRED_ALWAYS_ON_LEVERS` set as graduated/always-ON, cross-checked by a test importing the registry.
 - [ ] DESIGN.md opens with the demotion banner; `docs/architecture.md` describes the CURRENT layering (engine → observation → agents/meetings ← orchestrator; llm behind the Protocol; eval/api privileged; frontend on generated types) in ≤2 pages; AGENTS.md routes readers to it and carries the graduation-sweep convention.
+- [ ] The dispatch template's authority line no longer asserts DESIGN.md as the source of truth; all prompts are regenerated in this PR and `generate_prompts.py --check` is green — a repo grep proves zero generated prompts still carry the old sentence.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
