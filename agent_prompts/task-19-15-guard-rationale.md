@@ -22,7 +22,9 @@ a neutral strategic reason while KEEPING the audit marker that the guard changed
 target (auditability is never laundered — the redaction is itself marked). Dormant for
 committed bytes (they are frozen and unaffected); this matters on any future recording.
 Explicitly distinct from model-originated fourth-wall statements, which 19.14 measures
-and 19.8 discloses — this fixes only the guard-originated class.
+and 19.8 discloses — this fixes only the guard-originated TEXT class. The DISPLAY-side
+twin (the `teammate_coerced` chip's perspective gating) is 19.11's; this task never
+touches the UI.
 
 **Files in scope:**
 - meetings/manager.py; (the guard's rationale construction only)

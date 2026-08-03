@@ -12,7 +12,7 @@ Implement Task 19.10 — Playback coherence: the meeting pause, the unspoiled mo
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-playback-coherence`
-**Depends on:** 19.5, 19.9 (the first edge is api/schemas.py + generated-types serialization)
+**Depends on:** 19.5, 19.6, 19.9 (the 19.5 edge is api/schemas.py + generated-types serialization; the 19.6 edge is HighlightCard.tsx serialization)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1188-1195 (the loader's own deliberate-mix comment)
 **Complexity:** Integration
 
@@ -31,6 +31,8 @@ resolving the deliberate mix the loader documents.
 **Files in scope:**
 - frontend/src/hooks/usePlayback.ts
 - frontend/src/App.tsx
+- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186)
+- frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
@@ -43,7 +45,7 @@ resolving the deliberate mix the loader documents.
 - replays/ (frozen)
 
 **Definition of done:**
-- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle.
+- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.

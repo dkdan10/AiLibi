@@ -33,6 +33,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 - frontend/src/tokens.ts
 - agents/strategic/prompts/loader.py
 - tests/llm/test_provider.py
+- tests/llm/test_client.py; (the existing `test_unknown_model_uses_fallback_pricing` at :481-503 asserts the behavior this task removes — it flips to asserting the raise)
 - tests/agents/test_prompt_loader.py; (or the loader's actual test home — locate by grep, name it in the PR)
 
 **Files NOT in scope:**

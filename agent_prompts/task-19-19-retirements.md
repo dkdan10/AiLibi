@@ -12,7 +12,7 @@ Implement Task 19.19 — The retirements + the dead-code sweep (consumer-verifie
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-retirements`
-**Depends on:** 19.1, 19.4, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge)
+**Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge; 19.6 the tests/llm/test_client.py edge)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
@@ -66,6 +66,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_rollout.py
 - tests/training/test_surrogate_runner.py
 - tests/training/test_coevo_driver.py; (the :1764 realpath docstring reference + any removal ripple)
+- tests/training/test_finalist_eval_pins.py; (ONLY the module-reference docstrings at :35-36/:40/:921/:1086-1087 — the `realpath-crew/` ARTIFACT paths at :484/:554 are data paths to committed bytes and stay untouched)
 - scripts/run_tournament.py
 - tests/scripts/test_run_tournament.py
 - scripts/record_meeting_gate_probe.py; (deleted)
@@ -87,7 +88,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
 - [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
-- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) — the four already-verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764) plus any the closing grep surfaces.
+- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) and outside `realpath-crew/` ARTIFACT paths (data, not module references) — the verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764, test_finalist_eval_pins:35-36/:40/:921/:1086-1087) plus any the closing grep surfaces.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

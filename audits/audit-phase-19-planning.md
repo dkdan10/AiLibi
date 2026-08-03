@@ -227,6 +227,22 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The fourth Codex review round (8 findings)** was verified claim-by-claim — all
+  eight reproduced (one, the ballot-chip disclosure, verifies as data flow rather than
+  at the cited literal: `teammate_coerced` reaches `BallotCard` inside
+  `rewrite_reasons`) — and absorbed: 19.3's cross-platform claim now requires the
+  owner-assisted Darwin-arm64 digest comparison before it is advertised (a Linux-only
+  double-run cannot prove the motivating failure fixed); 19.14 pins the cross-tab under
+  BOTH partitions with separate denominators (meeting-flag 10/31 = 32.3% vs
+  ejectee-proof 10/33 = 30.3% — the round caught the two being mixed in one sentence,
+  the C5 lesson applied to this plan itself); `tests/llm/test_client.py`'s
+  fallback-pricing assertion joins 19.6; 19.7's smoke imports entry modules (all six
+  package `__init__`s are 0 bytes — bare-package imports prove nothing); the featured
+  entry cards' WinnerTag joins 19.10's unspoiled mode (HighlightCard + the picker's
+  winner pass-through); the `teammate_coerced` chip gets perspective gating in 19.11
+  (19.15 stays manager-side only); the finalist-pins module-reference docstrings join
+  19.19 (artifact DATA paths under `realpath-crew/` stay); and 19.27 names its golden
+  output directories explicitly.
 - **The third Codex review round (8 findings)** was verified claim-by-claim — all eight
   reproduced — and absorbed: AGENT_IMPLEMENTATION.md joins 19.1's authority demotion
   (with the generator's second constraint scope-gated in the planning PR; zero parsed

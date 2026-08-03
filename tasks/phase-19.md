@@ -96,9 +96,9 @@ Wave 1 (roots, dispatch in parallel):
   19.6 -> 19.7 (public hygiene + MIT)
 
 Wave 2 (the spectator + the deduction instrument):
-  (19.5, 19.9) -> 19.10 (playback coherence) -> 19.11 (evidence taxonomy)
-  (the 19.5 edge is api/schemas.py + generated-types serialization — the report cells
-   19.5 adds flow through the same DTO surface the 19.10 chain edits)
+  (19.5, 19.6, 19.9) -> 19.10 (playback coherence) -> 19.11 (evidence taxonomy)
+  (the 19.5 edge is api/schemas.py + generated-types serialization; the 19.6 edge is
+   HighlightCard.tsx — the entry-card unspoiled gating follows the token fix)
   (19.7, 19.10) -> 19.12 (frontend test baseline)
   (19.1, 19.9) -> 19.16 (reading guide — the demo path quotes 19.9's curation)
   (19.1, 19.9, 19.10, 19.14, 19.16) -> 19.13 (README proof + static demo; the 19.14
@@ -110,8 +110,8 @@ Wave 2 (the spectator + the deduction instrument):
 
 Wave 3 (ML close + consolidation):
   19.5 -> 19.18 (tier map + freeze labels + reopening checklist)
-  (19.1, 19.4, 19.18) -> 19.19 (retirements; 19.1/19.4 are llm-README and
-   test_rewards serialization edges)
+  (19.1, 19.4, 19.6, 19.18) -> 19.19 (retirements; 19.1/19.4/19.6 are llm-README,
+   test_rewards, and test_client serialization edges)
   19.4 -> 19.20 (report honesty)
   (19.13, 19.19) -> 19.22 (artifact classes + coevo prune)
   (19.20, 19.22) -> 19.21 (raw slate — OWNER)
@@ -142,7 +142,12 @@ views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 cells and DTO-version constant ride the same generated surface);
 `frontend/src/App.tsx` 19.10 → 19.17;
 `frontend/src/api/client.ts` 19.9 → 19.13 → 19.24; `frontend/e2e/` 19.12 → 19.17;
-`frontend/src/components/ReplayPicker.tsx` 19.9 → 19.12 (transitive via 19.10);
+`frontend/src/components/ReplayPicker.tsx` 19.9 → 19.10 → 19.12 (copy, then the
+entry-card unspoiled gating, then the error selector);
+`frontend/src/components/HighlightCard.tsx` 19.6 → 19.10;
+`frontend/src/components/BallotCard.tsx` 19.11 only;
+`tests/training/test_finalist_eval_pins.py` 19.19 (reference rewrites) → 19.27 (the
+golden conversion);
 `frontend/src/components/TournamentDashboard.tsx` 19.5 → 19.14 → 19.13 (truth tiles,
 the metrics panel, then the fetch-seam routing);
 `scripts/prompt_template.md.j2` + `agent_prompts/` 19.1 only (the authority-line
@@ -349,7 +354,7 @@ shipped artifact).
 
 **Definition of done:**
 - [ ] Verify-then-fix recorded: the platform-sensitive call(s) identified with the reasoning in the module docstring, and the old promise text quoted in the PR.
-- [ ] Primary path: the sampler's algorithm is documented (name + why each operation is portable), a double-run on this host is digest-identical, and the new golden is pinned. Fallback path: the claim text states exactly what is guaranteed (same-runtime repeatability) and the test carries an explicit platform pin/guard with the Darwin divergence cited.
+- [ ] Primary path: the sampler's algorithm is documented (name + why each operation is portable), a double-run on this host is digest-identical, and the new golden is pinned — but the CROSS-PLATFORM claim is not advertised until the digest is confirmed on the divergent platform: an owner-assisted Darwin-arm64 run (minutes — the recorded failure host) matches the Linux digest, recorded in the test's comment. Until that comparison exists the in-code claim uses the narrowed wording even on the primary path (designed-portable, cross-platform digest pending). Fallback path: the claim text states exactly what is guaranteed (same-runtime repeatability) and the test carries an explicit platform pin/guard with the Darwin divergence cited.
 - [ ] The in-code claim and README's reproducibility-scopes text (19.1) agree — coordinate wording, not files.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -503,6 +508,7 @@ baseline variable. No prompt bytes move (the byte-golden proves it).
 - frontend/src/tokens.ts
 - agents/strategic/prompts/loader.py
 - tests/llm/test_provider.py
+- tests/llm/test_client.py; (the existing `test_unknown_model_uses_fallback_pricing` at :481-503 asserts the behavior this task removes — it flips to asserting the raise)
 - tests/agents/test_prompt_loader.py; (or the loader's actual test home — locate by grep, name it in the PR)
 
 **Files NOT in scope:**
@@ -563,7 +569,7 @@ view — loopback only; how to report).
 
 **Definition of done:**
 - [ ] CI runs green with the permissions block, SHA-pinned actions, and exactly one frontend build per run.
-- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and the runtime-only smoke actually proves the partition: `uv run --no-dev --exact python -c "import engine, orchestrator, api, agents, meetings, llm"` (the `--no-dev --exact` flags are load-bearing — a bare `uv run` re-syncs the dev group and vacuously passes) plus an assertion that pytest/mypy are absent from that environment — training/eval are explicitly excluded from the claim until 19.24 (the known `eval.leak_test` pytest import, stated in the partition's notes).
+- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and the runtime-only smoke actually proves the partition: `uv run --no-dev --exact python -c "import api.main, orchestrator.game, meetings.manager, agents.strategic.prompts.loader, llm.provider, engine.tick"` — the flags are load-bearing (a bare `uv run` re-syncs the dev group and vacuously passes) and the ENTRY-MODULE list is load-bearing too (the six package `__init__`s are all 0 bytes, so importing bare packages executes none of the production graph) — plus an assertion that pytest/mypy are absent from that environment. training/eval are explicitly excluded from the claim until 19.24 (the known `eval.leak_test` pytest import, stated in the partition's notes).
 - [ ] LICENSE is MIT with the owner's copyright line; CONTRIBUTING and SECURITY match locked decision 4's posture and the deployment doc's trust boundary.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -688,7 +694,7 @@ featured list and pin that agreement.
 
 ### Task 19.10 — Playback coherence: the meeting pause, the unspoiled mode, the finale card
 **Branch:** `phase-19-playback-coherence`
-**Depends on:** 19.5, 19.9 (the first edge is api/schemas.py + generated-types serialization)
+**Depends on:** 19.5, 19.6, 19.9 (the 19.5 edge is api/schemas.py + generated-types serialization; the 19.6 edge is HighlightCard.tsx serialization)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1188-1195 (the loader's own deliberate-mix comment)
 **Complexity:** Integration
 
@@ -707,6 +713,8 @@ resolving the deliberate mix the loader documents.
 **Files in scope:**
 - frontend/src/hooks/usePlayback.ts
 - frontend/src/App.tsx
+- frontend/src/components/HighlightCard.tsx; (the entry-card WinnerTag honors unspoiled mode — verified pre-open spoiler at :186)
+- frontend/src/components/ReplayPicker.tsx; (ONLY the winner data passed into the entry cards at :118/:129 — unspoiled gating, no copy changes)
 - frontend/src/lib/playback.ts; (pure helpers for pause/beat/finale state — keep them pure, 19.12 tests them)
 - api/replay_loader.py
 - api/schemas.py; (additive DTO fields only)
@@ -719,7 +727,7 @@ resolving the deliberate mix the loader documents.
 - replays/ (frozen)
 
 **Definition of done:**
-- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle.
+- [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; the winner is not rendered before the finale without the reveal toggle — INCLUDING the picker's entry cards (the featured list must not spoil the games it advertises; the WinnerTag renders only under the reveal toggle or omniscient mode).
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
@@ -777,6 +785,7 @@ naming routes to the post-19 decision.
 - api/replay_loader.py
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/MeetingView.tsx
+- frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
 - tests/api/
 
 **Files NOT in scope:**
@@ -787,6 +796,7 @@ naming routes to the post-19 decision.
 **Definition of done:**
 - [ ] The classification is total over all committed bytes: a pin counts each category corpus-wide (samples + ml_corpus) and an unknown kind fails loud, never defaults.
 - [ ] The committed self-linked vent records render as role proof (no `p-X ↔ p-X` anywhere); weak-stamped flags are visually subordinated; the four mechanism fixtures exist with their seed/meeting anchors and one-line descriptions of what each demonstrates.
+- [ ] Role-disclosing guard chips (`teammate_coerced` in `rewrite_reasons`) render only in omniscient/reveal contexts — the audit information survives in the privileged view, never in fog (fixture-pinned both ways).
 - [ ] The DTO change is additive; older fixtures parse; the fidelity fixture regenerates green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -938,7 +948,7 @@ footage at modest resolution to respect the media budget.
 ### Task 19.14 — The deduction metrics: what "deduction" means, instrumented
 **Branch:** `phase-19-deduction-metrics`
 **Depends on:** 19.5, 19.11, 19.18 (the last is the eval/meeting_quality.py serialization edge — labels land before the wrapper extension)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 15 [S-Codex/S-Claude convergent objective; §8 rows 3, 10, 14; the roll-call split and the 13-redirected-ejects cells are source-specific and NOT independently re-run — verify-then-fix] + item 24 disclosure twin (19.8); the headline cross-tab (9p2i samples: 70 flagged meetings → 68 imp/2 inn ejected, 95 unflagged → 10/21; corpus: 213/248; non-direct accuracy 30.3%/39.3%); tests/eval/test_kill_craft.py:66-135 (the witnessed-supply pins to adopt); the C5 lesson (define the metric before counting)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 15 [S-Codex/S-Claude convergent objective; §8 rows 3, 10, 14; the roll-call split and the 13-redirected-ejects cells are source-specific and NOT independently re-run — verify-then-fix] + item 24 disclosure twin (19.8); the headline cross-tab under its TWO distinct partitions, both pinned separately — MEETING-flag (9p2i samples: 70 flagged meetings → 68 imp/2 inn ejected, 95 unflagged → 10 imp/21 inn; unflagged-meeting accuracy 10/31 = 32.3%) and EJECTEE-specific-proof (68/101 ejections proof-present; accuracy among the 33 without ejectee-specific proof 10/33 = 30.3%; corpus twin 35/89 = 39.3%) — the fourth Codex round caught the two denominators being mixed in one sentence, which is exactly the C5 define-before-counting lesson; tests/eval/test_kill_craft.py:66-135 (the witnessed-supply pins to adopt)
 **Complexity:** Medium
 
 The precondition for any future gameplay phase (locked decision 6): make "deduction"
@@ -977,7 +987,7 @@ the evidence the 19.28 close puts in front of the owner.
 
 **Definition of done:**
 - [ ] Verify-then-fix for the source-specific cells: the roll-call coverage split and the engine-redirected eject count are recomputed from committed bytes before pinning (and the recount is the pin).
-- [ ] The 9p2i cross-tab pin reproduces the triage's independent recount exactly (165 meetings; 70 flagged → 68/2; 95 unflagged → 10/21); the corpus twin is pinned beside it.
+- [ ] The 9p2i cross-tab pins reproduce the triage's independent recount exactly UNDER BOTH PARTITIONS, each with its own named cell (meeting-flag: 70 flagged → 68/2, 95 unflagged → 10/21, unflagged accuracy 10/31; ejectee-proof: 68 proof-present, non-direct accuracy 10/33) — the module docstring defines both and no cell ever mixes their denominators; the corpus twins are pinned beside them.
 - [ ] Every metric has a docstring definition stating numerator, denominator, and what it does NOT measure; the weak/proof classification counts match 19.11's DTO taxonomy on the same bytes (cross-pin).
 - [ ] The regenerated reports carry the cells; the dashboard panel renders direct-proof vs non-direct accuracy side by side with honest labels; regeneration commands recorded.
 - [ ] `uv run mypy .` passes.
@@ -1015,7 +1025,9 @@ a neutral strategic reason while KEEPING the audit marker that the guard changed
 target (auditability is never laundered — the redaction is itself marked). Dormant for
 committed bytes (they are frozen and unaffected); this matters on any future recording.
 Explicitly distinct from model-originated fourth-wall statements, which 19.14 measures
-and 19.8 discloses — this fixes only the guard-originated class.
+and 19.8 discloses — this fixes only the guard-originated TEXT class. The DISPLAY-side
+twin (the `teammate_coerced` chip's perspective gating) is 19.11's; this task never
+touches the UI.
 
 **Files in scope:**
 - meetings/manager.py; (the guard's rationale construction only)
@@ -1207,7 +1219,7 @@ the mechanism, not just the name.
 
 ### Task 19.19 — The retirements + the dead-code sweep (consumer-verified)
 **Branch:** `phase-19-retirements`
-**Depends on:** 19.1, 19.4, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge)
+**Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge; 19.6 the tests/llm/test_client.py edge)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
@@ -1261,6 +1273,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - tests/training/test_rollout.py
 - tests/training/test_surrogate_runner.py
 - tests/training/test_coevo_driver.py; (the :1764 realpath docstring reference + any removal ripple)
+- tests/training/test_finalist_eval_pins.py; (ONLY the module-reference docstrings at :35-36/:40/:921/:1086-1087 — the `realpath-crew/` ARTIFACT paths at :484/:554 are data paths to committed bytes and stay untouched)
 - scripts/run_tournament.py
 - tests/scripts/test_run_tournament.py
 - scripts/record_meeting_gate_probe.py; (deleted)
@@ -1282,7 +1295,7 @@ recoverable from git history; the PR lists each with its consumer-check output.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and every former boundary-constructing test (the verified list in the prose) updated and green.
 - [ ] `RealPathRerankRow` lives in the surviving schema module; `generate_campaign_tables` and its test consume it there; the committed rankings and `measurement-stability.json` pins are untouched.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
-- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) — the four already-verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764) plus any the closing grep surfaces.
+- [ ] A repo-wide grep for `training.realpath` / `realpath.py` returns zero live references outside historical records (audits/, training/reports/, committed provenance) and outside `realpath-crew/` ARTIFACT paths (data, not module references) — the verified reference sites (hall_of_fame:279, serving:301, driver:207/:281-283/:949, test_coevo_driver:1764, test_finalist_eval_pins:35-36/:40/:921/:1086-1087) plus any the closing grep surfaces.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -1731,6 +1744,8 @@ Quote the default-gate runtime before/after in the PR.
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
 - scripts/regen_test_goldens.py (new)
+- tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
+- tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
 - .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**

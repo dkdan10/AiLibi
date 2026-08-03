@@ -41,6 +41,8 @@ Quote the default-gate runtime before/after in the PR.
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
 - scripts/regen_test_goldens.py (new)
+- tests/scripts/_goldens/ (new — the champion-flip ruling golden JSON lives here)
+- tests/training/_goldens/ (new — the finalist-eval pin golden JSON lives here)
 - .github/workflows/ci.yml; (ONLY the campaign-tier automation — a scheduled or training-path-filtered job running `-m campaign`, so the opt-in tier has a standing automated run and is never orphaned)
 
 **Files NOT in scope:**
