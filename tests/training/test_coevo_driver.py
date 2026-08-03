@@ -689,13 +689,21 @@ def test_founders_seed_the_pool_and_exploits_join_the_hall(tmp_path: Path) -> No
     # founders ingest through the substrate fence BEFORE any sampling, the
     # payoff row exactly covers them, and (fixture-pinned under these seeds)
     # the exploiter probe finds an impostor exploit and freezes it.
+    #
+    # The master seed moved 42 -> 43 at Task 19.3, which replaced the ES core's
+    # libm-backed `rng.gauss` with a portable inverse-CDF sampler and so re-rolled
+    # this one-population, one-swap fixture's seed luck. Not a search regression:
+    # over master seeds 42..48 the exploiter probe finds an exploit on 2 with the
+    # new sampler and on 3 with the old one — the same order, a different draw. 43
+    # keeps the scenario this test exists to pin (an exploit IS found and frozen);
+    # every other assertion here is structural and seed-independent.
     cells = _founder_cells(tmp_path)
     config = _make_config(
         tmp_path,
         substrate_sha256=bakeoff_substrate_sha(),
         impostor=_impostor_side(population=1, founder_cells_dir=cells),
         crew=_crew_side(population=1),
-        master_seed=42,
+        master_seed=43,
         num_swaps=1,
         first_side="crew",
     )
