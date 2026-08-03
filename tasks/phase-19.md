@@ -62,12 +62,14 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
    agents are barred from both by prompt-generator constraints; THIS PLANNING PR
    scope-gates both rules (a task explicitly listing the file in scope is exempt), so
    19.1's generated prompt already carries the exceptions — resolving the bootstrap
-   contradictions the Codex review rounds flagged. Recorded, not silent: five HISTORICAL
-   prompts (tasks 1.9, 2.10, 2.10.5, 2.13, 2.14 — the era when DESIGN.md was the living
-   spec and their contracts listed it in scope) drop the DESIGN.md line under the same
-   rule; no parsed task lists AGENT_IMPLEMENTATION.md, so that gate changes only 19.1's
-   prompt. Every other prompt is byte-identical. The merge of this document ratifies the
-   control-surface change.
+   contradictions the Codex review rounds flagged. Recorded accurately, not silent:
+   this PR regenerates EVERY prompt — the authority-routing neutralization changes
+   three template lines in all 321 (a deliberate repository-wide control-surface
+   change, ratified by this merge) — and ON TOP of that, seven historical prompts also
+   drop a constraint line under the scope-gate rule: five DESIGN.md-era tasks (1.9,
+   2.10, 2.10.5, 2.13, 2.14) and two whose contracts scope AGENT_IMPLEMENTATION.md in
+   annotated/joined forms (8.13, 9.4 — the exemption matches the item's FILE PORTION,
+   guard-tested). The merge of this document ratifies the control-surface change.
 
 ## Designer rulings (recorded here so contracts inherit them)
 
@@ -696,7 +698,7 @@ pacing/structure heuristic — not a human rating").
 
 **Files in scope:**
 - api/replay_loader.py; (the DEFAULT_SET constant + the featured-list serving, if served)
-- frontend/src/api/client.ts; (ONLY the omitted-set contract comment at :62-65 — it documents the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
+- frontend/src/api/client.ts; (ONLY the omitted-set contract comments at :62-65 AND :140-144 — both document the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - experiments/lab/rubric_score.py; (the provenance-key change only — `_set_manifest_sha` learns the set fingerprint the loader also learns)
@@ -780,6 +782,7 @@ resolving the deliberate mix the loader documents.
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; outcome reveal is a store state INDEPENDENT of perspective, defaults off for every replay (the per-replay perspective reset does not re-reveal — pinned), and no outcome-derived surface renders without it: header, finale, entry-card outcome copy (win shape/ejection counts included), outcome filters (spoiler-warned), and URL state.
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
+- [ ] The stale 4p1i-default claims in this task's files are swept post-flip: `api/replay_loader.py:800/:2755-2759` and `api/schemas.py:1000-1001` (this task depends on the flip, so the sweep lands ordered).
 - [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
@@ -975,6 +978,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - scripts/build_demo_bundle.py (new)
 - frontend/src/api/client.ts; (the static-data seam only)
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
+- frontend/src/stories/BeliefMatrix.stories.tsx; (the :184-185 default claim — same sweep)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)
@@ -986,7 +990,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 
 **Definition of done:**
 - [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; a Playwright case serves the BUILT bundle statically and plays the featured journey end-to-end (pause → finale) with network interception asserting ZERO `/api` requests — the browser test exercises the artifact itself, not only its Python builder.
-- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
+- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) plus its :101/:737-740 claims, BeliefMatrix's server-default comment (:33-35), and `BeliefMatrix.stories.tsx:184-185` now state the 9p2i default — and, as the LAST task in the default-flip chain, a repo-wide grep for 4p1i-default claims returns zero stale assertions (any newly discovered site is swept here or recorded with its owner).
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
 - [ ] `uv run mypy .` passes.
@@ -1052,6 +1056,7 @@ the evidence the 19.28 close puts in front of the owner.
 
 **Definition of done:**
 - [ ] Verify-then-fix for the source-specific cells: the roll-call coverage split and the engine-redirected eject count are recomputed from committed bytes before pinning (and the recount is the pin).
+- [ ] The stale 4p1i-default claim in `api/routes/eval.py:183-186` is swept (this task owns the file and is ordered after the flip via the DTO chain).
 - [ ] The 9p2i cross-tab pins reproduce the triage's independent recount exactly UNDER BOTH PARTITIONS, each with its own named cell (meeting-flag: 70 flagged → 68/2, 95 unflagged → 10/21, unflagged accuracy 10/31; ejectee-proof: 68 proof-present, non-direct accuracy 10/33) — the module docstring defines both and no cell ever mixes their denominators; the corpus twins are pinned beside them.
 - [ ] Every metric has a docstring definition stating numerator, denominator, and what it does NOT measure; the weak/proof classification counts match 19.11's DTO taxonomy on the same bytes (cross-pin).
 - [ ] The regenerated reports carry the cells; the dashboard panel renders direct-proof vs non-direct accuracy side by side with honest labels; regeneration commands recorded.
@@ -1593,7 +1598,7 @@ repo-relative.
 
 **Definition of done:**
 - [ ] The command runs green at HEAD in one invocation, listing every check with its measured value vs the committed verdict, and the availability class of every named evidence artifact (including the 19.21 outcome); on a post-prune checkout WITHOUT the evidence branch fetched it stays green with the moved sidecars reported as their own class (count quoted), and after `fetch_evidence.sh` the same command verifies them hash-for-hash.
-- [ ] A `--complete` mode exists that FAILS if any evidence class is absent (nothing skippable) — the 19.28 close runs `fetch_evidence.sh` then `--complete`, so the phase cannot close without every archived hash verified once.
+- [ ] A `--complete` mode exists that FAILS for any byte PROMISED archival availability that is absent, while ACCEPTING a manifest-recorded LOST class (the ratified 19.21 loss outcome is a valid close state, not a deadlock) — the 19.28 close runs `fetch_evidence.sh` then `--complete`, so the phase cannot close without every archived hash verified once and every loss recorded rather than silent.
 - [ ] It is read-only (no artifact writes outside a temp dir) and offline; a perturbed-input test proves it fails loud.
 - [ ] The invocation appendix reproduces the recorded harness invocations repo-relative, citing the provenance files it replaces.
 - [ ] `uv run mypy .` passes.

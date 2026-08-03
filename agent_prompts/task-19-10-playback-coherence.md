@@ -60,6 +60,7 @@ resolving the deliberate mix the loader documents.
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; outcome reveal is a store state INDEPENDENT of perspective, defaults off for every replay (the per-replay perspective reset does not re-reveal — pinned), and no outcome-derived surface renders without it: header, finale, entry-card outcome copy (win shape/ejection counts included), outcome filters (spoiler-warned), and URL state.
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
+- [ ] The stale 4p1i-default claims in this task's files are swept post-flip: `api/replay_loader.py:800/:2755-2759` and `api/schemas.py:1000-1001` (this task depends on the flip, so the sweep lands ordered).
 - [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.

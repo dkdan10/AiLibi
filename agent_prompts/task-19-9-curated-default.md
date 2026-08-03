@@ -36,7 +36,7 @@ pacing/structure heuristic — not a human rating").
 
 **Files in scope:**
 - api/replay_loader.py; (the DEFAULT_SET constant + the featured-list serving, if served)
-- frontend/src/api/client.ts; (ONLY the omitted-set contract comment at :62-65 — it documents the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
+- frontend/src/api/client.ts; (ONLY the omitted-set contract comments at :62-65 AND :140-144 — both document the 4p1i server default this task retires — plus a pin that an omitted `set` resolves 9p2i)
 - frontend/src/components/ReplayPicker.tsx
 - frontend/src/components/GuidedTour.tsx; (retarget onto the curated featured entry if its selection rule changes)
 - experiments/lab/rubric_score.py; (the provenance-key change only — `_set_manifest_sha` learns the set fingerprint the loader also learns)

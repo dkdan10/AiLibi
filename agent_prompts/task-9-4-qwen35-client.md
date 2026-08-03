@@ -65,7 +65,6 @@ the old model string until 9.5 re-records; that is provenance, not staleness. Le
 
 ## Constraints and non-goals
 Do not modify DESIGN.md.
-Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
 

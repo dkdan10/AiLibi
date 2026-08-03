@@ -118,6 +118,16 @@ def _module_path(symbol: str) -> str | None:
     return ".".join(parts[:-1])
 
 
+def _scope_lists_file(in_scope: tuple[str, ...], name: str) -> bool:
+    """True when a scope item's file portion names ``name``.
+
+    Scope items may carry annotations ("NAME (why)") or joined forms
+    ("NAME + OTHER (why)"); the exemption keys on the leading file token.
+    """
+
+    return any(item == name or item.startswith(name + " ") for item in in_scope)
+
+
 def _constraints_for(task: TaskDoc) -> list[str]:
     """Return the Section 5 lines that apply to ``task``.
 
@@ -129,13 +139,17 @@ def _constraints_for(task: TaskDoc) -> list[str]:
     touches_agents = any(item.startswith("agents/") for item in in_scope)
     rules = (
         # Scope-gated at the Phase-19 planning PR (tasks/phase-19.md locked
-        # decision 8): a task that explicitly lists DESIGN.md in its Files in
-        # scope is exempt from the bar; every other prompt keeps the line
-        # byte-identically.
-        _ConstraintRule("Do not modify DESIGN.md.", "DESIGN.md" not in in_scope),
+        # decision 8): a task that explicitly lists the file in its Files in
+        # scope is exempt from the bar; every other prompt keeps the line.
+        # Matching is on the item's FILE PORTION — historical contracts carry
+        # annotated forms like "AGENT_IMPLEMENTATION.md (Phase-3 ... prose)".
+        _ConstraintRule(
+            "Do not modify DESIGN.md.",
+            not _scope_lists_file(in_scope, "DESIGN.md"),
+        ),
         _ConstraintRule(
             "Do not modify AGENT_IMPLEMENTATION.md.",
-            "AGENT_IMPLEMENTATION.md" not in in_scope,
+            not _scope_lists_file(in_scope, "AGENT_IMPLEMENTATION.md"),
         ),
         _ConstraintRule(
             "Do not modify tasks/phase-*.md unless this task explicitly lists "

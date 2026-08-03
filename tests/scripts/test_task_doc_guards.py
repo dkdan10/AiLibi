@@ -63,6 +63,32 @@ class TestScopeGatedConstraints:
         assert "Do not modify AGENT_IMPLEMENTATION.md." not in rules
         assert "Do not modify DESIGN.md." in rules
 
+    def test_annotated_scope_form_is_exempt(self) -> None:
+        rules = generate_prompts._constraints_for(
+            _task(
+                "99.1",
+                files_in_scope=(
+                    "AGENT_IMPLEMENTATION.md (Phase-3 meeting + roster prose)",
+                ),
+            )
+        )
+        assert "Do not modify AGENT_IMPLEMENTATION.md." not in rules
+
+    def test_joined_scope_form_is_exempt(self) -> None:
+        rules = generate_prompts._constraints_for(
+            _task(
+                "99.1",
+                files_in_scope=("AGENT_IMPLEMENTATION.md + README.md (swept)",),
+            )
+        )
+        assert "Do not modify AGENT_IMPLEMENTATION.md." not in rules
+
+    def test_prefix_of_longer_name_is_not_exempt(self) -> None:
+        rules = generate_prompts._constraints_for(
+            _task("99.1", files_in_scope=("DESIGN.md.bak",))
+        )
+        assert "Do not modify DESIGN.md." in rules
+
 
 class TestDependsOnParsing:
     def test_prose_repeats_do_not_duplicate_blockers(self) -> None:

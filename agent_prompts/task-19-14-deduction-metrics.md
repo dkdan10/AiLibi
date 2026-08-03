@@ -55,6 +55,7 @@ the evidence the 19.28 close puts in front of the owner.
 
 **Definition of done:**
 - [ ] Verify-then-fix for the source-specific cells: the roll-call coverage split and the engine-redirected eject count are recomputed from committed bytes before pinning (and the recount is the pin).
+- [ ] The stale 4p1i-default claim in `api/routes/eval.py:183-186` is swept (this task owns the file and is ordered after the flip via the DTO chain).
 - [ ] The 9p2i cross-tab pins reproduce the triage's independent recount exactly UNDER BOTH PARTITIONS, each with its own named cell (meeting-flag: 70 flagged → 68/2, 95 unflagged → 10/21, unflagged accuracy 10/31; ejectee-proof: 68 proof-present, non-direct accuracy 10/33) — the module docstring defines both and no cell ever mixes their denominators; the corpus twins are pinned beside them.
 - [ ] Every metric has a docstring definition stating numerator, denominator, and what it does NOT measure; the weak/proof classification counts match 19.11's DTO taxonomy on the same bytes (cross-pin).
 - [ ] The regenerated reports carry the cells; the dashboard panel renders direct-proof vs non-direct accuracy side by side with honest labels; regeneration commands recorded.

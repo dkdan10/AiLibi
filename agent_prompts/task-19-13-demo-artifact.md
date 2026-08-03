@@ -33,6 +33,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - scripts/build_demo_bundle.py (new)
 - frontend/src/api/client.ts; (the static-data seam only)
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
+- frontend/src/stories/BeliefMatrix.stories.tsx; (the :184-185 default claim — same sweep)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)
@@ -44,7 +45,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 
 **Definition of done:**
 - [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; a Playwright case serves the BUILT bundle statically and plays the featured journey end-to-end (pause → finale) with network interception asserting ZERO `/api` requests — the browser test exercises the artifact itself, not only its Python builder.
-- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) and BeliefMatrix's server-default comment (:33-35) now state the 9p2i default.
+- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) plus its :101/:737-740 claims, BeliefMatrix's server-default comment (:33-35), and `BeliefMatrix.stories.tsx:184-185` now state the 9p2i default — and, as the LAST task in the default-flip chain, a repo-wide grep for 4p1i-default claims returns zero stale assertions (any newly discovered site is swept here or recorded with its owner).
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
 - [ ] `uv run mypy .` passes.

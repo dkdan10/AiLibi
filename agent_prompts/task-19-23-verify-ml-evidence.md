@@ -41,7 +41,7 @@ repo-relative.
 
 **Definition of done:**
 - [ ] The command runs green at HEAD in one invocation, listing every check with its measured value vs the committed verdict, and the availability class of every named evidence artifact (including the 19.21 outcome); on a post-prune checkout WITHOUT the evidence branch fetched it stays green with the moved sidecars reported as their own class (count quoted), and after `fetch_evidence.sh` the same command verifies them hash-for-hash.
-- [ ] A `--complete` mode exists that FAILS if any evidence class is absent (nothing skippable) — the 19.28 close runs `fetch_evidence.sh` then `--complete`, so the phase cannot close without every archived hash verified once.
+- [ ] A `--complete` mode exists that FAILS for any byte PROMISED archival availability that is absent, while ACCEPTING a manifest-recorded LOST class (the ratified 19.21 loss outcome is a valid close state, not a deadlock) — the 19.28 close runs `fetch_evidence.sh` then `--complete`, so the phase cannot close without every archived hash verified once and every loss recorded rather than silent.
 - [ ] It is read-only (no artifact writes outside a temp dir) and offline; a perturbed-input test proves it fails loud.
 - [ ] The invocation appendix reproduces the recorded harness invocations repo-relative, citing the provenance files it replaces.
 - [ ] `uv run mypy .` passes.

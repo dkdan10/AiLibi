@@ -143,9 +143,14 @@ regenerated eval reports (19.5 → 19.14).
    by the prompt generator (a hard constraint line in every prompt;
    `tasks/post-phase-14-plan.md` §5 records the bar). 19.1 therefore scope-gates that
    generator rule ("Do not modify DESIGN.md **unless this task explicitly lists it in
-   scope**" — mirroring the existing tasks/phase-*.md rule) so the demotion/banner work is
-   contractable; existing prompts stay byte-identical because no other task lists
-   DESIGN.md. The owner's merge of the phase doc ratifies this control-surface change.
+   scope**" — mirroring the existing tasks/phase-*.md rule) so the demotion/banner work
+   is contractable. Recorded accurately after the later review rounds: the planning PR
+   ALSO neutralized the dispatch template's authority routing (three lines change in
+   all 321 regenerated prompts — a deliberate repository-wide control-surface change),
+   and seven historical prompts additionally drop a constraint line under the
+   scope-gate rule (five DESIGN.md-era tasks: 1.9, 2.10, 2.10.5, 2.13, 2.14; two
+   annotated/joined AGENT_IMPLEMENTATION.md scopes: 8.13, 9.4). The owner's merge of
+   the phase doc ratifies these control-surface changes.
 7. **A phase-close contract (19.28) is added** though §7 lists none — phase conventions
    (the close audit, the STATUS banner, the roadmap tick, the routed decision menu) require
    it.
@@ -233,6 +238,17 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **Codex round 12 (4 findings)** — all reproduced and absorbed: the scope-gate
+  exemption now matches the item's FILE PORTION (historical annotated/joined scope
+  forms — 8.13, 9.4 — defeated exact membership; their prompts drop the constraint
+  line, guard-tested); `--complete` accepts a manifest-recorded LOST class so the
+  ratified 19.21 loss outcome cannot deadlock the close (it still fails for
+  promised-but-absent bytes); six more stale 4p1i-default sites are assigned to their
+  ordered downstream owners (client :140-144 → 19.9; replay_loader/schemas → 19.10;
+  routes/eval → 19.14; dashboard :101/:737-740 + BeliefMatrix.stories → 19.13, which
+  also carries the closing repo-wide default-claim grep); and the register/dossier
+  claims about prompt regeneration are corrected — all 321 prompts changed under the
+  authority-routing neutralization, recorded as such rather than as byte-identity.
 - **Codex round 11 (4 findings)** — all reproduced and absorbed: the recovered
   raw-slate bytes get a real handoff (the owner step pushes a manifest-verified
   `evidence/raw-slate-staging` ref; the artifact task folds and retires it — hashes
