@@ -68,7 +68,8 @@ figures, recomputed from these committed bytes (commands in the Task-19.8 PR):
 all 165 meetings are crew-triggered and crew-opened (the structural
 reporter-innocence prior — the scripted impostor cannot report or call
 meetings, `agents/tactical/impostor_policy.py:39-40`); 48/225 = 21.3% of kill
-submissions are engine-rejected (177 resolved); 53/971 = 5.5% of
+submissions do not resolve (42 engine-rejected, all on the same-room check;
+6 pre-empted by a same-tick meeting; 177 resolved); 53/971 = 5.5% of
 player-visible transcript turns carry an `[invalid accusation target …]` husk,
 against the corpus README's own no-husk doctrine (a recorded deviation);
 56/165 meetings re-litigate an already-ejected impostor's vent; 30/451 skip

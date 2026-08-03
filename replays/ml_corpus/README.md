@@ -115,9 +115,14 @@ stated. Four surfaces are measured: this corpus's two sets and the canonical
 50 games). These are **capability disclosures, not defects fixed here**: Task
 19.8 changed zero gameplay and zero bytes outside this README and the two
 samples-MANIFEST mirror notes. And because the by-game split rule above is a
-function of the seed alone, every phenomenon below lands in train, val, and
-test alike — a model fitted on this corpus learns these regularities as if they
-were the game.
+function of the seed alone — never of content — the pervasive phenomena below
+(the structural prior, the husk rate, the response shape, the skip templating,
+both theater classes, the evidence economy) land in train, val, and test alike
+(e.g. C9 husk turns: 80 train / 32 val / 25 test), so a model fitted on the
+train split learns them as if they were the game; rare events, by the same
+seed-blindness, land wherever their seed falls — the corpus's single public
+fourth-wall leak (seed 1023) sits entirely in val, and the two corroboration
+husks in train and test only.
 
 1. **The absolute reporter-innocence prior (structural).** The scripted FSM
    impostor never files a body report and never calls a meeting — the COVER
@@ -132,14 +137,21 @@ were the game.
    instantly invalidates the crew's learned prior. The prior is disclosed, not
    changed: the policy file is out of scope for 19.8.
 
-2. **Engine-rejected kill submissions.** Of **986** recorded `kill` actions
-   across the four sets, **798 resolved** and **188 (19.1%) were
-   engine-rejected** (target left the room, cooldown, or a same-tick meeting
-   pre-empting the rest of the tick). Per set: S9 **48/225 = 21.3%**, C9
-   **135/640 = 21.1%**, S4 3/64 = 4.7%, C4 2/57 = 3.5%. At 9p, roughly one in
-   five scripted kill decisions is illegal at the moment it is submitted — a
-   mover-quality limitation no eval report surfaces. Resolved counts match the
-   committed kill-craft pins exactly (177/505/61, `tests/eval/
+2. **Non-resolving kill submissions.** Of **986** recorded `kill` actions
+   across the four sets, **798 resolved** and **188 (19.1%) produced no kill**
+   — in two distinct ways. **156 were engine-rejected**, every single one on
+   the same-room check (the target was no longer co-located when the action
+   applied mid-tick; zero cooldown and zero dead-target rejections anywhere),
+   and **32 were never evaluated at all** (an earlier `report`/`emergency` in
+   the same tick moved the phase to MEETING before the kill applied — those
+   were not necessarily illegal when submitted). Per set,
+   non-resolving = rejected + pre-empted: S9 **48/225 = 21.3%** (42 + 6), C9
+   **135/640 = 21.1%** (111 + 24), S4 3/64 = 4.7% (2 + 1), C4 2/57 = 3.5%
+   (1 + 1). At 9p, roughly one scripted kill decision in five fails to land,
+   and most of those failures are outright illegal at application (42/225 =
+   18.7% S9, 111/640 = 17.3% C9) — a mover-quality limitation no eval report
+   surfaces. Resolved counts match the committed
+   kill-craft pins exactly (177/505/61, `tests/eval/
    test_kill_craft.py:66-135`; C4's 55 is newly recounted here). Delta noted:
    an audit input's 131/640 for C9 did not reproduce — 640 − 505 = 135.
 
@@ -218,13 +230,23 @@ were the game.
    the impostor. Voting is futile." is the bluntest. Player-visible
    `free_text` carries exactly **one** genuine fourth-wall leak in 3,934 turns
    (C9 seed 1023, an impostor saying "my teammate" aloud). Model-originated
-   *machinery quotation* is near-nil: of the audit-suggested tokens
-   (`vent_sighting`, `alibi_vs_sighting`, `[weak signal`, `roll_call`, …) none
-   appears in any player-visible or rationale text; only `primary_reason`
-   shows up, in 5/3,934 ballots. The bracketed machinery text that *does*
-   reach player-visible surfaces is the machinery-injected husk class of item
-   3, not model quotation — the earlier "~17% quote machinery" reading
-   conflated the two.
+   *machinery quotation* splits by register. Literal implementation tokens are
+   near-nil: of the audit-suggested tokens (`vent_sighting`,
+   `alibi_vs_sighting`, `[weak signal`, `roll_call`, …) none appears in any
+   player-visible or rationale text; only `primary_reason` shows up, in
+   5/3,934 ballots. But *natural-language* machinery talk is common in ballot
+   rationales: "threshold" in **90/971 = 9.3% (S9)** and **208/2,726 = 7.6%
+   (C9)**, "suspicion" in 85/971 and 244/2,726, and a quoted internal decimal
+   (`0.NN`) in **39/971 = 4.0%** and **94/2,726 = 3.4%** — S9 seed 38's "my
+   suspicion is 0.45 … the threshold is 0.60. I skip." reproduces the scoring
+   internals verbatim, and S9 seed 44 asks whether "the system" flagged
+   verified evidence. The vocabulary counts are an upper bound (a deduction
+   game says "suspicion" naturally); the quoted decimals are unambiguous.
+   In player-visible `free_text` the same vocabulary is rarer ("suspicion"
+   16/971 and 47/2,726). The bracketed machinery text that reaches
+   player-visible surfaces is the machinery-injected husk class of item 3,
+   not model quotation — the earlier "~17% quote machinery" reading spanned
+   both registers without separating them.
 
 8. **Role-correlated public response shape.** The share of a role's transcript
    turns carrying a structured `whereabouts` observation (the roll-call
@@ -241,11 +263,14 @@ were the game.
    surface hard-codes `observations: []` (0/124) while the crew reply carries
    the full vocabulary (79/80) — and impostors are disproportionately in reply
    position (124/245 of their turns, vs 80/726 for crew). The whereabouts that
-   *are* recorded are genuinely model-authored, and impostors lie in them:
-   impostor self-placements match the reconstructed true room only ~48–51% of
-   the time, crew ~79%. A behavioral tell in the public record — not an
-   observation-firewall leak — and a learnable role classifier that no shipped
-   metric currently prices.
+   *are* recorded are genuinely model-authored, and impostors lie in them: at
+   the pre-advance decision frame (the reconstructed state each recorded
+   tick's actions were decided against — the same frame as item 9's census),
+   impostor self-placements match the reconstructed room in **58/120 = 48.3%
+   (S9)** and **155/342 = 45.3% (C9)** of whereabouts-carrying turns, versus
+   crew **575/723 = 79.5%** and **1,619/2,035 = 79.6%**. A behavioral tell in
+   the public record — not an observation-firewall leak — and a learnable
+   role classifier that no shipped metric currently prices.
 
 9. **The too-clean evidence economy.** Across all **798** resolved kills in
    the four sets, the pre-advance decision frame shows **zero** kills with any

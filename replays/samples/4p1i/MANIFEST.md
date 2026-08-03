@@ -68,7 +68,8 @@ figures, recomputed from these committed bytes (commands in the Task-19.8 PR):
 all 39 meetings are crew-triggered and crew-opened (the structural
 reporter-innocence prior — the scripted impostor cannot report or call
 meetings, `agents/tactical/impostor_policy.py:39-40`); 3/64 = 4.7% of kill
-submissions are engine-rejected (61 resolved); the set is husk-free (0/117
+submissions do not resolve (2 engine-rejected on the same-room check; 1
+pre-empted by a same-tick meeting; 61 resolved); the set is husk-free (0/117
 transcript turns carry the `[invalid accusation target …]` husk that the 9p
 sets carry against the corpus README's no-husk doctrine) and has no zombie
 vent re-litigation (structural: ejecting the sole impostor ends the game);
