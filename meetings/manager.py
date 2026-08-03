@@ -1763,9 +1763,12 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             # Task 15.5: names the reporter + states the base rate. The
             # reporter_exculpation lever is unconditional since the Task-15.7
-            # record (default-OFF at 15.5), so the annotation renders for every
-            # body report; ``None`` -- and no annotation -- only for an
-            # emergency call, which has no reporter.
+            # record (default-OFF at 15.5), so the kwarg is THREADED for every
+            # body report (``None`` only for an emergency call, which has no
+            # reporter); whether an annotation RENDERS is the serving
+            # template's call -- only the reporter-aware ballots reference
+            # ``reporter_id`` (``qwen3_32b`` v6, where the 15.5 bump landed,
+            # and ``qwen3_6_27b``); the other sets ignore the kwarg.
             reporter_id=render_reporter,
             # Task 16.3 inert widenings (rendered by 16.16 / 16.15). ``persona``
             # is the participant's inert persona slot; ``suspicion_provenance``

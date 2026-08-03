@@ -923,9 +923,12 @@ class PlayerBelief:
     """Immutable snapshot of beliefs about a single other player.
 
     ``alibis`` is LIVE in production: the ``"reported"`` provenance write path
-    lands each public alibi statement here --
+    lands public alibi statements here --
     :func:`agents.memory.store.absorb_reported_testimony` calls
-    :meth:`BeliefState.record_alibi` once per ``alibi`` statement, and the
+    :meth:`BeliefState.record_alibi` once per ``alibi`` statement that survives
+    its guards (own-speaker and own-subject statements never land, speaker and
+    subject must be roster-valid, and a tickless claim records nothing; the
+    full guard list is on :meth:`BeliefState.record_alibi`), and the
     orchestrator and the replay loader run that absorb per LIVING agent in the
     SAME loop as :func:`agents.memory.store.absorb_meeting_evidence`,
     unconditionally since Task 14.9 (the ``AILIBI_TESTIMONY_AS_CONTENT`` gate is
@@ -1116,8 +1119,14 @@ class BeliefState:
 
         LIVE in production: the caller is
         :func:`agents.memory.store.absorb_reported_testimony`, which invokes this
-        once per public ``alibi`` statement (skipping the listener's own), and
-        the orchestrator and the replay loader run that absorb per LIVING agent
+        once per public ``alibi`` statement that survives its guards: a
+        statement the listener SPOKE is skipped whole (own-speaker -- even a
+        proxy alibi the listener gave about someone else; their own turn already
+        lives in first-hand memory), an alibi ABOUT the listener stays
+        episodic-only (own-subject: belief rows are about OTHER players), both
+        speaker and subject must be roster-valid, and a tickless claim
+        (``from_tick`` ``None``) records no belief-row entry. The orchestrator
+        and the replay loader run that absorb per LIVING agent
         in the SAME loop as :func:`agents.memory.store.absorb_meeting_evidence`,
         unconditionally since Task 14.9 (the ``AILIBI_TESTIMONY_AS_CONTENT`` gate
         is retired). The §6.6 render reads what this writes, via the belief
