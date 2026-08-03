@@ -233,6 +233,14 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The eighth Codex review round (2 findings)** was verified claim-by-claim — both
+  reproduced — and absorbed: the coevo prune would have stranded 268 of the 313
+  training sidecars away from 19.23's flat verification promise, so 19.22 now keeps
+  moved weight/sidecar pairs paired with hashes in the in-tree manifest and 19.23
+  verifies per-class (in-tree offline; evidence-branch after fetch; absent reported as
+  its own class, never a silent skip); and `ContradictionBadge.tsx` (the MindInspector
+  evidence badge, styling by `kind` alone) joins 19.11 so weak flags are subordinated
+  on every rendering surface.
 - **The seventh Codex review round (4 findings)** was verified claim-by-claim — all
   four reproduced — and absorbed: `tests/eval/test_gate_metrics.py` (24 complete
   `GateMetricsReport` literals) and `tests/scripts/test_measure_baseline_cli.py` (the

@@ -17,7 +17,11 @@ The authoritative task contract is copied below from tasks/phase-19.md. Follow i
 **Complexity:** Medium
 
 One read-only command for the whole ML evidence story: `scripts/verify_ml_evidence.py`
-runs sidecar/sha verification (296 sidecars), corpus reconstruction (delegating to the
+runs PER-CLASS sidecar/sha verification — in-tree sidecars verify fully offline; the
+sidecars whose bytes 19.22 moved (268 of the 313 at HEAD live under coevo/) verify when
+`scripts/fetch_evidence.sh` has restored them and otherwise report as a distinct
+EVIDENCE-BRANCH-ABSENT class, never a silent skip and never a network call — plus
+corpus reconstruction (delegating to the
 existing verifiers), surrogate/conviction/composed recomputation against the committed
 verdicts, the paired finalist statistics (via `scripts/paired_stats`), and an
 artifact-availability report per `docs/artifacts.md` class (in-tree / evidence-branch /
@@ -36,7 +40,7 @@ repo-relative.
 - scripts/paired_stats.py (consumed, not edited)
 
 **Definition of done:**
-- [ ] The command runs green at HEAD in one invocation, listing every check with its measured value vs the committed verdict, and the availability class of every named evidence artifact (including the 19.21 outcome).
+- [ ] The command runs green at HEAD in one invocation, listing every check with its measured value vs the committed verdict, and the availability class of every named evidence artifact (including the 19.21 outcome); on a post-prune checkout WITHOUT the evidence branch fetched it stays green with the moved sidecars reported as their own class (count quoted), and after `fetch_evidence.sh` the same command verifies them hash-for-hash.
 - [ ] It is read-only (no artifact writes outside a temp dir) and offline; a perturbed-input test proves it fails loud.
 - [ ] The invocation appendix reproduces the recorded harness invocations repo-relative, citing the provenance files it replaces.
 - [ ] `uv run mypy .` passes.

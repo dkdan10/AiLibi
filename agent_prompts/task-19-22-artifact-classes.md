@@ -42,6 +42,7 @@ caveat that full-history clones stay heavy absent a future deliberate rewrite.
 
 **Definition of done:**
 - [ ] The consumer enumeration is committed (the manifest marks each retained path with its pinning test); the full suite passes with NO test edits — the prune provably removed only unpinned bytes.
+- [ ] Moved weight/sidecar PAIRS stay paired in the evidence branch and the in-tree manifest carries their hashes — verification-after-fetch must work (19.23 depends on it); a weight whose sidecar went one way while it went the other is a manifest error.
 - [ ] The evidence branch exists, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them; the working-tree size reduction is quoted in the PR.
 - [ ] The fast-clone path is documented with the honest history caveat.
 - [ ] `uv run mypy .` passes.

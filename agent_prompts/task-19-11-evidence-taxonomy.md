@@ -40,6 +40,7 @@ naming routes to the post-19 decision.
 - frontend/src/components/TurnCard.tsx; (the INLINE evidence renderer — `ContradictionMarker` branches on `severity` alone at :100-105/:261-316, so a self-linked vent proof still renders contradiction-styled inline; the marker branches on the category)
 - frontend/src/stories/MeetingView.stories.tsx; (`CHAIN_CONTRADICTIONS` constructs `ContradictionView` literals — the category field lands in the fixture or tsc fails)
 - frontend/src/stories/MindInspector.stories.tsx; (same — `CONTRADICTION` at :89)
+- frontend/src/components/ContradictionBadge.tsx; (the MindInspector's evidence badge styles by `kind` alone — it receives the full DTO, so it branches on the category here; MindInspector itself passes the flag through untouched and stays 19.12's file)
 - frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
 - tests/api/
 
