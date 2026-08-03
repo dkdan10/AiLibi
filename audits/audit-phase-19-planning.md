@@ -170,8 +170,9 @@ owner-chartered phase:
 - Dead frontend api-client methods (singleton-31 inventory): they collide with
   19.13/19.24's `client.ts` work this phase, so their deletion is deferred to this
   backlog rather than folded in.
-- The three remaining cross-test library imports outside 19.27's narrowed scope
-  (`tests/agents/test_absence_prior.py:958` → test_prompt_byte_golden;
+- The five remaining cross-test library imports outside 19.27's narrowed scope
+  (`tests/agents/test_absence_prior.py:958`, `tests/agents/test_episodic_ids.py:480`,
+  and `tests/agents/test_beliefs_hard_evidence_gate.py:751` → test_prompt_byte_golden;
   `tests/llm/test_real_provider.py:56` → test_client;
   `tests/observation/test_leak_property.py:68` → test_tick_properties) — the same
   helper-extraction treatment, next structure pass.
@@ -232,6 +233,14 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **The seventh Codex review round (4 findings)** was verified claim-by-claim — all
+  four reproduced — and absorbed: `tests/eval/test_gate_metrics.py` (24 complete
+  `GateMetricsReport` literals) and `tests/scripts/test_measure_baseline_cli.py` (the
+  exact CLI contract) join 19.5; `frontend/src/components/TurnCard.tsx` joins 19.11
+  (the INLINE `ContradictionMarker` branches on severity alone, so the summary fix
+  left the same proof contradiction-styled inline); and the cross-test-import backlog
+  count corrects from three to five (two more `test_prompt_byte_golden` importers in
+  tests/agents).
 - **The sixth Codex review round (7 findings)** was verified claim-by-claim — all seven
   reproduced — and absorbed: the generated-type ripple reaches the Storybook fixtures
   that construct complete `ReplayView`/`ContradictionView` literals

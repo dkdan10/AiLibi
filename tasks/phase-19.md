@@ -459,6 +459,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/prompt_regression.py; (the None convention propagates — `alibi_survival_rate` is consumed at :257 into a required `float` at :161, so the regression metrics model widens with it)
 - tests/eval/test_prompt_regression.py
 - tests/api/test_leak.py; (`EXPECTED_EVAL_REPORT_FIELDS` is an exact field-set snapshot — the canary cell's addition updates the reviewed pin)
+- tests/eval/test_gate_metrics.py; (24 complete `GateMetricsReport` literals gain the new sibling field or the gate fails)
+- tests/scripts/test_measure_baseline_cli.py; (the exact CLI contract pins the new canary in both the report and CLI output cases — otherwise a silent omission stays green)
 - api/routes/eval.py; (only if the mirrored `_TournamentEvalReportView` chain surfaces the new nested cell — its `extra="forbid"` revalidation must accept the regenerated report; record whether an edit was needed)
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
@@ -811,6 +813,7 @@ naming routes to the post-19 decision.
 - frontend/src/types/api.ts; (regenerated)
 - frontend/src/types/api.fidelity.ts; (regenerated — both generator artifacts)
 - frontend/src/components/MeetingView.tsx
+- frontend/src/components/TurnCard.tsx; (the INLINE evidence renderer — `ContradictionMarker` branches on `severity` alone at :100-105/:261-316, so a self-linked vent proof still renders contradiction-styled inline; the marker branches on the category)
 - frontend/src/stories/MeetingView.stories.tsx; (`CHAIN_CONTRADICTIONS` constructs `ContradictionView` literals — the category field lands in the fixture or tsc fails)
 - frontend/src/stories/MindInspector.stories.tsx; (same — `CONTRADICTION` at :89)
 - frontend/src/components/BallotCard.tsx; (the guard-chip visibility gate — `teammate_coerced` arrives as data in `ballot.rewrite_reasons` via replay_loader:2437 and renders unconditionally at :105-114, disclosing the impostor pairing outside omniscient view)
@@ -1792,7 +1795,7 @@ Quote the default-gate runtime before/after in the PR.
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
 - [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
-- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER three repo cross-test imports (test_absence_prior → test_prompt_byte_golden:958, test_real_provider → test_client:56, test_leak_property → test_tick_properties:68) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
+- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER FIVE repo cross-test imports (test_absence_prior:958, test_episodic_ids:480, and test_beliefs_hard_evidence_gate:751 → test_prompt_byte_golden; test_real_provider:56 → test_client; test_leak_property:68 → test_tick_properties) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
