@@ -12,7 +12,7 @@ Implement Task 19.24 — Boundary hardening: the leak-scan library, `moved_playe
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-boundary-hardening`
-**Depends on:** 19.2, 19.11, 19.13, 19.19
+**Depends on:** 19.2, 19.11, 19.13, 19.14, 19.19
 **Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
 **Complexity:** Integration
 
@@ -89,6 +89,7 @@ generated constant keeps client and server in lockstep through the same codegen.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import api.schemas"`
 
 ## Pre-flight checklist

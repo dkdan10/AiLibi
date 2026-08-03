@@ -35,8 +35,8 @@ consolidation goes to the backlog — the fallback is pre-authorized by the tria
 - eval/ (consumers of voting.py are untouched)
 
 **Definition of done:**
-- [ ] The parity suite covers every committed meeting (count pinned) + the synthetic edges, green on both implementations.
-- [ ] Consolidation is either DONE (manager delegates; replay verification + byte-golden green; the private copy gone) or DEFERRED with the blocking difference named in a dated note in voting.py — no third state.
+- [ ] The parity suite covers every committed meeting (count pinned) + the synthetic edges, green on both implementations at the pre-consolidation commit.
+- [ ] Consolidation is either DONE (manager delegates; replay verification + byte-golden green; the private copy gone — and the suite pivots to pinning the delegation plus the recorded outcomes, since only one implementation remains) or DEFERRED with the blocking difference named in a dated note in voting.py (the two-implementation suite then stays as the permanent guard) — no third state.
 - [ ] `bash scripts/verify_samples.sh` green (reconstruction semantics unchanged).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

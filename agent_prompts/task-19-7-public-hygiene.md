@@ -44,7 +44,7 @@ view — loopback only; how to report).
 
 **Definition of done:**
 - [ ] CI runs green with the permissions block, SHA-pinned actions, and exactly one frontend build per run.
-- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and `uv run python -c "import ailibi"`-class runtime imports need no dev tool.
+- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and a runtime-only environment smoke-imports the production packages (`uv run python -c "import engine, orchestrator, api, agents, meetings, llm"`) with no dev tool installed.
 - [ ] LICENSE is MIT with the owner's copyright line; CONTRIBUTING and SECURITY match locked decision 4's posture and the deployment doc's trust boundary.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

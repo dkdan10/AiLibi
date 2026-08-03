@@ -6,21 +6,24 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 19.18 — The tier map, the freeze-label sweep, and the reopening checklist, anchored to audits/audit-phase-19-triage.md §7 items 19+21 and the label halves of 29+31 [C + S-both + L] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements. Do not implement work outside these references.
+Implement Task 19.18 — The tier map, the freeze-label sweep, and the reopening checklist, anchored to audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-tier-map`
 **Depends on:** 19.5
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 and the label halves of 29+31 [C + S-both + L] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
 **Complexity:** Medium
 
 The ruling is made (locked decision 2); this task writes it down where the next agent
 will trip over it. `training/README.md` (new): the component-by-component
 keep/freeze/retire table with the measured basis per row — surrogate RANKING kept (46/60
-top-1) vs the standalone decision arm retired (96/96 held-out SKIP; the class itself
-stays as the composed runner's dependency — state the boundary explicitly); the composed
+top-1) vs the standalone decision arm retired (96/96 held-out SKIP; the FACTORY and the
+class stay wherever the composed runner's verification fence and the harness consume
+them — `training/composed_runner.py:266`, `training/bakeoff/harness.py:159` — and what
+retires is the surrogate-ONLY runner exposure 19.19's consumer grep proves free; state
+the boundary explicitly); the composed
 runner frozen optional-diagnostic (0.8646 decision / 0.7917 exact, zero-LLM Goodhart
 substrate caveat); the conviction model kept (0.9375 CONVERSION-LABEL accuracy — the
 terminology ruling); ES core + champion acceptance kept; crew stack frozen
@@ -44,7 +47,8 @@ zero behavior bytes.
 - training/coevo/; (FROZEN headers only)
 - training/scenarios.py; (same)
 - training/anchor_study.py; (same)
-- training/fidelity.py; (same — both fidelity harnesses if split across files)
+- training/conviction/fidelity.py; (FROZEN header only)
+- training/surrogate/fidelity.py; (FROZEN header only)
 - training/composed_runner.py; (the frozen optional-diagnostic label)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
 - experiments/; (FROZEN headers)
@@ -107,4 +111,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-19-tier-map` with a title like `task 19.18: the tier map, the freeze-label sweep, and the reopening checklist`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 items 19+21 and the label halves of 29+31 [C + S-both + L] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

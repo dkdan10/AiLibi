@@ -34,6 +34,8 @@ the evidence the 19.28 close puts in front of the owner.
 - eval/deduction_metrics.py (new)
 - tests/eval/test_deduction_metrics.py (new)
 - scripts/build_sample_report.py; (report wiring)
+- api/schemas.py; (the new report cells' DTO surface — additive)
+- frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated)

@@ -35,7 +35,11 @@ convention).
 ## 2. The decision menu (owner, 2026-08-03 — these are now locked decisions)
 
 Six questions were put to the owner with costed recommendations; all six answers ratify the
-recommended option:
+recommended option. NUMBERING NOTE: `tasks/phase-19.md`'s locked-decision register is the
+authoritative numbering and prepends the charter/NOT-list as decision 1, so menu question
+N = register decision N+1 (menu Q5, the substrate deferral, is register decision 6; menu
+Q6, the cut line, is register decision 7). Citations below and in the phase doc use the
+REGISTER numbers.
 
 1. **ML component tier map: EVIDENCE-FIRST HYBRID.** KEEP what committed evidence and
    always-on gates still execute (compact learned inference + parity, corpus
@@ -94,7 +98,7 @@ scores, generated goldens) is recomputed from committed bytes — replay bytes n
   prune; `verify-ml-evidence`; boundary hardening; the parameterized replay walker; vote-
   tally parity; test-suite structure. **19.28 closes the phase** with the close audit and
   the post-19 decision menu (substrate fixes vs presentation), read against the 19.14
-  metrics per locked decision 5.
+  metrics per locked decision 6 (menu question 5).
 
 **Model assignments** follow the phase-18 standing rule — Opus for loud-failure work
 (mechanical fixes, re-pins, deletions with consumer greps, test scaffolding, generated
@@ -105,9 +109,11 @@ the phase-doc preamble.
 **Collision discipline** (the phase doc's block is authoritative): the truth-sweep,
 dashboard, walker, and frontend tasks share files and are serialized by dependency edges —
 notably README.md (19.1 → 19.16 → 19.13 → 19.22), `api/replay_loader.py` (19.9 → 19.10 →
-19.11), `frontend/src/types/api.ts` + `api/schemas.py` (19.10 → 19.11 → 19.24),
-`meetings/manager.py` (19.2 → 19.15 → 19.26), `eval/leak_test.py` (19.24 → 19.25),
-`pyproject.toml` (19.6 → 19.7 → 19.27), and the regenerated eval reports (19.5 → 19.14).
+19.11), `api/schemas.py` (19.5 → 19.10 → 19.11 → 19.14) and `frontend/src/types/api.ts`
+(19.5 → 19.10 → 19.11 → 19.14 → 19.24 — the report cells and the DTO-version constant
+ride the same generated surface), `meetings/manager.py` (19.2 → 19.15 → 19.26),
+`eval/leak_test.py` (19.24 → 19.25), `pyproject.toml` (19.6 → 19.7 → 19.27), and the
+regenerated eval reports (19.5 → 19.14).
 
 ## 4. Divergences from the triage §7 (recorded, with reasons)
 
@@ -115,7 +121,7 @@ notably README.md (19.1 → 19.16 → 19.13 → 19.22), `api/replay_loader.py` (
    (19.11).** Prompt-template edits are substrate behavior: they break the prompt
    byte-golden against committed bytes and change model behavior on any future recording —
    exactly what the NOT-list forbids beyond instrumentation/labels. The prompt-side flag
-   naming ("VERIFIED evidence") routes to the post-19 decision (locked decision 5) with the
+   naming ("VERIFIED evidence") routes to the post-19 decision (locked decision 6) with the
    other three mechanisms; Phase 19 fixes the UI/DTO/metric surfaces only and preserves the
    four mechanisms as separate fixtures/labels per triage item 20.
 2. **Item 29 (typed telemetry) resolves as freeze-labels, not code** — ratified by the cut
@@ -158,14 +164,19 @@ owner-chartered phase:
 
 - Monolith decompositions: `orchestrator/game.py`, `api/replay_loader.py`,
   `meetings/manager.py`, `meetings/transcript.py` (characterization tests first; after the
-  Phase-19 seams).
+  Phase-19 seams). This line also carries the loader's private
+  `orchestrator.replay._state_hash` import (`api/replay_loader.py:162`) — the boundary
+  cleanup belongs to the decomposition, explicitly deferred, not silently dropped.
+- Dead frontend api-client methods (singleton-31 inventory): they collide with
+  19.13/19.24's `client.ts` work this phase, so their deletion is deferred to this
+  backlog rather than folded in.
 - Replay-walk migration of the API (`api/replay_loader.py`) and training (`training/env.py`)
   reconstruction paths onto the 19.25 walker.
 - Typed per-ballot suspicion/ballot telemetry (replaces the frozen rendered-prose scrapes if
   any recording ever happens again).
 - The evidence-honesty substrate behavior fixes (sighting provenance, content-vs-memory
   validation, interval/weighting, prompt-side flag naming) — the pre-chartered candidate
-  for the first post-19 phase, decided at the 19.28 close per locked decision 5.
+  for the first post-19 phase, decided at the 19.28 close per locked decision 6.
 - Equal-response-shape prototype behind a measured gate (Codex singleton; behavior change,
   same post-19 route).
 - GuidedTour focus-trap dedup + the duplicated initial list fetch; SWC-plugin swap; npm
@@ -191,11 +202,14 @@ owner-chartered phase:
      pattern) and README cites it as the engine-purity proof. The Claude audit's
      "exercised by nothing" is REFUTED; the module is excluded from 19.19's retirements,
      and the mandatory consumer-check discipline cites this as its motivating case.
-  2. The surrogate "standalone decision path" has live consumers:
-     `training/composed_runner.py:122-124` and the bake-off harness import
-     `SurrogateMeetingRunner`. The retirement (19.19) is therefore scoped to the
-     standalone factory/CLI arm only; the class stays as the composed runner's
-     dependency, and 19.18's tier map states the boundary.
+  2. The surrogate "standalone decision path" has live consumers: the FACTORY itself is
+     load-bearing — `training/composed_runner.py:266` calls
+     `load_surrogate_runner_factory` as its sha/staleness verification fence, and
+     `training/bakeoff/harness.py` imports it at :159 and calls it at :1763/:2072 with
+     AST call-site pins in `tests/training/test_bakeoff_harness.py:1742-1772`. The
+     retirement (19.19) therefore keeps the factory AND the class; only a surrogate-only
+     runner exposure proven consumer-free may retire, and a no-consumer-free-exposure
+     outcome is a recorded no-op. 19.18's tier map states the boundary.
   3. `tests/scripts/test_champion_flip_ruling.py` carries ~136 exact-literal pin lines,
      not "~580 of 831" — the audit counted the interleaved logic. 19.27's pin-to-golden
      conversion is scoped to the pin dicts accordingly.

@@ -38,6 +38,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/alibi_fabrication.py
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
+- api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
+- frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated derived view)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated derived view)

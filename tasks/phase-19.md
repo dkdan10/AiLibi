@@ -16,10 +16,13 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
    channel; no behavior change to gameplay or evidence validation beyond
    instrumentation/labels; no training campaign, referee/floor change, or bar re-pricing;
    no human seat; no heterogeneous-model lobbies; no watchability-scalar tuning as a
-   human-interest proxy; no recorder ports; no rewrite-for-its-own-sake; polish never
-   ahead of narrative correctness. Prompt templates are substrate behavior (the prompt
-   byte-golden pins them): **no prompt-template edits anywhere in this phase** — the
+   human-interest proxy; no recorder ports; no rewrite-for-its-own-sake; no further
+   audit formalism beyond the 19.16 glossary; polish never ahead of narrative
+   correctness. Prompt templates are substrate behavior (the prompt byte-golden pins
+   them): **no edits to any referenced prompt template anywhere in this phase** — the
    prompt-side evidence-flag naming routes to the post-19 decision (decision 6 below).
+   The one sanctioned prompt-surface change is 19.19's deletion of bake-off prompt-set
+   DIRECTORIES grep-proven unreferenced by stamps, loader, tests, and the byte-golden.
 2. **ML component tier map: the evidence-first hybrid.** KEEP what committed evidence and
    always-on gates still execute (compact learned inference + parity, the corpus
    verifier/splits, the conviction model, the surrogate RANKING channel, the ES core +
@@ -58,9 +61,12 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
   ledger. Where the triage did not independently re-run a claim and the planning session
   could not verify it either, the contract's FIRST DoD step is verify-then-fix, never
   assume-then-fix. Anchors below were re-verified at HEAD by the planning session.
-- **No recordings, anywhere.** Every task is $0/offline. Derived views (eval reports, the
-  rubric score, generated goldens) regenerate from committed bytes only; replay bytes
-  never move; `bash scripts/verify_samples.sh` must stay green through every merge.
+- **No recordings, anywhere.** Every task is $0 — no LLM calls, no recordings. Derived
+  views (eval reports, the rubric score, generated goldens) regenerate from committed
+  bytes only; replay bytes never move; `bash scripts/verify_samples.sh` must stay green
+  through every merge. Ordinary tooling network (package registries for lockfile
+  regeneration, action-SHA lookup, git push) is permitted — "offline" binds the
+  evidence, not the toolchain.
 - **Docs of record get additive, dated errata — never in-place rewrites.** README/design
   prose is living documentation and is rewritten; campaign reports and audits are records
   and get errata sections.
@@ -79,7 +85,9 @@ Wave 1 (roots, dispatch in parallel):
   19.6 -> 19.7 (public hygiene + MIT)
 
 Wave 2 (the spectator + the deduction instrument):
-  19.9 -> 19.10 (playback coherence) -> 19.11 (evidence taxonomy)
+  (19.5, 19.9) -> 19.10 (playback coherence) -> 19.11 (evidence taxonomy)
+  (the 19.5 edge is api/schemas.py + generated-types serialization — the report cells
+   19.5 adds flow through the same DTO surface the 19.10 chain edits)
   (19.7, 19.10) -> 19.12 (frontend test baseline)
   19.1 -> 19.16 (reading guide)
   (19.1, 19.9, 19.10, 19.16) -> 19.13 (README proof + static demo)
@@ -94,25 +102,31 @@ Wave 3 (ML close + consolidation):
   (19.13, 19.19) -> 19.22 (artifact classes + coevo prune)
   (19.20, 19.22) -> 19.21 (raw slate — OWNER)
   (19.19, 19.20, 19.22) -> 19.23 (verify-ml-evidence)
-  (19.2, 19.11, 19.13, 19.19) -> 19.24 (boundary hardening)
+  (19.2, 19.11, 19.13, 19.14, 19.19) -> 19.24 (boundary hardening)
   19.24 -> 19.25 (the replay walker)
   19.15 -> 19.26 (vote-tally parity)
   (19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25) -> 19.27 (test-suite structure)
   (19.3/19.4 edges are tests/training/ serialization, not semantic prerequisites)
-  (19.3, 19.8, 19.14, 19.17, 19.21, 19.23, 19.26, 19.27) -> 19.28 THE PHASE CLOSE [OWNER]
+  (19.8, 19.17, 19.21, 19.23, 19.26, 19.27) -> 19.28 THE PHASE CLOSE [OWNER]
+  (19.28's list is the true leaf set; every other task reaches the close transitively)
 ```
 
-Critical path: 19.9 → 19.10 → 19.11 → 19.24 → 19.25 → 19.27 → 19.28, with the README/demo
-branch (19.1 → 19.16 → 19.13 → 19.24) joining at 19.24. The day-one frontier is nine
-roots (19.1–19.6, 19.8, 19.9); nothing waits on the owner until 19.21 and the close.
+Critical path: three co-critical seven-task chains join at 19.24 and share the tail
+19.24 → 19.25 → 19.27 → 19.28 — the spectator chain (19.5/19.9 → 19.10 → 19.11 → 19.24),
+the README/demo branch (19.1 → 19.16 → 19.13 → 19.24), and the ML chain
+(19.5 → 19.18 → 19.19 → 19.24). Dispatch 19.5, 19.9, and 19.1 early; they head all
+three. The day-one frontier is eight roots (19.1–19.6, 19.8, 19.9); nothing waits on the
+owner until 19.21 and the close.
 
 **Baseline numbering.** None. This phase records no baselines and no recordings of any
 kind; the ladder tip stands at baseline 6 (the 18.12 adopting record). Regenerated derived
 views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 
 **Collision discipline.** `README.md` 19.1 → 19.16 → 19.13 → 19.22 (dep-ordered);
-`api/replay_loader.py` 19.9 → 19.10 → 19.11; `api/schemas.py` +
-`frontend/src/types/api.ts` 19.10 → 19.11 → 19.24; `frontend/src/App.tsx` 19.10 → 19.17;
+`api/replay_loader.py` 19.9 → 19.10 → 19.11; `api/schemas.py` 19.5 → 19.10 → 19.11 →
+19.14; `frontend/src/types/api.ts` 19.5 → 19.10 → 19.11 → 19.14 → 19.24 (the report
+cells and DTO-version constant ride the same generated surface);
+`frontend/src/App.tsx` 19.10 → 19.17;
 `frontend/src/api/client.ts` 19.13 → 19.24; `frontend/e2e/` 19.12 → 19.17;
 `frontend/src/components/TournamentDashboard.tsx` 19.5 → 19.14; `meetings/manager.py`
 19.2 → 19.15 → 19.26; `orchestrator/game.py` 19.2 → 19.24; `eval/meeting_quality.py` +
@@ -123,7 +137,13 @@ views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 `training/README.md` 19.18 → 19.23 (transitive); `training/reports/report-finalist-eval.md`
 19.20 → 19.21; `docs/artifacts.md` 19.22 → 19.21; the four
 `tournament-eval-report.json` derived views 19.5 → 19.14; `scripts/build_sample_report.py`
-19.5 → 19.14; `tests/api/` 19.9 → 19.10 → 19.11 → 19.24; `tasks/phase-19.md` 19.28 only.
+19.5 → 19.14; `tests/eval/test_report_schema.py` + `test_tournament_report.py`
+19.5 → 19.14; `tests/api/` 19.9 → 19.10 → 19.11 → 19.24;
+`training/surrogate/runner.py` 19.18 (label) → 19.19 (code);
+`training/surrogate/fidelity.py` 19.18 → 19.19 (dir ripple);
+`docs/reading-guide.md` 19.16 → 19.22 (transitive); `tests/training/`
+19.3/19.4/19.19 → 19.27 (exact files vs the marker sweep); `tasks/phase-19.md` 19.28
+only.
 
 **Model assignments** (the standing rule: Opus for loud-failure work — mechanical fixes,
 re-pins, deletions with consumer greps, test scaffolding, generated docs; Fable for
@@ -377,6 +397,8 @@ the affected pins, quoting each delta in the PR. Replay bytes never move.
 - eval/alibi_fabrication.py
 - scripts/measure_baseline.py
 - scripts/build_sample_report.py; (the report-assembly wiring for the canary cell)
+- api/schemas.py; (the report-DTO surface the new/None-able cells flow through — additive)
+- frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated derived view)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated derived view)
@@ -496,7 +518,7 @@ view — loopback only; how to report).
 
 **Definition of done:**
 - [ ] CI runs green with the permissions block, SHA-pinned actions, and exactly one frontend build per run.
-- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and `uv run python -c "import ailibi"`-class runtime imports need no dev tool.
+- [ ] `uv run pytest` and `bash scripts/check.sh` still pass locally after the dependency partition (dev group installed by setup), and a runtime-only environment smoke-imports the production packages (`uv run python -c "import engine, orchestrator, api, agents, meetings, llm"`) with no dev tool installed.
 - [ ] LICENSE is MIT with the owner's copyright line; CONTRIBUTING and SECURITY match locked decision 4's posture and the deployment doc's trust boundary.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -620,7 +642,7 @@ featured list and pin that agreement.
 
 ### Task 19.10 — Playback coherence: the meeting pause, the unspoiled mode, the finale card
 **Branch:** `phase-19-playback-coherence`
-**Depends on:** 19.9
+**Depends on:** 19.5, 19.9 (the first edge is api/schemas.py + generated-types serialization)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1188-1195 (the loader's own deliberate-mix comment)
 **Complexity:** Integration
 
@@ -887,6 +909,8 @@ the evidence the 19.28 close puts in front of the owner.
 - eval/deduction_metrics.py (new)
 - tests/eval/test_deduction_metrics.py (new)
 - scripts/build_sample_report.py; (report wiring)
+- api/schemas.py; (the new report cells' DTO surface — additive)
+- frontend/src/types/api.ts; (regenerated)
 - frontend/src/components/TournamentDashboard.tsx; (the proof-vs-inference panel)
 - replays/samples/4p1i/tournament-eval-report.json; (regenerated)
 - replays/samples/9p2i/tournament-eval-report.json; (regenerated)
@@ -1051,14 +1075,17 @@ neither may regress the pause/finale flow, and both extend the existing test bas
 ### Task 19.18 — The tier map, the freeze-label sweep, and the reopening checklist
 **Branch:** `phase-19-tier-map`
 **Depends on:** 19.5
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 and the label halves of 29+31 [C + S-both + L] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19+21 [C] and the label halves of 29 [S-Claude] + 31 [L / source-specific] + locked decisions 2 and 3; §8 rows 21–22 (the reopen caveats; the component channels); audits/audit-phase-18-close.md §7 (the ledger long tail to freeze-label: items 5–8, 10–14) and §6.1 L10 (the Red-Queen context); eval/off_menu.py:12-34 (its own vacuity docstring); eval/deception_instruments.py (no non-test consumer — verified); eval/_suspicion_parse.py:9-13 + eval/meeting_quality.py:276-283 + eval/vote_correctness.py:566-571 (the rendered-prose scrapes to label frozen) [S-Claude — sites re-verified at HEAD]; training/surrogate/runner.py:105/:164/:383 with its live importers (training/composed_runner.py:122-124, training/bakeoff/harness.py) — the standalone-vs-dependency boundary 19.19 implements
 **Complexity:** Medium
 
 The ruling is made (locked decision 2); this task writes it down where the next agent
 will trip over it. `training/README.md` (new): the component-by-component
 keep/freeze/retire table with the measured basis per row — surrogate RANKING kept (46/60
-top-1) vs the standalone decision arm retired (96/96 held-out SKIP; the class itself
-stays as the composed runner's dependency — state the boundary explicitly); the composed
+top-1) vs the standalone decision arm retired (96/96 held-out SKIP; the FACTORY and the
+class stay wherever the composed runner's verification fence and the harness consume
+them — `training/composed_runner.py:266`, `training/bakeoff/harness.py:159` — and what
+retires is the surrogate-ONLY runner exposure 19.19's consumer grep proves free; state
+the boundary explicitly); the composed
 runner frozen optional-diagnostic (0.8646 decision / 0.7917 exact, zero-LLM Goodhart
 substrate caveat); the conviction model kept (0.9375 CONVERSION-LABEL accuracy — the
 terminology ruling); ES core + champion acceptance kept; crew stack frozen
@@ -1082,7 +1109,8 @@ zero behavior bytes.
 - training/coevo/; (FROZEN headers only)
 - training/scenarios.py; (same)
 - training/anchor_study.py; (same)
-- training/fidelity.py; (same — both fidelity harnesses if split across files)
+- training/conviction/fidelity.py; (FROZEN header only)
+- training/surrogate/fidelity.py; (FROZEN header only)
 - training/composed_runner.py; (the frozen optional-diagnostic label)
 - training/surrogate/runner.py; (the standalone-vs-dependency boundary label — 19.19 does the code)
 - experiments/; (FROZEN headers)
@@ -1128,15 +1156,19 @@ the mechanism, not just the name.
 ### Task 19.19 — The retirements + the dead-code sweep (consumer-verified)
 **Branch:** `phase-19-retirements`
 **Depends on:** 19.6, 19.18
-**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory` — the standalone arm) with the class retained for training/composed_runner.py:122-124; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
+**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the five unreferenced bake-off prompt-set dirs (cydonia_24b, glm_4_32b, qwen3_30b_a3b, qwen3_32b, qwen3_32b_thinking — delete ONLY those grep-proven unreferenced by committed stamps and tests). NOTE: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
 Implement the tier map's RETIRE column plus the verified dead-code list, one deletion at
 a time, each with a grep-proven consumer check recorded in the PR. Retire:
 `training/realpath.py` + its test file (the ranking-row schema doc and committed rankings
-survive — the map records where); the STANDALONE surrogate meeting-runner arm (the
-factory/CLI exposure; `SurrogateMeetingRunner` itself stays as the composed runner's
-dependency and its ranking-channel tests stay green); the `first_meeting` episode
+survive — the map records where); the surrogate-ONLY meeting-runner exposure — with the
+verified boundary respected: `load_surrogate_runner_factory` and
+`SurrogateMeetingRunner` STAY (the composed runner's verification fence at
+`composed_runner.py:266` and the harness at `:159/:1763/:2072` consume them, AST-pinned)
+— the retire candidate is any config/CLI arm that runs the surrogate ALONE as a meeting
+runner, and if the consumer grep proves no such consumer-free exposure exists, the
+outcome is a recorded no-op for this item, not a forced deletion; the `first_meeting` episode
 boundary (env + rollout plumbing; tests-only consumer); the stale crew-dir CLI
 advertisement in run_tournament (the honest fail-loud behavior stays; the advertisement
 of a stampless directory goes); `llm/cache.py` (+ its import in test_client);
@@ -1149,8 +1181,13 @@ history; the PR lists each with its consumer-check output.
 **Files in scope:**
 - training/realpath.py; (deleted)
 - tests/training/test_realpath.py; (deleted)
-- training/surrogate/runner.py; (the standalone factory arm only)
+- training/surrogate/runner.py; (the surrogate-only exposure, if the grep frees one)
 - training/surrogate/; (ripple from the arm removal)
+- training/bakeoff/harness.py; (only if a retired exposure ripples — record if touched)
+- tests/training/test_bakeoff_harness.py; (the AST pins, only on ripple)
+- tests/training/test_goodhart_probe.py; (only on ripple)
+- tests/training/test_composed_runner.py; (only on ripple)
+- tests/eval/test_balance_eval_meeting_runner.py; (only on ripple)
 - training/env.py
 - training/rollout.py
 - tests/training/test_rollout.py
@@ -1172,7 +1209,7 @@ history; the PR lists each with its consumer-check output.
 
 **Definition of done:**
 - [ ] Every deletion carries its consumer-check grep output in the PR; every skipped candidate (failed grep) is named with the blocking consumer.
-- [ ] The surrogate boundary is proven: composed-runner tests and ranking-channel tests green with the standalone arm gone; `git log` can resurrect the arm (noted in training/README.md's retire row by 19.18's convention).
+- [ ] The surrogate boundary is proven: `load_surrogate_runner_factory`/`SurrogateMeetingRunner` and every verified consumer (composed runner fence, harness, the AST pins) are untouched and green; the surrogate-only exposure is either retired with its consumer grep quoted or recorded as no-consumer-free-exposure (a documented no-op), never force-deleted.
 - [ ] `first_meeting` is gone from env/rollout with the three production call sites unchanged (`full_game` explicit) and their tests green.
 - [ ] The full gate is green after all deletions; the gate-runtime delta is quoted in the PR.
 - [ ] `uv run mypy .` passes.
@@ -1390,7 +1427,7 @@ samples if the full walk exceeds that budget, with the sampling disclosed in out
 
 ### Task 19.24 — Boundary hardening: the leak-scan library, `moved_players`, `intent.actor`, the API factory, DTO versions
 **Branch:** `phase-19-boundary-hardening`
-**Depends on:** 19.2, 19.11, 19.13, 19.19
+**Depends on:** 19.2, 19.11, 19.13, 19.14, 19.19
 **Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
 **Complexity:** Integration
 
@@ -1563,8 +1600,8 @@ consolidation goes to the backlog — the fallback is pre-authorized by the tria
 - eval/ (consumers of voting.py are untouched)
 
 **Definition of done:**
-- [ ] The parity suite covers every committed meeting (count pinned) + the synthetic edges, green on both implementations.
-- [ ] Consolidation is either DONE (manager delegates; replay verification + byte-golden green; the private copy gone) or DEFERRED with the blocking difference named in a dated note in voting.py — no third state.
+- [ ] The parity suite covers every committed meeting (count pinned) + the synthetic edges, green on both implementations at the pre-consolidation commit.
+- [ ] Consolidation is either DONE (manager delegates; replay verification + byte-golden green; the private copy gone — and the suite pivots to pinning the delegation plus the recorded outcomes, since only one implementation remains) or DEFERRED with the blocking difference named in a dated note in voting.py (the two-implementation suite then stays as the permanent guard) — no third state.
 - [ ] `bash scripts/verify_samples.sh` green (reconstruction semantics unchanged).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1646,7 +1683,7 @@ if all four importers migrate cleanly.
 ### Task 19.28 — The phase close (owner)
 **Branch:** `phase-19-close`
 **Depends on:** 19.3, 19.8, 19.14, 19.17, 19.21, 19.23, 19.26, 19.27
-**Section refs:** the phase-18 close conventions (audits/audit-phase-18-close.md — the exemplar); locked decision 6 (the post-19 menu reads the 19.14 metrics); tasks/post-phase-14-plan.md (the roadmap tick this close owns)
+**Section refs:** [L] the phase-18 close conventions (audits/audit-phase-18-close.md — the exemplar); locked decision 6 (the post-19 menu reads the 19.14 metrics); tasks/post-phase-14-plan.md (the roadmap tick this close owns)
 **Complexity:** Medium
 
 The close re-verifies and routes. `audits/audit-phase-19-close.md`: re-run the full gate,
