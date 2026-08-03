@@ -10,23 +10,72 @@ Covers the three guarantees the set selector + per-set serving rest on:
 * ``/replays`` and ``/eval/*`` are set-parametrized over the per-set loader, with
   determinism holding PER SET across the two committed sets, and an unknown set is
   a 404.
+
+Task 19.9 adds the curated-default pins: ``DEFAULT_SET`` is the 9p2i spectator set
+(not the 4p1i fixture), the rubric's provenance key agrees between producer and
+loader on the committed mixed-provenance manifest, and every hand-curated featured
+seed exists in the set it names.
 """
 
 from __future__ import annotations
 
+import importlib
+import re
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import ENV_REPLAY_DIR, create_app
-from api.replay_loader import DEFAULT_SET, ReplayLoader, SetLoaderRegistry
+from api.replay_loader import (
+    DEFAULT_SET,
+    ReplayLoader,
+    SetLoaderRegistry,
+    _manifest_git_sha,
+    _manifest_seed_shas,
+    _rubric_is_stale,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PARENT = _REPO_ROOT / "replays" / "samples"
 _COMMITTED_4P1I = _PARENT / "4p1i"
 # A small, fast committed 4p1i seed used to stamp fake set subdirs in tmp dirs.
 _FAST_SEED = 0
+
+# The rubric regen producer is a top-level lab module (experiments/lab is not on
+# mypy_path); import it dynamically so mypy does not try to resolve it by name —
+# the same pattern tests/api/test_view_model.py uses.
+_LAB_DIR = _REPO_ROOT / "experiments" / "lab"
+if str(_LAB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LAB_DIR))
+_rubric_score: Any = importlib.import_module("rubric_score")
+
+# The committed featured list lives in the picker as DATA (Task 19.9); the seeds
+# are read back out of the source so a curated seed that no set carries fails here
+# instead of rendering as a dead entry in the UI.
+_PICKER_TSX = _REPO_ROOT / "frontend" / "src" / "components" / "ReplayPicker.tsx"
+_FEATURED_BLOCK = re.compile(
+    r"FEATURED_GAMES: readonly FeaturedGame\[\] = \[(.*?)\n\];", re.DOTALL
+)
+_FEATURED_ENTRY = re.compile(r'set: "([^"]+)",\s*\n\s*seed: (\d+),')
+_FEATURED_LABEL = re.compile(r'label:\s*\n?\s*"([^"]*)"')
+
+
+def _featured_block() -> str:
+    block = _FEATURED_BLOCK.search(_PICKER_TSX.read_text(encoding="utf-8"))
+    assert block is not None, "FEATURED_GAMES not found in ReplayPicker.tsx"
+    return block.group(1)
+
+
+def _parse_featured_games() -> list[tuple[str, int]]:
+    """The committed ``(set, seed)`` featured pairs, in their curated order."""
+
+    return [
+        (set_name, int(seed))
+        for set_name, seed in _FEATURED_ENTRY.findall(_featured_block())
+    ]
 
 
 def _stamp_set(
@@ -195,11 +244,21 @@ def test_sets_route_default_falls_back_to_first_when_default_absent(
     assert body["default"] == "7p2i"
 
 
-def test_default_set_prefers_4p1i_else_first(tmp_path: Path) -> None:
-    # With 4p1i present it is the default (the historical default-served set)...
+def test_default_set_is_the_curated_9p2i_set() -> None:
+    # THE DEFAULT-SET PIN (Task 19.9; audits/audit-phase-19-triage.md §7 item 10):
+    # the product default is the CURATED set, not the fast 4p1i fixture. 4p1i is
+    # median 12 ticks with at most one meeting per game (39/50 exactly one, 11/50
+    # none) and ships no rubric; 9p2i is the set with meetings, suspicion arcs and
+    # a scored highlight reel. A regression here silently re-points every
+    # no-`set` deep-link at the weakest set.
+    assert DEFAULT_SET == "9p2i"
+
+
+def test_default_set_prefers_9p2i_else_first(tmp_path: Path) -> None:
+    # With 9p2i present it is the default (the curated spectator set)...
     _stamp_set(tmp_path, "9p2i")
     _stamp_set(tmp_path, "4p1i")
-    assert SetLoaderRegistry(tmp_path).default_set() == "4p1i"
+    assert SetLoaderRegistry(tmp_path).default_set() == "9p2i"
     # ...without it, the first available set...
     only = tmp_path / "only"
     _stamp_set(only, "7p2i")
@@ -208,13 +267,14 @@ def test_default_set_prefers_4p1i_else_first(tmp_path: Path) -> None:
     assert SetLoaderRegistry(tmp_path / "nope").default_set() == DEFAULT_SET
 
 
-def test_omitted_set_resolves_advertised_default_on_non_4p1i_parent(
+def test_omitted_set_resolves_advertised_default_on_parent_without_the_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Regression (Codex P2): on a parent with no 4p1i, a no-`set` request must
-    # resolve the SAME default `/sets` advertises (the first set), not the absent
-    # hard-coded 4p1i — so it serves rather than 404s. The advertised default and
-    # the route fallback share one resolver (SetLoaderRegistry.default_set).
+    # Regression (Codex P2): on a parent that lacks DEFAULT_SET, a no-`set` request
+    # must resolve the SAME default `/sets` advertises (the first set), not the
+    # absent hard-coded name — so it serves rather than 404s. The advertised
+    # default and the route fallback share one resolver
+    # (SetLoaderRegistry.default_set).
     _stamp_set(tmp_path, "7p2i")
     with _client(tmp_path, monkeypatch) as client:
         assert client.get("/sets").json()["default"] == "7p2i"
@@ -231,19 +291,24 @@ def test_omitted_set_resolves_advertised_default_on_non_4p1i_parent(
 
 def test_replays_is_set_parametrized(monkeypatch: pytest.MonkeyPatch) -> None:
     with _client(_PARENT, monkeypatch) as client:
-        # Default (no `set`) resolves to DEFAULT_SET (4p1i); both committed sets
+        # Default (no `set`) resolves to DEFAULT_SET (9p2i); both committed sets
         # carry seeds 0..49, so both list 50 replays over their own loader.
         default = client.get("/replays")
+        four = client.get("/replays", params={"set": "4p1i"})
         nine = client.get("/replays", params={"set": "9p2i"})
     assert default.status_code == 200
+    assert four.status_code == 200
     assert nine.status_code == 200
     assert len(default.json()) == 50
-    assert len(nine.json()) == 50
+    assert len(four.json()) == 50
+    # The omitted-`set` response IS the curated default's set (Task 19.9), not the
+    # 4p1i fixture's — the client's omitted-set contract comment states this.
+    assert default.json() == nine.json()
 
 
 def test_eval_rubric_is_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
     with _client(_PARENT, monkeypatch) as client:
-        # 9p2i ships a rubric; the flat 4p1i default ships none (404 → empty state).
+        # 9p2i ships a rubric; the flat 4p1i fixture ships none (404 → empty state).
         nine = client.get("/eval/rubric", params={"set": "9p2i"})
         four = client.get("/eval/rubric", params={"set": "4p1i"})
     assert nine.status_code == 200
@@ -264,6 +329,121 @@ def test_unknown_set_is_404_on_replays(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.get("/replays", params={"set": "nope"}).status_code == 404
         # A path-traversal set name is likewise rejected (never escapes the parent).
         assert client.get("/replays", params={"set": "../9p2i"}).status_code == 404
+
+
+# ── the committed rubric's provenance key + the curated featured list ────────
+#
+# Task 19.9. The 9p2i manifest carries THREE distinct recording shas, so the old
+# scalar key resolved to None on BOTH sides and the picker's staleness banner was
+# unconditionally, falsely "stale" — no re-score could clear it. The key is now a
+# SET FINGERPRINT over the sorted per-seed shas, produced by
+# ``experiments.lab.rubric_score._set_manifest_sha`` and recomputed by
+# ``api.replay_loader._manifest_git_sha`` from the same bytes.
+#
+# The committed rubric was regenerated at HEAD with ($0, offline, no provider):
+#   PYTHONPATH=. uv run python audits/workflows/extract_gameplay_facts.py \
+#     >/dev/null \
+#     && uv run python experiments/lab/rubric_score.py \
+#       "${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json" \
+#       --set-dir replays/samples/9p2i
+# (the same pair scripts/refresh_samples.sh runs after a re-record).
+
+
+def test_committed_9p2i_manifest_is_mixed_provenance() -> None:
+    # The premise the fingerprint exists for: this set was refreshed piecemeal, so
+    # there is no single recording sha to key on.
+    rows = _manifest_seed_shas(_PARENT / "9p2i")
+    assert len({sha for _, sha in rows}) > 1
+    nine = _manifest_git_sha(_PARENT / "9p2i")
+    assert nine is not None and nine.startswith("multi:")
+    # A uniformly-recorded set still keys on its one sha (unchanged behaviour).
+    four = _manifest_git_sha(_PARENT / "4p1i")
+    assert four is not None and not four.startswith("multi:")
+
+
+def test_rubric_producer_and_loader_agree_on_the_committed_provenance_key() -> None:
+    # THE PROBE PIN: the producer's stamp and the loader's recomputation are the
+    # same string for the committed manifest — so the served rubric reads FRESH and
+    # the banner's semantics are honest at HEAD (not falsely "stale", and not a
+    # false "fresh" either: re-record a seed and the fingerprint moves).
+    set_dir = _PARENT / "9p2i"
+    assert _rubric_score._set_manifest_sha(set_dir) == _manifest_git_sha(set_dir)
+    view = SetLoaderRegistry(_PARENT).get("9p2i").rubric()
+    assert view.git_head == view.manifest_sha == _manifest_git_sha(set_dir)
+    assert view.stale is False
+
+
+def test_featured_labels_are_spoiler_free() -> None:
+    # Review fix (PR #324, P1): the featured strip renders BEFORE any game is
+    # opened, and a static blurb is prose — 19.10's unspoiled-mode reveal gate
+    # covers outcome-derived DATA, and 19.10's contract forbids copy changes in
+    # ReplayPicker.tsx, so nothing downstream can retract a spoiler written here.
+    # The labels name the setup and the question, never the answer. This guards
+    # the rule stated above FEATURED_GAMES against a future well-meaning edit.
+    banned = (
+        "wins",
+        "won",
+        "victory",
+        "ejects",
+        "ejected",
+        "is the impostor",
+        "their own killer",
+        "7–1",
+        "5–0",
+        "crew win",
+        "impostor win",
+    )
+    labels = _FEATURED_LABEL.findall(_featured_block())
+    assert len(labels) == len(_parse_featured_games())
+    for label in labels:
+        lowered = label.lower()
+        for token in banned:
+            assert token not in lowered, f"outcome spoiler {token!r} in: {label}"
+
+
+def test_set_fingerprints_compare_by_exact_equality() -> None:
+    # Review fix (PR #324, P2): a fingerprint is a fixed-width digest, not a
+    # truncatable sha, so it must NOT ride the bidirectional prefix comparison —
+    # a shortened or hand-edited stamp would otherwise prefix-match the real key
+    # and silently suppress the honesty banner on an artifact with no valid
+    # provenance. Malformed on either side → stale (the fail-safe direction).
+    real = _manifest_git_sha(_PARENT / "9p2i")
+    assert real is not None
+    assert _rubric_is_stale(real, real) is False
+    for malformed in (
+        "multi:",  # prefix only
+        real[: len("multi:") + 5],  # truncated digest
+        real.upper(),  # non-lowercase hex
+        real + "ab",  # over-long
+        "multi:zzzzzzzzzzzz",  # non-hex
+    ):
+        assert _rubric_is_stale(malformed, real) is True, malformed
+        assert _rubric_is_stale(real, malformed) is True, malformed
+    # A different well-formed fingerprint is stale too (the point of the key).
+    assert _rubric_is_stale("multi:000000000000", real) is True
+    # A bare git sha keeps the prefix comparison: the manifest stores a SHORT sha
+    # and a rubric may carry the full HEAD.
+    assert _rubric_is_stale("1e48c40deadbeef", "1e48c40") is False
+    # ...and a sha never matches a fingerprint in either direction.
+    assert _rubric_is_stale("1e48c40", real) is True
+
+
+def test_featured_seeds_exist_in_their_committed_sets() -> None:
+    # The curated featured list is committed DATA (frontend/src/components/
+    # ReplayPicker.tsx: FEATURED_GAMES) — the audits' named good tail, each with a
+    # hand-written why-watch line. Its one drift risk is a seed the served set does
+    # not carry, which would render as a dead entry; pin that here. The ORDER is
+    # editorial and deliberately unpinned — the rubric does not validate it.
+    featured = _parse_featured_games()
+    assert {game[0] for game in featured} == {"4p1i", "9p2i"}
+    # The audits' named good tail (audits/audit-phase-19-input-claude.md §5.3-5.4).
+    assert featured[0] == ("9p2i", 2)  # the tour's landing game (the curated head)
+    assert {seed for set_name, seed in featured if set_name == "9p2i"} == {2, 8, 17, 23}
+    assert {seed for set_name, seed in featured if set_name == "4p1i"} == {2, 29, 41}
+    registry = SetLoaderRegistry(_PARENT)
+    for set_name, seed in featured:
+        loader = registry.get(set_name)
+        assert any(meta.seed == seed for meta in loader.list_replays())
 
 
 def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:

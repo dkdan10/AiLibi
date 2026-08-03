@@ -22,9 +22,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import statistics
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -1249,23 +1251,27 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
 _MANIFEST_GIT_SHA_FROM_END = -4
 _MANIFEST_MIN_ROW_CELLS = 9
 
+# The mixed-provenance SET FINGERPRINT (Task 19.9). Kept in lockstep with
+# ``api.replay_loader._SET_FINGERPRINT_PREFIX`` / ``_SET_FINGERPRINT_DIGEST_LEN``:
+# the loader VALIDATES this exact shape (``multi:<12 hex>``) before treating a
+# stamp as a fingerprint at all, and compares it by exact equality — so the
+# producer must never emit a shortened or differently-cased key.
+_SET_FINGERPRINT_PREFIX = "multi:"
+_SET_FINGERPRINT_DIGEST_LEN = 12
 
-def _set_manifest_sha(set_dir: Path) -> str | None:
-    """The single distinct git sha across a set's ``MANIFEST.md`` data rows.
 
-    Mirrors ``api.replay_loader._manifest_git_sha``: the rubric stamps the
-    version of the replay SET it was scored from (read here, cwd-independent via
-    the absolute ``set_dir``), so the loader's freshness comparison is
-    "do the served replays still match what the rubric was scored against",
-    NOT "what code commit happened to run the scorer". Returns ``None`` when the
-    manifest is absent or carries more than one distinct sha.
+def _manifest_seed_shas(set_dir: Path) -> list[tuple[str, str]]:
+    """The ``(seed, git_sha)`` pairs of a set's ``MANIFEST.md`` data rows.
+
+    Mirrors ``api.replay_loader._manifest_seed_shas`` so producer and loader
+    derive the SAME provenance key from the same bytes.
     """
 
     try:
         text = (set_dir / "MANIFEST.md").read_text(encoding="utf-8")
     except OSError:
-        return None
-    shas: set[str] = set()
+        return []
+    rows: list[tuple[str, str]] = []
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
@@ -1276,8 +1282,49 @@ def _set_manifest_sha(set_dir: Path) -> str | None:
             continue  # header / separator row
         sha = cells[_MANIFEST_GIT_SHA_FROM_END]
         if sha:
-            shas.add(sha)
-    return next(iter(shas)) if len(shas) == 1 else None
+            rows.append((cells[1], sha))
+    return rows
+
+
+def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
+    """A stable digest of a set's sorted per-seed recording shas.
+
+    Byte-identical to ``api.replay_loader._set_fingerprint`` — the loader
+    recomputes this exact string from the manifest and compares it to the stamp
+    written here, so the two sides can never disagree on a mixed-provenance set.
+    """
+
+    payload = "\n".join(f"{seed}:{sha}" for seed, sha in sorted(set(rows)))
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"{_SET_FINGERPRINT_PREFIX}{digest[:_SET_FINGERPRINT_DIGEST_LEN]}"
+
+
+def _set_manifest_sha(set_dir: Path) -> str | None:
+    """A set's PROVENANCE KEY: its single recording sha, or a set fingerprint.
+
+    Mirrors ``api.replay_loader._manifest_git_sha``: the rubric stamps the
+    version of the replay SET it was scored from (read here, cwd-independent via
+    the absolute ``set_dir``), so the loader's freshness comparison is
+    "do the served replays still match what the rubric was scored against",
+    NOT "what code commit happened to run the scorer".
+
+    A uniformly-recorded set stamps its one distinct short sha. A PIECEMEAL-
+    refreshed set — the committed 9p2i carries three distinct recording shas —
+    stamps the ``multi:<digest>`` fingerprint over its sorted ``(seed, sha)``
+    rows instead (Task 19.9). Both sides returned ``None`` there before, and a
+    missing key reads stale unconditionally, so no re-score could clear the
+    banner; the fingerprint is a real key that changes exactly when a seed's
+    recording sha changes. ``None`` only when the manifest is absent or ships no
+    data rows.
+    """
+
+    rows = _manifest_seed_shas(set_dir)
+    if not rows:
+        return None
+    shas = {sha for _, sha in rows}
+    if len(shas) == 1:
+        return next(iter(shas))
+    return _set_fingerprint(rows)
 
 
 def regen_for_set(
@@ -1290,7 +1337,10 @@ def regen_for_set(
     surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
 
     The result is stamped with the version of the replay SET it was scored from
-    — the set's ``MANIFEST.md`` git sha — NOT the scoring code commit. That makes
+    — the set's ``MANIFEST.md`` provenance key: its single recording sha, or the
+    ``multi:<digest>`` fingerprint for a piecemeal-recorded set — NOT the scoring
+    code commit (the ``git_head`` FIELD keeps its name for DTO compatibility; it
+    has carried the set's stamp, not a scoring HEAD, since Task 12.2). That makes
     the loader's staleness guard meaningful: it reads FRESH while the on-disk
     replays match what the rubric scored, and STALE only once the set is
     re-recorded (manifest sha bumped) without a re-score. (An explicit
@@ -1371,13 +1421,13 @@ def main() -> int:
             f"{p['r3_arcs']:<4} {p['r7_legible']:<4}"
         )
 
-    # Stamp the SET manifest sha (the replay version scored), NOT the scoring
-    # HEAD (audit RUB-CAL-5): the pre-repair lab-local write stamped
+    # Stamp the SET manifest's provenance key (the replay version scored), NOT the
+    # scoring HEAD (audit RUB-CAL-5): the pre-repair lab-local write stamped
     # ``facts['git_head']`` (a docs-descendant scoring commit), so the
     # loader's freshness guard would have read the lab artifact as scored at a
     # different version than the served copy. Resolve the set dir from
     # ``--set-dir`` or the facts JSON's own ``sample_dir`` and read the same
-    # manifest sha the served copy carries, mirroring :func:`regen_for_set`.
+    # key the served copy carries, mirroring :func:`regen_for_set`.
     sample_dir = facts.get("sample_dir")
     set_dir = (
         Path(args.set_dir)
@@ -1396,7 +1446,10 @@ def main() -> int:
     Path("experiments/lab/results-rubric-score.json").write_text(
         json.dumps(out, indent=2)
     )
-    print(f"\nwrote experiments/lab/results-rubric-score.json (set sha {lab_head})")
+    print(
+        f"\nwrote experiments/lab/results-rubric-score.json "
+        f"(set provenance key {lab_head})"
+    )
 
     # ---- Geomean interestingness referee (Task 13.15) ----
     # The held-out referee's D1-D4 score + the report-rubric-design.md §6

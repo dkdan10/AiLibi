@@ -31,7 +31,7 @@ import json
 import logging
 import re
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -201,6 +201,18 @@ _MANIFEST_GIT_SHA_FROM_END: Final[int] = -4
 # Fewest ``|``-split cells a well-formed data row can have (the legacy 7-col row,
 # with its two empty end cells): shorter lines cannot carry ``git_sha`` at -4.
 _MANIFEST_MIN_ROW_CELLS: Final[int] = 9
+
+# The mixed-provenance SET FINGERPRINT (Task 19.9): a piecemeal-recorded set has no
+# single recording sha, so its provenance key is a digest over the sorted per-seed
+# shas. The prefix keeps it unmistakable for a bare git sha; the pattern is what
+# :func:`_rubric_is_stale` validates before trusting one, so a truncated stamp
+# cannot prefix-match its way to "fresh". Kept in lockstep with
+# ``experiments.lab.rubric_score``.
+_SET_FINGERPRINT_PREFIX: Final[str] = "multi:"
+_SET_FINGERPRINT_DIGEST_LEN: Final[int] = 12
+_SET_FINGERPRINT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"{_SET_FINGERPRINT_PREFIX}[0-9a-f]{{{_SET_FINGERPRINT_DIGEST_LEN}}}"
+)
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
@@ -2581,20 +2593,19 @@ def _belief_frames_from_memories(
     return tuple(frames)
 
 
-def _manifest_git_sha(replay_dir: Path) -> str | None:
-    """The single distinct git sha across the set's ``MANIFEST.md`` data rows.
+def _manifest_seed_shas(replay_dir: Path) -> list[tuple[str, str]]:
+    """The ``(seed, git_sha)`` pairs of the set's ``MANIFEST.md`` data rows.
 
-    Returns ``None`` when the manifest is absent, carries no data rows, or holds
-    more than one distinct sha (a piecemeal-refreshed set) — any of which makes a
-    clean freshness comparison impossible, so :func:`_rubric_is_stale` reports
-    the rubric stale rather than silently fresh.
+    Empty when the manifest is absent or carries no data rows. Kept in lockstep
+    with ``experiments.lab.rubric_score._manifest_seed_shas`` so the producer and
+    this reader derive the SAME provenance key from the same bytes.
     """
 
     try:
         text = (replay_dir / _MANIFEST_FILENAME).read_text(encoding="utf-8")
     except OSError:
-        return None
-    shas: set[str] = set()
+        return []
+    rows: list[tuple[str, str]] = []
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
@@ -2607,20 +2618,80 @@ def _manifest_git_sha(replay_dir: Path) -> str | None:
             continue
         sha = cells[_MANIFEST_GIT_SHA_FROM_END]
         if sha:
-            shas.add(sha)
-    return next(iter(shas)) if len(shas) == 1 else None
+            rows.append((cells[1], sha))
+    return rows
+
+
+def _manifest_git_sha(replay_dir: Path) -> str | None:
+    """The set's PROVENANCE KEY: its single recording sha, or a set fingerprint.
+
+    A uniformly-recorded set returns its one distinct short sha (the historical
+    behaviour every single-sha set keeps). A PIECEMEAL-refreshed set — the
+    committed 9p2i carries three distinct recording shas — returns a stable
+    ``multi:<digest>`` FINGERPRINT over its sorted ``(seed, sha)`` rows instead
+    (Task 19.9). Returning ``None`` there, as this did before, made the rubric
+    read stale unconditionally: no re-score could ever clear the banner, because
+    the key it had to match did not exist. The fingerprint is a real key — it
+    changes exactly when a seed's recording sha changes — so a re-scored rubric
+    reads fresh and a later partial re-record reads stale, both honestly.
+
+    ``None`` only when the manifest is absent or ships no data rows (no
+    provenance to compare at all → :func:`_rubric_is_stale` reports stale rather
+    than a false "fresh").
+    """
+
+    rows = _manifest_seed_shas(replay_dir)
+    if not rows:
+        return None
+    shas = {sha for _, sha in rows}
+    if len(shas) == 1:
+        return next(iter(shas))
+    return _set_fingerprint(rows)
+
+
+def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
+    """A stable digest of a set's sorted per-seed recording shas.
+
+    The mixed-provenance provenance key. Prefixed ``multi:`` so it can never be
+    confused with (or accidentally prefix-match) a bare git sha, and truncated:
+    this is a change detector, not a security boundary. Kept in lockstep with
+    ``experiments.lab.rubric_score._set_fingerprint`` — the producer stamps the
+    exact string this reader recomputes.
+    """
+
+    payload = "\n".join(f"{seed}:{sha}" for seed, sha in sorted(set(rows)))
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"{_SET_FINGERPRINT_PREFIX}{digest[:_SET_FINGERPRINT_DIGEST_LEN]}"
 
 
 def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
-    """Whether the rubric's scoring commit disagrees with the set's record commit.
+    """Whether the rubric's provenance key disagrees with the set's own.
 
-    Fresh iff both shas are present and one is a prefix of the other (the
-    manifest stores a SHORT sha; the rubric a full ``git rev-parse HEAD``). Any
-    missing sha → stale (the banner shows rather than a false "fresh").
+    Two key shapes, two comparisons:
+
+    * A bare git sha compares by PREFIX in either direction — the manifest stores
+      a SHORT sha and a rubric may carry a full ``git rev-parse HEAD``, so a
+      prefix relation is the legitimate "same commit" test.
+    * A ``multi:<12 hex>`` set fingerprint compares by EXACT EQUALITY on a
+      well-formed value. It is a fixed-width digest, never a truncatable prefix,
+      so a shortened or hand-edited stamp (``multi:``, ``multi:29735``) must not
+      prefix-match its way to "fresh" and silently suppress the honesty banner
+      (PR #324 review). A malformed fingerprint on either side reads STALE — the
+      fail-safe direction: the banner shows rather than a false "fresh".
+
+    Any missing key → stale, likewise.
     """
 
     if git_head is None or manifest_sha is None:
         return True
+    if git_head.startswith(_SET_FINGERPRINT_PREFIX) or manifest_sha.startswith(
+        _SET_FINGERPRINT_PREFIX
+    ):
+        well_formed = all(
+            _SET_FINGERPRINT_PATTERN.fullmatch(key) is not None
+            for key in (git_head, manifest_sha)
+        )
+        return not (well_formed and git_head == manifest_sha)
     return not (git_head.startswith(manifest_sha) or manifest_sha.startswith(git_head))
 
 
@@ -2647,10 +2718,16 @@ def _expected_seedset(replay_dir: Path) -> str | None:
 # param resolving ``<parent>/<set>/`` to a per-set loader.
 _REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
 
-# The default set served when a request carries no ``set`` query param — the flat
-# 4p/1i baseline that was the pre-12.12 default-served set, so existing deep-links
-# (which omit ``set``) and the dashboard still resolve unchanged.
-DEFAULT_SET: Final[str] = "4p1i"
+# The default set served when a request carries no ``set`` query param — the
+# CURATED spectator default (Task 19.9; audits/audit-phase-19-triage.md §7 item 10).
+# Flipped from the flat 4p1i baseline (the pre-12.12 default-served set): 4p1i is a
+# fast technical fixture, not a demo — median 12 ticks, at most one meeting (39/50
+# have exactly one, 11/50 none), 23/50 decided by the task timer against the map's
+# own ``dead_task_rule: redistribute`` intent that "the only crew win path becomes
+# ejection" (engine/maps/canonical_1.yaml:39-44), and it ships no rubric. 9p2i is the
+# set with meetings, suspicion arcs, and a scored highlight reel. Deep-links that
+# omit ``set`` now resolve 9p2i; an explicit ``?set=4p1i`` still serves the fixture.
+DEFAULT_SET: Final[str] = "9p2i"
 
 # Bound the per-set loader cache (the integration-risk LRU cap): each set's
 # ReplayLoader carries its own per-game caches, so a stray/one-off set cannot
@@ -2752,12 +2829,13 @@ class SetLoaderRegistry:
     def default_set(self) -> str:
         """The set served when a request omits ``set``.
 
-        Prefers :data:`DEFAULT_SET` (the committed 4p1i baseline) when present, so
-        existing no-``set`` deep-links resolve to the historical default; otherwise
-        the first available set, so the advertised default ALWAYS resolves — the
-        ``/sets`` ``default`` and the route fallback share this one resolver, so
-        they cannot disagree on a non-4p1i parent. Falls back to :data:`DEFAULT_SET`
-        for an empty parent (every set request 404s there anyway).
+        Prefers :data:`DEFAULT_SET` (the curated 9p2i spectator default) when
+        present, so a no-``set`` deep-link lands on the set that actually has
+        meetings; otherwise the first available set, so the advertised default
+        ALWAYS resolves — the ``/sets`` ``default`` and the route fallback share
+        this one resolver, so they cannot disagree on a parent without 9p2i. Falls
+        back to :data:`DEFAULT_SET` for an empty parent (every set request 404s
+        there anyway).
         """
 
         sets = self.available_sets()

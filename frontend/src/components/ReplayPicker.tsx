@@ -16,8 +16,16 @@
 // switches to the workspace at tick 0.
 //
 // Firewall: identity ≠ guilt, outcomes role-neutral — the card keys on drama /
-// score, never on who won. The 4p1i default set ships no rubric and is mostly
-// zero-meeting, so the empty / zero-meeting state is a first-class path here.
+// score, never on who won. The 4p1i set (an explicit `?set=4p1i`, no longer the
+// server default — Task 19.9) ships no rubric, so the unscored / zero-meeting
+// state is a first-class path here: 11 of its 50 games hold no meeting at all.
+//
+// Curation (Task 19.9; audits/audit-phase-19-triage.md §7 item 10): a hand-picked
+// FEATURED strip leads the browser. The interestingness rubric is an internal
+// pacing/structure heuristic, NOT a human rating — it top-scores formulaic
+// double-vent stomps and bottom-scores the corpus's most dramatic read (9p2i seed
+// 8 at 33.6) — so the featured order is EDITORIAL and every rendered rubric
+// scalar on this surface carries that narrow label.
 //
 // Split for Storybook (cf. MindInspector): the connected `ReplayPicker` owns the
 // store + fetch + URL wiring; the presentational `ReplayBrowserView` renders the
@@ -46,6 +54,7 @@ import type {
 import { Banner } from "../ui/Banner";
 import { EmptyState } from "../ui/EmptyState";
 import { Loading } from "../ui/Loading";
+import { SectionLabel } from "../ui/SectionLabel";
 
 // Debounce the filter → URL write so rapid changes don't thrash history. Both
 // this writer and 12.4's transport writer re-read `location.search` at write time
@@ -55,6 +64,79 @@ const FILTER_URL_DEBOUNCE_MS = 150;
 
 type BrowserView = "replays" | "highlights";
 type BrowserStatus = "loading" | "error" | "ready";
+
+// ── the curated featured list (Task 19.9) ────────────────────────────────────
+
+/** One hand-curated game: which set, which seed, and one line on why to watch. */
+export interface FeaturedGame {
+  readonly set: string;
+  readonly seed: number;
+  /** The editorial why-watch line — written by hand, never scorer-derived. */
+  readonly label: string;
+}
+
+// DATA, not machinery. These are the good-tail games the two Phase-19 audits
+// named and read end-to-end (audits/audit-phase-19-input-claude.md §5.3–5.4;
+// audits/audit-phase-19-input-codex.md §5.3), with a why-watch line each. The
+// interestingness rubric does NOT produce this order and cannot: it ranks 9p2i
+// seed 8 last-but-five (33.6) and seed 2 third. Editing this list is an editorial
+// act — re-scoring the rubric does not update it.
+//
+// SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
+// opened, and a static blurb is prose, not outcome-derived data — so 19.10's
+// unspoiled-mode reveal gate cannot cover it, and 19.10's contract explicitly
+// forbids copy changes in this file. Each label therefore names the SETUP and the
+// question a game poses, never its answer: no winner, no ejection, no vote tally,
+// no "who the killer turns out to be". A blurb added later must hold that line.
+export const FEATURED_GAMES: readonly FeaturedGame[] = [
+  {
+    set: "9p2i",
+    seed: 2,
+    label:
+      "Four meetings, four acts: a cold open, a case that nearly lands, and a last meeting that turns on one piece of hard evidence.",
+  },
+  {
+    set: "9p2i",
+    seed: 17,
+    label:
+      "An impostor pair builds a fabricated sighting against a truthful vent witness — watch whose testimony the engine stamps “verified”.",
+  },
+  {
+    set: "9p2i",
+    seed: 23,
+    label:
+      "A sighting that is factually true but provenance-impossible: the flag fires, and nothing asks whether the observer could have seen it.",
+  },
+  {
+    set: "9p2i",
+    seed: 8,
+    label:
+      "The corpus's most contested endgame — and the game the rubric ranks 45th of 50. Read the last ballots against what each voter knew.",
+  },
+  {
+    set: "4p1i",
+    seed: 29,
+    label:
+      "One alibi in the only meeting reads completely differently the second time through — the most Among-Us moment in the corpus.",
+  },
+  {
+    set: "4p1i",
+    seed: 2,
+    label:
+      "The emergency button, pressed with no body ever found: the table has to argue from absence alone.",
+  },
+  {
+    set: "4p1i",
+    seed: 41,
+    label:
+      "The one meeting in the corpus an LLM tie-break decided rather than the flags — two flags of equal weight pointing opposite ways.",
+  },
+];
+
+/** The featured games for one set, in curated order (empty for an uncurated set). */
+export function featuredForSet(set: string | null): readonly FeaturedGame[] {
+  return set === null ? [] : FEATURED_GAMES.filter((game) => game.set === set);
+}
 
 // ── pure data shaping ────────────────────────────────────────────────────────
 
@@ -142,6 +224,50 @@ function winShapeOptionsOf(rubric: RubricView | null): string[] {
 
 // ── presentational view (storied) ────────────────────────────────────────────
 
+/** A featured game joined to the served replay it opens. */
+export interface FeaturedEntry extends FeaturedGame {
+  readonly gameId: string;
+}
+
+/** The curated strip: hand-picked games with their why-watch lines, best-first by
+ *  EDITORIAL judgment (no scalar is shown here — there is none to show). */
+function FeaturedStrip({
+  entries,
+  onOpen,
+}: {
+  entries: readonly FeaturedEntry[];
+  onOpen: (gameId: string) => void;
+}) {
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <section aria-label="Featured games" className="flex flex-col gap-2">
+      <SectionLabel as="h3">Featured — picked by hand</SectionLabel>
+      <ul className="flex flex-col gap-2">
+        {entries.map((entry) => (
+          <li key={`f-${entry.set}-${entry.seed}`}>
+            <button
+              type="button"
+              onClick={() => {
+                onOpen(entry.gameId);
+              }}
+              className="flex w-full items-start gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-3 py-2 text-left shadow-data hover:bg-paper-2"
+            >
+              <span className="shrink-0 rounded-pill border-2 border-ink-900 bg-paper-2 px-2 py-0.5 font-mono text-xs font-semibold text-ink-900">
+                seed {entry.seed}
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-ink-900">
+                {entry.label}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export interface ReplayBrowserViewProps {
   view: BrowserView;
   status: BrowserStatus;
@@ -154,10 +280,14 @@ export interface ReplayBrowserViewProps {
   onFiltersChange: (next: ReplayFilterState) => void;
   winShapeOptions: readonly string[];
   set: string | null;
-  /** Rubric staleness (git_head ≠ the set's recorded sha) → honesty banner. */
+  /** Rubric staleness: the rubric's stamped provenance key ≠ the set's own
+   *  (the loader recomputes it from MANIFEST.md) → honesty banner. */
   stale: boolean;
   /** Highlights view, but the served set ships no rubric (the 4p1i case). */
   rubricMissing: boolean;
+  /** The curated featured games for the served set, joined to their replays
+   *  (Task 19.9). Empty for an uncurated set, or before the list loads. */
+  featured?: readonly FeaturedEntry[];
   onOpen: (gameId: string) => void;
   onBrowseReplays: () => void;
 }
@@ -174,6 +304,7 @@ export function ReplayBrowserView({
   set,
   stale,
   rubricMissing,
+  featured = [],
   onOpen,
   onBrowseReplays,
 }: ReplayBrowserViewProps) {
@@ -209,8 +340,10 @@ export function ReplayBrowserView({
       <EmptyState title="No interestingness rubric for this set">
         <p>
           The served set{set !== null ? ` (${set})` : ""} ships no rubric —
-          expected for the default 4p1i set, which is mostly zero-meeting. A scored
-          set (9p2i) populates the reel.
+          expected for 4p1i, the fast technical fixture: median 12 ticks, at most
+          one meeting (39 of its 50 games hold exactly one, 11 hold none), and 23
+          of 50 decided by the task timer rather than by an ejection. The default
+          set, 9p2i, is scored and populates the reel.
         </p>
         <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
           Browse all replays
@@ -243,11 +376,13 @@ export function ReplayBrowserView({
     body = (
       <>
         {/* One banner for an unscored set (Task 12.13): hoists the per-card "Not
-            scored" note (the 4p1i common case) up to a single line. */}
+            scored" note (the 4p1i case) up to a single line. */}
         {!isHighlights && rubricMissing && (
           <Banner tone="caveat">
             This set{set !== null ? ` (${set})` : ""} ships no interestingness
-            rubric — its games are unscored.
+            rubric — its games are unscored. 4p1i is a fast technical fixture
+            (median 12 ticks, at most one meeting per game), not the spectator
+            set.
           </Banner>
         )}
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -276,18 +411,32 @@ export function ReplayBrowserView({
         </h2>
         <p className="font-mono text-xs text-ink-500">
           {isHighlights
-            ? "Games ranked by interestingness — deduction (R1), deception (R2), suspicion arcs (R3), legibility (R7). Best first."
+            ? "Ordered by the interestingness rubric — deduction (R1), deception (R2), suspicion arcs (R3), legibility (R7)."
             : "Every recorded replay in the served set. Click a card to open it."}
         </p>
+        {/* The narrow label on the rubric scalar (Task 19.9), shown wherever this
+            surface renders a score: it measures pacing/structure, and both
+            Phase-19 audits found its ordering inverts the human-interest tails.
+            The FEATURED strip is the human ordering. */}
+        {(isHighlights || !rubricMissing) && (
+          <p className="font-mono text-xs text-ink-500">
+            The 0–100 score is an internal pacing/structure heuristic — not a
+            human rating, and not a watchability ranking. For games worth
+            watching, see Featured below.
+          </p>
+        )}
       </header>
 
       {stale && (
         <Banner tone="caveat">
-          Scores may be stale — the rubric was scored against a different commit
-          than these replays (git_head mismatch). Treat the numbers as indicative,
+          Scores may be stale — the rubric's stamped provenance key no longer
+          matches these replays' recording provenance (their MANIFEST.md rows), so
+          it was scored against different bytes. Treat the numbers as indicative,
           not fresh.
         </Banner>
       )}
+
+      <FeaturedStrip entries={featured} onOpen={onOpen} />
 
       {/* The filter bar is always shown so its keys round-trip even while loading
           / empty (a shared, reload-stable URL contract). */}
@@ -460,6 +609,18 @@ export function ReplayPicker() {
   );
   const winShapeOptions = useMemo(() => winShapeOptionsOf(rubric), [rubric]);
 
+  // The curated strip for the ACTIVE set, joined to the served replays by seed
+  // (Task 19.9). A featured seed the served set does not carry is dropped rather
+  // than rendered as a dead link — the list is committed data, the set on disk
+  // is the authority.
+  const featured = useMemo<readonly FeaturedEntry[]>(() => {
+    const metas = metaBySeed(replayList);
+    return featuredForSet(seedSet).flatMap((game) => {
+      const meta = metas.get(game.seed);
+      return meta === undefined ? [] : [{ ...game, gameId: meta.game_id }];
+    });
+  }, [seedSet, replayList]);
+
   // Status: the reel is driven by the rubric; the browser by the replay list
   // (rubric is best-effort enrichment there).
   let status: BrowserStatus;
@@ -533,6 +694,7 @@ export function ReplayPicker() {
         set={seedSet ?? rubric?.seedset ?? null}
         stale={rubric?.stale ?? false}
         rubricMissing={rubricStatus === "absent"}
+        featured={featured}
         onOpen={(gameId) => {
           void selectReplay(gameId);
         }}
