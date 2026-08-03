@@ -1251,6 +1251,14 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
 _MANIFEST_GIT_SHA_FROM_END = -4
 _MANIFEST_MIN_ROW_CELLS = 9
 
+# The mixed-provenance SET FINGERPRINT (Task 19.9). Kept in lockstep with
+# ``api.replay_loader._SET_FINGERPRINT_PREFIX`` / ``_SET_FINGERPRINT_DIGEST_LEN``:
+# the loader VALIDATES this exact shape (``multi:<12 hex>``) before treating a
+# stamp as a fingerprint at all, and compares it by exact equality — so the
+# producer must never emit a shortened or differently-cased key.
+_SET_FINGERPRINT_PREFIX = "multi:"
+_SET_FINGERPRINT_DIGEST_LEN = 12
+
 
 def _manifest_seed_shas(set_dir: Path) -> list[tuple[str, str]]:
     """The ``(seed, git_sha)`` pairs of a set's ``MANIFEST.md`` data rows.
@@ -1288,7 +1296,7 @@ def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
 
     payload = "\n".join(f"{seed}:{sha}" for seed, sha in sorted(set(rows)))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return f"multi:{digest[:12]}"
+    return f"{_SET_FINGERPRINT_PREFIX}{digest[:_SET_FINGERPRINT_DIGEST_LEN]}"
 
 
 def _set_manifest_sha(set_dir: Path) -> str | None:

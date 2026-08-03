@@ -35,6 +35,7 @@ from api.replay_loader import (
     SetLoaderRegistry,
     _manifest_git_sha,
     _manifest_seed_shas,
+    _rubric_is_stale,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -59,16 +60,21 @@ _FEATURED_BLOCK = re.compile(
     r"FEATURED_GAMES: readonly FeaturedGame\[\] = \[(.*?)\n\];", re.DOTALL
 )
 _FEATURED_ENTRY = re.compile(r'set: "([^"]+)",\s*\n\s*seed: (\d+),')
+_FEATURED_LABEL = re.compile(r'label:\s*\n?\s*"([^"]*)"')
+
+
+def _featured_block() -> str:
+    block = _FEATURED_BLOCK.search(_PICKER_TSX.read_text(encoding="utf-8"))
+    assert block is not None, "FEATURED_GAMES not found in ReplayPicker.tsx"
+    return block.group(1)
 
 
 def _parse_featured_games() -> list[tuple[str, int]]:
     """The committed ``(set, seed)`` featured pairs, in their curated order."""
 
-    block = _FEATURED_BLOCK.search(_PICKER_TSX.read_text(encoding="utf-8"))
-    assert block is not None, "FEATURED_GAMES not found in ReplayPicker.tsx"
     return [
         (set_name, int(seed))
-        for set_name, seed in _FEATURED_ENTRY.findall(block.group(1))
+        for set_name, seed in _FEATURED_ENTRY.findall(_featured_block())
     ]
 
 
@@ -365,6 +371,61 @@ def test_rubric_producer_and_loader_agree_on_the_committed_provenance_key() -> N
     view = SetLoaderRegistry(_PARENT).get("9p2i").rubric()
     assert view.git_head == view.manifest_sha == _manifest_git_sha(set_dir)
     assert view.stale is False
+
+
+def test_featured_labels_are_spoiler_free() -> None:
+    # Review fix (PR #324, P1): the featured strip renders BEFORE any game is
+    # opened, and a static blurb is prose — 19.10's unspoiled-mode reveal gate
+    # covers outcome-derived DATA, and 19.10's contract forbids copy changes in
+    # ReplayPicker.tsx, so nothing downstream can retract a spoiler written here.
+    # The labels name the setup and the question, never the answer. This guards
+    # the rule stated above FEATURED_GAMES against a future well-meaning edit.
+    banned = (
+        "wins",
+        "won",
+        "victory",
+        "ejects",
+        "ejected",
+        "is the impostor",
+        "their own killer",
+        "7–1",
+        "5–0",
+        "crew win",
+        "impostor win",
+    )
+    labels = _FEATURED_LABEL.findall(_featured_block())
+    assert len(labels) == len(_parse_featured_games())
+    for label in labels:
+        lowered = label.lower()
+        for token in banned:
+            assert token not in lowered, f"outcome spoiler {token!r} in: {label}"
+
+
+def test_set_fingerprints_compare_by_exact_equality() -> None:
+    # Review fix (PR #324, P2): a fingerprint is a fixed-width digest, not a
+    # truncatable sha, so it must NOT ride the bidirectional prefix comparison —
+    # a shortened or hand-edited stamp would otherwise prefix-match the real key
+    # and silently suppress the honesty banner on an artifact with no valid
+    # provenance. Malformed on either side → stale (the fail-safe direction).
+    real = _manifest_git_sha(_PARENT / "9p2i")
+    assert real is not None
+    assert _rubric_is_stale(real, real) is False
+    for malformed in (
+        "multi:",  # prefix only
+        real[: len("multi:") + 5],  # truncated digest
+        real.upper(),  # non-lowercase hex
+        real + "ab",  # over-long
+        "multi:zzzzzzzzzzzz",  # non-hex
+    ):
+        assert _rubric_is_stale(malformed, real) is True, malformed
+        assert _rubric_is_stale(real, malformed) is True, malformed
+    # A different well-formed fingerprint is stale too (the point of the key).
+    assert _rubric_is_stale("multi:000000000000", real) is True
+    # A bare git sha keeps the prefix comparison: the manifest stores a SHORT sha
+    # and a rubric may carry the full HEAD.
+    assert _rubric_is_stale("1e48c40deadbeef", "1e48c40") is False
+    # ...and a sha never matches a fingerprint in either direction.
+    assert _rubric_is_stale("1e48c40", real) is True
 
 
 def test_featured_seeds_exist_in_their_committed_sets() -> None:

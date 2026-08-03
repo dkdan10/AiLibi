@@ -81,48 +81,55 @@ export interface FeaturedGame {
 // interestingness rubric does NOT produce this order and cannot: it ranks 9p2i
 // seed 8 last-but-five (33.6) and seed 2 third. Editing this list is an editorial
 // act — re-scoring the rubric does not update it.
+//
+// SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
+// opened, and a static blurb is prose, not outcome-derived data — so 19.10's
+// unspoiled-mode reveal gate cannot cover it, and 19.10's contract explicitly
+// forbids copy changes in this file. Each label therefore names the SETUP and the
+// question a game poses, never its answer: no winner, no ejection, no vote tally,
+// no "who the killer turns out to be". A blurb added later must hold that line.
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
   {
     set: "9p2i",
     seed: 2,
     label:
-      "Four acts across four meetings — cold-open kill, a near miss that ties with SKIP, then the vent that ends it.",
+      "Four meetings, four acts: a cold open, a case that nearly lands, and a last meeting that turns on one piece of hard evidence.",
   },
   {
     set: "9p2i",
     seed: 17,
     label:
-      "An impostor pair fabricates a sighting against the one truthful vent witness; the table ejects the witness 7–1.",
+      "An impostor pair builds a fabricated sighting against a truthful vent witness — watch whose testimony the engine stamps “verified”.",
   },
   {
     set: "9p2i",
     seed: 23,
     label:
-      "The impostor files a sighting it could not possibly have made — factually true, provenance-impossible — and an innocent goes 5–0.",
+      "A sighting that is factually true but provenance-impossible: the flag fires, and nothing asks whether the observer could have seen it.",
   },
   {
     set: "9p2i",
     seed: 8,
     label:
-      "At parity the impostor wins by telling the truth about a confused innocent. The rubric scores this game 45th of 50.",
+      "The corpus's most contested endgame — and the game the rubric ranks 45th of 50. Read the last ballots against what each voter knew.",
   },
   {
     set: "4p1i",
     seed: 29,
     label:
-      "A victim alibis their own killer one tick before dying to them — the most Among-Us moment in the corpus.",
+      "One alibi in the only meeting reads completely differently the second time through — the most Among-Us moment in the corpus.",
   },
   {
     set: "4p1i",
     seed: 2,
     label:
-      "An emergency-button conviction with the corpse never found: the crew argues its way there without the body.",
+      "The emergency button, pressed with no body ever found: the table has to argue from absence alone.",
   },
   {
     set: "4p1i",
     seed: 41,
     label:
-      "The one meeting an LLM tie-break decided — and it decided wrong: a bogus alibi flag outweighs a correct vent flag.",
+      "The one meeting in the corpus an LLM tie-break decided rather than the flags — two flags of equal weight pointing opposite ways.",
   },
 ];
 

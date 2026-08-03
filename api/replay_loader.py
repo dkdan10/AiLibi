@@ -202,6 +202,18 @@ _MANIFEST_GIT_SHA_FROM_END: Final[int] = -4
 # with its two empty end cells): shorter lines cannot carry ``git_sha`` at -4.
 _MANIFEST_MIN_ROW_CELLS: Final[int] = 9
 
+# The mixed-provenance SET FINGERPRINT (Task 19.9): a piecemeal-recorded set has no
+# single recording sha, so its provenance key is a digest over the sorted per-seed
+# shas. The prefix keeps it unmistakable for a bare git sha; the pattern is what
+# :func:`_rubric_is_stale` validates before trusting one, so a truncated stamp
+# cannot prefix-match its way to "fresh". Kept in lockstep with
+# ``experiments.lab.rubric_score``.
+_SET_FINGERPRINT_PREFIX: Final[str] = "multi:"
+_SET_FINGERPRINT_DIGEST_LEN: Final[int] = 12
+_SET_FINGERPRINT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"{_SET_FINGERPRINT_PREFIX}[0-9a-f]{{{_SET_FINGERPRINT_DIGEST_LEN}}}"
+)
+
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
 # re-seed it with the right roles + task pool (``num_impostors`` /
@@ -2649,22 +2661,37 @@ def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
 
     payload = "\n".join(f"{seed}:{sha}" for seed, sha in sorted(set(rows)))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return f"multi:{digest[:12]}"
+    return f"{_SET_FINGERPRINT_PREFIX}{digest[:_SET_FINGERPRINT_DIGEST_LEN]}"
 
 
 def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
     """Whether the rubric's provenance key disagrees with the set's own.
 
-    Fresh iff both keys are present and one is a prefix of the other (for a
-    uniform set the manifest stores a SHORT sha and the rubric a full
-    ``git rev-parse HEAD``; for a mixed-provenance set both sides carry the
-    byte-identical ``multi:<digest>`` fingerprint, which prefix-matches only
-    itself). Any missing key → stale (the banner shows rather than a false
-    "fresh").
+    Two key shapes, two comparisons:
+
+    * A bare git sha compares by PREFIX in either direction — the manifest stores
+      a SHORT sha and a rubric may carry a full ``git rev-parse HEAD``, so a
+      prefix relation is the legitimate "same commit" test.
+    * A ``multi:<12 hex>`` set fingerprint compares by EXACT EQUALITY on a
+      well-formed value. It is a fixed-width digest, never a truncatable prefix,
+      so a shortened or hand-edited stamp (``multi:``, ``multi:29735``) must not
+      prefix-match its way to "fresh" and silently suppress the honesty banner
+      (PR #324 review). A malformed fingerprint on either side reads STALE — the
+      fail-safe direction: the banner shows rather than a false "fresh".
+
+    Any missing key → stale, likewise.
     """
 
     if git_head is None or manifest_sha is None:
         return True
+    if git_head.startswith(_SET_FINGERPRINT_PREFIX) or manifest_sha.startswith(
+        _SET_FINGERPRINT_PREFIX
+    ):
+        well_formed = all(
+            _SET_FINGERPRINT_PATTERN.fullmatch(key) is not None
+            for key in (git_head, manifest_sha)
+        )
+        return not (well_formed and git_head == manifest_sha)
     return not (git_head.startswith(manifest_sha) or manifest_sha.startswith(git_head))
 
 
