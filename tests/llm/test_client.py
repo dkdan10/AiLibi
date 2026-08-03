@@ -401,10 +401,15 @@ class TestAnthropicClientPrivateKnobsAndCallKindRouting:
                 output_tokens=4,
             )
 
+        # Task 19.6: pricing has no fallback rate, so any model id that reaches
+        # _compute_cost_usd must be a priced one. The overrides are therefore
+        # the two real ids CROSSED -- the trigger id configured as the meeting
+        # model and vice versa. Still a genuine override of both defaults
+        # (which is what this test is about), and still priced.
         client = AnthropicClient(
             api_key="key",
-            meeting_model="custom-meeting",
-            trigger_model="custom-trigger",
+            meeting_model=DEFAULT_TRIGGER_MODEL,
+            trigger_model=DEFAULT_MEETING_MODEL,
             send=fake_send,
         )
 
@@ -417,7 +422,9 @@ class TestAnthropicClientPrivateKnobsAndCallKindRouting:
             )
         )
 
-        assert captured["model"] == "custom-meeting"
+        # The default call_kind is "meeting", so the CONFIGURED meeting model
+        # (here: the trigger id) is what reached the send hook.
+        assert captured["model"] == DEFAULT_TRIGGER_MODEL
 
     def test_extended_thinking_and_caching_beta_flow_through_send_hook(self) -> None:
         captured: dict[str, object] = {}
@@ -478,7 +485,16 @@ class TestAnthropicClientPrivateKnobsAndCallKindRouting:
         # Sonnet pricing: $3/Mtok input + $15/Mtok output = $18 per million.
         assert response.cost_usd == pytest.approx(18.0)
 
-    def test_unknown_model_uses_fallback_pricing(self) -> None:
+    def test_unknown_model_raises_instead_of_falling_back(self) -> None:
+        """Task 19.6: unknown-model pricing fails loud, naming the model.
+
+        This test used to be ``test_unknown_model_uses_fallback_pricing`` and
+        asserted $6.00 — the old ``(3.00, 15.00)`` Sonnet-shaped default
+        billing an unpriced model at frontier rates. Cost accounting is where
+        AGENTS.md §"No silent fallbacks" binds hardest: an unpriced model now
+        raises with its own name rather than recording a plausible fiction.
+        """
+
         async def fake_send(**kwargs: object) -> AnthropicRawResponse:
             return AnthropicRawResponse(
                 text="ok",
@@ -489,18 +505,19 @@ class TestAnthropicClientPrivateKnobsAndCallKindRouting:
 
         client = AnthropicClient(api_key="key", send=fake_send)
 
-        response = _run(
-            client.complete(
-                prompt="cost",
-                schema=None,
-                max_tokens=8,
-                temperature=0.0,
+        with pytest.raises(ValueError, match="unknown-model-id") as excinfo:
+            _run(
+                client.complete(
+                    prompt="cost",
+                    schema=None,
+                    max_tokens=8,
+                    temperature=0.0,
+                )
             )
-        )
 
-        assert isinstance(response, LLMResponse)
-        # Fallback uses Sonnet rates: 2M input @ $3 = $6.
-        assert response.cost_usd == pytest.approx(6.0)
+        # The message must be actionable: it names the offending model AND
+        # where to declare it, so the fix is not a hunt through the module.
+        assert "_ANTHROPIC_PRICING_USD_PER_MTOK" in str(excinfo.value)
 
     def test_schema_validation_rejects_non_schema_payload(self) -> None:
         async def fake_send(**kwargs: object) -> AnthropicRawResponse:
@@ -551,12 +568,16 @@ class TestBuildDefaultClient:
                 output_tokens=1,
             )
 
+        # Task 19.6: the env overrides are the two real ids CROSSED (see the
+        # sibling constructor-override test) -- a genuine override of both
+        # defaults that still resolves to a priced model, now that unpriced
+        # models raise instead of billing at a fallback rate.
         client = build_default_client(
             env={
                 ENV_PROVIDER: PROVIDER_ANTHROPIC,
                 ENV_ANTHROPIC_API_KEY: "k",
-                ENV_MEETING_MODEL: "env-meeting",
-                ENV_TRIGGER_MODEL: "env-trigger",
+                ENV_MEETING_MODEL: DEFAULT_TRIGGER_MODEL,
+                ENV_TRIGGER_MODEL: DEFAULT_MEETING_MODEL,
             },
             send=fake_send,
         )
@@ -572,7 +593,7 @@ class TestBuildDefaultClient:
                 call_kind="meeting",
             )
         )
-        assert captured["model"] == "env-meeting"
+        assert captured["model"] == DEFAULT_TRIGGER_MODEL
 
         _ = _run(
             client.complete(
@@ -583,7 +604,7 @@ class TestBuildDefaultClient:
                 call_kind="trigger",
             )
         )
-        assert captured["model"] == "env-trigger"
+        assert captured["model"] == DEFAULT_MEETING_MODEL
 
     def test_unknown_provider_value_raises(self) -> None:
         with pytest.raises(ValueError, match="unknown"):

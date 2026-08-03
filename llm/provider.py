@@ -45,17 +45,27 @@ PROVIDER_FEATHERLESS: Final[str] = "featherless"
 
 # Anthropic per-million-token list pricing as of 2026-05. Kept private so
 # call sites never depend on it; if pricing changes only this file moves.
+#
+# There is NO fallback rate (Task 19.6). The table used to carry a
+# ``(3.00, 15.00)`` Sonnet-shaped default, so an unpriced model — a new
+# release, a typo'd override, a dated alias resolution — was silently billed
+# at frontier rates and the recorded ``cost_usd`` became fiction. Cost
+# accounting is exactly where AGENTS.md §"No silent fallbacks" binds hardest:
+# an unknown model now raises with its name (see :func:`_compute_cost_usd`).
+# The two PROVIDER-keyed zero fallbacks below are a different thing and stay:
+# they are keyed by provider, not model, so they cannot silently substitute
+# one model's rate for another's (see their own comments).
 _ANTHROPIC_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {
     "claude-sonnet-4-6": (3.00, 15.00),
     "claude-haiku-4-5-20251001": (1.00, 5.00),
 }
-_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (3.00, 15.00)
 
 # Ollama runs a local open model for $0. The rate is keyed by PROVIDER,
 # not by model name: every Ollama model resolves to the (0.0, 0.0)
-# fallback, so an A/B swap (``qwen3.5:9b`` -> ``llama3.1:8b``) cannot
-# silently fall back to a non-zero frontier rate the way a model-keyed
-# lookup against the Anthropic table would. The per-model dict is the
+# fallback, so an A/B swap (``qwen3.5:9b`` -> ``llama3.1:8b``) stays free
+# instead of routing through the Anthropic table, where a local model name
+# has no entry at all (before Task 19.6 that meant a silent frontier rate;
+# since 19.6 it means a raise — either way, wrong). The per-model dict is the
 # optional override surface (empty today) for a hypothetical metered
 # local endpoint; absent an entry the zero fallback applies.
 _OLLAMA_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {}
@@ -65,10 +75,11 @@ _OLLAMA_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (0.0, 0.0)
 # decision 2026-06-25), not metered per token. The rate is keyed by PROVIDER,
 # not by model name: every Featherless model resolves to the (0.0, 0.0)
 # fallback, so an A/B swap across the model slate (Qwen3-32B -> GLM-4-32B -> a
-# RP fine-tune) cannot silently fall back to a non-zero frontier rate the way a
-# model-keyed lookup against the Anthropic table would. The per-model dict is
-# the optional override surface (empty today); absent an entry the zero
-# fallback applies.
+# RP fine-tune) stays free instead of routing through the Anthropic table,
+# where a Featherless model name has no entry at all (before Task 19.6 that
+# meant a silent frontier rate; since 19.6 it means a raise — either way,
+# wrong). The per-model dict is the optional override surface (empty today);
+# absent an entry the zero fallback applies.
 _FEATHERLESS_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {}
 _FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (0.0, 0.0)
 
@@ -646,6 +657,16 @@ def _compute_cost_usd(
     :data:`PROVIDER_FEATHERLESS` selects the hosted flat-rate table, whose
     zero fallback likewise makes every Featherless model free regardless of
     name (see :data:`_FEATHERLESS_PRICING_USD_PER_MTOK`).
+
+    The Anthropic arm has NO fallback rate (Task 19.6): a model missing from
+    :data:`_ANTHROPIC_PRICING_USD_PER_MTOK` raises :class:`ValueError` naming
+    the model rather than billing it at the old Sonnet-shaped
+    ``(3.00, 15.00)`` default. Known models are unchanged — Sonnet and Haiku
+    price exactly as before, so committed ``cost_usd`` figures still
+    reproduce. The Anthropic call site passes the model id the RESPONSE
+    reports (``raw.model``), so a new release or a dated alias resolution
+    surfaces here as a loud, actionable "add this model to the table" instead
+    of as quiet cost fiction.
     """
 
     if provider == PROVIDER_OLLAMA:
@@ -657,9 +678,17 @@ def _compute_cost_usd(
             model, _FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK
         )
     else:
-        input_rate, output_rate = _ANTHROPIC_PRICING_USD_PER_MTOK.get(
-            model, _FALLBACK_PRICING_USD_PER_MTOK
-        )
+        try:
+            input_rate, output_rate = _ANTHROPIC_PRICING_USD_PER_MTOK[model]
+        except KeyError as exc:
+            known = ", ".join(sorted(_ANTHROPIC_PRICING_USD_PER_MTOK))
+            raise ValueError(
+                f"No Anthropic pricing for model {model!r}: cost cannot be "
+                f"computed and there is no fallback rate (AGENTS.md "
+                f'§"No silent fallbacks"). Add the model to '
+                f"_ANTHROPIC_PRICING_USD_PER_MTOK in llm/provider.py. "
+                f"Priced models: {known}."
+            ) from exc
     return (input_tokens / 1_000_000.0) * input_rate + (
         output_tokens / 1_000_000.0
     ) * output_rate

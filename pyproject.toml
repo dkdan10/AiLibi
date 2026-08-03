@@ -7,6 +7,11 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "anthropic==0.104.1",
     "fastapi==0.136.1",
+    # Direct dependency of llm/featherless_client.py (the canonical eval
+    # provider's HTTP transport). The import there is lazy, but the declaration
+    # is not optional: without this line the client rides in transitively via
+    # anthropic/ollama and would break the moment either drops or repins it.
+    "httpx==0.28.1",
     "hypothesis==6.152.4",
     "import-linter==2.11",
     "jinja2==3.1.6",

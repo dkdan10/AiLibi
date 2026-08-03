@@ -42,6 +42,16 @@ byte-identical. An unknown set name (no matching subdirectory) raises
 fallbacks"). The ``*_TEMPLATE`` filename constants are shared across sets;
 only the directory varies.
 
+The default is byte-identity, not a recommendation (Task 19.6). Every
+operational surface runs :data:`OPERATIONAL_BASELINE_PROMPT_SET`
+(``qwen3_6_27b``, the bespoke set for the canonical Featherless model), so a
+bare environment taking the 9B default is running a prompt family two
+generations behind the reports. The default VALUE stays — moving it would
+move committed prompt bytes — but the fallback is no longer quiet:
+:func:`resolve_prompt_set` emits a one-line stderr notice naming
+``AILIBI_PROMPT_SET`` and the baseline set whenever it falls back with no
+override present.
+
 The module-level wrapper callables render through the import-time process
 default :data:`_ENV` (selected by ``AILIBI_PROMPT_SET`` at import). Each also
 accepts an explicit ``environment`` so a caller can pin a specific set's
@@ -87,6 +97,7 @@ loader).
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
@@ -119,6 +130,41 @@ _PROMPTS_ROOT: Final[Path] = Path(__file__).resolve().parent
 DEFAULT_PROMPT_SET: Final[str] = "qwen3_5_9b"
 ENV_PROMPT_SET: Final[str] = "AILIBI_PROMPT_SET"
 
+# The set every operational surface actually runs (Task 19.6): the bespoke
+# 27B set recorded against the canonical Featherless model ``Qwen/Qwen3.6-27B``
+# (AGENTS.md §"Environment setup"; the baseline-6 recording env in
+# training/reports/report-finalist-eval.md is literally
+# ``AILIBI_LLM_PROVIDER=featherless AILIBI_PROMPT_SET=qwen3_6_27b``). It is NOT
+# the default — :data:`DEFAULT_PROMPT_SET` stays the frozen 9B set so every
+# committed render stays byte-identical (owner decision 2026-06-25) — but it is
+# named in the bare-environment notice below so a bare shell cannot quietly run
+# a prompt family two generations behind what the reports describe.
+OPERATIONAL_BASELINE_PROMPT_SET: Final[str] = "qwen3_6_27b"
+
+
+def _notify_bare_prompt_set_fallback() -> None:
+    """Emit the one-line bare-environment notice on stderr (Task 19.6).
+
+    Called from :func:`resolve_prompt_set` on the fallback path only. It is
+    deliberately unconditional — no "warn once" flag, because that would be
+    module-level mutable state (AGENTS.md §"No global state") — and stderr, not
+    stdout, so it never contaminates the machine-readable stdout the CLI
+    surfaces emit. The resolution points it rides are per-process or per-runner
+    (the import-time :data:`_ENV`, ``build_prompt_renderers``,
+    ``orchestrator.game.build_default_meeting_runner``,
+    ``training.realpath``'s manifest stamp), not per-turn.
+    """
+
+    print(
+        f"agents.strategic.prompts.loader: {ENV_PROMPT_SET} is unset — falling "
+        f"back to the frozen reference set {DEFAULT_PROMPT_SET!r}, two "
+        f"generations behind the operational baseline "
+        f"{OPERATIONAL_BASELINE_PROMPT_SET!r}; export "
+        f"{ENV_PROMPT_SET}={OPERATIONAL_BASELINE_PROMPT_SET} to run the "
+        f"baseline set.",
+        file=sys.stderr,
+    )
+
 
 def resolve_prompt_set(
     prompt_set: str | None = None,
@@ -131,12 +177,27 @@ def resolve_prompt_set(
     environment variable is consulted, defaulting to :data:`DEFAULT_PROMPT_SET`
     (the frozen 9B set) when unset or empty. The ``env`` argument lets tests
     select a set deterministically without mutating ``os.environ``.
+
+    The bare-environment path is LOUD (Task 19.6). The default value itself is
+    unchanged — it must stay :data:`DEFAULT_PROMPT_SET` for byte-identity with
+    every committed render — but taking it *without* an ``AILIBI_PROMPT_SET``
+    override now emits a one-line stderr notice naming the variable and
+    :data:`OPERATIONAL_BASELINE_PROMPT_SET`, because a bare shell otherwise
+    runs a prompt family two generations behind the operational baseline with
+    no signal at all. The notice fires on exactly one path: no explicit
+    ``prompt_set`` argument AND no non-empty ``AILIBI_PROMPT_SET``. An explicit
+    argument (a caller pinning its own set) and a set env var are both silent —
+    they are choices, not fallbacks.
     """
 
     if prompt_set is not None:
         return prompt_set
     environment = env if env is not None else os.environ
-    return environment.get(ENV_PROMPT_SET, "").strip() or DEFAULT_PROMPT_SET
+    selected = environment.get(ENV_PROMPT_SET, "").strip()
+    if selected:
+        return selected
+    _notify_bare_prompt_set_fallback()
+    return DEFAULT_PROMPT_SET
 
 
 def build_environment(
@@ -657,6 +718,7 @@ __all__ = [
     "ENV_PROMPT_SET",
     "IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE",
     "IMPOSTOR_REPORT_TEMPLATE",
+    "OPERATIONAL_BASELINE_PROMPT_SET",
     "VOTE_BALLOT_TEMPLATE",
     "PromptRenderers",
     "accusation_round_prompt",
