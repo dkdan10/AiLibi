@@ -2657,9 +2657,10 @@ class TacticalAgent:
         the other bespoke sets the split still rides the graph inertly. Fed
         from HERE, the one production builder, populating it keeps ``0.5 +
         sum(the eight fields) == suspicion`` on every live row (the belief
-        store's own invariant, on the STORED belief -- an entirely-soft row's
-        RENDERED scalar is gate-clamped below that sum, see Task 16.4 below),
-        so the 16.15 surface reads real hard/soft data rather than defaults.
+        store's own invariant, on the STORED belief -- an entirely-soft row
+        OVER the J1 ceiling renders its scalar clamped below that sum, while
+        one at or under 0.59 renders it unchanged; see Task 16.4 below), so
+        the 16.15 surface reads real hard/soft data rather than defaults.
 
         Task 16.4 (the J1 render clamp). The hard-evidence-gate lever is
         UNCONDITIONAL since the Task-16.17 baseline-5 record (was default-OFF at
