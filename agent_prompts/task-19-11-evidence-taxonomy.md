@@ -52,7 +52,7 @@ naming routes to the post-19 decision.
 **Definition of done:**
 - [ ] The classification is total over all committed bytes: a pin counts each category corpus-wide (samples + ml_corpus) and an unknown kind fails loud, never defaults.
 - [ ] The committed self-linked vent records render as role proof (no `p-X ↔ p-X` anywhere); weak-stamped flags are visually subordinated; the four mechanism fixtures exist with their seed/meeting anchors and one-line descriptions of what each demonstrates.
-- [ ] Role-disclosing guard chips (`teammate_coerced` in `rewrite_reasons`) render only in omniscient/reveal contexts — the audit information survives in the privileged view, never in fog (fixture-pinned both ways).
+- [ ] Role-disclosing guard chips (`teammate_coerced` in `rewrite_reasons`) render in OMNISCIENT perspective ONLY — never under as-agent fog, regardless of the outcome-reveal state (reveal governs outcome information, perspective governs current-frame knowledge, per the playback task's own semantics; a revealed outcome must not expose the impostor pairing through fog). Fixture-pinned in as-agent view under BOTH reveal states, plus the omniscient case.
 - [ ] The DTO change is additive; older fixtures parse; the fidelity fixture regenerates green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

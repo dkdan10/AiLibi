@@ -860,7 +860,7 @@ naming routes to the post-19 decision.
 **Definition of done:**
 - [ ] The classification is total over all committed bytes: a pin counts each category corpus-wide (samples + ml_corpus) and an unknown kind fails loud, never defaults.
 - [ ] The committed self-linked vent records render as role proof (no `p-X ↔ p-X` anywhere); weak-stamped flags are visually subordinated; the four mechanism fixtures exist with their seed/meeting anchors and one-line descriptions of what each demonstrates.
-- [ ] Role-disclosing guard chips (`teammate_coerced` in `rewrite_reasons`) render only in omniscient/reveal contexts — the audit information survives in the privileged view, never in fog (fixture-pinned both ways).
+- [ ] Role-disclosing guard chips (`teammate_coerced` in `rewrite_reasons`) render in OMNISCIENT perspective ONLY — never under as-agent fog, regardless of the outcome-reveal state (reveal governs outcome information, perspective governs current-frame knowledge, per the playback task's own semantics; a revealed outcome must not expose the impostor pairing through fog). Fixture-pinned in as-agent view under BOTH reveal states, plus the omniscient case.
 - [ ] The DTO change is additive; older fixtures parse; the fidelity fixture regenerates green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1932,7 +1932,7 @@ this file; the roadmap gets its tick.
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
 
 **Definition of done:**
-- [ ] The close's gate rerun is the WHOLE gate, not the default subset: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `scripts/fetch_evidence.sh` followed by `verify_ml_evidence --complete` (every archived hash verified, nothing absent) AND `verify_samples` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
+- [ ] The close's gate rerun is the WHOLE gate, not the default subset, invoked by the verifiers' ACTUAL paths: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `bash scripts/fetch_evidence.sh` followed by `uv run python scripts/verify_ml_evidence.py --complete` (every archived hash verified; a manifest-recorded LOST class accepted) AND `bash scripts/verify_samples.sh` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
 - [ ] The post-19 decision menu is framed from the committed 19.14 cells with a recommendation; the owner's ruling is recorded in the close audit.
 - [ ] The STATUS banner and roadmap reflect the close.
 - [ ] `uv run mypy .` passes.

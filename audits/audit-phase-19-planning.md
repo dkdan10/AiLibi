@@ -238,6 +238,13 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **Codex round 14 (2 findings)** — both reproduced and absorbed: the close's
+  verifier invocations use the actual script paths (`uv run python
+  scripts/verify_ml_evidence.py --complete`, `bash scripts/verify_samples.sh` — the
+  bare command forms did not exist), and the `teammate_coerced` guard chip is gated on
+  OMNISCIENT perspective only, never on outcome reveal (reveal governs outcomes;
+  perspective governs current-frame knowledge — a revealed outcome must not expose the
+  impostor pairing through as-agent fog), pinned under both reveal states.
 - **Codex round 13 (2 findings)** — both reproduced and absorbed: the error-field
   split's remaining consumers join 19.12 (`usePlayback.ts:302/:431-460` routes the
   URL-hydration clear to the replay-load error specifically; the two typed

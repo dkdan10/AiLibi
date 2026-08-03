@@ -36,7 +36,7 @@ this file; the roadmap gets its tick.
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
 
 **Definition of done:**
-- [ ] The close's gate rerun is the WHOLE gate, not the default subset: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `scripts/fetch_evidence.sh` followed by `verify_ml_evidence --complete` (every archived hash verified, nothing absent) AND `verify_samples` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
+- [ ] The close's gate rerun is the WHOLE gate, not the default subset, invoked by the verifiers' ACTUAL paths: `bash scripts/check.sh` AND `uv run pytest -m campaign` (the 19.27 opt-in tier) AND `bash scripts/fetch_evidence.sh` followed by `uv run python scripts/verify_ml_evidence.py --complete` (every archived hash verified; a manifest-recorded LOST class accepted) AND `bash scripts/verify_samples.sh` — all green at close HEAD with outputs quoted; every contract is verified-or-deviation-recorded in the ledger.
 - [ ] The post-19 decision menu is framed from the committed 19.14 cells with a recommendation; the owner's ruling is recorded in the close audit.
 - [ ] The STATUS banner and roadmap reflect the close.
 - [ ] `uv run mypy .` passes.
