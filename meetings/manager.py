@@ -1704,11 +1704,15 @@ class MeetingManager:
         # meeting scope -- not re-derived from the transcript); an emergency
         # call has no body-reporter, so the exculpation never applies there.
         # The belief fold receives the reporter for a body report and caps
-        # any soft lift landing on them; the render annotation is threaded
-        # for that same ballot. Both read the one
-        # ``reporter_exculpation_enabled`` resolver, which now hard-returns
-        # True, so an emergency call (a ``None`` reporter: belief fold no-op
-        # + no annotation) is the one ballot with no exculpation surface.
+        # any soft lift landing on them; the render annotation is THREADED
+        # for that same ballot, and whether it renders is the serving
+        # template's call (only the reporter-aware ``qwen3_32b`` v6 /
+        # ``qwen3_6_27b`` ballots read ``reporter_id``). Both halves read the
+        # one ``reporter_exculpation_enabled`` resolver, which now
+        # hard-returns True; an emergency call (``None`` reporter) is the one
+        # ballot where NEITHER half is armed -- no fold cap, no threaded
+        # annotation. A body report arms both, though each can be inert (no
+        # soft lift to cap; a reporter-unaware template).
         reporter_id = (
             trigger.triggered_by if not _trigger_is_emergency(trigger) else None
         )
