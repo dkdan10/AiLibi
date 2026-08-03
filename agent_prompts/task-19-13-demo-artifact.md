@@ -34,6 +34,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - frontend/src/api/client.ts; (the static-data seam only)
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
 - frontend/src/stories/BeliefMatrix.stories.tsx; (the :184-185 default claim — same sweep)
+- frontend/src/stories/ReplayBrowser.stories.tsx; (the :71 "common default" claim — same sweep)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)

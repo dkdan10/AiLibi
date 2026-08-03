@@ -106,7 +106,8 @@ Wave 2 (the spectator + the deduction instrument):
   (19.5, 19.6, 19.9) -> 19.10 (playback coherence) -> 19.11 (evidence taxonomy)
   (the 19.5 edge is api/schemas.py + generated-types serialization; the 19.6 edge is
    HighlightCard.tsx — the entry-card unspoiled gating follows the token fix)
-  (19.7, 19.10) -> 19.12 (frontend test baseline)
+  (19.7, 19.10, 19.11) -> 19.12 (frontend test baseline; the taxonomy edge is
+   MeetingView.stories serialization)
   (19.1, 19.9) -> 19.16 (reading guide — the demo path quotes 19.9's curation)
   (19.1, 19.9, 19.10, 19.12, 19.14, 19.16) -> 19.13 (README proof + static demo; the
    TournamentDashboard serialization edge plus the Playwright baseline — the bundle is
@@ -152,8 +153,11 @@ views (19.5/19.9/19.14) are recomputations from committed bytes, not records.
 19.24 (the report cells and DTO-version constant ride the same generated surfaces —
 BOTH generator artifacts regenerate together);
 `frontend/src/stories/TournamentDashboard.stories.tsx` 19.5 → 19.14 (the typed
-fixture); `frontend/src/stories/MeetingView.stories.tsx` 19.10 → 19.11 (finale field,
-then the contradiction category); `tests/api/test_leak.py` 19.5 → 19.14 (the field-set
+fixture); `frontend/src/stories/MeetingView.stories.tsx` 19.10 → 19.11 → 19.12 (finale field,
+the contradiction category, then the error-split fixture);
+`frontend/src/stories/MapStage.stories.tsx` 19.10 → 19.12;
+`frontend/src/hooks/usePlayback.ts` 19.10 (playback) → 19.12 (the error-selector
+routing only); `tests/api/test_leak.py` 19.5 → 19.14 (the field-set
 snapshot, twice); `api/routes/eval.py` 19.5 → 19.14 (the mirrored view);
 `frontend/src/App.tsx` 19.10 → 19.17;
 `frontend/src/api/client.ts` 19.9 → 19.13 → 19.24;
@@ -889,7 +893,7 @@ three categories, stop and record it as a finding — never add a silent OTHER b
 
 ### Task 19.12 — The frontend test baseline: Vitest, ESLint, one Playwright journey
 **Branch:** `phase-19-frontend-test-baseline`
-**Depends on:** 19.7, 19.10
+**Depends on:** 19.7, 19.10, 19.11 (the last is MeetingView.stories.tsx serialization — the taxonomy fixture lands before the error-split touches the same file)
 **Section refs:** audits/audit-phase-19-triage.md §7 item 13 [C]; frontend/package.json:6-14 (no test script); the two `eslint-disable` comments with no linter (frontend/src/components/MapView.tsx:329, AgentToken.tsx:142 — verified: no eslint config or dependency exists); frontend/src/store/replayStore.ts:445 + :488 (one error field, three meanings) [S-Claude — re-verified at HEAD]; frontend/src/lib/playback.ts (407 LOC of pure functions, the natural unit-test target)
 **Complexity:** Integration
 
@@ -917,11 +921,14 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/playwright.config.ts (new)
 - frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer at :358)
 - frontend/src/components/MindInspector.tsx; (same — verified consumer at :758)
+- frontend/src/hooks/usePlayback.ts; (ONLY the error-selector routing at :302/:431-460 — the URL-hydration clear keys off the REPLAY-LOAD error specifically after the split; 19.10's playback behavior is untouched)
+- frontend/src/stories/MeetingView.stories.tsx; (the typed store-state fixture seeds the split fields — :371)
+- frontend/src/stories/MapStage.stories.tsx; (same — :267)
 - .github/workflows/ci.yml
 - scripts/check.sh
 
 **Files NOT in scope:**
-- frontend/src/App.tsx + usePlayback.ts (19.10's files — tested here, not edited; if a race guard fix requires an edit there, coordinate as a follow-up, don't fold it in)
+- frontend/src/App.tsx (19.10's file — tested here, not edited; usePlayback.ts is IN scope above for the error-selector routing ONLY, never for playback behavior)
 - frontend/src/components/ (beyond the two named selector updates — behavior pinned, not changed)
 
 **Definition of done:**
@@ -979,6 +986,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - frontend/src/api/client.ts; (the static-data seam only)
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
 - frontend/src/stories/BeliefMatrix.stories.tsx; (the :184-185 default claim — same sweep)
+- frontend/src/stories/ReplayBrowser.stories.tsx; (the :71 "common default" claim — same sweep)
 - frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)

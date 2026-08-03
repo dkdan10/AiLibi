@@ -238,6 +238,12 @@ owner-chartered phase:
      (eval prose vs dashboard badge vs the 13.13 intent) stands and is still 19.5's
      work, but the contract is rewritten recount-first: measure the 87's cause mix from
      committed bytes, then re-doctrine to what the recount supports.
+- **Codex round 13 (2 findings)** — both reproduced and absorbed: the error-field
+  split's remaining consumers join 19.12 (`usePlayback.ts:302/:431-460` routes the
+  URL-hydration clear to the replay-load error specifically; the two typed
+  story-state fixtures seed the split fields; 19.12 gains the 19.11 edge for the
+  shared story file), and `ReplayBrowser.stories.tsx:71`'s "common default" claim
+  joins 19.13's closing sweep.
 - **Codex round 12 (4 findings)** — all reproduced and absorbed: the scope-gate
   exemption now matches the item's FILE PORTION (historical annotated/joined scope
   forms — 8.13, 9.4 — defeated exact membership; their prompts drop the constraint
