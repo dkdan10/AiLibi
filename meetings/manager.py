@@ -216,6 +216,45 @@ TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
     "[teammate target {target!r} coerced to SKIP] "
 )
 
+# Replacement ``rationale_text`` body recorded BEHIND
+# ``TEAMMATE_VOTE_TARGET_MARKER`` when the teammate firewall guard coerces a
+# ballot to SKIP (Task 19.15; audits/audit-phase-19-triage.md §7 item 16).
+# The model authored that rationale to justify the betrayal target, so it can
+# state the impostor's private knowledge outright ("p-3 is my partner", "I did
+# the kill") -- and the coerced ballot rides ``rationale_text`` straight onto
+# the spectator surface, where the marker is stripped to a chip and the
+# remainder renders as the voter's stated reason. Keeping that text is
+# omniscience leaking through the guard's own output, so the guard REPLACES it
+# rather than preserving it. Two properties are load-bearing:
+#
+# * the substitution is SELF-DECLARING -- a silent swap to plausible in-world
+#   prose would attribute a fabricated sentence to the model, which is the
+#   laundering this task exists to avoid;
+# * it names no role, no teammate, and no kill. The marker carries the
+#   auditable fact that the guard rewrote the target, and gating that
+#   marker's DISPLAY is a separate task (19.11, the display-side twin), so
+#   the note itself says only "the vote guard", never WHICH guard.
+#
+# BRACKETED, not parenthesized like ``DEFAULT_VOTE_RATIONALE``: the leading
+# ``[...]`` form is the repo's established "system text, not model voice"
+# shape, and ``eval.vj_instruments._strip_leading_markers`` drops exactly that
+# form before a ballot body enters the §2.5 echo / skeleton / distinct-n voice
+# fold. A parenthesized note would survive that strip and feed the SAME
+# guard-authored sentence into the model-voice diversity metrics on every
+# coerced ballot -- measuring the guard's prose as the model's. The bracket is
+# what keeps this synthetic body out of an instrument it was never model
+# output for. It carries no ``{...!r}`` payload, so it is not a marker: the
+# display-side parse (``api.replay_loader._parse_rewrite_reasons``) registers
+# no chip for it and leaves it as the ballot's clean body.
+#
+# Forward-looking only: committed replay bytes are frozen and unaffected (no
+# recorded ballot is rewritten), so this changes what a FUTURE recording
+# carries and nothing that already exists on disk.
+TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
+    "[rationale redacted by the vote guard; recorded reason: "
+    "no confident read this round]"
+)
+
 # Audit-trail marker prepended to ``rationale_text`` when the ballot-target
 # graph guard (Task 10.9.2; PR #147 finding F2) rewrites an eject ballot
 # whose target carries no over-gate rendered row. The seed-12 m0 shape:
@@ -1928,8 +1967,17 @@ class MeetingManager:
         # it. Coerce a ballot that targets a fellow impostor to SKIP so an
         # impostor can never supply the betrayal vote that ejects a teammate.
         # Deterministic, no RNG, and a no-op for a crewmate / sole impostor.
+        # ``model_rationale_text`` (Task 19.15) is the trusted provenance
+        # boundary for the coercion's rationale redaction: ``parsed`` is the
+        # ballot as the model returned it, so everything the chain has
+        # prepended since is this codebase's own audit text and is preserved,
+        # while the model's body -- which can name a teammate outright -- is
+        # replaced. Splitting on marker SHAPE instead would let a rationale
+        # that opens with marker-shaped prose smuggle that payload through.
         normalized = coerce_teammate_ballot_to_skip(
-            ballot=normalized, fellow_impostor_ids=participant.fellow_impostor_ids
+            ballot=normalized,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
+            model_rationale_text=parsed.rationale_text,
         )
         # Ballot-target graph guard (Task 10.9.2; PR #147 F2): an eject
         # ballot under a MUST-vote verdict must name a target whose
@@ -2926,10 +2974,105 @@ def drop_teammate_statement_target(
     return target
 
 
+# Every ballot marker interpolates its payload with ``{x!r}`` -- a Python repr
+# of a string, hence always quoted -- so a marker's untrusted part is exactly
+# its quoted literal. Matching a payload as a quoted literal (rather than
+# scanning for the marker's static tail) stays correct when the payload itself
+# contains that tail text. Mirrors ``api.replay_loader``'s
+# ``_MARKER_REPR_VALUE``; the two cannot share an implementation because
+# ``api`` imports ``meetings``, never the reverse.
+#
+# This pattern is applied ONLY to text already established as validator-written
+# by the provenance split in :func:`_preserved_ballot_markers` -- never to
+# model output. That ordering is the whole safety argument: pattern-matching
+# untrusted text is what let marker-shaped model prose pose as an audit marker.
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+
+# What a preserved marker's payload becomes on the redaction path (Task 19.15).
+# ``TurnId`` / ``ObservationId`` are bare ``str`` aliases, so a hallucinated
+# ``primary_reason_id`` is arbitrary MODEL text -- it can read "p-5 is my
+# partner" as easily as "m-1:turn-99". The marker around it is this codebase's,
+# but the payload inside it is not, so redacting the body while preserving the
+# payload verbatim would leave the same omniscience in the recorded rationale
+# through a narrower channel. Only the coercion path redacts payloads; an
+# uncoerced ballot keeps its markers whole, so the fabricated-id evidence stays
+# fully readable everywhere the leak does not apply.
+#
+# Written as a ``repr`` so the marker keeps the shape every consumer parses:
+# ``api.replay_loader``'s chip regex still matches a quoted literal, the
+# substring / prefix greps in ``eval`` are unaffected (they key on the static
+# head), and the class and count of the nulled citation survive -- only the
+# untrusted value is gone. It contains no ``]``, which would otherwise stop
+# ``eval.vj_instruments``'s leading-marker strip early and leak a fragment into
+# the voice fold.
+_REDACTED_MARKER_PAYLOAD: Final[str] = repr("(redacted)")
+
+
+def _preserved_ballot_markers(
+    rationale_text: str, model_rationale_text: str | None
+) -> str:
+    """The upstream audit markers a rationale redaction must carry across.
+
+    The ballot chain in :meth:`MeetingManager._collect_vote` runs both
+    citation-id validators BEFORE the teammate coercion, so a betrayal ballot
+    that also carried a hallucinated reason / observation id reaches the guard
+    with their markers already prepended. The Task 19.15 redaction removes
+    only the MODEL-authored body, so those markers are carried across:
+    dropping them would silently un-count nulled citations for every consumer
+    that reads markers straight off the recorded string
+    (``eval.vj_instruments``'s substring counts, ``api.replay_loader``'s
+    chips, ``eval.meeting_quality``'s prefix greps) -- laundering one guard's
+    audit trail through another's.
+
+    The split is by PROVENANCE, never by pattern. ``model_rationale_text`` is
+    the body as the model wrote it, before any validator ran; every marker in
+    the chain is a *prefix*, so the recorded rationale always ends with that
+    body and everything ahead of it was written by this codebase. Matching
+    marker-SHAPED text instead would hand the model a bypass: a rationale that
+    opens with a convincing ``[invalid primary_reason_id 'p-3 is my partner'
+    nulled]`` would be preserved as an audit marker -- carrying the omniscient
+    payload this redaction exists to remove, and inflating the nulled-citation
+    counts with a citation that was never nulled. A null id field is not proof
+    the validator wrote anything; the model may simply have cited nothing.
+
+    The markers are preserved as a CLASS, not verbatim: each one's quoted
+    payload is replaced with :data:`_REDACTED_MARKER_PAYLOAD`. The marker
+    text belongs to this codebase, but the id inside it is a raw model field
+    (``TurnId`` / ``ObservationId`` are bare ``str``), so a hallucinated
+    ``primary_reason_id`` reading "p-5 is my partner" would otherwise carry
+    the same omniscience into the record through a narrower channel than the
+    body this function exists to remove. Chip, class and count all survive;
+    only the untrusted value is dropped. Payload matching is safe HERE and
+    only here -- the provenance split has already established that this text
+    is validator-written, so there is nothing for a lookalike to spoof.
+
+    ``model_rationale_text`` is ``None`` for a caller with no trusted
+    boundary to offer (the guard is a pure function others may call
+    directly). Then NOTHING is preserved and the whole rationale is replaced
+    -- the safe direction, since over-redacting only loses audit detail while
+    under-redacting leaks the text this guard exists to suppress.
+    """
+
+    if model_rationale_text is None:
+        return ""
+    if not rationale_text.endswith(model_rationale_text):
+        # Structural invariant, not model input: every guard in the ballot
+        # chain PREPENDS its marker, so the model's body is always the
+        # suffix. A violation means the chain grew a rewrite that edits the
+        # body -- fail loud rather than guess where the markers end.
+        raise ValueError(
+            "ballot rationale does not end with the model-authored body; "
+            "the ballot chain must only prepend audit markers"
+        )
+    markers = rationale_text[: len(rationale_text) - len(model_rationale_text)]
+    return re.sub(_MARKER_REPR_VALUE, lambda _: _REDACTED_MARKER_PAYLOAD, markers)
+
+
 def coerce_teammate_ballot_to_skip(
     *,
     ballot: VoteBallot,
     fellow_impostor_ids: tuple[PlayerId, ...],
+    model_rationale_text: str | None = None,
 ) -> VoteBallot:
     """Coerce a ballot that targets a fellow impostor to ``SKIP``.
 
@@ -2939,24 +3082,62 @@ def coerce_teammate_ballot_to_skip(
     ejects a teammate. Returns ``ballot`` unchanged when
     ``fellow_impostor_ids`` is empty or the target is not a teammate;
     otherwise rewrites ``target`` to ``SKIP`` and prepends
-    :data:`TEAMMATE_VOTE_TARGET_MARKER` to ``rationale_text`` so the
-    original (teammate) target stays auditable in the replay record.
+    :data:`TEAMMATE_VOTE_TARGET_MARKER` to the rationale so the original
+    (teammate) target stays auditable in the replay record.
 
     The coercion also nulls ``primary_reason_id`` (DESIGN.md §5.5; audit
     gp-3): once the vote collapses to SKIP the reason id is stale (it was
     chosen to justify the betrayal target), so a coerced ballot that kept
     its now-meaningless reason id would corrupt the ballot-follows-chain
     instrument exactly as a hallucinated id does.
+
+    For the same reason the model-authored ``rationale_text`` is REPLACED
+    with :data:`TEAMMATE_COERCED_VOTE_RATIONALE` rather than preserved
+    (Task 19.15; audits/audit-phase-19-triage.md §7 item 16). That text was
+    written to justify the betrayal target, so it can state the impostor's
+    private knowledge outright ("p-3 is my partner", "I did the kill"), and
+    it rides the coerced ballot onto the spectator surface, where the
+    marker is stripped to a chip and the remainder renders as the voter's
+    stated reason -- omniscience leaking through the guard's own output.
+    EVERY audit marker survives the redaction, not just this guard's:
+    auditability is never laundered. The redaction removes the model's body
+    and nothing else -- markers the upstream ballot chain already prepended
+    (a nulled ``primary_reason_id`` / ``primary_reason_observation_id``) are
+    carried across by :func:`_preserved_ballot_markers`, so a coerced ballot
+    still reports its nulled citations to every downstream marker consumer.
+    That split is by PROVENANCE: pass ``model_rationale_text`` -- the body
+    as the model wrote it, before any validator ran -- and everything ahead
+    of it in ``ballot.rationale_text`` is by construction this codebase's
+    own text. Omit it (the default) and nothing is preserved: the whole
+    rationale is replaced, which loses audit detail but can never leak
+    model text. Never split on marker SHAPE; a rationale that opens with
+    convincing marker-shaped prose would otherwise smuggle exactly the
+    payload this guard removes. The replacement body is itself a
+    self-declaring substitution note, never fabricated in-world prose
+    attributed to the model. This is the guard-originated TEXT class only;
+    model-originated fourth-wall statements elsewhere in a transcript are a
+    separate concern (measured and disclosed, not rewritten), and the
+    display-side gating of the ``teammate_coerced`` chip is Task 19.11's.
+
+    **Dormant for committed bytes.** No recorded replay is rewritten: the
+    committed corpus is frozen and this guard runs only while a meeting is
+    being collected, so the redaction changes what a FUTURE recording's
+    coerced ballots carry and nothing that already exists on disk.
     """
 
     if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
         return ballot
     marker = TEAMMATE_VOTE_TARGET_MARKER.format(target=ballot.target)
+    upstream_markers = _preserved_ballot_markers(
+        ballot.rationale_text, model_rationale_text
+    )
     return ballot.model_copy(
         update={
             "target": _SKIP_TARGET,
             "primary_reason_id": None,
-            "rationale_text": marker + ballot.rationale_text,
+            "rationale_text": (
+                marker + upstream_markers + TEAMMATE_COERCED_VOTE_RATIONALE
+            ),
         }
     )
 
@@ -3791,6 +3972,7 @@ __all__ = [
     "OPENING_UNSURE_DEGRADE_MARKER",
     "OPENING_UNSURE_MARKER",
     "OPENING_UNSURE_MAX_FREE_TEXT_CHARS",
+    "TEAMMATE_COERCED_VOTE_RATIONALE",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "UNCITED_ZERO_FLAG_EJECT_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
