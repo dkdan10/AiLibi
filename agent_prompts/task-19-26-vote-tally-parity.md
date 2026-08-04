@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, the architecture rou
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 19.26 — Vote-tally parity (consolidation optional), anchored to audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1956-2004 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only. Do not implement work outside these references.
+Implement Task 19.26 — Vote-tally parity (consolidation optional), anchored to audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1978-2028 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-vote-tally-parity`
 **Depends on:** 19.15
-**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1956-2004 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
+**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1978-2028 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
 **Complexity:** Medium
 
 The ejection rule the game applies and the one eval re-checks live in two
@@ -76,4 +76,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-19-vote-tally-parity` with a title like `task 19.26: vote-tally parity (consolidation optional)`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1956-2004 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1978-2028 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

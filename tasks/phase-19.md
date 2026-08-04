@@ -22,7 +22,7 @@ are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at charte
    behavior (the prompt byte-golden pins them): **no edits to any game prompt template
    anywhere in this phase** — the prompt-side evidence-flag naming routes to the post-19
    decision (decision 6 below). All five bespoke bake-off sets are LIVE (registered in
-   `orchestrator/game.py:343-350`, parametrically validated by
+   `orchestrator/game.py:346-357`, parametrically validated by
    `tests/agents/test_bespoke_prompt_sets.py`) — the source audits' deletion candidacy
    is refuted and no prompt-set directory is deleted. The agent-dispatch template
    (`scripts/prompt_template.md.j2`) is not a game template; its authority line was
@@ -739,7 +739,7 @@ featured list and pin that agreement.
 ### Task 19.10 — Playback coherence: the meeting pause, the unspoiled mode, the finale card
 **Branch:** `phase-19-playback-coherence`
 **Depends on:** 19.5, 19.6, 19.9 (the 19.5 edge is api/schemas.py + generated-types serialization; the 19.6 edge is HighlightCard.tsx serialization)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1188-1195 (the loader's own deliberate-mix comment)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 11 [S-Codex; VERIFIED §8 row 10]; frontend/src/hooks/usePlayback.ts:40 (500 ms base cadence), :304-331 (auto-advance), :333-382 (auto-follow selects a meeting on its single frame and clears it on the next — :366/:376); frontend/src/App.tsx:290 (the header renders `meta.winner` unconditionally), :366-489 (RosterRail mixes pre-ejection `agent_states` with post-ejection `advantage` counts); api/replay_loader.py:1200-1207 (the loader's own deliberate-mix comment)
 **Complexity:** Integration
 
 The app's core content cannot be consumed on the default Play path: a meeting gets one
@@ -786,7 +786,7 @@ resolving the deliberate mix the loader documents.
 **Definition of done:**
 - [ ] Default Play on a featured replay pauses at each meeting, resumes on demand, and ends on the finale card; outcome reveal is a store state INDEPENDENT of perspective, defaults off for every replay (the per-replay perspective reset does not re-reveal — pinned), and no outcome-derived surface renders without it: header, finale, entry-card outcome copy (win shape/ejection counts included), outcome filters (spoiler-warned), and URL state.
 - [ ] Meeting-tick frames expose explicit pre/post-resolution semantics (fixture-pinned through the loader: the roster a meeting deliberates over and the advantage after its result are never conflated in one unlabeled frame).
-- [ ] The stale 4p1i-default claims in this task's files are swept post-flip: `api/replay_loader.py:800/:2755-2759` and `api/schemas.py:1000-1001` (this task depends on the flip, so the sweep lands ordered).
+- [ ] The stale 4p1i-default claims in this task's files are swept post-flip: `api/replay_loader.py:812` (the `rubric()` docstring's "4p1i default" line) and `api/schemas.py:1000-1001`; the third pre-flip claim, `default_set()`'s docstring, was already rewritten by 19.9 itself (this task depends on the flip, so the sweep lands ordered).
 - [ ] HighlightCard's rubric score badge (:69-82) carries the narrow internal-heuristic label, and its stale "4p1i default" comments (:16-17, :33) are rewritten post-flip (19.9's rules, applied here because this task owns the file and depends on 19.9).
 - [ ] The DTO additions are additive (existing committed fixtures still parse; the fidelity fixture regenerates green).
 - [ ] `uv run mypy .` passes.
@@ -821,7 +821,7 @@ the DTO change is additive-only so older committed fixtures keep parsing.
 ### Task 19.11 — The evidence taxonomy: proof is not a contradiction
 **Branch:** `phase-19-evidence-taxonomy`
 **Depends on:** 19.10
-**Section refs:** audits/audit-phase-19-triage.md §7 item 12 [S-Codex/S-Claude; §8 rows 10, 14] + item 20 (the four mechanisms preserved as separate fixtures); meetings/schemas.py:442-456 (vent_sighting: "both event ids reference the SAME spoken observation"); meetings/transcript.py:2878-2906 (the self-linked emission); frontend/src/components/MeetingView.tsx:303-385 with :348 (every flag rendered `A ↔ B`, so grounded vent proof shows as `p-X ↔ p-X` under "Contradictions"); the traced injustice exhibits (§8 row 14: seed 17 M0, seed 47; plus seed 12 M0, seed 23 M1, 4p1i seeds 41/49)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 12 [S-Codex/S-Claude; §8 rows 10, 14] + item 20 (the four mechanisms preserved as separate fixtures); meetings/schemas.py:442-456 (vent_sighting: "both event ids reference the SAME spoken observation"); meetings/transcript.py:2857-2917 (the self-linked emission; `event_a_id = event_b_id` at :2909-2910); frontend/src/components/MeetingView.tsx:303-385 with :348 (every flag rendered `A ↔ B`, so grounded vent proof shows as `p-X ↔ p-X` under "Contradictions"); the traced injustice exhibits (§8 row 14: seed 17 M0, seed 47; plus seed 12 M0, seed 23 M1, 4p1i seeds 41/49)
 **Complexity:** Integration
 
 A grounded vent sighting is role proof, not a contradiction — but the schema carries it
@@ -1094,7 +1094,7 @@ only when the accused was votable) — write the definition first, then count.
 ### Task 19.15 — Guard-rationale redaction (the dormant path)
 **Branch:** `phase-19-guard-rationale`
 **Depends on:** 19.2
-**Section refs:** audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1906-1913 (the call site) + :2893-2925 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2923, preserving omniscient teammate/self-kill text)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1926-1933 (the call site) + :2929-2961 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2959, preserving omniscient teammate/self-kill text)
 **Complexity:** Small
 
 When the vote guard coerces a teammate ballot to SKIP, the preserved rationale can say
@@ -1306,7 +1306,7 @@ the mechanism, not just the name.
 ### Task 19.19 — The retirements + the dead-code sweep (consumer-verified)
 **Branch:** `phase-19-retirements`
 **Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge; 19.6 the tests/llm/test_client.py edge)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:343-350; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
+**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:346-357; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
 Implement the tier map's RETIRE column plus the verified dead-code list, one deletion at
@@ -1328,7 +1328,7 @@ the schema's own defensive tests (the round-trip and invalid-proof cases current
 inside the deleted `test_realpath.py:4434` region) MOVE into a surviving
 `tests/training/test_realpath_schema.py` rather than dying with the campaign tests — the
 committed rankings' row contract survives the campaign machinery, validators and all. The `first_meeting` removal updates ALL its test constructors
-(test_env.py:227-239, test_env_fast_path.py:141-154, test_rewards.py:115 — verified
+(test_env.py:227-239, test_env_fast_path.py:141-154, test_rewards.py:124 — verified
 list), and the cache deletion removes `llm/README.md`'s advertisement of the module
 (:20-21) so 19.1's rewritten README does not point at a deleted API; the `first_meeting` episode
 boundary (env + rollout plumbing; tests-only consumer); the stale crew-dir CLI
@@ -1629,7 +1629,7 @@ samples if the full walk exceeds that budget, with the sampling disclosed in out
 ### Task 19.24 — Boundary hardening: the leak-scan library, `moved_players`, `intent.actor`, the API factory, DTO versions
 **Branch:** `phase-19-boundary-hardening`
 **Depends on:** 19.2, 19.11, 19.12, 19.13, 19.14, 19.19 (the 19.12 edge: the client-side rejection test needs the vitest baseline to exist)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2024-2033 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 26 [S-Claude/S-Codex; §8 row 16; the DTO cast and the CWD import re-verified at HEAD: frontend/src/api/client.ts:51 (`data as T`), api/main.py:24-27 (CWD-relative fallbacks) + :188 (module-scope `create_app()`)]; eval/leak_test.py:9 (module-level pytest import) + :719 (`scan_factory_packets`) + training/bakeoff/harness.py:107 (the champion-gate path importing a pytest module); observation/service.py:458-506 (`_moved_players_for_agent` — the one packet channel with ZERO leak-suite coverage, whose docstring narrates a prior gating bug); orchestrator/game.py:2035-2044 (no `intent.actor` validation); frontend/src/types/api.ts:25 (`viewModelVersion: string`)
 **Complexity:** Integration
 
 Five hardening moves on the project's trust boundaries. (a) Promote the packet scanners
@@ -1798,7 +1798,7 @@ the same contract (coordination notes the split) rather than letting the branch 
 ### Task 19.26 — Vote-tally parity (consolidation optional)
 **Branch:** `phase-19-vote-tally-parity`
 **Depends on:** 19.15
-**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1956-2004 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
+**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1978-2028 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
 **Complexity:** Medium
 
 The ejection rule the game applies and the one eval re-checks live in two
@@ -1844,7 +1844,7 @@ delete the call site.
 ### Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens
 **Branch:** `phase-19-test-structure`
 **Depends on:** 19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:45-46 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines)
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:50-51 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines)
 **Complexity:** Medium
 
 The gate's structure work, driven by the tier map. Register markers (`slow`, `campaign`,

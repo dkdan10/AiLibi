@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, the architecture rou
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 19.15 — Guard-rationale redaction (the dormant path), anchored to audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1906-1913 (the call site) + :2893-2925 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2923, preserving omniscient teammate/self-kill text). Do not implement work outside these references.
+Implement Task 19.15 — Guard-rationale redaction (the dormant path), anchored to audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1926-1933 (the call site) + :2929-2961 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2959, preserving omniscient teammate/self-kill text). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-guard-rationale`
 **Depends on:** 19.2
-**Section refs:** audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1906-1913 (the call site) + :2893-2925 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2923, preserving omniscient teammate/self-kill text)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1926-1933 (the call site) + :2929-2961 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2959, preserving omniscient teammate/self-kill text)
 **Complexity:** Small
 
 When the vote guard coerces a teammate ballot to SKIP, the preserved rationale can say
@@ -67,4 +67,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-19-guard-rationale` with a title like `task 19.15: guard-rationale redaction (the dormant path)`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1906-1913 (the call site) + :2893-2925 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2923, preserving omniscient teammate/self-kill text)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 item 16 [S-Codex; mechanism confirmed by the triage's partner-phrase counts and re-verified at HEAD]; meetings/manager.py:1926-1933 (the call site) + :2929-2961 (`coerce_teammate_ballot_to_skip` — rewrites the target, prepends a marker, and KEEPS `ballot.rationale_text` at :2959, preserving omniscient teammate/self-kill text)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
