@@ -404,6 +404,33 @@ class AdvantageView(_FrozenView):
     advantage: float
 
 
+class MeetingResolutionView(_FrozenView):
+    """Explicit pre/post-resolution labeling for a RESOLVED meeting's tick frame
+    (Task 19.10; audits/audit-phase-19-triage.md §7 item 11).
+
+    A meeting :class:`TickView` carries two vintages of the same tick at once.
+    Its ``agent_states`` / ``events`` / ``tasks_*_total`` are the **PRE**-resolution
+    state — the roster the meeting deliberates over, in which an about-to-be-ejected
+    player is still alive — while ``TickView.advantage`` is recomputed from the
+    **POST**-resolution state so the win-progress trajectory carries the meeting's
+    outcome (the decisive inflection; see ``api.replay_loader._walk``). Before this
+    view the two vintages were conflated in one unlabeled frame and every consumer
+    had to re-derive which half it was reading. ``pre_advantage`` is the same
+    tick's advantage BEFORE the meeting's result applied, so both vintages are now
+    present and named rather than mixed.
+
+    ``None`` on every non-meeting frame AND on an unresolved (partial-replay)
+    meeting frame, whose ``advantage`` never got the post-resolution rewrite and is
+    therefore purely pre-resolution. ``ejected_player_id`` mirrors
+    :attr:`MeetingView.ejected_player_id` (``None`` for a SKIPPED meeting) so the
+    frame is self-describing without a client-side join against ``meetings``.
+    """
+
+    meeting_id: str
+    ejected_player_id: str | None
+    pre_advantage: AdvantageView
+
+
 class TickView(_FrozenView):
     """One reconstructed tick of a replay.
 
@@ -431,6 +458,10 @@ class TickView(_FrozenView):
     bodies: tuple[BodyView, ...]
     sabotage: SabotageDetailView | None
     advantage: AdvantageView
+    # Task 19.10: the pre/post-resolution label for a RESOLVED meeting frame (see
+    # :class:`MeetingResolutionView`). Additive and defaulted so every payload
+    # serialized before 19.10 still parses; ``None`` on every other frame.
+    meeting_resolution: MeetingResolutionView | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -854,6 +885,99 @@ class SuspicionGraphView(_FrozenView):
 
 
 # ---------------------------------------------------------------------------
+# Finale DTOs (Task 19.10) — the recorded outcome as one composed view
+# ---------------------------------------------------------------------------
+
+
+class FinaleEventView(_FrozenView):
+    """One decisive beat on the road to the recorded outcome (Task 19.10).
+
+    Shadows the recorded engine kill events and meeting records; composed
+    server-side so the finale is ONE view rather than a client-side join over
+    ``ticks[*].events`` and ``meetings``. ``actor_id`` is the killer (kill) or the
+    player who triggered the meeting (ejection / skipped meeting); ``subject_id``
+    is the victim (kill) or the ejected player (ejection). Both are ``None`` on
+    the terminal ``game_end`` beat, which exists so the card can name the tick the
+    game actually ended on even when nothing else happened there.
+    """
+
+    tick: int
+    kind: Literal["kill", "ejection", "meeting_skipped", "game_end"]
+    actor_id: str | None
+    subject_id: str | None
+
+
+class FinaleAgentRecapView(_FrozenView):
+    """One agent's compact "what they knew vs the truth" recap row (Task 19.10).
+
+    Pairs ground truth (``role``, ``alive_at_end``) with the recorded
+    decision-level evidence of what the agent believed: their ballot in the LAST
+    meeting of the game. ``final_vote_target`` is ``"SKIP"`` or a player id, and
+    ``None`` when the game held no meetings or the agent cast no ballot in the
+    last one (they were already dead, or the meeting predates their death).
+    ``final_vote_named_impostor`` is ``None`` when there is no vote or the vote was
+    ``"SKIP"``; otherwise it is whether the target's TRUE role is ``IMPOSTOR``.
+
+    Ballot-derived on purpose. Per-agent beliefs are only reconstructed on the
+    separate, expensive memory walk (``ReplayLoader.belief_frames``), whereas
+    ballots are recorded bytes already available on the bulk load path — so the
+    finale costs nothing extra per ``GET /replays/{game_id}``. The trade-off is
+    that this is *decision*-level truth, not *belief*-level; the Belief × Truth
+    surface (:class:`BeliefFrameView`) remains the belief-level view.
+
+    ``final_vote_rewritten`` marks the one case where the recorded target is NOT
+    evidence of the voter's belief: the meeting layer rewrote the ballot's
+    target (an under-gate redirect, a teammate/uncited coercion, an
+    invalid-target normalization, or a whole-ballot parse default — the audit
+    markers the loader already parses into ``BallotView.rewrite_reasons``).
+    ``final_vote_target`` then documents the TALLIED vote, not the authored
+    choice — the recorded rationale can explicitly oppose it — so
+    ``final_vote_named_impostor`` is ``None`` for a rewritten ballot: judging
+    "did they name an impostor" against a target the engine chose would invert
+    the agent's actual reasoning (e.g. the committed 9p2i seed 22, where p-5's
+    intended target was redirected). Citation-only rewrites (a nulled reason /
+    observation id) leave the authored target intact and do NOT set this flag.
+    """
+
+    agent_id: str
+    role: Literal["CREWMATE", "IMPOSTOR"]
+    alive_at_end: bool
+    final_vote_target: str | None
+    final_vote_named_impostor: bool | None
+    # Task 19.10 (review): additive and defaulted so pre-existing serialized
+    # payloads still parse; ``False`` for an authored (or absent) ballot.
+    final_vote_rewritten: bool = False
+
+
+class GameFinale(_FrozenView):
+    """The game's resolution as one additive view (Task 19.10).
+
+    Winner, win reason, the recorded final tick, the decisive events, and the
+    per-agent recap — everything the finale card renders, composed once
+    server-side. Built from the recorded ``game_over`` row and the recorded
+    meeting records (shadowing ``orchestrator.replay.GameEndReplayEntry``) and
+    NEVER re-validated against re-walked state: recorded bytes are authoritative
+    (a direct-``ReplayLog`` writer may legitimately stamp a winner onto a
+    non-terminal state, as the codegen fidelity fixture does).
+
+    ``winner_reason`` stays a plain ``str`` rather than the four-value
+    ``engine.win_conditions.WinResultType`` literal: fixtures and pre-Phase-14
+    recordings carry other strings (e.g. ``"all_tasks_complete"``), and this DTO
+    shadows what was recorded, not what the current engine would emit.
+
+    ``None`` on :class:`ReplayView` for a partial replay with no ``game_over`` row
+    (a crashed / tick-budget-exhausted run) — the game has no recorded outcome, so
+    there is no finale to show.
+    """
+
+    winner: Literal["CREWMATES", "IMPOSTORS"]
+    winner_reason: str
+    final_tick: int
+    decisive_events: tuple[FinaleEventView, ...]
+    agent_recaps: tuple[FinaleAgentRecapView, ...]
+
+
+# ---------------------------------------------------------------------------
 # Replay-level DTOs
 # ---------------------------------------------------------------------------
 
@@ -952,6 +1076,10 @@ class ReplayView(_FrozenView):
     ticks: tuple[TickView, ...]
     meetings: tuple[MeetingView, ...]
     failed_calls: tuple[FailedCallView, ...]
+    # Task 19.10: the composed outcome view (see :class:`GameFinale`). Additive
+    # and defaulted so every payload serialized before 19.10 still parses;
+    # ``None`` for a partial replay with no recorded ``game_over`` row.
+    finale: GameFinale | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -997,10 +1125,11 @@ class RubricGameView(_FrozenView):
 class RubricView(_FrozenView):
     """The per-set rubric surface served at ``/eval/rubric`` (DESIGN.md §3.1, §7).
 
-    The rubric is **per-set** (the 9p2i target set carries one; the default 4p1i
-    set has none → 404 / empty state) and **staleness-guarded**: ``git_head`` is
-    the commit the rubric was scored at, ``manifest_sha`` is the commit the
-    served set's replays were recorded at (read from its ``MANIFEST.md``), and
+    The rubric is **per-set** (the default 9p2i target set carries one; the 4p1i
+    fast technical fixture, served only via an explicit ``?set=4p1i``, ships none
+    → 404 / empty state) and **staleness-guarded**: ``git_head`` is the commit
+    the rubric was scored at, ``manifest_sha`` is the commit the served set's
+    replays were recorded at (read from its ``MANIFEST.md``), and
     ``stale`` is ``True`` when they disagree (the rubric was scored against a
     different code/replay version than the set on disk). ``per_game`` is sorted
     best-first by the scorer, so the Highlights reel renders it directly.
@@ -1036,11 +1165,15 @@ __all__ = [
     "EvalCostSummaryView",
     "FailedCallEvalView",
     "FailedCallView",
+    "FinaleAgentRecapView",
+    "FinaleEventView",
     "FoundBodyObsView",
+    "GameFinale",
     "GateView",
     "KillEventView",
     "LLMCallView",
     "MapLayoutView",
+    "MeetingResolutionView",
     "MeetingTriggeredEventView",
     "MeetingView",
     "PlayerView",

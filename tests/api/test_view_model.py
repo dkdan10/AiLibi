@@ -59,7 +59,11 @@ from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET, tally_ballots
 from observation.service import ObservationService
 from orchestrator.seeder import seed_initial_state
-from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
+from tests.api.fixtures.sample_replay import (
+    write_meeting_replay,
+    write_partial_replay,
+    write_sample_replay,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE_P_TWO_I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -564,8 +568,12 @@ def test_advantage_reflects_post_meeting_ejection(
     # meeting tick the advantage frame is recomputed from the POST-resolution
     # state, so the ejected player is not counted even though the tick's
     # agent_states (the meeting roster) still show them alive.
-    # Task 13.12 redistribute re-record: seed-12 no longer ejects (all SKIP);
-    # re-pointed to seed-16, which carries an EJECTED meeting on the new bytes.
+    # Task 13.12 re-pointed this pin from seed-12 to seed-16. (The re-point's
+    # original premise — "seed-12 no longer ejects, all SKIP" — is stale on the
+    # bytes committed since: seed-12 ejects the crewmate p-3 at tick 7 and skips
+    # at tick 15. seed-16 stays the anchor because Task 19.10 uses seed-12 as the
+    # NON-meeting-final-frame control below, and reusing it here would couple the
+    # two.)
     replay = nine_p_two_i_loader.load_replay("headless-seed-16")
     ejection = next(m for m in replay.meetings if m.outcome == "EJECTED")
     tick = next(t for t in replay.ticks if t.tick == ejection.tick)
@@ -580,6 +588,304 @@ def test_advantage_reflects_post_meeting_ejection(
         if a.is_alive and a.agent_id != ejection.ejected_player_id
     )
     assert tick.advantage.crew_alive + tick.advantage.impostors_alive == expected_alive
+
+    # Task 19.10: that mix is no longer implicit. The same frame now LABELS both
+    # vintages — ``meeting_resolution`` names the meeting and its ejected player
+    # and carries the frame's pre-resolution advantage, while ``advantage`` stays
+    # the post-resolution one asserted above. The label is additive: every
+    # assertion above still describes the same, unchanged fields.
+    resolution = tick.meeting_resolution
+    assert resolution is not None, "a resolved meeting frame must be labeled"
+    assert resolution.meeting_id == ejection.meeting_id
+    assert resolution.ejected_player_id == ejection.ejected_player_id
+    alive_in_states = sum(1 for a in tick.agent_states if a.is_alive)
+    pre = resolution.pre_advantage
+    assert pre.crew_alive + pre.impostors_alive == alive_in_states
+    assert (
+        tick.advantage.crew_alive + tick.advantage.impostors_alive
+        == alive_in_states - 1
+    )
+
+
+def test_non_meeting_frames_carry_no_resolution_label(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """``meeting_resolution`` is ``None`` off a resolved meeting frame (19.10).
+
+    The label means "this frame mixes two vintages"; a frame that resolved
+    nothing must not claim one. seed-12 is the control because it ends on a KILL
+    at tick 19, not on a meeting (its meetings sit at ticks 7 and 15), so the
+    last frame — the one the finale card renders over — is unlabeled.
+    """
+
+    replay = nine_p_two_i_loader.load_replay("headless-seed-12")
+    meeting_ticks = {meeting.tick for meeting in replay.meetings}
+    assert replay.ticks[-1].tick not in meeting_ticks, (
+        "seed-12 must not end on a meeting"
+    )
+    assert replay.ticks[-1].meeting_resolution is None
+    labeled = {t.tick for t in replay.ticks if t.meeting_resolution is not None}
+    assert labeled == meeting_ticks, "exactly the resolved meeting frames are labeled"
+
+
+# ---------------------------------------------------------------------------
+# Game finale: the recorded outcome composed server-side (Task 19.10)
+# ---------------------------------------------------------------------------
+
+
+def test_finale_pins_committed_eject_decided_game(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """The finale is built from the recorded bytes of an eject-decided game.
+
+    seed-1 is the cheapest CREWMATE_EJECT game in the committed 9p2i set (13
+    recorded ticks, two meetings, both ejecting a real impostor) and it ends ON
+    its decisive meeting — so one load pins the winner, the recorded end tick,
+    the decisive-beat ordering, and the alive-at-end correction across the
+    labeled pre/post mix at the same time (Task 19.10;
+    audits/audit-phase-19-triage.md §7 item 11).
+
+    ``final_tick`` is the recorded ``game_over`` tick (12), NOT
+    ``metadata.total_ticks`` (13, a count of recorded ROWS) — the two differ by
+    one here, which is exactly why 19.10 had to start retaining it.
+    """
+
+    replay = nine_p_two_i_loader.load_replay("headless-seed-1")
+    finale = replay.finale
+    assert finale is not None
+    assert finale.winner == "CREWMATES"
+    assert finale.winner_reason == "CREWMATE_EJECT"
+    assert finale.final_tick == 12
+    assert replay.metadata.total_ticks == 13, "the row count is a different number"
+
+    # Ascending tick; within tick 12 the ejection precedes the terminal beat.
+    assert [
+        (e.tick, e.kind, e.actor_id, e.subject_id) for e in finale.decisive_events
+    ] == [
+        (5, "kill", "p-6", "p-3"),
+        (7, "kill", "p-7", "p-4"),
+        (8, "ejection", "p-8", "p-6"),
+        (12, "ejection", "p-1", "p-7"),
+        (12, "game_end", None, None),
+    ]
+
+    recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
+    assert [r.agent_id for r in finale.agent_recaps] == sorted(recaps)
+    assert set(recaps) == {p.agent_id for p in replay.players}
+    # Ground truth: both impostors were ejected, which is how the crew won. p-7's
+    # row is the one that proves the alive-at-end correction — it is ejected ON
+    # the final frame, whose agent_states (pre-resolution) still show it alive.
+    for impostor in ("p-6", "p-7"):
+        assert recaps[impostor].role == "IMPOSTOR"
+        assert recaps[impostor].alive_at_end is False
+    assert any(
+        a.is_alive and a.agent_id == "p-7" for a in replay.ticks[-1].agent_states
+    )
+
+    # Belief side: the last meeting's ballots. Everyone who voted named p-7, a
+    # real impostor; p-7 skipped, which names nobody (None, not False).
+    assert recaps["p-1"].final_vote_target == "p-7"
+    assert recaps["p-1"].final_vote_named_impostor is True
+    assert recaps["p-7"].final_vote_target == "SKIP"
+    assert recaps["p-7"].final_vote_named_impostor is None
+    # p-3 died at tick 5, long before the last meeting — no ballot to recap.
+    assert recaps["p-3"].final_vote_target is None
+    assert recaps["p-3"].final_vote_named_impostor is None
+
+
+def test_finale_pins_committed_wrong_ejection_game(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """The contrast case: an impostor win decided by a WRONG ejection.
+
+    seed-47 ejects the crewmate p-8 at tick 33 and hands the impostors parity —
+    zero impostors are ejected all game. It is the exhibit that makes the recap's
+    "what they knew vs the truth" split legible (every living voter named p-8, a
+    crewmate → ``final_vote_named_impostor`` is ``False``, not ``None``), and the
+    reason the finale must be reveal-gated on the frontend at all.
+    """
+
+    replay = nine_p_two_i_loader.load_replay("headless-seed-47")
+    finale = replay.finale
+    assert finale is not None
+    assert finale.winner == "IMPOSTORS"
+    assert finale.winner_reason == "IMPOSTOR_PARITY"
+    assert finale.final_tick == 33
+
+    ejections = [e for e in finale.decisive_events if e.kind == "ejection"]
+    assert [(e.tick, e.subject_id) for e in ejections] == [(33, "p-8")]
+    # Both earlier meetings resolved without an ejection and are recorded as
+    # such — a skipped meeting is a decisive beat too (it is why nobody left).
+    assert [e.tick for e in finale.decisive_events if e.kind == "meeting_skipped"] == [
+        7,
+        14,
+    ]
+
+    recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
+    assert recaps["p-8"].role == "CREWMATE"
+    assert recaps["p-8"].alive_at_end is False
+    assert recaps["p-1"].final_vote_target == "p-8"
+    assert recaps["p-1"].final_vote_named_impostor is False
+    # An authored ballot: the meeting layer rewrote nothing on this one.
+    assert recaps["p-1"].final_vote_rewritten is False
+    # Neither impostor was ever ejected; both survive to the end.
+    assert all(recaps[pid].alive_at_end is True for pid in ("p-1", "p-9"))
+
+
+def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """A REWRITTEN ballot is flagged and never judged as belief (Task 19.10
+    review).
+
+    seed-22's last meeting records p-5's ballot with the ``under_gate_redirect``
+    audit marker: the authored target was redirected to the tallied ``p-7``, and
+    the recorded rationale explicitly OPPOSES p-7's ejection ("the herd is wrong
+    to eject p-7"). Presenting that target under "what they knew" — worse,
+    stamping it "named an impostor" — would invert the agent's recorded
+    reasoning, so the recap carries ``final_vote_rewritten=True`` and a ``None``
+    judgment for it, while an unmarked co-voter on the same meeting keeps the
+    ordinary ``True`` judgment. Only TARGET-rewriting markers set the flag
+    (``_TARGET_REWRITE_LABELS``); a citation-only rewrite leaves the authored
+    target intact and stays unflagged.
+    """
+
+    replay = nine_p_two_i_loader.load_replay("headless-seed-22")
+    last = replay.meetings[-1]
+    redirected = next(b for b in last.ballots if b.voter == "p-5")
+    assert "under_gate_redirect" in redirected.rewrite_reasons
+    assert redirected.target == "p-7"
+
+    finale = replay.finale
+    assert finale is not None
+    recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
+    # The rewritten ballot: tallied target shown, flagged, judgment withheld.
+    assert recaps["p-5"].final_vote_target == "p-7"
+    assert recaps["p-5"].final_vote_rewritten is True
+    assert recaps["p-5"].final_vote_named_impostor is None
+    # An unmarked co-voter on the SAME ballot sheet keeps the judgment: p-4 also
+    # voted p-7 (an impostor — the ejection was right), authored and unflagged.
+    assert recaps["p-4"].final_vote_target == "p-7"
+    assert recaps["p-4"].final_vote_rewritten is False
+    assert recaps["p-4"].final_vote_named_impostor is True
+
+
+def test_skipped_meeting_frame_is_labeled_resolved(
+    meeting_loader: ReplayLoader,
+) -> None:
+    """A SKIPPED meeting is RESOLVED — its frame is labeled, with no ejected id.
+
+    Hermetic (``write_meeting_replay``), because no committed 9p2i game ends on a
+    skipped meeting. The distinction the label draws is resolution, not ejection:
+    ``meeting_resolution is None`` means "nothing resolved on this frame", while
+    ``ejected_player_id is None`` inside a present label means "resolved, and the
+    vote ejected nobody". Conflating the two would make a SKIPPED frame
+    indistinguishable from an ordinary play tick.
+    """
+
+    replay = meeting_loader.load_replay("headless-seed-1")
+    meeting = replay.meetings[0]
+    assert meeting.outcome == "SKIPPED"
+    tick = next(t for t in replay.ticks if t.tick == meeting.tick)
+    resolution = tick.meeting_resolution
+    assert resolution is not None, "a SKIPPED meeting still resolved the frame"
+    assert resolution.meeting_id == meeting.meeting_id
+    assert resolution.ejected_player_id is None
+    # Nothing was ejected, so pre- and post-resolution advantage agree exactly.
+    assert resolution.pre_advantage == tick.advantage
+
+    # The fixture's shape derived, not spelled: the kill is the tick before the
+    # report opens the meeting, and the game-end record is stamped on the quiet
+    # tick after it resumes play (``write_meeting_replay``).
+    finale = replay.finale
+    assert finale is not None
+    assert finale.final_tick == meeting.tick + 1
+    assert [(e.tick, e.kind) for e in finale.decisive_events] == [
+        (meeting.tick - 1, "kill"),
+        (meeting.tick, "meeting_skipped"),
+        (meeting.tick + 1, "game_end"),
+    ]
+
+
+def test_finale_is_none_for_a_partial_replay(tmp_path: Path) -> None:
+    """No recorded ``game_over`` row → no finale (Task 19.10).
+
+    A crashed / tick-budget-exhausted run has no recorded outcome, so the finale
+    must be absent rather than synthesized from re-walked state — the same
+    fail-quiet-but-honest contract ``metadata.winner`` already has for partials.
+    """
+
+    write_partial_replay(tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3)
+    replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
+    assert replay.metadata.winner is None
+    assert replay.finale is None
+
+
+def test_finale_final_tick_prefers_the_recorded_game_end_tick(
+    tmp_path: Path,
+) -> None:
+    """``finale.final_tick`` follows the RECORDED game-end row, not the walk.
+
+    On every orchestrator-shaped recording the two coincide (``GameOverEvent.tick``
+    is the emitting tick), so a fixture must force them apart or the
+    recorded-tick path in ``_finale_view`` is unobserved — deleting the
+    ``_ReplaySummary.final_tick`` threading would leave every other finale pin
+    green (Task 19.10 review). The writer permits the disagreement: ``tick`` is a
+    free argument on ``ReplayLog.record_game_end``.
+    """
+
+    write_sample_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=41
+    )
+    replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
+    finale = replay.finale
+    assert finale is not None
+    assert replay.ticks[-1].tick == 2, "the walk position the fallback would pick"
+    assert finale.final_tick == 41, "the recorded row wins over the walk position"
+    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(41, "game_end")]
+
+
+def test_finale_final_tick_falls_back_to_the_walk_without_a_recorded_tick(
+    tmp_path: Path,
+) -> None:
+    """A game-end row with no ``tick`` (a direct-``ReplayLog`` writer) falls back
+    to where the walk stopped — the documented ``_finale_view`` fallback."""
+
+    write_sample_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=None
+    )
+    replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
+    finale = replay.finale
+    assert finale is not None
+    assert finale.final_tick == replay.ticks[-1].tick == 2
+
+
+def test_finale_degrades_to_the_terminal_beat_without_meetings(
+    meeting_loader: ReplayLoader,
+) -> None:
+    """A meeting-less game still gets a finale — one ``game_end`` beat, no votes.
+
+    This is the shape the codegen fidelity fixture records
+    (``scripts/gen_frontend_types.py``), so it must never raise: no meetings
+    means no ballots, hence ``final_vote_target is None`` on every recap, and the
+    decisive-events list degrades to the terminal beat alone rather than being
+    empty (the card still has a tick to name).
+    """
+
+    replay = meeting_loader.load_replay("headless-seed-0")
+    assert replay.meetings == ()
+    finale = replay.finale
+    assert finale is not None
+    assert finale.winner == "CREWMATES"
+    assert finale.final_tick == 2
+    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(2, "game_end")]
+    assert {r.agent_id for r in finale.agent_recaps} == {
+        p.agent_id for p in replay.players
+    }
+    for recap in finale.agent_recaps:
+        assert recap.final_vote_target is None
+        assert recap.final_vote_named_impostor is None
+    assert all(t.meeting_resolution is None for t in replay.ticks)
 
 
 # ---------------------------------------------------------------------------

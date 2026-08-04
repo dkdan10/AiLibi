@@ -27,6 +27,17 @@
 // 8 at 33.6) — so the featured order is EDITORIAL and every rendered rubric
 // scalar on this surface carries that narrow label.
 //
+// Unspoiled by default (Task 19.10): the connected container subscribes the
+// store's `revealOutcome` and threads it down as a plain `reveal` prop — the
+// cards and the filter bar stay presentational. While it is off, the cards emit
+// no outcome DOM, the three outcome filter criteria go inert (see
+// `matchesFilters`), and the rubric-missing empty state withholds its aggregate
+// ending-mechanism clause (an outcome statistic, gated like the win-shape
+// options); the filter bar carries the one spoiler-warned affordance that turns
+// it on. The editorial copy is otherwise untouched, and the curated FEATURED
+// strip entirely so — its blurbs are spoiler-audited prose, not outcome-derived
+// data, so the gate does not (and cannot) cover them.
+//
 // Split for Storybook (cf. MindInspector): the connected `ReplayPicker` owns the
 // store + fetch + URL wiring; the presentational `ReplayBrowserView` renders the
 // loading / list / empty / error states from props and is what the story drives.
@@ -142,13 +153,27 @@ export function featuredForSet(set: string | null): readonly FeaturedGame[] {
 
 /** Whether a card passes the active filters. Rubric-derived filters exclude
  *  unscored cards (you cannot match a score/shape/ejection a game has no rubric
- *  for) — which is exactly why the 4p1i set lands in the empty state. */
-function matchesFilters(card: HighlightCardData, f: ReplayFilterState): boolean {
-  if (f.winner !== null && card.winner !== f.winner) {
+ *  for) — which is exactly why the 4p1i set lands in the empty state.
+ *
+ *  `reveal` (Task 19.10) makes the three OUTCOME criteria — winner, win shape,
+ *  ejection — inert while outcomes are hidden. ReplayFilters hides those three
+ *  controls unrevealed, and a hidden control must not keep acting: otherwise a
+ *  deep link carrying `?winner=IMPOSTORS` would silently shrink the grid with no
+ *  visible cause, and the result COUNT ("7 / 50 games") would itself be an
+ *  outcome statistic — a leak through the one channel the card gating cannot
+ *  cover. The URL keys are left untouched, so revealing re-applies them exactly.
+ *  `scoreBucket` still applies: it filters the internal pacing heuristic, which
+ *  is structure, not who won. */
+function matchesFilters(
+  card: HighlightCardData,
+  f: ReplayFilterState,
+  reveal: boolean,
+): boolean {
+  if (reveal && f.winner !== null && card.winner !== f.winner) {
     return false;
   }
   const rubric = card.rubric;
-  if (f.winShape !== null && rubric?.win_shape !== f.winShape) {
+  if (reveal && f.winShape !== null && rubric?.win_shape !== f.winShape) {
     return false;
   }
   if (
@@ -157,7 +182,7 @@ function matchesFilters(card: HighlightCardData, f: ReplayFilterState): boolean 
   ) {
     return false;
   }
-  if (f.hasEjection && (rubric === null || rubric.ejected_impostors <= 0)) {
+  if (reveal && f.hasEjection && (rubric === null || rubric.ejected_impostors <= 0)) {
     return false;
   }
   return true;
@@ -288,6 +313,12 @@ export interface ReplayBrowserViewProps {
   /** The curated featured games for the served set, joined to their replays
    *  (Task 19.9). Empty for an uncurated set, or before the list loads. */
   featured?: readonly FeaturedEntry[];
+  /** Outcome reveal (Task 19.10): threaded straight down to the cards and the
+   *  filter bar, which own the actual gating. This view adds no copy of its own
+   *  for it — the affordance lives on the filter bar, one place, not two. */
+  reveal: boolean;
+  /** Turn the reveal on from the filter bar's spoiler-warned affordance. */
+  onReveal: () => void;
   onOpen: (gameId: string) => void;
   onBrowseReplays: () => void;
 }
@@ -305,6 +336,8 @@ export function ReplayBrowserView({
   stale,
   rubricMissing,
   featured = [],
+  reveal,
+  onReveal,
   onOpen,
   onBrowseReplays,
 }: ReplayBrowserViewProps) {
@@ -341,9 +374,17 @@ export function ReplayBrowserView({
         <p>
           The served set{set !== null ? ` (${set})` : ""} ships no rubric —
           expected for 4p1i, the fast technical fixture: median 12 ticks, at most
-          one meeting (39 of its 50 games hold exactly one, 11 hold none), and 23
-          of 50 decided by the task timer rather than by an ejection. The default
-          set, 9p2i, is scored and populates the reel.
+          one meeting (39 of its 50 games hold exactly one, 11 hold none)
+          {/* The ending-mechanism count is OUTCOME data — "23 of 50 decided by
+              the task timer rather than by an ejection" states, in aggregate,
+              how the set's games end — so it renders only behind the same
+              reveal gate as the win-shape filter options (Task 19.10 review):
+              the structural facts (ticks, meeting counts) stay, the endings
+              clause waits for reveal. */}
+          {reveal
+            ? ", and 23 of 50 decided by the task timer rather than by an ejection"
+            : ""}
+          . The default set, 9p2i, is scored and populates the reel.
         </p>
         <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
           Browse all replays
@@ -392,6 +433,7 @@ export function ReplayBrowserView({
                 data={card}
                 onOpen={onOpen}
                 hideUnscoredNote={!isHighlights && rubricMissing}
+                reveal={reveal}
               />
             </li>
           ))}
@@ -448,6 +490,8 @@ export function ReplayBrowserView({
         resultCount={cards.length}
         totalCount={totalCount}
         disabled={status === "loading"}
+        reveal={reveal}
+        onReveal={onReveal}
       />
 
       {body}
@@ -514,6 +558,16 @@ export function ReplayPicker() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
   const setView = useReplayStore((s) => s.setView);
   const selectReplay = useReplayStore((s) => s.selectReplay);
+  // Outcome reveal (Task 19.10). Global, URL-round-tripped state — deliberately
+  // NOT local to this surface, so the browser's gate and the finale card's
+  // Reveal/Hide drive ONE flag and one `reveal` URL key. Note the scope,
+  // though: `selectReplay` deliberately resets the flag, so revealing here and
+  // then opening a game still starts that game UNSPOILED (a reveal is a choice
+  // about one game's ending, not a mode you carry forward); only an explicit
+  // `&reveal=1` deep link survives the reset, re-applied by usePlaybackEngine's
+  // deferred hydration.
+  const revealOutcome = useReplayStore((s) => s.revealOutcome);
+  const setRevealOutcome = useReplayStore((s) => s.setRevealOutcome);
 
   // The workspace/tournament routes don't mount this component, so `view` is
   // effectively replays | highlights here; narrow defensively.
@@ -604,8 +658,8 @@ export function ReplayPicker() {
     [browserView, rubric, replayList],
   );
   const cards = useMemo(
-    () => allCards.filter((card) => matchesFilters(card, filters)),
-    [allCards, filters],
+    () => allCards.filter((card) => matchesFilters(card, filters, revealOutcome)),
+    [allCards, filters, revealOutcome],
   );
   const winShapeOptions = useMemo(() => winShapeOptionsOf(rubric), [rubric]);
 
@@ -695,6 +749,10 @@ export function ReplayPicker() {
         stale={rubric?.stale ?? false}
         rubricMissing={rubricStatus === "absent"}
         featured={featured}
+        reveal={revealOutcome}
+        onReveal={() => {
+          setRevealOutcome(true);
+        }}
         onOpen={(gameId) => {
           void selectReplay(gameId);
         }}

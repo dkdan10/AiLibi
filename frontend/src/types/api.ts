@@ -29,6 +29,7 @@ export interface ReplayView {
   ticks: TickView[];
   meetings: MeetingView[];
   failed_calls: FailedCallView[];
+  finale: GameFinale | null;
 }
 
 export interface ReplayMetadataView {
@@ -95,6 +96,7 @@ export interface TickView {
   bodies: BodyView[];
   sabotage: SabotageDetailView | null;
   advantage: AdvantageView;
+  meeting_resolution: MeetingResolutionView | null;
 }
 
 export interface AgentTickStateView {
@@ -201,6 +203,12 @@ export interface AdvantageView {
   tasks_required: number;
   tasks_required_total: number;
   advantage: number;
+}
+
+export interface MeetingResolutionView {
+  meeting_id: string;
+  ejected_player_id: string | null;
+  pre_advantage: AdvantageView;
 }
 
 export interface MeetingView {
@@ -338,6 +346,30 @@ export interface FailedCallView {
   cost_usd: number;
   error_type: string;
   error_message: string;
+}
+
+export interface GameFinale {
+  winner: Winner;
+  winner_reason: string;
+  final_tick: number;
+  decisive_events: FinaleEventView[];
+  agent_recaps: FinaleAgentRecapView[];
+}
+
+export interface FinaleEventView {
+  tick: number;
+  kind: "kill" | "ejection" | "meeting_skipped" | "game_end";
+  actor_id: string | null;
+  subject_id: string | null;
+}
+
+export interface FinaleAgentRecapView {
+  agent_id: string;
+  role: PlayerRole;
+  alive_at_end: boolean;
+  final_vote_target: string | null;
+  final_vote_named_impostor: boolean | null;
+  final_vote_rewritten: boolean;
 }
 
 export interface AgentMemoryView {

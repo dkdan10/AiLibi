@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from engine.actions import Action, KillAction, ReportBodyAction, WaitAction
 from engine.tick import advance_tick
@@ -81,8 +82,24 @@ class MeetingReplayExpectations:
     winner: str
 
 
-def write_sample_replay(path: Path, *, seed: int = 0, ticks: int = 3) -> None:
-    """Write a minimal no-op game that ends with a CREWMATES win record."""
+def write_sample_replay(
+    path: Path,
+    *,
+    seed: int = 0,
+    ticks: int = 3,
+    game_end_tick: int | None | Literal["last"] = "last",
+) -> None:
+    """Write a minimal no-op game that ends with a CREWMATES win record.
+
+    ``game_end_tick`` controls the ``tick`` recorded on the game-end row: the
+    default ``"last"`` records the final advanced tick (``ticks - 1``, what the
+    orchestrator does), an ``int`` records that value verbatim even when it
+    disagrees with the tick stream, and ``None`` omits it (a direct-``ReplayLog``
+    writer that only cares about the winner). The last two exist so Task 19.10's
+    finale tests can tell the recorded ``GameEndReplayEntry.tick`` apart from the
+    loader's walk-position fallback — on every orchestrator-shaped recording the
+    two coincide, which would leave the recorded-tick path unobserved.
+    """
 
     game_map = load_canonical_map()
     log = ReplayLog(path=path, game_id=f"headless-seed-{seed}")
@@ -96,7 +113,11 @@ def write_sample_replay(path: Path, *, seed: int = 0, ticks: int = 3) -> None:
         input_tick = state.tick
         state, _events = advance_tick(state, [], game_map=game_map)
         log.record_tick(input_tick, [], state)
-    log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1)
+    log.record_game_end(
+        winner="CREWMATES",
+        reason="all_tasks_complete",
+        tick=ticks - 1 if game_end_tick == "last" else game_end_tick,
+    )
 
 
 def write_partial_replay(path: Path, *, seed: int = 0, ticks: int = 3) -> None:

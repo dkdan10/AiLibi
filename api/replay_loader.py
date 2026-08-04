@@ -68,11 +68,15 @@ from api.schemas import (
     EdgeView,
     EvalCostSummaryView,
     FailedCallView,
+    FinaleAgentRecapView,
+    FinaleEventView,
     FoundBodyObsView,
+    GameFinale,
     GateView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
+    MeetingResolutionView,
     MeetingTriggeredEventView,
     MeetingView,
     PlayerView,
@@ -212,6 +216,36 @@ _SET_FINGERPRINT_PREFIX: Final[str] = "multi:"
 _SET_FINGERPRINT_DIGEST_LEN: Final[int] = 12
 _SET_FINGERPRINT_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"{_SET_FINGERPRINT_PREFIX}[0-9a-f]{{{_SET_FINGERPRINT_DIGEST_LEN}}}"
+)
+
+# Within-tick ordering of the finale's decisive beats (Task 19.10). A kill lands
+# inside ``advance_tick``; a meeting resolves after that frame was appended; the
+# game ends last. Ejections and skipped meetings share a rank because a tick
+# holds at most one meeting, so they never compete.
+_FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
+    "kill": 0,
+    "ejection": 1,
+    "meeting_skipped": 1,
+    "game_end": 2,
+}
+
+# The rewrite-reason labels (see ``_BALLOT_PREFIX_MARKERS`` /
+# ``_VOTE_PARSE_DEFAULT_LABEL``) under which a recorded ballot's TARGET is not
+# the voter's authored choice — the meeting layer redirected, coerced,
+# normalized, or wholly defaulted it — so the finale recap must not present it
+# as evidence of what the voter believed (Task 19.10 review; the committed 9p2i
+# seed 22 carries an ``under_gate_redirect`` whose rationale explicitly opposes
+# the tallied target). The two citation-only labels (``invalid_reason_id``,
+# ``invalid_observation_id``) null a reference but leave the authored target
+# intact, so they are deliberately NOT in this set.
+_TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "parse_default",
+        "invalid_target",
+        "teammate_coerced",
+        "under_gate_redirect",
+        "uncited_coerced",
+    }
 )
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
@@ -596,6 +630,15 @@ class _ReplaySummary:
     meeting_count: int
     winner: WinnerSide | None
     winner_reason: str | None
+    # The recorded ``GameEndReplayEntry.tick`` — the engine tick the game
+    # actually ended on (Task 19.10). Distinct from ``total_ticks``, which counts
+    # ``ReplayEntry`` ROWS, and from ``ticks[-1].tick``, which is where the WALK
+    # stopped: the two disagree on a truncated walk. ``None`` for a partial
+    # replay with no game-end row, and for direct-``ReplayLog`` writers (unit
+    # tests, eval scripts) that omit the optional ``tick`` argument — see
+    # ``ReplayLog.record_game_end``; every orchestrator-written row carries it,
+    # and all 100 committed sample rows do.
+    final_tick: int | None
     total_cost_usd: float
     prompt_versions: Mapping[str, str]
 
@@ -808,10 +851,10 @@ class ReplayLoader:
         ``experiments/lab/rubric_score.py``) and serves its
         ``interestingness.per_game[]`` rows, comparing the rubric's ``git_head``
         to the set's ``MANIFEST.md`` git sha to flag staleness (DESIGN.md §3.1,
-        §7). Raises :class:`FileNotFoundError` when the set ships no rubric (the
-        4p1i default → the eval route maps that to a 404 / empty state). A
-        malformed rubric fails loud rather than being silently coerced (AGENTS.md
-        "no silent fallbacks").
+        §7). Raises :class:`FileNotFoundError` when the set ships no rubric (e.g.
+        the 4p1i fast technical fixture → the eval route maps that to a 404 /
+        empty state). A malformed rubric fails loud rather than being silently
+        coerced (AGENTS.md "no silent fallbacks").
         """
 
         path = self._replay_dir / _RUBRIC_FILENAME
@@ -920,6 +963,10 @@ class ReplayLoader:
                 for entry in walk.meeting_entries
             ),
             failed_calls=tuple(_failed_call_view(entry) for entry in walk.failed_calls),
+            # Task 19.10. ``_file_summary`` is separately memoized per
+            # ``(path, mtime)`` and was already parsed by ``_metadata_view``
+            # above, so the finale costs no extra file read.
+            finale=self._finale_view(walk, self._file_summary(path)),
         )
 
     def _reconstruct_meeting_memories(
@@ -1205,6 +1252,25 @@ class ReplayLoader:
                 # an eject that ends the game leaves the last frame reporting the
                 # ejected impostor still alive). Keep the tick's task totals so
                 # ``advantage.tasks_*`` stays aligned with ``tasks_*_total``.
+                #
+                # Task 19.10: that mix is now LABELED rather than implicit. The
+                # same ``model_copy`` attaches a ``meeting_resolution`` carrying
+                # the meeting's id, its ejected player (``None`` when SKIPPED),
+                # and ``pre_advantage`` — the frame's ORIGINAL, pre-resolution
+                # advantage, free because ``meeting_view_tick.advantage`` is
+                # exactly that object before it is overwritten. So the served
+                # frame states both vintages explicitly: the pre-resolution
+                # deliberation roster (``agent_states`` / ``events`` /
+                # ``tasks_*_total`` / ``meeting_resolution.pre_advantage``) and
+                # the post-resolution outcome (``advantage``). The ejected id
+                # comes from the recorded ``meeting_entry`` — the same source
+                # ``_meeting_view`` projects — never re-derived from state.
+                #
+                # This block only runs for a RESOLVED meeting: the unresolved
+                # (partial-replay) meeting breaks out of the walk above, so its
+                # frame keeps ``meeting_resolution=None`` and an advantage that is
+                # purely pre-resolution — which is what ``None`` means everywhere
+                # else too (nothing was resolved on this frame).
                 meeting_view_tick = ticks[-1]
                 ticks[-1] = meeting_view_tick.model_copy(
                     update={
@@ -1213,7 +1279,12 @@ class ReplayLoader:
                             tasks_completed=meeting_view_tick.tasks_completed_total,
                             tasks_required=meeting_view_tick.tasks_required_total,
                             tasks_required_total=fixed_tasks_required_total,
-                        )
+                        ),
+                        "meeting_resolution": MeetingResolutionView(
+                            meeting_id=meeting_id,
+                            ejected_player_id=meeting_entry.ejected_player_id,
+                            pre_advantage=meeting_view_tick.advantage,
+                        ),
                     }
                 )
                 if collect_memory:
@@ -1623,6 +1694,7 @@ class ReplayLoader:
         meeting_count = 0
         winner: WinnerSide | None = None
         winner_reason: str | None = None
+        final_tick: int | None = None
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
         for entry in read_all_entries(path):
@@ -1635,6 +1707,10 @@ class ReplayLoader:
             elif isinstance(entry, GameEndReplayEntry):
                 winner = entry.winner
                 winner_reason = entry.reason
+                # Task 19.10: retain the recorded end tick for the finale view.
+                # It was dropped before 19.10 because no consumer needed it; it
+                # is optional on the record, so it stays ``None``-able here.
+                final_tick = entry.tick
             elif isinstance(entry, FailedCallReplayEntry):
                 total_cost += entry.cost_usd
         return _ReplaySummary(
@@ -1642,6 +1718,7 @@ class ReplayLoader:
             meeting_count=meeting_count,
             winner=winner,
             winner_reason=winner_reason,
+            final_tick=final_tick,
             total_cost_usd=total_cost,
             prompt_versions=prompt_versions,
         )
@@ -1669,6 +1746,161 @@ class ReplayLoader:
                 color=_color_for(pid),
             )
             for pid in sorted(initial_state.players)
+        )
+
+    def _finale_view(
+        self, walk: _WalkResult, summary: _ReplaySummary
+    ) -> GameFinale | None:
+        """Compose the recorded outcome into one :class:`GameFinale` (Task 19.10).
+
+        The finale is built from RECORDED bytes only — the ``game_over`` row
+        (via ``summary``), the recorded meeting records, and the kill events the
+        walk already re-derived — and is never cross-validated against re-walked
+        state. That is deliberate: a direct-``ReplayLog`` writer may legitimately
+        stamp a winner onto a non-terminal state (the codegen fidelity fixture in
+        ``scripts/gen_frontend_types.py`` records ``CREWMATES`` on a 3-tick game
+        with zero tasks completed), and re-validating would turn that into a
+        raise on a path that only wants to *show* what was recorded.
+
+        Pure function of ``walk`` + ``summary``: it reads NO set-level sidecar
+        (``roster.json`` / ``MANIFEST.md`` / the rubric), because the fidelity
+        generator runs it inside a bare temp dir holding a single ``.jsonl``.
+
+        ``None`` when no winner was recorded — a partial replay (crash /
+        tick-budget / meeting-phase exit) has no outcome to show.
+        """
+
+        winner = summary.winner
+        if winner is None:
+            return None
+        if summary.winner_reason is None:
+            # A ``game_over`` row always carries a reason (``reason: str`` on
+            # :class:`orchestrator.replay.GameEndReplayEntry`), so a winner with
+            # no reason means the summary reduction is broken. Fail loud rather
+            # than defaulting to a plausible-looking string (AGENTS.md "no
+            # silent fallbacks") — a wrong win shape on the finale card is worse
+            # than a 500.
+            raise ValueError(
+                "replay records a winner but no win reason; refusing to "
+                f"synthesize one (winner={winner!r})"
+            )
+
+        # The recorded end tick when present, else where the walk stopped. They
+        # agree on a clean finish (``GameOverEvent.tick`` IS the emitting tick);
+        # the fallback exists for direct-``ReplayLog`` writers that omit the
+        # optional ``tick`` argument (see ``ReplayLog.record_game_end`` — every
+        # orchestrator-written row carries it) and covers a truncated walk only
+        # approximately, which is the honest best available.
+        final_tick = (
+            summary.final_tick
+            if summary.final_tick is not None
+            else walk.ticks[-1].tick
+        )
+
+        events: list[FinaleEventView] = []
+        for frame in walk.ticks:
+            for event in frame.events:
+                if isinstance(event, KillEventView):
+                    events.append(
+                        FinaleEventView(
+                            tick=event.tick,
+                            kind="kill",
+                            actor_id=event.killer_id,
+                            subject_id=event.victim_id,
+                        )
+                    )
+        for entry in walk.meeting_entries:
+            ejected = entry.ejected_player_id
+            events.append(
+                FinaleEventView(
+                    tick=entry.tick,
+                    kind="ejection"
+                    if entry.outcome == "EJECTED"
+                    else "meeting_skipped",
+                    actor_id=entry.triggered_by,
+                    subject_id=ejected if entry.outcome == "EJECTED" else None,
+                )
+            )
+        events.append(
+            FinaleEventView(
+                tick=final_tick, kind="game_end", actor_id=None, subject_id=None
+            )
+        )
+        # Ascending tick, and within a tick: kill → meeting resolution → the
+        # terminal beat, which is the order they happen in the tick loop (kills
+        # land in ``advance_tick``; a meeting resolves after the frame was
+        # appended; the game ends last). ``sorted`` is stable, so kills keep walk
+        # order and meetings keep file order within a tick.
+        decisive_events = tuple(
+            sorted(events, key=lambda e: (e.tick, _FINALE_EVENT_ORDER[e.kind]))
+        )
+
+        roles = {pid: player.role for pid, player in walk.initial_state.players.items()}
+        # Alive-at-end is the LAST frame's roster, corrected for that frame's own
+        # ejection: on a game that ends ON an ejection the frame's agent_states
+        # are the PRE-resolution deliberation roster (the labeled mix — see
+        # :class:`MeetingResolutionView`), so the ejected player still reads as
+        # alive there and must be subtracted here. ``walk.ticks`` always holds at
+        # least the synthesized tick=-1 Start frame, so ``[-1]`` is safe.
+        last_frame = walk.ticks[-1]
+        alive_at_end = {a.agent_id for a in last_frame.agent_states if a.is_alive}
+        resolution = last_frame.meeting_resolution
+        if resolution is not None and resolution.ejected_player_id is not None:
+            alive_at_end.discard(resolution.ejected_player_id)
+
+        # The LAST meeting's ballots are the recorded decision-level evidence of
+        # what each agent believed at the end. Empty for a game with no meetings;
+        # a voter absent from the mapping simply cast no ballot there (dead, or
+        # died before it). Each ballot also carries whether the meeting layer
+        # REWROTE its target (the same audit markers ``_meeting_view`` parses
+        # into ``BallotView.rewrite_reasons``): a redirected / coerced /
+        # defaulted target is the TALLIED vote, not the authored choice, and the
+        # rationale can explicitly oppose it — so the recap flags it and never
+        # judges belief against it (see ``_TARGET_REWRITE_LABELS``).
+        final_ballots: dict[str, tuple[str, bool]] = {}
+        if walk.meeting_entries:
+            for ballot in walk.meeting_entries[-1].ballots:
+                reasons, _clean = _parse_rewrite_reasons(ballot.rationale_text)
+                rewritten = any(label in _TARGET_REWRITE_LABELS for label in reasons)
+                final_ballots[ballot.voter] = (ballot.target, rewritten)
+        agent_recaps = tuple(
+            FinaleAgentRecapView(
+                agent_id=pid,
+                role=roles[pid],
+                alive_at_end=pid in alive_at_end,
+                final_vote_target=(
+                    final_ballots[pid][0] if pid in final_ballots else None
+                ),
+                # ``None`` = the question does not apply: no ballot, a SKIP
+                # (which names nobody), or a REWRITTEN target (the engine's
+                # choice, not the voter's — judging it would invert the agent's
+                # recorded reasoning). Recorded targets are normalized to
+                # SKIP-or-a-real-candidate by ``meetings.manager``'s ballot
+                # normalization (its manager-side copy of the canonical
+                # ``meetings.voting`` rule) before they are persisted, so an
+                # unknown id here is corrupt bytes and raises.
+                final_vote_named_impostor=(
+                    None
+                    if (
+                        pid not in final_ballots
+                        or final_ballots[pid][0] == SKIP_TARGET
+                        or final_ballots[pid][1]
+                    )
+                    else roles[final_ballots[pid][0]] == "IMPOSTOR"
+                ),
+                final_vote_rewritten=(
+                    final_ballots[pid][1] if pid in final_ballots else False
+                ),
+            )
+            for pid in sorted(roles)
+        )
+
+        return GameFinale(
+            winner=winner,
+            winner_reason=summary.winner_reason,
+            final_tick=final_tick,
+            decisive_events=decisive_events,
+            agent_recaps=agent_recaps,
         )
 
     def _build_map_view(self) -> MapLayoutView:

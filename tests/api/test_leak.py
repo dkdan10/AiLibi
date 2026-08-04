@@ -83,6 +83,10 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "BodyView",
         "SabotageDetailView",
         "AdvantageView",
+        # Task 19.10 — playback coherence: the explicit pre/post-resolution label
+        # on a resolved meeting's tick frame (audits/audit-phase-19-triage.md §7
+        # item 11):
+        "MeetingResolutionView",
         "TickView",
         "SawPlayerView",
         "CompletedTaskObsView",
@@ -112,6 +116,11 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FailedCallView",
         "FailedCallEvalView",
         "ReplayView",
+        # Task 19.10 — playback coherence: the recorded outcome composed into one
+        # additive view for the finale card (DESIGN.md §7):
+        "FinaleEventView",
+        "FinaleAgentRecapView",
+        "GameFinale",
         "EvalCostSummaryView",
         # Phase-12 per-set rubric surface (DESIGN.md §3.1, §7):
         "RubricGameView",

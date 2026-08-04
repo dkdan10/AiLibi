@@ -17,6 +17,7 @@
 // testable. The store/hook own state; this module only computes.
 
 import type {
+  GameFinale,
   MeetingView,
   TickEventView,
   TickView,
@@ -229,6 +230,82 @@ export function keyMomentTicks(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Playback coherence (Task 19.10): the meeting pause + the finale beat. Both are
+// decisions the DRIVER (`usePlaybackEngine`) has to make inside a timer callback,
+// so they are expressed here as pure predicates over the already-loaded
+// view-model — the timer computes, it never re-derives the tick↔frame mapping.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O(1)-lookup set of ENGINE TICKS that carry a meeting (the membership form of
+ * {@link meetingTickNumbers}). Build it ONCE per replay and hand it to
+ * {@link shouldPauseAtMeeting}: the auto-advance interval fires every 125 ms at
+ * 4×, and a linear `meetings.find` per tick is exactly the ad-hoc re-derivation
+ * this module exists to replace.
+ */
+export function meetingTickSet(meetings: readonly MeetingView[]): ReadonlySet<number> {
+  return new Set(meetings.map((meeting) => meeting.tick));
+}
+
+/**
+ * The meeting-ENTERED beat: true iff advancing from frame `fromIndex` to frame
+ * `toIndex` steps ONTO a meeting tick the playhead was not already on. Drives the
+ * auto-pause so a meeting — which occupies exactly ONE frame (`MeetingView` has a
+ * single `tick`, no span) — is not flashed past in 500 ms.
+ *
+ * EDGE-triggered on purpose, and that is the whole contract: a level predicate
+ * ("is this frame a meeting frame") would make Resume unusable — pressing Play
+ * while sitting on the meeting frame would immediately re-pause without ever
+ * advancing, and the transport's single Play/Pause toggle would read as dead.
+ * The edge is `toTick !== fromTick` rather than `!meetingTicks.has(fromTick)`,
+ * so back-to-back meeting ticks each get their own pause instead of the second
+ * one being silently skipped.
+ *
+ * Both arguments are ARRAY INDICES resolved through {@link tickNumberAt}, so an
+ * out-of-range index clamps rather than inventing a tick, and the caller can pass
+ * indices read fresh from the store without a bounds check of its own.
+ */
+export function shouldPauseAtMeeting(
+  ticks: readonly TickView[],
+  meetingTicks: ReadonlySet<number>,
+  fromIndex: number,
+  toIndex: number,
+): boolean {
+  const fromTick = tickNumberAt(ticks, fromIndex);
+  const toTick = tickNumberAt(ticks, toIndex);
+  return toTick !== fromTick && meetingTicks.has(toTick);
+}
+
+/**
+ * The finale to show at frame `index`: the replay's `finale` iff `index` is the
+ * LAST frame, else `null`.
+ *
+ * POSITION-derived, not pause-derived: autoplay's end-stop only flips
+ * `isPlaying` one interval AFTER the last frame is reached and never fires at all
+ * for a user who scrubs to the end while paused, so keying off the pause would
+ * make the finale both late and skippable. Keying off position means End, the
+ * scrubber, a graph click, and autoplay all land on the same beat.
+ *
+ * Makes NO assumption about what the last frame contains — `finale` is present
+ * for every replay with a recorded `game_over` row, whether the game ended on an
+ * ejection (last frame is a meeting), a kill, or the task counter. A partial
+ * replay has `finale === null` and therefore no finale beat anywhere. An empty
+ * timeline has no last frame at all, so it yields `null` rather than pinning the
+ * card to a phantom frame 0. This says only WHERE the finale beat belongs; how
+ * much of it may be SHOWN is a separate decision (the outcome-reveal gate).
+ */
+export function finaleAtIndex(
+  ticks: readonly TickView[],
+  index: number,
+  finale: GameFinale | null,
+): GameFinale | null {
+  if (finale === null || ticks.length === 0) {
+    return null;
+  }
+  return index >= ticks.length - 1 ? finale : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Advantage graph + event timeline derivations.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -302,11 +379,11 @@ export function timelineMarkers(ticks: readonly TickView[]): TimelineMarker[] {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // URL sync (DESIGN.md §2.1, §4) — `history.replaceState` + `URLSearchParams`,
-// no router dependency. Seven keys round-trip so every moment is shareable +
+// no router dependency. Eight keys round-trip so every moment is shareable +
 // reload-stable: set / game_id / tick / perspective / beliefView /
-// selectedAgent / selectedMeeting (plus `view` for the top-level container).
-// `tick` is the ENGINE TICK NUMBER (human-meaningful + shareable); the store
-// holds the array index and the resolvers above bridge them.
+// selectedAgent / selectedMeeting / reveal (plus `view` for the top-level
+// container). `tick` is the ENGINE TICK NUMBER (human-meaningful + shareable);
+// the store holds the array index and the resolvers above bridge them.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface PlaybackUrlState {
@@ -318,6 +395,12 @@ export interface PlaybackUrlState {
   readonly selectedAgent: string | null;
   readonly selectedMeeting: string | null;
   readonly view: ViewId | null;
+  // Outcome reveal (Task 19.10). INDEPENDENT of `perspective`: perspective says
+  // what the CURRENT FRAME may show, reveal says whether the OUTCOME (the
+  // finale, the winner, the ending-shaped browser data) may render at all. Off
+  // by default — unspoiled is the default experience — so the key is absent
+  // unless someone deliberately shares a revealed link (see serialize).
+  readonly reveal: boolean;
 }
 
 const BELIEF_VIEW_MODES: readonly BeliefViewMode[] = ["belief", "truth", "error"];
@@ -368,6 +451,10 @@ export function parsePlaybackParams(search: string): PlaybackUrlState {
     selectedAgent: params.get("selectedAgent"),
     selectedMeeting: params.get("selectedMeeting"),
     view: isViewId(params.get("view")) ? (params.get("view") as ViewId) : null,
+    // Strict `=== "1"` (the `hasEjection` convention in ReplayFilters), so any
+    // other value — including a hand-typed `reveal=0` or `reveal=true` — falls
+    // back to the unspoiled default rather than half-revealing.
+    reveal: params.get("reveal") === "1",
   };
 }
 
@@ -401,6 +488,18 @@ export function serializePlaybackParams(state: PlaybackUrlState): string {
   }
   if (state.view !== null) {
     params.set("view", state.view);
+  }
+  // `reveal` is written ONLY when on — default-omitted, and that omission is
+  // load-bearing three times over (Task 19.10):
+  //   (a) parse falls back to the same `false`, so the round-trip is preserved
+  //       exactly as it is for `beliefView` above;
+  //   (b) GuidedTour's first-run check is "does this URL carry ANY key?" — an
+  //       unconditional `reveal=0` would make every bare visit look deep-linked
+  //       and silently kill the curated-seed autoload;
+  //   (c) a spoiler flag in a shared URL must be a deliberate hand-off, never a
+  //       byproduct of having opened the page.
+  if (state.reveal) {
+    params.set("reveal", "1");
   }
   const query = params.toString();
   return query === "" ? "" : `?${query}`;
