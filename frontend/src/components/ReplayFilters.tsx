@@ -16,6 +16,19 @@
 //
 // Firewall: outcomes are role-neutral. The winner is a plain text option, never
 // a guilt hue, and nothing here colours by who won.
+//
+// Unspoiled mode (Task 19.10): three of the four interactive filters — winner,
+// win shape, ejection — are OUTCOME controls, and the win-shape <select> is the
+// worst offender on the surface: its option list enumerates every ending the set
+// contains ("impostor-win", "eject-decided", "stopwatch-no-meeting", …) with zero
+// games opened. So while `reveal` is false those three fields do not render at
+// all and one spoiler-warned affordance stands in their place. Everything BELOW
+// the presentation layer is untouched: `ReplayFilterState`, `hasActiveFilters`,
+// `parseFilterParams` and `writeFilterParams` all keep the four keys
+// round-tripping regardless of reveal, so a shared `?winner=…` link survives an
+// unrevealed visit intact and re-applies the moment outcomes are shown. The
+// controls hide; the state machinery stays. (The connected ReplayPicker makes the
+// three criteria INERT while hidden — a control nobody can see must not filter.)
 
 import type { ReactNode } from "react";
 
@@ -152,6 +165,40 @@ function FilterField({ label, children }: FilterFieldProps) {
   );
 }
 
+const GATE_WARNING_ID = "outcome-filters-spoiler-warning";
+
+// The stand-in for the three outcome fields while outcomes are hidden (Task
+// 19.10). Dashed border = the established "honestly nothing here" idiom (cf.
+// ui/EmptyState) — this is a declared omission, not a control that failed to
+// load. The warning is a sibling line, not a tooltip, because the cost of the
+// click is unrecoverable: revealing is set-wide and instant, and there is no
+// un-seeing an ending. It is wired with `aria-describedby` so the warning reaches
+// assistive tech before activation, not after.
+function OutcomeFilterGate({
+  onReveal,
+  disabled,
+}: {
+  onReveal: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md border-2 border-dashed border-ink-300 bg-paper-0 px-3 py-2">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-describedby={GATE_WARNING_ID}
+        onClick={onReveal}
+        className="self-start rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Show outcome filters
+      </button>
+      <span id={GATE_WARNING_ID} className="font-mono text-2xs text-ink-500">
+        <span aria-hidden>⚠</span> reveals winners and endings across the whole set
+      </span>
+    </div>
+  );
+}
+
 interface ReplayFiltersProps {
   filters: ReplayFilterState;
   onChange: (next: ReplayFilterState) => void;
@@ -163,6 +210,11 @@ interface ReplayFiltersProps {
   resultCount: number;
   totalCount: number;
   disabled?: boolean;
+  /** Outcome reveal (Task 19.10). Required, not optional: an omitted spoiler
+   *  gate must be a compile error, never a silent default to "show everything". */
+  reveal: boolean;
+  /** Turn the reveal on (the connected picker writes the store + the URL key). */
+  onReveal: () => void;
 }
 
 export function ReplayFilters({
@@ -173,6 +225,8 @@ export function ReplayFilters({
   resultCount,
   totalCount,
   disabled = false,
+  reveal,
+  onReveal,
 }: ReplayFiltersProps) {
   const active = hasActiveFilters(filters);
 
@@ -190,44 +244,57 @@ export function ReplayFilters({
         </FilterField>
       )}
 
-      <FilterField label="Winner">
-        <select
-          className={SELECT_CLASS}
-          disabled={disabled}
-          value={filters.winner ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange({
-              ...filters,
-              winner: v === "" ? null : (v as Winner),
-            });
-          }}
-        >
-          <option value="">Any winner</option>
-          <option value="CREWMATES">Crew</option>
-          <option value="IMPOSTORS">Impostor</option>
-        </select>
-      </FilterField>
+      {/* Winner + Win shape: outcome controls, so they are replaced wholesale by
+          one affordance while hidden (Task 19.10). Not disabled-in-place — a
+          greyed <select> still carries its option list into the DOM, which is
+          exactly the leak. */}
+      {reveal ? (
+        <>
+          <FilterField label="Winner">
+            <select
+              className={SELECT_CLASS}
+              disabled={disabled}
+              value={filters.winner ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onChange({
+                  ...filters,
+                  winner: v === "" ? null : (v as Winner),
+                });
+              }}
+            >
+              <option value="">Any winner</option>
+              <option value="CREWMATES">Crew</option>
+              <option value="IMPOSTORS">Impostor</option>
+            </select>
+          </FilterField>
 
-      <FilterField label="Win shape">
-        <select
-          className={SELECT_CLASS}
-          disabled={disabled || winShapeOptions.length === 0}
-          value={filters.winShape ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange({ ...filters, winShape: v === "" ? null : v });
-          }}
-        >
-          <option value="">Any shape</option>
-          {winShapeOptions.map((shape) => (
-            <option key={shape} value={shape}>
-              {shape}
-            </option>
-          ))}
-        </select>
-      </FilterField>
+          <FilterField label="Win shape">
+            <select
+              className={SELECT_CLASS}
+              disabled={disabled || winShapeOptions.length === 0}
+              value={filters.winShape ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onChange({ ...filters, winShape: v === "" ? null : v });
+              }}
+            >
+              <option value="">Any shape</option>
+              {winShapeOptions.map((shape) => (
+                <option key={shape} value={shape}>
+                  {shape}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+        </>
+      ) : (
+        <OutcomeFilterGate onReveal={onReveal} disabled={disabled} />
+      )}
 
+      {/* Score is NOT an outcome control: it buckets the internal pacing /
+          structure heuristic, which says how much happens, never who won — so it
+          stays live in both modes (as does the Set chip above, which is context). */}
       <FilterField label="Score">
         <select
           className={SELECT_CLASS}
@@ -250,20 +317,24 @@ export function ReplayFilters({
         </select>
       </FilterField>
 
-      <FilterField label="Ejection">
-        <label className="flex items-center gap-1.5 rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs text-ink-900">
-          <input
-            type="checkbox"
-            className="accent-ink-900"
-            disabled={disabled}
-            checked={filters.hasEjection}
-            onChange={(e) => {
-              onChange({ ...filters, hasEjection: e.target.checked });
-            }}
-          />
-          ejected an impostor
-        </label>
-      </FilterField>
+      {/* Ejection: an outcome criterion ("did the table get one right?"), folded
+          into the same gate above rather than given a second affordance. */}
+      {reveal && (
+        <FilterField label="Ejection">
+          <label className="flex items-center gap-1.5 rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs text-ink-900">
+            <input
+              type="checkbox"
+              className="accent-ink-900"
+              disabled={disabled}
+              checked={filters.hasEjection}
+              onChange={(e) => {
+                onChange({ ...filters, hasEjection: e.target.checked });
+              }}
+            />
+            ejected an impostor
+          </label>
+        </FilterField>
+      )}
 
       <div className="ml-auto flex items-center gap-3">
         <span className="font-mono text-xs text-ink-500" aria-live="polite">

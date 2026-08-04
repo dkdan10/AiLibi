@@ -159,6 +159,12 @@ const T_KILL = 313;
 const T_ENTER = 314;
 const T_EXIT = 315;
 
+// `meeting_resolution: null` on every frame below (Task 19.10): this fixture holds
+// no meetings (`FIXTURE.meetings: []`), and the label is present ONLY on a frame
+// whose meeting has resolved — it is what tells the UI that such a frame's
+// `agent_states` are the PRE-vote roster while its `advantage` is already
+// post-vote. Null here is the honest value, not a placeholder.
+
 const TICK_KILL: TickView = {
   tick: T_KILL,
   agent_states: playStates({ id: "p-5", room: "REACTOR", alive: true, venting: false, action: "KILL" }),
@@ -169,6 +175,7 @@ const TICK_KILL: TickView = {
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
   advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
+  meeting_resolution: null,
 };
 
 const TICK_ENTER: TickView = {
@@ -191,6 +198,7 @@ const TICK_ENTER: TickView = {
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
   advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
+  meeting_resolution: null,
 };
 
 const TICK_EXIT: TickView = {
@@ -213,6 +221,7 @@ const TICK_EXIT: TickView = {
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
   advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
+  meeting_resolution: null,
 };
 
 // Everyone spawns alive in the Cafeteria (the loader's synthetic pre-game frame).
@@ -230,6 +239,7 @@ const START_TICK: TickView = {
   bodies: [],
   sabotage: null,
   advantage: { crew_alive: 7, impostors_alive: 2, tasks_completed: 0, tasks_required: 14, tasks_required_total: 14, advantage: 0.05 },
+  meeting_resolution: null,
 };
 
 // Index 3 = TICK_EXIT (engine tick 315) — p-5 has just emerged, so the traveller
@@ -255,6 +265,10 @@ const FIXTURE: ReplayView = {
   ticks: [START_TICK, TICK_KILL, TICK_ENTER, TICK_EXIT],
   meetings: [],
   failed_calls: [],
+  // The fixture is a mid-game slice (it ends on the vent emerge, not on a
+  // `game_over`), and its metadata already says `winner: null` — so there is no
+  // recorded finale to mirror (Task 19.10).
+  finale: null,
 };
 
 // Seed the store, then render the stage (the component reads currentReplay /

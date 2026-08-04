@@ -110,6 +110,10 @@ function meetingFixture(meeting: MeetingViewDTO): ReplayView {
     ticks: [],
     meetings: [meeting],
     failed_calls: [],
+    // No recorded finale: these fixtures isolate ONE meeting, and their metadata
+    // already says `winner: null` (Task 19.10 — `GameFinale` is nullable exactly
+    // so a partial/never-ended replay states that instead of inventing an ending).
+    finale: null,
   };
 }
 
