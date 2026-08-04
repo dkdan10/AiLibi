@@ -1,7 +1,7 @@
 # AGENTS.md
 
 You are an AI coding agent working on AiLibi. Read this file before every
-task, then read DESIGN.md and the task contract in tasks/phase-N.md.
+task, then read docs/architecture.md and the task contract in tasks/phase-N.md.
 
 ## One-time onboarding
 
@@ -13,10 +13,18 @@ contract for each PR.
 
 ## Source of truth
 
-- `DESIGN.md` is the authoritative architecture document. Every task references
-  a specific section. If the section says X, you do X — even if you think Y
-  is better. If you genuinely think the design is wrong, leave a comment in
-  the PR description and stop. Do not change the design unilaterally.
+- `docs/architecture.md` is the current-architecture note and the authority on
+  the system's layering as built — packages, the enforced boundaries, the
+  determinism and substrate-ladder contracts. Read it before touching a package
+  boundary.
+- `DESIGN.md` is the **historical design record**: a v0.1 draft, reconciled to
+  HEAD as of the Phase 6 close (2026-05-30). Read it for design rationale and
+  the history of a decision, not for current architecture. Where the two
+  disagree, `docs/architecture.md` wins.
+- Every task references specific sections — of its own contract and of the
+  documents that contract names. If the section says X, you do X — even if you
+  think Y is better. If you genuinely think the design is wrong, leave a comment
+  in the PR description and stop. Do not change the design unilaterally.
 - `tasks/phase-N.md` is the task contract — branch, dependencies, files in/out
   of scope, definition of done, implementation hint, public types introduced.
   The matching `agent_prompts/task-*.md` is generated from this contract by
@@ -51,6 +59,20 @@ contract for each PR.
 - `ruff` and `ruff format` must pass.
 - Tests are `pytest`. Property tests use `hypothesis`.
 
+## Graduation sweeps (substrate levers)
+
+When a substrate lever graduates — its `AILIBI_*` env gate retired, its
+behavior unconditional, normally at a baseline adopting record — the graduating
+PR must ALSO sweep the prose. Grep the lever's snake_case name repo-wide and
+rewrite every docstring, comment, and doc line that still describes it as live
+or default-OFF: the lever stays in the substrate stamp for provenance, but
+nothing may still tell a reader it can be switched off. Stale "default-OFF"
+prose is exactly the drift class the Task-19.2 in-code sweep had to clean;
+sweeping at graduation is the structural fix that stops it regenerating. The
+registry in `orchestrator/replay.py` (`_RETIRED_ALWAYS_ON_LEVERS` /
+`_TOGGLEABLE_LEVER_RESOLVERS`) is the source of truth for which levers are
+still live.
+
 ## Environment setup
 
 - In a fresh local, container, or agent runner environment, run
@@ -61,20 +83,26 @@ contract for each PR.
 - New Python dependencies must be added intentionally with `uv add ...` or
   `uv lock`. Commit both `pyproject.toml` and `uv.lock` when dependencies
   change.
+- **Shallow clones.** Hosted CI and agent-runner environments often provide a
+  shallow clone (the Phase-19 input audit's session saw ~50 commits until it
+  unshallowed). Any history-derived claim — merged-PR counts, `git log --follow`
+  provenance — requires `git fetch --unshallow` (or an equivalent full fetch)
+  first. Never read a truncated log as the project's history.
 - **LLM providers.** CI and `bash scripts/check.sh` always run against the
-  deterministic fake provider and never hit the network. Three real providers
-  are supported behind the `LLMClient` Protocol, selected by
+  deterministic fake provider and never hit the network. Four providers sit
+  behind the `LLMClient` Protocol — the fake plus three real ones — selected by
   `AILIBI_LLM_PROVIDER`: Anthropic (`anthropic`, needs `ANTHROPIC_API_KEY`);
   a local **Ollama** open model (`ollama`, `qwen3.5:9b` on `localhost:11434`,
   run with thinking disabled, free); and hosted **Featherless**
   (`featherless`, `Qwen/Qwen3.6-27B`, OpenAI-compatible, needs
   `FEATHERLESS_API_KEY`, recorded as $0 on a flat-rate subscription) — the
   **canonical eval provider** since Phase 14, its model locked 2026-07-12 at
-  Task 16.2 (audits/audit-phase-16-model-lock.md) and pinned non-thinking; the
-  committed baseline sets were recorded under the previous model
-  `Qwen/Qwen3-32B` (baseline 3), pending the 16.14 baseline-4 re-record.
-  None is reached in CI: the Anthropic and Ollama integration tests are
-  opt-in behind env gates
+  Task 16.2 (audits/audit-phase-16-model-lock.md) and pinned non-thinking. The
+  committed sample sets under `replays/samples/` are the **baseline-6** record
+  (the Task-18.12 meeting-layer adopting record), recorded on that locked
+  model; each set's `MANIFEST.md` is the canonical provenance record.
+  No real provider is reached in CI: the Anthropic and Ollama integration
+  tests are opt-in behind env gates
   (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`), and the
   Featherless client is unit-tested against a mock transport (no network).
 
@@ -84,7 +112,9 @@ A task is not done until:
 - All checkboxes in the task's "Definition of done" are checked.
 - `bash scripts/check.sh` passes locally.
 - The diff touches only the files listed as in scope.
-- The PR description references the DESIGN.md section(s) implemented.
+- The PR description references the section(s) the task contract names
+  (DESIGN.md sections where the contract cites them; `docs/architecture.md`
+  for layering).
 
 ## GitHub operations
 
