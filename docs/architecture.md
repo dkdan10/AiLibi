@@ -119,7 +119,9 @@ every packet from Hypothesis-generated games recursively through the
 
 ## Determinism and the substrate ladder
 
-A seed, an agent factory, and the provider's responses determine the bytes.
+A seed, a game config (roster, map, tick budget — the run setup
+`scripts/run_game.py` builds), an agent factory, and the provider's responses
+determine the bytes.
 Under the deterministic fake provider a seed alone reproduces byte-identical
 replay JSONL, and a committed recording reconstructs byte-identically under any
 provider; fresh hosted generation is non-deterministic, so for real providers

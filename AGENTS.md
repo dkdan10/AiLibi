@@ -101,10 +101,12 @@ still live.
   committed sample sets under `replays/samples/` are the **baseline-6** record
   (the Task-18.12 meeting-layer adopting record), recorded on that locked
   model; each set's `MANIFEST.md` is the canonical provenance record.
-  No real provider is reached in CI: the Anthropic and Ollama integration
-  tests are opt-in behind env gates
-  (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`), and the
-  Featherless client is unit-tested against a mock transport (no network).
+  No real provider is reached in CI: the live integration tests are opt-in
+  behind env gates — `AILIBI_RUN_REAL_PROVIDER_TESTS=1` covers the Anthropic
+  tests AND the live Featherless smoke tests (which additionally need
+  `FEATHERLESS_API_KEY`; `tests/llm/test_real_provider.py`), and
+  `AILIBI_RUN_OLLAMA_TESTS=1` the local Ollama round-trip. The Featherless
+  client's CI coverage is unit tests against a mock transport (no network).
 
 ## Definition of done (always)
 

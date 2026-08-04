@@ -29,12 +29,13 @@ together, so one run names every drifted fact rather than the first.
    the whole sentence, however long — must name that baseline, and no other.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
-   with a commented example line showing its bare-environment default — and
-   ONLY that way: an active (uncommented) export anywhere in the template
-   fails, because a copied .env would flip the substrate away from the
-   committed baseline-6 record. Every graduated lever must be named by its
-   registry key inside the belief-substrate section's graduated note (a
-   mention elsewhere in the file does not count) and must NOT appear as an
+   IN the belief-substrate section with a commented example line showing its
+   bare-environment default — and ONLY that way: an active (uncommented)
+   export anywhere in the template fails, because a copied .env would flip
+   the substrate away from the committed baseline-6 record. Every graduated
+   lever must be named by its registry key inside the section's GRADUATED
+   LEVERS note — the contiguous comment block, not merely the section or the
+   file — and must NOT appear as an
    ``AILIBI_*=`` assignment, commented or not — its env gate was deleted at
    graduation, so an assignment line would hand out a knob this build does not
    read. The belief-substrate section may not advertise any ``AILIBI_*=``
@@ -108,6 +109,10 @@ _WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
 _LEVER_SECTION_TITLE: Final = "# Belief-substrate levers"
 _SECTION_RULE: Final = re.compile(r"^# -{20,}[ \t]*$", re.MULTILINE)
 _ENV_ASSIGNMENT: Final = re.compile(r"^#?[ \t]*(AILIBI_[A-Z0-9_]+)=", re.MULTILINE)
+# The graduated note is the contiguous comment block opening with this marker;
+# the graduated/always-ON labels must live IN it, not merely near it.
+_GRADUATED_NOTE_MARKER: Final = "# GRADUATED LEVERS"
+_BLANK_LINE: Final = re.compile(r"\n[ \t]*\n")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -342,22 +347,25 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
 
     for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS:
         variable = env_var_for(key)
-        if variable not in text:
+        if variable not in section:
             errors.append(
                 f"{_ENV_EXAMPLE}: live toggle {key!r} is undocumented — "
-                f"{variable} appears nowhere, so the one substrate knob this "
-                "build still reads is invisible to anyone copying the template."
+                f"{variable} appears nowhere in the belief-substrate section, "
+                "so the one substrate knob this build still reads is invisible "
+                "to anyone copying the template."
             )
             continue
         default = "1" if bare_defaults.get(key, False) else "0"
         example = re.compile(
             rf"^#[ \t]*{re.escape(variable)}={default}[ \t]*$", re.MULTILINE
         )
-        if example.search(text) is None:
+        if example.search(section) is None:
             errors.append(
                 f"{_ENV_EXAMPLE}: live toggle {key!r} has no commented example "
-                f"line '# {variable}={default}' showing its bare-environment "
-                "default in this build."
+                f"line '# {variable}={default}' in the belief-substrate "
+                "section showing its bare-environment default in this build — "
+                "an example elsewhere in the file is not where a reader copying "
+                "the lever section looks."
             )
         active = re.compile(rf"^[ \t]*{re.escape(variable)}=", re.MULTILINE)
         if active.search(text) is not None:
@@ -368,17 +376,25 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
                 "toggle may appear only as the commented bare-default example."
             )
 
+    note = graduated_note(section)
+    if note is None:
+        errors.append(
+            f"{_ENV_EXAMPLE}: missing the {_GRADUATED_NOTE_MARKER!r} note in "
+            "the belief-substrate section — the graduated/always-ON labels "
+            "have no home, so they cannot be audited against the registry."
+        )
+
     toggleable = set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
     for key in SUBSTRATE_FLAG_KEYS:
         if key in toggleable:
             continue
-        if re.search(rf"\b{re.escape(key)}\b", section) is None:
+        if note is not None and re.search(rf"\b{re.escape(key)}\b", note) is None:
             errors.append(
                 f"{_ENV_EXAMPLE}: graduated lever {key!r} is missing from the "
-                "graduated-levers note in the belief-substrate section; "
-                "orchestrator.replay still stamps it into every recording, so "
-                "the template must keep naming it there — a mention elsewhere "
-                "in the file does not label the lever graduated/always-ON."
+                "graduated-levers note; orchestrator.replay still stamps it "
+                "into every recording, so the note must keep naming it — a "
+                "mention elsewhere in the file or section does not label the "
+                "lever graduated/always-ON."
             )
         assignment = f"{env_var_for(key)}="
         if assignment in text:
@@ -417,6 +433,23 @@ def lever_section(text: str) -> str | None:
     start = rules[0].end()
     end = rules[1].start() if len(rules) > 1 else len(text)
     return text[start:end]
+
+
+def graduated_note(section: str) -> str | None:
+    """The graduated-levers note inside the belief-substrate section.
+
+    The note is the contiguous comment block opening with
+    :data:`_GRADUATED_NOTE_MARKER` and ending at the first blank line — the
+    one place the graduated/always-ON labels count. ``None`` when the marker
+    is missing (format drift the caller reports).
+    """
+
+    marker = section.find(_GRADUATED_NOTE_MARKER)
+    if marker == -1:
+        return None
+    rest = section[marker:]
+    blank = _BLANK_LINE.search(rest)
+    return rest if blank is None else rest[: blank.start()]
 
 
 def env_var_for(key: str) -> str:

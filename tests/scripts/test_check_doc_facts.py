@@ -300,6 +300,48 @@ def test_graduated_mention_outside_note_does_not_count(doc_tree: Path) -> None:
     assert "graduated-levers note" in errors[0]
 
 
+def test_graduated_aside_inside_section_does_not_count(doc_tree: Path) -> None:
+    # Tighter still: a mention inside the SECTION but outside the graduated
+    # NOTE (a historical aside before the toggle paragraph) must not stand in
+    # for the note's graduated/always-ON label either.
+    _substitute(doc_tree, _ENV_EXAMPLE, "movement_perception", "")
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        "# The ONE live toggle",
+        "# Historical aside: movement_perception was once default-OFF.\n\n"
+        "# The ONE live toggle",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'movement_perception'" in errors[0]
+    assert "graduated-levers note" in errors[0]
+
+
+def test_missing_graduated_note_marker_detected(doc_tree: Path) -> None:
+    # Losing the note's marker is format drift, not a silent skip.
+    _substitute(doc_tree, _ENV_EXAMPLE, "# GRADUATED LEVERS", "# RETIRED LEVERS")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'# GRADUATED LEVERS'" in errors[0]
+
+
+def test_toggle_example_outside_section_does_not_count(doc_tree: Path) -> None:
+    # The commented example must live in the belief-substrate section — the
+    # place a reader copying the lever config actually looks; the same line
+    # in an appendix elsewhere must not satisfy the check.
+    _substitute(doc_tree, _ENV_EXAMPLE, _TOGGLE_EXAMPLE_LINE + "\n", "")
+    _write(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _read(doc_tree, _ENV_EXAMPLE) + "\n" + _TOGGLE_EXAMPLE_LINE + "\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'impostor_roll_call'" in errors[0]
+    assert "appears nowhere in the belief-substrate section" in errors[0]
+
+
 def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
     # (g) The bytes move under the prose: one recorded winner cell flips, so
     # the re-derived rate slides 34% -> 32%; the README misses the new rate
