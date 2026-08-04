@@ -104,6 +104,37 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     assert "refresh date '2026-07-20'" in errors[0]
 
 
+def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
+    # Every regenerated-date clause in the paragraph must match — a stale
+    # duplicate beside the correct clause is drift, same as the win rates.
+    _substitute(
+        doc_tree,
+        _README,
+        "regenerated 2026-07-20",
+        "regenerated 2026-07-20 (an earlier draft said regenerated 2026-07-14)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'regenerated 2026-07-14'" in errors[0]
+    assert "refresh date '2026-07-20'" in errors[0]
+
+
+def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
+    # The paragraph's total-replay count is a manifest fact too.
+    _substitute(doc_tree, _README, "100 sample replays", "80 sample replays")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'100 sample replays'" in errors[0]
+
+
+def test_wrong_tournament_size_detected(doc_tree: Path) -> None:
+    # As is the per-set tournament size.
+    _substitute(doc_tree, _README, "50-game", "40-game")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'50-game'" in errors[0]
+
+
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     # Losing the paragraph anchor is format drift, not a vacuous pass.
     _substitute(doc_tree, _README, "regenerated 2026-07-20", "refreshed 2026-07-20")
@@ -316,6 +347,23 @@ def test_graduated_aside_inside_section_does_not_count(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "'movement_perception'" in errors[0]
     assert "graduated-levers note" in errors[0]
+
+
+def test_graduated_note_wording_drift_detected(doc_tree: Path) -> None:
+    # Listing every key is not enough: the note's WORDING is the label. If it
+    # stops saying always-ON or drifts back to default-OFF phrasing, both
+    # facets are reported.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        "# GRADUATED LEVERS — always ON, nothing to set.",
+        "# GRADUATED LEVERS — default OFF pending re-record.",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert "no longer says 'always ON'" in errors[0]
+    assert "'default OFF'" in errors[1]
+    assert "graduation-sweep convention" in errors[1]
 
 
 def test_missing_graduated_note_marker_detected(doc_tree: Path) -> None:

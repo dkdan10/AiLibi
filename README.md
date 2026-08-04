@@ -85,7 +85,7 @@ uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r2.jsonl
 diff -q /tmp/r1.jsonl /tmp/r2.jsonl   # files are identical
 ```
 
-The replay JSONL records per-tick actions and a SHA-256 hash of the full engine state. Identical seed + identical agent factory always produces identical bytes — that property is also how CI proves the engine is pure: `eval/determinism_test.py` runs every scripted fixture twice and compares the entire JSONL output.
+The replay JSONL records per-tick actions and a SHA-256 hash of the full engine state. Identical seed + identical config + identical agent factory always produces identical bytes under the deterministic fake provider (the default, and what the demo above runs); with a real provider, fresh generation is non-deterministic and it is the *recording* that reproduces byte-identically — the scopes below state the exact claims. The fake-provider property is also how CI proves the engine is pure: `eval/determinism_test.py` runs every scripted fixture twice and compares the entire JSONL output.
 
 ### Three reproducibility scopes
 

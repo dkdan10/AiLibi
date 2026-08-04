@@ -21,9 +21,12 @@ together, so one run names every drifted fact rather than the first.
    ``regenerated YYYY-MM-DD`` clause): its stated date must equal the newest
    ``refreshed_at``, and it must carry each recomputed rate as the exact
    substring ``"<rate>% (<set>)"`` — a correct value elsewhere in the file
-   cannot satisfy a drifted paragraph. And EVERY ``"<rate>% (<set>)"`` claim in
-   the file — inside the paragraph or out — must match the recomputed rate, so
-   a stale duplicate cannot hide beside the correct value.
+   cannot satisfy a drifted paragraph. EVERY ``regenerated YYYY-MM-DD`` clause
+   in the paragraph and EVERY ``"<rate>% (<set>)"`` claim in the file — inside
+   the paragraph or out — must match, so a stale duplicate cannot hide beside
+   the correct value. The paragraph's count claims are re-derived from the
+   same rows: the per-set tournament size (``"<rows>-game"``) and the total
+   (``"<sum> sample replays"``).
 2. **Ladder tip.** ``audits/audit-phase-18-close.md`` owns which baseline the
    substrate ladder stands at. Every README sentence naming the "ladder tip" —
    the whole sentence, however long — must name that baseline, and no other.
@@ -35,7 +38,8 @@ together, so one run names every drifted fact rather than the first.
    the substrate away from the committed baseline-6 record. Every graduated
    lever must be named by its registry key inside the section's GRADUATED
    LEVERS note — the contiguous comment block, not merely the section or the
-   file — and must NOT appear as an
+   file — whose wording must keep saying "always ON" and never drift back to
+   default-OFF phrasing; and no graduated lever may appear as an
    ``AILIBI_*=`` assignment, commented or not — its env gate was deleted at
    graduation, so an assignment line would hand out a knob this build does not
    read. The belief-substrate section may not advertise any ``AILIBI_*=``
@@ -220,16 +224,17 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
 
     if dates:
         newest = max(dates)
-        date_match = _REGENERATED_DATE.search(paragraph)
-        assert date_match is not None  # the paragraph anchor guarantees it
-        if date_match.group(1) != newest:
-            errors.append(
-                f"{_README}: the sample-provenance paragraph claims "
-                f"'regenerated {date_match.group(1)}', but the newest "
-                f"refresh date {newest!r} is what "
-                f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
-                " record."
-            )
+        # EVERY regenerated-date clause in the paragraph must match — a stale
+        # duplicate beside the correct clause is drift, same as the win rates.
+        for stated in _REGENERATED_DATE.findall(paragraph):
+            if stated != newest:
+                errors.append(
+                    f"{_README}: the sample-provenance paragraph claims "
+                    f"'regenerated {stated}', but the newest "
+                    f"refresh date {newest!r} is what "
+                    f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
+                    " record."
+                )
 
     for name, (impostor_wins, total) in rates.items():
         claim = f"{round(100 * impostor_wins / total)}% ({name})"
@@ -239,6 +244,27 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"recorded impostor win rate {claim!r} — "
                 f"{_MANIFEST_PATH.format(name=name)} records "
                 f"{impostor_wins}/{total} games won by the impostors."
+            )
+
+    size_claims: dict[str, list[str]] = {}
+    for name, (_, total) in rates.items():
+        size_claims.setdefault(f"{total}-game", []).append(name)
+    for games_claim, names in sorted(size_claims.items()):
+        if games_claim not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph is missing the "
+                f"tournament size {games_claim!r} — "
+                f"{', '.join(_MANIFEST_PATH.format(name=name) for name in names)} "
+                f"hold that many replay rows per set."
+            )
+    if len(rates) == len(_SAMPLE_SETS):
+        grand_total = sum(total for _, total in rates.values())
+        replays_claim = f"{grand_total} sample replays"
+        if replays_claim not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph is missing the "
+                f"total {replays_claim!r} — the manifests hold {grand_total} "
+                "replay rows between them."
             )
 
     for claim_match in _WIN_RATE_CLAIM.finditer(readme):
@@ -383,6 +409,25 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
             "the belief-substrate section — the graduated/always-ON labels "
             "have no home, so they cannot be audited against the registry."
         )
+    else:
+        # The note's WORDING is the load-bearing label, not just the key
+        # names: it must keep saying always-ON, and must never drift back to
+        # describing a graduated lever as default-OFF/switchable.
+        if "always ON" not in note:
+            errors.append(
+                f"{_ENV_EXAMPLE}: the graduated-levers note no longer says "
+                "'always ON' — the graduated state is the note's one "
+                "load-bearing label."
+            )
+        stale_wording = re.search(r"default[-\s]?off", note, re.IGNORECASE)
+        if stale_wording is not None:
+            errors.append(
+                f"{_ENV_EXAMPLE}: the graduated-levers note contains "
+                f"{stale_wording.group(0)!r} — graduated levers are "
+                "unconditionally ON; default-OFF wording in the note is the "
+                "exact drift class the graduation-sweep convention "
+                "(AGENTS.md) exists to prevent."
+            )
 
     toggleable = set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
     for key in SUBSTRATE_FLAG_KEYS:
