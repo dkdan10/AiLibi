@@ -368,3 +368,41 @@ uv run pytest tests/training/test_composed_runner.py -q
   standing plan with nothing re-planned — the fallback is always live.
 * Any substrate change re-runs §8 — every number here is a baseline-6
   measurement, not a transferable constant.
+
+## 11. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)
+
+Anchor: `audits/audit-phase-19-triage.md` §7 item 20 [S-Codex/S-Claude], with §8
+row 4 VERIFIED exactly, and the triage's contradiction rulings **C2** and **C9**;
+**C9 is the one that reaches this report.** The item below is **additive** — no
+recorded byte, no table cell, and no verdict above this section is rewritten — and
+it **overturns no conclusion**: this report already draws the distinction
+correctly. The erratum exists because external citations collapsed it.
+
+1. **The report's own qualification is correct; the guard is against citations
+   that drop it.** §4's honest note (a) already separates the two figures, in
+   these words:
+
+   > "well clear of the 0.625 constant but below the model's 0.9375 accuracy on
+   > its own conversion label"
+
+   (:166, closing the sentence that reports the 0.8646 decision cell). That
+   clause is accurate as written and needs no change. Downstream citations,
+   however, quoted the conviction model's 0.9375 as "decision accuracy" — the
+   triage's **C9** finding, whose ruling is that the source reports are right and
+   the mislabel is the citation's.
+
+   **The three figures, pinned, with their channels:**
+   - **0.8646 (83/96) — meeting DECISION accuracy.** This report's gating cell
+     (§3 table; axis 1 of §4's verdict), and **identical under the live candidate
+     views** (§3's live-view re-score: "decision accuracy **83/96 = 0.8646
+     (identical)**"). This is the program's meeting-decision figure.
+   - **0.7917 (76/96) — exact-outcome match.** Informational by
+     pre-registration, **never gates** (§4 axis 3: "informational, never gates").
+     It compounds both channels and is not a decision accuracy.
+   - **0.9375 (90/96) — the conviction model's CONVERSION-label accuracy**
+     (`report-conviction-model.md` §4). It is **not a decision figure and must
+     not be quoted as one**; it measures the conversion head against its own
+     testimony-backed conversion label, on the same 96 held-out meetings.
+
+   The GO verdict, all three axes, and every cell in §3 stand exactly as
+   recorded.

@@ -2489,3 +2489,128 @@ finding, and two cells clearing the bar on all four arms is not four findings.
   Classes 2 and 3 both exit `rc 0`, so the retry machinery never sees them as
   failures at all; both were caught by the scorer's `game_over` check, not by the
   runner. That is the operational lesson this campaign hands forward.
+
+## 18. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)
+
+Anchor: `audits/audit-phase-19-triage.md` §7 item 20 [S-Codex/S-Claude], whose §8
+row 4 recomputation is marked **VERIFIED exactly**, together with the triage's
+contradiction rulings **C2** (the paired win edge) and **C9** (the
+conversion-vs-decision terminology). Every item below is **additive**: no recorded
+byte, no table cell, and no verdict above this section is rewritten, and the
+committed `training/reports/results-finalist-eval.jsonl` is read, never edited.
+**One reading does change, and it is named plainly** — item 1 removes the
+inferential license from §16.a's win-edge sentence for the shipped champion. Item 2
+records a possible mechanism and is explicitly uncausal as measured. Item 3 records
+what these items do **not** touch.
+
+1. **§16.a's impostor win edge was recorded as a bare point estimate, with no
+   paired uncertainty treatment — item 1 supplies it, and the shipped arm's edge
+   does not survive.** The report states (:1082-1087): "Every impostor arm beats
+   the fresh comparator; every impostor arm fails the referee on the same two
+   supply gauges." and "The four learned arms sit **+0.12 to +0.30** above it on
+   wins". Both sentences are arithmetically correct — every Δ cell in §16.a
+   reproduces from the committed rows — but the win-edge cells carry **no interval
+   and no test**, so "beats" was doing inferential work the recording never
+   supported. The report applies exactly this discipline elsewhere (two-proportion
+   z on the emergence gauges, :232; an exact McNemar on the crew pair,
+   :1746-1770); it never applied it to the impostor win edge. This erratum does.
+
+   **The recomputation.** An exact (binomial) McNemar test on each arm's per-game
+   rows against the **same-seed** `p18-fsm-comparator` rows, plus Wilson score
+   intervals on each side's win rate. Every row is read from the committed
+   `training/reports/results-finalist-eval.jsonl`, which is consistent with this
+   report's own provenance separation — §2 (:115-118) records that the raw
+   recordings "live **outside** the repo tree… What is committed is their
+   **measurement**", and §16 (:1066-1070) records that the committed measurement
+   is what every cell is read from. The paired test therefore runs entirely on
+   committed bytes and needs no access to the external slate.
+
+   | arm | n | wins (arm/comparator) | Δ | discordant b/c | exact McNemar p | Wilson 95% (arm) | Wilson 95% (comparator) |
+   |---|---|---|---|---|---|---|---|
+   | `p18-imp-ea4bc955` | 50 | 26 / 13 | +0.26 | 17/4 | **0.0072** | [0.3851, 0.6520] | [0.1587, 0.3955] |
+   | `p18-imp-bfd145cb` | 50 | 28 / 13 | +0.30 | 20/5 | **0.0041** | [0.4231, 0.6884] | [0.1587, 0.3955] |
+   | `p18-imp-6d327dcb` | 50 | 19 / 13 | +0.12 | 15/9 | **0.3075 — n.s.** | [0.2586, 0.5185] | [0.1587, 0.3955] |
+   | `p18-imp-7f73929d` | 49 | 21 / 12 | +0.18367 | 12/3 | **0.0352** | [0.3002, 0.5673] | [0.1460, 0.3809] |
+
+   **In plain language, first: the SHIPPED champion's edge is not statistically
+   significant.** `p18-imp-6d327dcb` runs the artifact this repo actually ships —
+   the committed weights at `agents/tactical/learned/weights.json`, sidecar
+   `6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0`. Its paired
+   edge is **+0.12 on 15/9 discordant seeds, p = 0.3075**: **not statistically
+   significant at n=50**, at any conventional level. A 15-vs-9 discordant split is
+   what a coin does. **The Phase-18 edge of the artifact the repo actually ships is
+   statistically unresolved.** §16.a's "every impostor arm beats the fresh
+   comparator" stays true as a statement about point estimates, and must not be
+   quoted as a demonstrated advantage for this arm.
+
+   **Second: across the four-arm family, one more arm falls to the multiplicity
+   correction.** Four learned arms were tested against the same comparator, so the
+   family-wise bar is Bonferroni **α = 0.05 / 4 = 0.0125**. Against it,
+   `p18-imp-7f73929d` (p = 0.0352) **fails the multiplicity correction**; only
+   `p18-imp-ea4bc955` (p = 0.0072) and `p18-imp-bfd145cb` (p = 0.0041) survive it.
+   Two of the four arms hold a family-wise defensible win edge, and the shipped one
+   is not among them.
+
+   **Recompute:**
+
+   ```
+   uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl
+   ```
+
+   (exact binomial McNemar on the discordant pair + Wilson score intervals,
+   `scripts/paired_stats.py`, pinned by `tests/scripts/test_paired_stats.py`.) The
+   method is not new to this report: §16 already applies it to the crew pair — the
+   c1 gen-9/gen-0 exact McNemar at :1746-1770, where "**38 of the 49 seeds are
+   concordant**… McNemar's exact two-sided test on those discordants gives **p =
+   1.0**". This erratum applies that same standard to the impostor win edge, which
+   the report itself never did.
+
+2. **The four learned arms were trained under a reward-shaping term whose
+   docstring claim was mathematically false.** Every arm in §16.a was trained
+   through `training/rewards.py`, whose module docstring headed its shaping term
+   "**Potential-based shaping (Ng et al. 1999, policy-invariant).**" and asserted:
+   "At ``γ = 1`` the shaping TELESCOPES: ``Σ_t F = Φ(terminal) − Φ(initial)`` for
+   ANY episode, so it cannot change the optimal policy." — quoted from
+   `training/rewards.py` as committed at `09cd2416`, the last state of that file
+   before the Task 19.4 correction. **The claim is false as deployed.** Telescoping
+   is not invariance: Ng-1999 policy invariance needs one further hypothesis this
+   module does not satisfy — a trajectory-INdependent terminal potential — and
+   `_side_potential` here is a CUMULATIVE count (impostor: kills; crew: completed
+   task instances). Φ(terminal) is therefore trajectory-DEPENDENT, the shaping sum
+   at γ=1 equals the episode's terminal kill count, and the term is a real
+   **+1-per-kill incentive** added to the return rather than a policy-neutral
+   transform. Corrected in code by Task 19.4; the non-invariance is now pinned by a
+   committed test in `tests/training/test_rewards.py`.
+
+   **Why it is recorded in this report.** It bears on this report's central
+   negative: all four learned arms fail the referee on the same two
+   evidence-supply gauges (`flags_per_meeting` and `testimony_backed_conversion`,
+   §16.a), and a +1-per-kill incentive is a possible contributor to evidence-starved
+   play. **Uncausal as measured**: no committed measurement isolates the shaping
+   term's contribution to those gauges — no ablation of the shaping term was ever
+   recorded — so it is entered here as a **possible mechanism, not an established
+   cause**. **No computed value in this report moves.**
+
+3. **What items 1-2 do NOT touch: the retained findings, still quotable exactly as
+   recorded.** Neither item reaches this report's positively-established findings,
+   which are rate contrasts rather than the paired win edge:
+   - **N1 — the learned mover kills into witnesses at ~3.3× the scripted rate.**
+     Crew-witnessed-kill rate **0.15228 = 30/197** against the comparator's
+     **0.04598 = 8/174**, **z = +3.370**, sign-reproduced **3/3**.
+   - **N2 — the learned mover emits a kill class the FSM structurally never does.**
+     Co-present-kill departure rate **0.10152 = 20/197** against **0.0 = 0/174**,
+     **z = +4.321**, sign-reproduced **3/3**.
+
+   Both are from `audits/audit-phase-18-flip-emergence.md` §8.3, with the
+   underlying cells carried in this report's §16.a witnessed-rate column. They are
+   rate contrasts measured at **z = +3.4 / +4.3** — a different instrument, a
+   different quantity, and a different order of evidence from a +0.12 win-rate
+   point estimate — and they **survive item 1 untouched**.
+
+   The program's clean negatives likewise remain standing and quotable (the set
+   catalogued at `audits/audit-phase-19-triage.md` §4 item 23): the **torch PPO
+   probe NO**; the **policy-es real-path annihilation** (win 0.02, Δ −0.34 in §3.a;
+   "stays competitively annihilated (0.00 → **0.02**…)" at :207); and the
+   **crew-track null** — this report's own §16 crew-pair exact McNemar at **p =
+   1.0**, recorded there as "a **null, not an equivalence**". Item 1 weakens the
+   shipped champion's win-edge claim. It does not weaken any of these.

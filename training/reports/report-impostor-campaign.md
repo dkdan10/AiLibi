@@ -1766,3 +1766,29 @@ bytes; all other artifacts are untouched.
     bytes: the committed sweep JSONs carry no `off_menu_decisions` key. The
     denominators for any off-menu reading come from the named non-finalist exhibit
     (`27f852fe…`) recordings directly, not from the sweep artifacts.
+16. **(added 2026-08-04, from the Task 19.20 report-honesty pass) The §4.0 instability
+    check as a stopping rule, not a post-mortem.** Anchor:
+    `audits/audit-phase-19-triage.md` §7 item 20 [S-Codex/S-Claude], §8 row 4 VERIFIED
+    exactly, findings C2 + C9. This item is **additive** and **overturns nothing**: no
+    recorded byte, table cell or verdict above is rewritten, and §4.0's own numbers are
+    quoted unchanged. It records the *stopping-rule* reading of a lesson the report
+    already states as a post-mortem. §4.0 admits the late discovery in its own words
+    (:460-465): "the first non-replication — `f280962f…` collapsing on fresh seeds — was
+    read at the time as "that candidate was noise" rather than "this measurement is
+    noise," and recording continued for roughly another day before the stability table
+    above was computed." What that delay cost is measured, not estimated: the mean
+    absolute `flags_per_meeting` swing between tranches is **0.7415** against a floor of
+    **1.0909** — **~68% noise-to-threshold** — with **10 of 22** arms swinging a full
+    game in win rate and **0** referee PASSes replicated (3 recorded / 1 retested / 0
+    replicated). Every one of those cells was computed only **after ~40 h of recording**.
+    F12 states the consequence: the check "invalidates the referee verdicts this campaign
+    spent ~40 h producing"; §11 prices the counterfactual — run at hour ~16 "it would
+    have re-framed the remaining ~24 h of recording before they were spent." **The lesson,
+    restated as a stopping rule:** a campaign must **pre-register the stability check as
+    a CONTINUE/STOP gate fired after the FIRST retested candidate**, not as an analysis
+    run at the end. Continuing to record past the first non-replication without computing
+    it is spending the budget before the instrument's noise floor is known — the first
+    non-replication is the gate's trigger, and the correct default on a failed gate is
+    STOP, not "retest another candidate." This is the same content routed forward as
+    18.25's F12 precondition; it is recorded here so the stopping rule is quotable from
+    the report that paid for it.

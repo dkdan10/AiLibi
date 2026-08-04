@@ -292,3 +292,37 @@ uv run pytest tests/training/test_conviction_model.py -q
   training-signal role).
 * Any substrate change re-runs §8 — this verdict, like every number here, is
   a baseline-6 measurement, not a transferable constant.
+
+## 11. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)
+
+Anchor: `audits/audit-phase-19-triage.md` §7 item 20 [S-Codex/S-Claude], with §8
+row 4 VERIFIED exactly, and the triage's contradiction rulings **C2** and **C9**;
+**C9 is the one that reaches this report.** The item below is **additive** — no
+recorded byte, no table cell, and no verdict above this section is rewritten — and
+it **overturns no conclusion here**, because this report's own label is already
+correct. It exists to pin the terminology against downstream mis-citation.
+
+1. **This report's label is correct; downstream citations of it are not.** §4
+   records the cell verbatim as:
+
+   > `| conversion accuracy | 90/96 = 0.9375 |`
+
+   (:196, under §4's held-out table on 30 test games / 96 meetings). That is the
+   accuracy of the conversion head on its **testimony-backed CONVERSION label**,
+   and §4 says so in its own column name. Downstream citations have nevertheless
+   quoted the same figure as "held-out decision accuracy" / "decision accuracy
+   0.938" — the triage's **C9** finding, whose ruling is that "Claude's label is
+   wrong; Codex and the source reports are right"; `README.md`'s status line
+   carried the mislabel until the Task 19.1 correction.
+
+   **The terminology, pinned:** **0.9375 is accuracy on the testimony-backed
+   CONVERSION label** — 90 of 96 held-out meetings, the label defined in §3 and
+   mirrored, never imported. It is **not** meeting-decision accuracy. The
+   meeting-DECISION figure for this model, consumed as an eject/skip gate, is the
+   composed runner's **83/96 = 0.8646** (`report-composed-runner.md` §3-4), with
+   **76/96 = 0.7917** the informational exact-outcome match that never gates.
+
+   Any quotation of 0.9375 as "decision accuracy" is therefore a **citation error,
+   not a report error**. Nothing in §4, §5 or the committed
+   `training/artifacts/conviction/verdict.json` changes; the GO verdict and both
+   axes stand exactly as recorded.
