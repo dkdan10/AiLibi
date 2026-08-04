@@ -10,21 +10,21 @@ dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "hypothesis" },
-    { name = "import-linter" },
     { name = "jinja2" },
-    { name = "mypy" },
     { name = "numpy" },
     { name = "ollama" },
     { name = "pydantic" },
-    { name = "pytest" },
     { name = "pyyaml" },
-    { name = "ruff" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "hypothesis" },
+    { name = "import-linter" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
     { name = "types-pyyaml" },
 ]
 
@@ -33,21 +33,23 @@ requires-dist = [
     { name = "anthropic", specifier = "==0.104.1" },
     { name = "fastapi", specifier = "==0.136.1" },
     { name = "httpx", specifier = "==0.28.1" },
-    { name = "hypothesis", specifier = "==6.152.4" },
-    { name = "import-linter", specifier = "==2.11" },
     { name = "jinja2", specifier = "==3.1.6" },
-    { name = "mypy", specifier = "==1.20.2" },
     { name = "numpy", specifier = "==2.2.6" },
     { name = "ollama", specifier = "==0.6.2" },
     { name = "pydantic", specifier = "==2.13.3" },
-    { name = "pytest", specifier = "==9.0.3" },
     { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "ruff", specifier = "==0.15.12" },
     { name = "uvicorn", specifier = "==0.38.0" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "types-pyyaml", specifier = "==6.0.12.20260408" }]
+dev = [
+    { name = "hypothesis", specifier = "==6.152.4" },
+    { name = "import-linter", specifier = "==2.11" },
+    { name = "mypy", specifier = "==1.20.2" },
+    { name = "pytest", specifier = "==9.0.3" },
+    { name = "ruff", specifier = "==0.15.12" },
+    { name = "types-pyyaml", specifier = "==6.0.12.20260408" },
+]
 
 [[package]]
 name = "annotated-doc"

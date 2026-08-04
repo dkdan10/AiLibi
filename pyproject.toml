@@ -4,6 +4,24 @@ version = "0.1.0"
 description = "Multi-agent social-deduction simulation platform"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
+# Runtime dependencies only: what the production packages (api, orchestrator,
+# meetings, agents, llm, engine, observation) need to import and run. The gate
+# toolchain lives in the `dev` dependency group below. The partition is provable,
+# not decorative:
+#
+#     uv run --no-dev --exact python -c "import api.main, orchestrator.game, \
+#         meetings.manager, agents.strategic.prompts.loader, llm.provider, engine.tick"
+#
+# (`--no-dev --exact` is load-bearing — a bare `uv run` re-syncs the dev group and
+# the probe passes vacuously; the entry-module list is load-bearing too, because
+# all six package `__init__.py` files are 0 bytes and importing the bare packages
+# executes none of the production graph.)
+#
+# Known, accepted boundary: `training/` and `eval/` are NOT covered by that claim.
+# `eval/leak_test.py:9` imports pytest at module level and both production-side
+# consumers (`training/bakeoff/harness.py:107`, `training/crew/scorer.py:113`)
+# import from it, so training/eval remain dev-environment surfaces until Task
+# 19.24 promotes the scanners to a pytest-free library.
 dependencies = [
     "anthropic==0.104.1",
     "fastapi==0.136.1",
@@ -12,16 +30,11 @@ dependencies = [
     # is not optional: without this line the client rides in transitively via
     # anthropic/ollama and would break the moment either drops or repins it.
     "httpx==0.28.1",
-    "hypothesis==6.152.4",
-    "import-linter==2.11",
     "jinja2==3.1.6",
-    "mypy==1.20.2",
     "numpy==2.2.6",
     "ollama==0.6.2",
     "pydantic==2.13.3",
-    "pytest==9.0.3",
     "pyyaml==6.0.3",
-    "ruff==0.15.12",
     "uvicorn==0.38.0",
 ]
 
@@ -51,6 +64,15 @@ exclude = "^(experiments/lab/ml_spike/|experiments/lab/torch_probe/|experiments/
 pythonpath = ["."]
 
 [dependency-groups]
+# The gate toolchain: everything `scripts/check.sh` runs and nothing the
+# production packages import. `uv sync` / `uv run` include the `dev` group by
+# default; `scripts/setup_env.sh` and CI still name it explicitly so the
+# dependency the gates rely on is stated rather than inherited.
 dev = [
+    "hypothesis==6.152.4",
+    "import-linter==2.11",
+    "mypy==1.20.2",
+    "pytest==9.0.3",
+    "ruff==0.15.12",
     "types-pyyaml==6.0.12.20260408",
 ]
