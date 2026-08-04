@@ -216,6 +216,34 @@ TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
     "[teammate target {target!r} coerced to SKIP] "
 )
 
+# Replacement ``rationale_text`` body recorded BEHIND
+# ``TEAMMATE_VOTE_TARGET_MARKER`` when the teammate firewall guard coerces a
+# ballot to SKIP (Task 19.15; audits/audit-phase-19-triage.md §7 item 16).
+# The model authored that rationale to justify the betrayal target, so it can
+# state the impostor's private knowledge outright ("p-3 is my partner", "I did
+# the kill") -- and the coerced ballot rides ``rationale_text`` straight onto
+# the spectator surface, where the marker is stripped to a chip and the
+# remainder renders as the voter's stated reason. Keeping that text is
+# omniscience leaking through the guard's own output, so the guard REPLACES it
+# rather than preserving it. Two properties are load-bearing:
+#
+# * the substitution is SELF-DECLARING (the ``DEFAULT_VOTE_RATIONALE`` shape:
+#   parenthesized, machinery-honest) -- a silent swap to plausible in-world
+#   prose would attribute a fabricated sentence to the model, which is the
+#   laundering this task exists to avoid;
+# * it names no role, no teammate, and no kill. The marker carries the
+#   auditable fact that the guard rewrote the target, and gating that
+#   marker's DISPLAY is a separate task (19.11, the display-side twin), so
+#   the note itself says only "the vote guard", never WHICH guard.
+#
+# Forward-looking only: committed replay bytes are frozen and unaffected (no
+# recorded ballot is rewritten), so this changes what a FUTURE recording
+# carries and nothing that already exists on disk.
+TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
+    "(rationale redacted by the vote guard; recorded reason: "
+    "no confident read this round)"
+)
+
 # Audit-trail marker prepended to ``rationale_text`` when the ballot-target
 # graph guard (Task 10.9.2; PR #147 finding F2) rewrites an eject ballot
 # whose target carries no over-gate rendered row. The seed-12 m0 shape:
@@ -2939,14 +2967,36 @@ def coerce_teammate_ballot_to_skip(
     ejects a teammate. Returns ``ballot`` unchanged when
     ``fellow_impostor_ids`` is empty or the target is not a teammate;
     otherwise rewrites ``target`` to ``SKIP`` and prepends
-    :data:`TEAMMATE_VOTE_TARGET_MARKER` to ``rationale_text`` so the
-    original (teammate) target stays auditable in the replay record.
+    :data:`TEAMMATE_VOTE_TARGET_MARKER` to the rationale so the original
+    (teammate) target stays auditable in the replay record.
 
     The coercion also nulls ``primary_reason_id`` (DESIGN.md §5.5; audit
     gp-3): once the vote collapses to SKIP the reason id is stale (it was
     chosen to justify the betrayal target), so a coerced ballot that kept
     its now-meaningless reason id would corrupt the ballot-follows-chain
     instrument exactly as a hallucinated id does.
+
+    For the same reason the model-authored ``rationale_text`` is REPLACED
+    with :data:`TEAMMATE_COERCED_VOTE_RATIONALE` rather than preserved
+    (Task 19.15; audits/audit-phase-19-triage.md §7 item 16). That text was
+    written to justify the betrayal target, so it can state the impostor's
+    private knowledge outright ("p-3 is my partner", "I did the kill"), and
+    it rides the coerced ballot onto the spectator surface, where the
+    marker is stripped to a chip and the remainder renders as the voter's
+    stated reason -- omniscience leaking through the guard's own output.
+    The audit marker SURVIVES the redaction: auditability is never
+    laundered, the recorded ballot still states that the guard rewrote the
+    target, and the replacement is itself a self-declaring substitution
+    note, never fabricated in-world prose attributed to the model. This is
+    the guard-originated TEXT class only; model-originated fourth-wall
+    statements elsewhere in a transcript are a separate concern (measured
+    and disclosed, not rewritten), and the display-side gating of the
+    ``teammate_coerced`` chip is Task 19.11's.
+
+    **Dormant for committed bytes.** No recorded replay is rewritten: the
+    committed corpus is frozen and this guard runs only while a meeting is
+    being collected, so the redaction changes what a FUTURE recording's
+    coerced ballots carry and nothing that already exists on disk.
     """
 
     if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
@@ -2956,7 +3006,7 @@ def coerce_teammate_ballot_to_skip(
         update={
             "target": _SKIP_TARGET,
             "primary_reason_id": None,
-            "rationale_text": marker + ballot.rationale_text,
+            "rationale_text": marker + TEAMMATE_COERCED_VOTE_RATIONALE,
         }
     )
 
@@ -3791,6 +3841,7 @@ __all__ = [
     "OPENING_UNSURE_DEGRADE_MARKER",
     "OPENING_UNSURE_MARKER",
     "OPENING_UNSURE_MAX_FREE_TEXT_CHARS",
+    "TEAMMATE_COERCED_VOTE_RATIONALE",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "UNCITED_ZERO_FLAG_EJECT_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
