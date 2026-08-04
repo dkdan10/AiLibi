@@ -28,6 +28,11 @@ What this module pins:
   that body is this codebase's own text. Marker-SHAPED model prose is redacted
   like any other body -- it cannot smuggle an omniscient payload through as a
   fake audit marker, nor inflate the nulled-citation counts;
+* a preserved marker keeps its CLASS, not its payload. ``TurnId`` /
+  ``ObservationId`` are bare ``str``, so a hallucinated ``primary_reason_id``
+  is raw model text sitting inside a validator-written marker -- the same
+  omniscience through a narrower channel. Chip, class and count survive; the
+  untrusted value does not;
 * the replacement body is BRACKETED, the repo's "system text, not model voice"
   shape, so ``eval.vj_instruments._strip_leading_markers`` drops it before a
   ballot body reaches the §2.5 voice fold. The guard's prose is never measured
@@ -62,6 +67,7 @@ from eval.vj_instruments import _strip_leading_markers  # noqa: PLC2701
 from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
+    _REDACTED_MARKER_PAYLOAD,  # noqa: PLC2701
     TEAMMATE_COERCED_VOTE_RATIONALE,
     TEAMMATE_VOTE_TARGET_MARKER,
     MeetingParticipant,
@@ -120,6 +126,18 @@ def _ballot(
 
 def _marker_for(target: str) -> str:
     return TEAMMATE_VOTE_TARGET_MARKER.format(target=target)
+
+
+def _redacted(marker: str) -> str:
+    """A preserved upstream marker as the redaction path records it.
+
+    The marker's class survives; its quoted payload -- a raw model field --
+    does not. Built from the imported constants so a marker rename breaks here
+    loudly rather than silently passing against a hard-coded literal.
+    """
+
+    head, _, rest = marker.partition("{")
+    return head + _REDACTED_MARKER_PAYLOAD + rest.partition("}")[2]
 
 
 def _body_of(rationale_text: str, *, target: str) -> str:
@@ -267,15 +285,16 @@ class TestUpstreamMarkersSurviveTheRedaction:
             model_rationale_text=_OMNISCIENT_RATIONALE,
         )
 
-        # Same stack order the un-redacted guard produced: the teammate marker
-        # in front, then the upstream markers, then the body.
+        # Same stack order the un-redacted guard produced, but each preserved
+        # marker keeps its CLASS with an untrusted payload dropped.
         assert coerced.rationale_text == (
             _marker_for("p-5")
-            + INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-4:1:1")
-            + INVALID_REASON_ID_MARKER.format(reason_id="m-9:turn-99")
+            + _redacted(INVALID_OBSERVATION_ID_MARKER)
+            + _redacted(INVALID_REASON_ID_MARKER)
             + TEAMMATE_COERCED_VOTE_RATIONALE
         )
         assert _OMNISCIENT_RATIONALE not in coerced.rationale_text
+        assert "m-9:turn-99" not in coerced.rationale_text
 
     def test_every_chip_still_registers_on_the_spectator_surface(self) -> None:
         coerced = coerce_teammate_ballot_to_skip(
@@ -306,6 +325,50 @@ class TestUpstreamMarkersSurviveTheRedaction:
         for marker in (INVALID_REASON_ID_MARKER, INVALID_OBSERVATION_ID_MARKER):
             prefix = marker.partition("{")[0]
             assert prefix in coerced.rationale_text, prefix
+
+    def test_a_preserved_marker_keeps_its_class_but_not_its_payload(self) -> None:
+        # The marker is this codebase's text; the id inside it is the model's.
+        # ``TurnId`` / ``ObservationId`` are bare ``str`` aliases, so nothing
+        # stops a hallucinated id from being prose -- and preserving it
+        # verbatim would put the same omniscience back in the record through a
+        # narrower channel than the body just removed.
+        body = "trust me."
+        ballot = _ballot(
+            primary_reason_id="p-5 is my partner", rationale_text=body
+        ).model_copy(
+            update={"primary_reason_observation_id": "I did the cafeteria kill"}
+        )
+        ballot = _normalize_ballot_reason_id(
+            ballot=ballot,
+            valid_reason_ids=frozenset({"m-1:turn-0"}),
+            reason_id_by_ordinal={},
+        )
+        ballot = _normalize_ballot_observation_id(
+            ballot=ballot, valid_observation_ids=frozenset()
+        )
+        assert "my partner" in ballot.rationale_text
+
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=ballot, fellow_impostor_ids=("p-5",), model_rationale_text=body
+        )
+
+        assert coerced.rationale_text == (
+            _marker_for("p-5")
+            + _redacted(INVALID_OBSERVATION_ID_MARKER)
+            + _redacted(INVALID_REASON_ID_MARKER)
+            + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        for token in ("partner", "kill", "cafeteria"):
+            assert token not in coerced.rationale_text.lower(), token
+        # Class and count are what the audit needs; both survive intact.
+        reasons, _ = _parse_rewrite_reasons(coerced.rationale_text)
+        assert reasons == (
+            "teammate_coerced",
+            "invalid_observation_id",
+            "invalid_reason_id",
+        )
+        # And the redacted marker still leaves nothing in the voice fold.
+        assert _strip_leading_markers(coerced.rationale_text) == ""
 
     def test_omitting_the_provenance_boundary_preserves_nothing(self) -> None:
         # A caller with no trusted boundary to offer gets the SAFE direction:
@@ -385,7 +448,7 @@ class TestMarkerShapedModelTextCannotSurviveTheRedaction:
 
         assert coerced.rationale_text == (
             _marker_for("p-5")
-            + INVALID_REASON_ID_MARKER.format(reason_id="m-9:turn-99")
+            + _redacted(INVALID_REASON_ID_MARKER)
             + TEAMMATE_COERCED_VOTE_RATIONALE
         )
         assert "partner" not in coerced.rationale_text.lower()

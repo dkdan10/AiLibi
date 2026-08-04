@@ -2974,6 +2974,40 @@ def drop_teammate_statement_target(
     return target
 
 
+# Every ballot marker interpolates its payload with ``{x!r}`` -- a Python repr
+# of a string, hence always quoted -- so a marker's untrusted part is exactly
+# its quoted literal. Matching a payload as a quoted literal (rather than
+# scanning for the marker's static tail) stays correct when the payload itself
+# contains that tail text. Mirrors ``api.replay_loader``'s
+# ``_MARKER_REPR_VALUE``; the two cannot share an implementation because
+# ``api`` imports ``meetings``, never the reverse.
+#
+# This pattern is applied ONLY to text already established as validator-written
+# by the provenance split in :func:`_preserved_ballot_markers` -- never to
+# model output. That ordering is the whole safety argument: pattern-matching
+# untrusted text is what let marker-shaped model prose pose as an audit marker.
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+
+# What a preserved marker's payload becomes on the redaction path (Task 19.15).
+# ``TurnId`` / ``ObservationId`` are bare ``str`` aliases, so a hallucinated
+# ``primary_reason_id`` is arbitrary MODEL text -- it can read "p-5 is my
+# partner" as easily as "m-1:turn-99". The marker around it is this codebase's,
+# but the payload inside it is not, so redacting the body while preserving the
+# payload verbatim would leave the same omniscience in the recorded rationale
+# through a narrower channel. Only the coercion path redacts payloads; an
+# uncoerced ballot keeps its markers whole, so the fabricated-id evidence stays
+# fully readable everywhere the leak does not apply.
+#
+# Written as a ``repr`` so the marker keeps the shape every consumer parses:
+# ``api.replay_loader``'s chip regex still matches a quoted literal, the
+# substring / prefix greps in ``eval`` are unaffected (they key on the static
+# head), and the class and count of the nulled citation survive -- only the
+# untrusted value is gone. It contains no ``]``, which would otherwise stop
+# ``eval.vj_instruments``'s leading-marker strip early and leak a fragment into
+# the voice fold.
+_REDACTED_MARKER_PAYLOAD: Final[str] = repr("(redacted)")
+
+
 def _preserved_ballot_markers(
     rationale_text: str, model_rationale_text: str | None
 ) -> str:
@@ -3001,6 +3035,17 @@ def _preserved_ballot_markers(
     counts with a citation that was never nulled. A null id field is not proof
     the validator wrote anything; the model may simply have cited nothing.
 
+    The markers are preserved as a CLASS, not verbatim: each one's quoted
+    payload is replaced with :data:`_REDACTED_MARKER_PAYLOAD`. The marker
+    text belongs to this codebase, but the id inside it is a raw model field
+    (``TurnId`` / ``ObservationId`` are bare ``str``), so a hallucinated
+    ``primary_reason_id`` reading "p-5 is my partner" would otherwise carry
+    the same omniscience into the record through a narrower channel than the
+    body this function exists to remove. Chip, class and count all survive;
+    only the untrusted value is dropped. Payload matching is safe HERE and
+    only here -- the provenance split has already established that this text
+    is validator-written, so there is nothing for a lookalike to spoof.
+
     ``model_rationale_text`` is ``None`` for a caller with no trusted
     boundary to offer (the guard is a pure function others may call
     directly). Then NOTHING is preserved and the whole rationale is replaced
@@ -3019,7 +3064,8 @@ def _preserved_ballot_markers(
             "ballot rationale does not end with the model-authored body; "
             "the ballot chain must only prepend audit markers"
         )
-    return rationale_text[: len(rationale_text) - len(model_rationale_text)]
+    markers = rationale_text[: len(rationale_text) - len(model_rationale_text)]
+    return re.sub(_MARKER_REPR_VALUE, lambda _: _REDACTED_MARKER_PAYLOAD, markers)
 
 
 def coerce_teammate_ballot_to_skip(
