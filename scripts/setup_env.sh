@@ -7,7 +7,24 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-uv sync --locked
+# Mirrors scripts/check.sh: AILIBI_SKIP_FRONTEND=1 skips the frontend
+# dependency install below. CI's Python job sets it because the dedicated
+# frontend-checks job installs and builds the frontend itself; installing it
+# here too is pure duplicate work. Validated loudly — an unrecognised value is a
+# typo, not an "install it anyway".
+skip_frontend="${AILIBI_SKIP_FRONTEND:-0}"
+if [ "$skip_frontend" != "0" ] && [ "$skip_frontend" != "1" ]; then
+  echo "AILIBI_SKIP_FRONTEND must be 0 or 1 (got '$skip_frontend')." >&2
+  exit 1
+fi
+
+# `--group dev` names the gate toolchain (pytest, hypothesis, ruff, mypy +
+# stubs, import-linter) explicitly. uv includes the `dev` group by default, so
+# this is not a behaviour change — it is the declaration that the environment
+# this script builds is the DEV environment, now that the runtime dependency set
+# in pyproject.toml no longer carries those tools. The version probes below fail
+# loudly if the group ever stops being installed.
+uv sync --locked --group dev
 
 uv run python --version
 uv run ruff --version
@@ -15,12 +32,15 @@ uv run mypy --version
 uv run pytest --version
 uv run lint-imports --version
 
-# Frontend dependencies (Phase 4.3+). Skipped on branches without frontend/.
-# When the frontend IS present, npm is a hard prerequisite: failing loudly here
-# beats a partially-configured environment that breaks later in obscure ways.
-# Uses `npm ci` for a reproducible install from the committed lockfile (fails on
-# package.json/lock drift rather than silently rewriting the lock).
-if [ -f frontend/package.json ]; then
+# Frontend dependencies (Phase 4.3+). Skipped with AILIBI_SKIP_FRONTEND=1 and on
+# branches without frontend/. When the frontend IS present and not opted out, npm
+# is a hard prerequisite: failing loudly here beats a partially-configured
+# environment that breaks later in obscure ways. Uses `npm ci` for a reproducible
+# install from the committed lockfile (fails on package.json/lock drift rather
+# than silently rewriting the lock).
+if [ "$skip_frontend" = "1" ]; then
+  echo "Skipping frontend dependency install (AILIBI_SKIP_FRONTEND=1)."
+elif [ -f frontend/package.json ]; then
   if ! command -v npm >/dev/null 2>&1; then
     echo "npm is required to set up the AiLibi frontend (frontend/package.json present)." >&2
     echo "Install Node.js/npm, then re-run: bash scripts/setup_env.sh" >&2
