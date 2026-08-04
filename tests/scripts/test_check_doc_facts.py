@@ -87,6 +87,31 @@ def test_stale_sample_date_detected(doc_tree: Path) -> None:
     assert _README in errors[0]
 
 
+def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
+    # The provenance claim is bound to its paragraph: the correct date
+    # appearing somewhere else in the file must not satisfy a drifted
+    # paragraph (the pre-hardening checker accepted exactly this).
+    _substitute(doc_tree, _README, "regenerated 2026-07-20", "regenerated 2026-07-14")
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README)
+        + "\nAn unrelated historical note mentioning 2026-07-20.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'regenerated 2026-07-14'" in errors[0]
+    assert "refresh date '2026-07-20'" in errors[0]
+
+
+def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
+    # Losing the paragraph anchor is format drift, not a vacuous pass.
+    _substitute(doc_tree, _README, "regenerated 2026-07-20", "refreshed 2026-07-20")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "exactly one sample-provenance paragraph" in errors[0]
+
+
 def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     # (b) A win rate that no longer matches the manifest it is drawn from.
     _substitute(doc_tree, _README, "34% (4p1i)", "30% (4p1i)")
@@ -107,6 +132,51 @@ def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "names baseline 5" in errors[0]
     assert "ladder tip at baseline 6" in errors[0]
+
+
+def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
+    # A wrong rate claim OUTSIDE the provenance paragraph is drift too — the
+    # paragraph being right must not license a false claim elsewhere.
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README)
+        + "\nHistorically the impostors held 36% (9p2i) of the games.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "stray win-rate claim '36% (9p2i)'" in errors[0]
+    assert "15/50 = 30%" in errors[0]
+
+
+def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
+    # The scan covers the WHOLE sentence: a baseline mention more than 120
+    # characters from the "ladder tip" phrase (the pre-hardening window cap)
+    # is still the same claim.
+    filler = "and the qualifying clauses go on " * 6
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README)
+        + f"\nThe baseline-5 sets, {filler}remain the ladder tip.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "names baseline 5" in errors[0]
+
+
+def test_ladder_tip_sentence_without_baseline_detected(doc_tree: Path) -> None:
+    # A ladder-tip claim that names no baseline at all is unverifiable prose
+    # on the one fact this checker exists to pin; require the tip by name.
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README) + "\nThese sets remain the ladder tip.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "names no baseline at all" in errors[0]
+    assert "baseline 6" in errors[0]
 
 
 def test_missing_live_toggle_example_detected(doc_tree: Path) -> None:
@@ -141,6 +211,32 @@ def test_retired_lever_assignment_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "'AILIBI_CITATION_GATE='" in errors[0]
     assert "'citation_gate'" in errors[0]
+
+
+def test_unknown_substrate_knob_detected(doc_tree: Path) -> None:
+    # An assignment in the belief-substrate section whose key is not in the
+    # registry at all — misspelled, or never registered — is a no-op knob and
+    # must be rejected, not silently skipped by the known-keys iteration.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _TOGGLE_EXAMPLE_LINE,
+        _TOGGLE_EXAMPLE_LINE + "\n# AILIBI_STALE_SUBSTRATE_KNOB=0",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'AILIBI_STALE_SUBSTRATE_KNOB='" in errors[0]
+    assert "not in the live lever registry" in errors[0]
+
+
+def test_missing_lever_section_banner_detected(doc_tree: Path) -> None:
+    # The section audit fails loud when the banner it keys on disappears,
+    # rather than silently auditing nothing.
+    _substitute(doc_tree, _ENV_EXAMPLE, "# Belief-substrate levers", "# Levers")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'# Belief-substrate levers'" in errors[0]
+    assert "cannot be located" in errors[0]
 
 
 def test_missing_retired_lever_key_detected(doc_tree: Path) -> None:

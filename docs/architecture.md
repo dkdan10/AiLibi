@@ -71,10 +71,14 @@ the tick loop, dispatches meetings and applies the result
 JSONL (per-tick actions + a SHA-256 state hash) and owns the substrate-lever registry.
 
 **`eval/`** — the eval harness, hubbed on `report_schema.py`'s typed
-`TournamentReport` (an aggregation over the replay records, never a re-scrape):
-the pure analyzers (vote correctness, accusation calibration, cost dashboard, and
-more), the determinism and leak tests, the prompt-regression close gate.
-Privileged — roles come from final engine state.
+`TournamentReport`. The tournament runner
+(`balance_eval.py::run_tournament_eval`) folds each just-written replay JSONL
+into a typed `GameReport` (`_game_report_from_replay`) and collects the
+tournament report; from there the pure analyzers (vote correctness, accusation
+calibration, cost dashboard, and more) consume the typed report and never
+re-scrape the JSONL. Also home to the determinism and leak tests and the
+prompt-regression close gate. Privileged — roles come from the in-memory game
+result, never the replay.
 
 **`api/`** — the FastAPI spectator surface (`main.py`, `routes/`) over sanitized DTOs
 (`schemas.py`). Privileged by design — a post-game GM view: role, kill attribution and

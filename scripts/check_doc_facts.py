@@ -16,18 +16,25 @@ together, so one run names every drifted fact rather than the first.
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
    set's outcomes and refresh date. The impostor win rate is recomputed from the
    ``winner`` column (rounded to a whole percent) and the newest ``refreshed_at``
-   is taken across both sets; README must carry that date literally and each
-   recomputed rate as the exact substring ``"<rate>% (<set>)"``.
+   is taken across both sets. The claims are bound to the README's ONE
+   sample-provenance paragraph (anchored on ``replays/samples/`` plus a
+   ``regenerated YYYY-MM-DD`` clause): its stated date must equal the newest
+   ``refreshed_at``, and it must carry each recomputed rate as the exact
+   substring ``"<rate>% (<set>)"`` — a correct value elsewhere in the file
+   cannot satisfy a drifted paragraph. Any ``"<rate>% (<set>)"`` claim OUTSIDE
+   that paragraph must match the recomputed rate too.
 2. **Ladder tip.** ``audits/audit-phase-18-close.md`` owns which baseline the
-   substrate ladder stands at. Every README sentence naming the "ladder tip"
-   must name that baseline and no other.
+   substrate ladder stands at. Every README sentence naming the "ladder tip" —
+   the whole sentence, however long — must name that baseline, and no other.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
    with a commented example line showing its bare-environment default; every
    graduated lever must be named in the graduated note by its registry key and
    must NOT appear as an ``AILIBI_*=`` assignment, commented or not — its env
    gate was deleted at graduation, so an assignment line would hand out a knob
-   this build does not read.
+   this build does not read. The belief-substrate section may not advertise any
+   ``AILIBI_*=`` assignment whose key is absent from the registry either: a
+   misspelled or never-registered knob is as much a no-op as a graduated one.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -83,7 +90,19 @@ _BASELINE_MENTION: Final = re.compile(r"baseline[ -](\d+)", re.IGNORECASE)
 # A sentence boundary: a period followed by whitespace or end of text, so
 # version numbers and decimals ("18.12", "0.8646") do not end a sentence.
 _SENTENCE_END: Final = re.compile(r"\.(?=\s|\Z)")
-_SENTENCE_WINDOW: Final = 120
+
+# The README's sample-provenance paragraph is anchored on this clause; the
+# refresh-date claim is parsed from it rather than sought file-wide, so a
+# stale paragraph cannot be alibied by the correct date elsewhere.
+_REGENERATED_DATE: Final = re.compile(r"regenerated (\d{4}-\d{2}-\d{2})")
+# Any "<rate>% (<set>)" claim, wherever it appears, must match the manifest.
+_WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
+
+# The .env.example section whose AILIBI_*= assignments must all resolve to a
+# live registry key, delimited by the repo's dashed section banners.
+_LEVER_SECTION_TITLE: Final = "# Belief-substrate levers"
+_SECTION_RULE: Final = re.compile(r"^# -{20,}[ \t]*$", re.MULTILINE)
+_ENV_ASSIGNMENT: Final = re.compile(r"^#?[ \t]*(AILIBI_[A-Z0-9_]+)=", re.MULTILINE)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -140,9 +159,15 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
     the same arithmetic the README paragraph states in prose. A manifest that
     parses to zero rows is a hard failure rather than a vacuous pass: silent
     format drift would otherwise let any claim through.
+
+    The claims are checked IN the sample-provenance paragraph, not file-wide:
+    a correct value surviving somewhere else (a historical note, another
+    section's date) must not alibi a drifted paragraph. Win-rate claims found
+    outside the paragraph are held to the same manifest arithmetic.
     """
 
     dates: list[str] = []
+    rates: dict[str, tuple[int, int]] = {}
     for name in _SAMPLE_SETS:
         relative_path = _MANIFEST_PATH.format(name=name)
         text = read_document(repo_root, relative_path, errors)
@@ -160,13 +185,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
         impostor_wins = sum(
             1 for row in rows if row.winner.strip().upper() == _IMPOSTOR_WINNER
         )
-        claim = f"{round(100 * impostor_wins / len(rows))}% ({name})"
-        if claim not in readme:
-            errors.append(
-                f"{_README}: missing the recorded impostor win rate {claim!r} — "
-                f"{relative_path} records {impostor_wins}/{len(rows)} games won "
-                "by the impostors."
-            )
+        rates[name] = (impostor_wins, len(rows))
 
         set_dates = [
             row.refreshed_at.strip()
@@ -180,15 +199,71 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
             )
         dates.extend(set_dates)
 
-    if not dates:
-        return
-    newest = max(dates)
-    if newest not in readme:
+    paragraph, paragraph_span = provenance_paragraph(readme)
+    if paragraph is None:
         errors.append(
-            f"{_README}: missing the sample-set refresh date {newest!r} — the "
-            "newest refreshed_at across "
-            f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}."
+            f"{_README}: expected exactly one sample-provenance paragraph "
+            "(anchored on 'replays/samples/' plus a 'regenerated YYYY-MM-DD' "
+            "clause) — without it the provenance claims have no home to check."
         )
+        return
+
+    if dates:
+        newest = max(dates)
+        date_match = _REGENERATED_DATE.search(paragraph)
+        assert date_match is not None  # the paragraph anchor guarantees it
+        if date_match.group(1) != newest:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph claims "
+                f"'regenerated {date_match.group(1)}', but the newest "
+                f"refresh date {newest!r} is what "
+                f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
+                " record."
+            )
+
+    for name, (impostor_wins, total) in rates.items():
+        claim = f"{round(100 * impostor_wins / total)}% ({name})"
+        if claim not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph is missing the "
+                f"recorded impostor win rate {claim!r} — "
+                f"{_MANIFEST_PATH.format(name=name)} records "
+                f"{impostor_wins}/{total} games won by the impostors."
+            )
+
+    for stray in _WIN_RATE_CLAIM.finditer(readme):
+        if paragraph_span[0] <= stray.start() < paragraph_span[1]:
+            continue
+        name = stray.group(2)
+        if name not in rates:
+            continue
+        impostor_wins, total = rates[name]
+        expected = round(100 * impostor_wins / total)
+        if int(stray.group(1)) != expected:
+            errors.append(
+                f"{_README}:{line_number(readme, stray.start())}: stray win-rate "
+                f"claim {stray.group(0)!r} disagrees with "
+                f"{_MANIFEST_PATH.format(name=name)} "
+                f"({impostor_wins}/{total} = {expected}%)."
+            )
+
+
+def provenance_paragraph(readme: str) -> tuple[str | None, tuple[int, int]]:
+    """The README's single sample-provenance paragraph and its offset span.
+
+    ``None`` (with an empty span) when the anchor is missing or ambiguous —
+    both are format drift the caller reports rather than papering over.
+    """
+
+    matches: list[tuple[str, tuple[int, int]]] = []
+    offset = 0
+    for paragraph in readme.split("\n\n"):
+        if "replays/samples/" in paragraph and _REGENERATED_DATE.search(paragraph):
+            matches.append((paragraph, (offset, offset + len(paragraph))))
+        offset += len(paragraph) + 2
+    if len(matches) != 1:
+        return None, (0, 0)
+    return matches[0]
 
 
 def check_ladder_tip(repo_root: Path, readme: str, errors: list[str]) -> None:
@@ -219,15 +294,24 @@ def check_ladder_tip(repo_root: Path, readme: str, errors: list[str]) -> None:
 
     tip = recorded[0]
     for phrase in _LADDER_TIP_PHRASE.finditer(readme):
-        window = sentence_window(readme, phrase.start(), phrase.end())
-        for mention in _BASELINE_MENTION.finditer(window):
-            if mention.group(1) == tip:
+        sentence = sentence_around(readme, phrase.start(), phrase.end())
+        mentions = _BASELINE_MENTION.findall(sentence)
+        if not mentions:
+            errors.append(
+                f"{_README}:{line_number(readme, phrase.start())}: a 'ladder "
+                "tip' sentence names no baseline at all — every ladder-tip "
+                f"claim must name baseline {tip} ({_LADDER_TIP_AUDIT}) — "
+                f"“{sentence.strip()}”."
+            )
+            continue
+        for number in mentions:
+            if number == tip:
                 continue
             errors.append(
                 f"{_README}:{line_number(readme, phrase.start())}: a 'ladder "
-                f"tip' sentence names baseline {mention.group(1)}, but "
+                f"tip' sentence names baseline {number}, but "
                 f"{_LADDER_TIP_AUDIT} records the ladder tip at baseline "
-                f"{tip} — “{window.strip()}”."
+                f"{tip} — “{sentence.strip()}”."
             )
 
 
@@ -284,6 +368,46 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
                 "its env gate was deleted, so setting the variable does nothing."
             )
 
+    section = lever_section(text)
+    if section is None:
+        errors.append(
+            f"{_ENV_EXAMPLE}: missing the {_LEVER_SECTION_TITLE!r} section "
+            "banner — the belief-substrate section cannot be located, so its "
+            "assignments cannot be audited against the registry."
+        )
+        return
+    registry = set(SUBSTRATE_FLAG_KEYS)
+    for assigned in _ENV_ASSIGNMENT.finditer(section):
+        key = assigned.group(1).removeprefix("AILIBI_").lower()
+        if key in toggleable:
+            continue
+        if key in registry:
+            continue  # the graduated-assignment check above already reports it
+        errors.append(
+            f"{_ENV_EXAMPLE}: the belief-substrate section advertises "
+            f"'{assigned.group(1)}=', but {key!r} is not in the live lever "
+            "registry — a misspelled or never-registered knob this build does "
+            "not read."
+        )
+
+
+def lever_section(text: str) -> str | None:
+    """.env.example's belief-substrate section, or ``None`` if unlocatable.
+
+    The section runs from the dashed rule closing its title banner to the
+    dashed rule opening the next section's banner (or end of file).
+    """
+
+    title = text.find(_LEVER_SECTION_TITLE)
+    if title == -1:
+        return None
+    rules = [m for m in _SECTION_RULE.finditer(text) if m.start() > title]
+    if not rules:
+        return None
+    start = rules[0].end()
+    end = rules[1].start() if len(rules) > 1 else len(text)
+    return text[start:end]
+
 
 def env_var_for(key: str) -> str:
     """The ``AILIBI_*`` variable a substrate-lever registry key derives."""
@@ -291,20 +415,25 @@ def env_var_for(key: str) -> str:
     return f"AILIBI_{key.upper()}"
 
 
-def sentence_window(text: str, start: int, end: int) -> str:
-    """The sentence-ish neighbourhood of ``text[start:end]``.
+def sentence_around(text: str, start: int, end: int) -> str:
+    """The whole sentence containing ``text[start:end]``, however long.
 
-    Up to :data:`_SENTENCE_WINDOW` characters each side, clipped at the nearest
-    sentence boundary. README paragraphs are single long lines, so the clip —
-    not the line — is what keeps one paragraph's baselines from bleeding into
-    another sentence's ladder-tip claim.
+    Bounded first by the line (README paragraphs are single long lines, so a
+    sentence never spans one), then clipped to the nearest sentence boundary —
+    a period followed by whitespace — on each side. No length cap: a claim
+    hundreds of characters from its subject is still the same sentence, and
+    truncating would hide it.
     """
 
-    left = text[max(0, start - _SENTENCE_WINDOW) : start]
+    line_start = text.rfind("\n", 0, start) + 1
+    newline = text.find("\n", end)
+    line_end = len(text) if newline == -1 else newline
+
+    left = text[line_start:start]
     boundaries = list(_SENTENCE_END.finditer(left))
     if boundaries:
         left = left[boundaries[-1].end() :]
-    right = text[end : end + _SENTENCE_WINDOW]
+    right = text[end:line_end]
     boundary = _SENTENCE_END.search(right)
     if boundary is not None:
         right = right[: boundary.start()]
