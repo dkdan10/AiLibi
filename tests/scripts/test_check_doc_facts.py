@@ -120,19 +120,64 @@ def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
 
 
 def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
-    # The paragraph's total-replay count is a manifest fact too.
+    # The paragraph's total-replay count is a manifest fact too: the expected
+    # claim is missing AND the drifted one contradicts the row totals.
     _substitute(doc_tree, _README, "100 sample replays", "80 sample replays")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "'100 sample replays'" in errors[0]
+    assert "'80 sample replays'" in errors[1]
 
 
 def test_wrong_tournament_size_detected(doc_tree: Path) -> None:
-    # As is the per-set tournament size.
+    # As is the per-set tournament size — both facets reported.
     _substitute(doc_tree, _README, "50-game", "40-game")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "'50-game'" in errors[0]
+    assert "'40-game'" in errors[1]
+
+
+def test_stale_count_beside_correct_detected(doc_tree: Path) -> None:
+    # A contradictory count clause beside the correct substring is drift —
+    # every count-shaped claim in the paragraph is held to the row totals.
+    _substitute(
+        doc_tree,
+        _README,
+        "two full 50-game tournaments",
+        "one stale 40-game tournament and one 50-game tournament",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'40-game'" in errors[0]
+
+
+def test_wrong_recording_model_detected(doc_tree: Path) -> None:
+    # The recording model named in the paragraph is a manifest fact.
+    _substitute(
+        doc_tree,
+        _README,
+        "against the Featherless provider (`Qwen/Qwen3.6-27B`",
+        "against the Featherless provider (`Qwen/Qwen3-32B`",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'Qwen/Qwen3.6-27B'" in errors[0]
+    assert "`model` column" in errors[0]
+
+
+def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
+    # As is the prompt-set version token the prompt_versions column records.
+    _substitute(
+        doc_tree,
+        _README,
+        "`qwen3_6_27b` `v3` prompt set",
+        "`qwen3_6_27b` `v2` prompt set",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'v3'" in errors[0]
+    assert "`prompt_versions` column" in errors[0]
 
 
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:

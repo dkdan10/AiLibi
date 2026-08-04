@@ -92,7 +92,7 @@ The replay JSONL records per-tick actions and a SHA-256 hash of the full engine 
 "Reproducible" is three different claims here, and the repo keeps them apart rather than trading on the strongest one:
 
 1. **Replay integrity** — committed replay bytes reconstruct through the current engine's per-tick state hashes. Free and API-less: `bash scripts/verify_samples.sh` replays every bundled sample and fails loud the moment a recorded hash no longer reconstructs. Verified strong.
-2. **Same-runtime repeatability** — the same seed, config and provider responses produce byte-identical replays on the same runtime. That is the run-twice demo above, verified with the fake provider; the ES optimizer's stream is pinned the same way, as a fixed digest in `tests/training/test_es.py`.
+2. **Same-runtime repeatability** — the same seed, config, agent factory and provider responses produce byte-identical replays on the same runtime. That is the run-twice demo above, verified with the fake provider; the ES optimizer's stream is pinned the same way, as a fixed digest in `tests/training/test_es.py`.
 3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. This one is **designed for, not yet confirmed**. The sampler in `training/bakeoff/es.py` is built only out of operations IEEE-754 requires to be correctly rounded, but it has only been observed on Linux/x86-64; until an owner-assisted Darwin-arm64 run (the recorded failure host) reproduces the pinned digest, cross-platform portability is a design property of that module, not a supported guarantee, and no caller should rely on it (Task 19.3).
 
 ---

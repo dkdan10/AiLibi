@@ -25,8 +25,11 @@ together, so one run names every drifted fact rather than the first.
    in the paragraph and EVERY ``"<rate>% (<set>)"`` claim in the file — inside
    the paragraph or out — must match, so a stale duplicate cannot hide beside
    the correct value. The paragraph's count claims are re-derived from the
-   same rows: the per-set tournament size (``"<rows>-game"``) and the total
-   (``"<sum> sample replays"``).
+   same rows — the per-set tournament size (``"<rows>-game"``) and the total
+   (``"<sum> sample replays"``), with every count-shaped claim in the
+   paragraph held to the row totals — and the recording model plus the
+   prompt-set family/version tokens the ``model`` / ``prompt_versions``
+   columns record must be named in the paragraph as well.
 2. **Ladder tip.** ``audits/audit-phase-18-close.md`` owns which baseline the
    substrate ladder stands at. Every README sentence naming the "ladder tip" —
    the whole sentence, however long — must name that baseline, and no other.
@@ -182,6 +185,9 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
 
     dates: list[str] = []
     rates: dict[str, tuple[int, int]] = {}
+    models: set[str] = set()
+    prompt_families: set[str] = set()
+    prompt_versions: set[str] = set()
     for name in _SAMPLE_SETS:
         relative_path = _MANIFEST_PATH.format(name=name)
         text = read_document(repo_root, relative_path, errors)
@@ -200,6 +206,16 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
             1 for row in rows if row.winner.strip().upper() == _IMPOSTOR_WINNER
         )
         rates[name] = (impostor_wins, len(rows))
+
+        models.update(row.model.strip() for row in rows)
+        for row in rows:
+            # Entries are ``template.family.version``; the no-meetings
+            # sentinel and empty cells have no dotted shape and are skipped.
+            for entry in row.prompt_versions.split(","):
+                segments = entry.strip().split(".")
+                if len(segments) >= 3:
+                    prompt_families.add(segments[-2])
+                    prompt_versions.add(segments[-1])
 
         set_dates = [
             row.refreshed_at.strip()
@@ -257,6 +273,15 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"{', '.join(_MANIFEST_PATH.format(name=name) for name in names)} "
                 f"hold that many replay rows per set."
             )
+    set_sizes = {total for _, total in rates.values()}
+    for size_match in re.finditer(r"(\d+)-game", paragraph):
+        if int(size_match.group(1)) not in set_sizes:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph claims a "
+                f"'{size_match.group(0)}' tournament, but no manifest holds "
+                f"that many rows (per-set row counts: "
+                f"{', '.join(str(size) for size in sorted(set_sizes))})."
+            )
     if len(rates) == len(_SAMPLE_SETS):
         grand_total = sum(total for _, total in rates.values())
         replays_claim = f"{grand_total} sample replays"
@@ -266,6 +291,39 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"total {replays_claim!r} — the manifests hold {grand_total} "
                 "replay rows between them."
             )
+        for total_match in re.finditer(r"(\d+) sample replays", paragraph):
+            if int(total_match.group(1)) != grand_total:
+                errors.append(
+                    f"{_README}: the sample-provenance paragraph claims "
+                    f"{total_match.group(0)!r}, but the manifests hold "
+                    f"{grand_total} replay rows between them."
+                )
+
+    if len(models) > 1:
+        errors.append(
+            f"{_README}: the manifests disagree on the recording model "
+            f"({', '.join(sorted(models))}) — a single model claim cannot be "
+            "checked; the sample sets should share one recorded model."
+        )
+    elif models:
+        model = next(iter(models))
+        if model not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph does not name "
+                f"the recording model {model!r} — the manifest `model` column "
+                "records it on every row."
+            )
+    for kind, tokens in (
+        ("prompt-set family", prompt_families),
+        ("prompt-set version", prompt_versions),
+    ):
+        for token in sorted(tokens):
+            if token not in paragraph:
+                errors.append(
+                    f"{_README}: the sample-provenance paragraph does not "
+                    f"name the {kind} {token!r} — the manifest "
+                    "`prompt_versions` column records it."
+                )
 
     for claim_match in _WIN_RATE_CLAIM.finditer(readme):
         name = claim_match.group(2)
