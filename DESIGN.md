@@ -1,20 +1,32 @@
 # AiLibi — System Design Document
 
-**Status:** v0.1 draft — reconciled to HEAD after the Phase 6 close (2026-05-30)
+**Status:** historical design record — v0.1 draft, reconciled to HEAD as of the Phase 6 close (2026-05-30)
 **Audience:** engineers implementing or maintaining the system
-**Scope:** complete architecture and roadmap for a multi-agent social-deduction simulation platform
+**Scope:** the original architecture and roadmap for a multi-agent social-deduction simulation platform
 
-> **Reading note — MVP vs vision.** This document is both the design vision and a
-> map of what is built. Where the implemented MVP diverges from the original
-> design, the divergence is annotated inline as **Implemented at MVP** / **Deferred**.
-> The load-bearing realities a reader should not be surprised by: persistence is
-> JSONL/JSON files on local disk — no PostgreSQL/JSONB yet; the spectator surface
-> is a static read-only replay + eval REST API consumed by a replay-scrubbing
-> React UI — the live WebSocket broadcast layer is not built; games are created
-> from the CLI — there is no `POST /games`; belief Rules 1–5 are
-> live (Rules 3 and 5 landed in Phase 9, Task 9.8). MVP (roadmap phases 0–5) is complete; post-MVP
-> repair/hardening is tracked in `tasks/` (the executed Phase 6 was a repair
-> phase, and the §9 "human player" work is deferred to Phase 7+).
+> **Historical record — this is not the current architecture.** Demoted under
+> Task 19.1. Read this document for **design rationale and history** — why the
+> observation firewall is a package boundary, why reasoning is two-tier, why
+> memory is structured first — and not for the system's current shape. The
+> current-architecture note is [`docs/architecture.md`](docs/architecture.md),
+> authoritative for the layering as built; `AGENTS.md` carries the routing that
+> points there; the per-PR implementation contract remains the task file under
+> `tasks/phase-N.md`, whose section refs bind. Where this document and
+> `docs/architecture.md` disagree, `docs/architecture.md` wins. The sections that
+> have drifted hardest since the Phase 6 close carry a short **Superseded**
+> note at the top; the rest is Phase-6-vintage prose, unmaintained by design.
+>
+> **Reading note — MVP vs vision (retained from the Phase 6 reconciliation).**
+> Where the implemented MVP diverged from the original design, the divergence is
+> annotated inline as **Implemented at MVP** / **Deferred**. The load-bearing
+> realities a reader should not be surprised by, all still true at HEAD:
+> persistence is JSONL/JSON files on local disk — no PostgreSQL/JSONB; the
+> spectator surface is a static read-only replay + eval REST API consumed by a
+> replay-scrubbing React UI — the live WebSocket broadcast layer is not built;
+> games are created from the CLI — there is no `POST /games`; belief Rules 1–5
+> are live (Rules 3 and 5 landed in Phase 9, Task 9.8). MVP (roadmap phases 0–5)
+> is complete; post-MVP work is tracked in `tasks/` (the executed Phase 6 was a
+> repair phase, and §9's "human player" work has never been built).
 
 ---
 
@@ -124,6 +136,11 @@ The tick clock is wall-clock-locked for live spectating but can run as fast as t
 ---
 
 ## 2. Core Modules and File Structure
+
+> **Superseded —** see [`docs/architecture.md`](docs/architecture.md): the tree below predates
+> `training/` and `experiments/` entirely, `llm/` has grown from the four modules drawn here to
+> nine (the Protocol, four provider adapters, cache, budget, the budgeted wrapper and report
+> normalization), and `frontend/src/components/` now holds thirty components, not five.
 
 ```
 ailibi/
@@ -575,6 +592,13 @@ The voting prompt presents — as **evidence to weigh, not a directive** — the
 
 ## 6. Memory Architecture
 
+> **Superseded in part —** see [`docs/architecture.md`](docs/architecture.md): §6.1's HEAD-status
+> note still describes `testimony_as_content` as an `AILIBI_*` flag defaulting OFF, but that lever
+> graduated — its env gate is deleted and the behavior is unconditional (`orchestrator/replay.py`,
+> `_RETIRED_ALWAYS_ON_LEVERS`). §6.3's closing correction still holds: `agents/runtime.py::AgentRuntime`
+> is a Phase-2 scaffold imported only by tests, and the production perceive→memory→policy wiring is
+> `orchestrator/game.py::TacticalAgent`.
+
 This is the heart of the project. A weak memory system is the most likely cause of weak agent reasoning.
 
 ### 6.1 Stores
@@ -697,6 +721,13 @@ Token budget is enforced — events past the budget are dropped by salience.
 
 ## 7. Tech Stack
 
+> **Superseded —** see [`docs/architecture.md`](docs/architecture.md): the LLM row is two model
+> generations stale — four providers now sit behind the `LLMClient` Protocol, and the canonical
+> eval provider has been hosted Featherless (`Qwen/Qwen3.6-27B`, locked at Task 16.2,
+> non-thinking) since Phase 14, not the Phase-7 local Ollama model named below. `mypy --strict`
+> also runs repo-wide now (`pyproject.toml` `[tool.mypy] strict = true`, with narrow spike
+> exclusions), not on three packages.
+
 | Concern               | Choice                                        | Why                                                                                                       |
 | --------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Engine + agents       | **Python 3.11**                               | One language across simulation, agent code, LLM SDK, eval. Pydantic for schemas, asyncio for parallelism. |
@@ -724,6 +755,12 @@ Two stack questions deserve explicit calls:
 ---
 
 ## 8. MVP Scope
+
+> **Superseded —** the MVP shipped: roadmap phases 0–5 are closed, so read this section as the
+> scope contract that was met, not as the system's boundary. The scope has grown well past the
+> list below (a learned-policy training program, a tournament dashboard, four LLM providers), and
+> the meeting LLM named here — Claude Sonnet — is no longer the canonical eval provider. See
+> [`docs/architecture.md`](docs/architecture.md).
 
 ### 8.1 In scope
 
@@ -766,6 +803,11 @@ This is realistic for a solo developer over ~10–14 weeks if they ship steadily
 ---
 
 ## 9. Development Roadmap
+
+> **Superseded —** the week-numbered phases 0–6 below are long past. MVP (phases 0–5) closed, the
+> executed Phase 6 ran as a repair phase, and the live roadmap has continued since as per-phase
+> contracts under `tasks/phase-N.md` — through Phase 19, which is the phase now under way. The
+> "human player" phase sketched at §9's tail has never been built.
 
 ### Phase 0 — Scaffolding (week 1)
 
@@ -934,6 +976,13 @@ A more general version walks the schema and asserts no field whose value should 
 ---
 
 ## 12. Optional Advanced Extensions
+
+> **Superseded in part —** three entries below have since shipped, in altered form: agent
+> personalities (`orchestrator/personas.py`, Phase 16), the tournament simulator
+> (`scripts/run_tournament.py` plus the typed eval report and its dashboard tab), and the learned
+> tactical policy — which arrived as the evolution-strategies program under `training/` rather
+> than reinforcement learning, and whose champion stays opt-in behind the scripted FSM (the
+> Phase-18 NO-FLIP close). See [`docs/architecture.md`](docs/architecture.md).
 
 - **Multiple maps** with procedural variation. Map authoring as YAML.
 - **Agent personalities** — prompt-injected traits (cautious / aggressive / talkative) that bias tactical and strategic policies. Personality vector becomes a knob for tournament diversity.

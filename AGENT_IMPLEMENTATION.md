@@ -31,20 +31,39 @@ belong outside task contracts unless a task explicitly needs them.
 
 ---
 
+> **Routing note (Task 19.1, 2026-08).** This build plan is the historical
+> onboarding narrative — how the repo was bootstrapped and how agent work was
+> dispatched, phase by phase. It is read once, at onboarding, not per task.
+> Where it names `DESIGN.md` as the source of truth, that was true **at build
+> time**; it is not the live routing. Today `AGENTS.md` carries the routing and
+> points architecture reading at [`docs/architecture.md`](docs/architecture.md),
+> the current-architecture note; `DESIGN.md` is the historical design record (a
+> v0.1 draft, reconciled to HEAD as of the Phase 6 close, 2026-05-30), read for
+> rationale and history. The per-PR implementation contract is still the task
+> file under `tasks/phase-N.md`, and its section refs still bind. The embedded
+> `AGENTS.md` and task-prompt templates in Appendices A and C — like the
+> illustrative prompt quotes in the narrative parts below — are Phase-0
+> artifacts, superseded by the live `AGENTS.md` and
+> `scripts/prompt_template.md.j2`.
+
+---
+
 ## Part 1 — Foundation: the rules of the road
 
 ### 1.1 The strategy in one paragraph
 
 You are the architect and reviewer. The AI coding agent is the implementer:
-sometimes one agent at a time, sometimes several in parallel. `DESIGN.md` is
-the single source of truth; every task prompt anchors to a specific section of
-it. Every task ends with tests passing. You never let an agent merge its own
-work; you read every diff before merging, even if briefly. This is the entire
-workflow. Everything below is the mechanics.
+sometimes one agent at a time, sometimes several in parallel. `DESIGN.md` was,
+at build time, the single source of truth, and every task prompt anchored to a
+specific section of it; today that anchoring role belongs to the task contract's
+section refs in `tasks/phase-N.md`, with `AGENTS.md` routing architecture
+reading to `docs/architecture.md`. Every task ends with tests passing. You never
+let an agent merge its own work; you read every diff before merging, even if
+briefly. This is the entire workflow. Everything below is the mechanics.
 
 ### 1.2 Three rules you must not break
 
-1. **No agent works without anchoring to DESIGN.md.** Every task prompt must reference a section. "Implement Section 3.2 WorldState exactly as specified" beats "implement the world state" by a wide margin.
+1. **No agent works without anchoring to a written section reference.** Every task prompt must reference a section. "Implement Section 3.2 WorldState exactly as specified" beats "implement the world state" by a wide margin. *(The rule's original phrasing was "anchoring to DESIGN.md", and at build time the referenced sections were DESIGN.md's; today the binding refs are the task contract's in `tasks/phase-N.md`, and architecture reading is routed by `AGENTS.md` to `docs/architecture.md`.)*
 2. **Two agents never edit the same files at the same time.** This is enforced by branches and (if running locally) by git worktrees. If you forget this rule, you will eat hours of merge pain.
 3. **Tests are the contract, not vibes.** Each task has a concrete, runnable definition of done — usually a pytest that passes. "Looks right" is not done.
 
@@ -519,22 +538,35 @@ models for cosmetic tasks (e.g., styling tweaks).
 
 ## Appendix A — AGENTS.md template
 
+> **Historical Phase-0 template — superseded by the live `AGENTS.md` at the repo
+> root.** This is the file that was written by hand to bootstrap the repo; the
+> live `AGENTS.md` has moved on (its routing, conventions and definition of done
+> are the ones that bind). Read this for how the repo started, not as
+> instruction. The "Source of truth" block below has been re-pointed to the
+> current routing so the template cannot be pasted forward with stale authority;
+> everything else is left as it was written.
+
 Save this verbatim (with light edits) as `AGENTS.md` at the repo root.
 
 ```markdown
 # AGENTS.md
 
 You are an AI coding agent working on AiLibi. Read this file before every task,
-then read DESIGN.md and AGENT_IMPLEMENTATION.md as referenced.
+then read the architecture routing it names and the task contract as referenced.
 
 ## Source of truth
 
-- `DESIGN.md` is the authoritative architecture document. Every task references
-  a specific section. If the section says X, you do X — even if you think Y
-  is better. If you genuinely think the design is wrong, leave a comment in
-  the PR description and stop. Do not change the design unilaterally.
-- `AGENT_IMPLEMENTATION.md` is the provider-neutral build plan. The current
-  task description in the prompt overrides it where they conflict.
+- `docs/architecture.md` is the current-architecture note, authoritative for the
+  system's layering as built. `DESIGN.md` is the historical design record (v0.1
+  draft, reconciled to HEAD as of the Phase 6 close, 2026-05-30) — read it for
+  design rationale, not for current architecture.
+- The task contract in `tasks/phase-N.md` is the implementation contract for the
+  PR, and its section refs bind. If the section says X, you do X — even if you
+  think Y is better. If you genuinely think the contract is wrong, leave a
+  comment in the PR description and stop. Do not change it unilaterally.
+- `AGENT_IMPLEMENTATION.md` is the provider-neutral build plan, read once at
+  onboarding. The current task description in the prompt overrides it where they
+  conflict.
 
 ## Three load-bearing rules (DESIGN.md §0)
 
@@ -654,6 +686,14 @@ local agent runner, single agent, sequential.
 
 ## Appendix C — Task prompt templates
 
+> **Historical Phase-0 template — superseded by `scripts/prompt_template.md.j2`.**
+> Prompts are no longer hand-copied: `scripts/generate_prompts.py` renders every
+> file under `agent_prompts/` from that Jinja template plus the task contracts,
+> and `scripts/validate_task_docs.py` gates the result. The shape below is kept
+> because it explains what the generated prompt is *for*; its routing lines have
+> been brought into line with the live template so the two cannot be read in
+> contradiction.
+
 Copy this shape into `agent_prompts/task-*.md`. The phase task file remains
 the source of truth; the prompt is a paste-ready wrapper around the copied task
 contract. Replace the `{{...}}` placeholders.
@@ -663,14 +703,15 @@ contract. Replace the `{{...}}` placeholders.
 ```
 # Agent Prompt — {{TASK ID}} {{TASK TITLE}}
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md,
-AGENT_IMPLEMENTATION.md, and the task section in tasks/phase-{{N}}.md.
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture
+routing it names, and the task section in tasks/phase-{{N}}.md.
 
 1. Role and context
-You are an AI coding agent working on the AiLibi project. Follow
-AGENTS.md exactly. DESIGN.md is the source of truth, AGENT_IMPLEMENTATION.md is
-the provider-neutral build plan, and the task contract below is the
-implementation contract for this PR.
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md
+exactly; it names the authoritative architecture routing. The task contract
+below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the
+provider-neutral build plan and is read once during onboarding (see AGENTS.md),
+not per task.
 
 2. Exact section reference
 Implement Task {{TASK ID}} — {{TASK TITLE}}, anchored to {{DESIGN SECTION REFS}}.
@@ -684,7 +725,7 @@ files not in scope, and definition of done.
 {{COPY THE TASK BODY FROM **Branch:** THROUGH THE DEFINITION OF DONE CHECKLIST}}
 
 4. Pre-flight checklist
-- Read AGENTS.md, DESIGN.md, AGENT_IMPLEMENTATION.md, and the task section
+- Read AGENTS.md, the architecture routing it names, and the task section
   before editing.
 - Inspect the current implementation before editing.
 - Confirm the dependency listed in the task contract is present in the current
