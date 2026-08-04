@@ -21,19 +21,22 @@ import {
   type Perspective,
   type ViewId,
   eventTickNumbers,
+  finaleAtIndex,
   frameIndexForTick,
   keyMomentTicks,
   meetingTickNumbers,
+  meetingTickSet,
   nextAfter,
   parsePlaybackParams,
   prevBefore,
   serializePlaybackParams,
+  shouldPauseAtMeeting,
   START_TICK,
   tickNumberAt,
 } from "../lib/playback";
 import { useReplayStore } from "../store/replayStore";
 import type { PlaybackSpeed } from "../store/replayStore";
-import type { MeetingView, TickView } from "../types/api";
+import type { GameFinale, MeetingView, TickView } from "../types/api";
 
 // The base auto-advance cadence; effective interval is BASE / speed (ported
 // verbatim from the old ReplayControls timer).
@@ -57,6 +60,12 @@ const PLAYBACK_OWNED_PARAM_KEYS = [
   "selectedAgent",
   "selectedMeeting",
   "view",
+  // Owned even though it is DEFAULT-OMITTED (Task 19.10). `mergePlaybackSearch`
+  // below deletes only the keys listed here before re-setting what serialize
+  // emitted, so an unlisted `reveal` would be treated as a foreign key and
+  // preserved forever: turning the reveal back off could never clear it, and the
+  // next reload would re-spoil the ending from a URL the user thought was clean.
+  "reveal",
 ] as const;
 
 // Merge the transport's own serialized keys onto the LIVE query string (read at
@@ -93,6 +102,16 @@ export interface Playback {
   readonly frame: TickView | null;
   /** The meeting at the current tick, if any (the stage morphs here). */
   readonly meetingAtTick: MeetingView | null;
+  /**
+   * The recorded finale WHEN THE PLAYHEAD IS ON IT — i.e. the replay's
+   * `GameFinale` at the last frame, `null` anywhere else and `null` for a partial
+   * replay that never recorded a `game_over` (Task 19.10). Position-derived, so
+   * autoplay, `End`, and a scrub to the far right all surface the same beat.
+   * Deliberately UNGATED by `revealOutcome`: this says the game is over and the
+   * outcome is knowable, not what it was. The reveal gate lives in the consumer
+   * (App), which decides how much of this payload reaches the DOM.
+   */
+  readonly finale: GameFinale | null;
   readonly isPlaying: boolean;
   readonly speed: PlaybackSpeed;
   readonly isAtStart: boolean;
@@ -134,6 +153,10 @@ export function usePlayback(): Playback {
   const lastTickNumber = tickNumberAt(ticks, lastIndex);
   const frame = ticks.length === 0 ? null : (ticks[Math.min(frameIndex, lastIndex)] ?? null);
   const meetingAtTick = meetings.find((m) => m.tick === tickNumber) ?? null;
+  // `?? null` rather than a bare read: the API client casts unvalidated JSON, so
+  // a stale backend serving a pre-19.10 payload yields `undefined` here while TS
+  // insists the field exists — normalise it once, at the single read site.
+  const finale = finaleAtIndex(ticks, frameIndex, replay?.finale ?? null);
 
   // Actions read fresh state via `getState()` and call only stable store
   // setters + pure `lib/playback` helpers, so they never need to change identity
@@ -247,6 +270,7 @@ export function usePlayback(): Playback {
     lastIndex,
     frame,
     meetingAtTick,
+    finale,
     isPlaying,
     speed,
     isAtStart: tickNumber === START_TICK,
@@ -273,6 +297,11 @@ interface PendingHydration {
   readonly tick: number | null;
   readonly perspective: Perspective;
   readonly beliefView: BeliefViewMode;
+  // Deferred for the same reason as `perspective` (Task 19.10): `selectReplay`
+  // resets `revealOutcome` to off so every replay opens unspoiled, which would
+  // otherwise eat a deep-linked `&reveal=1` before anyone saw it. Stashed here
+  // and re-applied by effect 3b, after that reset has landed.
+  readonly reveal: boolean;
   readonly selectedAgent: string | null;
   readonly selectedMeeting: string | null;
   // selectReplay forces view=workspace, so the parsed top-level view is restored
@@ -297,6 +326,7 @@ export function usePlaybackEngine(): void {
   const view = useReplayStore((s) => s.view);
   const perspective = useReplayStore((s) => s.perspective);
   const beliefView = useReplayStore((s) => s.beliefView);
+  const revealOutcome = useReplayStore((s) => s.revealOutcome);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
   const currentReplayError = useReplayStore((s) => s.currentReplayError);
@@ -310,19 +340,51 @@ export function usePlaybackEngine(): void {
   // transport is unmounted, so — like the old ReplayControls-owned timer that
   // unmounted with the replay tab — playback freezes rather than silently
   // advancing the tick/URL in the background, and resumes on returning.
+  // Task 19.10 additionally makes this callback the home of the meeting pause
+  // (see the inline note below); it stays a pure function of the arguments it
+  // reads fresh, so the dependency list is unchanged.
   useEffect(() => {
     if (!isPlaying || replay === null || view !== "workspace") {
       return;
     }
     const intervalMs = BASE_TICK_INTERVAL_MS / speed;
     const lastIndex = replay.ticks.length - 1;
+    // Built ONCE per effect run, not per interval firing: the meeting ticks can
+    // only change when `replay` changes, which already re-runs this effect.
+    const meetingTicks = meetingTickSet(replay.meetings);
     const id = window.setInterval(() => {
       const store = useReplayStore.getState();
-      const next = store.currentTick + 1;
+      const current = store.currentTick;
+      const next = current + 1;
       if (next > lastIndex) {
         store.setIsPlaying(false);
       } else {
         store.setCurrentTick(next);
+        // Task 19.10 — the meeting pause. A meeting occupies exactly ONE frame,
+        // so at 1× autoplay flashes the game's whole deliberation past in 500 ms;
+        // entering one stops the transport and lets the reader choose to resume.
+        //
+        // Decided HERE, in the same callback (and the same `getState()`
+        // transaction) that advances the frame, for two reasons:
+        //   • ATOMICITY. React batches both setters inside one timer callback, so
+        //     the advance and the pause land in a single commit — no intermediate
+        //     render showing `isPlaying` still true on the meeting frame.
+        //   • LATENCY. A separate effect reacting to `frameIndex` would not clear
+        //     the interval until React commits; at 4× the interval is 125 ms, and
+        //     a slow commit (the Pixi map is the heavy consumer) lets the timer
+        //     fire again and step PAST the meeting before the pause lands.
+        //
+        // EDGE-triggered (`shouldPauseAtMeeting` compares the pre- and
+        // post-advance ticks), so pressing Play while parked on the meeting frame
+        // advances off it instead of instantly re-pausing — a level predicate
+        // would make Resume, and the transport's single Play/Pause toggle, dead.
+        // `current` is the pre-advance index from the same transaction; it is
+        // NEVER closed over, so this effect still must not depend on
+        // `currentTick` (doing so would tear down and re-register the interval
+        // every tick, compounding drift — see the note above).
+        if (shouldPauseAtMeeting(replay.ticks, meetingTicks, current, next)) {
+          store.setIsPlaying(false);
+        }
       }
     }, intervalMs);
     return () => {
@@ -406,13 +468,16 @@ export function usePlaybackEngine(): void {
         tick: parsed.tick,
         perspective: parsed.perspective,
         beliefView: parsed.beliefView,
+        reveal: parsed.reveal,
         selectedAgent: parsed.selectedAgent,
         selectedMeeting: parsed.selectedMeeting,
         view: parsed.view,
       };
       void store.selectReplay(parsed.gameId);
     } else {
+      // No deep-linked replay, so nothing will reset these: apply them now.
       store.setPerspective(parsed.perspective);
+      store.setRevealOutcome(parsed.reveal);
     }
   }, []);
 
@@ -442,6 +507,9 @@ export function usePlaybackEngine(): void {
     const store = useReplayStore.getState();
     store.setPerspective(pending.perspective);
     store.setBeliefView(pending.beliefView);
+    // Re-applied AFTER selectReplay's per-replay reset, so `?game_id=…&reveal=1`
+    // opens revealed while an ordinary replay switch always opens unspoiled.
+    store.setRevealOutcome(pending.reveal);
     if (pending.tick !== null) {
       store.setCurrentTick(frameIndexForTick(replay.ticks, pending.tick));
     }
@@ -478,6 +546,7 @@ export function usePlaybackEngine(): void {
         selectedAgent: selectedAgentId,
         selectedMeeting: selectedMeetingId,
         view,
+        reveal: revealOutcome,
       });
       // Preserve foreign keys (e.g. Task 12.9's Highlights filters) rather than
       // clobbering the whole query string with only the transport's keys.
@@ -495,6 +564,7 @@ export function usePlaybackEngine(): void {
     view,
     perspective,
     beliefView,
+    revealOutcome,
     selectedAgentId,
     selectedMeetingId,
   ]);

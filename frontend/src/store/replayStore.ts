@@ -129,6 +129,19 @@ export interface ReplayStoreState {
   // The sighting under the cursor in the open meeting transcript, or `null`.
   // Ephemeral hover state (like `hoverTick`); drives the additive map highlight.
   highlightedSighting: HighlightedSighting | null;
+
+  // ── Task 19.10: outcome reveal (playback coherence) ────────────────────────
+  // Whether the game's OUTCOME may render: the finale card, the header's winner
+  // label, and the browser's winner / win-shape / ejection data. This is ITS OWN
+  // axis, deliberately NOT folded into `perspective` — perspective governs what
+  // the CURRENT FRAME may show (fog of war over the present), reveal governs the
+  // FUTURE (the ending you have not watched yet). The two never touch: entering
+  // Omniscient must not spoil the ending, and revealing the ending must not lift
+  // anyone's fog.
+  // Default OFF — spectating unspoiled is the default experience — and reset per
+  // selected replay (see `selectReplay`), so opening game B never inherits game
+  // A's reveal. URL-synced by `usePlaybackEngine` as `reveal=1`, absent when off.
+  revealOutcome: boolean;
 }
 
 export interface ReplayStoreActions {
@@ -157,6 +170,9 @@ export interface ReplayStoreActions {
 
   // ── Task 12.7 action ───────────────────────────────────────────────────────
   setHighlightedSighting(sighting: HighlightedSighting | null): void;
+
+  // ── Task 19.10 action ──────────────────────────────────────────────────────
+  setRevealOutcome(revealOutcome: boolean): void;
 }
 
 function errorMessage(error: unknown): string {
@@ -226,6 +242,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       autoFollow: true,
       guidedTourOpen: false,
       highlightedSighting: null,
+      revealOutcome: false,
 
       async loadSets() {
         // Fetch the available sets (Task 12.12) and, when no set is active yet
@@ -300,10 +317,14 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           }
           // Selecting a replay opens the workspace (DESIGN.md §2.1). Reset the
           // replay-scoped overlays: perspective returns to Omniscient (a fresh
-          // game has different agents) and the crosshair clears. `beliefView`,
-          // `seedSet`, and `autoFollow` persist across replays (view modes, not
-          // replay-scoped). The URL-hydration path re-applies any shared moment
-          // AFTER this reset (see usePlaybackEngine), so a deep link still lands.
+          // game has different agents), the crosshair clears, and `revealOutcome`
+          // returns to OFF — every replay opens unspoiled, because a reveal is a
+          // choice made about ONE game's ending, never a mode you carry into the
+          // next one (Task 19.10). `beliefView`, `seedSet`, and `autoFollow`
+          // persist across replays (view modes, not replay-scoped). The
+          // URL-hydration path re-applies any shared moment AFTER this reset (see
+          // usePlaybackEngine), so a deep link — including `&reveal=1` — still
+          // lands, exactly as it does for perspective.
           set({
             currentReplay: windowReplay(replay),
             currentReplayError: null,
@@ -318,6 +339,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             perspective: OMNISCIENT,
             hoverTick: null,
             highlightedSighting: null,
+            revealOutcome: false,
           });
         } catch (error) {
           if (requestToken !== latestReplayRequest) {
@@ -357,6 +379,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             perspective: OMNISCIENT,
             hoverTick: null,
             highlightedSighting: null,
+            revealOutcome: false,
           });
         }
       },
@@ -546,6 +569,13 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       setHighlightedSighting(sighting) {
         set({ highlightedSighting: sighting });
+      },
+
+      // A plain setter on purpose: reveal is orthogonal to every other field, so
+      // unlike setPerspective/selectAgent (which keep the fog and the inspector
+      // aimed at the same agent) there is no invariant to maintain here.
+      setRevealOutcome(revealOutcome) {
+        set({ revealOutcome });
       },
     };
   },
