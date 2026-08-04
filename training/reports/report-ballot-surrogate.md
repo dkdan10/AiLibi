@@ -550,3 +550,39 @@ honest ceiling as denominator, re-grounding as an executed operator recipe (§8)
 measured walk/live-parity re-validation (§2.1), and the bake-off's rule that final
 numbers are never surrogate-scored — none weakened to make the verdict look better,
 and the verdict's failing axis is named in the same section that reports it.
+
+---
+
+## 11. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)
+
+Anchor: `audits/audit-phase-19-triage.md` §7 item 20 [S-Codex/S-Claude], with §8 row 4
+VERIFIED exactly, and the triage's contradiction rulings **C2** and **C9**; **C9 is the
+one that reaches this report.** The item below is **additive** — no recorded byte, no
+table cell, and no verdict above this section is rewritten — and it **overturns no
+conclusion**: the NO-GO stands, and the figure it discusses is this report's own,
+correctly labelled where it is recorded. The erratum pins the channel so the figure
+cannot be conflated with two others that share the phrase "decision accuracy".
+
+1. **"Decision accuracy" in this report names the SURROGATE's own channel, and only
+   that.** §3 records the cell verbatim as:
+
+   > `| SKIP-vs-eject decision accuracy | **37.5%** (36/96) |`
+
+   (:242, in the `ballot-surrogate.v1` channel table over 30 test games / 96 meetings /
+   60 ejections / 36 skips). Read in context that label is exact: it is the surrogate's
+   **SKIP-vs-eject channel** — **0.375**, the degenerate all-SKIP constant (0 correct
+   ejects, 36 correct skips, `degenerates_to_skip` **True**), and it is the measurement
+   that produces this report's honest **NO-GO**.
+
+   **What it is NOT.** It is **not** the program's meeting-decision figure. That figure
+   is the composed runner's **0.8646 (83/96)** — `report-composed-runner.md` §3-4, the
+   cell that gates its GO and is identical under the live candidate views. And neither
+   of those is the conviction model's **0.9375 (90/96)**, which is accuracy on the
+   testimony-backed **CONVERSION label** (`report-conviction-model.md` §4) and has been
+   mis-cited downstream as "decision accuracy" — the triage's **C9** finding.
+
+   **Three different figures, three different channels:** 0.375 = this surrogate's own
+   SKIP-vs-eject decision channel (the honest NO-GO); 0.8646 = the composed runner's
+   meeting-decision accuracy; 0.9375 = the conviction model's conversion-label accuracy.
+   This note exists so that they cannot be conflated when quoted. Nothing in §3, §4 or
+   §5 changes; the NO-GO and the fallback ladder stand exactly as recorded.
