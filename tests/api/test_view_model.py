@@ -781,6 +781,45 @@ def test_finale_is_none_for_a_partial_replay(tmp_path: Path) -> None:
     assert replay.finale is None
 
 
+def test_finale_final_tick_prefers_the_recorded_game_end_tick(
+    tmp_path: Path,
+) -> None:
+    """``finale.final_tick`` follows the RECORDED game-end row, not the walk.
+
+    On every orchestrator-shaped recording the two coincide (``GameOverEvent.tick``
+    is the emitting tick), so a fixture must force them apart or the
+    recorded-tick path in ``_finale_view`` is unobserved — deleting the
+    ``_ReplaySummary.final_tick`` threading would leave every other finale pin
+    green (Task 19.10 review). The writer permits the disagreement: ``tick`` is a
+    free argument on ``ReplayLog.record_game_end``.
+    """
+
+    write_sample_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=41
+    )
+    replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
+    finale = replay.finale
+    assert finale is not None
+    assert replay.ticks[-1].tick == 2, "the walk position the fallback would pick"
+    assert finale.final_tick == 41, "the recorded row wins over the walk position"
+    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(41, "game_end")]
+
+
+def test_finale_final_tick_falls_back_to_the_walk_without_a_recorded_tick(
+    tmp_path: Path,
+) -> None:
+    """A game-end row with no ``tick`` (a direct-``ReplayLog`` writer) falls back
+    to where the walk stopped — the documented ``_finale_view`` fallback."""
+
+    write_sample_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=None
+    )
+    replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
+    finale = replay.finale
+    assert finale is not None
+    assert finale.final_tick == replay.ticks[-1].tick == 2
+
+
 def test_finale_degrades_to_the_terminal_beat_without_meetings(
     meeting_loader: ReplayLoader,
 ) -> None:

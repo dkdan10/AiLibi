@@ -28,13 +28,19 @@
 // `currentTick` stays the array index (the frozen store contract every mounted
 // surface reads); the index↔engine-tick mapping lives once in `lib/playback`.
 //
-// Task 12.11 (design §8, §9, slice 9) owns the shell-level polish — and is the
-// one task that legitimately edits App.tsx. It adds: lazy route boundaries for
-// the Pixi map / Dashboard / browser (the code-split that kills the 859 kB
-// chunk); a responsive layout where the rails collapse to drawers while the map
-// + transport stay the irreducible core; keyboard-operable transport shortcuts;
-// the first-run GuidedTour mount; and a measured `--transport-h` so the fixed
-// overlays reserve exactly the transport's height (no magic numbers, no bleed).
+// Task 12.11 (design §8, §9, slice 9) owned the shell-level polish and was, in
+// Phase 12, the one task that legitimately edited App.tsx. It added: lazy route
+// boundaries for the Pixi map / Dashboard / browser (the code-split that kills
+// the 859 kB chunk); a responsive layout where the rails collapse to drawers
+// while the map + transport stay the irreducible core; keyboard-operable
+// transport shortcuts; the first-run GuidedTour mount; and a measured
+// `--transport-h` so the fixed overlays reserve exactly the transport's height
+// (no magic numbers, no bleed).
+//
+// Phase 19 re-opens the file deliberately (tasks/phase-19.md lists App.tsx under
+// 19.10 → 19.17): Task 19.10 adds the playback-coherence surfaces — the header's
+// outcome gate, the roster's pre/post-vote labeling, the meeting pause bar in
+// the transport region, and the finale card overlay.
 
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -588,15 +594,26 @@ const ACTION_BUTTON =
 // that and nowhere else — (a) `useTransportHeight`'s ResizeObserver measures the
 // bar, so the fixed overlays keep reserving the right `--transport-h` as it
 // appears and disappears; (b) the region sits at z-70, above the meeting modal's
-// z-50 scrim, so Resume stays visible while a meeting owns the screen; (c) the
-// KeyboardTransport accelerator carve-out keeps arrows / `n` / `[` / `]` live for
-// buttons inside this region, which they would not be anywhere else on the page.
+// z-50 scrim, so Resume stays VISIBLE while a meeting owns the screen — visible,
+// not Tab-reachable: the modal's focus trap cycles inside its own dialog, so
+// while a meeting is open these buttons are pointer-only and the keyboard route
+// is the meeting's own Escape/Close (or Space, which still toggles play while
+// focus rests on the dialog container); (c) the KeyboardTransport accelerator
+// carve-out keeps arrows / `n` / `[` / `]` live for buttons inside this region,
+// which they would not be anywhere else on the page.
 //
 // `role="status"` because the pause is otherwise silent: the transport's single
 // Play/Pause toggle just flips its own label, which announces nothing.
 function MeetingPauseBar() {
-  const { hasReplay, meetingAtTick, isPlaying, isAtEnd, play, nextKeyMoment } =
-    usePlayback();
+  const {
+    hasReplay,
+    meetingAtTick,
+    isPlaying,
+    isAtEnd,
+    finale,
+    play,
+    nextKeyMoment,
+  } = usePlayback();
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
   const selectMeeting = useReplayStore((s) => s.selectMeeting);
 
@@ -620,9 +637,13 @@ function MeetingPauseBar() {
           // ejection). There is nothing to resume to, so the only useful move is
           // to dismiss the meeting and let the finale card — which yields the
           // screen to an open meeting — take it. Offered only when a meeting is
-          // actually open: with auto-follow off the finale is already showing and
-          // the button would be a no-op.
-          selectedMeetingId !== null && (
+          // actually open (with auto-follow off the finale is already showing)
+          // AND a finale exists to hand off to: a partial recording whose walk
+          // ends on a resolved meeting has no game_over row, `finale === null`,
+          // and no card can ever appear — a button promising one would be a
+          // dead end.
+          selectedMeetingId !== null &&
+          finale !== null && (
             <button
               type="button"
               onClick={() => {
@@ -755,7 +776,11 @@ function RecapRow({
 // PRECEDENCE: it yields to an open meeting (`selectedMeetingId === null`). A game
 // that ends on an ejection has the meeting and the finale on the SAME frame, and
 // stacking a second card over a focus-trapped modal would be unreachable by
-// keyboard; the pause bar's "Show finale" is the deliberate hand-off.
+// keyboard. The hand-off out of the meeting is two-path: the pause bar's "Show
+// finale" for the pointer (the bar is visible above the scrim but sits OUTSIDE
+// the modal's focus trap, so Tab cannot reach it while the meeting is open), and
+// the meeting's own Escape/Close for the keyboard — either way the meeting
+// closes, `selectedMeetingId` clears, and this card takes the frame.
 function FinaleCard() {
   const { finale, seekToIndex } = usePlayback();
   const replay = useReplayStore((s) => s.currentReplay);
@@ -765,14 +790,17 @@ function FinaleCard() {
   // Dismissal is pure UI state, deliberately NOT in the store and NOT URL-synced:
   // it is "I have read this card", not part of the shared moment. It resets when
   // the finale goes away (scrubbing off the last frame, or loading another
-  // replay), so returning to the end shows the card again.
+  // replay) AND whenever a meeting takes the screen — so the pause bar's "Show
+  // finale" hand-off always lands: dismiss the card, re-open the meeting from
+  // the pill, click "Show finale" again, and the card returns instead of the
+  // stale dismissal eating the click.
   const [dismissed, setDismissed] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (finale === null) {
+    if (finale === null || selectedMeetingId !== null) {
       setDismissed(false);
     }
-  }, [finale]);
+  }, [finale, selectedMeetingId]);
 
   const open = finale !== null && selectedMeetingId === null && !dismissed;
   // Move focus to the card when it appears — but ONLY when nothing else holds it.

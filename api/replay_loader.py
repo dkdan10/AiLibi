@@ -615,8 +615,10 @@ class _ReplaySummary:
     # actually ended on (Task 19.10). Distinct from ``total_ticks``, which counts
     # ``ReplayEntry`` ROWS, and from ``ticks[-1].tick``, which is where the WALK
     # stopped: the two disagree on a truncated walk. ``None`` for a partial
-    # replay with no game-end row, and for the pre-Task-14 recordings whose
-    # game-end row predates the optional ``tick`` field.
+    # replay with no game-end row, and for direct-``ReplayLog`` writers (unit
+    # tests, eval scripts) that omit the optional ``tick`` argument — see
+    # ``ReplayLog.record_game_end``; every orchestrator-written row carries it,
+    # and all 100 committed sample rows do.
     final_tick: int | None
     total_cost_usd: float
     prompt_versions: Mapping[str, str]
@@ -1766,8 +1768,10 @@ class ReplayLoader:
 
         # The recorded end tick when present, else where the walk stopped. They
         # agree on a clean finish (``GameOverEvent.tick`` IS the emitting tick);
-        # they differ for recordings whose game-end row predates the optional
-        # ``tick`` field and for direct-writer rows.
+        # the fallback exists for direct-``ReplayLog`` writers that omit the
+        # optional ``tick`` argument (see ``ReplayLog.record_game_end`` — every
+        # orchestrator-written row carries it) and covers a truncated walk only
+        # approximately, which is the honest best available.
         final_tick = (
             summary.final_tick
             if summary.final_tick is not None
@@ -1841,8 +1845,10 @@ class ReplayLoader:
                 alive_at_end=pid in alive_at_end,
                 final_vote_target=final_ballots.get(pid),
                 # ``None`` = the question does not apply (no ballot, or a SKIP,
-                # which names nobody). Targets are normalized to SKIP-or-a-real
-                # candidate by ``meetings.voting.normalize_ballot_target``, so an
+                # which names nobody). Recorded targets are normalized to
+                # SKIP-or-a-real-candidate by ``meetings.manager``'s ballot
+                # normalization (its manager-side copy of the canonical
+                # ``meetings.voting`` rule) before they are persisted, so an
                 # unknown id here is corrupt bytes and raises.
                 final_vote_named_impostor=(
                     None

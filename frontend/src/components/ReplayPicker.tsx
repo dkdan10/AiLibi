@@ -549,8 +549,13 @@ export function ReplayPicker() {
   const setView = useReplayStore((s) => s.setView);
   const selectReplay = useReplayStore((s) => s.selectReplay);
   // Outcome reveal (Task 19.10). Global, URL-round-tripped state — deliberately
-  // NOT local to this surface, so revealing here and opening a game keeps the
-  // ending visible instead of silently re-hiding it (and vice versa).
+  // NOT local to this surface, so the browser's gate and the finale card's
+  // Reveal/Hide drive ONE flag and one `reveal` URL key. Note the scope,
+  // though: `selectReplay` deliberately resets the flag, so revealing here and
+  // then opening a game still starts that game UNSPOILED (a reveal is a choice
+  // about one game's ending, not a mode you carry forward); only an explicit
+  // `&reveal=1` deep link survives the reset, re-applied by usePlaybackEngine's
+  // deferred hydration.
   const revealOutcome = useReplayStore((s) => s.revealOutcome);
   const setRevealOutcome = useReplayStore((s) => s.setRevealOutcome);
 

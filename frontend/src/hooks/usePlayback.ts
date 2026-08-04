@@ -354,6 +354,15 @@ export function usePlaybackEngine(): void {
     const meetingTicks = meetingTickSet(replay.meetings);
     const id = window.setInterval(() => {
       const store = useReplayStore.getState();
+      // Idempotence guard: after this callback pauses (below, or at the end
+      // stop), the interval STAYS registered until React's passive-effect flush
+      // runs the cleanup — and at 4× that is a 125 ms window a slow commit (the
+      // Pixi map is the heavy consumer) can miss. Re-reading `isPlaying` fresh
+      // makes any post-pause firing a no-op, so the playhead can never be
+      // stepped past a meeting frame by the interval's dying breath.
+      if (!store.isPlaying) {
+        return;
+      }
       const current = store.currentTick;
       const next = current + 1;
       if (next > lastIndex) {
@@ -365,14 +374,12 @@ export function usePlaybackEngine(): void {
         // entering one stops the transport and lets the reader choose to resume.
         //
         // Decided HERE, in the same callback (and the same `getState()`
-        // transaction) that advances the frame, for two reasons:
-        //   • ATOMICITY. React batches both setters inside one timer callback, so
-        //     the advance and the pause land in a single commit — no intermediate
-        //     render showing `isPlaying` still true on the meeting frame.
-        //   • LATENCY. A separate effect reacting to `frameIndex` would not clear
-        //     the interval until React commits; at 4× the interval is 125 ms, and
-        //     a slow commit (the Pixi map is the heavy consumer) lets the timer
-        //     fire again and step PAST the meeting before the pause lands.
+        // transaction) that advances the frame: React batches both setters inside
+        // one timer callback, so the advance and the pause land in a single
+        // commit — no intermediate render showing `isPlaying` still true on the
+        // meeting frame. (Teardown of the interval itself is NOT faster this way
+        // — that is what the `isPlaying` guard at the top of the callback is
+        // for.)
         //
         // EDGE-triggered (`shouldPauseAtMeeting` compares the pre- and
         // post-advance ticks), so pressing Play while parked on the meeting frame
