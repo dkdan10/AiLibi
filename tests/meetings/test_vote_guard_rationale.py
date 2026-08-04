@@ -17,10 +17,16 @@ What this module pins:
   :data:`meetings.manager.TEAMMATE_COERCED_VOTE_RATIONALE` -- nothing of the
   original text survives, and the replacement is byte-identical regardless of
   what the model wrote (no leakage through length or shape);
-* the audit marker SURVIVES the redaction (auditability is never laundered):
-  the recorded ballot still names the original teammate target, and the
-  spectator surface still parses the ``teammate_coerced`` chip off it with the
-  redaction note as the clean body;
+* EVERY audit marker survives the redaction, not just this guard's
+  (auditability is never laundered). The recorded ballot still names the
+  original teammate target, AND the markers the upstream ballot chain already
+  prepended -- a nulled ``primary_reason_id`` / ``primary_reason_observation_id``
+  -- are preserved in place, so the coerced ballot still reports its nulled
+  citations to every downstream marker consumer;
+* the replacement body is BRACKETED, the repo's "system text, not model voice"
+  shape, so ``eval.vj_instruments._strip_leading_markers`` drops it before a
+  ballot body reaches the §2.5 voice fold. The guard's prose is never measured
+  as the model's;
 * the redacted body carries zero teammate / self-kill / role phrasing. The
   scan runs on the BODY, not the whole string: the marker legitimately
   contains the word "teammate" (it is the audit channel), and gating its
@@ -47,10 +53,15 @@ import pytest
 from pydantic import BaseModel
 
 from api.replay_loader import _parse_rewrite_reasons  # noqa: PLC2701
+from eval.vj_instruments import _strip_leading_markers  # noqa: PLC2701
 from meetings.manager import (
+    INVALID_OBSERVATION_ID_MARKER,
+    INVALID_REASON_ID_MARKER,
     TEAMMATE_COERCED_VOTE_RATIONALE,
     TEAMMATE_VOTE_TARGET_MARKER,
     MeetingParticipant,
+    _normalize_ballot_observation_id,  # noqa: PLC2701
+    _normalize_ballot_reason_id,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
 )
 from meetings.schemas import VoteBallot
@@ -128,8 +139,8 @@ class TestCoercedRationaleIsRedacted:
         assert coerced.target == "SKIP"
         assert coerced.rationale_text == (
             "[teammate target 'p-5' coerced to SKIP] "
-            "(rationale redacted by the vote guard; "
-            "recorded reason: no confident read this round)"
+            "[rationale redacted by the vote guard; "
+            "recorded reason: no confident read this round]"
         )
         assert coerced.rationale_text == (
             _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
@@ -208,6 +219,133 @@ class TestCoercedRationaleIsRedacted:
         reasons, clean = _parse_rewrite_reasons(coerced.rationale_text)
 
         assert reasons == ("teammate_coerced",)
+        assert clean == TEAMMATE_COERCED_VOTE_RATIONALE
+
+
+class TestUpstreamMarkersSurviveTheRedaction:
+    """The redaction removes the model's body -- never another guard's marker.
+
+    The ballot chain prepends the roster normalization and both citation-id
+    validators BEFORE the teammate coercion, so a betrayal ballot that also
+    carried a hallucinated reason / observation id arrives with their markers
+    on the front. Replacing the whole rationale would drop them, silently
+    un-counting nulled citations for every consumer that reads markers off the
+    recorded string -- laundering one guard's audit trail through another's.
+    """
+
+    def _doubly_marked_ballot(self) -> VoteBallot:
+        # Exactly the upstream chain, run for real rather than hand-spliced.
+        ballot = _ballot(primary_reason_id="m-9:turn-99")
+        ballot = ballot.model_copy(update={"primary_reason_observation_id": "p-4:1:1"})
+        ballot = _normalize_ballot_reason_id(
+            ballot=ballot,
+            valid_reason_ids=frozenset({"m-1:turn-0"}),
+            reason_id_by_ordinal={},
+        )
+        return _normalize_ballot_observation_id(
+            ballot=ballot, valid_observation_ids=frozenset()
+        )
+
+    def test_nulled_citation_markers_are_preserved_in_place(self) -> None:
+        marked = self._doubly_marked_ballot()
+        assert INVALID_REASON_ID_MARKER.format(reason_id="m-9:turn-99") in (
+            marked.rationale_text
+        )
+
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=marked, fellow_impostor_ids=("p-5",)
+        )
+
+        # Same stack order the un-redacted guard produced: the teammate marker
+        # in front, then the upstream markers, then the body.
+        assert coerced.rationale_text == (
+            _marker_for("p-5")
+            + INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-4:1:1")
+            + INVALID_REASON_ID_MARKER.format(reason_id="m-9:turn-99")
+            + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert _OMNISCIENT_RATIONALE not in coerced.rationale_text
+
+    def test_every_chip_still_registers_on_the_spectator_surface(self) -> None:
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=self._doubly_marked_ballot(), fellow_impostor_ids=("p-5",)
+        )
+
+        reasons, clean = _parse_rewrite_reasons(coerced.rationale_text)
+
+        assert reasons == (
+            "teammate_coerced",
+            "invalid_observation_id",
+            "invalid_reason_id",
+        )
+        assert clean == TEAMMATE_COERCED_VOTE_RATIONALE
+
+    def test_substring_marker_counts_still_see_the_nulled_citations(self) -> None:
+        # ``eval.vj_instruments`` counts nulled citations by substring against
+        # the recorded ``rationale_text``; the prefix (marker minus its
+        # interpolated payload) is what ``eval.meeting_quality`` greps.
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=self._doubly_marked_ballot(), fellow_impostor_ids=("p-5",)
+        )
+
+        for marker in (INVALID_REASON_ID_MARKER, INVALID_OBSERVATION_ID_MARKER):
+            prefix = marker.partition("{")[0]
+            assert prefix in coerced.rationale_text, prefix
+
+    def test_a_model_emitted_lookalike_marker_is_redacted_not_preserved(self) -> None:
+        # The peel is gated on the field actually being nulled, so a model that
+        # writes marker-shaped text of its own cannot smuggle a body past the
+        # redaction: here ``primary_reason_id`` is still populated, so the
+        # lookalike prefix is model output and goes with the rest of it.
+        spoofed = _ballot(
+            primary_reason_id="m-1:turn-0",
+            rationale_text=(
+                INVALID_REASON_ID_MARKER.format(reason_id="p-5 is my partner")
+                + "and I did the kill."
+            ),
+        )
+
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=spoofed, fellow_impostor_ids=("p-5",)
+        )
+
+        assert coerced.rationale_text == (
+            _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert "partner" not in coerced.rationale_text.lower()
+
+
+class TestRedactedBodyStaysOutOfTheVoiceFold:
+    """The guard's prose is system text and must never be measured as a voice.
+
+    ``eval.vj_instruments._normalize_voice`` strips leading ``[...]`` markers
+    and folds whatever remains into the §2.5 echo / skeleton / distinct-n
+    metrics. A parenthesized note (the ``DEFAULT_VOTE_RATIONALE`` shape) would
+    survive that strip and feed the SAME guard-authored sentence into the
+    model-voice diversity figures on every coerced ballot. The bracketed form
+    is dropped with the markers.
+    """
+
+    def test_the_note_is_bracketed_system_text(self) -> None:
+        assert TEAMMATE_COERCED_VOTE_RATIONALE.startswith("[")
+        assert TEAMMATE_COERCED_VOTE_RATIONALE.endswith("]")
+        # A bracketed marker's payload must not contain a nested "]", or the
+        # evaluator's strip stops early and leaks a fragment into the fold.
+        assert "]" not in TEAMMATE_COERCED_VOTE_RATIONALE[1:-1]
+
+    def test_a_coerced_ballot_contributes_no_voice_tokens(self) -> None:
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=_ballot(), fellow_impostor_ids=("p-5",)
+        )
+
+        assert _strip_leading_markers(coerced.rationale_text) == ""
+
+    def test_it_carries_no_marker_payload_so_registers_no_chip(self) -> None:
+        # Bracketed but NOT a marker: no ``{...!r}`` payload, so the display
+        # parse leaves it as the ballot's clean body rather than a chip.
+        reasons, clean = _parse_rewrite_reasons(TEAMMATE_COERCED_VOTE_RATIONALE)
+
+        assert reasons == ()
         assert clean == TEAMMATE_COERCED_VOTE_RATIONALE
 
 
