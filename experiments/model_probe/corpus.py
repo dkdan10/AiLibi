@@ -1,4 +1,7 @@
-"""Reconstruct real vote-ballot decision contexts from committed replays.
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Reconstruct real vote-ballot decision contexts from committed replays.
 
 The harness's foundation. For every recorded vote in a committed replay set it
 rebuilds the *exact* context the voter's prompt was rendered from — reusing the

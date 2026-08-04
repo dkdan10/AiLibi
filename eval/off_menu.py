@@ -1,4 +1,7 @@
-"""Off-menu action diagnostics — behaviour outside the FSM option menu.
+"""FROZEN (Phase 19 tier map, training/README.md): vacuous for the champion by design.
+Bug fixes and evidence readers only; no new search.
+
+Off-menu action diagnostics — behaviour outside the FSM option menu.
 
 Task 18.3 (tasks/phase-18.md; audits/audit-phase-18-planning.md §3.2) builds the
 byte-grounded gauge of

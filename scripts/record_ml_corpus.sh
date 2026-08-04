@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 #
+# FROZEN (Phase 19 tier map, training/README.md): recorder of the frozen corpus
+# bytes; the Bash-recorder port is explicitly out of scope. Bug fixes and
+# evidence readers only; no new search.
+#
 # record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-6
 # config (Task 15.12 corpus, re-grounded onto baseline 6 by Task 18.13;
 # audits/audit-phase-18-baseline-6.md; audits/audit-phase-16-model-lock.md;
@@ -583,6 +587,14 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
             models.update(call.model for call in entry.llm_calls)
         elif isinstance(entry, FailedCallReplayEntry):
             models.add(entry.model)
+            # Phase-18 ledger, labeled in place (Phase 19 tier map,
+            # training/README.md §6; audit-phase-18-close.md §7 items 6+7):
+            # this freeze-guard branch has no unit test (item 6 —
+            # tests/scripts/test_record_ml_corpus.py carries zero
+            # deadline_default occurrences), and the validity gate has no
+            # deadline_default check at all — the recorder is deliberately
+            # stricter than the gate (item 7, unassigned at the close; the
+            # gate-side anchor is an absence of code). Frozen as-is.
             # Key on error_type, NOT on the model sentinel: the burned-generation
             # branch stamps the REAL baseline model, so a model-only check misses
             # it entirely (PR #301 review).
@@ -972,6 +984,9 @@ record_set() {
   printf '0' >"$stage_dir/.state/meetings"
   local lockdir="$stage_dir/.lock"
 
+  # Phase-18 ledger, labeled in place (Phase 19 tier map, training/README.md §6;
+  # audit-phase-18-close.md §7 item 5 — the recorder lock-race): the Bash-3.2
+  # dead-owner degradation recorded below is the known limitation; frozen as-is.
   # Portable mkdir mutex with DEAD-OWNER detection: the holder records its PID; a
   # waiter that finds the lock owned by a dead process marks the run failed (the
   # half-written MANIFEST is unsafe to freeze) and gives up. Returns non-zero when

@@ -1,4 +1,7 @@
-"""Task 18.5 — the anchor study: λ sweep + filtered-BC anchor refinement.
+"""FROZEN (Phase 19 tier map, training/README.md): report-only study, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Task 18.5 — the anchor study: λ sweep + filtered-BC anchor refinement.
 
 The two cheap training-side levers on the exact gauges the committed champion
 failed (audits/audit-phase-18-planning.md §2.4, adopted without an owner slot;
@@ -28,7 +31,7 @@ watchability into fitness, which stays forbidden):
    perception path, with every re-derived FSM decision VERIFIED against the
    recorded action (fail loud on any divergence). The fit mirrors the
    ``Fo6Logistic`` / ``BallotPredictor`` deterministic recipe
-   (``training/surrogate/fidelity.py:302-419``, ``ballots.py``): zeros init,
+   (``training/surrogate/fidelity.py:305-422``, ``ballots.py``): zeros init,
    fixed epochs/learning-rate, full-batch gradient descent, no RNG. Evaluation
    is OFFLINE only — per-decision agreement with the FSM over the corpus
    decision stream, where it diverges and toward what. The
@@ -165,7 +168,7 @@ COMMITTED_CHAMPION_DIR: Final[Path] = Path("training/artifacts/impostor/utility-
 HIGH_FLAG_FLOOR: Final[float] = 180 / 165
 
 # The filtered-BC fit hyperparameters — the Fo6Logistic / BallotPredictor
-# deterministic recipe verbatim (training/surrogate/fidelity.py:316,
+# deterministic recipe verbatim (training/surrogate/fidelity.py:319,
 # ballots.py DEFAULT_EPOCHS / DEFAULT_LEARNING_RATE): zeros init, fixed
 # epochs/lr, full-batch, no RNG.
 FILTERED_BC_EPOCHS: Final[int] = 300

@@ -1,4 +1,7 @@
-"""Asymmetric-visibility re-sim: crew = same_room_only, impostor = same_room_and_adjacent.
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Asymmetric-visibility re-sim: crew = same_room_only, impostor = same_room_and_adjacent.
 
 Tests the proposal that keeping the IMPOSTOR's adjacent sight (while crew go room-only)
 avoids the impostor-weakening the SYMMETRIC room-local flip caused (visibility_resim.py:

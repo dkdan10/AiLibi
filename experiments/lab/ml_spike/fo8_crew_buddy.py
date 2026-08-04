@@ -1,4 +1,7 @@
-"""Phase-C probe 2 — does a non-degenerate crew BUDDY SYSTEM emerge? (blindspot).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Phase-C probe 2 — does a non-degenerate crew BUDDY SYSTEM emerge? (blindspot).
 
 FO-2's co-evolution collapsed because the crew move-override had NO task pressure
 (clumping trivially denies kills). Here the crew keeps task pressure: a learned gate

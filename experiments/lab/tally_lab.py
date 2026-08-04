@@ -1,4 +1,7 @@
-"""Tally counterfactual lab (Tier 1) — the gp-8 parked owner call's data.
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Tally counterfactual lab (Tier 1) — the gp-8 parked owner call's data.
 
 Replays every recorded meeting's ballots under tally VARIANTS and scores the
 flips. Reads the audit extractor's facts JSON (ballots carry voter/target roles

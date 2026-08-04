@@ -1,4 +1,7 @@
-"""Deflection probe (gp-2) — does wiring the v5 cover into the REPLY path lift it?
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Deflection probe (gp-2) — does wiring the v5 cover into the REPLY path lift it?
 
 Decision informed: whether the Phase-10 close audit's gp-1 (wire the impostor
 cover directive into accusation_round.j2's reply branch) is worth a re-record.

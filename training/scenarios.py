@@ -1,4 +1,7 @@
-"""Scenario staging: the skill-scenario library + per-scenario dense fitness (18.23).
+"""FROZEN (Phase 19 tier map, training/README.md): campaign-only staging, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Scenario staging: the skill-scenario library + per-scenario dense fitness (18.23).
 
 The training-grounds instrument (audits/audit-phase-18-planning.md §4 #12):
 constructed MID-GAME skill situations injected into the headless game through the
@@ -972,6 +975,12 @@ class ScenarioProvider:
     evaluates ``1 + population`` genomes per generation). Episodes are
     horizon-capped by construction (``spec.staged_tick + spec.horizon_ticks``),
     far below a full game.
+
+    Phase-18 ledger, labeled in place (Phase 19 tier map, training/README.md
+    §6; audit-phase-18-close.md §7 item 12): the delegation convention below
+    is UNENFORCED (validation checks side names, seam overlap, and
+    non-emptiness — never delegation) and was never exercised by a campaign
+    (both campaigns' rows carry ``scenario_labels: []``).
 
     Each side is driven through exactly one of two seams. ``selector_builders``
     maps a side to a genome→selector factory; the built selector drives EVERY

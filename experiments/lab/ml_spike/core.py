@@ -1,4 +1,7 @@
-"""ML feasibility spike — core harness (throwaway, design-thread, $0).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+ML feasibility spike — core harness (throwaway, design-thread, $0).
 
 Charter: experiments/lab/ml-spike-charter.md. Proves three things on the EXISTING
 substrate with ZERO engine edits and NO new dependencies (pure-Python MLP =

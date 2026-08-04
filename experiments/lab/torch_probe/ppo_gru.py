@@ -1,4 +1,7 @@
-"""The torch side of the 15.17 probe: a PPO + GRU impostor learner.
+"""FROZEN (Phase 19 tier map, training/README.md): the torch probe, a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+The torch side of the 15.17 probe: a PPO + GRU impostor learner.
 
 Everything torch lives here and in the operator scripts — ``entrant.py`` (the
 comparability plumbing the committed test drives) never imports this module.

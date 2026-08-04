@@ -1,4 +1,7 @@
-"""The surrogate fidelity harness — by-GAME CV + the honest ceiling (Task 15.11).
+"""FROZEN (Phase 19 tier map, training/README.md): evidence reader; instrument frozen.
+Bug fixes and evidence readers only; no new search.
+
+The surrogate fidelity harness — by-GAME CV + the honest ceiling (Task 15.11).
 
 The instrument the phase judges ALL meeting models with
 (audits/post-phase-14-ML-training-signal.md §5.5): never a single headline number,

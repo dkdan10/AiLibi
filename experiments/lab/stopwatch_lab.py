@@ -1,4 +1,7 @@
-"""Stopwatch sensitivity lab (Tier 1) — how close is the task-clock race, really?
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Stopwatch sensitivity lab (Tier 1) — how close is the task-clock race, really?
 
 Decision informed: Wave-2 balance knobs + the 10.13 gate (any clock-slow or
 kill-cadence change must be modeled before it is tuned); R1 (deduction decides)

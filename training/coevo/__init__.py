@@ -1,4 +1,7 @@
-"""The seam co-evolution package (Task 18.19).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded campaign machinery.
+Bug fixes and evidence readers only; no new search.
+
+The seam co-evolution package (Task 18.19).
 
 The dual-role co-evolution seam: where the 15.15 impostor bake-off
 (``training/bakeoff/harness.py``) and the 15.16 crew track

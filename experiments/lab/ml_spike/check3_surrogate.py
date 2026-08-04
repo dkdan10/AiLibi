@@ -1,4 +1,7 @@
-"""Check 3 — SURROGATE FIDELITY.
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Check 3 — SURROGATE FIDELITY.
 
 Can the DETERMINISTIC detector (the per-meeting `contradictions` flags the engine
 already computes, no LLM) predict the real-LLM meeting ejection well enough to be

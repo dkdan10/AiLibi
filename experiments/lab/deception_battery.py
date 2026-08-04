@@ -1,4 +1,7 @@
-"""Deception probe battery (Tier 2) — the 10.10 pre-contract gate, pulled forward.
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Deception probe battery (Tier 2) — the 10.10 pre-contract gate, pulled forward.
 
 Decision informed: Wave-2 contract shape (10.10 toolkit / 10.11 metrics) — can
 qwen3.5:9b play the villain at all, and where exactly does it fail? Rubric: R2

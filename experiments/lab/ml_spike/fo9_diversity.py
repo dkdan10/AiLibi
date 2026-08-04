@@ -1,4 +1,7 @@
-"""Phase-C probe 3 — diversity vs MONOCULTURE (blindspot).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Phase-C probe 3 — diversity vs MONOCULTURE (blindspot).
 
 Plain ES converges to ONE policy; real Among-Us interest comes from strategy
 DIVERSITY. Run N independent ES runs (different seeds, same kills objective) and

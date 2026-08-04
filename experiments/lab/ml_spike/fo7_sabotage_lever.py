@@ -1,4 +1,7 @@
-"""Phase-C probe 1 — sabotage as a learnable strategic lever (blindspot).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Phase-C probe 1 — sabotage as a learnable strategic lever (blindspot).
 
 Sabotage is the richest Among-Us emergent tool (sabotage -> split the crew ->
 pick them off / stall the clock) and NO spike/follow-on touched it. Give the

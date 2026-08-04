@@ -1,4 +1,7 @@
-"""The dual-role co-evolution factory (Task 18.19).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded campaign machinery.
+Bug fixes and evidence readers only; no new search.
+
+The dual-role co-evolution factory (Task 18.19).
 
 Where ``training.bakeoff.harness.build_candidate_factory`` interposes IMPOSTOR
 decisions only (crew frozen to the scripted FSM) and
@@ -7,10 +10,10 @@ only (impostors frozen to the scripted FSM), :func:`build_coevo_factory`
 composes both into ONE game: a ROLE BRANCH over the two EXISTING wrappers, not
 a new agent class (the task hint — the wrappers are imported/mirrored, never
 rewired). An impostor agent is wrapped in the harness's private
-``_CandidateAgent`` (harness.py:531-609, which overrides IMPOSTOR decisions
+``_CandidateAgent`` (harness.py:548-626, which overrides IMPOSTOR decisions
 against ``impostor_policy`` and delegates every other role to the FSM); a crew
 agent is wrapped in the scorer's private ``_CrewCandidateAgent``
-(scorer.py:696-826, which overrides CREW decisions against ``crew_policy``,
+(scorer.py:712-845, which overrides CREW decisions against ``crew_policy``,
 carries the per-agent emergency-uses tracker, and delegates every other role to
 the FSM). Because each wrapper already role-gates internally and only ever
 overrides its own role, wrapping impostors with the impostor wrapper and crew
@@ -71,10 +74,10 @@ def build_coevo_factory(
     IMPOSTOR gets an :class:`~agents.tactical.impostor_policy.ImpostorPolicy`
     inner, else a :class:`~agents.tactical.crewmate_policy.CrewmatePolicy` inner
     — then ROLE-BRANCHES the interposition: an impostor is wrapped in
-    ``_CandidateAgent`` (harness.py:612-645's ``build_candidate_factory``
+    ``_CandidateAgent`` (harness.py:629-662's ``build_candidate_factory``
     construction) so ``impostor_policy`` overrides its IMPOSTOR decisions and
     feeds ``impostor_trace``; a crew agent is wrapped in ``_CrewCandidateAgent``
-    (scorer.py:828-868's ``build_crew_candidate_factory`` construction) so
+    (scorer.py:848-888's ``build_crew_candidate_factory`` construction) so
     ``crew_policy`` overrides its CREW decisions, feeds ``crew_trace``, and runs
     the per-agent emergency-uses tracker off
     ``game_map.emergency.uses_per_player``. ``sabotage_kinds`` is

@@ -1,4 +1,7 @@
-"""Vent-escape counterfactual (offline, $0) — does hidden movement let the
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Vent-escape counterfactual (offline, $0) — does hidden movement let the
 impostor's alibi survive the detector?
 
 For every recorded meeting in a committed sample set, simulate that each impostor

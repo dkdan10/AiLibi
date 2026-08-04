@@ -1,4 +1,7 @@
-"""Check 1 — DETERMINISM (the cornerstone).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Check 1 — DETERMINISM (the cornerstone).
 
 Does a float MLP in the recorded-action loop preserve byte-identical replay +
 per-tick state hashes? Run the same seed twice with the same frozen genome and

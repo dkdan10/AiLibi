@@ -1,4 +1,7 @@
-"""Phase-B 13.4-CEILING probe: is there enough PUBLIC TESTIMONY to reconstruct
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Phase-B 13.4-CEILING probe: is there enough PUBLIC TESTIMONY to reconstruct
 physically-impossible alibis (13.4's alibi_vs_physical STRONG lever)?
 
 13.3's gate showed R7=0/50 (only 1 alibi_conflict to promote). 13.4 GENERATES STRONG

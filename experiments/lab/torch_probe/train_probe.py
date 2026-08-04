@@ -1,4 +1,7 @@
-"""Operator script: train the PPO+GRU probe and score it through the harness.
+"""FROZEN (Phase 19 tier map, training/README.md): the torch probe, a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+Operator script: train the PPO+GRU probe and score it through the harness.
 
 Run (torch never enters the project environment; the defaults ARE the
 recorded budget, so a bare run regenerates the committed champions):

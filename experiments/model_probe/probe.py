@@ -1,4 +1,7 @@
-"""Matrix runner — drive local Ollama over the reconstructed decision corpus.
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Matrix runner — drive local Ollama over the reconstructed decision corpus.
 
 For each cell (model x think x num_ctx x prompt-variant) and each corpus item,
 render the vote-ballot prompt and call Ollama DIRECTLY via

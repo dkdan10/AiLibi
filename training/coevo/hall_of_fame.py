@@ -1,4 +1,7 @@
-"""The co-evolution hall of fame + PFSP-lite opponent sampler (Task 18.20).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded campaign machinery.
+Bug fixes and evidence readers only; no new search.
+
+The co-evolution hall of fame + PFSP-lite opponent sampler (Task 18.20).
 
 The opponent-pool half of the co-evo track: where
 :mod:`training.coevo.factory` / :mod:`training.coevo.rollout` (Task 18.19)
@@ -35,7 +38,7 @@ Three doctrines the module mirrors verbatim from committed siblings:
   review caught them).
 
 * **Staleness** — :class:`OpponentStalenessLedger` is the co-evo analogue of
-  :class:`training.surrogate.runner.SurrogateUseCounter` (runner.py:105-148): an
+  :class:`training.surrogate.runner.SurrogateUseCounter` (runner.py:114-157): an
   explicit, in-memory, run-scoped meter the 18.21 driver constructs ONCE and
   threads through the alternating-freeze loop, sha-keyed so it can never meter an
   opponent it was not seeded with. Counts are NEVER persisted into

@@ -1,4 +1,7 @@
-"""Meeting-prompt fixture battery (Task 13.6) — does the prompt elicit RICHER testimony?
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Meeting-prompt fixture battery (Task 13.6) — does the prompt elicit RICHER testimony?
 
 The 13.4 gate (tasks/phase-13.md "GATE FINDING 2026-06-21") proved the inferential
 detector is STARVED: the committed 9p2i transcripts hold ~0 multi-witness placements,

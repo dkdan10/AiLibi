@@ -1,4 +1,7 @@
-"""Follow-on 5 — grade the FAITHFUL deterministic surrogate (gap 5).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 5 — grade the FAITHFUL deterministic surrogate (gap 5).
 
 The pressure-test flagged check3's naive top-1 tally as a strawman: the real
 pipeline weights flags (weak 0.08 / strong 0.30) against a 0.60 gate and

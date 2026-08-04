@@ -1,8 +1,11 @@
-"""The dual-role co-evolution rollout (Task 18.19).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded campaign machinery.
+Bug fixes and evidence readers only; no new search.
+
+The dual-role co-evolution rollout (Task 18.19).
 
 The co-evo twin of ``training.bakeoff.harness.rollout_candidate``
-(harness.py:648-706, interposes impostor decisions only) and
-``training.crew.scorer.rollout_crew_candidate`` (scorer.py:871-931, interposes
+(harness.py:665-723, interposes impostor decisions only) and
+``training.crew.scorer.rollout_crew_candidate`` (scorer.py:891-950, interposes
 crew decisions only): ONE full production game in which BOTH sides are
 independently the scripted FSM (``None``), a live candidate, or a frozen learned
 artifact, driven through :func:`~training.coevo.factory.build_coevo_factory`,
@@ -129,8 +132,8 @@ def rollout_coevo(
 ) -> CoevoRolloutResult:
     """Run ONE full production game with both sides and score both (Task 18.19).
 
-    Mirrors ``rollout_candidate`` (harness.py:648-706) / ``rollout_crew_candidate``
-    (scorer.py:871-931) structurally, wiring BOTH override paths through
+    Mirrors ``rollout_candidate`` (harness.py:665-723) / ``rollout_crew_candidate``
+    (scorer.py:891-950) structurally, wiring BOTH override paths through
     :func:`~training.coevo.factory.build_coevo_factory`. Resolves the canonical
     map when ``game_map`` is ``None``, writes ``replay-seed-{seed}.jsonl`` under
     ``output_dir``, drives :class:`orchestrator.game.HeadlessGame` with

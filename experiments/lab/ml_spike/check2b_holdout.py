@@ -1,4 +1,7 @@
-"""Check 2b — does the ES champion GENERALIZE? (closes the train/test leak).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Check 2b — does the ES champion GENERALIZE? (closes the train/test leak).
 
 The original Check 2 selected AND reported the champion on the same 8 seeds
 (range(8)) — an in-sample maximum. Re-score the champion, random, and FSM on a

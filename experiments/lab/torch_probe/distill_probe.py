@@ -1,4 +1,7 @@
-"""Operator script: distill the torch champion into the pure-Python net.
+"""FROZEN (Phase 19 tier map, training/README.md): the torch probe, a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+Operator script: distill the torch champion into the pure-Python net.
 
 The escape hatch the task contract prices: behavior-clone the frozen
 PPO+GRU champion into the 15.15 ``MaskedMlpPolicy`` family (encoder-v2 ->

@@ -1,4 +1,7 @@
-"""The conviction-model fidelity harness + the pre-stated GO bar (Task 18.15).
+"""FROZEN (Phase 19 tier map, training/README.md): evidence reader; instrument frozen.
+Bug fixes and evidence readers only; no new search.
+
+The conviction-model fidelity harness + the pre-stated GO bar (Task 18.15).
 
 Judges a :class:`~training.conviction.model.ConvictionEconomyModel` on the
 committed corpus split's HELD-OUT side against the bar the task contract

@@ -1,4 +1,16 @@
-"""The composed meeting-outcome runner — conviction WHETHER × surrogate WHO (Task 18.29).
+"""FROZEN (Phase 19 tier map, training/README.md): optional-diagnostic only.
+Bug fixes and evidence readers only; no new search.
+
+Phase-18 ledger, labeled in place (Phase 19 tier map, training/README.md §6;
+audit-phase-18-close.md §7 item 8 — the stamped-substrate question): a composed
+meeting makes zero LLM calls, so no model row exists to stamp and every
+composed-path arm fails ``cost_and_provenance_exact`` structurally (an eval-side
+question, ``eval/validity.py`` ``check_cost_and_provenance``); composed-substrate
+probe reads stay diagnostic-grade until the provenance check has a
+stamped-substrate answer for LLM-free meeting paths
+(``training/artifacts/composed/verdict.json`` ``adoption_constraints[0]``).
+
+The composed meeting-outcome runner — conviction WHETHER × surrogate WHO (Task 18.29).
 
 Training rollouts run fake meetings that convict nobody, while 65.2% of real
 baseline-6 meetings convict — so rosters never shrink, parity never arises, an
@@ -360,6 +372,9 @@ def load_composed_runner_factory(
     DIAGNOSTIC path — the Goodhart leg and the first-eval/re-ground machinery
     construct the runner regardless of (and before) any committed composed
     verdict; that escape is for the diagnostics, never for campaign wiring.
+    (Phase-18 ledger item 10 — this ``None`` escape is fenced off from
+    campaigns only by the driver config's ``Path`` annotation; see the label
+    on ``training/coevo/driver.py``'s ``composed_artifact_dir`` field.)
     """
 
     components = load_composed_components(

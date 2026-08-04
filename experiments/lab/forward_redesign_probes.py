@@ -1,4 +1,7 @@
-"""Two $0-offline probes that de-risk the forward-redesign minimal fix on the committed
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Two $0-offline probes that de-risk the forward-redesign minimal fix on the committed
 9p2i set (50 games / 114 meetings), before any code lands. See
 audits/audit-2026-06-22-1558-forward-redesign.md (steps 0 + 2) and the write-up in
 experiments/lab/report-forward-redesign-probes.md.

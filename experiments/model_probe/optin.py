@@ -1,4 +1,7 @@
-"""Opt-in / corroboration probe — does the crew pile onto a correct accusation?
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Opt-in / corroboration probe — does the crew pile onto a correct accusation?
 
 The opt-in is the terminal info-share before the vote: a non-speaking crewmate
 with relevant evidence can second an accusation, building the shared belief (and
