@@ -29,11 +29,15 @@ from api.schemas import (
     EdgeView,
     EvalCostSummaryView,
     FailedCallView,
+    FinaleAgentRecapView,
+    FinaleEventView,
     FoundBodyObsView,
+    GameFinale,
     GateView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
+    MeetingResolutionView,
     MeetingTriggeredEventView,
     MeetingView,
     ObservationClaimView,
@@ -138,6 +142,30 @@ def _contradiction() -> ContradictionView:
     )
 
 
+def _meeting_resolution_view() -> MeetingResolutionView:
+    """The Task 19.10 pre/post-resolution label for a RESOLVED meeting frame.
+
+    Populated (not ``None``) on purpose: a ``None`` would round-trip trivially
+    and prove nothing about the nested :class:`AdvantageView`. ``pre_advantage``
+    is the frame's advantage BEFORE the ejection applied, so it carries one more
+    living impostor than the tick's (post-resolution) ``advantage`` — the two
+    vintages the label exists to keep apart.
+    """
+
+    return MeetingResolutionView(
+        meeting_id="m1",
+        ejected_player_id="p2",
+        pre_advantage=AdvantageView(
+            crew_alive=6,
+            impostors_alive=2,
+            tasks_completed=9,
+            tasks_required=14,
+            tasks_required_total=14,
+            advantage=0.21,
+        ),
+    )
+
+
 def _tick_view() -> TickView:
     return TickView(
         tick=10,
@@ -231,6 +259,10 @@ def _tick_view() -> TickView:
             tasks_required_total=14,
             advantage=0.47,
         ),
+        # Task 19.10 additive label. Named explicitly (rather than left to its
+        # ``None`` default) because the house style is exhaustive construction,
+        # and because a populated value is what round-trips the nested DTO.
+        meeting_resolution=_meeting_resolution_view(),
     )
 
 
@@ -319,6 +351,47 @@ def _replay_metadata_view() -> ReplayMetadataView:
     )
 
 
+def _game_finale() -> GameFinale:
+    """The Task 19.10 composed outcome view.
+
+    Covers all four ``FinaleEventView`` kinds in one fixture so the inlined
+    ``kind`` literal round-trips on every branch, and both recap shapes: an agent
+    who named a real impostor (``final_vote_named_impostor=True``) and one whose
+    ``SKIP`` names nobody (``None`` — the question does not apply, distinct from
+    ``False`` = named a crewmate).
+    """
+
+    return GameFinale(
+        winner="CREWMATES",
+        winner_reason="CREWMATE_EJECT",
+        final_tick=42,
+        decisive_events=(
+            FinaleEventView(tick=10, kind="kill", actor_id="p2", subject_id="p4"),
+            FinaleEventView(
+                tick=20, kind="meeting_skipped", actor_id="p1", subject_id=None
+            ),
+            FinaleEventView(tick=42, kind="ejection", actor_id="p1", subject_id="p2"),
+            FinaleEventView(tick=42, kind="game_end", actor_id=None, subject_id=None),
+        ),
+        agent_recaps=(
+            FinaleAgentRecapView(
+                agent_id="p1",
+                role="CREWMATE",
+                alive_at_end=True,
+                final_vote_target="p2",
+                final_vote_named_impostor=True,
+            ),
+            FinaleAgentRecapView(
+                agent_id="p2",
+                role="IMPOSTOR",
+                alive_at_end=False,
+                final_vote_target="SKIP",
+                final_vote_named_impostor=None,
+            ),
+        ),
+    )
+
+
 def _replay_view() -> ReplayView:
     return ReplayView(
         metadata=_replay_metadata_view(),
@@ -368,6 +441,9 @@ def _replay_view() -> ReplayView:
                 error_message="missing field 'vote'",
             ),
         ),
+        # Task 19.10 additive field; populated so the nested finale round-trips
+        # as part of the full replay payload, not only standalone.
+        finale=_game_finale(),
     )
 
 
@@ -458,6 +534,7 @@ _TOP_LEVEL_FIXTURES: tuple[pydantic.BaseModel, ...] = (
     _suspicion_graph_view(),
     _belief_frame_view(),
     _rubric_view(),
+    _game_finale(),
 )
 
 
