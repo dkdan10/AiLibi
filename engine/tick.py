@@ -635,6 +635,12 @@ def advance_tick(
         )
         return game_over_state, events
 
+    # FROZEN (Phase 19 tier map, training/README.md): the byte-frozen RNG-draw
+    # apparatus — the draw's value is discarded; it exists to advance the RNG
+    # cursor so state_hash chains stay byte-identical on every committed
+    # replay. Removing or consuming it would shift every hash chain and break
+    # replay byte-identity. Bug fixes and evidence readers only; no new search.
+    # (A note, not a module freeze: the engine is live.)
     # RNG state is explicitly threaded through the tick transition. The DRAW
     # happens under either policy (the cursor advances identically); only the
     # snapshot encoding of the advanced state differs (Task 15.8.1). Under the

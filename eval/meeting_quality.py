@@ -309,6 +309,10 @@ _UNCITED_ZERO_FLAG_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(
 # so the parser accepts either header (newest first) and only the header string
 # alternates. Recognizing both keeps the frozen 9B-era prompt_regression
 # fixtures parsing while the canonical set is on the new header.
+# FROZEN (Phase 19 tier map, training/README.md): rendered-prose scrape —
+# unreliable under prompt-shape change. Bug fixes and evidence readers only; no
+# new search. (The suspicion-graph read below regex-parses rendered prompt
+# text; non-matching rows are silently skipped.)
 _SUSPICION_GRAPH_HEADERS: Final[tuple[str, ...]] = (
     "## Your suspicion of each player",
     "## Your suspicion graph",

@@ -1,4 +1,7 @@
-"""Reply-turn probe — does the reactive chain engage, or die at one hop?
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Reply-turn probe — does the reactive chain engage, or die at one hop?
 
 The accusation-chain protocol's whole point is the reactive middle: an accused
 player answers and (if their evidence warrants) redirects, passing the floor on.

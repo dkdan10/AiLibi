@@ -37,6 +37,15 @@ re-grounding recipe lives in ``training/reports/report-ballot-surrogate.md``).
 Public surface (stable — downstream tasks import these):
 :class:`SurrogateMeetingRunner`, :class:`SurrogateUseCounter`,
 :class:`SurrogateStalenessExceededError`, :func:`load_surrogate_runner_factory`.
+
+Phase 19 tier map (training/README.md §2a), the standalone-vs-dependency
+boundary: the surrogate RANKING channel is KEPT (46/60 top-1); the standalone
+DECISION arm is retired by 19.19 (all-SKIP census — the NO-GO in
+``training/reports/report-ballot-surrogate.md`` §5). The factory, the class,
+and the counter STAY: ``training/composed_runner.py``'s verification fence and
+``training/bakeoff/harness.py`` consume them. Only a surrogate-ONLY runner
+exposure proven consumer-free may retire — a no-free-exposure outcome is a
+recorded no-op.
 """
 
 from __future__ import annotations

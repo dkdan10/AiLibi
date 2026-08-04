@@ -1,4 +1,7 @@
-"""Follow-on 6 — the LINCHPIN: a LEARNED vote-surrogate (gap 5, decisive).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 6 — the LINCHPIN: a LEARNED vote-surrogate (gap 5, decisive).
 
 FO-5 showed the rule-based deterministic gate can't predict LLM ejections. The
 pressure-test said: a LEARNED model on the detector signal might. But a deeper

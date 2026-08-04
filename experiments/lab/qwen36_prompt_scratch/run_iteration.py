@@ -1,4 +1,7 @@
-"""Iteration driver for the from-scratch qwen3.6-27b prompt set (owner-directed, 2026-07-11).
+"""FROZEN (Phase 19 tier map, training/README.md): pre-lock prompt scratch, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Iteration driver for the from-scratch qwen3.6-27b prompt set (owner-directed, 2026-07-11).
 
 Renders one of the version directories in THIS folder through the loader's own
 render functions (custom Jinja environment, identical strict-undefined / trim /

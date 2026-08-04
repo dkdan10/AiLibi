@@ -1,4 +1,7 @@
-"""Provider-neutral probe backend (Task 14.3) — one seam, two providers.
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Provider-neutral probe backend (Task 14.3) — one seam, two providers.
 
 The real-data probes (``experiments/model_probe/probe.py``,
 ``experiments/lab/deception_battery.py``, ``experiments/lab/deflection_probe.py``,

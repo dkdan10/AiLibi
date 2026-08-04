@@ -1,4 +1,7 @@
-"""Decay sweep + emergence census (Tier 1).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Decay sweep + emergence census (Tier 1).
 
 Part 1 — DECAY SWEEP (decision: the deferred decay-rate revisit; R3 arcs).
 On the W0 facts (clean 9.8 semantics — no pre-vote folds), re-fold every

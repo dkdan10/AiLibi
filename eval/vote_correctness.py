@@ -560,6 +560,10 @@ def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
 
     roster = frozenset(ballot.voter for ballot in meeting.ballots)
     subjects: set[PlayerId] = set()
+    # FROZEN (Phase 19 tier map, training/README.md): weak-reason membership is
+    # English-substring matching on ContradictionRef.description — unreliable
+    # under flag-wording/prompt-shape change. Bug fixes and evidence readers
+    # only; no new search.
     for flag in detect_contradictions(meeting.transcript, roster=roster):
         if flag.kind != "alibi_vs_sighting":
             continue
@@ -664,6 +668,8 @@ SUPPLIED_CHANNELS: Final[tuple[SuppliedChannel, ...]] = (
 # flags THERE, by event id, is the eval-side re-anchor (the detector's band
 # itself is untouched; the record-time relaxation is routed elsewhere, per
 # the Phase-17 designer ruling).
+# Frozen metric site — same substring-membership caveat as the tier-map label
+# in ``genuine_class_subjects`` above (Phase 19 tier map, training/README.md).
 _SIGHTING_CHANNEL_EXCLUDED_MARKERS: Final[tuple[str, ...]] = (
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_RETARGETED_PROXY,

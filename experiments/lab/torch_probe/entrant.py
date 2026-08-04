@@ -1,4 +1,7 @@
-"""The torch-probe entrant adapter — the TORCH-FREE comparability plumbing (15.17).
+"""FROZEN (Phase 19 tier map, training/README.md): the torch probe, a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+The torch-probe entrant adapter — the TORCH-FREE comparability plumbing (15.17).
 
 This module is the seam between the experiment-tier torch code
 (``ppo_gru.py``, imported only by the operator scripts) and the production

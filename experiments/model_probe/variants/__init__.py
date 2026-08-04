@@ -1,4 +1,7 @@
-"""Prompt-variant registry for the conversion lab (P2).
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Prompt-variant registry for the conversion lab (P2).
 
 A variant is a callable ``(VoteContext) -> str`` that renders the vote-ballot
 prompt from the SAME reconstructed context as the baseline, through an alternate

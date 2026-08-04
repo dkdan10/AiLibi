@@ -1,4 +1,7 @@
-"""Visibility RE-SIM — agents RE-DECIDE under room-local sight (fake provider, $0).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Visibility RE-SIM — agents RE-DECIDE under room-local sight (fake provider, $0).
 
 The detection counterfactual (visibility_probe.py) held games fixed. Here we
 actually RE-SIMULATE under each visibility model so agents act on the reduced

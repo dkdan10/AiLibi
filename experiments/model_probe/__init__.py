@@ -1,4 +1,7 @@
-"""Model-probe harness — isolated prompt/config lab (Phase 9 investigation).
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Model-probe harness — isolated prompt/config lab (Phase 9 investigation).
 
 Reconstructs real vote-ballot decision contexts from committed replays and runs
 them through model x think x num_ctx x prompt-variant matrices against local

@@ -1,4 +1,7 @@
-"""Check 2 — LEARNABILITY + BOOTSTRAP.
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Check 2 — LEARNABILITY + BOOTSTRAP.
 
 (a) ES: does an impostor-fitness (kills over K seeds) CLIMB above a random genome
     when we evolve the move-policy against the frozen FSM crew + frozen rules?

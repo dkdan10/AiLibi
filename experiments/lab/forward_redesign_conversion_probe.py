@@ -1,4 +1,7 @@
-"""Conversion probe (Probe 4): with alibi_vs_sighting promoted to STRONG (all 111 flags, the real
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Conversion probe (Probe 4): with alibi_vs_sighting promoted to STRONG (all 111 flags, the real
 lever = removing WEAK_REASON_SELF_STATED), how many crew flags would actually EJECT, not just flag?
 The Wave-E review (audits/audit-2026-06-22-2149) flagged that the probes measured FLAG precision,
 not ejection CONVERSION. This measures conversion. See report-forward-redesign-probes.md (Probe 4).

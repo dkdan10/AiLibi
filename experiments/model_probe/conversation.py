@@ -1,4 +1,7 @@
-"""Conversation-quality probe — opening-accusation behavior on both models.
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Conversation-quality probe — opening-accusation behavior on both models.
 
 The model decision (7B vs 9B) now turns on conversation quality, not vote
 conversion (v1_verdict fixes votes on both). The opening accusation is the

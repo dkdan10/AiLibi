@@ -1,4 +1,7 @@
-"""Deterministic grader + report over a probe run.
+"""FROZEN (Phase 19 tier map, training/README.md): Phase-9 probe harness, concluded.
+Bug fixes and evidence readers only; no new search.
+
+Deterministic grader + report over a probe run.
 
 Reads a ``probe-*.jsonl`` matrix run and aggregates per cell
 (model x think x num_ctx x variant):

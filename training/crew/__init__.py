@@ -1,4 +1,7 @@
-"""The Phase-15 crew track (Task 15.16).
+"""FROZEN (Phase 19 tier map, training/README.md): the crew stack is a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+The Phase-15 crew track (Task 15.16).
 
 The secondary track of the mid-phase measurement wave, run on 15.15's shared
 machinery consumed strictly read-only: a learned utility scorer over a FIXED,

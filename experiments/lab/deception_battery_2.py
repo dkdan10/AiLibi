@@ -1,4 +1,7 @@
-"""Deception battery 2 (Tier 2, CREATIVE) — the Wave-2 toolkit capability map.
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Deception battery 2 (Tier 2, CREATIVE) — the Wave-2 toolkit capability map.
 
 Decision informed: the 10.11 impostor-toolkit DESIGN (which scripted-deception
 levers actually work on qwen3.5:9b) + the 10.12 A/B baselines. Rubric: R2

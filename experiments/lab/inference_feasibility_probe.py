@@ -1,4 +1,7 @@
-"""Phase-B FEASIBILITY probe: does ROOM-LOCAL + DEPARTURE-BREADCRUMB restore the
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Phase-B FEASIBILITY probe: does ROOM-LOCAL + DEPARTURE-BREADCRUMB restore the
 detector signal that pure room-only loses?
 
 For each resolved kill (killer K in room R), build the "who could have done it"

@@ -1,4 +1,7 @@
-"""Featherless model x thinking-mode sweep over reconstructed 9p2i contexts (Task 14.4).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Featherless model x thinking-mode sweep over reconstructed 9p2i contexts (Task 14.4).
 
 Operator-run, $0-marginal matrix driver. It runs each candidate Featherless
 model over the SAME reconstructed opening/reply/vote contexts from the committed

@@ -54,6 +54,10 @@ VOTE_MAX_SUSPICION_RE: Final[re.Pattern[str]] = re.compile(
 SKIP_SUSPICION_THRESHOLD: Final[float] = 0.60
 
 
+# FROZEN (Phase 19 tier map, training/README.md): rendered-prose scrape —
+# unreliable under prompt-shape change. Bug fixes and evidence readers only; no
+# new search. (The metrics this parse feeds are frozen at the committed prompt
+# shape; the typed-telemetry replacement is backlogged, planning dossier §5.)
 def parse_rendered_max_suspicion(prompt: str) -> float | None:
     """Pull the rendered §4.6 max suspicion from a v5 vote prompt, or None.
 

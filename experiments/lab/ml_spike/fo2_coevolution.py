@@ -1,4 +1,7 @@
-"""Follow-on 2 — co-evolution stability (gap 2).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 2 — co-evolution stability (gap 2).
 
 The spike's clean climb was vs a FROZEN FSM crew. Phase C co-evolves BOTH sides.
 Run 2-population alternating ES: evolve the impostor move-policy to MAXIMIZE kills

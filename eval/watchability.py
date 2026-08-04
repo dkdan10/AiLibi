@@ -2120,6 +2120,12 @@ def compute_watchability(
 ) -> WatchabilityReport:
     """Run the two-layer selection referee over ``sample_dir`` from committed bytes.
 
+    FROZEN (Phase 19 tier map, training/README.md): the champion-SELECTION
+    referee is frozen with the champion opt-in path it serves. Bug fixes and
+    evidence readers only; no new search. The supply floors it evaluates are
+    pinned measurements and stay untouched — re-pricing them is the reopening
+    checklist's route A, an owner decision (the map §7).
+
     Pure + offline. Assembles the typed tournament report (roster + re-seeded
     roles + frozen-outcome fold, shared with the validity gate), reconstructs each
     game once for kill witnesses + the integrity flag, folds the Layer-2 D1-D4

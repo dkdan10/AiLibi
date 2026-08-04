@@ -1,4 +1,7 @@
-"""Stopwatch / task-clock retune sweep ($0, fake provider) — what breaks the stopwatch?
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Stopwatch / task-clock retune sweep ($0, fake provider) — what breaks the stopwatch?
 
 The fake provider runs the full physical FSM (movement, tasks, kills, body-reports -> meetings)
 deterministically; only the meeting RESOLUTION is dead (no deduction -> ~no ejections). So this

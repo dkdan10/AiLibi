@@ -1,4 +1,7 @@
-"""Visibility probe — does ROOM-LOCAL visibility starve the detector?
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Visibility probe — does ROOM-LOCAL visibility starve the detector?
 
 Detection counterfactual: hold each committed 9p2i game's action stream FIXED and
 vary ONLY the visibility model — `same_room_and_adjacent` (today's base) vs

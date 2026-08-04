@@ -1,4 +1,7 @@
-"""Follow-on 1 — sparse-lever learnability (gap 1).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 1 — sparse-lever learnability (gap 1).
 
 The spike learned a DENSE decision (move every tick). The Phase-11 levers
 (kill/vent/sabotage) are SPARSE — they fire a handful of times per game. Does ES

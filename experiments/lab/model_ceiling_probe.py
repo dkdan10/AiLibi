@@ -1,4 +1,7 @@
-"""Model-ceiling vs information-ceiling adjudication (diagnostic, $0 + frontier).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Model-ceiling vs information-ceiling adjudication (diagnostic, $0 + frontier).
 
 Runs the IDENTICAL hard impostor reply contexts (production accusation_round
 reply prompt, baseline — no cover injection) across a model-strength curve:

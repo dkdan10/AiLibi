@@ -1,4 +1,7 @@
-"""The alternating-freeze co-evolution driver + stabilizers (Task 18.21).
+"""FROZEN (Phase 19 tier map, training/README.md): concluded campaign machinery.
+Bug fixes and evidence readers only; no new search.
+
+The alternating-freeze co-evolution driver + stabilizers (Task 18.21).
 
 The campaign engine the planning audit priced as option #8
 (audits/audit-phase-18-planning.md §4) with the §6 AlphaStar/PSRO transfer as
@@ -331,6 +334,12 @@ GEN_CHAMPIONS_DIRNAME: Final[str] = "gen-champions"
 #: Per-rollout scratch lands under ``<work_dir>/rollouts/r<NNNNNN>/``.
 ROLLOUTS_DIRNAME: Final[str] = "rollouts"
 
+#: Phase-18 ledger, labeled in place (Phase 19 tier map, training/README.md §6;
+#: audit-phase-18-close.md §7 item 14): a hand-maintained namespace list whose
+#: collision class re-opens with every new campaign; its twin is
+#: ``scripts/generate_campaign_tables.py`` ``DEFAULT_RANKING_ROOTS`` (close §6.3
+#: C4 — named here, labeled there is out of this task's scope).
+#:
 #: EVERY name this driver writes under ``work_dir``, enumerated. Stated as data
 #: because the config preflight has to know the whole set: a ``hall_root``
 #: pointed at one of these is a collision between two trees that both believe
@@ -434,6 +443,11 @@ class CoevoComposedRunnerConfig:
 
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
     surrogate_artifact_dir: Path = SURROGATE_ARTIFACT_DIR
+    #: Phase-18 ledger, labeled in place (Phase 19 tier map, training/README.md
+    #: §6; audit-phase-18-close.md §7 item 10): this ``Path`` annotation IS the
+    #: whole "structurally unreachable" guarantee — the diagnostics-only
+    #: ``None`` escape still exists on ``training/composed_runner.py``'s
+    #: ``composed_artifact_dir`` parameter and its live ``None`` branch.
     composed_artifact_dir: Path = COMPOSED_ARTIFACT_DIR
     corpus_dir: Path | None = None
 
@@ -1510,6 +1524,12 @@ class _CampaignEngine:
             "substrate_sha256": self._config.substrate_sha256,
             "substrate_sha_kind": self._config.substrate_sha_kind,
         }
+        # Phase-18 ledger, labeled in place (Phase 19 tier map,
+        # training/README.md §6; audit-phase-18-close.md §7 item 11): this
+        # write_text is the silently-overwritable ``campaign-plan.json`` — the
+        # plan file is written per run with no no-clobber preflight (the
+        # WORK_DIR_OWNED_NAMES preflight covers hall_root collisions only,
+        # never this per-run rewrite).
         (self._config.work_dir / CAMPAIGN_PLAN_FILENAME).write_text(
             json.dumps(plan, indent=2, sort_keys=True) + "\n"
         )

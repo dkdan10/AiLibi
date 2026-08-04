@@ -1,4 +1,7 @@
-"""Tier-A deception instruments over committed replay bytes (Task 18.1).
+"""FROZEN (Phase 19 tier map, training/README.md): no non-test consumer; Tier-A only.
+Bug fixes and evidence readers only; no new search.
+
+Tier-A deception instruments over committed replay bytes (Task 18.1).
 
 Anchored to ``audits/audit-phase-18-planning.md`` §3.1-§3.2, DESIGN.md §11.3, and
 the Task 18.1 definition of done. This module folds a replay-set directory's
@@ -127,7 +130,7 @@ Predicate definitions (each landed on the corpus bytes):
    shape (spawn-window/kill-scene co-presence weaponized as cover); none is a
    whole-cloth invention with no matching record at all.
 9. Adoption wrappers (pure assembly, no metric math re-implemented -- the
-   ``build_tournament_eval_report`` doctrine, ``eval/meeting_quality.py:2649``):
+   ``build_tournament_eval_report`` doctrine, ``eval/meeting_quality.py:3012``):
    :func:`eval.validity.assemble_tournament_report` feeds
    :func:`eval.alibi_fabrication.compute_alibi_fabrication_rate` and
    :func:`eval.meeting_quality.compute_effective_deflection`; both frozen reports

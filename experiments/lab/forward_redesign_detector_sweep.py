@@ -1,4 +1,7 @@
-"""Live-detector threshold sweep over the committed 9p2i set (50 games / 114 meetings):
+"""FROZEN (Phase 19 tier map, training/README.md): concluded design-thread experiment.
+Bug fixes and evidence readers only; no new search.
+
+Live-detector threshold sweep over the committed 9p2i set (50 games / 114 meetings):
 how do we light R7 (STRONG-flag meeting share off 0/114), and at what precision (impostor TP
 vs crew FP)? Unlike forward_redesign_probes.py (a hand-rolled approximation), this runs the
 MERGED detector (`meetings.transcript.detect_contradictions`) on `model_validate`'d committed

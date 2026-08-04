@@ -1,4 +1,7 @@
-"""Follow-on 4 — determinism at production scale (gaps 4 & 6).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 4 — determinism at production scale (gaps 4 & 6).
 
 Three things the spike's Check 1 did NOT cover:
  (1) a STATEFUL encoder (memory features) — does carrying state across ticks

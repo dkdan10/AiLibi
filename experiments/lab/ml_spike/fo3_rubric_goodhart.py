@@ -1,4 +1,7 @@
-"""Follow-on 3 — rubric fitness vs the tactical layer (gap 3).
+"""FROZEN (Phase 19 tier map, training/README.md): the throwaway feasibility spike.
+Bug fixes and evidence readers only; no new search.
+
+Follow-on 3 — rubric fitness vs the tactical layer (gap 3).
 
 The spike optimized KILLS (dense, tactical). The real objective is the rubric, which
 is ~80% meeting-driven (R1 ejection-decided, R2 deception, R3 arcs, R7 evidence). Does

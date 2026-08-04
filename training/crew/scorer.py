@@ -1,4 +1,7 @@
-"""The learned crew option scorer + training entry + the crew eval twin (15.16).
+"""FROZEN (Phase 19 tier map, training/README.md): the crew stack is a clean negative.
+Bug fixes and evidence readers only; no new search.
+
+The learned crew option scorer + training entry + the crew eval twin (15.16).
 
 Three responsibilities, mirroring the 15.15 split without editing it:
 

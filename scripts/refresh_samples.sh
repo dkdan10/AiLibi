@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 #
+# FROZEN (Phase 19 tier map, training/README.md): re-records committed sample
+# bytes (real spend); replay bytes never move under the Phase-19 charter. Bug
+# fixes and evidence readers only; no new search.
+#
 # refresh_samples.sh — regenerate the replay samples under replays/samples/
 # (Task 4.17; DESIGN.md §9, §11.4).
 #
