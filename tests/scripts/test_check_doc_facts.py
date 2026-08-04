@@ -113,12 +113,15 @@ def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
 
 
 def test_wrong_win_rate_detected(doc_tree: Path) -> None:
-    # (b) A win rate that no longer matches the manifest it is drawn from.
+    # (b) A win rate that no longer matches the manifest it is drawn from:
+    # the paragraph misses the expected substring AND carries a claim that
+    # contradicts the manifest — both are reported.
     _substitute(doc_tree, _README, "34% (4p1i)", "30% (4p1i)")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "'34% (4p1i)'" in errors[0]
     assert "17/50" in errors[0]
+    assert "claim '30% (4p1i)' disagrees" in errors[1]
 
 
 def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -145,7 +148,22 @@ def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "stray win-rate claim '36% (9p2i)'" in errors[0]
+    assert "win-rate claim '36% (9p2i)'" in errors[0]
+    assert "15/50 = 30%" in errors[0]
+
+
+def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
+    # The correct substring being present must not exempt the paragraph's
+    # OTHER claims: a stale duplicate beside the correct value is drift.
+    _substitute(
+        doc_tree,
+        _README,
+        "34% (4p1i) and 30% (9p2i)",
+        "34% (4p1i) and 30% (9p2i) (an earlier draft misquoted 35% (9p2i))",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "win-rate claim '35% (9p2i)' disagrees" in errors[0]
     assert "15/50 = 30%" in errors[0]
 
 
@@ -191,13 +209,30 @@ def test_missing_live_toggle_example_detected(doc_tree: Path) -> None:
 def test_uncommented_live_toggle_example_detected(doc_tree: Path) -> None:
     # The example must stay COMMENTED: an active assignment in a copied .env
     # would flip the substrate away from the committed baseline-6 record.
+    # Both facets are reported: the commented example is gone AND an active
+    # export is present.
     _substitute(
         doc_tree, _ENV_EXAMPLE, _TOGGLE_EXAMPLE_LINE, "AILIBI_IMPOSTOR_ROLL_CALL=0"
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "no commented example line" in errors[0]
     assert f"'{_TOGGLE_EXAMPLE_LINE}'" in errors[0]
+    assert "active export" in errors[1]
+
+
+def test_active_toggle_export_beside_example_detected(doc_tree: Path) -> None:
+    # Keeping the required commented example does not license an ADDITIONAL
+    # active export of the same toggle.
+    _substitute(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _TOGGLE_EXAMPLE_LINE,
+        _TOGGLE_EXAMPLE_LINE + "\nAILIBI_IMPOSTOR_ROLL_CALL=1",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "active export of live toggle 'impostor_roll_call'" in errors[0]
 
 
 def test_retired_lever_assignment_detected(doc_tree: Path) -> None:
@@ -249,16 +284,34 @@ def test_missing_retired_lever_key_detected(doc_tree: Path) -> None:
     assert "graduated-levers note" in errors[0]
 
 
+def test_graduated_mention_outside_note_does_not_count(doc_tree: Path) -> None:
+    # The graduated label lives in the belief-substrate section's note — a
+    # historical mention elsewhere in the file must not stand in for it.
+    _substitute(doc_tree, _ENV_EXAMPLE, "movement_perception", "")
+    _write(
+        doc_tree,
+        _ENV_EXAMPLE,
+        _read(doc_tree, _ENV_EXAMPLE)
+        + "\n# Historical note: movement_perception was measured in Phase 13.5.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'movement_perception'" in errors[0]
+    assert "graduated-levers note" in errors[0]
+
+
 def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
     # (g) The bytes move under the prose: one recorded winner cell flips, so
-    # the re-derived rate slides 34% -> 32% and the README no longer carries it.
+    # the re-derived rate slides 34% -> 32%; the README misses the new rate
+    # AND its now-stale 34% claim contradicts the manifest.
     text = _read(doc_tree, _MANIFEST_4P1I)
     assert "| IMPOSTORS |" in text
     _write(doc_tree, _MANIFEST_4P1I, text.replace("| IMPOSTORS |", "| CREWMATES |", 1))
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "'32% (4p1i)'" in errors[0]
     assert "16/50" in errors[0]
+    assert "claim '34% (4p1i)' disagrees" in errors[1]
 
 
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:

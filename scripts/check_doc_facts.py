@@ -21,20 +21,25 @@ together, so one run names every drifted fact rather than the first.
    ``regenerated YYYY-MM-DD`` clause): its stated date must equal the newest
    ``refreshed_at``, and it must carry each recomputed rate as the exact
    substring ``"<rate>% (<set>)"`` — a correct value elsewhere in the file
-   cannot satisfy a drifted paragraph. Any ``"<rate>% (<set>)"`` claim OUTSIDE
-   that paragraph must match the recomputed rate too.
+   cannot satisfy a drifted paragraph. And EVERY ``"<rate>% (<set>)"`` claim in
+   the file — inside the paragraph or out — must match the recomputed rate, so
+   a stale duplicate cannot hide beside the correct value.
 2. **Ladder tip.** ``audits/audit-phase-18-close.md`` owns which baseline the
    substrate ladder stands at. Every README sentence naming the "ladder tip" —
    the whole sentence, however long — must name that baseline, and no other.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
-   with a commented example line showing its bare-environment default; every
-   graduated lever must be named in the graduated note by its registry key and
-   must NOT appear as an ``AILIBI_*=`` assignment, commented or not — its env
-   gate was deleted at graduation, so an assignment line would hand out a knob
-   this build does not read. The belief-substrate section may not advertise any
-   ``AILIBI_*=`` assignment whose key is absent from the registry either: a
-   misspelled or never-registered knob is as much a no-op as a graduated one.
+   with a commented example line showing its bare-environment default — and
+   ONLY that way: an active (uncommented) export anywhere in the template
+   fails, because a copied .env would flip the substrate away from the
+   committed baseline-6 record. Every graduated lever must be named by its
+   registry key inside the belief-substrate section's graduated note (a
+   mention elsewhere in the file does not count) and must NOT appear as an
+   ``AILIBI_*=`` assignment, commented or not — its env gate was deleted at
+   graduation, so an assignment line would hand out a knob this build does not
+   read. The belief-substrate section may not advertise any ``AILIBI_*=``
+   assignment whose key is absent from the registry either: a misspelled or
+   never-registered knob is as much a no-op as a graduated one.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -199,7 +204,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
             )
         dates.extend(set_dates)
 
-    paragraph, paragraph_span = provenance_paragraph(readme)
+    paragraph = provenance_paragraph(readme)
     if paragraph is None:
         errors.append(
             f"{_README}: expected exactly one sample-provenance paragraph "
@@ -231,38 +236,35 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"{impostor_wins}/{total} games won by the impostors."
             )
 
-    for stray in _WIN_RATE_CLAIM.finditer(readme):
-        if paragraph_span[0] <= stray.start() < paragraph_span[1]:
-            continue
-        name = stray.group(2)
+    for claim_match in _WIN_RATE_CLAIM.finditer(readme):
+        name = claim_match.group(2)
         if name not in rates:
             continue
         impostor_wins, total = rates[name]
         expected = round(100 * impostor_wins / total)
-        if int(stray.group(1)) != expected:
+        if int(claim_match.group(1)) != expected:
             errors.append(
-                f"{_README}:{line_number(readme, stray.start())}: stray win-rate "
-                f"claim {stray.group(0)!r} disagrees with "
+                f"{_README}:{line_number(readme, claim_match.start())}: win-rate "
+                f"claim {claim_match.group(0)!r} disagrees with "
                 f"{_MANIFEST_PATH.format(name=name)} "
                 f"({impostor_wins}/{total} = {expected}%)."
             )
 
 
-def provenance_paragraph(readme: str) -> tuple[str | None, tuple[int, int]]:
-    """The README's single sample-provenance paragraph and its offset span.
+def provenance_paragraph(readme: str) -> str | None:
+    """The README's single sample-provenance paragraph.
 
-    ``None`` (with an empty span) when the anchor is missing or ambiguous —
-    both are format drift the caller reports rather than papering over.
+    ``None`` when the anchor is missing or ambiguous — both are format drift
+    the caller reports rather than papering over.
     """
 
-    matches: list[tuple[str, tuple[int, int]]] = []
-    offset = 0
-    for paragraph in readme.split("\n\n"):
-        if "replays/samples/" in paragraph and _REGENERATED_DATE.search(paragraph):
-            matches.append((paragraph, (offset, offset + len(paragraph))))
-        offset += len(paragraph) + 2
+    matches = [
+        paragraph
+        for paragraph in readme.split("\n\n")
+        if "replays/samples/" in paragraph and _REGENERATED_DATE.search(paragraph)
+    ]
     if len(matches) != 1:
-        return None, (0, 0)
+        return None
     return matches[0]
 
 
@@ -328,6 +330,14 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
     text = read_document(repo_root, _ENV_EXAMPLE, errors)
     if text is None:
         return
+    section = lever_section(text)
+    if section is None:
+        errors.append(
+            f"{_ENV_EXAMPLE}: missing the {_LEVER_SECTION_TITLE!r} section "
+            "banner — the belief-substrate section cannot be located, so its "
+            "claims cannot be audited against the registry."
+        )
+        return
     bare_defaults = substrate_flag_snapshot({})
 
     for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS:
@@ -349,16 +359,26 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
                 f"line '# {variable}={default}' showing its bare-environment "
                 "default in this build."
             )
+        active = re.compile(rf"^[ \t]*{re.escape(variable)}=", re.MULTILINE)
+        if active.search(text) is not None:
+            errors.append(
+                f"{_ENV_EXAMPLE}: active export of live toggle {key!r} — an "
+                f"uncommented '{variable}=' line would flip anyone who copies "
+                "the template away from the bare baseline-6 substrate; the "
+                "toggle may appear only as the commented bare-default example."
+            )
 
     toggleable = set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
     for key in SUBSTRATE_FLAG_KEYS:
         if key in toggleable:
             continue
-        if re.search(rf"\b{re.escape(key)}\b", text) is None:
+        if re.search(rf"\b{re.escape(key)}\b", section) is None:
             errors.append(
                 f"{_ENV_EXAMPLE}: graduated lever {key!r} is missing from the "
-                "graduated-levers note; orchestrator.replay still stamps it "
-                "into every recording, so the template must keep naming it."
+                "graduated-levers note in the belief-substrate section; "
+                "orchestrator.replay still stamps it into every recording, so "
+                "the template must keep naming it there — a mention elsewhere "
+                "in the file does not label the lever graduated/always-ON."
             )
         assignment = f"{env_var_for(key)}="
         if assignment in text:
@@ -368,21 +388,11 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
                 "its env gate was deleted, so setting the variable does nothing."
             )
 
-    section = lever_section(text)
-    if section is None:
-        errors.append(
-            f"{_ENV_EXAMPLE}: missing the {_LEVER_SECTION_TITLE!r} section "
-            "banner — the belief-substrate section cannot be located, so its "
-            "assignments cannot be audited against the registry."
-        )
-        return
     registry = set(SUBSTRATE_FLAG_KEYS)
     for assigned in _ENV_ASSIGNMENT.finditer(section):
         key = assigned.group(1).removeprefix("AILIBI_").lower()
-        if key in toggleable:
-            continue
         if key in registry:
-            continue  # the graduated-assignment check above already reports it
+            continue  # toggleable: the active check above; graduated: rejected
         errors.append(
             f"{_ENV_EXAMPLE}: the belief-substrate section advertises "
             f"'{assigned.group(1)}=', but {key!r} is not in the live lever "

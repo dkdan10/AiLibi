@@ -119,9 +119,13 @@ every packet from Hypothesis-generated games recursively through the
 
 ## Determinism and the substrate ladder
 
-A seed plus an agent factory determines the bytes: identical inputs produce
-byte-identical replay JSONL — what makes every metric attributable and every
-regression bisectable. Behavioral changes to the belief substrate land as
+A seed, an agent factory, and the provider's responses determine the bytes.
+Under the deterministic fake provider a seed alone reproduces byte-identical
+replay JSONL, and a committed recording reconstructs byte-identically under any
+provider; fresh hosted generation is non-deterministic, so for real providers
+the recording — not the seed — is the determinism boundary (the README's
+"Three reproducibility scopes" states the exact claims). That is what makes
+every metric attributable and every regression bisectable. Behavioral changes to the belief substrate land as
 **levers**, registered in `orchestrator/replay.py`: `SUBSTRATE_FLAG_KEYS` is
 thirteen graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
 unconditionally ON, kept in the stamp for provenance) plus exactly one live

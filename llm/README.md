@@ -108,15 +108,19 @@ sweep harness and logs every discard.
 ## CI posture
 
 CI must leave `AILIBI_LLM_PROVIDER` unset (or set to `"fake"`) so no test
-reaches the network. The Anthropic tests are gated behind the
+reaches the network. The live round trips are all opt-in behind the
 `real_provider` marker — a `skipif` keyed on
-`AILIBI_RUN_REAL_PROVIDER_TESTS == "1"` (`tests/llm/test_client.py`) — and
-the live-server Ollama round-trip behind `ollama_server`, keyed on
-`AILIBI_RUN_OLLAMA_TESTS == "1"`. CI sets neither, so both report as
-skipped. The Featherless client has no live gate at all: it is unit-
-tested end to end against an injected mock transport, so its request
-shape, retry mapping, thinking policy, and cost mapping are pinned in CI
-without an API key.
+`AILIBI_RUN_REAL_PROVIDER_TESTS == "1"` (`tests/llm/test_client.py`):
+that gate covers the Anthropic tests (need `ANTHROPIC_API_KEY`) **and**
+the live Featherless smoke tests
+(`tests/llm/test_real_provider.py::TestFeatherlessRoundTrip`, which
+additionally skip themselves unless `FEATHERLESS_API_KEY` is set). The
+live-server Ollama round-trip sits behind `ollama_server`, keyed on
+`AILIBI_RUN_OLLAMA_TESTS == "1"`. CI sets none of these, so all report
+as skipped. What runs *in* CI for Featherless is the mock-transport
+unit suite: `FeatherlessClient` is unit-tested end to end against an
+injected transport, so its request shape, retry mapping, thinking
+policy, and cost mapping are pinned without an API key.
 
 ## Minimum surface a new adapter must implement
 
