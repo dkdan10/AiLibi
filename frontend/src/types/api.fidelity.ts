@@ -37,6 +37,7 @@ export const _fidelityReplay: ReplayView = {
         "agent_id": "p-1",
         "alive_at_end": true,
         "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
         "final_vote_target": null,
         "role": "CREWMATE"
       },
@@ -44,6 +45,7 @@ export const _fidelityReplay: ReplayView = {
         "agent_id": "p-2",
         "alive_at_end": true,
         "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
         "final_vote_target": null,
         "role": "CREWMATE"
       },
@@ -51,6 +53,7 @@ export const _fidelityReplay: ReplayView = {
         "agent_id": "p-3",
         "alive_at_end": true,
         "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
         "final_vote_target": null,
         "role": "IMPOSTOR"
       },
@@ -58,6 +61,7 @@ export const _fidelityReplay: ReplayView = {
         "agent_id": "p-4",
         "alive_at_end": true,
         "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
         "final_vote_target": null,
         "role": "CREWMATE"
       }

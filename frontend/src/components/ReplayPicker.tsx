@@ -30,11 +30,13 @@
 // Unspoiled by default (Task 19.10): the connected container subscribes the
 // store's `revealOutcome` and threads it down as a plain `reveal` prop — the
 // cards and the filter bar stay presentational. While it is off, the cards emit
-// no outcome DOM and the three outcome filter criteria go inert (see
-// `matchesFilters`); the filter bar carries the one spoiler-warned affordance
-// that turns it on. No copy on this surface changes with reveal, and the curated
-// FEATURED strip is untouched — its blurbs are spoiler-audited prose, not
-// outcome-derived data, so the gate does not (and cannot) cover them.
+// no outcome DOM, the three outcome filter criteria go inert (see
+// `matchesFilters`), and the rubric-missing empty state withholds its aggregate
+// ending-mechanism clause (an outcome statistic, gated like the win-shape
+// options); the filter bar carries the one spoiler-warned affordance that turns
+// it on. The editorial copy is otherwise untouched, and the curated FEATURED
+// strip entirely so — its blurbs are spoiler-audited prose, not outcome-derived
+// data, so the gate does not (and cannot) cover them.
 //
 // Split for Storybook (cf. MindInspector): the connected `ReplayPicker` owns the
 // store + fetch + URL wiring; the presentational `ReplayBrowserView` renders the
@@ -372,9 +374,17 @@ export function ReplayBrowserView({
         <p>
           The served set{set !== null ? ` (${set})` : ""} ships no rubric —
           expected for 4p1i, the fast technical fixture: median 12 ticks, at most
-          one meeting (39 of its 50 games hold exactly one, 11 hold none), and 23
-          of 50 decided by the task timer rather than by an ejection. The default
-          set, 9p2i, is scored and populates the reel.
+          one meeting (39 of its 50 games hold exactly one, 11 hold none)
+          {/* The ending-mechanism count is OUTCOME data — "23 of 50 decided by
+              the task timer rather than by an ejection" states, in aggregate,
+              how the set's games end — so it renders only behind the same
+              reveal gate as the win-shape filter options (Task 19.10 review):
+              the structural facts (ticks, meeting counts) stay, the endings
+              clause waits for reveal. */}
+          {reveal
+            ? ", and 23 of 50 decided by the task timer rather than by an ejection"
+            : ""}
+          . The default set, 9p2i, is scored and populates the reel.
         </p>
         <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
           Browse all replays

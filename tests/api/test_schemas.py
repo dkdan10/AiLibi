@@ -355,10 +355,12 @@ def _game_finale() -> GameFinale:
     """The Task 19.10 composed outcome view.
 
     Covers all four ``FinaleEventView`` kinds in one fixture so the inlined
-    ``kind`` literal round-trips on every branch, and both recap shapes: an agent
-    who named a real impostor (``final_vote_named_impostor=True``) and one whose
-    ``SKIP`` names nobody (``None`` — the question does not apply, distinct from
-    ``False`` = named a crewmate).
+    ``kind`` literal round-trips on every branch, and the three recap shapes: an
+    agent who named a real impostor (``final_vote_named_impostor=True``), one
+    whose ``SKIP`` names nobody (``None`` — the question does not apply, distinct
+    from ``False`` = named a crewmate), and one whose ballot the meeting layer
+    REWROTE (``final_vote_rewritten=True`` with ``None`` judgment — the tallied
+    target is not the authored choice, so belief is never judged against it).
     """
 
     return GameFinale(
@@ -380,6 +382,7 @@ def _game_finale() -> GameFinale:
                 alive_at_end=True,
                 final_vote_target="p2",
                 final_vote_named_impostor=True,
+                final_vote_rewritten=False,
             ),
             FinaleAgentRecapView(
                 agent_id="p2",
@@ -387,6 +390,15 @@ def _game_finale() -> GameFinale:
                 alive_at_end=False,
                 final_vote_target="SKIP",
                 final_vote_named_impostor=None,
+                final_vote_rewritten=False,
+            ),
+            FinaleAgentRecapView(
+                agent_id="p3",
+                role="CREWMATE",
+                alive_at_end=True,
+                final_vote_target="p2",
+                final_vote_named_impostor=None,
+                final_vote_rewritten=True,
             ),
         ),
     )

@@ -726,8 +726,48 @@ def test_finale_pins_committed_wrong_ejection_game(
     assert recaps["p-8"].alive_at_end is False
     assert recaps["p-1"].final_vote_target == "p-8"
     assert recaps["p-1"].final_vote_named_impostor is False
+    # An authored ballot: the meeting layer rewrote nothing on this one.
+    assert recaps["p-1"].final_vote_rewritten is False
     # Neither impostor was ever ejected; both survive to the end.
     assert all(recaps[pid].alive_at_end is True for pid in ("p-1", "p-9"))
+
+
+def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """A REWRITTEN ballot is flagged and never judged as belief (Task 19.10
+    review).
+
+    seed-22's last meeting records p-5's ballot with the ``under_gate_redirect``
+    audit marker: the authored target was redirected to the tallied ``p-7``, and
+    the recorded rationale explicitly OPPOSES p-7's ejection ("the herd is wrong
+    to eject p-7"). Presenting that target under "what they knew" — worse,
+    stamping it "named an impostor" — would invert the agent's recorded
+    reasoning, so the recap carries ``final_vote_rewritten=True`` and a ``None``
+    judgment for it, while an unmarked co-voter on the same meeting keeps the
+    ordinary ``True`` judgment. Only TARGET-rewriting markers set the flag
+    (``_TARGET_REWRITE_LABELS``); a citation-only rewrite leaves the authored
+    target intact and stays unflagged.
+    """
+
+    replay = nine_p_two_i_loader.load_replay("headless-seed-22")
+    last = replay.meetings[-1]
+    redirected = next(b for b in last.ballots if b.voter == "p-5")
+    assert "under_gate_redirect" in redirected.rewrite_reasons
+    assert redirected.target == "p-7"
+
+    finale = replay.finale
+    assert finale is not None
+    recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
+    # The rewritten ballot: tallied target shown, flagged, judgment withheld.
+    assert recaps["p-5"].final_vote_target == "p-7"
+    assert recaps["p-5"].final_vote_rewritten is True
+    assert recaps["p-5"].final_vote_named_impostor is None
+    # An unmarked co-voter on the SAME ballot sheet keeps the judgment: p-4 also
+    # voted p-7 (an impostor — the ejection was right), authored and unflagged.
+    assert recaps["p-4"].final_vote_target == "p-7"
+    assert recaps["p-4"].final_vote_rewritten is False
+    assert recaps["p-4"].final_vote_named_impostor is True
 
 
 def test_skipped_meeting_frame_is_labeled_resolved(

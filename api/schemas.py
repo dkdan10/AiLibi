@@ -924,6 +924,19 @@ class FinaleAgentRecapView(_FrozenView):
     finale costs nothing extra per ``GET /replays/{game_id}``. The trade-off is
     that this is *decision*-level truth, not *belief*-level; the Belief × Truth
     surface (:class:`BeliefFrameView`) remains the belief-level view.
+
+    ``final_vote_rewritten`` marks the one case where the recorded target is NOT
+    evidence of the voter's belief: the meeting layer rewrote the ballot's
+    target (an under-gate redirect, a teammate/uncited coercion, an
+    invalid-target normalization, or a whole-ballot parse default — the audit
+    markers the loader already parses into ``BallotView.rewrite_reasons``).
+    ``final_vote_target`` then documents the TALLIED vote, not the authored
+    choice — the recorded rationale can explicitly oppose it — so
+    ``final_vote_named_impostor`` is ``None`` for a rewritten ballot: judging
+    "did they name an impostor" against a target the engine chose would invert
+    the agent's actual reasoning (e.g. the committed 9p2i seed 22, where p-5's
+    intended target was redirected). Citation-only rewrites (a nulled reason /
+    observation id) leave the authored target intact and do NOT set this flag.
     """
 
     agent_id: str
@@ -931,6 +944,9 @@ class FinaleAgentRecapView(_FrozenView):
     alive_at_end: bool
     final_vote_target: str | None
     final_vote_named_impostor: bool | None
+    # Task 19.10 (review): additive and defaulted so pre-existing serialized
+    # payloads still parse; ``False`` for an authored (or absent) ballot.
+    final_vote_rewritten: bool = False
 
 
 class GameFinale(_FrozenView):

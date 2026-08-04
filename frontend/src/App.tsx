@@ -584,10 +584,13 @@ const ACTION_BUTTON =
 // automatic stop with no on-screen cause reads as a bug, so this bar names it and
 // offers the way out.
 //
-// It is keyed on the FRAME (`meetingAtTick`), never on `selectedMeetingId`:
-// auto-follow can be switched off, in which case the pause fires with no meeting
-// modal opening, and that is precisely the case where an unexplained stop is most
-// confusing.
+// The PAUSE case is keyed on the FRAME (`meetingAtTick`), never on
+// `selectedMeetingId`: auto-follow can be switched off, in which case the pause
+// fires with no meeting modal opening, and that is precisely the case where an
+// unexplained stop is most confusing. One additional render case DOES read the
+// selection — the stale-meeting-at-End signpost (see `staleMeetingAtEnd`
+// below), where an explicitly opened meeting from an earlier tick is the thing
+// standing between the user and the finale card.
 //
 // MOUNT (load-bearing, not cosmetic): it lives INSIDE the `[data-transport-region]`
 // container, as the first child of its inner column. Three properties come from
@@ -617,7 +620,22 @@ function MeetingPauseBar() {
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
   const selectMeeting = useReplayStore((s) => s.selectMeeting);
 
-  if (!hasReplay || meetingAtTick === null || isPlaying) {
+  // Second render case (Task 19.10 review): the playhead is at the END with a
+  // finale to show, but a meeting the user EXPLICITLY opened earlier (pill /
+  // meeting jump — auto-follow never clears an explicit selection, by design)
+  // still owns the screen from a previous tick. The finale card yields to any
+  // open meeting, and with no meeting on the current frame the bar would not
+  // render either — leaving the promised End/scrub finale invisible with no
+  // signpost. Auto-closing the user's own transcript would be exactly the yank
+  // the auto-follow refs exist to prevent, so instead the bar renders and
+  // offers the same explicit "Show finale" hand-off the ejection ending has.
+  const staleMeetingAtEnd =
+    meetingAtTick === null &&
+    isAtEnd &&
+    selectedMeetingId !== null &&
+    finale !== null;
+
+  if (!hasReplay || isPlaying || (meetingAtTick === null && !staleMeetingAtEnd)) {
     return null;
   }
   return (
@@ -626,22 +644,26 @@ function MeetingPauseBar() {
       className="flex flex-wrap items-center gap-2 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 shadow-data"
     >
       <span className="rounded-pill bg-paper-2 px-1.5 font-mono text-3xs uppercase tracking-wide text-ink-500">
-        paused
+        {meetingAtTick !== null ? "paused" : "end"}
       </span>
       <span className="font-mono text-xs text-ink-900">
-        Meeting at tick {meetingAtTick.tick} — playback paused
+        {meetingAtTick !== null
+          ? `Meeting at tick ${meetingAtTick.tick} — playback paused`
+          : "End of replay — a meeting from an earlier tick is open"}
       </span>
       <div className="ml-auto flex items-center gap-2">
         {isAtEnd ? (
-          // The last frame IS the meeting frame (a game that ended on an
-          // ejection). There is nothing to resume to, so the only useful move is
-          // to dismiss the meeting and let the finale card — which yields the
-          // screen to an open meeting — take it. Offered only when a meeting is
-          // actually open (with auto-follow off the finale is already showing)
-          // AND a finale exists to hand off to: a partial recording whose walk
-          // ends on a resolved meeting has no game_over row, `finale === null`,
-          // and no card can ever appear — a button promising one would be a
-          // dead end.
+          // At the end there is nothing to resume to, so the one useful move is
+          // to dismiss the open meeting and let the finale card — which yields
+          // the screen to any open meeting — take it. This covers BOTH end
+          // cases: the last frame IS the meeting frame (an ejection ending),
+          // and the stale-meeting case above (an explicitly opened meeting from
+          // an earlier tick still holding the screen at End). Offered only when
+          // a meeting is actually open (with auto-follow off the finale is
+          // already showing) AND a finale exists to hand off to: a partial
+          // recording whose walk ends on a resolved meeting has no game_over
+          // row, `finale === null`, and no card can ever appear — a button
+          // promising one would be a dead end.
           selectedMeetingId !== null &&
           finale !== null && (
             <button
@@ -723,6 +745,15 @@ function RecapRow({
       : recap.final_vote_target === "SKIP"
         ? "voted SKIP"
         : `voted ${recap.final_vote_target}`;
+  // A REWRITTEN ballot's target is the engine's tally, not the voter's authored
+  // choice (redirect / coercion / parse default — the recorded rationale can
+  // explicitly oppose it), so it must not read as "what they knew". The row
+  // says so in words and the backend already withholds the ✓/✗ judgment
+  // (`final_vote_named_impostor` is null for a rewritten ballot). The label is
+  // deliberately generic — WHY the engine adjusted it is reason-level detail
+  // (the ballot chips' territory), and one of those reasons discloses the
+  // impostor pairing, which reveal must never do.
+  const adjusted = recap.final_vote_rewritten;
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-md border border-ink-200 px-2 py-1">
       <PlayerSwatch color={color} size="sm" />
@@ -742,6 +773,14 @@ function RecapRow({
           expensive request. */}
       <span className="ml-auto flex items-center gap-1.5 font-mono text-2xs text-ink-700 opacity-50">
         {vote}
+        {adjusted && (
+          <span
+            title="The meeting layer rewrote this ballot's target, so the tallied vote is not the voter's authored choice — no belief judgment is shown for it"
+            className="rounded-sm border border-ink-300 px-1 text-4xs uppercase tracking-wide text-ink-500"
+          >
+            engine-adjusted
+          </span>
+        )}
         {recap.final_vote_named_impostor !== null && (
           <span className="text-ink-900">
             {recap.final_vote_named_impostor ? (

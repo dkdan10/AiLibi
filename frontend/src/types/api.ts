@@ -369,6 +369,7 @@ export interface FinaleAgentRecapView {
   alive_at_end: boolean;
   final_vote_target: string | null;
   final_vote_named_impostor: boolean | null;
+  final_vote_rewritten: boolean;
 }
 
 export interface AgentMemoryView {

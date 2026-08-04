@@ -229,6 +229,25 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
     "game_end": 2,
 }
 
+# The rewrite-reason labels (see ``_BALLOT_PREFIX_MARKERS`` /
+# ``_VOTE_PARSE_DEFAULT_LABEL``) under which a recorded ballot's TARGET is not
+# the voter's authored choice — the meeting layer redirected, coerced,
+# normalized, or wholly defaulted it — so the finale recap must not present it
+# as evidence of what the voter believed (Task 19.10 review; the committed 9p2i
+# seed 22 carries an ``under_gate_redirect`` whose rationale explicitly opposes
+# the tallied target). The two citation-only labels (``invalid_reason_id``,
+# ``invalid_observation_id``) null a reference but leave the authored target
+# intact, so they are deliberately NOT in this set.
+_TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "parse_default",
+        "invalid_target",
+        "teammate_coerced",
+        "under_gate_redirect",
+        "uncited_coerced",
+    }
+)
+
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
 # re-seed it with the right roles + task pool (``num_impostors`` /
@@ -1832,28 +1851,45 @@ class ReplayLoader:
         # The LAST meeting's ballots are the recorded decision-level evidence of
         # what each agent believed at the end. Empty for a game with no meetings;
         # a voter absent from the mapping simply cast no ballot there (dead, or
-        # died before it).
-        final_ballots = (
-            {ballot.voter: ballot.target for ballot in walk.meeting_entries[-1].ballots}
-            if walk.meeting_entries
-            else {}
-        )
+        # died before it). Each ballot also carries whether the meeting layer
+        # REWROTE its target (the same audit markers ``_meeting_view`` parses
+        # into ``BallotView.rewrite_reasons``): a redirected / coerced /
+        # defaulted target is the TALLIED vote, not the authored choice, and the
+        # rationale can explicitly oppose it — so the recap flags it and never
+        # judges belief against it (see ``_TARGET_REWRITE_LABELS``).
+        final_ballots: dict[str, tuple[str, bool]] = {}
+        if walk.meeting_entries:
+            for ballot in walk.meeting_entries[-1].ballots:
+                reasons, _clean = _parse_rewrite_reasons(ballot.rationale_text)
+                rewritten = any(label in _TARGET_REWRITE_LABELS for label in reasons)
+                final_ballots[ballot.voter] = (ballot.target, rewritten)
         agent_recaps = tuple(
             FinaleAgentRecapView(
                 agent_id=pid,
                 role=roles[pid],
                 alive_at_end=pid in alive_at_end,
-                final_vote_target=final_ballots.get(pid),
-                # ``None`` = the question does not apply (no ballot, or a SKIP,
-                # which names nobody). Recorded targets are normalized to
+                final_vote_target=(
+                    final_ballots[pid][0] if pid in final_ballots else None
+                ),
+                # ``None`` = the question does not apply: no ballot, a SKIP
+                # (which names nobody), or a REWRITTEN target (the engine's
+                # choice, not the voter's — judging it would invert the agent's
+                # recorded reasoning). Recorded targets are normalized to
                 # SKIP-or-a-real-candidate by ``meetings.manager``'s ballot
                 # normalization (its manager-side copy of the canonical
                 # ``meetings.voting`` rule) before they are persisted, so an
                 # unknown id here is corrupt bytes and raises.
                 final_vote_named_impostor=(
                     None
-                    if pid not in final_ballots or final_ballots[pid] == SKIP_TARGET
-                    else roles[final_ballots[pid]] == "IMPOSTOR"
+                    if (
+                        pid not in final_ballots
+                        or final_ballots[pid][0] == SKIP_TARGET
+                        or final_ballots[pid][1]
+                    )
+                    else roles[final_ballots[pid][0]] == "IMPOSTOR"
+                ),
+                final_vote_rewritten=(
+                    final_ballots[pid][1] if pid in final_ballots else False
                 ),
             )
             for pid in sorted(roles)
