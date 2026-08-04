@@ -1967,8 +1967,17 @@ class MeetingManager:
         # it. Coerce a ballot that targets a fellow impostor to SKIP so an
         # impostor can never supply the betrayal vote that ejects a teammate.
         # Deterministic, no RNG, and a no-op for a crewmate / sole impostor.
+        # ``model_rationale_text`` (Task 19.15) is the trusted provenance
+        # boundary for the coercion's rationale redaction: ``parsed`` is the
+        # ballot as the model returned it, so everything the chain has
+        # prepended since is this codebase's own audit text and is preserved,
+        # while the model's body -- which can name a teammate outright -- is
+        # replaced. Splitting on marker SHAPE instead would let a rationale
+        # that opens with marker-shaped prose smuggle that payload through.
         normalized = coerce_teammate_ballot_to_skip(
-            ballot=normalized, fellow_impostor_ids=participant.fellow_impostor_ids
+            ballot=normalized,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
+            model_rationale_text=parsed.rationale_text,
         )
         # Ballot-target graph guard (Task 10.9.2; PR #147 F2): an eject
         # ballot under a MUST-vote verdict must name a target whose
@@ -2965,93 +2974,59 @@ def drop_teammate_statement_target(
     return target
 
 
-# Every ballot marker interpolates its payload with ``{x!r}`` -- a Python repr
-# of a string, hence always quoted. Matching the payload as a quoted literal
-# (rather than scanning for the marker's static tail) keeps the peel correct
-# when the original invalid value itself contains that tail text. This mirrors
-# ``api.replay_loader``'s ``_MARKER_REPR_VALUE`` / ``_marker_pattern``, which
-# parse the same markers off the same string on the display side. The two
-# cannot share an implementation: ``api`` imports ``meetings``, never the
-# reverse.
-_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
-
-
-def _marker_prefix_pattern(marker: str) -> re.Pattern[str]:
-    """Anchored regex matching one whole ``.format()`` marker (head + repr + tail)."""
-
-    return re.compile(
-        re.escape(marker.partition("{")[0])
-        + _MARKER_REPR_VALUE
-        + re.escape(marker.partition("}")[2])
-    )
-
-
-_INVALID_REASON_ID_PATTERN: Final[re.Pattern[str]] = _marker_prefix_pattern(
-    INVALID_REASON_ID_MARKER
-)
-_INVALID_OBSERVATION_ID_PATTERN: Final[re.Pattern[str]] = _marker_prefix_pattern(
-    INVALID_OBSERVATION_ID_MARKER
-)
-
-
-def _preserved_ballot_markers(ballot: VoteBallot) -> str:
+def _preserved_ballot_markers(
+    rationale_text: str, model_rationale_text: str | None
+) -> str:
     """The upstream audit markers a rationale redaction must carry across.
 
     The ballot chain in :meth:`MeetingManager._collect_vote` runs both
     citation-id validators BEFORE the teammate coercion, so a betrayal ballot
     that also carried a hallucinated reason / observation id reaches the guard
     with their markers already prepended. The Task 19.15 redaction removes
-    only the MODEL-authored body, so those markers are peeled off here and
-    re-attached in place: dropping them would silently un-count nulled
-    citations for every consumer that reads markers straight off the recorded
-    string (``eval.vj_instruments``'s substring counts,
-    ``api.replay_loader``'s chips, ``eval.meeting_quality``'s prefix greps) --
-    laundering one guard's audit trail through another's.
+    only the MODEL-authored body, so those markers are carried across:
+    dropping them would silently un-count nulled citations for every consumer
+    that reads markers straight off the recorded string
+    (``eval.vj_instruments``'s substring counts, ``api.replay_loader``'s
+    chips, ``eval.meeting_quality``'s prefix greps) -- laundering one guard's
+    audit trail through another's.
 
-    Only markers whose field is ACTUALLY nulled on ``ballot`` are peeled, so
-    the redaction cannot be bypassed by a model that emits marker-shaped text
-    of its own: a lookalike prefix on a ballot whose id is still populated is
-    model output, and model output is exactly what this redaction removes.
-    The two markers written by guards that run AFTER the coercion
-    (:data:`BALLOT_TARGET_REDIRECT_MARKER`,
-    :data:`UNCITED_ZERO_FLAG_EJECT_MARKER`) cannot be present yet.
-    :data:`INVALID_VOTE_TARGET_MARKER` cannot be present either -- it only
-    ever accompanies a target already normalized to SKIP, which this guard
-    never coerces -- so it too is model-authored here and is not preserved.
+    The split is by PROVENANCE, never by pattern. ``model_rationale_text`` is
+    the body as the model wrote it, before any validator ran; every marker in
+    the chain is a *prefix*, so the recorded rationale always ends with that
+    body and everything ahead of it was written by this codebase. Matching
+    marker-SHAPED text instead would hand the model a bypass: a rationale that
+    opens with a convincing ``[invalid primary_reason_id 'p-3 is my partner'
+    nulled]`` would be preserved as an audit marker -- carrying the omniscient
+    payload this redaction exists to remove, and inflating the nulled-citation
+    counts with a citation that was never nulled. A null id field is not proof
+    the validator wrote anything; the model may simply have cited nothing.
 
-    Markers stack (both validators prepend), so they are consumed
-    front-to-back off the head of ``rationale_text`` until no permitted
-    pattern matches; the return value is that leading run, "" when there is
-    none.
+    ``model_rationale_text`` is ``None`` for a caller with no trusted
+    boundary to offer (the guard is a pure function others may call
+    directly). Then NOTHING is preserved and the whole rationale is replaced
+    -- the safe direction, since over-redacting only loses audit detail while
+    under-redacting leaks the text this guard exists to suppress.
     """
 
-    patterns = tuple(
-        pattern
-        for pattern, field_is_nulled in (
-            (
-                _INVALID_OBSERVATION_ID_PATTERN,
-                ballot.primary_reason_observation_id is None,
-            ),
-            (_INVALID_REASON_ID_PATTERN, ballot.primary_reason_id is None),
+    if model_rationale_text is None:
+        return ""
+    if not rationale_text.endswith(model_rationale_text):
+        # Structural invariant, not model input: every guard in the ballot
+        # chain PREPENDS its marker, so the model's body is always the
+        # suffix. A violation means the chain grew a rewrite that edits the
+        # body -- fail loud rather than guess where the markers end.
+        raise ValueError(
+            "ballot rationale does not end with the model-authored body; "
+            "the ballot chain must only prepend audit markers"
         )
-        if field_is_nulled
-    )
-    text = ballot.rationale_text
-    index = 0
-    while True:
-        for pattern in patterns:
-            match = pattern.match(text, index)
-            if match is not None:
-                index = match.end()
-                break
-        else:
-            return text[:index]
+    return rationale_text[: len(rationale_text) - len(model_rationale_text)]
 
 
 def coerce_teammate_ballot_to_skip(
     *,
     ballot: VoteBallot,
     fellow_impostor_ids: tuple[PlayerId, ...],
+    model_rationale_text: str | None = None,
 ) -> VoteBallot:
     """Coerce a ballot that targets a fellow impostor to ``SKIP``.
 
@@ -3082,9 +3057,16 @@ def coerce_teammate_ballot_to_skip(
     auditability is never laundered. The redaction removes the model's body
     and nothing else -- markers the upstream ballot chain already prepended
     (a nulled ``primary_reason_id`` / ``primary_reason_observation_id``) are
-    peeled off by :func:`_preserved_ballot_markers` and re-attached in
-    place, so a coerced ballot still reports its nulled citations to every
-    downstream marker consumer. The replacement body is itself a
+    carried across by :func:`_preserved_ballot_markers`, so a coerced ballot
+    still reports its nulled citations to every downstream marker consumer.
+    That split is by PROVENANCE: pass ``model_rationale_text`` -- the body
+    as the model wrote it, before any validator ran -- and everything ahead
+    of it in ``ballot.rationale_text`` is by construction this codebase's
+    own text. Omit it (the default) and nothing is preserved: the whole
+    rationale is replaced, which loses audit detail but can never leak
+    model text. Never split on marker SHAPE; a rationale that opens with
+    convincing marker-shaped prose would otherwise smuggle exactly the
+    payload this guard removes. The replacement body is itself a
     self-declaring substitution note, never fabricated in-world prose
     attributed to the model. This is the guard-originated TEXT class only;
     model-originated fourth-wall statements elsewhere in a transcript are a
@@ -3100,7 +3082,9 @@ def coerce_teammate_ballot_to_skip(
     if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
         return ballot
     marker = TEAMMATE_VOTE_TARGET_MARKER.format(target=ballot.target)
-    upstream_markers = _preserved_ballot_markers(ballot)
+    upstream_markers = _preserved_ballot_markers(
+        ballot.rationale_text, model_rationale_text
+    )
     return ballot.model_copy(
         update={
             "target": _SKIP_TARGET,

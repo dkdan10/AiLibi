@@ -23,6 +23,11 @@ What this module pins:
   prepended -- a nulled ``primary_reason_id`` / ``primary_reason_observation_id``
   -- are preserved in place, so the coerced ballot still reports its nulled
   citations to every downstream marker consumer;
+* that split is by PROVENANCE, never by pattern: the guard is handed the body
+  as the model wrote it, and every marker is a prefix, so anything ahead of
+  that body is this codebase's own text. Marker-SHAPED model prose is redacted
+  like any other body -- it cannot smuggle an omniscient payload through as a
+  fake audit marker, nor inflate the nulled-citation counts;
 * the replacement body is BRACKETED, the repo's "system text, not model voice"
   shape, so ``eval.vj_instruments._strip_leading_markers`` drops it before a
   ballot body reaches the §2.5 voice fold. The guard's prose is never measured
@@ -231,6 +236,10 @@ class TestUpstreamMarkersSurviveTheRedaction:
     on the front. Replacing the whole rationale would drop them, silently
     un-counting nulled citations for every consumer that reads markers off the
     recorded string -- laundering one guard's audit trail through another's.
+
+    The split is by PROVENANCE, never by pattern: ``model_rationale_text`` is
+    the body as the model wrote it, and every marker is a prefix, so anything
+    ahead of that body was written by this codebase.
     """
 
     def _doubly_marked_ballot(self) -> VoteBallot:
@@ -253,7 +262,9 @@ class TestUpstreamMarkersSurviveTheRedaction:
         )
 
         coerced = coerce_teammate_ballot_to_skip(
-            ballot=marked, fellow_impostor_ids=("p-5",)
+            ballot=marked,
+            fellow_impostor_ids=("p-5",),
+            model_rationale_text=_OMNISCIENT_RATIONALE,
         )
 
         # Same stack order the un-redacted guard produced: the teammate marker
@@ -268,7 +279,9 @@ class TestUpstreamMarkersSurviveTheRedaction:
 
     def test_every_chip_still_registers_on_the_spectator_surface(self) -> None:
         coerced = coerce_teammate_ballot_to_skip(
-            ballot=self._doubly_marked_ballot(), fellow_impostor_ids=("p-5",)
+            ballot=self._doubly_marked_ballot(),
+            fellow_impostor_ids=("p-5",),
+            model_rationale_text=_OMNISCIENT_RATIONALE,
         )
 
         reasons, clean = _parse_rewrite_reasons(coerced.rationale_text)
@@ -285,32 +298,95 @@ class TestUpstreamMarkersSurviveTheRedaction:
         # the recorded ``rationale_text``; the prefix (marker minus its
         # interpolated payload) is what ``eval.meeting_quality`` greps.
         coerced = coerce_teammate_ballot_to_skip(
-            ballot=self._doubly_marked_ballot(), fellow_impostor_ids=("p-5",)
+            ballot=self._doubly_marked_ballot(),
+            fellow_impostor_ids=("p-5",),
+            model_rationale_text=_OMNISCIENT_RATIONALE,
         )
 
         for marker in (INVALID_REASON_ID_MARKER, INVALID_OBSERVATION_ID_MARKER):
             prefix = marker.partition("{")[0]
             assert prefix in coerced.rationale_text, prefix
 
-    def test_a_model_emitted_lookalike_marker_is_redacted_not_preserved(self) -> None:
-        # The peel is gated on the field actually being nulled, so a model that
-        # writes marker-shaped text of its own cannot smuggle a body past the
-        # redaction: here ``primary_reason_id`` is still populated, so the
-        # lookalike prefix is model output and goes with the rest of it.
-        spoofed = _ballot(
-            primary_reason_id="m-1:turn-0",
-            rationale_text=(
-                INVALID_REASON_ID_MARKER.format(reason_id="p-5 is my partner")
-                + "and I did the kill."
-            ),
-        )
-
+    def test_omitting_the_provenance_boundary_preserves_nothing(self) -> None:
+        # A caller with no trusted boundary to offer gets the SAFE direction:
+        # the whole rationale is replaced. Over-redacting loses audit detail;
+        # under-redacting would leak the text this guard exists to suppress.
         coerced = coerce_teammate_ballot_to_skip(
-            ballot=spoofed, fellow_impostor_ids=("p-5",)
+            ballot=self._doubly_marked_ballot(), fellow_impostor_ids=("p-5",)
         )
 
         assert coerced.rationale_text == (
             _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+
+    def test_a_body_edit_in_the_chain_fails_loud(self) -> None:
+        # The structural invariant the split rests on: every guard in the
+        # ballot chain PREPENDS, so the model's body is always the suffix. If
+        # that ever stops holding, raise rather than guess where markers end.
+        with pytest.raises(ValueError, match="only prepend audit markers"):
+            coerce_teammate_ballot_to_skip(
+                ballot=_ballot(rationale_text="a rewritten body"),
+                fellow_impostor_ids=("p-5",),
+                model_rationale_text=_OMNISCIENT_RATIONALE,
+            )
+
+
+class TestMarkerShapedModelTextCannotSurviveTheRedaction:
+    """The redaction must not be bypassable by prose that mimics a marker.
+
+    Splitting on marker SHAPE (or on "the id field is null, so a validator
+    must have written this") hands the model a channel: a rationale that opens
+    with a convincing ``[invalid primary_reason_id 'p-5 is my partner'
+    nulled]`` would be preserved as an audit marker, carrying the omniscient
+    payload through the redaction AND inflating the nulled-citation counts
+    with a citation that was never nulled. A null id proves nothing -- the
+    model may simply have cited nothing.
+    """
+
+    @pytest.mark.parametrize("primary_reason_id", [None, "m-1:turn-0"])
+    def test_a_model_emitted_lookalike_marker_is_redacted(
+        self, primary_reason_id: str | None
+    ) -> None:
+        spoof = (
+            INVALID_REASON_ID_MARKER.format(reason_id="p-5 is my partner")
+            + "and I did the kill."
+        )
+        spoofed = _ballot(primary_reason_id=primary_reason_id, rationale_text=spoof)
+
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=spoofed,
+            fellow_impostor_ids=("p-5",),
+            model_rationale_text=spoof,
+        )
+
+        assert coerced.rationale_text == (
+            _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert "partner" not in coerced.rationale_text.lower()
+
+    def test_a_spoof_behind_a_real_marker_is_still_redacted(self) -> None:
+        # The real validator marker is preserved; the model's lookalike, which
+        # sits behind it in the model's own body, is not.
+        spoof = (
+            INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-5 is my partner")
+            + "trust me."
+        )
+        ballot = _normalize_ballot_reason_id(
+            ballot=_ballot(primary_reason_id="m-9:turn-99", rationale_text=spoof),
+            valid_reason_ids=frozenset({"m-1:turn-0"}),
+            reason_id_by_ordinal={},
+        )
+
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=ballot,
+            fellow_impostor_ids=("p-5",),
+            model_rationale_text=spoof,
+        )
+
+        assert coerced.rationale_text == (
+            _marker_for("p-5")
+            + INVALID_REASON_ID_MARKER.format(reason_id="m-9:turn-99")
+            + TEAMMATE_COERCED_VOTE_RATIONALE
         )
         assert "partner" not in coerced.rationale_text.lower()
 
@@ -379,7 +455,7 @@ class TestUncoercedBallotsKeepTheirRationale:
 
 
 def _omniscient_responder(
-    *, vote_targets: dict[str, str]
+    *, vote_targets: dict[str, str], rationale: str = _OMNISCIENT_RATIONALE
 ) -> Callable[[str, type[BaseModel] | None], str]:
     """Every voter emits the omniscient rationale, so only the guard can clean it."""
 
@@ -394,7 +470,7 @@ def _omniscient_responder(
                 confidence=0.9,
                 primary_reason_id=None,
                 considered_alternatives=(),
-                rationale_text=_OMNISCIENT_RATIONALE,
+                rationale_text=rationale,
             ).model_dump_json()
         raise AssertionError(f"unrecognised prompt: {prompt!r}")
 
@@ -438,3 +514,24 @@ class TestRedactionOnProductionPath:
             if ballot.voter == "p-4":
                 continue
             assert ballot.rationale_text == _OMNISCIENT_RATIONALE
+
+    def test_marker_shaped_model_prose_is_redacted_end_to_end(self) -> None:
+        # The provenance boundary is wired at the call site
+        # (``meetings/manager.py`` passes the PARSED ballot's rationale), so a
+        # model that opens its rationale with a convincing fake audit marker
+        # still gets redacted -- and no phantom nulled-citation chip appears.
+        spoof = (
+            INVALID_REASON_ID_MARKER.format(reason_id="p-5 is my partner")
+            + "and I did the kill."
+        )
+        result, _ = _run_meeting(
+            _omniscient_responder(vote_targets={"p-4": "p-5"}, rationale=spoof),
+            participants=self._impostor_team(),
+        )
+
+        p4 = next(b for b in result.ballots if b.voter == "p-4")
+        assert p4.rationale_text == (
+            _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert "partner" not in p4.rationale_text.lower()
+        assert _parse_rewrite_reasons(p4.rationale_text)[0] == ("teammate_coerced",)
