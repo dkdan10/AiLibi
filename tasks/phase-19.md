@@ -894,7 +894,7 @@ three categories, stop and record it as a finding — never add a silent OTHER b
 ### Task 19.12 — The frontend test baseline: Vitest, ESLint, one Playwright journey
 **Branch:** `phase-19-frontend-test-baseline`
 **Depends on:** 19.7, 19.10, 19.11 (the last is MeetingView.stories.tsx serialization — the taxonomy fixture lands before the error-split touches the same file)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 13 [C]; frontend/package.json:6-14 (no test script); the two `eslint-disable` comments with no linter (frontend/src/components/MapView.tsx:329, AgentToken.tsx:142 — verified: no eslint config or dependency exists); frontend/src/store/replayStore.ts:445 + :488 (one error field, three meanings) [S-Claude — re-verified at HEAD]; frontend/src/lib/playback.ts (407 LOC of pure functions, the natural unit-test target)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 13 [C]; frontend/package.json:6-14 (no test script); the two `eslint-disable` comments with no linter (frontend/src/components/MapView.tsx:329, AgentToken.tsx:142 — verified: no eslint config or dependency exists); frontend/src/store/replayStore.ts:468 + :511 (one error field, three meanings; a third write site at :370) [S-Claude — re-verified at HEAD]; frontend/src/lib/playback.ts (407 LOC of pure functions, the natural unit-test target)
 **Complexity:** Integration
 
 The flagship surface has zero tests and suppresses a linter that does not exist. Land the
@@ -1306,7 +1306,7 @@ the mechanism, not just the name.
 ### Task 19.19 — The retirements + the dead-code sweep (consumer-verified)
 **Branch:** `phase-19-retirements`
 **Depends on:** 19.1, 19.4, 19.6, 19.18 (19.1 is the llm/README.md serialization edge; 19.4 the tests/training/test_rewards.py edge; 19.6 the tests/llm/test_client.py edge)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:383 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:266 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:946, bakeoff/harness.py:722, coevo/rollout.py:214); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:279 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:346-357; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
+**Section refs:** audits/audit-phase-19-triage.md §7 item 19 (retire set) + singleton 31 + claude §4 item 16 [S-Claude/S-Codex; consumer checks mandatory] + locked decision 2; training/realpath.py (4,470 LOC; the one-shot campaign ops surface) + tests/training/test_realpath.py (4,601 LOC; wall-clock asserts :288/:320-322/:3307-3309); training/surrogate/runner.py:392 (`load_surrogate_runner_factory`) — VERIFIED LIVE CONSUMERS: training/composed_runner.py:278 (the sha/staleness verification fence) and training/bakeoff/harness.py:159/:1763/:2072, with AST call-site pins at tests/training/test_bakeoff_harness.py:1742-1772 — so the factory and class STAY and only a surrogate-ONLY runner exposure proven consumer-free may retire; training/env.py:1037-1056 (`first_meeting` — production callers all pass `full_game`: crew/scorer.py:949, bakeoff/harness.py:722, coevo/rollout.py:217); scripts/run_tournament.py:102-105 (the stale crew-dir CLI advertisement); llm/cache.py (192 LOC; sole importer tests/llm/test_client.py:12); scripts/record_meeting_gate_probe.py (zero references); frontend/src/ui/SectionLabel.tsx (dead); the realpath docstring references in surviving files (training/coevo/hall_of_fame.py:282 `RealPathCandidate`, training/conviction/serving.py:301 `_TimeoutMeetingRunner` — rewritten with the deletion). NOTE 1: the five bespoke prompt-set dirs are NOT retired — all five are live (orchestrator/game.py:346-357; tests/agents/test_bespoke_prompt_sets.py loads every one); the source audits' deletion candidacy is REFUTED. NOTE 2: eval/determinism_test.py is NOT retired — the planning session verified pytest collects it (`*_test.py`) and README cites it as the engine-purity proof; the source audit's "exercised by nothing" is REFUTED.
 **Complexity:** Integration
 
 Implement the tier map's RETIRE column plus the verified dead-code list, one deletion at
@@ -1315,7 +1315,7 @@ a time, each with a grep-proven consumer check recorded in the PR. Retire:
 survive — the map records where); the surrogate-ONLY meeting-runner exposure — with the
 verified boundary respected: `load_surrogate_runner_factory` and
 `SurrogateMeetingRunner` STAY (the composed runner's verification fence at
-`composed_runner.py:266` and the harness at `:159/:1763/:2072` consume them, AST-pinned)
+`composed_runner.py:278` and the harness at `:159/:1763/:2072` consume them, AST-pinned)
 — the retire candidate is any config/CLI arm that runs the surrogate ALONE as a meeting
 runner, and if the consumer grep proves no such consumer-free exposure exists, the
 outcome is a recorded no-op for this item, not a forced deletion. The realpath deletion
@@ -1330,7 +1330,7 @@ inside the deleted `test_realpath.py:4434` region) MOVE into a surviving
 committed rankings' row contract survives the campaign machinery, validators and all. The `first_meeting` removal updates ALL its test constructors
 (test_env.py:227-239, test_env_fast_path.py:141-154, test_rewards.py:124 — verified
 list), and the cache deletion removes `llm/README.md`'s advertisement of the module
-(:20-21) so 19.1's rewritten README does not point at a deleted API; the `first_meeting` episode
+(:46-47 and the "Cache and budget composition" section at :223, post-19.1 positions) so the rewritten README does not point at a deleted API; the `first_meeting` episode
 boundary (env + rollout plumbing; tests-only consumer); the stale crew-dir CLI
 advertisement in run_tournament (the honest fail-loud behavior stays; the advertisement
 of a stampless directory goes); `llm/cache.py` (+ its import in test_client);
@@ -1714,7 +1714,7 @@ session sanctions the split at dispatch, and the DoD applies to the sequence's t
 ### Task 19.25 — The parameterized replay walker + the eval consumer migration
 **Branch:** `phase-19-replay-walker`
 **Depends on:** 19.24
-**Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:166 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:169 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
 **Complexity:** Integration
 
 "Reconstructs cleanly" currently denotes eight subtly different predicates — and the
@@ -1798,7 +1798,7 @@ the same contract (coordination notes the split) rather than letting the branch 
 ### Task 19.26 — Vote-tally parity (consolidation optional)
 **Branch:** `phase-19-vote-tally-parity`
 **Depends on:** 19.15
-**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:1978-2028 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
+**Section refs:** audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original triage]; meetings/voting.py:38-48 ("the manager retains its own private copies … future work may consolidate the manager onto this canonical home"); meetings/manager.py:2026-2076 (`_tally` — the implementation the live game applies); the equivalence protected today by prose only
 **Complexity:** Medium
 
 The ejection rule the game applies and the one eval re-checks live in two
@@ -1844,7 +1844,7 @@ delete the call site.
 ### Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens
 **Branch:** `phase-19-test-structure`
 **Depends on:** 19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:50-51 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines)
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines)
 **Complexity:** Medium
 
 The gate's structure work, driven by the tier map. Register markers (`slow`, `campaign`,
