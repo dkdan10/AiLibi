@@ -11,7 +11,7 @@
 // in ink — never red-vs-green. Under As-agent fog it is suppressed entirely.
 //
 // FIREWALL (Task 19.11): one rewrite-reason chip is role-disclosing and is gated
-// the same way — see `ROLE_DISCLOSING_REWRITE_REASONS`.
+// the same way — see `isRoleDisclosingRewriteReason`.
 
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
@@ -33,9 +33,28 @@ import type { BallotView, PlayerView } from "../types/api";
 // revealed the ending is still standing behind one agent's eyes, and the
 // impostor pairing is not part of the ending. Suppressed SILENTLY — a
 // "1 chip hidden" placeholder would leak exactly the fact being withheld.
-export const ROLE_DISCLOSING_REWRITE_REASONS: ReadonlySet<string> = new Set([
+//
+// MODULE-PRIVATE AND FROZEN, exposed only through the pure predicate below.
+// `ReadonlySet` would be a compile-time view over a runtime-mutable `Set`: an
+// exported one could be emptied through a cast or from plain JS, and every
+// later as-agent render would then disclose the pairing — a firewall gate must
+// not be a mutable global anyone can switch off (AGENTS.md "no module-level
+// mutable state"). `Object.freeze` makes the list immutable in fact, and not
+// exporting it means there is no handle to reach for in the first place.
+const ROLE_DISCLOSING_REWRITE_REASONS: readonly string[] = Object.freeze([
   "teammate_coerced",
 ]);
+
+/**
+ * Whether a rewrite-reason label discloses ground-truth roles.
+ *
+ * The exported form of the policy is this pure predicate rather than the
+ * collection itself — callers (including Task 19.12's Vitest baseline) can ask
+ * the question without holding anything they could mutate.
+ */
+export function isRoleDisclosingRewriteReason(reason: string): boolean {
+  return ROLE_DISCLOSING_REWRITE_REASONS.includes(reason);
+}
 
 /**
  * The rewrite-reason chips this perspective may see.
@@ -52,7 +71,7 @@ export function visibleRewriteReasons(
 ): readonly string[] {
   return omniscient
     ? reasons
-    : reasons.filter((reason) => !ROLE_DISCLOSING_REWRITE_REASONS.has(reason));
+    : reasons.filter((reason) => !isRoleDisclosingRewriteReason(reason));
 }
 
 /**
@@ -74,9 +93,7 @@ export function visibleRewriteReasons(
  * would itself announce that something was withheld.
  */
 export function visibleRationale(ballot: BallotView, omniscient: boolean): string {
-  const roleDisclosing = ballot.rewrite_reasons.some((reason) =>
-    ROLE_DISCLOSING_REWRITE_REASONS.has(reason),
-  );
+  const roleDisclosing = ballot.rewrite_reasons.some(isRoleDisclosingRewriteReason);
   return !omniscient && roleDisclosing ? "" : ballot.rationale_text_clean.trim();
 }
 
