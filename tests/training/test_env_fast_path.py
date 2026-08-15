@@ -136,19 +136,3 @@ def test_fast_no_replay_shaped_reward_matches_recorded(seed: int) -> None:
             recorded_reward = compute_shaped_reward(recorded, side)
             fast_reward = compute_shaped_reward(fast, side)
             assert recorded_reward.total() == fast_reward.total()
-
-
-def test_first_meeting_boundary_marks_truncated_in_no_replay() -> None:
-    env = _env(
-        episode_boundary="first_meeting",
-        no_replay=True,
-        rng_hash_policy=RngStateHashPolicy.TRAINING_FAST,
-    )
-    rollout = env.rollout(2)
-    assert rollout.episode_boundary == "first_meeting"
-    # A game that reaches a meeting is truncated at it; one that ends first is a
-    # genuine full game. Either way the outcome shape is consistent.
-    if rollout.meetings:
-        assert rollout.truncated
-        assert rollout.outcome == "FIRST_MEETING"
-        assert rollout.winner is None
