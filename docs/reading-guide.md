@@ -56,8 +56,9 @@ instruments are **pre-registered** before the measurement that judges them
 (`audits/audit-phase-18-baseline-6.md` §0); a measurement that misses its bar is
 recorded as a **finding, not a failure**, and the phase closes on it rather than
 moving the goalposts (`audits/audit-phase-18-close.md` §6 — Phase 18 published
-four learned arms that each beat the scripted baseline on wins and shipped none
-of them); and records are corrected by additive dated **errata**, never in-place
+four learned arms that each beat the scripted baseline on wins and promoted
+none of them to the default; the incumbent champion stays opt-in and unswapped,
+`:38-39`); and records are corrected by additive dated **errata**, never in-place
 rewrites (`training/reports/report-finalist-eval.md` §18).
 
 The sharpest demonstration: two independent external audits were commissioned
