@@ -44,7 +44,7 @@ read the hidden state it is supposed to deduce.
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | `scripts/verify_samples.sh`; `audits/audit-phase-19-input-claude.md` §0 |
 | Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | `replays/samples/{4p1i,9p2i}/MANIFEST.md`; the README's copy of both rates is re-derived from those manifests on every test run by `scripts/check_doc_facts.py` |
 | Eject ballots carrying a valid citation — a turn or an observation id (9p2i) | 520 / 520, zero dangling | `tests/eval/test_vj_instruments.py::test_9p2i_citation_compliance_pins`; `audits/audit-phase-19-triage.md` §2 row 11 |
-| Impostor ballots cast against a partner (9p2i) | 0 of 245 — engine-enforced, see §3 | `audits/audit-phase-19-input-claude.md` §5.3; the guard is `meetings/manager.py::coerce_teammate_ballot_to_skip` |
+| Impostor ballots cast against a partner (9p2i) | 0 of 245 — meeting-layer enforced, see §3 | `audits/audit-phase-19-input-claude.md` §5.3; the guard is `meetings/manager.py::coerce_teammate_ballot_to_skip` |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | `audits/audit-phase-19-triage.md` §8 row 3 (three independent parses agree) |
 | Pre-registered emergence rulings demonstrated, Phase 18 | 0 of 14 | `audits/audit-phase-18-close.md` title and `:719`; derived cell by cell in `audits/audit-phase-18-flip-emergence.md` |
 | Learned movers that became the default | none — NO-FLIP twice | `audits/audit-phase-17-close.md`, `audits/audit-phase-18-close.md` |
@@ -147,8 +147,10 @@ never as restraint alone.
 
 **General social deduction: NOT demonstrated.** This is the qualification the
 project's credibility rests on volunteering. A *flag* is a contradiction the
-engine detects across the meeting transcript and shows to the voters; a
-`vent_sighting` flag is the one class only an impostor can produce. **87% of
+**meeting layer** detects across the transcript and shows to the voters
+(`meetings/transcript.py::detect_contradictions` — not the engine); a
+`vent_sighting` flag is the one class only an impostor can produce, because it
+rests on an engine-certified observation of a vent. **87% of
 correct 9p ejections ride an ejectee-specific vent sighting; ~30–39%
 otherwise.** The cross-tab, over all 165 committed 9p2i meetings, reproduced by
 three independent parses (`audits/audit-phase-19-triage.md` §8 row 3;
@@ -221,7 +223,8 @@ names a committed usage you can check.
   against it (`audits/audit-phase-18-close.md:104-105`).
 - **NO-FLIP** — the ruling that the bar was not cleared, so the scripted mover
   stays default and the learned champion stays opt-in. Ruled twice, in the
-  titles of `audits/audit-phase-17-close.md` and `audit-phase-18-close.md`.
+  titles of `audits/audit-phase-17-close.md` and
+  `audits/audit-phase-18-close.md`.
 - **canary denominator** — the largest same-substrate, validity-gated recording
   set canary metrics are judged on (today `replays/ml_corpus/`, ~3× the
   samples). An owner ruling (`audits/review-phase-15-midwave.md` Q3), restored
@@ -309,9 +312,12 @@ the committed audits):
 
 **The clean negatives, kept as results** (same source): the crew stack's triple
 negative (0/30 wins against the FSM's 3/30 under a passing validity gate); the
-torch PPO probe; the policy-ES real path, whose win edge collapsed to 0.02; and
-the surrogate's always-SKIP decision arm — 0 ejections across 96 held-out
-meetings, retired while its *ranking* channel (46/60 top-1) is kept.
+torch PPO probe; the policy-ES real path, whose impostor **win rate** collapsed
+to 0.02 = 1/50 against the same-substrate FSM's 0.36 — an edge of −0.34, and a
+referee PASS bought by losing (`training/reports/report-finalist-eval.md:268-271`;
+the per-arm cells at `audits/audit-phase-17-close.md:61`); and the surrogate's
+always-SKIP decision arm — 0 ejections across 96 held-out meetings, retired
+while its *ranking* channel (46/60 top-1) is kept.
 
 **One statistic the program corrected about itself:** the shipped champion's
 paired win edge is statistically unresolved at n=50 — exact McNemar 15/9,
@@ -319,8 +325,8 @@ p = 0.3075 (`training/README.md` §3; `audits/audit-phase-19-triage.md` §8 row 
 recomputable via `scripts/paired_stats.py`). The terminology erratum belongs
 here too: `0.9375` is conversion-label accuracy, and the composed runner's
 meeting-decision accuracy is `0.8646` against a 0.625 always-eject constant
-(`training/reports/report-conviction-model.md` and `report-composed-runner.md`,
-both carrying dated errata).
+(`training/reports/report-conviction-model.md` and
+`training/reports/report-composed-runner.md`, both carrying dated errata).
 
 **The program is frozen.** Every frozen surface carries a header naming the tier
 map, and the map is `training/README.md` — keep / freeze / retire, component by
