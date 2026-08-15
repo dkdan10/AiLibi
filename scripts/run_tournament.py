@@ -749,9 +749,8 @@ def _read_crew_artifact_stamp(artifact_dir: Path) -> CrewTacticalPolicyStamp:
     surface's constants. A missing file, unreadable JSON, or a schema mismatch
     (including a blank / pipe-bearing field the validator rejects) is fail-loud
     (``SystemExit``) rather than a silent fallback (AGENTS.md "no silent
-    fallbacks"). NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet
-    carry a ``stamp.json`` (the 18.25 crew campaign's recording legs (the first dual-stamped crew recordings) writes them), so the arm
-    fails loud on them until one is added; the tests build fixture dirs.
+    fallbacks"). A directory without a ``stamp.json`` therefore fails loud — the
+    arm never infers an identity it was not handed; the tests build fixture dirs.
     """
 
     stamp_path = artifact_dir / _CANDIDATE_STAMP_FILENAME
@@ -812,9 +811,10 @@ def _load_crew_artifact_policy(
     if not artifact_dir.is_dir():
         raise SystemExit(
             f"--crew-artifact: {str(artifact_dir)!r} is not a directory; pass a "
-            "committed crew artifact dir (e.g. "
-            "training/artifacts/crew/crew-owned-tasks-es) carrying weights.json + "
-            "its .sha256 sidecar + a five-field stamp.json."
+            "committed crew artifact dir carrying weights.json + its .sha256 "
+            "sidecar + a five-field stamp.json (e.g. one of the co-evolution "
+            "driver's frozen crew artifacts under "
+            "training/artifacts/coevo/<run>/crew/gen-N/<digest>/)."
         )
 
     stamp = _read_crew_artifact_stamp(artifact_dir)

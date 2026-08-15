@@ -45,24 +45,31 @@ DECISION arm is the NO-GO in ``training/reports/report-ballot-surrogate.md`` §5
 ``training/composed_runner.py``'s verification fence and
 ``training/bakeoff/harness.py`` consume them.
 
-Task 19.19's retire item — a surrogate-ONLY runner exposure proven consumer-free
-— resolved as a RECORDED NO-OP: no such exposure exists. Every site that installs
-this runner as a meeting runner has a live consumer:
+Task 19.19's retire item — a surrogate-ONLY runner exposure proven CONSUMER-FREE
+— resolved as a RECORDED NO-OP. A surrogate-only exposure does exist; what does
+not exist is a consumer-free one, and consumer-free was the retire condition.
+Every site that installs this runner as the sole meeting runner has a live
+consumer:
 
+* ``training/bakeoff/harness.py:2072`` — ``run_goodhart_surrogate_rerun`` hands
+  the factory straight to ``run_goodhart_probe``, so the probe's games run on
+  this runner ALONE. That IS a surrogate-only exposure, and it is driven by a
+  live CLI: the ``goodhart-surrogate`` subcommand of that module's own ``main``
+  (:2208/:2244). It is also pinned by
+  ``tests/training/test_bakeoff_harness.py:546``. Consumed, so it stays;
+* ``training/bakeoff/harness.py:1763`` — ``evaluate_candidate``'s surrogate-path
+  DIAGNOSTIC column, likewise surrogate-only for that pass, feeding
+  ``inner_fitness_surrogate`` / ``surrogate_real_divergence`` on the bake-off row;
 * ``training/composed_runner.py:278`` — the sha/staleness verification fence
   (calls the factory, discards the result);
-* ``training/bakeoff/harness.py:1763`` — ``evaluate_candidate``'s surrogate-path
-  DIAGNOSTIC column, which feeds ``inner_fitness_surrogate`` /
-  ``surrogate_real_divergence`` on the bake-off row;
-* ``training/bakeoff/harness.py:2072`` — ``run_goodhart_surrogate_rerun``,
-  reached from that module's own CLI (``main``, :2244) and pinned by
-  ``tests/training/test_bakeoff_harness.py:546``;
 * ``eval/balance_eval.py``'s ``meeting_runner_factory`` is a GENERIC seam that
   accepts any :class:`~orchestrator.game.MeetingRunner` factory (the composed
-  runner included) — not a surrogate-only arm.
+  runner included) — not a surrogate-only arm at all.
 
-There is no config or CLI arm anywhere that runs the surrogate ALONE as a
-decision-making meeting runner, so nothing here was force-deleted.
+Both surrogate-only exposures are DIAGNOSTIC — they measure the surrogate path,
+they do not select a champion (final scoring always uses a real meeting path;
+``eval/balance_eval.py``'s reporting rule) — which is what keeps them consistent
+with the report's standalone-DECISION NO-GO. Nothing here was force-deleted.
 """
 
 from __future__ import annotations
