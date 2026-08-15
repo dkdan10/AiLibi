@@ -106,6 +106,15 @@ carry the answers.
 Seeds 17, 23 and 41 are the exhibits the audits traced case by case. Watch them
 first, then read §5.2 of the Claude input audit and see whether you agree.
 
+One qualification on blurb #2, whose wording is reproduced verbatim from the
+committed list: the "verified" stamp is applied by the **vote-ballot prompt**
+("Each flag below is VERIFIED evidence" —
+`agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2:100`), over a flag minted
+in `meetings/transcript.py`. The engine certifies the vent *observation*
+underneath a `vent_sighting` flag; it never certifies the fabricated testimony
+that game turns on. That gap is the first limit in §3, and it is most of why
+seed 17 is worth watching.
+
 Two claims you can check yourself, offline and free: the run-twice determinism
 demo and `bash scripts/verify_samples.sh`, both in the README's
 "Reproduce a game". Its "Three reproducibility scopes" states exactly which
@@ -165,7 +174,9 @@ A vent sighting is hard, impostor-only evidence the *engine* certifies and the
 scripted mover donates by venting in witnessed conditions. Without one, ejection
 accuracy is roughly chance and innocents go down 2:1. The audits' summary: the
 system demonstrates LLM evidence-processing of engine-certified facts, plus real
-deception, on top of a conviction engine that is substantially deterministic.
+deception, on top of a conviction engine that is substantially deterministic —
+"conviction engine" meaning the flag → ballot → tally pipeline in `meetings/`,
+not the `engine/` package.
 
 Two limits belong in the same breath:
 
@@ -216,7 +227,11 @@ names a committed usage you can check.
   unconditional, the key stays in the recording stamp for provenance. Thirteen
   have graduated, one live toggle remains (`orchestrator/replay.py`,
   `_RETIRED_ALWAYS_ON_LEVERS` vs `TOGGLEABLE_SUBSTRATE_FLAG_KEYS`), and
-  graduating obliges a prose sweep (`AGENTS.md` §"Graduation sweeps").
+  graduating obliges a prose sweep (`AGENTS.md` §"Graduation sweeps"). The
+  usage, at the record that performed the most recent four: "the four
+  meeting-layer levers graduated to unconditional ON … beside the nine
+  already-retired levers" (`audits/audit-phase-18-baseline-6.md:7` — the 4 + 9
+  that make thirteen).
 - **the §1.3 bar** — the flip bar. `audits/audit-phase-17-close.md` §1.3 states
   what a learned mover must do to become the default: close both
   evidence-supply gaps *without surrendering the win edge*. Later rulings read
@@ -283,8 +298,10 @@ in its §8 table.
    the machinery holds under a result nobody wanted. Every learned arm beat the
    same-seed scripted comparator on wins (+0.12 to +0.30, `:104-105`) and every
    arm failed the *referee* — the pre-registered selection gate that prices what
-   a mover does to the deduction economy it plays in — so nothing shipped; zero
-   of fourteen pre-registered emergence rulings were demonstrated, including two
+   a mover does to the deduction economy it plays in — so **no arm became the
+   default** (the learned champion stays opt-in, where Phase 15 left it, and no
+   crew artifact was adopted); zero of fourteen pre-registered emergence
+   rulings were demonstrated, including two
    real, selected-for effects the registered clause could not certify.
    `audits/audit-phase-18-flip-emergence.md` derives that reading cell by cell.
 
