@@ -207,7 +207,8 @@ from training.bakeoff.map_elites import load_archive_cell_genomes
 from training.bakeoff.policy_es import build_masked_mlp_policy
 
 # The utility family's encoder tag names the ONE impostor family that rebuilds
-# without a ``hidden`` width (the same private-alias import realpath.py uses).
+# without a ``hidden`` width (the same private-alias import the 18.17 re-rank
+# library used, before Task 19.19 retired it).
 from training.bakeoff.utility_es import ENCODER_VERSION as _UTILITY_ENCODER_VERSION
 from training.coevo.factory import CREW_ENCODER_NAMESPACE_PREFIX
 from training.coevo.hall_of_fame import (
@@ -281,9 +282,9 @@ DEFAULT_RUN_LABEL: Final[str] = "coevo-campaign"
 #: freeze artifacts nothing can load — and would only discover it after paying
 #: for every generation (Codex review on PR #314), so the pin is refused up
 #: front. Restated here (the hall_of_fame restated-literal idiom) rather than
-#: importing a private symbol across the seam; ``training.realpath``'s
-#: ``_SUPPORTED_ENCODER_VERSIONS`` states the same set for the same reason. A
-#: new family extends BOTH lists and the builder dispatch — never just this one.
+#: importing a private symbol across the seam; the 18.17 re-rank library stated
+#: the same set for the same reason, until Task 19.19 retired it. A new family
+#: extends this list and the builder dispatch together — never just one.
 _LOADABLE_IMPOSTOR_ENCODERS: Final[tuple[str, ...]] = (
     _UTILITY_ENCODER_VERSION,
     "v2",
@@ -960,8 +961,9 @@ def _validate_side(
         if probe_encoder == _UTILITY_ENCODER_VERSION and config.hidden is not None:
             # The utility scorer takes NO head width, so a declared one would
             # put a false masked-MLP width into every artifact's config.json.
-            # ``RealPathCandidate`` rejects the same combination for the same
-            # family (Codex review on PR #314).
+            # The 18.17 re-rank library's candidate model rejected the same
+            # combination for the same family (Codex review on PR #314); it
+            # retired at Task 19.19, this guard did not.
             raise ValueError(
                 f"the utility family ({_UTILITY_ENCODER_VERSION!r}) takes no hidden "
                 f"width; got hidden={config.hidden!r}. Declaring one would stamp "

@@ -297,8 +297,9 @@ class ConvictionServingMeetingRunner:
     the trigger-time inputs, predicts the supply, records the prediction, then
     delegates to the inner runner unchanged and returns its artifacts. The
     assembly + prediction happen BEFORE delegation (the features are
-    pre-meeting), and the wrapper never mutates ``state`` (precedent:
-    ``training/realpath.py::_TimeoutMeetingRunner``).
+    pre-meeting), and the wrapper never mutates ``state`` (the precedent was the
+    18.17 re-rank library's timeout meeting-runner wrapper, retired at Task
+    19.19 with the campaign machinery).
 
     ``predict`` / ``record`` are CALLBACKS, not concrete types, precisely so this
     module never imports ``training.bakeoff.harness`` / ``training.crew.scorer``

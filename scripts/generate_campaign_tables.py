@@ -73,7 +73,7 @@ if str(_REPO_ROOT) not in sys.path:
 from pydantic import ValidationError, create_model  # noqa: E402
 
 from training.coevo.driver import CoevoCampaignRow  # noqa: E402
-from training.realpath import RealPathRerankRow  # noqa: E402
+from training.realpath_schema import RealPathRerankRow  # noqa: E402
 
 #: The typed model for each supported ranking schema. ``-v2`` is the recorder's
 #: own row type; ``-v1`` is that type with the two recorder-identity fields made

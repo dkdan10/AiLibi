@@ -278,11 +278,12 @@ def _validate_stamp_token(name: str, value: str) -> None:
     Restates the :class:`~orchestrator.replay.TacticalPolicyStamp` field rules
     (non-blank, no ``|`` / newline / CR — replay.py:211-254) rather than
     importing them: this module pulls in no ``orchestrator`` graph, the same
-    restated-literal idiom the filename constants above use.
-    ``training.realpath.RealPathCandidate`` restates the identical rule set for
-    the same reason. (The builder seam DOES import ``engine.world`` — see the
-    module docstring — but a stamp-token rule is a two-line predicate, so
-    restating it stays cheaper than importing a pydantic model to validate it.)
+    restated-literal idiom the filename constants above use. The 18.17 re-rank
+    library's candidate model restated the identical rule set for the same
+    reason (retired at Task 19.19 with the campaign machinery). (The builder
+    seam DOES import ``engine.world`` — see the module docstring — but a
+    stamp-token rule is a two-line predicate, so restating it stays cheaper
+    than importing a pydantic model to validate it.)
     """
 
     if not value.strip():
