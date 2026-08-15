@@ -594,8 +594,8 @@ def test_stability_requires_one_recorder_and_one_map_per_arm(tmp_path: Path) -> 
     Two tranche rankings written into one leg directory by separate calls can
     use different providers, prompt sets, custom runners or maps while agreeing
     on every protocol field — and ``compute_stability`` would then report that
-    behavioural change as provider/seed noise. ``run_realpath_rerank`` now names
-    the recorder in every row it writes, and an arm's two reads must agree.
+    behavioural change as provider/seed noise. The 18.17 re-rank recorder named
+    itself in every row it wrote, and an arm's two reads must agree.
 
     Keyed on the ROW's declared schema so the frozen ``-v1`` corpus is handled
     as what it is: a record made before the field existed, not a pair that
@@ -684,7 +684,7 @@ def _opponent_stamp(weights_sha256: str = _OPPONENT_DIGEST) -> dict[str, str]:
 
 
 def _v3_crew_row(*, index: int = 0, **overrides: object) -> dict[str, object]:
-    """A ``-v3`` CREW row (Task 18.32), shaped as ``run_realpath_rerank`` writes one.
+    """A ``-v3`` CREW row (Task 18.32), shaped as the 18.17 recorder wrote one.
 
     The two identities sit in their own slots: ``crew_stamp`` names the ranked
     candidate (so it carries the row's own ``weights_sha256``) and ``stamp``
@@ -1593,10 +1593,9 @@ def test_check_compares_raw_bytes_not_newline_normalized_text(
 def test_one_genome_under_two_labels_is_a_valid_ranking(tmp_path: Path) -> None:
     """Two labels over ONE genome is output the recorder legitimately emits.
 
-    ``run_realpath_rerank`` permits it (the 18.17 tie-break fixture, pinned by
-    ``test_prescreen_coverage_is_by_candidate_identity_not_digest_set``), so
+    The 18.17 re-rank recorder permitted it (the 18.17 tie-break fixture), so
     round 4's duplicate-``weights_sha256`` refusal made this generator reject a
-    ranking this PR's own recorder produces (Codex on PR #314). Labels are the
+    ranking that recorder legitimately produced (Codex on PR #314). Labels are the
     candidate identity; digests are not.
     """
 

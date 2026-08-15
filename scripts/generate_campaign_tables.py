@@ -707,11 +707,11 @@ def read_validated_ranking(ranking_path: Path) -> list[dict[str, Any]]:
             f"{ranking_path}: ranks are {ranks}, not a contiguous 1..{len(rows)} "
             "sequence; a leg table is one total order over the leg's candidates"
         )
-    # LABELS are the candidate identity, not digests. ``run_realpath_rerank``
-    # deliberately permits one genome under two labels (the 18.17 tie-break
-    # fixture, pinned by ``test_prescreen_coverage_is_by_candidate_identity_not_
-    # digest_set``), so rejecting a repeated ``weights_sha256`` here refused a
-    # ranking the recorder legitimately emits — this generator's own PR
+    # LABELS are the candidate identity, not digests. The 18.17 re-rank recorder
+    # (retired at Task 19.19) deliberately permitted one genome under two labels
+    # — the 18.17 tie-break fixture — so rejecting a repeated ``weights_sha256``
+    # here refused a
+    # ranking the recorder legitimately emitted — this generator's own PR
     # contradicting itself (Codex review on PR #314).
     labels = [row["label"] for row in rows]
     duplicated = sorted({value for value in labels if labels.count(value) > 1})
