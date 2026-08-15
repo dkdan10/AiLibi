@@ -43,8 +43,8 @@ read the hidden state it is supposed to deduce.
 | Gate at the Phase-19 chartering commit | 4,531 passed / 20 skipped / 3 xfailed | `tasks/phase-19.md` STATUS line; re-run from a cold clone in `audits/audit-phase-19-input-claude.md` §0 |
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | `scripts/verify_samples.sh`; `audits/audit-phase-19-input-claude.md` §0 |
 | Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | `replays/samples/{4p1i,9p2i}/MANIFEST.md`; the README's copy of both rates is re-derived from those manifests on every test run by `scripts/check_doc_facts.py` |
-| Eject ballots carrying a resolvable citation (9p2i) | 520 / 520 | `audits/audit-phase-19-triage.md` §2 row 11; traced in `audits/audit-phase-19-input-claude.md` §5.3 |
-| Impostor ballots cast against a partner (9p2i) | 0 of 245 | same |
+| Eject ballots carrying a valid citation — a turn or an observation id (9p2i) | 520 / 520, zero dangling | `tests/eval/test_vj_instruments.py::test_9p2i_citation_compliance_pins`; `audits/audit-phase-19-triage.md` §2 row 11 |
+| Impostor ballots cast against a partner (9p2i) | 0 of 245 — engine-enforced, see §3 | `audits/audit-phase-19-input-claude.md` §5.3; the guard is `meetings/manager.py::coerce_teammate_ballot_to_skip` |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | `audits/audit-phase-19-triage.md` §8 row 3 (three independent parses agree) |
 | Pre-registered emergence rulings demonstrated, Phase 18 | 0 of 14 | `audits/audit-phase-18-close.md` title and `:719`; derived cell by cell in `audits/audit-phase-18-flip-emergence.md` |
 | Learned movers that became the default | none — NO-FLIP twice | `audits/audit-phase-17-close.md`, `audits/audit-phase-18-close.md` |
@@ -118,16 +118,32 @@ optimizer portability is designed for, not confirmed. Do not upgrade the claim.
 
 Three capabilities get conflated in projects like this one. Keep them apart.
 
-**Evidence-processing: demonstrated.** Deliberation is typed, and every eject
-ballot cites an observation id resolving to a line in the voter's own rendered
-memory — 520 of 520 in the 9p2i samples, hallucinated ids nulled behind audit
-markers (`audits/audit-phase-19-input-claude.md` §5.3).
+**Evidence-processing: demonstrated.** Deliberation is typed, and every one of
+the 520 eject ballots in the 9p2i samples carries a *valid* citation — a
+transcript turn or an observation id, resolving to a real line the voter could
+see. The committed instrument splits it: 478 turn citations and 156 observation
+citations, zero dangling on either channel, compliance 1.000
+(`tests/eval/test_vj_instruments.py::test_9p2i_citation_compliance_pins`;
+hallucinated ids nulled behind audit markers,
+`audits/audit-phase-19-input-claude.md` §5.3).
 
 **Deception: demonstrated, and the strongest capability on display.**
 Coordinated fabricated alibis built by reading the transcript, strategic
 truth-telling at parity, verbal bussing of a caught partner while the ballot
-skips — and across 245 impostor ballots, zero votes against a partner (same
-section; corroborated at `audits/audit-phase-19-triage.md` §2 row 11).
+skips (`audits/audit-phase-19-input-claude.md` §5.3).
+
+One number in that section needs its guard stated: across 245 impostor ballots,
+zero votes against a partner. A **betrayal vote is not available to the model** —
+`meetings/manager.py::coerce_teammate_ballot_to_skip` deterministically rewrites
+any ballot targeting a fellow impostor to SKIP, so the zero is the teammate
+firewall holding, not a capability the model demonstrated (the audits say so:
+"the teammate firewall held perfectly, and within it the models produce genuine
+variety"). What the committed bytes add is that in this set the guard never had
+to fire: it stamps `[teammate target … coerced to SKIP]` into the rationale
+whenever it does, and `replays/samples/9p2i/` carries zero such markers — while
+`replays/ml_corpus/9p2i/` carries 4, across 4 of its 150 games
+(`replays/ml_corpus/README.md:69`). Read the zero as enforcement plus restraint,
+never as restraint alone.
 
 **General social deduction: NOT demonstrated.** This is the qualification the
 project's credibility rests on volunteering. A *flag* is a contradiction the
@@ -165,8 +181,9 @@ Two limits belong in the same breath:
   ~99.6–99.7% for crew against ~45.5–46.5% for impostors — a behavioral tell,
   not a firewall leak (same file, §4 item 24).
 
-[JUDGMENT, from the audits' full reads] The median game is formulaic; roughly
-one game in eight holds something a human would rewind. Hence §2's hand curation.
+[JUDGMENT, grounded] The median game is formulaic; roughly one game in eight
+holds something a human would rewind (`audits/audit-phase-19-input-claude.md`
+§5.4, from that audit's full reads). Hence §2's hand curation.
 
 ---
 
@@ -183,8 +200,10 @@ names a committed usage you can check.
   `_BASELINE_SUPPLY_FLOORS` (`eval/watchability.py:548`) holds baseline-2
   through baseline-6.
 - **adopting record** — the point of a baseline: it is the recording that
-  *adopts* a substrate change, not a tag applied afterwards. Baseline 6 is the
-  Task-18.12 meeting-layer adopting record (`docs/architecture.md`
+  *adopts* a substrate change, not a tag applied afterwards. Hence a lever
+  "graduates at its own adopting record" (`audits/audit-phase-17-absence-gate.md:149`),
+  and baseline 6 is named as "the 18.12 CREW-ONLY adopting record"
+  (`audits/audit-phase-18-close.md:7-8`; the rule in `docs/architecture.md`
   §"Determinism and the substrate ladder").
 - **the ladder tip** — the newest baseline; where the substrate stands. "The
   ladder tip STANDS at baseline 6" (`audits/audit-phase-18-close.md:7-8`); every
