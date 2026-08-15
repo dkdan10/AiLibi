@@ -43,9 +43,6 @@ recorded through it.
   validation (misplaced-key stripping; reversed `from_tick`/`to_tick`
   swap). Lives in the shared extract→validate seam, so all three real
   adapters inherit it.
-- `cache.py` — `PromptCache`, a bounded in-memory prompt → response
-  cache keyed only on engine-free fields (prompt text, schema identity,
-  max-tokens, temperature, call kind, model), FIFO eviction.
 - `budget.py` — `GameBudget`, a per-game USD + token-count ceiling.
   Overruns raise `BudgetExceededError`; the budget never silently
   truncates.
@@ -220,20 +217,16 @@ identical in shape to `AnthropicClient`'s, `OllamaClient`'s, and
 `build_default_client` with a `provider == "openai"` branch and set
 `AILIBI_LLM_PROVIDER=openai`.
 
-## Cache and budget composition
+## Budget composition
 
-Both are *layers* over an `LLMClient`. The cache lookup happens first;
-on a hit, no budget charge is applied (the answer was free). On a miss
-the wrapped client is called and the budget is charged from the
-returned `LLMResponse`.
+The budget is a *layer* over an `LLMClient`: the wrapped client is
+called and the budget is charged from the returned `LLMResponse`.
 
 ```python
 client = build_default_client()           # FakeProvider by default
-cache = PromptCache()
 budget = GameBudget(max_cost_usd=0.30)
 
-response = await cache.get_or_call(
-    client,
+response = await client.complete(
     prompt=prompt,
     schema=ReportDocument,
     max_tokens=2048,
