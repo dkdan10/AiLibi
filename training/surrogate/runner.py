@@ -40,12 +40,29 @@ Public surface (stable — downstream tasks import these):
 
 Phase 19 tier map (training/README.md §2a), the standalone-vs-dependency
 boundary: the surrogate RANKING channel is KEPT (46/60 top-1); the standalone
-DECISION arm is retired by 19.19 (all-SKIP census — the NO-GO in
-``training/reports/report-ballot-surrogate.md`` §5). The factory, the class,
-and the counter STAY: ``training/composed_runner.py``'s verification fence and
-``training/bakeoff/harness.py`` consume them. Only a surrogate-ONLY runner
-exposure proven consumer-free may retire — a no-free-exposure outcome is a
-recorded no-op.
+DECISION arm is the NO-GO in ``training/reports/report-ballot-surrogate.md`` §5
+(all-SKIP census). The factory, the class, and the counter STAY:
+``training/composed_runner.py``'s verification fence and
+``training/bakeoff/harness.py`` consume them.
+
+Task 19.19's retire item — a surrogate-ONLY runner exposure proven consumer-free
+— resolved as a RECORDED NO-OP: no such exposure exists. Every site that installs
+this runner as a meeting runner has a live consumer:
+
+* ``training/composed_runner.py:278`` — the sha/staleness verification fence
+  (calls the factory, discards the result);
+* ``training/bakeoff/harness.py:1763`` — ``evaluate_candidate``'s surrogate-path
+  DIAGNOSTIC column, which feeds ``inner_fitness_surrogate`` /
+  ``surrogate_real_divergence`` on the bake-off row;
+* ``training/bakeoff/harness.py:2072`` — ``run_goodhart_surrogate_rerun``,
+  reached from that module's own CLI (``main``, :2244) and pinned by
+  ``tests/training/test_bakeoff_harness.py:546``;
+* ``eval/balance_eval.py``'s ``meeting_runner_factory`` is a GENERIC seam that
+  accepts any :class:`~orchestrator.game.MeetingRunner` factory (the composed
+  runner included) — not a surrogate-only arm.
+
+There is no config or CLI arm anywhere that runs the surrogate ALONE as a
+decision-making meeting runner, so nothing here was force-deleted.
 """
 
 from __future__ import annotations
