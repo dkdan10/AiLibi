@@ -76,8 +76,12 @@ share one recording's label.
 The dual-role co-evolution recorder is the ``--crew-artifact`` arm (Task 18.19;
 audits/audit-phase-18-planning.md §4 #7) — the crew analog of
 ``--candidate-artifact`` and the seam that stamps BOTH identities on one game.
-``--crew-artifact training/artifacts/crew/<entrant>`` records with an ARBITRARY
-committed CREW artifact loaded by path: the genome is sha-verified against the
+``--crew-artifact <artifact-dir>`` records with an ARBITRARY committed CREW
+artifact loaded by path — a directory carrying ``weights.json`` + its ``.sha256``
+sidecar + a five-field ``stamp.json``, the four-file loadable-artifact shape the
+co-evolution driver freezes (e.g. under
+``training/artifacts/coevo/<run>/crew/gen-N/<digest>/``): the genome is
+sha-verified against the
 artifact's ``weights.json.sha256`` sidecar (a mismatch fails loud BEFORE any
 spend, REUSING ``training.bakeoff.harness.load_candidate_weights`` — the SAME
 shared loader the impostor arm uses, since crew artifacts share the
@@ -99,9 +103,8 @@ exclusive with the two single-side ``--agent-factory`` arms
 (``learned-champion`` / ``learned-crew``), and an impostor artifact handed to
 ``--crew-artifact`` — or a crew artifact handed to ``--candidate-artifact`` —
 fails loud on the encoder NAMESPACE (``crew-`` vs impostor) BEFORE any game runs.
-NOTE: the committed ``training/artifacts/crew`` dirs do NOT yet carry a
-``stamp.json`` (the 18.25 crew campaign's recording legs (the first dual-stamped crew recordings) writes them), so the arm fails loud on
-them until one is added; the tests build fixture dirs. An unflagged run threads
+A directory missing ``stamp.json`` fails loud too — the arm never infers an
+identity it was not handed. An unflagged run threads
 neither factory nor stamp, byte-identical to before Task 18.19.
 """
 
@@ -321,9 +324,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=(
             "record with an arbitrary committed CREW artifact loaded by path "
             "(Task 18.19, the dual-role co-evo recorder's crew arm, mirroring "
-            "--candidate-artifact). ARTIFACT_DIR is a training/artifacts/crew/"
-            "<entrant> dir carrying weights.json + its .sha256 sidecar + a "
-            "five-field stamp.json (CrewTacticalPolicyStamp). The genome is "
+            "--candidate-artifact). ARTIFACT_DIR is a dir carrying weights.json "
+            "+ its .sha256 sidecar + a five-field stamp.json "
+            "(CrewTacticalPolicyStamp) — the loadable-artifact shape the co-evo "
+            "driver freezes. The genome is "
             "sha-verified against the sidecar (a mismatch fails loud BEFORE any "
             "spend), rebuilt through the committed crew builder its encoder_version "
             "selects (build_crew_scorer, with an OwnedTaskOptionBasis for the "
@@ -332,8 +336,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "artifact's own stamp.json. Combinable with --candidate-artifact for a "
             "DUAL-stamp co-evo recording (a cross-stamp guard rejects colliding "
             "identities); mutually exclusive with --agent-factory learned-champion "
-            "/ learned-crew. NOTE: the committed crew dirs do not yet carry "
-            "stamp.json, so the arm fails loud on them until one is added."
+            "/ learned-crew. A dir without stamp.json fails loud."
         ),
     )
     return parser.parse_args(argv)
