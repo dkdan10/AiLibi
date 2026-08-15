@@ -101,6 +101,7 @@ from api.schemas import (
     VisibleBodyView,
     VisiblePlayerView,
     WhereaboutsClaimView,
+    classify_evidence,
 )
 from engine.actions import Action
 from engine.events import (
@@ -2402,6 +2403,16 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
     # carries no weak marker), which ``is_weak_contradiction`` resolves below
     # (no ``vent_sighting`` special-case is needed -- the predicate is
     # marker-based). Committed v4 replays predate the kind and never carry it.
+    # What the kind no longer shares with the others is how it RENDERS -- see
+    # the taxonomy below.
+    #
+    # Task 19.11: the evidence TAXONOMY derives here too, from the same recorded
+    # fields -- ``classify_evidence`` is the one place the rules live, and it is
+    # fail-loud (an unknown kind raises ``UnclassifiableEvidenceError`` rather
+    # than defaulting to "contradiction", which is exactly how a grounded vent
+    # proof came to render as ``p-X ↔ p-X``). ``weak`` is passed in rather than
+    # re-derived inside the classifier so the marker predicate stays
+    # single-sourced beside the marker writer in ``meetings.transcript``.
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
@@ -2412,6 +2423,12 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
         description=contradiction.description,
         weak=weak,
         severity="weak" if weak else "strong",
+        category=classify_evidence(
+            kind=contradiction.kind,
+            event_a_id=contradiction.event_a_id,
+            event_b_id=contradiction.event_b_id,
+            weak=weak,
+        ),
     )
 
 

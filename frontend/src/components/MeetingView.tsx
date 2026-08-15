@@ -17,6 +17,11 @@
 // label, never red-vs-green); role-revealing extras (correctness, the post-hoc
 // impostor reveal) are Omniscient-only. The claim↔map cross-highlight (wired in
 // TurnCard → store → MapView) lights only the PUBLIC referent a sighting names.
+//
+// THE EVIDENCE TAXONOMY (Task 19.11) governs the flag list at the bottom of the
+// transcript panel: role proof, cross-statement contradictions, and weak signals
+// are three different things and render as three different things. See
+// `EvidenceSection` below.
 
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
@@ -286,10 +291,7 @@ function TranscriptPanel({
           ))}
         </div>
       )}
-      <ContradictionsSection
-        contradictions={meeting.contradictions}
-        turns={meeting.turns}
-      />
+      <EvidenceSection contradictions={meeting.contradictions} turns={meeting.turns} />
     </Panel>
   );
 }
@@ -300,21 +302,103 @@ const TURN_KIND_LABEL: Record<TurnView["turn_kind"], string> = {
   opt_in: "opt-in",
 };
 
-// A contradiction event id is `turn:<turn_id>:claim:<i>` / `turn:<turn_id>:obs:<i>`
-// (mirrors meetings/transcript.py). Pull the turn id out so the link can name the
-// turn it references; greedy `.+` captures the whole id before the final suffix.
+// A contradiction event id is `turn:<turn_id>:<segment>:<i>` (mirrors
+// meetings/transcript.py). Pull the turn id out so the link can name the turn it
+// references; greedy `.+` captures the whole id before the final suffix.
+//
+// `whereabouts` is Task 16.7's roll-call self-placement segment, added to the
+// meeting layer after this helper was written and never taught to it — so every
+// flag with a roll-call endpoint (230 of the 830 committed flags) silently lost
+// its turn attribution and fell back to the bare subject id. Teaching the
+// segment here is what makes `link()` below able to say WHO said each half.
 function eventTurnId(eventId: string): string | null {
-  const match = /^turn:(.+):(?:claim|obs):\d+$/.exec(eventId);
+  const match = /^turn:(.+):(?:claim|obs|whereabouts):\d+$/.exec(eventId);
   return match ? match[1]! : null;
 }
 
-// Contradiction LINKS: weak = thin dashed ink / strong = bold solid fuchsia (from
-// `ContradictionView.weak` via `severity`), each paired with a label so it never
-// reads by hue alone (firewall). The link is made explicit by resolving
-// `event_a_id` / `event_b_id` to the two TurnCards they connect (speaker + kind),
-// so the reader can tell WHICH turns the flag links; it falls back to `subjects`
-// when an endpoint can't be resolved. Role-neutral throughout.
-function ContradictionsSection({
+// THE EVIDENCE TAXONOMY (Task 19.11; audits/audit-phase-19-triage.md §7 item 12,
+// §8 rows 10/14). Every flag used to render under one "Contradictions" heading
+// as `A ↔ B`, which made two different lies:
+//
+//   • a grounded `vent_sighting` is role PROOF, and its two event ids reference
+//     the SAME spoken observation by design (meetings/schemas.py), so it drew as
+//     `p-X ↔ p-X` — a "contradiction" between one statement and itself;
+//   • a one-tick interval artifact the detector itself stamped `[weak signal: …]`
+//     drew at the same weight as hard evidence (seed 47 ejected an innocent on
+//     nothing but weak-stamped flags).
+//
+// The DTO now carries `category`, so the three render as three things: proof
+// first (single source, no `↔`), then real cross-statement conflicts, then weak
+// signals — smaller, muted, last. The section never calls an unverified
+// statement pair "verified": each group states in one line what it actually is.
+type EvidenceCategory = ContradictionView["category"];
+
+// Presentation table — a `Record` over the category union, so a fourth category
+// added to the DTO is a compile error here rather than a flag that silently
+// renders as nothing. `role_proof` deliberately does NOT spend the reserved
+// fuchsia contradiction channel: proof is not a contradiction, which is the
+// whole point of the taxonomy, so it draws as authoritative solid ink.
+interface EvidenceGroupStyle {
+  heading: string;
+  caption: string;
+  chip: string;
+  stroke: string;
+  strokeWidth: number;
+  dash: string | undefined;
+  label: string;
+  row: string;
+}
+
+const EVIDENCE_STYLES: Record<EvidenceCategory, EvidenceGroupStyle> = {
+  role_proof: {
+    heading: "Role proof",
+    caption:
+      "grounded against the witness's own record — one source, not a conflict between two statements",
+    chip: "border-ink-900 text-ink-900",
+    stroke: tokens.ink[900],
+    strokeWidth: 3,
+    dash: undefined,
+    label: "proof",
+    row: "text-sm text-ink-900",
+  },
+  cross_statement: {
+    heading: "Contradictions",
+    caption:
+      "the detector says these two statements cannot both be true — never which one is false",
+    chip: "border-contradiction-strong text-contradiction-strong",
+    stroke: tokens.contradiction,
+    strokeWidth: 3,
+    dash: undefined,
+    label: "contradiction",
+    row: "text-sm text-ink-900",
+  },
+  weak_signal: {
+    heading: "Weak signals",
+    caption: "the detector stamped these weak (self-stated alibi, narrow window, endpoint tick)",
+    chip: "border-ink-300 text-ink-500",
+    stroke: tokens.ink[500],
+    strokeWidth: 1.6,
+    dash: "4 4",
+    label: "weak signal",
+    row: "text-xs text-ink-600",
+  },
+};
+
+// Proof first, weak last. Only categories PRESENT in the data get a group, and
+// the group list is derived from the data (not from a hand-kept order array), so
+// no flag can fall through the render.
+const EVIDENCE_RANK: Record<EvidenceCategory, number> = {
+  role_proof: 0,
+  cross_statement: 1,
+  weak_signal: 2,
+};
+
+// Evidence rows. The link is made explicit by resolving `event_a_id` /
+// `event_b_id` to the TurnCards they reference (speaker + kind), so the reader
+// can tell WHICH turns a flag connects; it falls back to `subjects` when an
+// endpoint can't be resolved. Role-neutral throughout, and never hue-only —
+// every group's stroke is paired with its label.
+function EvidenceSection({
   contradictions,
   turns,
 }: {
@@ -331,55 +415,108 @@ function ContradictionsSection({
       ? null
       : `${turn.speaker} (${TURN_KIND_LABEL[turn.turn_kind]})`;
   };
+  // `A ↔ B` is only honest when there really are two sides. Three shapes exist
+  // in the committed corpus and each gets its own reading — the whole point of
+  // this task is that a flag must never be drawn as a conflict with itself:
+  //
+  //   • SELF-LINKED (one artifact, cited twice — every grounded `vent_sighting`,
+  //     by design): "from p-1 (opening)".
+  //   • SAME TURN, two artifacts (a speaker's roll-call placement against their
+  //     own alibi claim — the `[weak signal: self-stated alibi pair]` class):
+  //     "within p-5 (opt-in)". Both endpoints resolve to the same label, so the
+  //     pair form would print the literal `p-5 (opt-in) ↔ p-5 (opt-in)`.
+  //   • TWO TURNS: the genuine pair, "p-3 (opening) ↔ p-5 (reply)".
+  //
+  // The subjects fallback (an endpoint that will not resolve) is de-duplicated
+  // for the same reason, so no input can drive a repeated id through the join.
+  const link = (c: ContradictionView): string | null => {
+    const a = endpoint(c.event_a_id);
+    const b = endpoint(c.event_b_id);
+    if (c.event_a_id === c.event_b_id) {
+      return a === null ? null : `from ${a}`;
+    }
+    const turnA = eventTurnId(c.event_a_id);
+    const turnB = eventTurnId(c.event_b_id);
+    if (turnA !== null && turnA === turnB) {
+      const one = a ?? b;
+      return one === null ? null : `within ${one}`;
+    }
+    if (a !== null && b !== null) {
+      return `${a} ↔ ${b}`;
+    }
+    const subjects = Array.from(new Set(c.subjects));
+    return subjects.length > 0 ? subjects.join(" ↔ ") : null;
+  };
+  const categories = Array.from(new Set(contradictions.map((c) => c.category))).sort(
+    (a, b) => EVIDENCE_RANK[a] - EVIDENCE_RANK[b],
+  );
 
   return (
     <div className="mt-4 border-t border-ink-100 pt-3">
       <h4 className="mb-2 font-mono text-2xs uppercase tracking-wide text-ink-500">
-        Contradictions ({contradictions.length})
+        Evidence ({contradictions.length})
       </h4>
-      <ul className="space-y-2">
-        {contradictions.map((c) => {
-          const strong = c.severity === "strong";
-          const a = endpoint(c.event_a_id);
-          const b = endpoint(c.event_b_id);
-          // Prefer the resolved turn endpoints; fall back to the subject ids.
-          const link =
-            a !== null && b !== null
-              ? `${a} ↔ ${b}`
-              : c.subjects.length > 0
-                ? c.subjects.join(" ↔ ")
-                : null;
+      <div className="space-y-3">
+        {categories.map((category) => {
+          const group = EVIDENCE_STYLES[category];
+          const rows = contradictions.filter((c) => c.category === category);
           return (
-            <li key={c.contradiction_id} className="flex flex-wrap items-center gap-2 text-sm">
-              <span
-                className={
-                  "inline-flex items-center gap-2 rounded-md border px-1.5 py-1 font-mono text-3xs font-bold uppercase tracking-wide " +
-                  (strong
-                    ? "border-contradiction-strong text-contradiction-strong"
-                    : "border-ink-200 text-ink-500")
-                }
-              >
-                <svg width="30" height="8" aria-hidden className="shrink-0">
-                  <line
-                    x1="1"
-                    y1="4"
-                    x2="29"
-                    y2="4"
-                    stroke={strong ? tokens.contradiction : tokens.ink[300]}
-                    strokeWidth={strong ? 3 : 1.6}
-                    strokeDasharray={strong ? undefined : "4 4"}
-                  />
-                </svg>
-                {strong ? "strong" : "weak"}
-              </span>
-              {link !== null && (
-                <span className="font-mono text-2xs font-bold text-ink-700">{link}</span>
-              )}
-              <span className="min-w-0 break-words text-ink-900">{c.description}</span>
-            </li>
+            <div key={category}>
+              <h5 className="font-mono text-3xs uppercase tracking-wide text-ink-500">
+                {group.heading} ({rows.length})
+              </h5>
+              <p className="mb-1.5 font-mono text-3xs italic text-ink-600">{group.caption}</p>
+              <ul className="space-y-2">
+                {rows.map((c) => {
+                  const endpoints = link(c);
+                  // A role-proof flag names the subject its evidence convicts;
+                  // spelling that out is what makes it read as proof rather than
+                  // as a link between two turns.
+                  const names =
+                    category === "role_proof" && c.subjects.length > 0
+                      ? `names ${c.subjects.join(", ")}`
+                      : null;
+                  return (
+                    <li
+                      key={c.contradiction_id}
+                      className={"flex flex-wrap items-center gap-2 " + group.row}
+                    >
+                      <span
+                        className={
+                          "inline-flex items-center gap-2 rounded-md border px-1.5 py-1 font-mono text-3xs font-bold uppercase tracking-wide " +
+                          group.chip
+                        }
+                      >
+                        <svg width="30" height="8" aria-hidden className="shrink-0">
+                          <line
+                            x1="1"
+                            y1="4"
+                            x2="29"
+                            y2="4"
+                            stroke={group.stroke}
+                            strokeWidth={group.strokeWidth}
+                            strokeDasharray={group.dash}
+                          />
+                        </svg>
+                        {group.label}
+                      </span>
+                      {endpoints !== null && (
+                        <span className="font-mono text-2xs font-bold text-ink-700">
+                          {endpoints}
+                        </span>
+                      )}
+                      {names !== null && (
+                        <span className="font-mono text-2xs font-bold text-ink-900">{names}</span>
+                      )}
+                      <span className="min-w-0 break-words">{c.description}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           );
         })}
-      </ul>
+      </div>
     </div>
   );
 }

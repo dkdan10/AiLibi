@@ -5,13 +5,18 @@
 // required states are covered:
 //
 //   • Chain      — the 05-meeting hero: a threaded accusation waterfall (indented
-//                  by reply_to), weak + strong contradiction links, ballots with
-//                  rewrite-marker chips, and a §4.6 EJECTED verdict.
+//                  by reply_to), one flag per Task-19.11 evidence category
+//                  (role proof / cross-statement contradiction / weak signal),
+//                  ballots with rewrite-marker chips, and a §4.6 EJECTED verdict.
 //   • SingleTurn — one opening turn, no replies (the un-threaded case).
 //   • Skipped    — a below-threshold gate (leader < 0.6) → SKIPPED, role-neutral.
 //   • Ejected    — a clean plurality + ≥ 0.6 ejection with the post-hoc reveal.
 //   • ChainAsAgentFog — the same hero under As-agent fog: correctness + the
 //                  post-hoc role reveal are suppressed (firewall).
+//   • GuardChip{Omniscient,AsAgentFogUnrevealed,AsAgentFogRevealed} — Task
+//                  19.11's role-disclosing `teammate_coerced` chip in all three
+//                  states: visible in Omniscient, hidden under As-agent fog with
+//                  the outcome reveal BOTH off and on.
 //
 // The §4.6 verdict in every fixture is the REAL rule (plurality + a leader ballot
 // ≥ 0.6; tie / SKIP → SKIP), NEVER the converge mock's "simple majority" copy.
@@ -162,11 +167,23 @@ const CHAIN_TURNS: TurnView[] = [
     turn_index: 4,
     speaker: "p-4",
     turn_kind: "opt_in",
-    free_text: "Body was in Reactor. That lines up with p-3, not p-5.",
-    observations: [{ type: "found_body", tick: 316, body_of: "p-7", room: "REACTOR" }],
+    free_text:
+      "Body was in Reactor. That lines up with p-3, not p-5 — and I watched p-5 drop into the Reactor vent.",
+    observations: [
+      { type: "found_body", tick: 316, body_of: "p-7", room: "REACTOR" },
+      // Task 19.11: the role-proving sighting. Grounded against p-4's own
+      // vent-witness record, it mints the self-linked `vent_sighting` flag
+      // below — the fixture's ROLE-PROOF exhibit.
+      { type: "saw_vent", tick: 314, subject: "p-5", room: "REACTOR" },
+    ],
   }),
 ];
 
+// One flag per Task-19.11 evidence category, so the hero covers the whole
+// taxonomy: role proof renders as PROOF from a single source (never `p-X ↔ p-X`
+// — its two event ids reference the SAME observation by design), the
+// cross-statement conflict keeps the fuchsia contradiction channel, and the
+// weak-stamped flag is subordinated (smaller, muted, listed last).
 const CHAIN_CONTRADICTIONS: ContradictionView[] = [
   {
     contradiction_id: "c-strong",
@@ -177,6 +194,7 @@ const CHAIN_CONTRADICTIONS: ContradictionView[] = [
     description: "p-5's Engineering alibi conflicts with p-3's Reactor sighting.",
     weak: false,
     severity: "strong",
+    category: "cross_statement",
   },
   {
     contradiction_id: "c-weak",
@@ -187,13 +205,47 @@ const CHAIN_CONTRADICTIONS: ContradictionView[] = [
     description: "The redirect to p-8 is unsupported by any new evidence.",
     weak: true,
     severity: "weak",
+    category: "weak_signal",
+  },
+  {
+    contradiction_id: "c-proof",
+    kind: "vent_sighting",
+    // SELF-LINKED on purpose: both ids reference p-4's one spoken vent
+    // observation (meetings/schemas.py:442-456), which is why rendering it as
+    // `A ↔ B` produced the `p-4 (opt-in) ↔ p-4 (opt-in)` nonsense this task fixes.
+    event_a_id: "turn:t-5:obs:1",
+    event_b_id: "turn:t-5:obs:1",
+    subjects: ["p-5"],
+    description:
+      "p-4 witnessed p-5 vent in REACTOR at tick 314; venting is impostor-only, and the spoken observation matches the witness's own record.",
+    weak: false,
+    severity: "strong",
+    category: "role_proof",
   },
 ];
 
 const CHAIN_BALLOTS: BallotView[] = [
   ballot("p-0", "p-5", 0.72, "The Reactor sighting plus the body location point at p-5."),
-  ballot("p-1", "SKIP", 0.3, "Not confident enough to eject anyone yet."),
-  ballot("p-2", "p-8", 0.4, "Labs is suspicious.", ["no new evidence"]),
+  ballot("p-1", "SKIP", 0.3, "Not confident enough to eject anyone yet.", [
+    "no new evidence",
+  ]),
+  // Task 19.11: the ROLE-DISCLOSING guard ballot, in the shape Task 19.15 gives
+  // it (no COMMITTED replay carries this sentinel — 19.15 post-dates them all).
+  // p-2 and p-5 are the fixture's impostor pair, so the teammate firewall guard
+  // (meetings.manager, Task 7.12) coerced p-2's ballot to SKIP. TWO things then
+  // announce that pairing, and both are Omniscient-only: the `teammate_coerced`
+  // chip, and the rationale BODY — Task 19.15 replaces the model's text with
+  // this exact sentinel sentence (`TEAMMATE_COERCED_VOTE_RATIONALE`), whose only
+  // writer is that guard, so it appears on coerced ballots and nowhere else.
+  // The two fog stories below pin that BOTH stay hidden under As-agent fog with
+  // the outcome reveal OFF and ON.
+  ballot(
+    "p-2",
+    "SKIP",
+    0.4,
+    "[rationale redacted by the vote guard; recorded reason: no confident read this round]",
+    ["teammate_coerced"],
+  ),
   // Task 16.7.1: a firsthand vote — the voter cites its own episodic
   // observation, giving the "cites" chip visual story coverage.
   ballot("p-3", "p-5", 0.81, "I saw them go to Reactor myself.", [], "p-3:312:0"),
@@ -363,10 +415,15 @@ function MeetingStoryHarness({
   replay,
   meetingId,
   perspective,
+  // Task 19.10's outcome reveal, seeded explicitly so the Task-19.11 firewall
+  // stories can pin that the role-disclosing guard chip is gated by PERSPECTIVE
+  // and is unaffected by reveal in either state.
+  revealOutcome = false,
 }: {
   replay: ReplayView;
   meetingId: string;
   perspective: Perspective;
+  revealOutcome?: boolean;
 }) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => {
@@ -377,11 +434,12 @@ function MeetingStoryHarness({
       isPlaying: false,
       selectedMeetingId: meetingId,
       perspective,
+      revealOutcome,
       view: "workspace",
       highlightedSighting: null,
     });
     setReady(true);
-  }, [replay, meetingId, perspective]);
+  }, [replay, meetingId, perspective, revealOutcome]);
   return <div className="min-h-[820px] bg-paper-1">{ready ? <MeetingView /> : null}</div>;
 }
 
@@ -410,13 +468,54 @@ export const Ejected: Story = {
   args: { replay: meetingFixture(EJECTED_MEETING), meetingId: "m-eject", perspective: OMNISCIENT },
 };
 
-// The hero under As-agent fog: correctness + the post-hoc role reveal vanish
-// (firewall — those read role ground truth). The public transcript / ballots /
-// §4.6 readout remain.
+// The hero under As-agent fog: correctness, the post-hoc role reveal, and the
+// role-disclosing `teammate_coerced` guard chip all vanish (firewall — those read
+// role ground truth). The public transcript / ballots / §4.6 readout remain.
 export const ChainAsAgentFog: Story = {
   args: {
     replay: meetingFixture(CHAIN_MEETING),
     meetingId: "m-chain",
     perspective: { mode: "agent", agentId: "p-3" },
+    revealOutcome: false,
+  },
+};
+
+// ── Task 19.11: the guard-chip perspective gate, pinned in all three states ──
+//
+// `teammate_coerced` in `ballot.rewrite_reasons` discloses the impostor PAIRING
+// (the guard only fires on a ballot that targeted a fellow impostor). It is
+// gated by PERSPECTIVE and nothing else: reveal governs OUTCOME information,
+// perspective governs what the current frame may know, so a revealed ending must
+// not expose the pairing through fog. p-2's SKIP ballot carries the chip.
+
+// Omniscient — the chip renders (the spectator is the GM).
+export const GuardChipOmniscient: Story = {
+  args: {
+    replay: meetingFixture(CHAIN_MEETING),
+    meetingId: "m-chain",
+    perspective: OMNISCIENT,
+    revealOutcome: false,
+  },
+};
+
+// As-agent fog, outcome NOT revealed — the chip is suppressed (silently: a
+// "hidden" placeholder would leak the very fact being withheld).
+export const GuardChipAsAgentFogUnrevealed: Story = {
+  args: {
+    replay: meetingFixture(CHAIN_MEETING),
+    meetingId: "m-chain",
+    perspective: { mode: "agent", agentId: "p-3" },
+    revealOutcome: false,
+  },
+};
+
+// As-agent fog, outcome REVEALED — still suppressed. Revealing who won says
+// nothing about who was partnered with whom in this frame.
+export const GuardChipAsAgentFogRevealed: Story = {
+  args: {
+    replay: meetingFixture(CHAIN_MEETING),
+    meetingId: "m-chain",
+    perspective: { mode: "agent", agentId: "p-3" },
+    revealOutcome: true,
   },
 };

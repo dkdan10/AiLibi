@@ -26,7 +26,10 @@ The three discriminated-union aliases (``TickEventView``,
 module symbols but are intentionally excluded from ``__all__`` / the DTO
 inventory: they are compositions of already-inventoried DTOs, not standalone
 DTOs. The leak test's ``EXPECTED_DTOS`` fixture therefore lists only the
-concrete models.
+concrete models. The Task-19.11 evidence taxonomy (``EvidenceCategory``,
+``classify_evidence``, ``UnclassifiableEvidenceError`` and the two kind sets)
+is public and importable for the same reason and excluded for the same one:
+it is a derived classification OVER a DTO field, not a DTO.
 """
 
 from __future__ import annotations
@@ -611,6 +614,136 @@ class TurnView(_FrozenView):
     fabricated_opening: bool
 
 
+# ---------------------------------------------------------------------------
+# Evidence taxonomy (Task 19.11; audits/audit-phase-19-triage.md §7 item 12)
+# ---------------------------------------------------------------------------
+
+
+EvidenceCategory: TypeAlias = Literal["role_proof", "cross_statement", "weak_signal"]
+"""What KIND of evidence a flagged :class:`ContradictionView` actually is.
+
+The meeting layer carries every flag through ONE shape
+(``meetings.schemas.ContradictionRef``) and the spectator surface used to
+render them all the same way — so a grounded vent sighting, which is role
+PROOF, arrived under a "Contradictions" heading as ``p-X ↔ p-X`` (its two
+event ids reference the SAME spoken observation by design,
+``meetings/schemas.py`` / ``meetings/transcript.py``), and a one-tick
+interval artifact stamped ``[weak signal: …]`` drew with the same visual
+weight as hard evidence. This alias is the derived classification that keeps
+those three things apart:
+
+* ``role_proof`` — a grounded ``vent_sighting`` (Task 15.4): a spoken
+  observation matched against the speaker's OWN typed vent-witness record.
+  Vents are impostor-only, so the flag names a role, not a conflict. It is
+  self-linked (one event, cited twice) and never carries a weak marker.
+* ``cross_statement`` — a conflict between two DIFFERENT statements
+  (``alibi_conflict`` / ``alibi_vs_sighting`` / ``alibi_vs_physical``). The
+  flag says they cannot both be true, never which one is the lie. Usually both
+  sides are unverified model-authored testimony — but NOT always, and the
+  category deliberately does not claim otherwise: 37 of the 42 committed
+  ``alibi_vs_physical`` flags are Task 18.9's GROUNDED vent-placement arm,
+  where one side is a typed ``VentWitnessRecord`` (engine truth) rather than
+  testimony. Those are arguably role proof; the contract's rule table scopes
+  ROLE-PROOF to ``vent_sighting`` / self-linked, so they classify here. See
+  the PR's Findings section — widening the rule would move 37 flags and must
+  be decided together with Task 19.14's cross-pinned eval-side twin.
+* ``weak_signal`` — a cross-statement flag the detector itself stamped
+  ``[weak signal: …]`` (self-stated alibi pair, narrow window, endpoint-tick
+  overlap). Belief Rule 2 already down-weights these; the spectator surface
+  subordinates them to match.
+
+Derived at the DTO layer only: recorded bytes and the ``meetings/`` schemas
+are frozen, so this is classification, not schema migration. Task 19.14
+implements the eval-side twin and the two are cross-pinned (same counts on
+the same bytes), which is why :func:`classify_evidence` is a pure function of
+primitives rather than of any DTO.
+"""
+
+
+# The role-proving kinds: a flag of this kind is proof regardless of how its
+# event ids sit. Today exactly ``vent_sighting`` (Task 15.4's grounding
+# chokepoint is the precision gate — an ungrounded spoken vent claim raises no
+# flag at all, so a flag of this kind can only name a genuine venter).
+ROLE_PROOF_KINDS: Final[frozenset[str]] = frozenset({"vent_sighting"})
+
+# The cross-statement kinds: two DIFFERENT public statements that cannot both
+# be true. Whether such a flag is ``cross_statement`` or ``weak_signal``
+# depends on the detector's own weak stamp, not on the kind.
+CROSS_STATEMENT_KINDS: Final[frozenset[str]] = frozenset(
+    {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
+)
+
+
+class UnclassifiableEvidenceError(ValueError):
+    """A recorded flag matches no :data:`EvidenceCategory` rule.
+
+    Raised — never defaulted — by :func:`classify_evidence`. The taxonomy must
+    be TOTAL over every committed byte: a new ``ContradictionRef.kind`` added
+    in ``meetings/`` without a corresponding rule here is a finding to record,
+    not a bucket to widen ("no silent fallbacks", AGENTS.md).
+    """
+
+
+def classify_evidence(
+    *,
+    kind: str,
+    event_a_id: str,
+    event_b_id: str,
+    weak: bool,
+) -> EvidenceCategory:
+    """Classify one recorded flag into its :data:`EvidenceCategory`.
+
+    The rules — a table, deliberately trivial to port (Task 19.14 re-implements
+    it eval-side and the two are cross-pinned on the same bytes):
+
+    ==========================================  ==================
+    condition                                   category
+    ==========================================  ==================
+    ``kind`` is not a KNOWN kind                *raise*
+    ``kind`` in :data:`ROLE_PROOF_KINDS`        ``role_proof``
+    ``event_a_id == event_b_id`` (self-linked)  ``role_proof``
+    ``weak`` (the ``[weak signal: …]`` stamp)   ``weak_signal``
+    otherwise                                   ``cross_statement``
+    ==========================================  ==================
+
+    The kind check comes FIRST and gates everything. Order matters here: with
+    the weak rule ahead of it, an unrecognised kind that happened to carry a
+    weak stamp would quietly bucket as ``weak_signal`` instead of raising —
+    a silent default in the one place the contract says there must not be one.
+    Once the kind is known, the remaining rows cannot fall through, so
+    ``cross_statement`` is the exhaustive tail rather than a fourth guard.
+
+    Self-linkage is a rule of its own rather than a property of the kind: a
+    flag whose two event ids reference the SAME artifact is not a conflict
+    between two statements by construction, whatever it is called. On the
+    committed corpus the two role-proof rules agree exactly (every self-linked
+    flag is a ``vent_sighting`` and vice versa — pinned corpus-wide in
+    ``tests/api/test_evidence_taxonomy.py``); keeping both means a known kind
+    that starts emitting self-linked flags cannot silently render as a
+    contradiction, while a genuinely NEW kind still fails loud above.
+
+    ``weak`` is the caller's, and must come from
+    ``meetings.transcript.is_weak_contradiction`` (imported, never
+    re-implemented — the same discipline ``ContradictionView.weak`` follows),
+    so the marker predicate stays single-sourced beside the marker writer.
+
+    :raises UnclassifiableEvidenceError: on any kind the table does not cover.
+    """
+
+    if kind not in ROLE_PROOF_KINDS and kind not in CROSS_STATEMENT_KINDS:
+        raise UnclassifiableEvidenceError(
+            f"unclassifiable evidence: kind={kind!r} "
+            f"(event_a_id={event_a_id!r}, event_b_id={event_b_id!r}, "
+            f"weak={weak!r}); the evidence taxonomy has no rule for it — "
+            "record it as a finding rather than widening a bucket"
+        )
+    if kind in ROLE_PROOF_KINDS or event_a_id == event_b_id:
+        return "role_proof"
+    if weak:
+        return "weak_signal"
+    return "cross_statement"
+
+
 class ContradictionView(_FrozenView):
     """Shadows ``meetings.schemas.ContradictionRef`` (a flagged contradiction).
 
@@ -626,7 +759,18 @@ class ContradictionView(_FrozenView):
 
     Task 15.4.1: the ``vent_sighting`` role-proving kind (Task 15.4) is
     mirrored here — it is always STRONG (grounding is the precision gate, so
-    it carries no weak marker) and renders like the other kinds.
+    it carries no weak marker). It used to RENDER like the other kinds too;
+    ``category`` below is what stopped that.
+
+    Task 19.11: ``category`` derives the :data:`EvidenceCategory` taxonomy at
+    load (:func:`classify_evidence`), so the spectator surface can render
+    proof as proof instead of as a self-linked ``p-X ↔ p-X`` "contradiction",
+    and subordinate weak-stamped flags instead of drawing them at hard-evidence
+    weight (audits/audit-phase-19-triage.md §7 item 12; §8 rows 10, 14). It is
+    ADDITIVE and derived: ``kind`` / ``event_a_id`` / ``event_b_id`` /
+    ``description`` keep their recorded meanings, and every committed
+    recording — including those made before ``vent_sighting`` existed —
+    classifies without a schema migration.
     """
 
     contradiction_id: str
@@ -639,6 +783,7 @@ class ContradictionView(_FrozenView):
     description: str
     weak: bool
     severity: Literal["weak", "strong"]
+    category: EvidenceCategory
 
 
 class BallotView(_FrozenView):
