@@ -66,10 +66,26 @@ consumer:
   accepts any :class:`~orchestrator.game.MeetingRunner` factory (the composed
   runner included) — not a surrogate-only arm at all.
 
-Both surrogate-only exposures are DIAGNOSTIC — they measure the surrogate path,
-they do not select a champion (final scoring always uses a real meeting path;
-``eval/balance_eval.py``'s reporting rule) — which is what keeps them consistent
-with the report's standalone-DECISION NO-GO. Nothing here was force-deleted.
+Both surrogate-only exposures are DIAGNOSTIC, but they are not diagnostic in the
+same way, and the difference matters for the NO-GO:
+
+* the ``:1763`` column SCORES an already-chosen candidate
+  (``_score_eval_pass(candidate.policy, ...)``) — it selects nothing;
+* the ``:2072`` Goodhart arm DOES select. ``run_goodhart_probe`` runs a full
+  :func:`~training.bakeoff.es.evolve` against the referee score and evaluates
+  ``result.champion`` (``training/bakeoff/goodhart.py:879-884`` / ``:913``), so a
+  PROBE champion is selected on the surrogate path. That is the point of the
+  probe — it is the adversarial attack that asks whether the referee is gameable,
+  and it has to optimize to answer.
+
+What the surrogate never does is select an ADOPTED entrant: a probe champion is
+an artifact of the attack, and the bake-off's adopted numbers are rescored on a
+real meeting path (``eval/balance_eval.py``'s reporting rule). That narrower
+statement — not "the surrogate never selects a champion" — is what squares these
+arms with the standalone-DECISION NO-GO in
+``training/reports/report-ballot-surrogate.md`` §5.
+
+Nothing here was force-deleted.
 """
 
 from __future__ import annotations

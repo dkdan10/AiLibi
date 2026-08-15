@@ -58,8 +58,8 @@ engine state; it returns a `MeetingResult` the orchestrator applies.
 **`llm/`** — the provider-neutral surface: `client.py`'s `LLMClient` Protocol,
 four adapters implementing it (`fake_provider.py` — deterministic, offline, CI's
 default; `provider.py` for Anthropic; `ollama_client.py`;
-`featherless_client.py`) selected by `AILIBI_LLM_PROVIDER`, and `budget.py` /
-`budgeted_client.py` layered above the Protocol. Featherless is the
+`featherless_client.py`) selected by `AILIBI_LLM_PROVIDER`, and `cache.py` /
+`budget.py` / `budgeted_client.py` layered above the Protocol. Featherless is the
 canonical eval provider since Phase 14 (`Qwen/Qwen3.6-27B`, locked 2026-07-12 at
 Task 16.2, non-thinking). A true leaf — it imports nothing else in the repo; the
 detail is in `llm/README.md`.
