@@ -35,6 +35,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { apiUrl } from "../api/client";
 import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
 import type {
@@ -112,7 +113,10 @@ function highlightsHref(set: string, bucket: ScoreBucket): string {
 
 // ---------------------------------------------------------------------------
 // Rubric fetch state (the `/eval/rubric` surface; staleness-guarded per set).
-// `absent` is the 4p1i-default 404 (no rubric → first-class empty histogram).
+// `absent` is the 404 an UNSCORED set answers with (no rubric → first-class
+// empty histogram). Since Task 19.9 the default set is the curated 9p2i, which
+// ships a rubric, so the 404 is now reached only by an explicit `?set=` onto an
+// unscored set — 4p1i, the fast fixture, and both ml_corpus sets.
 // ---------------------------------------------------------------------------
 
 export type RubricState =
@@ -738,15 +742,22 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
       {rubric.status === "loading" ? (
         <p className="text-sm text-ink-500">Loading the interestingness rubric…</p>
       ) : rubric.status === "absent" ? (
+        // Post-flip copy (Task 19.13, sweeping what Task 19.9's default flip
+        // falsified). This panel used to say the DEFAULT-served set was 4p1i and
+        // that its games were "mostly zero-meeting" — both wrong now: the default
+        // is the curated 9p2i, which ships a rubric, and 4p1i's games are mostly
+        // ONE-meeting (39 of 50 hold exactly one, 11 hold none). So this state is
+        // reached by an explicit switch onto an unscored set, and it says which.
         <div className="rounded-lg border border-ink-200 bg-paper-1 px-4 py-6 text-center shadow-data">
           <p className="font-semibold text-ink-900">No interestingness rubric.</p>
           <p className="mt-1 text-sm text-ink-500">
-            The default-served 4p1i set has no rubric (its games are mostly
-            zero-meeting). Serve the 9p2i set, or run{" "}
+            The selected set ships no rubric — expected for 4p1i, the fast
+            technical fixture (median 12 ticks, at most one meeting per game).
+            Switch back to the default 9p2i set, which ships one, or run{" "}
             <code className="font-mono text-xs">
               experiments/lab/rubric_score.py
-            </code>
-            , to populate this histogram.
+            </code>{" "}
+            over this set to populate the histogram.
           </p>
         </div>
       ) : rubric.status === "error" ? (
@@ -981,16 +992,6 @@ export function TournamentDashboardView({
 // Connected dashboard — store (report) + the `/eval/rubric` fetch (histogram)
 // ---------------------------------------------------------------------------
 
-const RUBRIC_ENDPOINT = "/api/eval/rubric";
-
-// Build the per-set rubric URL (Task 12.12): append `?set=` for the active set so
-// the histogram reflects the selection; omit it (server default) when unset.
-function rubricUrl(set: string | null): string {
-  return set === null || set === ""
-    ? RUBRIC_ENDPOINT
-    : `${RUBRIC_ENDPOINT}?set=${encodeURIComponent(set)}`;
-}
-
 export function TournamentDashboard() {
   const report = useTournamentStore((s) => s.report);
   const isLoading = useTournamentStore((s) => s.isLoading);
@@ -1006,9 +1007,12 @@ export function TournamentDashboard() {
   const loadSets = useReplayStore((s) => s.loadSets);
 
   // The rubric is fetched here (not via the tournament store, which is frozen to
-  // the report) — a load-time projection served per set, 404 when absent (the
-  // 4p1i default). `reloadNonce` re-triggers the fetch on Refresh; `seedSet`
-  // re-triggers it on a live set switch.
+  // the report) — a load-time projection served per set, 404 when the SELECTED
+  // set ships none (4p1i and the ml_corpus sets; not the 9p2i default, which
+  // ships one since Task 19.9's flip). `reloadNonce` re-triggers the fetch on
+  // Refresh; `seedSet` re-triggers it on a live set switch. The URL comes from
+  // `api/client`'s `apiUrl` seam (Task 19.13), so this panel reads the live API
+  // in a normal build and the pre-baked JSON in the static demo bundle.
   const [rubric, setRubric] = useState<RubricState>({ status: "loading" });
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -1021,7 +1025,9 @@ export function TournamentDashboard() {
   useEffect(() => {
     let cancelled = false;
     setRubric({ status: "loading" });
-    fetch(rubricUrl(seedSet), { headers: { Accept: "application/json" } })
+    fetch(apiUrl("/eval/rubric", seedSet), {
+      headers: { Accept: "application/json" },
+    })
       .then(async (response) => {
         if (cancelled) {
           return;

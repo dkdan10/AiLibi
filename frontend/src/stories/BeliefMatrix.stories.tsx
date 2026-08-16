@@ -181,6 +181,7 @@ export const ErrorLayer: Story = { args: { layer: "error" } };
 // disable, leaving only the agent-neutral Belief layer.
 export const Fog: Story = { args: { omniscient: false, layer: "belief" } };
 
-// A zero-meeting game (the default-served 4p1i set is mostly zero-meeting): the
-// first-class empty state, not a blank panel.
+// A zero-meeting game — 11 of 4p1i's 50 games, and the reason that fast fixture
+// is no longer the default (Task 19.9 flipped it to the curated 9p2i, where every
+// game has meetings): the first-class empty state, not a blank panel.
 export const Empty: Story = { args: { frames: [] } };

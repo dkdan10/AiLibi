@@ -68,7 +68,9 @@ const WIN_SHAPES = [
   "stopwatch-some-eject",
 ];
 
-// The 4p1i browser: replays with NO rubric (unscored cards), the common default.
+// The 4p1i browser: replays with NO rubric (unscored cards). Reached by an
+// explicit set switch, not by default — Task 19.9 flipped the served default to
+// the curated 9p2i, which ships a rubric.
 const UNSCORED_CARDS: HighlightCardData[] = [
   card(0, "CREWMATES", null, 510),
   card(1, "CREWMATES", null, 488),

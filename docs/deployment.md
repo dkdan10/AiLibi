@@ -5,7 +5,13 @@ hard prerequisites for ever exposing it beyond the local machine. It is the
 durable note for a future deployer; read it before changing any network bind.
 
 Anchors: audit C-C-1, C-C-2, C-C-4; DESIGN.md §1.1 (component diagram, Spectator
-API as a *privileged view*), §7 (tech stack — FastAPI, docker-compose dev infra).
+API as a *privileged view*), §7 (tech stack — FastAPI, docker-compose dev infra);
+audits/audit-phase-19-triage.md §7 item 14 (the shippable-artifact gap Task 19.13
+closed).
+
+**The one-line summary.** There is exactly one sanctioned way to put AiLibi in
+front of someone who is not the local operator: build the **static demo bundle**
+(below) and serve that. The live API is never it.
 
 ## The API is an unauthenticated GM view
 
@@ -48,6 +54,52 @@ highest-urgency operational finding).
   (empty by default). Compose does not propagate host/`.env` variables into a
   container automatically, so this passthrough is what makes the allowlist below
   actually configurable on the compose path; set it on the host or in `.env`.
+
+## The static demo bundle — the ONLY sanctioned public artifact
+
+The rule above ("safe only when unreachable by anyone but the local operator")
+used to leave the project with no way at all to show the spectator to anyone.
+`scripts/build_demo_bundle.py` is the answer, and it resolves the tension by
+removing the API rather than by protecting it:
+
+```bash
+uv run python scripts/build_demo_bundle.py            # → frontend/dist/demo-bundle
+python -m http.server -d frontend/dist/demo-bundle 8080
+```
+
+The output is one directory — `index.html`, its asset chunks, and a `data/`
+tree — and **it contains no server**. `frontend/src/api/client.ts` carries a
+data-source seam: built with `VITE_AILIBI_STATIC_DATA=1`, every call that would
+have gone to `/api/<path>?set=<set>` reads the file `data/<set>/<path>.json`
+instead. Any static file server, object store, or CDN is therefore a sufficient
+host, and there is no process to bind, no port to expose, and nothing to
+authenticate.
+
+**Why this is safe to publish when the API is not.** The bundle is a set of
+pre-rendered ANSWERS, not a query surface. It ships:
+
+* the hand-curated featured replays only (`FEATURED_GAMES` in
+  `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
+* the per-set rubric rows for exactly those games;
+* no `tournament-eval-report.json` (the 9p2i one is 29 MB — that is the corpus,
+  not a demo), so the Dashboard tab renders its first-class "no report" state.
+
+It carries the same **post-game GM view** of those specific games that the local
+spectator shows — roles, kill attribution, vent usage — because that is what the
+spectator IS (`docs/architecture.md`, `api/` — privileged by design). Publishing
+the bundle therefore publishes the recorded outcomes of the curated games, which
+are already committed to this repository in `replays/samples/`. What it does NOT
+publish is a live, unauthenticated, unbounded-work endpoint over whatever the
+host happens to have on disk. That distinction — a fixed set of already-public
+bytes vs. an open query surface into the operator's filesystem — is the whole
+reason one of these is publishable and the other is not.
+
+**What the bundle does not change.** Nothing above. The live API's posture is
+untouched by this document's addition: no `StaticFiles` mount was added to
+`api/`, the compose publish stays loopback-scoped, and the prohibitions in the
+previous section stand exactly as written. If you find yourself wanting to expose
+the API because the bundle is missing something, the answer is to bake more into
+the bundle — not to move the bind.
 
 ## CORS posture (audit C-C-2)
 

@@ -14,13 +14,17 @@
 // MeetingView modal open (selecting a meeting does). The step control inside
 // walks the meetings locally.
 //
-// Data path note (scope): the store + api/client are NOT in this task's scope, so
-// the BeliefFrameView[] is fetched here directly (with the store's
-// in-flight-replay guard mirrored) rather than via a new store action — the shape
-// is exactly the served DTO, so a later store-backed fetch is a drop-in swap.
+// Data path note (scope): the store is NOT in this task's scope, so the
+// BeliefFrameView[] is fetched here directly (with the store's in-flight-replay
+// guard mirrored) rather than via a new store action — the shape is exactly the
+// served DTO, so a later store-backed fetch is a drop-in swap. The URL, however,
+// is NOT hand-built: it goes through `api/client`'s `apiUrl` seam (Task 19.13) so
+// this panel follows the same data source as every other call — the live API in a
+// normal build, the pre-baked JSON in the static demo bundle.
 
 import { useEffect, useRef, useState } from "react";
 
+import { apiUrl, pathSegment } from "../api/client";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { BeliefFrameView } from "../types/api";
@@ -31,13 +35,10 @@ async function fetchBeliefFrames(
   set: string | null,
 ): Promise<BeliefFrameView[]> {
   // Thread the active set (Task 12.12): both committed sets reuse headless-seed-*
-  // ids, so omitting ?set= would resolve the server default (4p1i) and show the
-  // wrong set's belief frames (or an empty state) against, e.g., a 9p2i replay.
-  const base = `/api/replays/${encodeURIComponent(gameId)}/beliefs`;
-  const url =
-    set === null || set === ""
-      ? base
-      : `${base}?set=${encodeURIComponent(set)}`;
+  // ids, so omitting the set would fall back to the default — 9p2i since Task
+  // 19.9 flipped it off the 4p1i fixture — and show the wrong set's belief frames
+  // (or an empty state) against, e.g., a 4p1i replay.
+  const url = apiUrl(`/replays/${pathSegment(gameId)}/beliefs`, set);
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
   });

@@ -2,6 +2,40 @@
 
 > An Among-Us-style social-deduction simulator being built almost entirely by AI coding agents under a strict review protocol — and a working example of how to keep architecture coherent across many agent-authored pull requests.
 
+![The AiLibi spectator playing the curated 9p2i featured replay: the featured strip, the map, an autoplay that stops itself at a meeting, the ballots, and the finale revealed on purpose](docs/media/spectator-journey.gif)
+
+*15 seconds, no cuts: open the hand-picked featured game → play → the transport **stops itself** when a meeting starts (a whole deliberation happens inside one tick) → read the ballots → the ending, which stays hidden until you ask for it. Recorded against the shippable static bundle, so what you are watching is the artifact, not a dev server.*
+
+[![The spectator mid-meeting: the reactive accusation chain, each agent's testimony with the observations backing it, and every ballot with its confidence and its reasoning](docs/media/spectator-meeting.png)](docs/media/spectator-meeting.png)
+
+*Inside one meeting (seed 2, tick 7). Left: the reactive accusation chain — p-1 accuses p-4, the accused answers next — with each claim's structured observations underneath it. Right: the ballots, each with its confidence and the sentence the agent voted on. Right rail: any agent's memory and beliefs at that moment. The two impostors at this table know each other — they are told at game start; the seven crewmates are the ones reasoning in the dark, and the spectator sees all of it.*
+
+### Reproduce the three claims above
+
+```bash
+bash scripts/setup_env.sh   # one-time: uv sync + npm ci
+
+# 1. Determinism — the same seed twice, byte-identical replay JSONL.
+#    (A fresh dir each time: the recorder refuses to overwrite a replay path,
+#    deliberately — re-using one silently doubled per-seed files in Phase 4.)
+d=$(mktemp -d)
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl" &&
+  uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl" &&
+  diff -q "$d/r1.jsonl" "$d/r2.jsonl"
+
+# 2. Replay integrity — every committed sample still reconstructs through the
+#    engine's per-tick state hashes. Free, offline, no API key.
+bash scripts/verify_samples.sh
+
+# 3. The spectator above, on the 100 committed replays (opens localhost:5173).
+bash scripts/run_spectator.sh
+```
+
+Or build the demo you just watched — a static directory with no API process in
+it, playable from any file server:
+`uv run python scripts/build_demo_bundle.py && python -m http.server -d frontend/dist/demo-bundle 8080`
+([docs/deployment.md](docs/deployment.md)).
+
 ---
 
 ## What this is
@@ -81,10 +115,11 @@ The single strongest demonstration of the determinism claim is that anyone can r
 ```bash
 bash scripts/setup_env.sh
 
-uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r1.jsonl
-uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r2.jsonl
+d=$(mktemp -d)   # the recorder refuses to overwrite an existing replay path
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl"
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl"
 
-diff -q /tmp/r1.jsonl /tmp/r2.jsonl   # files are identical
+diff -q "$d/r1.jsonl" "$d/r2.jsonl"   # files are identical
 ```
 
 The replay JSONL records per-tick actions and a SHA-256 hash of the full engine state. Identical seed + identical config + identical agent factory always produces identical bytes under the deterministic fake provider (the default, and what the demo above runs); with a real provider, fresh generation is non-deterministic and it is the *recording* that reproduces byte-identically — the scopes below state the exact claims. The fake-provider property is also how CI proves the engine is pure: `eval/determinism_test.py` runs every scripted fixture twice and compares the entire JSONL output.
@@ -108,6 +143,8 @@ bash scripts/run_spectator.sh
 ```
 
 That starts the API + frontend, waits until both are healthy, and opens `http://localhost:5173` in your browser. Ctrl-C stops both. (One-time prerequisite: `bash scripts/setup_env.sh`. macOS + Linux only.)
+
+The spectator API is an unauthenticated game-master view — roles, kill attribution, vent state — so it is loopback-only and stays that way. To *share* the viewer instead, build the static demo bundle: `uv run python scripts/build_demo_bundle.py` writes one directory (the built frontend plus pre-baked JSON for the featured replays only) that plays with no API process at all, from any static file server. That bundle is the only sanctioned public artifact; the trust boundary and what the bundle does and does not carry are in [docs/deployment.md](docs/deployment.md).
 
 A fresh clone ships with 100 sample replays under `replays/samples/` — two full 50-game tournaments, one per roster preset (`4p1i/` and `9p2i/`), regenerated 2026-07-20 against the Featherless provider (`Qwen/Qwen3.6-27B` — the Task-16.2 locked model, non-thinking — on the `qwen3_6_27b` `v3` prompt set, model and prompt registry both unmoved at this record). They are the Task-18.12 adopting record for baseline 6: the meeting layer graduated **CREW-ONLY** — the roll-call round, the endpoint-band whereabouts exemption, the vent-placement contradiction variant (flag-minting plus the absent-set widening), and the absence prior all made unconditional beside the nine levers already retired, while the impostor-answer arm (`impostor_roll_call`) did not ship, so the record was made in a bare environment with that toggle OFF ([audits/audit-phase-18-baseline-6.md](audits/audit-phase-18-baseline-6.md)). Each set's `MANIFEST.md` is the canonical provenance record — its `flags` column stamps all 13 graduated levers on every row; the recorded impostor win rates are 34% (4p1i) and 30% (9p2i). These sets are the ladder tip: baseline 6 is where the substrate stands, and Phase 19 does not move it. Once the UI is up, pick a roster set and any replay to scrub through ticks, click meeting markers to read transcripts with ballots and contradiction flags, and select an agent to see their memory snapshot and the suspicion heatmap at that moment. Any replays you generate locally into `replays/` (e.g. via `scripts/run_game.py`) override the bundled samples; the API logs which directory it picked at startup.
 
@@ -177,8 +214,9 @@ bash scripts/setup_env.sh
 # generate_prompts --check, mypy (strict, via config), pytest, + frontend tsc + build
 bash scripts/check.sh
 
-# run a single deterministic game
-uv run python scripts/run_game.py --seed 0 --replay-path /tmp/replay.jsonl
+# run a single deterministic game (a path that does not exist yet — the
+# recorder refuses to overwrite one, so re-runs need a fresh --replay-path)
+uv run python scripts/run_game.py --seed 0 --replay-path "$(mktemp -d)/replay.jsonl"
 
 # run a tournament: replays + aggregate eval report into one dir
 uv run python scripts/run_tournament.py --num-games 50 --output-dir replays

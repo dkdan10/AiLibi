@@ -13,7 +13,20 @@ import { defineConfig } from "vite";
 // out of the app chunk; the lazy boundaries push Pixi behind the map route so it
 // is fetched only when a replay opens. The combination keeps every emitted chunk
 // under Vite's 500 kB warning threshold.
+//
+// Static demo bundle mode (Task 19.13). `scripts/build_demo_bundle.py` sets
+// `VITE_AILIBI_STATIC_DATA=1` (Vite forwards `VITE_`-prefixed process env into
+// `import.meta.env`, which is what flips `api/client.ts`'s data-source seam onto
+// the pre-baked `./data/*.json`). The ONE thing the seam cannot do from inside
+// the app is the asset base: Vite's default `/` emits absolute `/assets/…` URLs,
+// which only resolve when the bundle is served from a server ROOT. A demo that is
+// "playable from any static file server" has to survive a subdirectory too, so
+// bundle builds emit RELATIVE asset URLs — matching the relative `./data/…` the
+// seam fetches, from the same document base.
+const STATIC_BUNDLE = process.env.VITE_AILIBI_STATIC_DATA === "1";
+
 export default defineConfig({
+  base: STATIC_BUNDLE ? "./" : "/",
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
