@@ -34,6 +34,13 @@ import { defineConfig } from "@playwright/test";
 // The two servers the journey drives. Ports match `scripts/run_spectator.sh`
 // (8000 API, 5173 Vite) so the local on-demand run and the CI run exercise the
 // same topology the project documents.
+//
+// HOST is the IPv4 loopback LITERAL, passed to both servers AND used in both the
+// readiness probes and `baseURL`. Not cosmetic: a hostname would be resolved
+// independently by the server and by Playwright, and on a dual-stack runner
+// those two resolutions disagree (`localhost` → `::1` for the server, `127.0.0.1`
+// for the probe) — which is a two-minute timeout against a healthy server.
+const HOST = "127.0.0.1";
 const API_PORT = 8000;
 const UI_PORT = 5173;
 
@@ -57,7 +64,7 @@ export default defineConfig({
     ? [["list"], ["html", { open: "never", outputFolder: "./e2e/.report" }]]
     : [["list"]],
   use: {
-    baseURL: `http://127.0.0.1:${UI_PORT}`,
+    baseURL: `http://${HOST}:${UI_PORT}`,
     browserName: "chromium",
     headless: true,
     viewport: { width: 1440, height: 960 },
@@ -70,18 +77,25 @@ export default defineConfig({
       // is set explicitly for the same reason `run_spectator.sh` sets it: the
       // loader's fallthrough would otherwise prefer a local `./replays` scratch
       // dir, and the journey asserts on a specific curated game.
-      command: "uv run uvicorn api.main:app --port 8000",
+      command: `uv run uvicorn api.main:app --host ${HOST} --port ${API_PORT}`,
       cwd: "..",
       env: { AILIBI_REPLAY_DIR: "replays/samples" },
-      url: `http://127.0.0.1:${API_PORT}/health`,
+      url: `http://${HOST}:${API_PORT}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: "pipe",
       stderr: "pipe",
     },
     {
-      command: "npm run dev",
-      url: `http://127.0.0.1:${UI_PORT}/`,
+      // `--host` for the same reason as the API's, and this is the one that
+      // actually bit: Vite's default bind is the NAME `localhost`, which on a
+      // GitHub runner resolves to `::1` first — so the server came up, printed
+      // "ready", and Playwright's IPv4 readiness probe waited out the full two
+      // minutes against a port nothing was listening on. Uvicorn defaults to the
+      // IPv4 literal and was fine; the fix is to stop leaving either to name
+      // resolution.
+      command: `npm run dev -- --host ${HOST} --port ${UI_PORT}`,
+      url: `http://${HOST}:${UI_PORT}/`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: "pipe",
