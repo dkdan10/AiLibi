@@ -12,6 +12,8 @@ AiLibi is two things at once.
 
 **An experiment in agentic software workflow.** Every coding PR was opened by an AI coding agent against a task contract authored by a human. Architecture is enforced by tooling — import-linter, `mypy --strict`, a recursive observation leak test, byte-identical replay determinism. The contracts in `tasks/phase-N.md` are the only spec each agent sees. So far: 300+ merged agent-authored PRs — the live count is on GitHub, deliberately not re-pinned here — every one of them merged green through the same full gate, and zero observation-firewall violations. Phases 0–5 delivered the MVP; the phases after that pushed agent-reasoning quality and migrated the eval model.
 
+**New here?** [docs/reading-guide.md](docs/reading-guide.md) is the outsider's five minutes: the verified numbers with the committed path that owns each one, which replays to watch and why, what the corpus does and does not demonstrate, a glossary for the audit idiom, and the three audits worth reading first.
+
 ---
 
 ## How this is being built
@@ -200,4 +202,4 @@ Python 3.11 only. The [`uv`](https://docs.astral.sh/uv/) package manager is requ
 - `tasks/` — the project's spec, decomposed into task contracts.
 - `agent_prompts/` — paste-ready prompts auto-generated from the task contracts.
 
-Current architecture: [docs/architecture.md](docs/architecture.md). Workflow protocol: [AGENTS.md](AGENTS.md). Historical design record (rationale and history, not current architecture): [DESIGN.md](DESIGN.md). Build plan: [AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md).
+Outsider reading guide (the meta-story, the numbers, the audit-idiom glossary): [docs/reading-guide.md](docs/reading-guide.md). Current architecture: [docs/architecture.md](docs/architecture.md). Workflow protocol: [AGENTS.md](AGENTS.md). Historical design record (rationale and history, not current architecture): [DESIGN.md](DESIGN.md). Build plan: [AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md).
