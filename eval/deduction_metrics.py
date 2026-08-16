@@ -199,7 +199,18 @@ C5 finding restated as separately-defined metrics instead of one contested
 number. The contract names two leakage CLASSES on the model side — role
 statements and machinery statements — and one on the guard side; all three are
 counted, and the ROLE class is itself three nets because "omniscience" has three
-distinguishable shapes in the committed text:
+distinguishable shapes in the committed text.
+
+The two origins read DIFFERENT sources, by construction. Guard cells read the
+RECORDED ``rationale_text`` — that is where the machinery wrote. Model cells
+read the PRE-GUARD body parsed from the voter's own vote-call response, because
+Task 19.15's teammate coercion REPLACES the recorded rationale before the ballot
+is stored: a future teammate-aimed ballot disclosing a partner would read clean
+on the recorded surface, and this metric would under-count precisely the class
+that redaction exists to remove. ``model_source_pre_guard_ballots`` /
+``model_source_recorded_fallback_ballots`` partition every ballot so the
+substitution is counted rather than assumed (fallback 0 on all four committed
+sets, where the two sources agree cell for cell).
 
 * MODEL-originated ROLE/omniscience — text the model authored.
   ``model_partner_naming_ballots`` (:data:`PARTNER_PHRASES`),
@@ -232,14 +243,19 @@ distinguishable shapes in the committed text:
 * GUARD-originated — text the deterministic machinery injected.
   ``guard_marked_ballots``: ballots carrying any pinned manager/voting marker.
   ``guard_target_rewrite_ballots``: the subset whose TARGET the guard rewrote.
-  ``guard_preserved_omniscient_ballots``: target-rewritten ballots whose
-  preserved rationale still carries ANY omniscient phrase (the union above) —
-  the exact class Task 19.15 redacts going forward. It is **1** on
-  ``replays/ml_corpus/9p2i`` (seed 1118, meeting 0: a redirected impostor ballot
-  whose preserved rationale says "when I know I was killing p-3") and 0 on the
-  other three sets. The class is therefore RARE on committed bytes, not absent —
-  a distinction this module got wrong until the self-kill net existed, which is
-  itself the C5 lesson landing on the metric that measures it.
+  ``guard_preserved_omniscient_ballots`` and its own rate
+  ``guard_preserved_omniscient_rate``: target-rewritten ballots whose preserved
+  rationale still carries ANY omniscient phrase (the union above), over the
+  ``guard_target_rewrite_ballots`` denominator — the exact class Task 19.15
+  redacts going forward, and the guard-side RATE the contract asks for.
+  ``guard_marked_ballot_share`` is NOT a substitute: it answers a different
+  question over a different denominator (55/2,726 vs 1/53 on the corpus). The
+  cell is **1/53** on ``replays/ml_corpus/9p2i`` (seed 1118, meeting 0: a
+  redirected impostor ballot whose preserved rationale says "when I know I was
+  killing p-3") and 0 on the other three sets. The class is therefore RARE on
+  committed bytes, not absent — a distinction this module got wrong until the
+  self-kill net existed, which is itself the C5 lesson landing on the metric
+  that measures it.
 
 Every net is a substring or regex match over recorded text and is therefore an
 UPPER bound on intent and a LOWER bound on leakage: a phrase list cannot see a
@@ -304,6 +320,7 @@ no roles, transcripts, player ids, or engine-owned types cross a model boundary.
 from __future__ import annotations
 
 import ast
+import json
 import math
 import re
 from collections.abc import Mapping, Sequence
@@ -430,11 +447,21 @@ SELF_KILL_PHRASES: Final[tuple[str, ...]] = (
     "i kill ",
     "i was killing",
     "i had killed",
-    "one who killed",
+    "i was the one who killed",
+    "i am the one who killed",
+    "i'm the one who killed",
     "i am the killer",
     "i'm the killer",
 )
 """First-person KILL disclosure — a voter narrating their own kill.
+
+EVERY entry is explicitly first-person. The bare fragment ``"one who killed"``
+was tried and rejected: it also matches an ordinary third-person accusation
+("p-3 is the one who killed p-4"), which discloses nothing private and would
+inflate the rate on future records. Replacing it with the three first-person
+forms leaves every committed count unchanged (the committed matches were all
+"I'm the one who killed"), so the tightening costs no recall on these bytes and
+removes a false-positive class from the next ones.
 
 The third omniscience shape, and the one Task 19.15's contract names beside
 "teammate" ("omniscient teammate/self-kill rationale text"). It is NEW here
@@ -513,70 +540,101 @@ _OTHER_GUARD_MARKER_PREFIXES: Final[tuple[str, ...]] = (
 )
 _REDIRECT_MARKER_PREFIX: Final[str] = _marker_prefix(BALLOT_TARGET_REDIRECT_MARKER)
 
-# The repr-aware pattern that recovers the AUTHORED target a rewriting guard
-# preserved. Each of the four rewriting markers interpolates the ORIGINAL target
-# as ``{target!r}`` (``meetings/manager.py``: "either way this marker preserves
-# the original target"), so the agent's own ballot is recoverable from the
-# record. The value alternation mirrors ``eval/meeting_quality.py``'s
-# ``_MARKER_REPR_VALUE``: quote-matching consumes the whole repr first, so the
-# match ends at the REAL marker boundary even when the payload contains the
-# marker's tail. UNANCHORED on purpose — the citation gate is the last guard in
-# the ballot chain, so a redirect marker can ride INSIDE an outer coercion
-# marker; the outermost (earliest-starting) match is the one that names what the
-# agent actually wrote.
+# The repr-aware ANCHORED marker chain that recovers the AUTHORED target a
+# rewriting guard preserved. Each rewriting marker interpolates the target as it
+# stood BEFORE that guard ran (``meetings/manager.py``: "either way this marker
+# preserves the original target"), so the agent's own ballot is recoverable —
+# but only if the chain is read in the right direction.
+#
+# Every guard PREPENDS (``marker + ballot.rationale_text``, manager.py x5), so
+# the chain reads RIGHT-TO-LEFT in application order: the LEFTMOST marker is the
+# guard that ran LAST and its payload is an intermediate target some earlier
+# guard already produced, while the RIGHTMOST rewriting marker is the guard that
+# ran FIRST and its payload is what the MODEL wrote. Concretely, a graph
+# redirect followed by a citation coercion records
+# ``[uncited … 'p-4' …] [under-gate … 'p-2' …] body`` — the model authored p-2,
+# and reading leftmost would report the guard's own p-4.
+#
+# The walk is ANCHORED and consumes the whole prefix chain (including the
+# non-rewriting markers, which carry no target), so a marker's literal text
+# appearing inside the model's BODY can never be mistaken for a real marker —
+# the manager guarantees "the ballot chain must only prepend audit markers", and
+# this parse holds it to that rather than trusting a substring.
 _MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 
 
-def _rewrite_marker_pattern(marker: str) -> re.Pattern[str]:
-    head, placeholder, tail = marker.partition("{target!r}")
-    if not placeholder:
-        raise ValueError(f"marker constant carries no target repr: {marker!r}")
+def _marker_pattern(marker: str) -> re.Pattern[str]:
+    """An anchored, repr-aware pattern for one ``.format()``-interpolated marker.
+
+    Generalizes over the placeholder name (``{target!r}`` / ``{reason_id!r}`` /
+    ``{observation_id!r}`` / ``{head!r}``) so every pinned marker compiles from
+    its imported constant and a rename cannot silently break the parse.
+    """
+
+    head, _, rest = marker.partition("{")
+    _, _, tail = rest.partition("}")
+    if not head or not rest:
+        raise ValueError(f"marker constant carries no repr placeholder: {marker!r}")
     return re.compile(
         re.escape(head) + "(" + _MARKER_REPR_VALUE + ")" + re.escape(tail)
     )
 
 
-_TARGET_REWRITE_MARKER_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    _rewrite_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER),
-    _rewrite_marker_pattern(INVALID_VOTE_TARGET_MARKER),
-    _rewrite_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER),
-    _rewrite_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER),
+# ``(pattern, rewrites_the_target)`` for every marker the ballot chain prepends.
+_BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool], ...]] = (
+    (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True),
+    (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True),
+    (_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER), True),
+    (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True),
+    (_marker_pattern(INVALID_REASON_ID_MARKER), False),
+    (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False),
+    (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False),
 )
 
 
 def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
     """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
 
-    A rewriting guard replaces ``ballot.target`` and stamps the original into
-    ``rationale_text``; this reverses that for the SAME-AGENT metric, leaving the
-    guard's own behaviour to the redirect census. When no rewriting marker is
-    present the recorded target IS the authored one.
+    Walks the prepended marker chain from the start of ``rationale_text``,
+    keeping the LAST rewriting marker it reaches — the first guard to have run,
+    whose payload is the model's own target. When no rewriting marker is present
+    the recorded target IS the authored one.
 
     Fail-loud on a malformed repr (AGENTS.md "no silent fallbacks"): a marker
     that matched its own pinned pattern but whose payload will not evaluate is a
     corrupt record, not something to shrug past.
     """
 
-    matches = [
-        match
-        for match in (
-            pattern.search(ballot.rationale_text)
-            for pattern in _TARGET_REWRITE_MARKER_PATTERNS
-        )
-        if match is not None
-    ]
-    if not matches:
+    text = ballot.rationale_text
+    position = 0
+    authored: str | None = None
+    while True:
+        for pattern, rewrites_target in _BALLOT_MARKER_CHAIN:
+            match = pattern.match(text, position)
+            if match is None:
+                continue
+            if rewrites_target:
+                try:
+                    original = ast.literal_eval(match.group(1))
+                except (ValueError, SyntaxError) as error:  # pragma: no cover
+                    raise ValueError(
+                        "guard marker carries an unreadable target repr: "
+                        f"{match.group(1)!r}"
+                    ) from error
+                if not isinstance(original, str):
+                    raise ValueError(
+                        f"guard marker target repr is not a string: {original!r}"
+                    )
+                # Later iterations reach EARLIER-applied guards, so the last
+                # assignment is the model-authored target.
+                authored = original
+            position = match.end()
+            break
+        else:
+            break
+    if authored is None:
         return ballot.target, False
-    outermost = min(matches, key=lambda match: match.start())
-    try:
-        original = ast.literal_eval(outermost.group(1))
-    except (ValueError, SyntaxError) as error:  # pragma: no cover - corrupt record
-        raise ValueError(
-            f"guard marker carries an unreadable target repr: {outermost.group(1)!r}"
-        ) from error
-    if not isinstance(original, str):
-        raise ValueError(f"guard marker target repr is not a string: {original!r}")
-    return original, True
+    return authored, True
 
 
 # ---------------------------------------------------------------------------
@@ -1227,6 +1285,18 @@ class RedirectedBallotCells(_FrozenModel):
 class ScaffoldLeakageCells(_FrozenModel):
     """Fourth-wall leakage, split by ORIGIN rather than pooled (metric 8).
 
+    **Source, by origin.** GUARD-originated cells read the RECORDED
+    ``rationale_text`` — that is where the machinery wrote. MODEL-originated
+    cells read the PRE-GUARD body parsed out of the voter's own vote-call
+    response (:func:`_model_authored_bodies`), because Task 19.15's teammate
+    coercion REPLACES the recorded rationale before the ballot is stored: a
+    future teammate-aimed ballot disclosing a partner would read clean on the
+    recorded surface and the metric would under-count exactly the class the
+    redaction removes. ``model_source_pre_guard_ballots`` /
+    ``model_source_recorded_fallback_ballots`` partition ``ballots_total`` so
+    the substitution is counted, never silent (the fallback is 0 on all four
+    committed sets, where the two sources also agree cell for cell).
+
     MODEL-originated ROLE/omniscience (the model authored the text); all three
     nets are over ``impostor_ballots``:
 
@@ -1258,11 +1328,15 @@ class ScaffoldLeakageCells(_FrozenModel):
     * ``guard_marked_ballots`` — any pinned manager/voting marker.
     * ``guard_target_rewrite_ballots`` — the subset whose TARGET the guard
       rewrote.
-    * ``guard_preserved_omniscient_ballots`` — target-rewritten ballots whose
-      preserved rationale still carries ANY omniscient phrase. This is exactly
-      the class Task 19.15 redacts going forward. It is 1 on
+    * ``guard_preserved_omniscient_ballots`` / ``guard_preserved_omniscient_rate``
+      — target-rewritten ballots whose preserved rationale still carries ANY
+      omniscient phrase, over the ``guard_target_rewrite_ballots`` denominator.
+      This is exactly the class Task 19.15 redacts going forward. It is 1/53 on
       ``replays/ml_corpus/9p2i`` (seed 1118 meeting 0) and 0 on the other three
-      sets: rare on committed bytes, NOT absent.
+      sets: rare on committed bytes, NOT absent. The rate ships as its own cell
+      because ``guard_marked_ballot_share`` answers a different question over a
+      different denominator (55/2,726 on the same set) and cannot stand in for
+      it.
 
     *Does NOT measure* paraphrase, and does NOT claim the nets are exhaustive: a
     substring/regex net is an upper bound on intent and a lower bound on
@@ -1287,9 +1361,12 @@ class ScaffoldLeakageCells(_FrozenModel):
     model_machinery_quotation_ballots: int
     model_machinery_vocabulary_ballots: int
     model_machinery_quotation_share: float | None
+    model_source_pre_guard_ballots: int
+    model_source_recorded_fallback_ballots: int
     guard_marked_ballots: int
     guard_target_rewrite_ballots: int
     guard_preserved_omniscient_ballots: int
+    guard_preserved_omniscient_rate: WilsonRateCell
     guard_marked_ballot_share: float | None
 
     @model_validator(mode="after")
@@ -1310,11 +1387,24 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.player_visible_leak_turns,
                 self.model_machinery_quotation_ballots,
                 self.model_machinery_vocabulary_ballots,
+                self.model_source_pre_guard_ballots,
+                self.model_source_recorded_fallback_ballots,
                 self.guard_marked_ballots,
                 self.guard_target_rewrite_ballots,
                 self.guard_preserved_omniscient_ballots,
             ),
         )
+        if (
+            self.model_source_pre_guard_ballots
+            + self.model_source_recorded_fallback_ballots
+            != self.ballots_total
+        ):
+            raise ValueError(
+                "the model-source provenance split must span every ballot: "
+                f"{self.model_source_pre_guard_ballots} + "
+                f"{self.model_source_recorded_fallback_ballots} != "
+                f"{self.ballots_total}"
+            )
         # The union is bounded below by each net and above by their sum: a
         # ballot may hit several, so equality with the sum is NOT required, but
         # a union smaller than its largest member (or larger than the total)
@@ -1426,6 +1516,12 @@ class ScaffoldLeakageCells(_FrozenModel):
             self.model_machinery_quotation_share,
             self.model_machinery_quotation_ballots,
             self.ballots_total,
+        )
+        _validate_cell_against(
+            "guard_preserved_omniscient_rate",
+            self.guard_preserved_omniscient_rate,
+            self.guard_preserved_omniscient_ballots,
+            self.guard_target_rewrite_ballots,
         )
         _validate_rate(
             "guard_marked_ballot_share",
@@ -1718,6 +1814,49 @@ def _is_omniscient(rationale: str) -> bool:
     )
 
 
+def _model_authored_bodies(meeting: MeetingReport) -> dict[PlayerId, str]:
+    """Each voter's PRE-GUARD rationale body, parsed from its own vote call.
+
+    The model-originated leakage nets must read what the MODEL wrote, not what
+    the record kept: Task 19.15's teammate coercion REPLACES ``rationale_text``
+    with a fixed redaction before the ballot is recorded
+    (``meetings.manager.TEAMMATE_COERCED_VOTE_RATIONALE``), so a future
+    teammate-aimed ballot carrying a partner or self-kill disclosure would read
+    clean on the recorded surface — the metric would silently under-count
+    exactly the class the redaction exists to remove.
+
+    :class:`~orchestrator.replay.LLMCallRecord` keeps the original structured
+    response, so the pre-guard body is recoverable. A vote call is identified by
+    its parsed payload carrying a string ``rationale_text`` (the ballot schema's
+    distinctive field) and is attributed by ``agent_id``. The field is EXTRACTED
+    from the parsed JSON rather than scanned raw, because the raw envelope
+    carries ``"confidence": 0.NN`` — which the machinery-quotation net would
+    otherwise read as the model quoting its own scoring grid (850 false
+    positives against 39 real ones on ``replays/samples/9p2i``).
+
+    A response that does not parse, or carries no such field, is simply absent
+    here; the caller falls back to the recorded rationale and COUNTS the
+    fallback, so the substitution is never silent. On all four committed sets
+    every ballot pairs with exactly one parsed vote response, and every net
+    reproduces its recorded-surface count exactly.
+    """
+
+    bodies: dict[PlayerId, str] = {}
+    for call in meeting.llm_calls:
+        if call.agent_id is None:
+            continue
+        try:
+            payload = json.loads(call.response_text)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        body = payload.get("rationale_text")
+        if isinstance(body, str):
+            bodies[call.agent_id] = body
+    return bodies
+
+
 class _Accumulator:
     """Mutable per-set tallies for one fold pass (never module-level state)."""
 
@@ -1788,6 +1927,8 @@ class _Accumulator:
         self.guard_marked = 0
         self.guard_rewrite = 0
         self.guard_omniscient = 0
+        self.model_source_pre_guard = 0
+        self.model_source_recorded_fallback = 0
 
 
 def _fold_meeting(
@@ -1887,6 +2028,7 @@ def _fold_meeting(
     # Ballot-side metrics: redirects, leakage, and turn -> ballot consistency.
     votable = {ballot.voter for ballot in meeting.ballots}
     accused_by = _accused_by_speaker(meeting)
+    model_bodies = _model_authored_bodies(meeting)
     for turn in meeting.transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
@@ -1903,33 +2045,45 @@ def _fold_meeting(
                 acc.redirect_coerced_skip += 1
             else:
                 acc.redirected_eject += 1
+        # GUARD-originated cells read the RECORDED rationale (that is where the
+        # machinery wrote); MODEL-originated cells read the PRE-GUARD body the
+        # model actually authored, so Task 19.15's redaction cannot hide a
+        # disclosure from the metric that exists to count it.
+        model_body = model_bodies.get(ballot.voter)
+        if model_body is None:
+            model_body = rationale
+            acc.model_source_recorded_fallback += 1
+        else:
+            acc.model_source_pre_guard += 1
+
         marked, rewrote = _guard_marker_classes(rationale)
-        omniscient = _is_omniscient(rationale)
         if marked:
             acc.guard_marked += 1
         if rewrote:
             acc.guard_rewrite += 1
-            if omniscient:
+            # Scoped to the PRE-GUARD body too: the question is whether the text
+            # the guard carried forward discloses private knowledge.
+            if _is_omniscient(model_body):
                 acc.guard_omniscient += 1
-        if MACHINERY_DECIMAL_PATTERN.search(rationale):
+        if MACHINERY_DECIMAL_PATTERN.search(model_body):
             acc.machinery_quotation += 1
-        if _matches(rationale, MACHINERY_VOCABULARY):
+        if _matches(model_body, MACHINERY_VOCABULARY):
             acc.machinery_vocabulary += 1
         if roles[ballot.voter] == "IMPOSTOR":
             acc.impostor_ballots += 1
-            if _matches(rationale, PARTNER_PHRASES):
+            if _matches(model_body, PARTNER_PHRASES):
                 acc.model_partner += 1
-            if _matches(rationale, ROLE_STATEMENT_PHRASES):
+            if _matches(model_body, ROLE_STATEMENT_PHRASES):
                 acc.model_role += 1
-            if _matches(rationale, SELF_KILL_PHRASES):
+            if _matches(model_body, SELF_KILL_PHRASES):
                 acc.model_self_kill += 1
-            if omniscient:
+            if _is_omniscient(model_body):
                 acc.model_omniscient += 1
         else:
             acc.crew_ballots += 1
-            if _matches(rationale, PARTNER_PHRASES):
+            if _matches(model_body, PARTNER_PHRASES):
                 acc.crew_partner += 1
-            if omniscient:
+            if _is_omniscient(model_body):
                 acc.crew_omniscient += 1
 
         accused = accused_by.get(ballot.voter)
@@ -2095,9 +2249,14 @@ def compute_deduction_metrics(
             model_machinery_quotation_share=_rate_or_none(
                 acc.machinery_quotation, acc.ballots_total
             ),
+            model_source_pre_guard_ballots=acc.model_source_pre_guard,
+            model_source_recorded_fallback_ballots=(acc.model_source_recorded_fallback),
             guard_marked_ballots=acc.guard_marked,
             guard_target_rewrite_ballots=acc.guard_rewrite,
             guard_preserved_omniscient_ballots=acc.guard_omniscient,
+            guard_preserved_omniscient_rate=_cell(
+                acc.guard_omniscient, acc.guard_rewrite
+            ),
             guard_marked_ballot_share=_rate_or_none(
                 acc.guard_marked, acc.ballots_total
             ),

@@ -11232,9 +11232,19 @@
       "model_machinery_quotation_ballots": 4,
       "model_machinery_vocabulary_ballots": 20,
       "model_machinery_quotation_share": 0.03418803418803419,
+      "model_source_pre_guard_ballots": 117,
+      "model_source_recorded_fallback_ballots": 0,
       "guard_marked_ballots": 0,
       "guard_target_rewrite_ballots": 0,
       "guard_preserved_omniscient_ballots": 0,
+      "guard_preserved_omniscient_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
       "guard_marked_ballot_share": 0.0
     },
     "witnessed_supply": {

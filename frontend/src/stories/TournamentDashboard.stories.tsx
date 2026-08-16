@@ -377,11 +377,17 @@ function baseReport(): TournamentEvalReport {
         model_machinery_quotation_ballots: 27,
         model_machinery_vocabulary_ballots: 81,
         model_machinery_quotation_share: 27 / 679,
+        // Every ballot's model-side nets came from the PRE-GUARD vote response;
+        // no ballot needed the recorded-rationale fallback.
+        model_source_pre_guard_ballots: 679,
+        model_source_recorded_fallback_ballots: 0,
         guard_marked_ballots: 12,
         guard_target_rewrite_ballots: 11,
         // Rare, not absent: the committed corpus carries exactly one (seed
         // 1118), so the fixture shows the non-zero state.
         guard_preserved_omniscient_ballots: 1,
+        // Its own denominator — the target rewrites, NOT all marked ballots.
+        guard_preserved_omniscient_rate: wilsonCell(1, 11),
         guard_marked_ballot_share: 12 / 679,
       },
       witnessed_supply: {

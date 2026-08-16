@@ -51,10 +51,13 @@ from pydantic import ValidationError
 from api.schemas import classify_evidence
 from engine.entities import Role
 from eval.deduction_metrics import (
+    MACHINERY_DECIMAL_PATTERN,
+    SELF_KILL_PHRASES,
     DeductionMetricsReport,
     UnclassifiableFlagError,
     WilsonRateCell,
     _authored_target,
+    _is_omniscient,
     classify_flag,
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
@@ -68,7 +71,11 @@ from eval.report_schema import (
     MeetingReport,
     TournamentReport,
 )
-from meetings.manager import BALLOT_TARGET_REDIRECT_MARKER
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_REASON_ID_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
+)
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -883,6 +890,148 @@ def test_self_kill_disclosure_is_counted(
         + corpus.model_role_statement_ballots
         + corpus.model_self_kill_disclosure_ballots
     )
+
+
+def test_model_cells_read_the_pre_guard_body_not_the_recorded_one(
+    samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
+) -> None:
+    """Model-originated nets read what the MODEL wrote, not what the record kept.
+
+    Task 19.15's teammate coercion REPLACES ``rationale_text`` before the ballot
+    is stored, so a future teammate-aimed ballot disclosing a partner would read
+    clean on the recorded surface. The nets therefore read the pre-guard body
+    parsed out of the voter's own vote-call response. On the committed bytes
+    every ballot pairs with exactly one parsed response — the fallback is never
+    taken — which is why the source change moved no number.
+    """
+
+    for report in (samples_9p2i, corpus_9p2i):
+        leakage = report.deduction.scaffold_leakage
+        assert leakage.model_source_recorded_fallback_ballots == 0
+        assert leakage.model_source_pre_guard_ballots == leakage.ballots_total
+
+
+def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """The machinery net reads the parsed ``rationale_text``, never the JSON blob.
+
+    The raw vote response carries ``"confidence": 0.NN``, which the
+    quoted-decimal net would read as the model reproducing its own scoring grid.
+    Scanning the envelope would report 850 machinery quotations on this set
+    against the 39 real ones — so the extraction is load-bearing, not cosmetic.
+    """
+
+    envelope_hits = 0
+    for game in samples_9p2i.report.games:
+        for meeting in game.meetings:
+            for call in meeting.llm_calls:
+                if '"rationale_text"' in call.response_text and (
+                    MACHINERY_DECIMAL_PATTERN.search(call.response_text)
+                ):
+                    envelope_hits += 1
+
+    assert envelope_hits == 850
+    assert (
+        samples_9p2i.deduction.scaffold_leakage.model_machinery_quotation_ballots == 39
+    )
+
+
+def test_guard_preserved_omniscient_rate_has_its_own_denominator(
+    corpus_9p2i: TournamentEvalReport,
+) -> None:
+    """The guard-side RATE is over target rewrites, not over all marked ballots.
+
+    ``guard_marked_ballot_share`` answers a different question over a different
+    denominator (55/2,726 here), so it cannot stand in for the stale-rationale
+    rate the contract asks for: 1/53.
+    """
+
+    leakage = corpus_9p2i.deduction.scaffold_leakage
+    rate = leakage.guard_preserved_omniscient_rate
+    assert (rate.numerator, rate.denominator) == (1, 53)
+    assert rate.advisory is True
+    assert leakage.guard_marked_ballots == 55
+    assert leakage.guard_marked_ballot_share == pytest.approx(55 / 2726)
+    assert rate.rate != leakage.guard_marked_ballot_share
+
+
+def test_self_kill_net_is_first_person_only() -> None:
+    """A third-person accusation is not a self-disclosure.
+
+    ``"p-3 is the one who killed p-4"`` reveals nothing private; only the
+    first-person forms do. Every entry in the net is explicitly first-person, so
+    the accusation shape cannot inflate the rate on a future recording.
+    """
+
+    accusation = "p-3 is the one who killed p-4, so I vote them."
+    assert not any(phrase in accusation.lower() for phrase in SELF_KILL_PHRASES)
+    assert not _is_omniscient(accusation)
+
+    disclosure = "They'll realize I'm the one who killed p-8, so I skip."
+    assert any(phrase in disclosure.lower() for phrase in SELF_KILL_PHRASES)
+    assert _is_omniscient(disclosure)
+
+
+def test_authored_target_reads_the_earliest_applied_rewrite() -> None:
+    """A stacked chain resolves to the MODEL's target, not a guard intermediate.
+
+    Guards PREPEND, so the chain reads right-to-left in application order: a
+    graph redirect followed by a citation coercion records
+    ``[uncited 'p-4'] [under-gate 'p-2'] body``. The model authored ``p-2``;
+    reading the leftmost marker would report the guard's own ``p-4``.
+    """
+
+    stacked = VoteBallot(
+        voter="p-1",
+        target="SKIP",
+        confidence=0.5,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=(
+            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-4")
+            + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
+            + "they lied about Reactor."
+        ),
+    )
+    assert _authored_target(stacked) == ("p-2", True)
+
+    # A non-rewriting marker in the chain is consumed, not mistaken for one.
+    with_citation_null = VoteBallot(
+        voter="p-1",
+        target="SKIP",
+        confidence=0.5,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=(
+            INVALID_REASON_ID_MARKER.format(reason_id="bogus-turn")
+            + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
+            + "body"
+        ),
+    )
+    assert _authored_target(with_citation_null) == ("p-2", True)
+
+
+def test_authored_target_ignores_a_marker_quoted_inside_the_body() -> None:
+    """The chain walk is ANCHORED, so marker-shaped prose cannot spoof it.
+
+    The manager guarantees "the ballot chain must only prepend audit markers";
+    this parse holds it to that instead of trusting an unanchored substring.
+    """
+
+    spoofed = VoteBallot(
+        voter="p-1",
+        target="p-9",
+        confidence=0.5,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=(
+            "I think "
+            + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
+            + "is what the system would say."
+        ),
+    )
+    assert _authored_target(spoofed) == ("p-9", False)
 
 
 def test_machinery_quotation_reproduces_the_19_8_disclosure(
