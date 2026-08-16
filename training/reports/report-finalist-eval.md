@@ -2614,3 +2614,71 @@ what these items do **not** touch.
    **crew-track null** — this report's own §16 crew-pair exact McNemar at **p =
    1.0**, recorded there as "a **null, not an equivalence**". Item 1 weakens the
    shipped champion's win-edge claim. It does not weaken any of these.
+
+## 19. Availability erratum (coordination, 2026-08-15 — the Task 19.21 raw-slate ruling; additive, no in-place rewrites)
+
+Anchor: `audits/audit-phase-19-triage.md` §7 item 22 [C; VERIFIED §8 row 11] —
+"**Recover/content-address the finalist raw slate if it still exists; otherwise
+mark event-level lineage non-reproducible. Do not re-record.**" This section is
+**additive** and records exactly one thing: **where the bytes this report was
+measured from now live**. No cell, table, statistic, or verdict above it moves,
+and **nothing was re-recorded** (item 4).
+
+1. **The ruling, checked 2026-08-15: RECOVERED.** §2 (:115-118) records the
+   provenance separation — "the raw recordings are working artifacts — they live
+   **outside** the repo tree… What is committed is their **measurement**" — and
+   §16 (:1066-1070) names that external source for every recorded cell:
+   "`~/ailibi-campaign-1826/scoring/<arm>/` JSON". The triage read the two
+   together and found the gap: the flattened rows in
+   `training/reports/results-finalist-eval.jsonl` are committed, but the
+   **event-level lineage under them was repo-external and uncommitted** —
+   `git ls-files training/reports/_finalist_eval_raw` returned nothing, and the
+   external path had never been checked for survival.
+
+   The owner-machine check found `~/ailibi-campaign-1826/` **intact**:
+   **1,569 files, 298.2 MiB**, carrying all **449** raw per-seed recordings,
+   all 450 audit sidecars, every `scoring/<arm>/` measurement JSON this report's
+   §16 cells are read from, the 10 forensics recordings, the operator leg and
+   per-seed logs, and the `score-arm.py` / `assemble-row.py` scorers that turned
+   the events into the committed rows. The census reproduces the slate as this
+   report records it: §8's ratified cut is 9 arms × 50 = **450 games**, §14
+   (:998) records what the slate actually recorded — "**449** seed-games (8 arms
+   × 50 seeds + `7f73929d`'s 49)" — and the disk carries **449** raw recordings,
+   with seed 35 absent by construction as :935 records it ("**excluded,
+   forensics kept**", 14 logged attempts, every one rc 99; §16.a carries that
+   arm at n=49). Its audit sidecar and six forensics recordings are retained, so
+   even the excluded game keeps a lineage.
+
+2. **Content-addressed, staged, and destined for the evidence store.** Every one
+   of the 1,569 files carries a sha-256 in the new
+   **`training/reports/_finalist_eval_raw/MANIFEST.md`**, which also tabulates
+   the 1,433 split-view symlinks by membership (the seeds each view held) rather
+   than duplicating 612.3 MiB of already-hashed recordings. The bytes are staged
+   on the temporary ref **`evidence/raw-slate-staging`** @
+   `c27ab7b5f5e7e10bfab5c6dc752362b137862cac`; **Task 19.22** folds them into the
+   ONE immutable evidence commit (`evidence/phase-18-coevo`) as **class-(c) large
+   immutable evidence** and retires the staging ref. They do **not** join
+   `replays/samples/` or `replays/ml_corpus/` and they do not enter the working
+   tree, so §2's separation stands unchanged. The hashes were checked at
+   **1,569/1,569 OK** against the staged copy, the staging commit's extracted
+   tree, and a fresh anonymous fetch of the pushed ref; the manifest's §5 carries
+   the command.
+
+3. **The boundary — what recovery does and does not buy.** It buys the exact
+   bytes behind every §16 cell, hash-pinned: the flattened rows are re-derivable
+   from the events, the stamp==sidecar claim is auditable game by game, and the
+   recovered bytes are provably the recorded ones. It does **not** make the
+   recording reproducible. These are real-provider recordings
+   (`Qwen/Qwen3.6-27B` on Featherless); a seed alone does not regenerate them,
+   and the recording itself is the determinism boundary. §2's "**re-recordable
+   from this recipe**" is therefore a statement about the *recipe* producing a
+   *new* slate — not about these bytes being regenerable, which they are not.
+   Separately, and unchanged by this ruling: **every flattened row and every
+   derived statistic in this report was already reproducible from committed
+   cells** — item 1 of §18 recomputed the paired statistics entirely from
+   `results-finalist-eval.jsonl` "and needs no access to the external slate".
+
+4. **Not re-recorded, and none is scheduled.** §14 prices the slate at a
+   **58.705 h** span / **57.1589 busy hours**. That price is named and declined
+   by charter: these are the original `2026-07-29T07:17:48Z →
+   2026-07-31T18:00:06Z` bytes, preserved, not reproduced.
