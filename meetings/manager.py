@@ -161,6 +161,7 @@ from meetings.transcript import (
     next_chain_step,
     triggering_body_rooms,
 )
+from meetings.voting import tally_ballots
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
@@ -2027,51 +2028,35 @@ class MeetingManager:
         self,
         ballots: Sequence[VoteBallot],
     ) -> tuple[MeetingOutcome, PlayerId | None]:
-        """Plurality tally with confidence threshold (DESIGN.md §5.2 + §4.6 + §5.5).
+        """Resolve the meeting via :func:`meetings.voting.tally_ballots`.
 
-        ``SKIP`` is a real tally target -- a vote of ``SKIP`` competes with
-        non-``SKIP`` votes for plurality (DESIGN.md §5.5 schemas
-        ``VoteBallot.target`` as ``PlayerId | Literal["SKIP"]``; §5.2:
-        "tie or below threshold -> skip").
+        The ejection rule (DESIGN.md §5.2 + §4.6 + §5.5 -- ``SKIP`` as a
+        first-class tally target, tie -> skip, the inclusive confidence
+        cutoff) has ONE implementation as of 2026-08-16 (Task 19.26). This
+        method is the call site the meeting protocol resolves through; the
+        rule itself lives in :mod:`meetings.voting`, the canonical home the
+        module named for it at Task 3.10. See
+        :func:`meetings.voting.tally_ballots` for the full resolution rules.
 
-        Resolution rules:
+        Before the consolidation the manager carried its own private copy
+        (Task 3.8) and the two bodies were held equal by a paragraph in
+        ``meetings/voting.py`` -- audits/audit-phase-19-triage.md §7 item 27.
+        ``tests/meetings/test_vote_tally_parity.py`` ran both over every
+        committed meeting's recorded ballots (707 meetings / 3,934 ballots,
+        all four committed sets) plus synthetic edge fixtures and found zero
+        disagreements; it now pins this delegation and the recorded outcomes.
 
-        * Empty ballots -> ``SKIPPED`` (no votes to tally).
-        * ``SKIP`` has plurality (alone or tied at the top) -> ``SKIPPED``.
-        * Two or more non-``SKIP`` targets tied at the top -> ``SKIPPED``.
-        * Single non-``SKIP`` target with strict plurality AND at least one
-          ballot for that target with ``confidence >=
-          skip_confidence_threshold`` -> ``EJECTED``.
-        * Otherwise (strict plurality but no confident ballot) ->
-          ``SKIPPED`` (the mechanical "meets threshold" check; the "max
-          confidence across the target's ballots" reading matches DESIGN.md
-          §4.6 -- the eject requires at least one confident voter).
-
-        The threshold check is inclusive at the cutoff: a confidence of
-        exactly ``skip_confidence_threshold`` ejects.
+        The threshold is :attr:`MeetingConfig.skip_confidence_threshold`,
+        validated in ``[0, 1]`` by :meth:`__init__` on a frozen config.
+        ``tally_ballots`` re-validates it per call -- redundant here (a
+        constructed manager cannot carry an out-of-range threshold), which is
+        precisely why the delegation is behaviour-preserving.
         """
 
-        tallies: dict[str, int] = {}
-        for ballot in ballots:
-            tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
-        if not tallies:
-            return "SKIPPED", None
-        max_votes = max(tallies.values())
-        leaders = sorted(
-            target for target, count in tallies.items() if count == max_votes
+        return tally_ballots(
+            ballots,
+            skip_confidence_threshold=self._config.skip_confidence_threshold,
         )
-        if _SKIP_TARGET in leaders:
-            return "SKIPPED", None
-        if len(leaders) > 1:
-            return "SKIPPED", None
-        leader = leaders[0]
-        threshold = self._config.skip_confidence_threshold
-        leader_max_confidence = max(
-            ballot.confidence for ballot in ballots if ballot.target == leader
-        )
-        if leader_max_confidence < threshold:
-            return "SKIPPED", None
-        return "EJECTED", leader
 
     @staticmethod
     def _validate_participants(
