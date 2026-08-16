@@ -433,8 +433,8 @@ function MeetingStoryHarness({
       // always starts from the clean state, whatever a previously rendered story
       // left in the shared store.
       replayLoadError: null,
-      memoryError: null,
-      meetingError: null,
+      memoryErrors: {},
+      meetingErrors: {},
       currentTick: 0,
       isPlaying: false,
       selectedMeetingId: meetingId,

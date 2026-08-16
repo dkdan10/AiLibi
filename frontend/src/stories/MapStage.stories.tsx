@@ -282,8 +282,8 @@ function MapStoryHarness({ perspective }: { perspective: Perspective }) {
       // always starts from the clean state, whatever a previously rendered story
       // left in the shared store.
       replayLoadError: null,
-      memoryError: null,
-      meetingError: null,
+      memoryErrors: {},
+      meetingErrors: {},
       currentTick: PLAY_INDEX, // the emergence tick (engine tick 315)
       isPlaying: false,
       perspective,

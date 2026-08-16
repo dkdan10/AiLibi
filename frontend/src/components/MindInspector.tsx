@@ -340,8 +340,9 @@ function MemoryGate({
 }
 
 // The MEETING-TRANSCRIPT gate (Task 19.12) — `MemoryGate`'s sibling for the
-// Prompt / Response tabs, and the reader for the `meetingError` field the
-// error-field split introduced.
+// Prompt / Response tabs, and the surface behind the `meetingErrors` map the
+// error-field split introduced. It takes a plain string: the connected component
+// does the per-key lookup, so this stays presentational.
 //
 // The verbatim bodies are windowed out of the bulk payload (Task 6.7) and
 // lazy-fetched per meeting when one of those tabs opens. When that fetch FAILS
@@ -807,11 +808,11 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
   // split that sentence could be carrying a replay-load or meeting-transcript
   // failure instead — the gate is only ever reached with `memory === undefined`,
   // so the wrong error read as an explanation for the missing snapshot.
-  const memoryError = useReplayStore((s) => s.memoryError);
-  // …and the meeting-transcript failure, read by `VerbatimGate` on the Prompt /
+  const memoryErrors = useReplayStore((s) => s.memoryErrors);
+  // …and the meeting-transcript failures, read by `VerbatimGate` on the Prompt /
   // Response tabs. Two fields, two gates, two sentences — the split's whole
   // point is that neither surface can print the other's failure.
-  const meetingError = useReplayStore((s) => s.meetingError);
+  const meetingErrors = useReplayStore((s) => s.meetingErrors);
   const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
   const fetchMeeting = useReplayStore((s) => s.fetchMeeting);
   const selectAgent = useReplayStore((s) => s.selectAgent);
@@ -869,21 +870,15 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
       : `${meetingId}:${selectedAgentId}`;
   const memory = memoryCacheKey === null ? undefined : memoryCache[memoryCacheKey];
 
-  // SCOPE each stored failure to what this panel is actually showing (Task
-  // 19.12 review). Both store errors carry the key of the request that failed,
-  // so an error for another agent/meeting is simply not this panel's error: a
-  // transcript that 500s for meeting A must not caption meeting B's perfectly
-  // loaded bodies, and a memory fetch that failed for agent A must not explain
-  // agent B's still-loading snapshot. The panel props stay plain strings — the
+  // Read the failure for exactly what this panel is showing (Task 19.12 review).
+  // The store keys failures the same way it keys the caches, so this is a plain
+  // lookup rather than a comparison: a transcript that 500s for meeting A is
+  // simply not in meeting B's slot, and it cannot be evicted by a later failure
+  // for some other key either. The panel props stay plain strings — the
   // presentational component renders a message, it does not adjudicate whose.
   const memorySnapshotError =
-    memoryError !== null && memoryError.key === memoryCacheKey
-      ? memoryError.message
-      : null;
-  const transcriptError =
-    meetingError !== null && meetingError.key === meetingId
-      ? meetingError.message
-      : null;
+    memoryCacheKey === null ? null : (memoryErrors[memoryCacheKey] ?? null);
+  const transcriptError = meetingId === null ? null : (meetingErrors[meetingId] ?? null);
 
   // Liveness at the meeting tick (role-neutral "dead" chip). Defaults to alive
   // when the frame isn't found (e.g. a synthetic story meeting).

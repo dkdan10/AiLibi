@@ -49,29 +49,20 @@ export interface HighlightedSighting {
 }
 
 /**
- * A fetch failure tagged with the request it belongs to (Task 19.12).
- *
- * Splitting one error field into three (below) fixed "which SURFACE owns this
- * failure". It did not fix "which REQUEST does it describe" — and for the two
- * KEYED caches that second question is the one that bites. Both
- * `fetchMemoryView` and `fetchMeeting` write per-key cache entries, so a bare
- * scalar error outlives the request that produced it: open meeting A, its
- * transcript 500s, switch to meeting B whose fetch succeeds (or is already
- * cached, so no fetch runs at all), and B's panel renders A's failure over
- * bodies that loaded perfectly.
- *
- * So the error carries its key. A consumer shows it only when the key matches
- * what it is currently displaying, which makes a stale error inert rather than
- * merely unlikely — and the success path clears its own key, so a retry that
- * works actually clears the message.
- *
- * `replayLoadError` needs none of this: there is exactly one current replay, so
- * the selection itself is the scope, and `selectReplay` already resets it.
+ * Drop one key from an error map, preserving object identity when there is
+ * nothing to drop (a fresh object on every success would re-render every
+ * subscriber for no reason).
  */
-export interface ScopedFetchError {
-  /** `memoryKey(meetingId, agentId)` for memory; the meeting id for a transcript. */
-  readonly key: string;
-  readonly message: string;
+function withoutKey(
+  errors: Record<string, string>,
+  key: string,
+): Record<string, string> {
+  if (errors[key] === undefined) {
+    return errors;
+  }
+  const next = { ...errors };
+  delete next[key];
+  return next;
 }
 
 export interface ReplayStoreState {
@@ -99,17 +90,26 @@ export interface ReplayStoreState {
 
   /** The REPLAY-LOAD failure: `selectReplay` could not fetch this game. */
   replayLoadError: string | null;
-  /**
-   * The memory-snapshot failure: `fetchMemoryView` (the Mind inspector).
-   * SCOPED to the `${meetingId}:${agentId}` it belongs to — see
-   * {@link ScopedFetchError}.
-   */
-  memoryError: ScopedFetchError | null;
-  /**
-   * The meeting-transcript failure: `fetchMeeting` (the lazy LLM bodies).
-   * SCOPED to the meeting id it belongs to — see {@link ScopedFetchError}.
-   */
-  meetingError: ScopedFetchError | null;
+
+  // The two KEYED failures are MAPS, mirroring the caches they shadow, and that
+  // shape is load-bearing rather than tidy. Splitting one field into three fixed
+  // "which SURFACE owns this failure"; it left "which REQUEST does it describe"
+  // unanswered, and for a keyed cache one slot per CATEGORY cannot answer that
+  // however it is tagged. A single slot holds one failure, so every concurrent
+  // request fights over it: agent A fails, agent B fails after it, and A's
+  // failure is simply gone — the panel showing A then has no data and no error,
+  // i.e. a spinner that never resolves even though every request completed.
+  // Per-key storage removes the contention instead of arbitrating it: each
+  // request owns its own slot, a consumer reads the slot for what it is
+  // displaying, and a success deletes exactly its own.
+  //
+  // `replayLoadError` stays a scalar on purpose: there is exactly one current
+  // replay, so the selection itself is the scope and `selectReplay` resets it.
+
+  /** Memory-snapshot failures by `${meetingId}:${agentId}` (mirrors `memoryCache`). */
+  memoryErrors: Record<string, string>;
+  /** Meeting-transcript failures by meeting id (mirrors `meetingCache`). */
+  meetingErrors: Record<string, string>;
 
   // Playback state.
   currentTick: number;
@@ -278,8 +278,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       replayListError: null,
       currentReplay: null,
       replayLoadError: null,
-      memoryError: null,
-      meetingError: null,
+      memoryErrors: {},
+      meetingErrors: {},
       currentTick: 0,
       isPlaying: false,
       playbackSpeed: 1,
@@ -387,8 +387,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             // the previous game's load failure AND any memory/meeting failure
             // left over from it (the single field used to do this by accident).
             replayLoadError: null,
-            memoryError: null,
-            meetingError: null,
+            memoryErrors: {},
+            meetingErrors: {},
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -432,8 +432,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           set({
             currentReplay: null,
             replayLoadError: errorMessage(error),
-            memoryError: null,
-            meetingError: null,
+            memoryErrors: {},
+            meetingErrors: {},
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -524,7 +524,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             memoryCache: { ...state.memoryCache, [key]: memory },
             // A retry that WORKED clears its own failure, and only its own: a
             // pending error for a different agent/meeting is still true.
-            memoryError: state.memoryError?.key === key ? null : state.memoryError,
+            memoryErrors: withoutKey(state.memoryErrors, key),
           }));
         } catch (error) {
           // Likewise, don't surface an error for a replay/set no longer selected.
@@ -546,7 +546,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           if (get().memoryCache[key] !== undefined) {
             return;
           }
-          set({ memoryError: { key, message: errorMessage(error) } });
+          set((state) => ({
+            memoryErrors: { ...state.memoryErrors, [key]: errorMessage(error) },
+          }));
         }
       },
 
@@ -582,8 +584,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           set((state) => ({
             meetingCache: { ...state.meetingCache, [meetingId]: meeting },
             // As in fetchMemoryView: a successful retry clears its own failure.
-            meetingError:
-              state.meetingError?.key === meetingId ? null : state.meetingError,
+            meetingErrors: withoutKey(state.meetingErrors, meetingId),
           }));
         } catch (error) {
           if (
@@ -599,7 +600,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           if (get().meetingCache[meetingId] !== undefined) {
             return;
           }
-          set({ meetingError: { key: meetingId, message: errorMessage(error) } });
+          set((state) => ({
+            meetingErrors: {
+              ...state.meetingErrors,
+              [meetingId]: errorMessage(error),
+            },
+          }));
         }
       },
 
@@ -610,8 +616,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
         set({
           replayListError: null,
           replayLoadError: null,
-          memoryError: null,
-          meetingError: null,
+          memoryErrors: {},
+          meetingErrors: {},
         });
       },
 
