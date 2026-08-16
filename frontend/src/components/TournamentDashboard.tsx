@@ -447,6 +447,24 @@ function advisoryCaveat(cell: WilsonRateCell) {
   ) : undefined;
 }
 
+// The non-causation note. It rides on the non-direct tile ALWAYS, never as an
+// either/or with the rare-cell badge: StatTile's caveat slot is a wrap-friendly
+// row, so both render together. The two say different things — one is about
+// sample size, the other about what "proof-present" means — and dropping the
+// semantic one whenever a set happens to be small is exactly how the committed
+// samples-4p1i report (non-direct 1/3) ended up rendered with the causal
+// reading the backend definition rejects.
+function nonCausationCaveat(cell: WilsonRateCell) {
+  return (
+    <MetricCaveat
+      tone="note"
+      title={`Co-occurrence inside one meeting, not causation: the cell says no role-proof flag NAMED the ejected player, not that the vote ignored evidence. ${formatCellInterval(cell)}.`}
+    >
+      proof-present ≠ proof-driven
+    </MetricCaveat>
+  );
+}
+
 // A labelled sub-group inside the deduction panel. Each partition gets its own
 // heading and its own denominators; the two are NEVER mixed in one row, which is
 // the whole point of the panel (the C5 define-before-counting lesson: the audits'
@@ -493,7 +511,7 @@ function DeductionSection({
   return (
     <MetricSection
       title="Proof vs inference"
-      description="How much of this set's ejection accuracy rides on engine-donated vent proof rather than deduction (Task 19.14; audits/audit-phase-19-triage.md §7 item 15). The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed."
+      description="How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT (Task 19.14; audits/audit-phase-19-triage.md §7 item 15). The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed. Presence is co-occurrence, not causation: the split says what evidence was on the record, never that a vote followed it."
     >
       <div className="flex flex-col gap-4">
         <PartitionGroup
@@ -536,14 +554,10 @@ function DeductionSection({
             hint={`${formatInt(ejecteeProof.non_direct_impostor)} / ${formatInt(ejecteeProof.non_direct_ejections)} ejections with NO proof naming the ejected player`}
             lead
             caveat={
-              advisoryCaveat(ejecteeProof.non_direct_accuracy) ?? (
-                <MetricCaveat
-                  tone="note"
-                  title={`Co-occurrence inside one meeting, not causation: the cell says no role-proof flag NAMED the ejected player, not that the vote ignored evidence. ${formatCellInterval(ejecteeProof.non_direct_accuracy)}.`}
-                >
-                  proof-present ≠ proof-driven
-                </MetricCaveat>
-              )
+              <>
+                {advisoryCaveat(ejecteeProof.non_direct_accuracy)}
+                {nonCausationCaveat(ejecteeProof.non_direct_accuracy)}
+              </>
             }
           />
           <StatTile
@@ -553,7 +567,7 @@ function DeductionSection({
                 ? ejecteeProof.proof_present_ejections / ejecteeProof.ejections_total
                 : null,
             )}
-            hint={`${formatInt(ejecteeProof.proof_present_ejections)} / ${formatInt(ejecteeProof.ejections_total)} ejections rode ejectee-specific proof`}
+            hint={`${formatInt(ejecteeProof.proof_present_ejections)} / ${formatInt(ejecteeProof.ejections_total)} ejections had ejectee-specific proof on the record`}
           />
         </PartitionGroup>
 

@@ -417,13 +417,20 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 #   * ``weak_flag_conviction``, ``turn_ballot_consistency``,
 #     ``public_response_coverage``, ``redirected_ballots``,
 #     ``scaffold_leakage``, and the adopted ``witnessed_supply``;
+#   * the leakage block's THREE model-side omniscience nets
+#     (``model_partner_naming_ballots`` / ``model_role_statement_ballots`` /
+#     ``model_self_kill_disclosure_ballots``) plus their union
+#     (``model_omniscient_ballots``), the two machinery cells
+#     (``model_machinery_quotation_ballots`` — a quoted ``0.NN`` — and the
+#     explicitly-upper-bound ``model_machinery_vocabulary_ballots``), and the
+#     crew controls (``crew_omniscient_control_ballots``);
 #   * the shared ``WilsonRateCell`` leaf (``numerator`` / ``denominator`` /
 #     ``rate`` / ``wilson_low`` / ``wilson_high`` / ``advisory``).
 #
-# Every one is an aggregate count, a rate, or a bool. Two deserve an explicit
-# firewall note because their NAMES sound content-bearing and are not:
-# ``player_visible_leak_turns`` and ``model_partner_naming_ballots`` are COUNTS
-# of turns/ballots matching a phrase net — no text, no speaker, no player id
+# Every one is an aggregate count, a rate, or a bool. Two groups deserve an
+# explicit firewall note because their NAMES sound content-bearing and are not:
+# ``player_visible_leak_turns`` / ``model_*_ballots`` are COUNTS of turns and
+# ballots matching a phrase or regex net — no text, no speaker, no player id
 # crosses the model boundary — and ``crew_turns`` / ``impostor_turns`` are
 # role-SPLIT totals over a finished game's transcript, which this privileged
 # post-game GM surface already exposes as ``roles``. So the whole block stays
@@ -477,6 +484,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "crew_ballots",
         "crew_macro_average_coverage",
         "crew_macro_meetings",
+        "crew_omniscient_control_ballots",
         "crew_partner_naming_ballots",
         "crew_pooled_coverage",
         "crew_turns",
@@ -524,6 +532,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "guard_marked_ballot_share",
         "guard_marked_ballots",
         "guard_preserved_omniscient_ballots",
+        "guard_rewritten_ballots_unwound",
         "guard_target_rewrite_ballots",
         "hi",
         "impostor_accused_conversion_rate",
@@ -537,6 +546,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "impostor_pooled_coverage",
         "impostor_turns",
         "impostor_turns_with_whereabouts",
+        "inconsistent_invalid_target_ballots",
         "inconsistent_other_target_ballots",
         "inconsistent_skip_ballots",
         "input_tokens",
@@ -569,9 +579,15 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "missed_skip_invalid_target",
         "missed_skip_teammate_coerced",
         "model",
+        "model_machinery_quotation_ballots",
+        "model_machinery_quotation_share",
+        "model_machinery_vocabulary_ballots",
+        "model_omniscient_ballots",
+        "model_omniscient_rate",
         "model_partner_naming_ballots",
         "model_partner_naming_rate",
         "model_role_statement_ballots",
+        "model_self_kill_disclosure_ballots",
         "n_bins",
         "non_direct_accuracy",
         "non_direct_ejections",

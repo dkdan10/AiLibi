@@ -54,6 +54,7 @@ from eval.deduction_metrics import (
     DeductionMetricsReport,
     UnclassifiableFlagError,
     WilsonRateCell,
+    _authored_target,
     classify_flag,
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
@@ -67,6 +68,7 @@ from eval.report_schema import (
     MeetingReport,
     TournamentReport,
 )
+from meetings.manager import BALLOT_TARGET_REDIRECT_MARKER
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -598,16 +600,84 @@ def test_turn_ballot_consistency_pins(
     samples = samples_9p2i.deduction.turn_ballot_consistency
     assert samples.accusations_total == 778
     assert samples.accusing_ballots == 777
-    assert samples.consistent_ballots == 340
-    assert samples.inconsistent_skip_ballots == 340
-    assert samples.inconsistent_other_target_ballots == 97
-    assert samples.consistency_rate == pytest.approx(340 / 777)
+    assert samples.consistent_ballots == 347
+    assert samples.inconsistent_skip_ballots == 336
+    assert samples.inconsistent_other_target_ballots == 92
+    assert samples.inconsistent_invalid_target_ballots == 2
+    assert samples.guard_rewritten_ballots_unwound == 16
+    assert samples.consistency_rate == pytest.approx(347 / 777)
 
     corpus = corpus_9p2i.deduction.turn_ballot_consistency
     assert corpus.accusing_ballots == 2186
-    assert corpus.consistent_ballots == 979
-    assert corpus.inconsistent_skip_ballots == 832
-    assert corpus.inconsistent_other_target_ballots == 375
+    assert corpus.consistent_ballots == 1003
+    assert corpus.inconsistent_skip_ballots == 829
+    assert corpus.inconsistent_other_target_ballots == 354
+    assert corpus.inconsistent_invalid_target_ballots == 0
+    assert corpus.guard_rewritten_ballots_unwound == 46
+
+
+def test_consistency_is_scored_against_the_authored_target(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """SAME-AGENT means the agent's target, not the guard's (the unwind).
+
+    Four deterministic guards rewrite ``VoteBallot.target`` and stamp the
+    ORIGINAL into ``rationale_text``. Scoring the RECORDED target would charge
+    the guard's redirect to the agent and double-count it against the redirect
+    census, so the fold unwinds it first. This test re-scores the same bytes
+    BOTH ways and asserts the two genuinely disagree — the unwind is not a
+    no-op dressed up as rigour.
+    """
+
+    committed = samples_9p2i.deduction.turn_ballot_consistency
+    naive_consistent = 0
+    scored = 0
+    for game in samples_9p2i.report.games:
+        for meeting in game.meetings:
+            votable = {ballot.voter for ballot in meeting.ballots}
+            accused_by: dict[str, set[str]] = {}
+            for turn in meeting.transcript.turns:
+                for claim in turn.claims:
+                    if isinstance(claim, AccusationClaim):
+                        accused_by.setdefault(turn.speaker, set()).add(claim.against)
+            for ballot in meeting.ballots:
+                accused = accused_by.get(ballot.voter)
+                if not accused or not accused & votable:
+                    continue
+                scored += 1
+                if ballot.target in accused:
+                    naive_consistent += 1
+
+    assert scored == committed.accusing_ballots == 777
+    # The recorded-target reading is the one the metric must NOT publish.
+    assert naive_consistent == 340
+    assert committed.consistent_ballots == 347
+    assert committed.guard_rewritten_ballots_unwound == 16
+
+
+def test_authored_target_recovers_the_pre_guard_ballot() -> None:
+    """The unwind reads the marker's own ``{target!r}``, on a synthetic ballot."""
+
+    redirected = VoteBallot(
+        voter="p-1",
+        target="p-4",
+        confidence=0.7,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
+        + "they lied about Reactor.",
+    )
+    assert _authored_target(redirected) == ("p-2", True)
+
+    untouched = VoteBallot(
+        voter="p-1",
+        target="p-2",
+        confidence=0.7,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text="they lied about Reactor.",
+    )
+    assert _authored_target(untouched) == ("p-2", False)
 
 
 @pytest.mark.parametrize(
@@ -787,25 +857,108 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     assert corpus_4p1i.deduction.scaffold_leakage.model_role_statement_ballots == 2
 
 
-@pytest.mark.parametrize(
-    "sample_dir",
-    [_SAMPLES_4P1I, _SAMPLES_9P2I, _CORPUS_4P1I, _CORPUS_9P2I],
-    ids=["samples-4p1i", "samples-9p2i", "corpus-4p1i", "corpus-9p2i"],
-)
-def test_guard_originated_stale_rationales_are_dormant_on_committed_bytes(
-    sample_dir: Path,
+def test_self_kill_disclosure_is_counted(
+    samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
 ) -> None:
-    """Task 19.15's class measured, not asserted: zero on every committed set.
+    """The THIRD omniscience net: a voter narrating their own kill.
+
+    Task 19.15's contract names "omniscient teammate/self-kill rationale text",
+    so a leakage metric that saw only partner naming and role statements was
+    measuring two thirds of the class. The union is below the net sum because a
+    ballot can hit several nets at once, and the crew control stays clean.
+    """
+
+    samples = samples_9p2i.deduction.scaffold_leakage
+    assert samples.model_self_kill_disclosure_ballots == 9
+    assert samples.model_omniscient_ballots == 42
+    assert samples.crew_omniscient_control_ballots == 0
+
+    corpus = corpus_9p2i.deduction.scaffold_leakage
+    assert corpus.model_self_kill_disclosure_ballots == 22
+    assert corpus.model_omniscient_ballots == 110
+    assert corpus.crew_omniscient_control_ballots == 0
+    # The union is a union, not a sum: overlapping nets are not double-counted.
+    assert corpus.model_omniscient_ballots < (
+        corpus.model_partner_naming_ballots
+        + corpus.model_role_statement_ballots
+        + corpus.model_self_kill_disclosure_ballots
+    )
+
+
+def test_machinery_quotation_reproduces_the_19_8_disclosure(
+    samples_9p2i: TournamentEvalReport, corpus_9p2i: TournamentEvalReport
+) -> None:
+    """The MACHINERY half of the model-originated class (contract: role/machinery).
+
+    ``replays/ml_corpus/README.md`` item 7: a quoted internal decimal in 39/971
+    (samples 9p2i) and 94/2,726 (corpus 9p2i) ballots — the unambiguous cell —
+    beside the vocabulary net, which Task 19.8 labelled an upper bound and this
+    module keeps labelled rather than promoting to a leak rate.
+    """
+
+    samples = samples_9p2i.deduction.scaffold_leakage
+    assert samples.model_machinery_quotation_ballots == 39
+    assert samples.model_machinery_quotation_share == pytest.approx(39 / 971)
+    assert samples.model_machinery_vocabulary_ballots == 116
+
+    corpus = corpus_9p2i.deduction.scaffold_leakage
+    assert corpus.model_machinery_quotation_ballots == 94
+    assert corpus.model_machinery_quotation_share == pytest.approx(94 / 2726)
+    assert corpus.model_machinery_vocabulary_ballots == 297
+    # The vocabulary net is strictly the looser reading of the same ballots.
+    assert (
+        corpus.model_machinery_vocabulary_ballots
+        > corpus.model_machinery_quotation_ballots
+    )
+
+
+@pytest.mark.parametrize(
+    ("set_name", "sample_dir", "expected"),
+    [
+        ("samples/4p1i", _SAMPLES_4P1I, 0),
+        ("samples/9p2i", _SAMPLES_9P2I, 0),
+        ("ml_corpus/4p1i", _CORPUS_4P1I, 0),
+        ("ml_corpus/9p2i", _CORPUS_9P2I, 1),
+    ],
+)
+def test_guard_originated_stale_rationales_are_rare_not_absent(
+    set_name: str, sample_dir: Path, expected: int
+) -> None:
+    """Task 19.15's class measured, not asserted — and it is NOT zero everywhere.
 
     19.15 redacts the omniscient rationale a target-rewriting guard used to
-    preserve, and labels the path "dormant for committed bytes". This is that
-    label as a measurement: guard rewrites DO occur (the count is nonzero on
-    three of four sets), and none of them preserved partner/role text.
+    preserve, and labels the path "dormant for committed bytes". Measured, that
+    label is *rare*, not *absent*: ``replays/ml_corpus/9p2i`` carries exactly one
+    instance. This test exists because the metric read 0 everywhere until the
+    self-kill net landed — a leakage predicate that saw only partner and role
+    phrasing was blind to a voter narrating their own kill, which is the third
+    shape 19.15's own contract names.
     """
 
     leakage = _committed(sample_dir).deduction.scaffold_leakage
-    assert leakage.guard_preserved_omniscient_ballots == 0
+    assert leakage.guard_preserved_omniscient_ballots == expected
     assert leakage.guard_target_rewrite_ballots <= leakage.guard_marked_ballots
+
+
+def test_the_guard_preserved_instance_is_seed_1118(
+    corpus_9p2i: TournamentEvalReport,
+) -> None:
+    """Name the exhibit: corpus seed 1118, meeting 0, a redirected impostor ballot.
+
+    Its preserved rationale reads "… when I know I was killing p-3 …" — the
+    guard rewrote the TARGET and left the self-kill disclosure in place, which
+    is exactly the text Task 19.15 redacts going forward.
+    """
+
+    hits = [
+        (game.seed, meeting.meeting_id, ballot.voter)
+        for game in corpus_9p2i.report.games
+        for meeting in game.meetings
+        for ballot in meeting.ballots
+        if BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] in ballot.rationale_text
+        and "i was killing" in ballot.rationale_text.lower()
+    ]
+    assert hits == [(1118, "headless-seed-1118:meeting-0", "p-6")]
 
 
 def test_guard_marker_counts(

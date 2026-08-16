@@ -662,7 +662,9 @@ export interface TurnBallotConsistencyCells {
   consistent_ballots: number;
   inconsistent_skip_ballots: number;
   inconsistent_other_target_ballots: number;
+  inconsistent_invalid_target_ballots: number;
   excluded_no_votable_target_ballots: number;
+  guard_rewritten_ballots_unwound: number;
   consistency_rate: number | null;
 }
 
@@ -694,9 +696,16 @@ export interface ScaffoldLeakageCells {
   turns_total: number;
   model_partner_naming_ballots: number;
   model_role_statement_ballots: number;
+  model_self_kill_disclosure_ballots: number;
+  model_omniscient_ballots: number;
   crew_partner_naming_ballots: number;
+  crew_omniscient_control_ballots: number;
   player_visible_leak_turns: number;
   model_partner_naming_rate: WilsonRateCell;
+  model_omniscient_rate: WilsonRateCell;
+  model_machinery_quotation_ballots: number;
+  model_machinery_vocabulary_ballots: number;
+  model_machinery_quotation_share: number | null;
   guard_marked_ballots: number;
   guard_target_rewrite_ballots: number;
   guard_preserved_omniscient_ballots: number;

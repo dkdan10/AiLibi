@@ -124,31 +124,48 @@ ejection.
 
 **5. Same-agent turn -> ballot consistency**
 (:class:`TurnBallotConsistencyCells`) — did the speaker vote the way they spoke?
-The definition is written first *because* SKIP needs a rule (the implementation
-hint): an accusation followed by a SKIP ballot is an inconsistency only when the
-accused was votable.
+The definition is written first *because* two things need a rule: SKIP (the
+implementation hint) and the vote guard.
 
 * VOTABLE set of a meeting = the players who cast a ballot in it (every living
   participant votes, so this is the living roster read off the record rather
   than reconstructed).
+* AUTHORED target: **the target the AGENT wrote, not the one the record shows.**
+  Four deterministic guards rewrite ``VoteBallot.target`` and each stamps the
+  ORIGINAL into ``rationale_text`` as ``{target!r}`` — the graph redirect, the
+  invalid-target normalization, the teammate coercion, and the citation-gate
+  coercion (``meetings/manager.py``). This metric is SAME-AGENT by name, so a
+  rewritten ballot is unwound to the authored target before it is scored;
+  otherwise the guard's choice would be charged to the agent, and the same
+  rewrite would be counted twice — once here as "inconsistency" and once,
+  correctly, in the separate redirect census (metric 7). On
+  ``replays/samples/9p2i`` 16 of the 777 scored ballots change bucket under the
+  unwind (46 of 2,186 on the corpus), so this is not a hypothetical.
+  ``guard_rewritten_ballots_unwound`` publishes how many were unwound.
 * Denominator ``accusing_ballots``: (meeting, voter) pairs where the voter cast
   a ballot, spoke at least one turn carrying an
   :class:`~meetings.schemas.AccusationClaim`, and accused at least one VOTABLE
   player.
-* ``consistent_ballots``: the ballot's target is one of that voter's accused
+* ``consistent_ballots``: the authored target is one of that voter's accused
   players.
-* ``inconsistent_skip_ballots``: the ballot is SKIP (the accused was votable, so
-  the SKIP-tolerance clause does not excuse it).
-* ``inconsistent_other_target_ballots``: the ballot names a player the voter
-  never accused.
+* ``inconsistent_skip_ballots``: the authored target is SKIP (the accused was
+  votable, so the SKIP-tolerance clause does not excuse it).
+* ``inconsistent_other_target_ballots``: the authored target is a VOTABLE player
+  the voter never accused.
+* ``inconsistent_invalid_target_ballots``: the authored target names no votable
+  player at all — the hallucinated-id shape the invalid-target guard normalizes
+  to SKIP (2 on ``replays/samples/9p2i``, 0 elsewhere). It is its own bucket
+  because the voter neither voted their accusation nor voted anyone else;
+  folding it into either would misdescribe what happened.
 * ``excluded_no_votable_target_ballots``: accusing ballots where NO accused
   player was votable — excluded from the denominator, published so the exclusion
   is visible rather than silent. ``accusations_of_non_votable_targets`` counts
   the accusation claims naming a non-votable player at all.
 
-*Does NOT measure*: whether the accusation or the vote was CORRECT; and it
-deliberately scores an honest mid-meeting revision as an inconsistency — it
-measures follow-through, not virtue.
+*Does NOT measure*: whether the accusation or the vote was CORRECT; whether the
+guard's rewrite was right (metric 7 owns the guard); and it deliberately scores
+an honest mid-meeting revision as an inconsistency — it measures follow-through,
+not virtue.
 
 **6. Public response coverage split by role**
 (:class:`PublicResponseCoverageCells`) — the triage's item-24 disclosure twin.
@@ -178,29 +195,58 @@ changed the meeting's OUTCOME (that needs a counterfactual tally, which recorded
 bytes cannot supply).
 
 **8. Scaffold leakage, split by ORIGIN** (:class:`ScaffoldLeakageCells`) — the
-C5 finding restated as two separately-defined metrics instead of one contested
-number:
+C5 finding restated as separately-defined metrics instead of one contested
+number. The contract names two leakage CLASSES on the model side — role
+statements and machinery statements — and one on the guard side; all three are
+counted, and the ROLE class is itself three nets because "omniscience" has three
+distinguishable shapes in the committed text:
 
-* MODEL-originated — text the model authored. ``model_partner_naming_ballots``:
-  impostor-voter ballots whose rationale contains a phrase from
-  :data:`PARTNER_PHRASES`. ``model_role_statement_ballots``: impostor-voter
-  ballots containing a phrase from :data:`ROLE_STATEMENT_PHRASES`.
-  ``crew_partner_naming_ballots`` is the false-positive CONTROL (0 on every
-  committed set). ``player_visible_leak_turns`` is the same partner-phrase net
-  over player-visible ``free_text``.
+* MODEL-originated ROLE/omniscience — text the model authored.
+  ``model_partner_naming_ballots`` (:data:`PARTNER_PHRASES`),
+  ``model_role_statement_ballots`` (:data:`ROLE_STATEMENT_PHRASES`), and
+  ``model_self_kill_disclosure_ballots`` (:data:`SELF_KILL_PHRASES` — a voter
+  narrating their OWN kill: "I killed p-4", "I know I was killing p-3"). All
+  three are over impostor-voter ballots; ``model_omniscient_ballots`` is their
+  UNION (a ballot can hit several nets, so the union is not their sum).
+  ``crew_partner_naming_ballots`` and ``crew_omniscient_control_ballots`` are
+  the false-positive CONTROLS (both 0 on every committed set).
+  ``player_visible_leak_turns`` is the partner net over player-visible
+  ``free_text``.
+
+  First-person VENT mentions are deliberately EXCLUDED from the self-kill net.
+  On the committed bytes they are dominated by denials and quotations of an
+  accusation — "You claim I vented", "They scream I vented" — which a substring
+  net cannot separate from an admission, and counting a denial as a leak would
+  invert the metric. A genuine vent admission that also states the role
+  ("I am the killer. I vented.") is already caught by the role net.
+* MODEL-originated MACHINERY — the model reproducing its own scoring scaffold.
+  Two cells, because the two registers do not deserve the same confidence
+  (Task 19.8's finding, carried rather than flattened):
+  ``model_machinery_quotation_ballots`` counts a QUOTED internal decimal
+  (:data:`MACHINERY_DECIMAL_PATTERN`, ``0.NN``) — unambiguous, since the
+  two-decimal grid is exactly what ``vote_ballot.j2`` renders; while
+  ``model_machinery_vocabulary_ballots`` counts :data:`MACHINERY_VOCABULARY`
+  ("threshold" / "suspicion") and is an explicit UPPER BOUND, because a
+  deduction game says those words naturally. Both are over ALL ballots, not
+  just impostor ones — machinery talk is role-independent.
 * GUARD-originated — text the deterministic machinery injected.
   ``guard_marked_ballots``: ballots carrying any pinned manager/voting marker.
   ``guard_target_rewrite_ballots``: the subset whose TARGET the guard rewrote.
   ``guard_preserved_omniscient_ballots``: target-rewritten ballots whose
-  preserved rationale still carries an omniscient phrase — the exact class Task
-  19.15 redacts going forward, pinned here at 0 for the committed bytes, which
-  is what "dormant for committed bytes" means as a measurement.
+  preserved rationale still carries ANY omniscient phrase (the union above) —
+  the exact class Task 19.15 redacts going forward. It is **1** on
+  ``replays/ml_corpus/9p2i`` (seed 1118, meeting 0: a redirected impostor ballot
+  whose preserved rationale says "when I know I was killing p-3") and 0 on the
+  other three sets. The class is therefore RARE on committed bytes, not absent —
+  a distinction this module got wrong until the self-kill net existed, which is
+  itself the C5 lesson landing on the metric that measures it.
 
-Both nets are substring matches over recorded text and are therefore an UPPER
-bound on intent and a LOWER bound on leakage: a phrase list cannot see a leak
-it does not list. *Does NOT measure*: paraphrase, and *does NOT* claim the
-phrase sets are exhaustive — they are the sets Task 19.8's disclosure counted,
-carried here verbatim so the two surfaces cannot drift.
+Every net is a substring or regex match over recorded text and is therefore an
+UPPER bound on intent and a LOWER bound on leakage: a phrase list cannot see a
+leak it does not list. *Does NOT measure*: paraphrase, and *does NOT* claim the
+nets are exhaustive. The partner, role, decimal and vocabulary nets are Task
+19.8's, carried verbatim so the two surfaces cannot drift; the self-kill net is
+new here and is stated as new.
 
 **9. Witnessed / co-present evidence supply**
 (:class:`WitnessedSupplyCells`) — ADOPTED wholesale from
@@ -257,7 +303,9 @@ no roles, transcripts, player ids, or engine-owned types cross a model boundary.
 
 from __future__ import annotations
 
+import ast
 import math
+import re
 from collections.abc import Mapping, Sequence
 from typing import Final, Literal, Protocol, TypeAlias
 
@@ -278,6 +326,7 @@ from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
     PlayerId,
+    VoteBallot,
     WhereaboutsClaim,
 )
 from meetings.transcript import is_weak_contradiction
@@ -376,6 +425,51 @@ ROLE_STATEMENT_PHRASES: Final[tuple[str, ...]] = (
 )
 """The STRICT outright-role-statement net (Task 19.8's 8/245 S9, 14/684 C9)."""
 
+SELF_KILL_PHRASES: Final[tuple[str, ...]] = (
+    "i killed",
+    "i kill ",
+    "i was killing",
+    "i had killed",
+    "one who killed",
+    "i am the killer",
+    "i'm the killer",
+)
+"""First-person KILL disclosure — a voter narrating their own kill.
+
+The third omniscience shape, and the one Task 19.15's contract names beside
+"teammate" ("omniscient teammate/self-kill rationale text"). It is NEW here
+rather than carried from Task 19.8, which counted only partner naming and
+outright role statements; the committed bytes carry 9/245 (samples 9p2i) and
+22/684 (corpus 9p2i) impostor-voter ballots under it, including the one
+guard-preserved instance the module docstring names.
+
+First-person VENT mentions are deliberately absent. On the committed bytes they
+are dominated by denials and quotations of an accusation ("You claim I vented",
+"They scream I vented"), which a substring net cannot separate from an
+admission; counting a denial as a leak would invert the metric. A genuine vent
+admission that also states the role is caught by
+:data:`ROLE_STATEMENT_PHRASES`. Crew false-positive control: 0 across all four
+committed sets.
+"""
+
+MACHINERY_DECIMAL_PATTERN: Final[re.Pattern[str]] = re.compile(r"0\.\d\d")
+"""The UNAMBIGUOUS machinery-quotation net: a quoted internal decimal.
+
+Two decimals is exactly the grid ``vote_ballot.j2`` renders suspicion and the
+§4.6 max on (``"%.2f"|format``), so a rationale reproducing one is quoting the
+scoring scaffold rather than talking like a player. Task 19.8: 39/971 (samples
+9p2i) and 94/2,726 (corpus 9p2i) ballots.
+"""
+
+MACHINERY_VOCABULARY: Final[tuple[str, ...]] = ("threshold", "suspicion")
+"""The machinery-vocabulary net — an explicit UPPER BOUND, not a leak count.
+
+A deduction game says "suspicion" and "threshold" naturally, so this net cannot
+distinguish quotation from ordinary play; Task 19.8 labelled it an upper bound
+and this module keeps that label rather than promoting it to a leak rate. It
+ships beside :data:`MACHINERY_DECIMAL_PATTERN`, never instead of it.
+"""
+
 
 def _marker_prefix(marker: str) -> str:
     """The literal head of a ``.format()``-interpolated marker constant.
@@ -418,6 +512,71 @@ _OTHER_GUARD_MARKER_PREFIXES: Final[tuple[str, ...]] = (
     _marker_prefix(INVALID_OBSERVATION_ID_MARKER),
 )
 _REDIRECT_MARKER_PREFIX: Final[str] = _marker_prefix(BALLOT_TARGET_REDIRECT_MARKER)
+
+# The repr-aware pattern that recovers the AUTHORED target a rewriting guard
+# preserved. Each of the four rewriting markers interpolates the ORIGINAL target
+# as ``{target!r}`` (``meetings/manager.py``: "either way this marker preserves
+# the original target"), so the agent's own ballot is recoverable from the
+# record. The value alternation mirrors ``eval/meeting_quality.py``'s
+# ``_MARKER_REPR_VALUE``: quote-matching consumes the whole repr first, so the
+# match ends at the REAL marker boundary even when the payload contains the
+# marker's tail. UNANCHORED on purpose — the citation gate is the last guard in
+# the ballot chain, so a redirect marker can ride INSIDE an outer coercion
+# marker; the outermost (earliest-starting) match is the one that names what the
+# agent actually wrote.
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+
+
+def _rewrite_marker_pattern(marker: str) -> re.Pattern[str]:
+    head, placeholder, tail = marker.partition("{target!r}")
+    if not placeholder:
+        raise ValueError(f"marker constant carries no target repr: {marker!r}")
+    return re.compile(
+        re.escape(head) + "(" + _MARKER_REPR_VALUE + ")" + re.escape(tail)
+    )
+
+
+_TARGET_REWRITE_MARKER_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    _rewrite_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER),
+    _rewrite_marker_pattern(INVALID_VOTE_TARGET_MARKER),
+    _rewrite_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER),
+    _rewrite_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER),
+)
+
+
+def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
+    """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
+
+    A rewriting guard replaces ``ballot.target`` and stamps the original into
+    ``rationale_text``; this reverses that for the SAME-AGENT metric, leaving the
+    guard's own behaviour to the redirect census. When no rewriting marker is
+    present the recorded target IS the authored one.
+
+    Fail-loud on a malformed repr (AGENTS.md "no silent fallbacks"): a marker
+    that matched its own pinned pattern but whose payload will not evaluate is a
+    corrupt record, not something to shrug past.
+    """
+
+    matches = [
+        match
+        for match in (
+            pattern.search(ballot.rationale_text)
+            for pattern in _TARGET_REWRITE_MARKER_PATTERNS
+        )
+        if match is not None
+    ]
+    if not matches:
+        return ballot.target, False
+    outermost = min(matches, key=lambda match: match.start())
+    try:
+        original = ast.literal_eval(outermost.group(1))
+    except (ValueError, SyntaxError) as error:  # pragma: no cover - corrupt record
+        raise ValueError(
+            f"guard marker carries an unreadable target repr: {outermost.group(1)!r}"
+        ) from error
+    if not isinstance(original, str):
+        raise ValueError(f"guard marker target repr is not a string: {original!r}")
+    return original, True
 
 
 # ---------------------------------------------------------------------------
@@ -822,10 +981,24 @@ class WeakFlagConvictionCells(_FrozenModel):
 class TurnBallotConsistencyCells(_FrozenModel):
     """Did the speaker vote the way they spoke? (metric 5).
 
+    Scored against the AUTHORED target — the one the agent wrote, recovered
+    from the guard marker whenever a deterministic guard rewrote
+    ``VoteBallot.target``. The metric is same-AGENT by name, so charging the
+    guard's redirect to the agent would both misattribute it and double-count
+    it against the redirect census (:class:`RedirectedBallotCells`).
+    ``guard_rewritten_ballots_unwound`` publishes how many scored ballots that
+    unwind touched (16 of 777 on ``replays/samples/9p2i``).
+
     Denominator ``accusing_ballots``: (meeting, voter) pairs where the voter
     cast a ballot, spoke >= 1 accusing turn, and accused >= 1 VOTABLE player
-    (votable = cast a ballot in that meeting). The three outcome buckets
+    (votable = cast a ballot in that meeting). The four outcome buckets
     partition it exactly.
+
+    ``inconsistent_invalid_target_ballots`` is the hallucinated-id shape: the
+    authored target names no votable player, so the voter neither voted their
+    accusation nor voted anyone else. It is its own bucket rather than folded
+    into either neighbour, because both foldings would misdescribe it (2 on
+    ``replays/samples/9p2i``, 0 elsewhere).
 
     ``excluded_no_votable_target_ballots`` is the SKIP-tolerance clause made
     visible: accusing ballots whose every accused player was non-votable are
@@ -835,9 +1008,10 @@ class TurnBallotConsistencyCells(_FrozenModel):
     committed set — the clause is structural, not empirically load-bearing on
     these bytes, and publishing the zeros is how that stays checkable.
 
-    *Does NOT measure* correctness of either the accusation or the vote, and
-    deliberately scores an honest mid-meeting revision as an inconsistency: it
-    measures follow-through, not virtue.
+    *Does NOT measure* correctness of either the accusation or the vote, nor
+    whether the guard's rewrite was right, and deliberately scores an honest
+    mid-meeting revision as an inconsistency: it measures follow-through, not
+    virtue.
     """
 
     accusations_total: int
@@ -846,7 +1020,9 @@ class TurnBallotConsistencyCells(_FrozenModel):
     consistent_ballots: int
     inconsistent_skip_ballots: int
     inconsistent_other_target_ballots: int
+    inconsistent_invalid_target_ballots: int
     excluded_no_votable_target_ballots: int
+    guard_rewritten_ballots_unwound: int
     consistency_rate: float | None
 
     @model_validator(mode="after")
@@ -860,19 +1036,29 @@ class TurnBallotConsistencyCells(_FrozenModel):
                 self.consistent_ballots,
                 self.inconsistent_skip_ballots,
                 self.inconsistent_other_target_ballots,
+                self.inconsistent_invalid_target_ballots,
                 self.excluded_no_votable_target_ballots,
+                self.guard_rewritten_ballots_unwound,
             ),
         )
         parts = (
             self.consistent_ballots
             + self.inconsistent_skip_ballots
             + self.inconsistent_other_target_ballots
+            + self.inconsistent_invalid_target_ballots
         )
         if parts != self.accusing_ballots:
             raise ValueError(
                 "the consistency buckets must partition accusing_ballots: "
                 f"{self.consistent_ballots} + {self.inconsistent_skip_ballots} + "
-                f"{self.inconsistent_other_target_ballots} != {self.accusing_ballots}"
+                f"{self.inconsistent_other_target_ballots} + "
+                f"{self.inconsistent_invalid_target_ballots} != "
+                f"{self.accusing_ballots}"
+            )
+        if self.guard_rewritten_ballots_unwound > self.accusing_ballots:
+            raise ValueError(
+                "unwound ballots cannot exceed the scored denominator: "
+                f"{self.guard_rewritten_ballots_unwound} > {self.accusing_ballots}"
             )
         if self.accusations_of_non_votable_targets > self.accusations_total:
             raise ValueError(
@@ -1041,16 +1227,31 @@ class RedirectedBallotCells(_FrozenModel):
 class ScaffoldLeakageCells(_FrozenModel):
     """Fourth-wall leakage, split by ORIGIN rather than pooled (metric 8).
 
-    MODEL-originated (the model authored the text):
+    MODEL-originated ROLE/omniscience (the model authored the text); all three
+    nets are over ``impostor_ballots``:
 
-    * ``model_partner_naming_ballots`` — impostor-voter ballots whose rationale
-      matches :data:`PARTNER_PHRASES`; denominator ``impostor_ballots``.
-    * ``model_role_statement_ballots`` — impostor-voter ballots matching
-      :data:`ROLE_STATEMENT_PHRASES`; same denominator.
-    * ``crew_partner_naming_ballots`` — the false-positive CONTROL over
-      ``crew_ballots`` (0 on every committed set).
+    * ``model_partner_naming_ballots`` — matches :data:`PARTNER_PHRASES`.
+    * ``model_role_statement_ballots`` — matches :data:`ROLE_STATEMENT_PHRASES`.
+    * ``model_self_kill_disclosure_ballots`` — matches
+      :data:`SELF_KILL_PHRASES` (a voter narrating their OWN kill).
+    * ``model_omniscient_ballots`` — the UNION of the three. A ballot can hit
+      several nets, so this is deliberately not their sum; it is the count the
+      guard-side cell below is scoped against.
+    * ``crew_partner_naming_ballots`` / ``crew_omniscient_control_ballots`` —
+      the false-positive CONTROLS over ``crew_ballots`` (both 0 on every
+      committed set).
     * ``player_visible_leak_turns`` — the partner net over player-visible
       ``free_text``; denominator ``turns_total``.
+
+    MODEL-originated MACHINERY (over ALL ballots — machinery talk is
+    role-independent):
+
+    * ``model_machinery_quotation_ballots`` — a quoted internal decimal
+      (:data:`MACHINERY_DECIMAL_PATTERN`). Unambiguous: two decimals is the grid
+      the frozen vote template renders.
+    * ``model_machinery_vocabulary_ballots`` — :data:`MACHINERY_VOCABULARY`, an
+      explicit UPPER BOUND rather than a leak count, kept labelled instead of
+      being promoted or dropped.
 
     GUARD-originated (the deterministic machinery injected the text):
 
@@ -1058,15 +1259,16 @@ class ScaffoldLeakageCells(_FrozenModel):
     * ``guard_target_rewrite_ballots`` — the subset whose TARGET the guard
       rewrote.
     * ``guard_preserved_omniscient_ballots`` — target-rewritten ballots whose
-      preserved rationale still carries an omniscient phrase. This is exactly
-      the class Task 19.15 redacts going forward; pinning it at 0 for the
-      committed bytes is what "dormant for committed bytes" means as a
-      measurement rather than an assertion.
+      preserved rationale still carries ANY omniscient phrase. This is exactly
+      the class Task 19.15 redacts going forward. It is 1 on
+      ``replays/ml_corpus/9p2i`` (seed 1118 meeting 0) and 0 on the other three
+      sets: rare on committed bytes, NOT absent.
 
-    *Does NOT measure* paraphrase, and does NOT claim the phrase nets are
-    exhaustive: a substring net is an upper bound on intent and a lower bound on
-    leakage. The nets are Task 19.8's, carried verbatim so the two surfaces
-    cannot drift.
+    *Does NOT measure* paraphrase, and does NOT claim the nets are exhaustive: a
+    substring/regex net is an upper bound on intent and a lower bound on
+    leakage. The partner, role, decimal and vocabulary nets are Task 19.8's,
+    carried verbatim so the two surfaces cannot drift; the self-kill net is new
+    here.
     """
 
     ballots_total: int
@@ -1075,9 +1277,16 @@ class ScaffoldLeakageCells(_FrozenModel):
     turns_total: int
     model_partner_naming_ballots: int
     model_role_statement_ballots: int
+    model_self_kill_disclosure_ballots: int
+    model_omniscient_ballots: int
     crew_partner_naming_ballots: int
+    crew_omniscient_control_ballots: int
     player_visible_leak_turns: int
     model_partner_naming_rate: WilsonRateCell
+    model_omniscient_rate: WilsonRateCell
+    model_machinery_quotation_ballots: int
+    model_machinery_vocabulary_ballots: int
+    model_machinery_quotation_share: float | None
     guard_marked_ballots: int
     guard_target_rewrite_ballots: int
     guard_preserved_omniscient_ballots: int
@@ -1094,13 +1303,44 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.turns_total,
                 self.model_partner_naming_ballots,
                 self.model_role_statement_ballots,
+                self.model_self_kill_disclosure_ballots,
+                self.model_omniscient_ballots,
                 self.crew_partner_naming_ballots,
+                self.crew_omniscient_control_ballots,
                 self.player_visible_leak_turns,
+                self.model_machinery_quotation_ballots,
+                self.model_machinery_vocabulary_ballots,
                 self.guard_marked_ballots,
                 self.guard_target_rewrite_ballots,
                 self.guard_preserved_omniscient_ballots,
             ),
         )
+        # The union is bounded below by each net and above by their sum: a
+        # ballot may hit several, so equality with the sum is NOT required, but
+        # a union smaller than its largest member (or larger than the total)
+        # would be arithmetically impossible.
+        widest_net = max(
+            self.model_partner_naming_ballots,
+            self.model_role_statement_ballots,
+            self.model_self_kill_disclosure_ballots,
+        )
+        net_sum = (
+            self.model_partner_naming_ballots
+            + self.model_role_statement_ballots
+            + self.model_self_kill_disclosure_ballots
+        )
+        if not widest_net <= self.model_omniscient_ballots <= net_sum:
+            raise ValueError(
+                "model_omniscient_ballots must lie between its widest net and "
+                f"the net sum: {widest_net} <= {self.model_omniscient_ballots} "
+                f"<= {net_sum} is false"
+            )
+        if self.crew_partner_naming_ballots > self.crew_omniscient_control_ballots:
+            raise ValueError(
+                "the crew partner control is a subset of the crew omniscient "
+                f"control: {self.crew_partner_naming_ballots} > "
+                f"{self.crew_omniscient_control_ballots}"
+            )
         if self.impostor_ballots + self.crew_ballots != self.ballots_total:
             raise ValueError(
                 "impostor + crew ballots must equal ballots_total: "
@@ -1119,14 +1359,39 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.impostor_ballots,
             ),
             (
+                "model_self_kill_disclosure_ballots",
+                self.model_self_kill_disclosure_ballots,
+                self.impostor_ballots,
+            ),
+            (
+                "model_omniscient_ballots",
+                self.model_omniscient_ballots,
+                self.impostor_ballots,
+            ),
+            (
                 "crew_partner_naming_ballots",
                 self.crew_partner_naming_ballots,
+                self.crew_ballots,
+            ),
+            (
+                "crew_omniscient_control_ballots",
+                self.crew_omniscient_control_ballots,
                 self.crew_ballots,
             ),
             (
                 "player_visible_leak_turns",
                 self.player_visible_leak_turns,
                 self.turns_total,
+            ),
+            (
+                "model_machinery_quotation_ballots",
+                self.model_machinery_quotation_ballots,
+                self.ballots_total,
+            ),
+            (
+                "model_machinery_vocabulary_ballots",
+                self.model_machinery_vocabulary_ballots,
+                self.ballots_total,
             ),
             ("guard_marked_ballots", self.guard_marked_ballots, self.ballots_total),
             (
@@ -1149,6 +1414,18 @@ class ScaffoldLeakageCells(_FrozenModel):
             self.model_partner_naming_rate,
             self.model_partner_naming_ballots,
             self.impostor_ballots,
+        )
+        _validate_cell_against(
+            "model_omniscient_rate",
+            self.model_omniscient_rate,
+            self.model_omniscient_ballots,
+            self.impostor_ballots,
+        )
+        _validate_rate(
+            "model_machinery_quotation_share",
+            self.model_machinery_quotation_share,
+            self.model_machinery_quotation_ballots,
+            self.ballots_total,
         )
         _validate_rate(
             "guard_marked_ballot_share",
@@ -1426,6 +1703,21 @@ def _guard_marker_classes(rationale: str) -> tuple[bool, bool]:
     return (rewrote or other), rewrote
 
 
+def _is_omniscient(rationale: str) -> bool:
+    """Whether a rationale carries ANY of the three omniscience nets.
+
+    The union behind ``model_omniscient_ballots`` and the predicate the
+    guard-preserved cell is scoped against — partner naming, an outright role
+    statement, or a first-person kill disclosure.
+    """
+
+    return (
+        _matches(rationale, PARTNER_PHRASES)
+        or _matches(rationale, ROLE_STATEMENT_PHRASES)
+        or _matches(rationale, SELF_KILL_PHRASES)
+    )
+
+
 class _Accumulator:
     """Mutable per-set tallies for one fold pass (never module-level state)."""
 
@@ -1465,7 +1757,9 @@ class _Accumulator:
         self.consistent = 0
         self.inconsistent_skip = 0
         self.inconsistent_other = 0
+        self.inconsistent_invalid = 0
         self.excluded_no_votable = 0
+        self.guard_unwound_in_denominator = 0
         # coverage
         self.crew_turns = 0
         self.crew_whereabouts = 0
@@ -1484,8 +1778,13 @@ class _Accumulator:
         self.crew_ballots = 0
         self.model_partner = 0
         self.model_role = 0
+        self.model_self_kill = 0
+        self.model_omniscient = 0
         self.crew_partner = 0
+        self.crew_omniscient = 0
         self.player_visible_leak = 0
+        self.machinery_quotation = 0
+        self.machinery_vocabulary = 0
         self.guard_marked = 0
         self.guard_rewrite = 0
         self.guard_omniscient = 0
@@ -1605,24 +1904,33 @@ def _fold_meeting(
             else:
                 acc.redirected_eject += 1
         marked, rewrote = _guard_marker_classes(rationale)
+        omniscient = _is_omniscient(rationale)
         if marked:
             acc.guard_marked += 1
         if rewrote:
             acc.guard_rewrite += 1
-            if _matches(rationale, PARTNER_PHRASES) or _matches(
-                rationale, ROLE_STATEMENT_PHRASES
-            ):
+            if omniscient:
                 acc.guard_omniscient += 1
+        if MACHINERY_DECIMAL_PATTERN.search(rationale):
+            acc.machinery_quotation += 1
+        if _matches(rationale, MACHINERY_VOCABULARY):
+            acc.machinery_vocabulary += 1
         if roles[ballot.voter] == "IMPOSTOR":
             acc.impostor_ballots += 1
             if _matches(rationale, PARTNER_PHRASES):
                 acc.model_partner += 1
             if _matches(rationale, ROLE_STATEMENT_PHRASES):
                 acc.model_role += 1
+            if _matches(rationale, SELF_KILL_PHRASES):
+                acc.model_self_kill += 1
+            if omniscient:
+                acc.model_omniscient += 1
         else:
             acc.crew_ballots += 1
             if _matches(rationale, PARTNER_PHRASES):
                 acc.crew_partner += 1
+            if omniscient:
+                acc.crew_omniscient += 1
 
         accused = accused_by.get(ballot.voter)
         if not accused:
@@ -1633,12 +1941,22 @@ def _fold_meeting(
             acc.excluded_no_votable += 1
             continue
         acc.accusing_ballots += 1
-        if ballot.target in accused:
+        # SAME-AGENT: score the target the AGENT wrote, unwinding a guard
+        # rewrite from its own marker. The guard's behaviour is metric 7's, and
+        # charging it here would both misattribute it and double-count it.
+        authored, unwound = _authored_target(ballot)
+        if unwound:
+            acc.guard_unwound_in_denominator += 1
+        if authored in accused:
             acc.consistent += 1
-        elif ballot.target == SKIP_TARGET:
+        elif authored == SKIP_TARGET:
             acc.inconsistent_skip += 1
-        else:
+        elif authored in votable:
             acc.inconsistent_other += 1
+        else:
+            # A hallucinated id naming no votable player: the voter neither
+            # voted their accusation nor voted anyone else.
+            acc.inconsistent_invalid += 1
 
 
 def compute_deduction_metrics(
@@ -1724,7 +2042,9 @@ def compute_deduction_metrics(
             consistent_ballots=acc.consistent,
             inconsistent_skip_ballots=acc.inconsistent_skip,
             inconsistent_other_target_ballots=acc.inconsistent_other,
+            inconsistent_invalid_target_ballots=acc.inconsistent_invalid,
             excluded_no_votable_target_ballots=acc.excluded_no_votable,
+            guard_rewritten_ballots_unwound=acc.guard_unwound_in_denominator,
             consistency_rate=_rate_or_none(acc.consistent, acc.accusing_ballots),
         ),
         public_response_coverage=PublicResponseCoverageCells(
@@ -1763,9 +2083,18 @@ def compute_deduction_metrics(
             turns_total=acc.turns_total,
             model_partner_naming_ballots=acc.model_partner,
             model_role_statement_ballots=acc.model_role,
+            model_self_kill_disclosure_ballots=acc.model_self_kill,
+            model_omniscient_ballots=acc.model_omniscient,
             crew_partner_naming_ballots=acc.crew_partner,
+            crew_omniscient_control_ballots=acc.crew_omniscient,
             player_visible_leak_turns=acc.player_visible_leak,
             model_partner_naming_rate=_cell(acc.model_partner, acc.impostor_ballots),
+            model_omniscient_rate=_cell(acc.model_omniscient, acc.impostor_ballots),
+            model_machinery_quotation_ballots=acc.machinery_quotation,
+            model_machinery_vocabulary_ballots=acc.machinery_vocabulary,
+            model_machinery_quotation_share=_rate_or_none(
+                acc.machinery_quotation, acc.ballots_total
+            ),
             guard_marked_ballots=acc.guard_marked,
             guard_target_rewrite_ballots=acc.guard_rewrite,
             guard_preserved_omniscient_ballots=acc.guard_omniscient,
@@ -1783,9 +2112,12 @@ def compute_deduction_metrics(
 
 __all__ = [
     "CROSS_STATEMENT_KINDS",
+    "MACHINERY_DECIMAL_PATTERN",
+    "MACHINERY_VOCABULARY",
     "PARTNER_PHRASES",
     "ROLE_PROOF_KINDS",
     "ROLE_STATEMENT_PHRASES",
+    "SELF_KILL_PHRASES",
     "DeductionMetricsReport",
     "EjecteeProofCrossTab",
     "EvidenceCategory",

@@ -330,9 +330,13 @@ function baseReport(): TournamentEvalReport {
         accusations_of_non_votable_targets: 0,
         accusing_ballots: 318,
         consistent_ballots: 139,
-        inconsistent_skip_ballots: 140,
+        inconsistent_skip_ballots: 138,
         inconsistent_other_target_ballots: 39,
+        inconsistent_invalid_target_ballots: 2,
         excluded_no_votable_target_ballots: 0,
+        // Scored against the AUTHORED target: 9 of the 318 were unwound from a
+        // guard rewrite before scoring (the metric is same-AGENT by name).
+        guard_rewritten_ballots_unwound: 9,
         consistency_rate: 139 / 318,
       },
       public_response_coverage: {
@@ -361,12 +365,23 @@ function baseReport(): TournamentEvalReport {
         turns_total: 679,
         model_partner_naming_ballots: 20,
         model_role_statement_ballots: 5,
+        model_self_kill_disclosure_ballots: 6,
+        // The UNION of the three nets — a ballot can hit several, so this is
+        // deliberately below their sum (20 + 5 + 6 = 31).
+        model_omniscient_ballots: 28,
         crew_partner_naming_ballots: 0,
+        crew_omniscient_control_ballots: 0,
         player_visible_leak_turns: 0,
         model_partner_naming_rate: wilsonCell(20, 171),
+        model_omniscient_rate: wilsonCell(28, 171),
+        model_machinery_quotation_ballots: 27,
+        model_machinery_vocabulary_ballots: 81,
+        model_machinery_quotation_share: 27 / 679,
         guard_marked_ballots: 12,
         guard_target_rewrite_ballots: 11,
-        guard_preserved_omniscient_ballots: 0,
+        // Rare, not absent: the committed corpus carries exactly one (seed
+        // 1118), so the fixture shows the non-zero state.
+        guard_preserved_omniscient_ballots: 1,
         guard_marked_ballot_share: 12 / 679,
       },
       witnessed_supply: {

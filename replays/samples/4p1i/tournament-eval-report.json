@@ -11177,7 +11177,9 @@
       "consistent_ballots": 22,
       "inconsistent_skip_ballots": 83,
       "inconsistent_other_target_ballots": 2,
+      "inconsistent_invalid_target_ballots": 0,
       "excluded_no_votable_target_ballots": 0,
+      "guard_rewritten_ballots_unwound": 0,
       "consistency_rate": 0.205607476635514
     },
     "public_response_coverage": {
@@ -11206,7 +11208,10 @@
       "turns_total": 117,
       "model_partner_naming_ballots": 0,
       "model_role_statement_ballots": 0,
+      "model_self_kill_disclosure_ballots": 2,
+      "model_omniscient_ballots": 2,
       "crew_partner_naming_ballots": 0,
+      "crew_omniscient_control_ballots": 0,
       "player_visible_leak_turns": 0,
       "model_partner_naming_rate": {
         "numerator": 0,
@@ -11216,6 +11221,17 @@
         "wilson_high": 0.08966985360023902,
         "advisory": true
       },
+      "model_omniscient_rate": {
+        "numerator": 2,
+        "denominator": 39,
+        "rate": 0.05128205128205128,
+        "wilson_low": 0.014177657646399527,
+        "wilson_high": 0.1688593904563791,
+        "advisory": true
+      },
+      "model_machinery_quotation_ballots": 4,
+      "model_machinery_vocabulary_ballots": 20,
+      "model_machinery_quotation_share": 0.03418803418803419,
       "guard_marked_ballots": 0,
       "guard_target_rewrite_ballots": 0,
       "guard_preserved_omniscient_ballots": 0,
