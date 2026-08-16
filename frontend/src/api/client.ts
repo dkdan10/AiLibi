@@ -101,10 +101,18 @@ async function getJson<T>(url: string): Promise<T> {
  * (all of them), which is portable nowhere. `scripts/build_demo_bundle.py`
  * applies the SAME rule when it names the baked files and fails loud if two ids
  * ever collapse onto one name, so the two sides cannot drift.
+ *
+ * The `u` flag is load-bearing, not decoration. Without it a JS character class
+ * matches UTF-16 CODE UNITS, so a non-BMP character is two matches and becomes
+ * `"__"` — while Python's `re.sub` matches CODE POINTS and produces `"_"`. The
+ * browser would then ask for a filename the builder never wrote, and the
+ * builder's collision guard cannot see a disagreement that happens in the other
+ * runtime. With `u`, both sides reduce per code point and agree for every input,
+ * not merely for the ASCII ids the corpus happens to use today.
  */
 export function pathSegment(value: string): string {
   return STATIC_DATA_MODE
-    ? value.replace(/[^A-Za-z0-9._-]/g, "_")
+    ? value.replace(/[^A-Za-z0-9._-]/gu, "_")
     : encodeURIComponent(value);
 }
 

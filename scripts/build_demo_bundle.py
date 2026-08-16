@@ -118,6 +118,14 @@ _ENV_DEFAULT_SET = "VITE_AILIBI_STATIC_DEFAULT_SET"
 # by interpolation, so the joined form never appears as one literal.
 _STATIC_MODE_MARKER = "./data"
 
+# The file that says "this script owns this directory". Written at the end of
+# every successful build and REQUIRED by :func:`assert_safe_out_dir` before an
+# occupied ``--out`` may be emptied. A structural heuristic is not enough here:
+# "has an index.html at its root" is true of any static site, so it would have
+# let ``--out ~/my-site`` through — and the build empties what it is given.
+# Ownership has to be something only this tool writes.
+_BUNDLE_MARKER = ".ailibi-demo-bundle"
+
 
 @dataclass(frozen=True)
 class FeaturedGame:
@@ -416,11 +424,17 @@ def assert_safe_out_dir(out_dir: Path) -> None:
     1. anything that contains the project — the repo root, ``frontend/``, or any
        ancestor of either. This is the catastrophic case and it gets its own
        check and its own message even though (2) usually also catches it;
-    2. any other existing, non-empty directory that is not already a web build
-       output (no ``index.html`` at its root). Re-pointing ``--out`` at a
-       previous bundle is the documented workflow; pointing it at
-       ``replays/`` or a home directory is a typo, and a typo must not be
-       destructive.
+    2. any other existing, non-empty directory that this script did not write —
+       i.e. one without :data:`_BUNDLE_MARKER`. Re-pointing ``--out`` at a
+       previous bundle is the documented workflow; pointing it at ``replays/``,
+       a home directory, or somebody's static site is a typo, and a typo must
+       not be destructive.
+
+    (2) deliberately tests for a marker this tool WROTE rather than for a shape
+    that looks build-ish. "It has an index.html" is true of every static site on
+    disk, so it would have waved ``--out ~/my-site`` straight through to an
+    ``emptyDir``. Deleting someone's files requires proof of ownership, not a
+    resemblance.
 
     ``out_dir`` is resolved FIRST. ``Path.is_relative_to`` compares paths, not
     filesystem locations, so a relative ``Path(".")`` or a symlink into the
@@ -443,11 +457,13 @@ def assert_safe_out_dir(out_dir: Path) -> None:
         return
     if not out_dir.is_dir():
         raise ValueError(f"refusing --out {out_dir}: not a directory")
-    if any(out_dir.iterdir()) and not (out_dir / "index.html").is_file():
+    if any(out_dir.iterdir()) and not (out_dir / _BUNDLE_MARKER).is_file():
         raise ValueError(
-            f"refusing --out {out_dir}: it is not empty and does not look like a "
-            "previous build (no index.html), and the build would empty it. Use an "
-            "empty or new directory, or delete it first if that is what you meant."
+            f"refusing --out {out_dir}: it is not empty and carries no "
+            f"{_BUNDLE_MARKER} marker, so it was not written by this script — and "
+            "the build EMPTIES its output directory. Use a new or empty "
+            "directory, or delete this one yourself if that is really what you "
+            "meant."
         )
 
 
@@ -562,6 +578,24 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     (out_dir / "README.md").write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_bundle_marker(out_dir: Path) -> None:
+    """Stamp the directory as owned by this script.
+
+    Written LAST, so it only appears on a build that got all the way through —
+    and read by :func:`assert_safe_out_dir` on the next run as the sole proof
+    that emptying this directory is destroying our own output rather than
+    somebody's files.
+    """
+
+    (out_dir / _BUNDLE_MARKER).write_text(
+        "AiLibi static demo bundle — written by scripts/build_demo_bundle.py.\n"
+        "This file marks the directory as owned by that script, which EMPTIES it\n"
+        "on every rebuild. Delete the directory rather than moving anything of\n"
+        "your own into it.\n",
+        encoding="utf-8",
+    )
+
+
 def _human_bytes(count: int) -> str:
     size = float(count)
     for unit in ("B", "KB", "MB", "GB"):
@@ -607,6 +641,7 @@ def main() -> int:
 
     summary = bake_data(out_dir, games=games, samples_dir=args.samples_dir)
     write_bundle_readme(out_dir, summary)
+    write_bundle_marker(out_dir)
 
     total = sum(p.stat().st_size for p in out_dir.rglob("*") if p.is_file())
     print(

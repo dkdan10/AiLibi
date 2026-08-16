@@ -16,9 +16,12 @@
 bash scripts/setup_env.sh   # one-time: uv sync + npm ci
 
 # 1. Determinism — the same seed twice, byte-identical replay JSONL.
-uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r1.jsonl &&
-  uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r2.jsonl &&
-  diff -q /tmp/r1.jsonl /tmp/r2.jsonl
+#    (A fresh dir each time: the recorder refuses to overwrite a replay path,
+#    deliberately — re-using one silently doubled per-seed files in Phase 4.)
+d=$(mktemp -d)
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl" &&
+  uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl" &&
+  diff -q "$d/r1.jsonl" "$d/r2.jsonl"
 
 # 2. Replay integrity — every committed sample still reconstructs through the
 #    engine's per-tick state hashes. Free, offline, no API key.
@@ -112,10 +115,11 @@ The single strongest demonstration of the determinism claim is that anyone can r
 ```bash
 bash scripts/setup_env.sh
 
-uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r1.jsonl
-uv run python scripts/run_game.py --seed 42 --replay-path /tmp/r2.jsonl
+d=$(mktemp -d)   # the recorder refuses to overwrite an existing replay path
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl"
+uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl"
 
-diff -q /tmp/r1.jsonl /tmp/r2.jsonl   # files are identical
+diff -q "$d/r1.jsonl" "$d/r2.jsonl"   # files are identical
 ```
 
 The replay JSONL records per-tick actions and a SHA-256 hash of the full engine state. Identical seed + identical config + identical agent factory always produces identical bytes under the deterministic fake provider (the default, and what the demo above runs); with a real provider, fresh generation is non-deterministic and it is the *recording* that reproduces byte-identically — the scopes below state the exact claims. The fake-provider property is also how CI proves the engine is pure: `eval/determinism_test.py` runs every scripted fixture twice and compares the entire JSONL output.
@@ -210,8 +214,9 @@ bash scripts/setup_env.sh
 # generate_prompts --check, mypy (strict, via config), pytest, + frontend tsc + build
 bash scripts/check.sh
 
-# run a single deterministic game
-uv run python scripts/run_game.py --seed 0 --replay-path /tmp/replay.jsonl
+# run a single deterministic game (a path that does not exist yet — the
+# recorder refuses to overwrite one, so re-runs need a fresh --replay-path)
+uv run python scripts/run_game.py --seed 0 --replay-path "$(mktemp -d)/replay.jsonl"
 
 # run a tournament: replays + aggregate eval report into one dir
 uv run python scripts/run_tournament.py --num-games 50 --output-dir replays

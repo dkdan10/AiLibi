@@ -186,13 +186,25 @@ def test_the_filename_reduction_matches_the_client(tmp_path: Path) -> None:
     """
 
     source = _CLIENT_TS.read_text(encoding="utf-8")
-    match = re.search(r"value\.replace\(/(\[\^[^/]+?\])/g, \"_\"\)", source)
+    match = re.search(r"value\.replace\(/(\[\^[^/]+?\])/(g[a-z]*), \"_\"\)", source)
     assert match is not None, "pathSegment()'s static-mode regex not found in client.ts"
     client_rule = re.compile(match.group(1))
+
+    # The `u` flag is part of the contract, not style. Without it a JS character
+    # class matches UTF-16 code units, so one non-BMP character is TWO matches
+    # ("😀" -> "__") where Python's code-point matching gives one ("_"). The
+    # builder's collision guard cannot see a disagreement that happens in the
+    # other runtime — the browser would simply request a file nobody wrote.
+    assert "u" in match.group(2), (
+        "pathSegment()'s static-mode regex must carry the `u` flag so JS matches "
+        "code points like Python does"
+    )
 
     meeting_id = "headless-seed-2:meeting-0"
     assert client_rule.sub("_", meeting_id) == bdb._file_segment(meeting_id)
     assert bdb._file_segment(meeting_id) == "headless-seed-2_meeting-0"
+    # The case the flag exists for, pinned on the Python side.
+    assert bdb._file_segment("a\U0001f600b") == "a_b"
 
     bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
     baked = tmp_path / "data/9p2i/replays/headless-seed-2/meetings"
@@ -372,16 +384,28 @@ def test_an_out_dir_containing_the_project_is_refused(
             bdb.assert_safe_out_dir(spelling)
 
 
-def test_a_non_build_out_dir_is_refused(tmp_path: Path) -> None:
-    """Anything else that is not empty and is not a build output."""
+def test_an_unowned_out_dir_is_refused(tmp_path: Path) -> None:
+    """Ownership is a marker this script WROTE, never a resemblance.
+
+    "It has an index.html" is true of every static site on disk, so a
+    shape-based check would wave `--out ~/my-site` through to an `emptyDir`.
+    Deleting someone's files takes proof, not a family resemblance.
+    """
 
     occupied = tmp_path / "someones-files"
     occupied.mkdir()
     (occupied / "thesis.txt").write_text("do not delete", encoding="utf-8")
-    with pytest.raises(ValueError, match="does not look like a previous build"):
+    with pytest.raises(ValueError, match="carries no .ailibi-demo-bundle marker"):
         bdb.assert_safe_out_dir(occupied)
-    # …and the file survived being asked about.
     assert (occupied / "thesis.txt").is_file()
+
+    # An unrelated WEB project — the case a structural check would have missed.
+    site = tmp_path / "my-site"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text("<html>my blog</html>", encoding="utf-8")
+    with pytest.raises(ValueError, match="carries no .ailibi-demo-bundle marker"):
+        bdb.assert_safe_out_dir(site)
+    assert (site / "index.html").is_file()
 
     with pytest.raises(ValueError, match="not a directory"):
         bdb.assert_safe_out_dir(occupied / "thesis.txt")
@@ -396,9 +420,12 @@ def test_new_empty_and_previous_bundle_out_dirs_are_allowed(tmp_path: Path) -> N
     empty.mkdir()
     bdb.assert_safe_out_dir(empty)
 
+    # A previous bundle: allowed because THIS script stamped it, and the stamp
+    # is what a rebuild is allowed to destroy.
     previous = tmp_path / "previous-bundle"
     (previous / "assets").mkdir(parents=True)
     (previous / "index.html").write_text("<html></html>", encoding="utf-8")
+    bdb.write_bundle_marker(previous)
     bdb.assert_safe_out_dir(previous)
 
 
