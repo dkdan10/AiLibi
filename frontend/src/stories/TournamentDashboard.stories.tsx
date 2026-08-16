@@ -9,7 +9,12 @@
 //   • the honesty caveats ride ATTACHED — small-n (vote correctness), low-power /
 //     populated-bins (calibration curves), and the conversion / gate sentinels;
 //   • the interestingness histogram + its deep-link buckets, plus the absent
-//     (4p1i) and stale rubric states.
+//     (unscored-set) and stale rubric states;
+//   • the Task 19.14 `deduction` block, so the proof-vs-inference panel renders
+//     BOTH cross-tab partitions with their own denominators — the story fixture
+//     is deliberately built so the two partitions disagree on the SPLIT while
+//     agreeing on the ejection totals, which is exactly the shape the committed
+//     9p2i bytes have and the reason the panel keeps them apart.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
@@ -22,6 +27,7 @@ import type {
   RubricGameView,
   RubricView,
   TournamentEvalReport,
+  WilsonRateCell,
 } from "../types/api";
 
 // ── mock builders (realistic 9p2i numbers; see replays/samples/9p2i) ──────────
@@ -48,6 +54,40 @@ function calibrationBins(
 ): CalibrationBin[] {
   const byIndex = new Map(populated.map(([i, c, h]) => [i, makeBin(i, c, h)]));
   return Array.from({ length: 10 }, (_, i) => byIndex.get(i) ?? makeBin(i, 0, 0));
+}
+
+// The Wilson 95% cell, computed the way `eval/deduction_metrics.py` computes it
+// rather than pasted as magic constants: the served model validates its own
+// interval against its counts, so a hand-typed fixture that drifted would be a
+// fixture the real payload could never produce.
+const WILSON_Z = 1.96;
+
+function wilsonCell(numerator: number, denominator: number): WilsonRateCell {
+  if (denominator === 0) {
+    return {
+      numerator,
+      denominator,
+      rate: null,
+      wilson_low: null,
+      wilson_high: null,
+      advisory: numerator <= 7,
+    };
+  }
+  const z = WILSON_Z;
+  const n = denominator;
+  const pHat = numerator / n;
+  const denom = 1 + (z * z) / n;
+  const center = (pHat + (z * z) / (2 * n)) / denom;
+  const half =
+    (z / denom) * Math.sqrt((pHat * (1 - pHat)) / n + (z * z) / (4 * n * n));
+  return {
+    numerator,
+    denominator,
+    rate: pHat,
+    wilson_low: Math.max(0, center - half),
+    wilson_high: Math.min(1, center + half),
+    advisory: numerator <= 7,
+  };
 }
 
 const WIN_SHAPES = [
@@ -234,6 +274,108 @@ function baseReport(): TournamentEvalReport {
       survivals_rendered_met: 63,
       survivals_sheltered_sub_gate: 4,
       survivals_unevidenced: 8,
+    },
+    // Task 19.14 — the deduction instrument. The two cross-tabs agree on the
+    // 39 ejections and on the 33/6 impostor/innocent totals (matching the
+    // vote_correctness fixture above) while splitting them DIFFERENTLY: the
+    // meeting-flag cut puts 28 ejections in flagged meetings, the ejectee-proof
+    // cut puts 26 on proof that named the ejectee. That disagreement is the
+    // fixture's job — it is what the panel must never blend.
+    deduction: {
+      games_total: 50,
+      meetings_total: 114,
+      ejections_total: 39,
+      ballots_total: 679,
+      turns_total: 679,
+      evidence_taxonomy: {
+        flags_total: 130,
+        role_proof_flags: 67,
+        cross_statement_flags: 45,
+        weak_signal_flags: 18,
+        meetings_with_any_flag: 70,
+        weak_signal_share: 18 / 130,
+      },
+      meeting_flag_cross_tab: {
+        meetings_total: 114,
+        flagged_meetings: 30,
+        unflagged_meetings: 84,
+        flagged_ejections_impostor: 27,
+        flagged_ejections_innocent: 1,
+        unflagged_ejections_impostor: 6,
+        unflagged_ejections_innocent: 5,
+        flagged_meeting_accuracy: wilsonCell(27, 28),
+        unflagged_meeting_accuracy: wilsonCell(6, 11),
+      },
+      ejectee_proof_cross_tab: {
+        ejections_total: 39,
+        proof_present_ejections: 26,
+        proof_present_impostor: 26,
+        proof_present_innocent: 0,
+        non_direct_ejections: 13,
+        non_direct_impostor: 7,
+        non_direct_innocent: 6,
+        direct_proof_accuracy: wilsonCell(26, 26),
+        non_direct_accuracy: wilsonCell(7, 13),
+      },
+      weak_flag_conviction: {
+        flag_named_ejections: 34,
+        weak_flag_only_convictions: 2,
+        weak_flag_only_impostor: 0,
+        weak_flag_only_innocent: 2,
+        weak_flag_only_rate: wilsonCell(2, 34),
+        weak_flag_only_innocent_share: wilsonCell(2, 2),
+      },
+      turn_ballot_consistency: {
+        accusations_total: 320,
+        accusations_of_non_votable_targets: 0,
+        accusing_ballots: 318,
+        consistent_ballots: 139,
+        inconsistent_skip_ballots: 140,
+        inconsistent_other_target_ballots: 39,
+        excluded_no_votable_target_ballots: 0,
+        consistency_rate: 139 / 318,
+      },
+      public_response_coverage: {
+        crew_turns: 508,
+        crew_turns_with_whereabouts: 506,
+        crew_pooled_coverage: 506 / 508,
+        crew_macro_average_coverage: 0.9955,
+        crew_macro_meetings: 114,
+        impostor_turns: 171,
+        impostor_turns_with_whereabouts: 84,
+        impostor_pooled_coverage: 84 / 171,
+        impostor_macro_average_coverage: 0.4557,
+        impostor_macro_meetings: 114,
+      },
+      redirected_ballots: {
+        ballots_total: 679,
+        redirected_ballots: 9,
+        redirected_eject_ballots: 9,
+        redirect_coerced_skip_ballots: 0,
+        redirected_ballot_share: 9 / 679,
+      },
+      scaffold_leakage: {
+        ballots_total: 679,
+        impostor_ballots: 171,
+        crew_ballots: 508,
+        turns_total: 679,
+        model_partner_naming_ballots: 20,
+        model_role_statement_ballots: 5,
+        crew_partner_naming_ballots: 0,
+        player_visible_leak_turns: 0,
+        model_partner_naming_rate: wilsonCell(20, 171),
+        guard_marked_ballots: 12,
+        guard_target_rewrite_ballots: 11,
+        guard_preserved_omniscient_ballots: 0,
+        guard_marked_ballot_share: 12 / 679,
+      },
+      witnessed_supply: {
+        kills_total: 121,
+        crew_witnessed_kills: 5,
+        co_present_crew_kills: 0,
+        crew_witnessed_kill_rate: wilsonCell(5, 121),
+        co_present_crew_kill_rate: wilsonCell(0, 121),
+      },
     },
   };
 }

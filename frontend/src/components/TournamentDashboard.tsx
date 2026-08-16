@@ -20,6 +20,14 @@
 // bug), and the gate canary is supplied-channel conversion — the alibi-anchored
 // genuine-class cell is a starved historical column.
 //
+// Task 19.14 adds the "Proof vs inference" panel over the typed `deduction`
+// block: direct-proof vs non-direct ejection accuracy side by side, under BOTH
+// of the cross-tab's partitions, each in its own labelled group with its own
+// denominators. That separation is the honesty requirement, not decoration —
+// the meeting-flag and ejectee-proof cuts of the same bytes give different
+// splits, and a tile that divided one's numerator by the other's denominator
+// would be the exact error the phase's planning rounds caught in prose.
+//
 // Split (mirrors the sibling chrome slices): `TournamentDashboard` is the
 // connected component (store + rubric fetch); `TournamentDashboardView` is the
 // pure presentational surface the Storybook story drives.
@@ -34,6 +42,7 @@ import type {
   GameReport,
   RubricView,
   TournamentEvalReport,
+  WilsonRateCell,
 } from "../types/api";
 import { CalibrationCurve } from "./CalibrationCurve";
 import { MetricCaveat } from "./MetricCaveat";
@@ -409,6 +418,218 @@ function GateMetricsSection({
 }
 
 // ---------------------------------------------------------------------------
+// Proof vs inference — the Task 19.14 deduction instrument
+// ---------------------------------------------------------------------------
+
+// `n/a` when the denominator is 0 (the None-not-0.0 sentinel the eval package
+// uses); otherwise the rate with its Wilson 95% interval, because the honest
+// reading of a rare cell IS the interval (audits/audit-phase-19-triage.md §7
+// item 15).
+function formatCellRate(cell: WilsonRateCell): string {
+  return formatPct(cell.rate);
+}
+
+function formatCellInterval(cell: WilsonRateCell): string {
+  if (cell.wilson_low === null || cell.wilson_high === null) return "no data";
+  return `95% CI ${formatPct(cell.wilson_low)}–${formatPct(cell.wilson_high)}`;
+}
+
+// The rare-cell badge. `advisory` is the eval module's own flag (numerator ≤ 7),
+// so the UI never re-derives the threshold — it renders the recorded verdict.
+function advisoryCaveat(cell: WilsonRateCell) {
+  return cell.advisory ? (
+    <MetricCaveat
+      tone="warn"
+      title={`Rare cell: the numerator is ${cell.numerator}. The point rate is statistically fragile at this scale — read the Wilson interval (${formatCellInterval(cell)}), not the percentage.`}
+    >
+      rare — read the interval
+    </MetricCaveat>
+  ) : undefined;
+}
+
+// A labelled sub-group inside the deduction panel. Each partition gets its own
+// heading and its own denominators; the two are NEVER mixed in one row, which is
+// the whole point of the panel (the C5 define-before-counting lesson: the audits'
+// counts differed only by definition, and the fourth planning round caught the
+// two denominators being blended into one sentence).
+function PartitionGroup({
+  heading,
+  unit,
+  children,
+}: {
+  heading: string;
+  unit: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-1 first:mt-0">
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h4 className="font-mono text-[11px] uppercase tracking-wide text-ink-900">
+          {heading}
+        </h4>
+        <span className="text-[11px] text-ink-500">{unit}</span>
+      </div>
+      <TileGrid>{children}</TileGrid>
+    </div>
+  );
+}
+
+function DeductionSection({
+  report,
+}: {
+  report: TournamentEvalReport["deduction"];
+}) {
+  const meetingFlag = report.meeting_flag_cross_tab;
+  const ejecteeProof = report.ejectee_proof_cross_tab;
+  const weak = report.weak_flag_conviction;
+  const coverage = report.public_response_coverage;
+  const supply = report.witnessed_supply;
+  const flaggedEjections =
+    meetingFlag.flagged_ejections_impostor + meetingFlag.flagged_ejections_innocent;
+  const unflaggedEjections =
+    meetingFlag.unflagged_ejections_impostor +
+    meetingFlag.unflagged_ejections_innocent;
+
+  return (
+    <MetricSection
+      title="Proof vs inference"
+      description="How much of this set's ejection accuracy rides on engine-donated vent proof rather than deduction (Task 19.14; audits/audit-phase-19-triage.md §7 item 15). The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed."
+    >
+      <div className="flex flex-col gap-4">
+        <PartitionGroup
+          heading="Partition A · meeting-flag"
+          unit={`the unit is the MEETING (${formatInt(meetingFlag.meetings_total)} meetings)`}
+        >
+          <StatTile
+            label="Flagged-meeting accuracy"
+            value={formatCellRate(meetingFlag.flagged_meeting_accuracy)}
+            hint={`${formatInt(meetingFlag.flagged_ejections_impostor)} / ${formatInt(flaggedEjections)} ejections in the ${formatInt(meetingFlag.flagged_meetings)} meetings that carried role proof`}
+            caveat={advisoryCaveat(meetingFlag.flagged_meeting_accuracy)}
+          />
+          <StatTile
+            label="Unflagged-meeting accuracy"
+            value={formatCellRate(meetingFlag.unflagged_meeting_accuracy)}
+            hint={`${formatInt(meetingFlag.unflagged_ejections_impostor)} / ${formatInt(unflaggedEjections)} ejections in the ${formatInt(meetingFlag.unflagged_meetings)} meetings with no role proof at all`}
+            lead
+            caveat={advisoryCaveat(meetingFlag.unflagged_meeting_accuracy)}
+          />
+          <StatTile
+            label="Innocents ejected"
+            value={`${formatInt(meetingFlag.flagged_ejections_innocent)} / ${formatInt(meetingFlag.unflagged_ejections_innocent)}`}
+            hint="flagged / unflagged meetings"
+          />
+        </PartitionGroup>
+
+        <PartitionGroup
+          heading="Partition B · ejectee-specific proof"
+          unit={`the unit is the EJECTION (${formatInt(ejecteeProof.ejections_total)} ejections)`}
+        >
+          <StatTile
+            label="Direct-proof accuracy"
+            value={formatCellRate(ejecteeProof.direct_proof_accuracy)}
+            hint={`${formatInt(ejecteeProof.proof_present_impostor)} / ${formatInt(ejecteeProof.proof_present_ejections)} ejections where a vent sighting named the ejected player`}
+            caveat={advisoryCaveat(ejecteeProof.direct_proof_accuracy)}
+          />
+          <StatTile
+            label="Non-direct accuracy"
+            value={formatCellRate(ejecteeProof.non_direct_accuracy)}
+            hint={`${formatInt(ejecteeProof.non_direct_impostor)} / ${formatInt(ejecteeProof.non_direct_ejections)} ejections with NO proof naming the ejected player`}
+            lead
+            caveat={
+              advisoryCaveat(ejecteeProof.non_direct_accuracy) ?? (
+                <MetricCaveat
+                  tone="note"
+                  title={`Co-occurrence inside one meeting, not causation: the cell says no role-proof flag NAMED the ejected player, not that the vote ignored evidence. ${formatCellInterval(ejecteeProof.non_direct_accuracy)}.`}
+                >
+                  proof-present ≠ proof-driven
+                </MetricCaveat>
+              )
+            }
+          />
+          <StatTile
+            label="Proof-present share"
+            value={formatPct(
+              ejecteeProof.ejections_total > 0
+                ? ejecteeProof.proof_present_ejections / ejecteeProof.ejections_total
+                : null,
+            )}
+            hint={`${formatInt(ejecteeProof.proof_present_ejections)} / ${formatInt(ejecteeProof.ejections_total)} ejections rode ejectee-specific proof`}
+          />
+        </PartitionGroup>
+
+        <PartitionGroup
+          heading="Supporting instrument"
+          unit="each cell carries its own denominator"
+        >
+          <StatTile
+            label="Weak-flag-only convictions"
+            value={`${formatInt(weak.weak_flag_only_convictions)} / ${formatInt(weak.flag_named_ejections)}`}
+            hint={`${formatInt(weak.weak_flag_only_innocent)} of them ejected an innocent`}
+            caveat={advisoryCaveat(weak.weak_flag_only_rate)}
+          />
+          <StatTile
+            label="Turn → ballot consistency"
+            value={formatPct(report.turn_ballot_consistency.consistency_rate)}
+            hint={`${formatInt(report.turn_ballot_consistency.consistent_ballots)} / ${formatInt(report.turn_ballot_consistency.accusing_ballots)} accusing voters voted their accusation`}
+            caveat={
+              <MetricCaveat
+                tone="note"
+                title="Follow-through, not virtue: an honest mid-meeting revision scores as an inconsistency, and a SKIP counts against the voter only when someone they accused was votable."
+              >
+                follow-through, not correctness
+              </MetricCaveat>
+            }
+          />
+          <StatTile
+            label="Roll-call coverage"
+            value={`${formatPct(coverage.crew_pooled_coverage)} / ${formatPct(coverage.impostor_pooled_coverage)}`}
+            hint={`crew ${formatInt(coverage.crew_turns_with_whereabouts)}/${formatInt(coverage.crew_turns)} vs impostor ${formatInt(coverage.impostor_turns_with_whereabouts)}/${formatInt(coverage.impostor_turns)} turns (pooled)`}
+            caveat={
+              <MetricCaveat
+                tone="note"
+                title={`A behavioural tell from the templates' role-differentiated output contract — NOT an observation-firewall leak. Estimator matters: the per-meeting macro-average reads ${formatPct(coverage.impostor_macro_average_coverage)} for impostors against the pooled ${formatPct(coverage.impostor_pooled_coverage)}.`}
+              >
+                pooled — macro differs
+              </MetricCaveat>
+            }
+          />
+          <StatTile
+            label="Engine-redirected ballots"
+            value={formatPct(report.redirected_ballots.redirected_ballot_share)}
+            hint={`${formatInt(report.redirected_ballots.redirected_ballots)} / ${formatInt(report.redirected_ballots.ballots_total)} ballots · ${formatInt(report.redirected_ballots.redirected_eject_ballots)} still ejected`}
+          />
+          <StatTile
+            label="Kill-scene evidence supply"
+            value={
+              supply === null
+                ? "n/a"
+                : `${formatInt(supply.crew_witnessed_kills)} / ${formatInt(supply.kills_total)}`
+            }
+            hint={
+              supply === null
+                ? "not supplied with this report"
+                : `crew-witnessed kills · ${formatInt(supply.co_present_crew_kills)} with a crewmate co-present`
+            }
+            caveat={
+              supply === null ? (
+                <MetricCaveat
+                  tone="note"
+                  title="The kill-craft fold needs a state-hash-verified walk over the committed replay directory, so a live tournament report carries no supply cells. Rebuild via scripts/build_sample_report.py to populate them."
+                >
+                  not supplied
+                </MetricCaveat>
+              ) : (
+                advisoryCaveat(supply.crew_witnessed_kill_rate)
+              )
+            }
+          />
+        </PartitionGroup>
+      </div>
+    </MetricSection>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Accusation calibration — two curves, each with its own low-power caveat
 // ---------------------------------------------------------------------------
 
@@ -687,8 +908,9 @@ export function TournamentDashboardView({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-ink-500">
           The latest tournament eval report (DESIGN.md §11.3): balance outcome plus
-          the Phase 5 metrics, the typed conversion / gate surface, and the
-          interestingness distribution.
+          the Phase 5 metrics, the typed conversion / gate surface, the
+          proof-vs-inference deduction instrument, and the interestingness
+          distribution.
         </p>
         <button
           type="button"
@@ -708,6 +930,7 @@ export function TournamentDashboardView({
           />
           <VoteCorrectness report={report.vote_correctness} />
           <ConversionSection report={report.conversion} />
+          <DeductionSection report={report.deduction} />
           <GateMetricsSection report={report.gate_metrics} />
           <AccusationCalibration report={report.accusation_calibration} />
           <AlibiFabrication report={report.alibi_fabrication} />

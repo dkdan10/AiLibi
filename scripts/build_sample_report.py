@@ -58,6 +58,7 @@ from engine.entities import PlayerId, Role  # noqa: E402
 from engine.world import load_canonical_map  # noqa: E402
 from eval.balance_eval import load_tournament_report  # noqa: E402
 from eval.action_ingest import tally_actions_by_role  # noqa: E402
+from eval.kill_craft import compute_kill_craft_report  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
@@ -140,7 +141,16 @@ def _roles_by_seed(
 
 
 def build_report(sample_dir: Path) -> TournamentEvalReport:
-    """Rebuild the eval report for ``sample_dir`` from its committed replays."""
+    """Rebuild the eval report for ``sample_dir`` from its committed replays.
+
+    Task 19.14: the Task-18.2 kill-craft fold runs beside the tournament load so
+    the deduction block's witnessed / co-present evidence-supply cells can be
+    ADOPTED (never recomputed). It is the one input the assembled report cannot
+    supply — those cells need a state-hash-verified engine walk over the replay
+    DIRECTORY — so this offline entry point, which has the directory, is where
+    they enter. A live tournament (``scripts/run_tournament.py``) has no
+    committed directory to walk at assembly time and leaves them ``None``.
+    """
 
     num_players, num_impostors, tasks_per_crewmate = _roster_knobs(sample_dir)
     roles_by_seed = _roles_by_seed(
@@ -160,7 +170,9 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
         roles_by_seed=roles_by_seed,
         tasks_per_crewmate=tasks_per_crewmate,
     )
-    return build_tournament_eval_report(report)
+    return build_tournament_eval_report(
+        report, kill_craft=compute_kill_craft_report(sample_dir)
+    )
 
 
 def _serialize(report: TournamentEvalReport) -> str:
@@ -257,6 +269,28 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
         else "n/a"
     )
     imp_win_rate = f"{impostor / len(games):.2f}" if games else "n/a"
+    # The Task 19.14 deduction headline, printed under BOTH partition names so
+    # the operator never reads one partition's numerator against the other's
+    # denominator (audits/audit-phase-19-triage.md §7 item 15; the C5
+    # define-before-counting lesson). The block itself rides on the report.
+    deduction = report.deduction
+    meeting_flag = deduction.meeting_flag_cross_tab
+    ejectee_proof = deduction.ejectee_proof_cross_tab
+    unflagged_acc = meeting_flag.unflagged_meeting_accuracy
+    non_direct_acc = ejectee_proof.non_direct_accuracy
+    unflagged_str = (
+        f"{unflagged_acc.rate:.3f}" if unflagged_acc.rate is not None else "n/a"
+    )
+    non_direct_str = (
+        f"{non_direct_acc.rate:.3f}" if non_direct_acc.rate is not None else "n/a"
+    )
+    supply = deduction.witnessed_supply
+    supply_str = (
+        f"{supply.crew_witnessed_kills}/{supply.kills_total} witnessed "
+        f"(co-present {supply.co_present_crew_kills})"
+        if supply is not None
+        else "not supplied"
+    )
     return (
         f"{len(games)} games | win split (non-gate) "
         f"CREW {crew} / IMP {impostor} / budget {budget} | "
@@ -290,7 +324,32 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
         f"inform_conversions {multi.conversions_with_single_witness_inform} | "
         f"imp_do_task {indist.impostor_do_task} (crew {indist.crewmate_do_task}) | "
         f"wait_share imp {imp_wait}/crew {crew_wait} | top_idler {top_idler} | "
-        f"impostor_win_rate (GUARDRAIL, non-gate) {imp_win_rate}"
+        f"impostor_win_rate (GUARDRAIL, non-gate) {imp_win_rate} | "
+        f"[19.14 MEETING-flag partition] flagged {meeting_flag.flagged_meetings}m "
+        f"-> {meeting_flag.flagged_ejections_impostor}imp/"
+        f"{meeting_flag.flagged_ejections_innocent}inn, unflagged "
+        f"{meeting_flag.unflagged_meetings}m -> "
+        f"{meeting_flag.unflagged_ejections_impostor}imp/"
+        f"{meeting_flag.unflagged_ejections_innocent}inn "
+        f"(unflagged accuracy {unflagged_acc.numerator}/{unflagged_acc.denominator} "
+        f"= {unflagged_str}) | "
+        f"[19.14 EJECTEE-proof partition] proof-present "
+        f"{ejectee_proof.proof_present_ejections}/{ejectee_proof.ejections_total} "
+        f"(non-direct accuracy {non_direct_acc.numerator}/"
+        f"{non_direct_acc.denominator} = {non_direct_str}) | "
+        f"weak_flag_only {deduction.weak_flag_conviction.weak_flag_only_convictions}"
+        f"/{deduction.weak_flag_conviction.flag_named_ejections} "
+        f"(innocent {deduction.weak_flag_conviction.weak_flag_only_innocent}) | "
+        f"turn->ballot {deduction.turn_ballot_consistency.consistent_ballots}/"
+        f"{deduction.turn_ballot_consistency.accusing_ballots} | "
+        f"roll_call pooled crew "
+        f"{deduction.public_response_coverage.crew_turns_with_whereabouts}/"
+        f"{deduction.public_response_coverage.crew_turns} vs imp "
+        f"{deduction.public_response_coverage.impostor_turns_with_whereabouts}/"
+        f"{deduction.public_response_coverage.impostor_turns} | "
+        f"redirected {deduction.redirected_ballots.redirected_ballots} "
+        f"(eject {deduction.redirected_ballots.redirected_eject_ballots}) | "
+        f"kill_supply {supply_str}"
     )
 
 

@@ -42,6 +42,7 @@ from eval.balance_eval import (
     run_tournament_eval,
 )
 from eval.cost_dashboard import CostDashboard
+from eval.deduction_metrics import DeductionMetricsReport
 from eval.meeting_quality import (
     MeetingRateReport,
     TournamentEvalReport,
@@ -182,6 +183,24 @@ def test_tournament_eval_report_full_integration(tmp_path: Path) -> None:
     assert mr.meetings_total == sum(len(game.meetings) for game in report.games)
     assert mr.body_report_meetings + mr.emergency_meetings == mr.meetings_total
     assert mr.meeting_rate is not None and mr.meeting_rate > 0.0
+
+    # Task 19.14: the deduction block rides on the wrapper and spans the same
+    # games/meetings the rest of the report does. Its two cross-tab partitions
+    # are cut differently but must BOTH span every ejection — the assembly-side
+    # half of the define-before-counting rule (the module's own validators cover
+    # the within-partition arithmetic; `tests/eval/test_deduction_metrics.py`
+    # carries the committed-bytes pins).
+    deduction = eval_report.deduction
+    assert isinstance(deduction, DeductionMetricsReport)
+    assert deduction.games_total == len(report.games)
+    assert deduction.meetings_total == mr.meetings_total
+    assert deduction.ejections_total == mr.ejected_meetings
+    assert deduction.meeting_flag_cross_tab.meetings_total == mr.meetings_total
+    assert deduction.ejectee_proof_cross_tab.ejections_total == mr.ejected_meetings
+    # No kill-craft report was supplied (a live tournament has no committed
+    # replay directory to walk at assembly time), so the supply cells are the
+    # explicit "not supplied" sentinel rather than zeros.
+    assert deduction.witnessed_supply is None
 
     # The emitted JSON validates against the schema and round-trips byte-for-byte.
     json_text = eval_report.model_dump_json()

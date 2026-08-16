@@ -45,6 +45,7 @@ from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
 from eval.cost_dashboard import CostDashboard
+from eval.deduction_metrics import DeductionMetricsReport
 from eval.meeting_quality import (
     ConversionReport,
     GateMetricsReport,
@@ -129,8 +130,9 @@ class _TournamentEvalReportView(BaseModel):
     Mirrors :class:`eval.meeting_quality.TournamentEvalReport` and reuses its
     metric reports verbatim by import; only the embedded ``report`` is the
     redacted view. Because this view forbids extras, a new field on
-    ``TournamentEvalReport`` (here ``meeting_rate``) MUST be mirrored here or
-    :func:`_redact_failed_calls`'s ``model_validate`` round-trip raises.
+    ``TournamentEvalReport`` (here ``meeting_rate``, and since Task 19.14
+    ``deduction``) MUST be mirrored here or :func:`_redact_failed_calls`'s
+    ``model_validate`` round-trip raises and ``/eval/tournament-report`` 500s.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -143,6 +145,10 @@ class _TournamentEvalReportView(BaseModel):
     meeting_rate: MeetingRateReport
     conversion: ConversionReport
     gate_metrics: GateMetricsReport
+    # Task 19.14: the proof-vs-inference instrument. Count-only cells (no roles,
+    # transcripts, or player ids cross its model boundary), so it is served
+    # verbatim like the other metric blocks.
+    deduction: DeductionMetricsReport
 
 
 def _sanitized_failed_call(call: Mapping[str, Any]) -> dict[str, Any]:
@@ -182,8 +188,13 @@ def get_cost_summary(loader: _LoaderDep) -> EvalCostSummaryView:
 def get_rubric(loader: _LoaderDep) -> RubricView:
     # Per-set interestingness rubric, staleness-guarded against the set's
     # MANIFEST git sha (DESIGN.md §3.1, §7). A set with no co-located
-    # ``results-rubric-score.json`` (the 4p1i default) → 404, which the
-    # frontend renders as a first-class empty/zero-rubric state.
+    # ``results-rubric-score.json`` → 404, which the frontend renders as a
+    # first-class empty/zero-rubric state. Task 19.14 sweep: that used to read
+    # "(the 4p1i default)", which Task 19.9's flip to the curated 9p2i default
+    # (``api.replay_loader.DEFAULT_SET``) falsified twice over — the DEFAULT set
+    # is now 9p2i and 9p2i is the set that DOES ship a rubric. The 404 branch is
+    # reached by the unscored sets (``replays/samples/4p1i`` and both
+    # ``replays/ml_corpus`` sets), never by the default.
     try:
         return loader.rubric()
     except FileNotFoundError:

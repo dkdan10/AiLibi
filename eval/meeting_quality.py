@@ -198,6 +198,11 @@ from eval.alibi_fabrication import (
     compute_alibi_fabrication_rate,
 )
 from eval.cost_dashboard import CostDashboard, compute_cost_dashboard
+from eval.deduction_metrics import (
+    DeductionMetricsReport,
+    KillCraftSupplyCells,
+    compute_deduction_metrics,
+)
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.vote_correctness import (
     GenuineClassConversionReport,
@@ -2995,6 +3000,16 @@ class TournamentEvalReport(BaseModel):
     shape untouched, version stays 2 — and both committed reports are
     regenerated in the same PR, so no pre-10.4 wrapper JSON survives to be
     read.
+
+    The Task 19.14 ``deduction`` block is the same rule a fourth time: a
+    wrapper-level aggregate (:class:`~eval.deduction_metrics
+    .DeductionMetricsReport`) over the unchanged inner report, so
+    ``format_version`` stays 2, and all four committed
+    ``tournament-eval-report.json`` views are regenerated in the same PR so no
+    pre-19.14 wrapper JSON survives to be read. It carries the proof-vs-inference
+    cross-tab under BOTH of its partitions plus the rest of the deduction
+    instrument (audits/audit-phase-19-triage.md §7 item 15); the metric logic
+    lives entirely in its own module — this one only assembles.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -3007,9 +3022,12 @@ class TournamentEvalReport(BaseModel):
     meeting_rate: MeetingRateReport
     conversion: ConversionReport
     gate_metrics: GateMetricsReport
+    deduction: DeductionMetricsReport
 
 
-def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalReport:
+def build_tournament_eval_report(
+    report: TournamentReport, *, kill_craft: KillCraftSupplyCells | None = None
+) -> TournamentEvalReport:
     """Run the §11.3 + W0.3 analyzers over ``report`` and wrap the results.
 
     Pure assembly: each metric is computed by its own public ``compute_*``
@@ -3017,10 +3035,20 @@ def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalRepo
     the results are packed into a :class:`TournamentEvalReport`. No metric math
     is reimplemented here — this function only orchestrates the analyzers
     (including :func:`compute_meeting_rate`, :func:`compute_conversion_report`,
-    and :func:`compute_gate_metrics`) and bundles their outputs with the
-    source report; it never re-derives a count inline. The vote-correctness
-    result is computed once and threaded into the conversion analyzer so its
-    mirrored precision-lead fields come from the same fold.
+    :func:`compute_gate_metrics`, and Task 19.14's
+    :func:`~eval.deduction_metrics.compute_deduction_metrics`) and bundles their
+    outputs with the source report; it never re-derives a count inline. The
+    vote-correctness result is computed once and threaded into the conversion
+    analyzer so its mirrored precision-lead fields come from the same fold.
+
+    ``kill_craft`` is the one OPTIONAL input that is not derivable from the
+    report: the Task-18.2 witnessed / co-present evidence-supply cells need a
+    state-hash-verified engine walk over a replay-set DIRECTORY. Callers that
+    have one (``scripts/build_sample_report.py``) pass
+    :func:`eval.kill_craft.compute_kill_craft_report`'s result and the deduction
+    block carries ``witnessed_supply``; callers that do not (a live tournament,
+    a hand-built test report) leave it ``None`` — the explicit "not supplied"
+    sentinel, never a zero that would read as "no kills".
     """
 
     vote_correctness = compute_vote_correctness(report)
@@ -3033,6 +3061,7 @@ def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalRepo
         meeting_rate=compute_meeting_rate(report),
         conversion=compute_conversion_report(report, vote_correctness=vote_correctness),
         gate_metrics=compute_gate_metrics(report),
+        deduction=compute_deduction_metrics(report, kill_craft=kill_craft),
     )
 
 

@@ -646,7 +646,13 @@ those three things apart:
   testimony. Those are arguably role proof; the contract's rule table scopes
   ROLE-PROOF to ``vent_sighting`` / self-linked, so they classify here. See
   the PR's Findings section — widening the rule would move 37 flags and must
-  be decided together with Task 19.14's cross-pinned eval-side twin.
+  be decided together with Task 19.14's cross-pinned eval-side twin. That twin
+  has since landed (``eval.deduction_metrics.classify_flag``) and did NOT
+  widen the rule: it re-implements this exact table and the two derivations are
+  pinned to identical per-category counts on the committed bytes
+  (``tests/eval/test_deduction_metrics.py``). The 37 grounded
+  ``alibi_vs_physical`` flags therefore stay ``cross_statement`` on BOTH
+  surfaces, and widening remains one decision taken once, in both places.
 * ``weak_signal`` — a cross-statement flag the detector itself stamped
   ``[weak signal: …]`` (self-stated alibi pair, narrow window, endpoint-tick
   overlap). Belief Rule 2 already down-weights these; the spectator surface
@@ -693,8 +699,10 @@ def classify_evidence(
 ) -> EvidenceCategory:
     """Classify one recorded flag into its :data:`EvidenceCategory`.
 
-    The rules — a table, deliberately trivial to port (Task 19.14 re-implements
-    it eval-side and the two are cross-pinned on the same bytes):
+    The rules — a table, deliberately trivial to port (Task 19.14 re-implemented
+    it eval-side as ``eval.deduction_metrics.classify_flag``; the two are
+    cross-pinned on the same bytes, which is evidence only because neither
+    imports the other):
 
     ==========================================  ==================
     condition                                   category
