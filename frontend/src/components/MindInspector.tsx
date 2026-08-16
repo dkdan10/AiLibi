@@ -863,10 +863,27 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
       ? undefined
       : (meetingCache[meetingId] ??
         replay.meetings.find((m) => m.meeting_id === meetingId));
-  const memory =
+  const memoryCacheKey =
     selectedAgentId === null || meetingId === null
-      ? undefined
-      : memoryCache[`${meetingId}:${selectedAgentId}`];
+      ? null
+      : `${meetingId}:${selectedAgentId}`;
+  const memory = memoryCacheKey === null ? undefined : memoryCache[memoryCacheKey];
+
+  // SCOPE each stored failure to what this panel is actually showing (Task
+  // 19.12 review). Both store errors carry the key of the request that failed,
+  // so an error for another agent/meeting is simply not this panel's error: a
+  // transcript that 500s for meeting A must not caption meeting B's perfectly
+  // loaded bodies, and a memory fetch that failed for agent A must not explain
+  // agent B's still-loading snapshot. The panel props stay plain strings — the
+  // presentational component renders a message, it does not adjudicate whose.
+  const memorySnapshotError =
+    memoryError !== null && memoryError.key === memoryCacheKey
+      ? memoryError.message
+      : null;
+  const transcriptError =
+    meetingError !== null && meetingError.key === meetingId
+      ? meetingError.message
+      : null;
 
   // Liveness at the meeting tick (role-neutral "dead" chip). Defaults to alive
   // when the frame isn't found (e.g. a synthetic story meeting).
@@ -908,8 +925,8 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
       selectedAgentId={selectedAgentId}
       meeting={meeting}
       memory={memory}
-      memoryError={memoryError}
-      meetingError={meetingError}
+      memoryError={memorySnapshotError}
+      meetingError={transcriptError}
       isAlive={isAlive}
       ownKills={ownKills}
       coverTasks={coverTasks}

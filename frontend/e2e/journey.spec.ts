@@ -155,26 +155,41 @@ test.describe("spectator journey", () => {
     // The end-of-replay beat is POSITION-derived, so `End` lands on it exactly
     // as autoplay or a scrub to the far right would.
     const finale = page.getByRole("region", { name: "End of replay" });
+    const showFinale = page.getByRole("button", { name: "Show finale" });
 
     // A game that ends on an ejection has the meeting and the finale on the SAME
     // frame, and the card yields to any open meeting — so the pause bar's
-    // "Show finale" is the documented hand-off. Today's curated head ends that
-    // way; a head that ends on a kill shows the card immediately. Take whichever
-    // path this game presents rather than pinning the journey to one ending.
+    // "Show finale" is the documented hand-off. A game that ends on a kill shows
+    // the card straight away. Take whichever path this game presents rather than
+    // pinning the journey to one ending shape.
     //
-    // SETTLE BEFORE BRANCHING. `End` only moves the playhead; auto-follow then
-    // opens the last frame's meeting from an EFFECT, so the two end states are
-    // several commits away. `isVisible()` is an instantaneous probe that does not
-    // wait, so branching on it directly would race that effect — read too early
-    // it reports "no hand-off button", the journey skips the click, and the
-    // meeting it did not close then hides the finale until the assertion times
-    // out. Waiting for EITHER terminal state first makes the branch a decision
-    // about a settled UI rather than about scheduler timing. (The two are
-    // mutually exclusive by construction: the card requires no open meeting, the
-    // button requires one.)
-    const showFinale = page.getByRole("button", { name: "Show finale" });
-    await expect(finale.or(showFinale).first()).toBeVisible();
-    if (await showFinale.isVisible()) {
+    // BRANCH ON THE FRAME, NOT ON THE OVERLAYS. `End` only moves the playhead;
+    // auto-follow opens the last frame's meeting from an EFFECT, so on a
+    // meeting-ending game there is a commit where the finale card is already
+    // mounted and the meeting is not yet open. Any branch keyed on the overlays
+    // — including "wait for the card OR the hand-off button" — can therefore be
+    // satisfied by that transient card, skip the hand-off, and then race the
+    // effect that hides it. The pre-effect DOM is genuinely indistinguishable
+    // from a kill ending's settled DOM, so no union of those two locators can
+    // tell them apart.
+    //
+    // The transport's `meeting` chip can: it is a pure function of the FRAME
+    // (`meetingAtTick`), rendered by the same component and the same commit as
+    // the scrubber value asserted just above, with no effect in between. So once
+    // the scrubber reads the last index, the chip is already the settled answer
+    // to "does this game end on a meeting" — and each branch then waits for its
+    // own terminal condition.
+    const lastIndex = await frameIndex(page).getAttribute("max");
+    await expect(frameIndex(page)).toHaveValue(lastIndex ?? "");
+    const endsOnMeeting = await page
+      .locator("[data-transport-region]")
+      .getByText("meeting", { exact: true })
+      .isVisible();
+
+    if (endsOnMeeting) {
+      // Auto-follow will open it; the hand-off button appearing IS the proof
+      // that the effect has run.
+      await expect(showFinale).toBeVisible();
       await showFinale.click();
     }
     await expect(finale).toBeVisible();

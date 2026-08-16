@@ -48,6 +48,32 @@ export interface HighlightedSighting {
   roomId: string;
 }
 
+/**
+ * A fetch failure tagged with the request it belongs to (Task 19.12).
+ *
+ * Splitting one error field into three (below) fixed "which SURFACE owns this
+ * failure". It did not fix "which REQUEST does it describe" — and for the two
+ * KEYED caches that second question is the one that bites. Both
+ * `fetchMemoryView` and `fetchMeeting` write per-key cache entries, so a bare
+ * scalar error outlives the request that produced it: open meeting A, its
+ * transcript 500s, switch to meeting B whose fetch succeeds (or is already
+ * cached, so no fetch runs at all), and B's panel renders A's failure over
+ * bodies that loaded perfectly.
+ *
+ * So the error carries its key. A consumer shows it only when the key matches
+ * what it is currently displaying, which makes a stale error inert rather than
+ * merely unlikely — and the success path clears its own key, so a retry that
+ * works actually clears the message.
+ *
+ * `replayLoadError` needs none of this: there is exactly one current replay, so
+ * the selection itself is the scope, and `selectReplay` already resets it.
+ */
+export interface ScopedFetchError {
+  /** `memoryKey(meetingId, agentId)` for memory; the meeting id for a transcript. */
+  readonly key: string;
+  readonly message: string;
+}
+
 export interface ReplayStoreState {
   // Available replays (loaded once via /replays on app mount).
   replayList: ReplayMetadataView[] | null;
@@ -73,10 +99,17 @@ export interface ReplayStoreState {
 
   /** The REPLAY-LOAD failure: `selectReplay` could not fetch this game. */
   replayLoadError: string | null;
-  /** The memory-snapshot failure: `fetchMemoryView` (the Mind inspector). */
-  memoryError: string | null;
-  /** The meeting-transcript failure: `fetchMeeting` (the lazy LLM bodies). */
-  meetingError: string | null;
+  /**
+   * The memory-snapshot failure: `fetchMemoryView` (the Mind inspector).
+   * SCOPED to the `${meetingId}:${agentId}` it belongs to — see
+   * {@link ScopedFetchError}.
+   */
+  memoryError: ScopedFetchError | null;
+  /**
+   * The meeting-transcript failure: `fetchMeeting` (the lazy LLM bodies).
+   * SCOPED to the meeting id it belongs to — see {@link ScopedFetchError}.
+   */
+  meetingError: ScopedFetchError | null;
 
   // Playback state.
   currentTick: number;
@@ -489,6 +522,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           }
           set((state) => ({
             memoryCache: { ...state.memoryCache, [key]: memory },
+            // A retry that WORKED clears its own failure, and only its own: a
+            // pending error for a different agent/meeting is still true.
+            memoryError: state.memoryError?.key === key ? null : state.memoryError,
           }));
         } catch (error) {
           // Likewise, don't surface an error for a replay/set no longer selected.
@@ -498,7 +534,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ memoryError: errorMessage(error) });
+          set({ memoryError: { key, message: errorMessage(error) } });
         }
       },
 
@@ -533,6 +569,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           }
           set((state) => ({
             meetingCache: { ...state.meetingCache, [meetingId]: meeting },
+            // As in fetchMemoryView: a successful retry clears its own failure.
+            meetingError:
+              state.meetingError?.key === meetingId ? null : state.meetingError,
           }));
         } catch (error) {
           if (
@@ -541,7 +580,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ meetingError: errorMessage(error) });
+          set({ meetingError: { key: meetingId, message: errorMessage(error) } });
         }
       },
 

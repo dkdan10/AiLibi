@@ -449,7 +449,7 @@ describe("the three error fields are independent", () => {
     await useReplayStore.getState().fetchMemoryView("m-1", "p-0");
 
     const state = useReplayStore.getState();
-    expect(state.memoryError).toContain("memory 404");
+    expect(state.memoryError?.message).toContain("memory 404");
     // Before the split this same failure raised "Failed to load replay: …" in
     // the browser AND dropped `usePlaybackEngine`'s pending deep-link hydration.
     expect(state.replayLoadError).toBeNull();
@@ -462,9 +462,78 @@ describe("the three error fields are independent", () => {
     await useReplayStore.getState().fetchMeeting("m-1");
 
     const state = useReplayStore.getState();
-    expect(state.meetingError).toContain("meeting 502");
+    expect(state.meetingError?.message).toContain("meeting 502");
     expect(state.replayLoadError).toBeNull();
     expect(state.memoryError).toBeNull();
+  });
+
+  it("tags each keyed failure with the request it belongs to", async () => {
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    mocked.getMemory.mockRejectedValueOnce(new Error("memory 404"));
+    mocked.getMeeting.mockRejectedValueOnce(new Error("meeting 502"));
+    await useReplayStore.getState().fetchMemoryView("m-1", "p-0");
+    await useReplayStore.getState().fetchMeeting("m-1");
+
+    // The key is what lets a consumer ask "is this MY error?" — without it the
+    // error is a replay-wide scalar that outlives the request that produced it.
+    expect(useReplayStore.getState().memoryError?.key).toBe("m-1:p-0");
+    expect(useReplayStore.getState().meetingError?.key).toBe("m-1");
+  });
+
+  it("a SUCCESSFUL retry clears its own failure and leaves other keys' alone", async () => {
+    useReplayStore.setState({
+      currentReplay: replay("g-1"),
+      seedSet: "9p2i",
+      memoryError: { key: "m-9:p-9", message: "someone else's failure" },
+    });
+    mocked.getMeeting
+      .mockRejectedValueOnce(new Error("meeting 502"))
+      .mockResolvedValueOnce(meetingView("m-1"));
+
+    await useReplayStore.getState().fetchMeeting("m-1");
+    expect(useReplayStore.getState().meetingError?.key).toBe("m-1");
+
+    // Retry the SAME meeting; it works this time.
+    await useReplayStore.getState().fetchMeeting("m-1");
+    expect(useReplayStore.getState().meetingError).toBeNull();
+    // …and a pending failure for a different key is still true, so it stands.
+    expect(useReplayStore.getState().memoryError?.key).toBe("m-9:p-9");
+  });
+
+  it("a failure for one meeting never captions ANOTHER meeting's loaded bodies", async () => {
+    // The consumer-side half of the same guarantee, and the exact case a bare
+    // scalar got wrong: meeting A fails, meeting B succeeds, and B's transcript
+    // must render its bodies rather than A's error. Nothing clears A's failure
+    // here — B simply is not A, and the key is what says so.
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    mocked.getMeeting
+      .mockRejectedValueOnce(new Error("meeting A 502"))
+      .mockResolvedValueOnce(meetingView("m-B"));
+
+    await useReplayStore.getState().fetchMeeting("m-A");
+    await useReplayStore.getState().fetchMeeting("m-B");
+
+    const state = useReplayStore.getState();
+    expect(state.meetingCache["m-B"]).toBeDefined();
+    expect(state.meetingError?.key).toBe("m-A");
+    // The assertion that matters: B's panel asks "is this error mine?" and the
+    // answer is no.
+    expect(state.meetingError?.key === "m-B").toBe(false);
+  });
+
+  it("a memory failure for one agent never explains another agent's snapshot", async () => {
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    mocked.getMemory
+      .mockRejectedValueOnce(new Error("memory 404"))
+      .mockResolvedValueOnce(memoryView("p-1"));
+
+    await useReplayStore.getState().fetchMemoryView("m-1", "p-0");
+    await useReplayStore.getState().fetchMemoryView("m-1", "p-1");
+
+    const state = useReplayStore.getState();
+    expect(state.memoryCache["m-1:p-1"]).toBeDefined();
+    expect(state.memoryError?.key).toBe("m-1:p-0");
+    expect(state.memoryError?.key === "m-1:p-1").toBe(false);
   });
 
   it("three failures coexist, each readable by its own surface", async () => {
@@ -477,32 +546,32 @@ describe("the three error fields are independent", () => {
 
     const state = useReplayStore.getState();
     expect(state.replayLoadError).toBe("replay 500");
-    expect(state.memoryError).toContain("memory 404");
-    expect(state.meetingError).toContain("meeting 502");
+    expect(state.memoryError?.message).toContain("memory 404");
+    expect(state.meetingError?.message).toContain("meeting 502");
   });
 
   it("clearReplayLoadError clears ONLY the load error", () => {
     useReplayStore.setState({
       replayListError: "list boom",
       replayLoadError: "load boom",
-      memoryError: "memory boom",
-      meetingError: "meeting boom",
+      memoryError: { key: "m-1:p-0", message: "memory boom" },
+      meetingError: { key: "m-1", message: "meeting boom" },
     });
     useReplayStore.getState().clearReplayLoadError();
 
     const state = useReplayStore.getState();
     expect(state.replayLoadError).toBeNull();
     expect(state.replayListError).toBe("list boom");
-    expect(state.memoryError).toBe("memory boom");
-    expect(state.meetingError).toBe("meeting boom");
+    expect(state.memoryError?.message).toBe("memory boom");
+    expect(state.meetingError?.message).toBe("meeting boom");
   });
 
   it("clearError clears every surfaced error", () => {
     useReplayStore.setState({
       replayListError: "list boom",
       replayLoadError: "load boom",
-      memoryError: "memory boom",
-      meetingError: "meeting boom",
+      memoryError: { key: "m-1:p-0", message: "memory boom" },
+      meetingError: { key: "m-1", message: "meeting boom" },
     });
     useReplayStore.getState().clearError();
 
@@ -516,8 +585,8 @@ describe("the three error fields are independent", () => {
   it("a successful selection clears all three (they are replay-scoped)", async () => {
     useReplayStore.setState({
       replayLoadError: "load boom",
-      memoryError: "memory boom",
-      meetingError: "meeting boom",
+      memoryError: { key: "m-1:p-0", message: "memory boom" },
+      meetingError: { key: "m-1", message: "meeting boom" },
     });
     mocked.getReplay.mockResolvedValueOnce(replay("g-1"));
     await useReplayStore.getState().selectReplay("g-1");
@@ -529,7 +598,10 @@ describe("the three error fields are independent", () => {
   });
 
   it("a FAILED selection clears the other two and raises only the load error", async () => {
-    useReplayStore.setState({ memoryError: "memory boom", meetingError: "meeting boom" });
+    useReplayStore.setState({
+      memoryError: { key: "m-1:p-0", message: "memory boom" },
+      meetingError: { key: "m-1", message: "meeting boom" },
+    });
     mocked.getReplay.mockRejectedValueOnce(new Error("replay 500"));
     await useReplayStore.getState().selectReplay("g-1");
 
