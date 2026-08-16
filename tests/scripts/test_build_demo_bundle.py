@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -346,43 +345,80 @@ def test_an_empty_build_dir_fails_loud(tmp_path: Path) -> None:
         bdb._assert_static_mode_compiled_in(tmp_path)
 
 
-def _stamp_static_build(out: Path) -> None:
-    """The minimum a directory needs to pass the static-mode guard."""
-
-    (out / "assets").mkdir(parents=True)
-    (out / "index.html").write_text("<html></html>", encoding="utf-8")
-    (out / "assets" / "index.js").write_text('const o="./data";', encoding="utf-8")
+# ── the --out guard ──────────────────────────────────────────────────────────
 
 
-def test_skip_frontend_build_validates_the_reused_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_an_out_dir_containing_the_project_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The documented fast path is held to the SAME check as a fresh build.
+    """The catastrophic typo, refused before Vite is ever invoked.
 
-    Skipping it there would make `--skip-frontend-build` the one supported way to
-    get a zero exit and a complete-looking bundle — `data/`, a README, no
-    complaint — over an empty directory or an ordinary `npm run build`, i.e. a
-    bundle that calls an API nobody is running.
+    `build_frontend` passes `--emptyOutDir`, and vite 8.0.16's `prepareOutDir`
+    calls `emptyDir(outDir, [..., ".git"])` — it empties the target and preserves
+    exactly one entry. Nothing in Vite checks that the target is not the project,
+    so `--out .` from the repo root would take the checkout with it: tracked
+    files recoverable from `.git`, everything untracked gone.
     """
 
-    out = tmp_path / "bundle"
-    out.mkdir()
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["build_demo_bundle.py", "--out", str(out), "--skip-frontend-build"],
-    )
-    with pytest.raises(FileNotFoundError, match="index.html"):
-        bdb.main()
-    # Nothing was written on the way to failing.
-    assert not (out / "data").exists()
-    assert not (out / "README.md").exists()
+    for destructive in (_REPO_ROOT, _REPO_ROOT / "frontend", _REPO_ROOT.parent):
+        with pytest.raises(ValueError, match="refusing --out"):
+            bdb.assert_safe_out_dir(destructive)
 
-    # A real static-mode build in the same place re-bakes normally.
-    _stamp_static_build(out)
-    assert bdb.main() == 0
-    assert (out / "data").is_dir()
-    assert (out / "README.md").is_file()
+    # …and via a RELATIVE path, which `is_relative_to` would otherwise compare
+    # False against the absolute repo root and wave straight through.
+    monkeypatch.chdir(_REPO_ROOT)
+    for spelling in (Path("."), Path("frontend"), Path("frontend/../frontend")):
+        with pytest.raises(ValueError, match="refusing --out"):
+            bdb.assert_safe_out_dir(spelling)
+
+
+def test_a_non_build_out_dir_is_refused(tmp_path: Path) -> None:
+    """Anything else that is not empty and is not a build output."""
+
+    occupied = tmp_path / "someones-files"
+    occupied.mkdir()
+    (occupied / "thesis.txt").write_text("do not delete", encoding="utf-8")
+    with pytest.raises(ValueError, match="does not look like a previous build"):
+        bdb.assert_safe_out_dir(occupied)
+    # …and the file survived being asked about.
+    assert (occupied / "thesis.txt").is_file()
+
+    with pytest.raises(ValueError, match="not a directory"):
+        bdb.assert_safe_out_dir(occupied / "thesis.txt")
+
+
+def test_new_empty_and_previous_bundle_out_dirs_are_allowed(tmp_path: Path) -> None:
+    """The three shapes the documented workflow actually produces."""
+
+    bdb.assert_safe_out_dir(tmp_path / "does-not-exist-yet")
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    bdb.assert_safe_out_dir(empty)
+
+    previous = tmp_path / "previous-bundle"
+    (previous / "assets").mkdir(parents=True)
+    (previous / "index.html").write_text("<html></html>", encoding="utf-8")
+    bdb.assert_safe_out_dir(previous)
+
+
+def test_there_is_no_bake_only_fast_path() -> None:
+    """Removed deliberately, so pin its absence.
+
+    A reuse flag decouples two halves built from the SAME source read: the
+    curated list and the resolved default set are compiled into the frontend AND
+    are what the data is baked from. Re-baking over an older frontend lets them
+    disagree — a de-curated game disappears through the picker's metadata join, a
+    newly curated one is baked but never featured, and a curation that drops the
+    old default leaves the compiled default pointing at a directory the bundle no
+    longer carries. Keeping the flag correct would need the compiled curation
+    stamped into the artifact and validated on every re-bake; building both
+    halves every time makes the mismatch impossible instead.
+    """
+
+    source = Path(bdb.__file__).read_text(encoding="utf-8")
+    assert "--skip-frontend-build" not in source
+    assert "skip_frontend_build" not in source
 
 
 # ── the shipped note ─────────────────────────────────────────────────────────

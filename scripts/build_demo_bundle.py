@@ -35,10 +35,21 @@ panel. That is the honest state, not a bug.
 :class:`api.replay_loader.ReplayLoader` the live API uses — no model, no network,
 no recording. The one subprocess is ``npm run build``.
 
+**One command, always a full build.** There is deliberately no "bake the data
+only" fast path. The curated list and the resolved default set are compiled INTO
+the frontend (``FEATURED_GAMES``, ``VITE_AILIBI_STATIC_DEFAULT_SET``) and are
+also what the data is baked from, so re-baking over a previously built frontend
+lets the two disagree: a de-curated game vanishes through the picker's metadata
+join, a newly curated one is baked but never featured, and a curation that drops
+the old default set leaves the compiled default pointing at a directory the
+bundle no longer has. Keeping a reuse flag correct would mean stamping the
+compiled curation into the artifact and validating it on every re-bake — real
+machinery to protect a few seconds of ``npm run build``. Building both halves
+from one source read makes the mismatch impossible instead.
+
 Usage::
 
     uv run python scripts/build_demo_bundle.py [--out DIR]
-    uv run python scripts/build_demo_bundle.py --out DIR --skip-frontend-build
 
 Then serve it with anything::
 
@@ -338,13 +349,14 @@ def bake_data(
 
     Any prior ``data/`` tree is REMOVED first, not overwritten in place. Baking
     is not idempotent by overwrite: drop a seed from the curated list (or a whole
-    set) and its JSON would survive under a reused output directory, still
-    directly fetchable, while this note and ``docs/deployment.md`` both promise
-    the bundle ships the current featured games and nothing else. The normal path
-    gets this from ``vite build --emptyOutDir``; the ``--skip-frontend-build``
-    reuse path would not, and that is the path where a curation edit is most
-    likely to be re-baked over an old tree. Only ``data/`` is cleared — the
-    frontend assets beside it are what the reuse path exists to keep.
+    set) and its JSON would survive, still directly fetchable, while the bundle's
+    own note and ``docs/deployment.md`` both promise it ships the current
+    featured games and nothing else.
+
+    Via :func:`main` the frontend build has already emptied the whole directory,
+    so this is belt-and-braces there — but it is the ONLY such clear for a
+    programmatic caller, and "what is in ``data/``" is this function's own
+    contract to keep rather than something to inherit from whoever ran first.
     """
 
     seeds_by_set: dict[str, list[int]] = {}
@@ -386,14 +398,69 @@ def bake_data(
     )
 
 
+def assert_safe_out_dir(out_dir: Path) -> None:
+    """Refuse an ``--out`` that emptying would be a disaster.
+
+    ``build_frontend`` passes ``--emptyOutDir``, and Vite has no safety of its
+    own worth the name: in the pinned 8.0.16, ``prepareOutDir`` calls
+    ``emptyDir(outDir, [..., ".git"])`` — it deletes the target's contents and
+    preserves exactly one entry, ``.git``. There is no check that the target is
+    not the project itself. So ``--out .`` from the repository root would erase
+    the checkout: tracked files recoverable from ``.git``, everything untracked
+    (``node_modules``, local replays, scratch work) simply gone.
+
+    A build tool is allowed to own its output directory. It is not allowed to
+    own a directory the user merely typed, so the guard lives HERE, before the
+    subprocess, and refuses two things:
+
+    1. anything that contains the project — the repo root, ``frontend/``, or any
+       ancestor of either. This is the catastrophic case and it gets its own
+       check and its own message even though (2) usually also catches it;
+    2. any other existing, non-empty directory that is not already a web build
+       output (no ``index.html`` at its root). Re-pointing ``--out`` at a
+       previous bundle is the documented workflow; pointing it at
+       ``replays/`` or a home directory is a typo, and a typo must not be
+       destructive.
+
+    ``out_dir`` is resolved FIRST. ``Path.is_relative_to`` compares paths, not
+    filesystem locations, so a relative ``Path(".")`` or a symlink into the
+    checkout would compare False against the absolute repo root and walk through
+    check (1) untouched. :func:`main` already resolves, but a guard that only
+    holds for one caller is not a guard.
+    """
+
+    out_dir = out_dir.resolve()
+    for owned, label in ((_REPO_ROOT, "the repository"), (_FRONTEND_DIR, "frontend/")):
+        if owned == out_dir or owned.is_relative_to(out_dir):
+            relation = "IS" if owned == out_dir else f"contains {owned}, i.e."
+            raise ValueError(
+                f"refusing --out {out_dir}: it {relation} {label}, and the build "
+                "empties its output directory (Vite's --emptyOutDir preserves "
+                "only .git). Point --out at a directory the project does not "
+                "live in."
+            )
+    if not out_dir.exists():
+        return
+    if not out_dir.is_dir():
+        raise ValueError(f"refusing --out {out_dir}: not a directory")
+    if any(out_dir.iterdir()) and not (out_dir / "index.html").is_file():
+        raise ValueError(
+            f"refusing --out {out_dir}: it is not empty and does not look like a "
+            "previous build (no index.html), and the build would empty it. Use an "
+            "empty or new directory, or delete it first if that is what you meant."
+        )
+
+
 def build_frontend(out_dir: Path, *, default_set: str) -> None:
     """Run ``npm run build`` in static-bundle mode into ``out_dir``.
 
     ``--emptyOutDir`` is explicit because the target is usually outside Vite's
-    root, where Vite refuses to clear a directory it was not told to clear. The
-    build runs FIRST and the data is baked into the emptied tree afterwards.
+    root, where Vite refuses to clear a directory it was not told to clear —
+    which is also why :func:`assert_safe_out_dir` runs first. The build runs
+    FIRST and the data is baked into the emptied tree afterwards.
     """
 
+    assert_safe_out_dir(out_dir)
     if not (_FRONTEND_DIR / "node_modules").is_dir():
         raise FileNotFoundError(
             f"{_FRONTEND_DIR / 'node_modules'} is missing — run "
@@ -430,8 +497,6 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
 
     index = out_dir / "index.html"
     if not index.is_file():
-        # Worded for BOTH callers: a fresh build that emitted nothing, and
-        # `--skip-frontend-build` pointed at a directory holding no build.
         raise FileNotFoundError(f"no frontend build in {out_dir}: {index} is missing")
     scripts = sorted(out_dir.glob("assets/*.js"))
     if not scripts:
@@ -519,7 +584,9 @@ def main() -> int:
         default=_DEFAULT_OUT,
         help=(
             "Bundle output directory (default: frontend/dist/demo-bundle, which "
-            "frontend/.gitignore already excludes)."
+            "frontend/.gitignore already excludes). It is EMPTIED by the build, "
+            "so it must be new, empty, or a previous bundle — anything else is "
+            "refused rather than deleted."
         ),
     )
     parser.add_argument(
@@ -528,17 +595,6 @@ def main() -> int:
         default=_SAMPLES_DIR,
         help="Parent of the per-set recorded sample dirs (default: replays/samples).",
     )
-    parser.add_argument(
-        "--skip-frontend-build",
-        action="store_true",
-        help=(
-            "Re-bake data/ over an EXISTING static-mode build in --out (the fast "
-            "path when iterating on what gets baked). The reused build is held to "
-            "the same static-mode check as a fresh one, so an empty directory or "
-            "an ordinary `npm run build` fails here rather than producing a "
-            "bundle that calls a live API."
-        ),
-    )
     args = parser.parse_args()
     out_dir: Path = args.out.resolve()
 
@@ -546,16 +602,7 @@ def main() -> int:
     set_names = tuple(sorted({game.set_name for game in games}))
     default_set = resolve_default_set(set_names)
 
-    if args.skip_frontend_build:
-        # The REUSED build is validated exactly like a fresh one. Skipping the
-        # check here would make the documented fast path the one way to produce a
-        # bundle that looks complete — data/, README and a zero exit — over an
-        # empty directory or an ordinary `npm run build`, i.e. one that calls an
-        # API nobody is running (AGENTS.md: no silent fallbacks).
-        _assert_static_mode_compiled_in(out_dir)
-        print(f"Reusing the static-mode build in {out_dir}; re-baking data/")
-    else:
-        build_frontend(out_dir, default_set=default_set)
+    build_frontend(out_dir, default_set=default_set)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary = bake_data(out_dir, games=games, samples_dir=args.samples_dir)
