@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -505,17 +504,21 @@ def test_bundle_readme_names_what_is_missing(tmp_path: Path) -> None:
     note = (tmp_path / "README.md").read_text(encoding="utf-8")
     assert "No tournament report" in note or "tournament eval report" in note
     assert "9p2i" in note
-    # The committed corpus IS already public, so the note may say so.
-    assert "already" in note and "replays/samples/" in note
+    # The GM data the bundle DOES carry is named, so "no GM endpoint" cannot be
+    # read as "the hidden information is stripped".
+    assert "roles, kill attribution, vent usage" in note
 
 
-def test_the_note_never_claims_unverified_provenance(tmp_path: Path) -> None:
-    """ "It was already public anyway" is stated only when it is true.
+def test_the_note_names_its_source_and_claims_nothing_more(tmp_path: Path) -> None:
+    """The note states WHERE the bytes came from, and makes no claim beyond it.
 
-    `--samples-dir` takes any directory. A bundle baked from local or
-    unpublished recordings carries THEIR hidden information, and telling that
-    operator it is already committed to this repository would be an assurance
-    nobody checked — handed to the one person about to act on it.
+    A conditional "…and it was already public anyway" lived here across four
+    review rounds and was wrong in a new way each time — asserted unchecked,
+    then checked by path, then by `git status` (blind to ignored files), then
+    against a synthesized filename rather than the one the loader consumed. The
+    lesson was that the sentence promised a fact about bytes this script cannot
+    establish, so it is gone: the source is named, and the reader — who can
+    actually answer it for their own directory — is handed the question.
     """
 
     alt = tmp_path / "private-recordings"
@@ -527,64 +530,19 @@ def test_the_note_never_claims_unverified_provenance(tmp_path: Path) -> None:
     summary = bdb.bake_data(
         out, games=(bdb.FeaturedGame(set_name="4p1i", seed=29),), samples_dir=alt
     )
-    assert not summary.samples_are_committed
     bdb.write_bundle_readme(out, summary)
     note = (out / "README.md").read_text(encoding="utf-8")
 
-    assert "already public" not in note
+    # The source is named exactly, and no assurance rides along with it.
     assert str(alt.resolve()) in note
-    assert "cannot vouch" in note and "publication status" in note
+    assert "does not judge whether they are public" in note
+    assert "already public" not in note
 
-
-def test_provenance_is_decided_by_bytes_not_by_path(tmp_path: Path) -> None:
-    """The canonical PATH does not license the claim — the committed bytes do.
-
-    `scripts/refresh_samples.sh` re-records `replays/samples/` in place, so the
-    canonical directory can hold recordings that exist nowhere but one machine.
-    A path check would have told that operator their unpublished bytes were
-    already public, which is exactly the assurance they would have acted on.
-    """
-
-    # The committed samples, untouched: tracked and clean, so the claim holds.
-    assert bdb.sources_are_committed((_SAMPLES / "4p1i" / "replay-seed-29.jsonl",)), (
-        "the committed samples should verify as committed in a clean checkout"
-    )
-
-    # An UNTRACKED file at a canonical path — the shape a local re-record leaves
-    # behind, and the case a path check cannot see.
-    untracked = _SAMPLES / "4p1i" / ".probe-untracked.jsonl"
-    untracked.write_text("{}\n", encoding="utf-8")
-    try:
-        assert not bdb.sources_are_committed((untracked,))
-    finally:
-        untracked.unlink()
-
-    # An IGNORED file inside the checkout. This is the one that makes the check
-    # take two git commands instead of one: `git status --porcelain` prints
-    # NOTHING and exits 0 for an ignored path, so treating empty output as proof
-    # of tracking would call these bytes committed. `--samples-dir` can point at
-    # exactly such a place — `frontend/dist/`, or the `replays/*.jsonl` scratch
-    # the tournament runner writes.
-    ignored = _REPO_ROOT / "frontend" / "dist" / "probe" / "ignored.jsonl"
-    ignored.parent.mkdir(parents=True, exist_ok=True)
-    ignored.write_text("{}\n", encoding="utf-8")
-    try:
-        assert not bdb.sources_are_committed((ignored,))
-    finally:
-        shutil.rmtree(_REPO_ROOT / "frontend" / "dist", ignore_errors=True)
-
-    # A TRACKED file with a local modification: tracked, but not the committed
-    # bytes — so the claim must not hold for it either.
-    tracked = _SAMPLES / "4p1i" / "replay-seed-2.jsonl"
-    original = tracked.read_bytes()
-    tracked.write_bytes(original + b"\n")
-    try:
-        assert not bdb.sources_are_committed((tracked,))
-    finally:
-        tracked.write_bytes(original)
-    assert bdb.sources_are_committed((tracked,)), "restore must leave it clean"
-
-    # Outside any repository, and the empty case: unverifiable, so False. The
-    # claim fails CLOSED — "could not check" must never read as "fine".
-    assert not bdb.sources_are_committed((tmp_path / "elsewhere.jsonl",))
-    assert not bdb.sources_are_committed(())
+    # …and the SAME wording ships when the canonical samples are used: there is
+    # no branch left that could reintroduce a conditional claim.
+    canonical_out = tmp_path / "canonical"
+    canonical = bdb.bake_data(canonical_out, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    bdb.write_bundle_readme(canonical_out, canonical)
+    canonical_note = (canonical_out / "README.md").read_text(encoding="utf-8")
+    assert "does not judge whether they are public" in canonical_note
+    assert str(_SAMPLES.resolve()) in canonical_note

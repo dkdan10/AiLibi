@@ -144,17 +144,10 @@ class BakeSummary:
     games: tuple[str, ...]
     files: int
     bytes_written: int
-    # WHERE the baked bytes came from. Carried so the bundle's own note can
-    # describe its actual source instead of asserting a provenance nobody
-    # checked: ``--samples-dir`` accepts any directory, and only the committed
-    # ``replays/samples`` is already-public data.
+    # WHERE the baked bytes came from. The bundle's note states this and stops
+    # there — see :func:`write_bundle_readme` for why it makes no claim about
+    # whether those bytes are public.
     samples_dir: Path
-    # Whether the replay files actually consumed are tracked AND unmodified in
-    # git. The path alone cannot answer this: ``scripts/refresh_samples.sh``
-    # re-records in place, so ``replays/samples/`` may hold working-tree bytes
-    # that were never committed and are not public. Only a byte-level answer
-    # licenses the note's "already public" line.
-    samples_are_committed: bool
 
 
 def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, ...]:
@@ -202,54 +195,6 @@ def _file_segment(value: str) -> str:
     """Reduce one id to the file name the client's static seam will ask for."""
 
     return _UNSAFE_IN_FILENAME.sub("_", value)
-
-
-def sources_are_committed(paths: tuple[Path, ...]) -> bool:
-    """Are these exact files tracked by git AND unmodified in the working tree?
-
-    The bundle's note tells a publisher whether the hidden information it ships
-    is already public. Matching ``--samples-dir`` against ``replays/samples``
-    answers a different question — where the bytes were READ from, not whether
-    those bytes were ever published. ``scripts/refresh_samples.sh`` re-records
-    in place, so the canonical path can hold a local re-recording that exists
-    nowhere but this machine, and the note would still have called it public.
-
-    It takes TWO questions, because no single git command answers both and the
-    obvious one-call shortcut is wrong: ``git status --porcelain -- <path>``
-    prints nothing for an IGNORED file and exits 0, so "empty output" means
-    "nothing to report", not "tracked and clean". Point ``--samples-dir`` at
-    recordings under an ignored directory — ``frontend/dist/``, or the
-    ``replays/*.jsonl`` scratch the tournament runner writes — and that shortcut
-    would have called every one of them committed. Verified: an ignored path
-    yields empty output and exit 0 from ``status``, and exit 1 from
-    ``ls-files --error-unmatch``.
-
-    So: ``git ls-files --error-unmatch`` (is every path TRACKED? — fails for
-    untracked *and* ignored) and then ``git diff --quiet HEAD`` (does any
-    tracked path DIFFER from the committed state?). Both must pass.
-
-    Any doubt resolves to False — git missing, not a repository, a path outside
-    it, a non-zero exit. The claim is an assurance handed to someone about to
-    publish, so "could not verify" must read as "do not assert" rather than as
-    "fine" (AGENTS.md: no silent fallbacks).
-    """
-
-    if not paths:
-        return False
-    args = [str(p) for p in paths]
-    for probe in (
-        ["git", "ls-files", "--error-unmatch", "--", *args],
-        ["git", "diff", "--quiet", "HEAD", "--", *args],
-    ):
-        try:
-            result = subprocess.run(
-                probe, cwd=_REPO_ROOT, capture_output=True, text=True, check=False
-            )
-        except OSError:
-            return False
-        if result.returncode != 0:
-            return False
-    return True
 
 
 def resolve_default_set(set_names: tuple[str, ...]) -> str:
@@ -456,19 +401,6 @@ def bake_data(
             f"{_file_segment(set_name)}/sets.json", sets_payload, source="sets"
         )
 
-    # The exact inputs this bake consumed, for the provenance question the
-    # bundle's note answers. The replay filename is the repo-wide convention
-    # (``_parse_seed_from_filename``), and a seed with no such file has already
-    # raised above; the per-set descriptors ride along because they ship too.
-    sources: list[Path] = []
-    for set_name in set_names:
-        set_dir = samples_dir / set_name
-        for seed in sorted(set(seeds_by_set[set_name])):
-            sources.append(set_dir / f"replay-seed-{seed}.jsonl")
-        for aux in ("roster.json", "results-rubric-score.json", "MANIFEST.md"):
-            if (set_dir / aux).is_file():
-                sources.append(set_dir / aux)
-
     return BakeSummary(
         sets=set_names,
         default_set=default_set,
@@ -476,7 +408,6 @@ def bake_data(
         files=writer.files,
         bytes_written=writer.bytes_written,
         samples_dir=samples_dir.resolve(),
-        samples_are_committed=sources_are_committed(tuple(sources)),
     )
 
 
@@ -614,33 +545,22 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     prompts, exactly as the local spectator shows them; the note says so rather
     than letting "no GM surface" read as "the hidden information is stripped".
 
-    The "and it was already public anyway" half is stated ONLY when it is true,
-    and "true" is decided by the BYTES, not by the path they were read from
-    (:func:`sources_are_committed`). ``--samples-dir`` accepts any directory, and
-    even the canonical one can hold a local re-recording — ``refresh_samples.sh``
-    rewrites it in place — so a path check would have told an operator their
-    unpublished recordings were already public. That is an assurance nobody
-    verified, handed to the one person about to act on it. Anything unverified
-    is named as the source instead, with the publication question handed back.
-    """
+    What the note does NOT say is that the data was already public. It used to,
+    conditionally, and that one sentence went wrong four times: first asserted
+    with no check at all, then checked by PATH (which cannot see a local
+    re-record, since ``refresh_samples.sh`` rewrites ``replays/samples/`` in
+    place), then by ``git status`` (which reports nothing for an IGNORED file, so
+    untracked bytes read as committed), then against a SYNTHESIZED filename
+    rather than the file the loader actually consumed (two names can map to one
+    seed, and the loader takes the lexicographically first).
 
-    provenance = (
-        [
-            "hidden information for these particular games, which is already",
-            "public in `replays/samples/` in this repository (the recordings this",
-            "bundle was built from are committed there, unmodified). Publish",
-            "accordingly.",
-        ]
-        if summary.samples_are_committed
-        else [
-            "hidden information for these particular games, which was baked from",
-            f"`{summary.samples_dir}` and is NOT verified as committed, public",
-            "data — the recordings are absent from git, locally modified, or in a",
-            "directory outside the repository. This script bakes whatever it is",
-            "pointed at and cannot vouch for a source's publication status;",
-            "establish that before publishing.",
-        ]
-    )
+    Each fix was narrower than the last and each was still wrong, which is the
+    signal that the sentence was carrying more than it could bear: it promised a
+    fact about bytes that this script is not in a position to establish. So it is
+    gone. The note now states the SOURCE and stops — a thing the builder knows
+    for certain — and hands the publication question to the operator, who can
+    answer it for their own directory. No claim, no check, no fifth defect.
+    """
 
     lines = [
         "# AiLibi — static spectator demo",
@@ -654,7 +574,14 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "contains their roles, kill attribution, vent usage, per-agent memories",
         "and rendered LLM prompts. What is gone is the live, unauthenticated,",
         "unbounded query surface over whatever the host has on disk — not the",
-        *provenance,
+        "hidden information for these particular games.",
+        "",
+        "**Before publishing, check where that came from.** These games were",
+        f"baked from `{summary.samples_dir}`. This script bakes whatever",
+        "recordings it is pointed at and does not judge whether they are public,",
+        "so that is yours to establish. The repository's own committed",
+        "`replays/samples/` is public; a local re-record sitting at that same path",
+        "(`scripts/refresh_samples.sh` rewrites it in place) is not.",
         "",
         "```bash",
         "python -m http.server -d . 8080",
