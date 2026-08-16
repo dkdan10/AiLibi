@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.deduction_metrics import DeductionMetricsReport
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -423,6 +424,50 @@ def test_format_version_missing_on_nested_dict_validate_is_rejected() -> None:
 # ---------------------------------------------------------------------------
 # extra="forbid" and frozen
 # ---------------------------------------------------------------------------
+
+
+def test_eval_wrapper_carries_the_deduction_block() -> None:
+    """Task 19.14's ``deduction`` block is a REAL field on the canonical owner.
+
+    ``TournamentEvalReport`` is ``extra="forbid"``, so the new cells could not
+    ride as loose extras: the block is a declared field
+    (:class:`~eval.deduction_metrics.DeductionMetricsReport`) whose two cross-tab
+    partitions each span the report's own totals. ``format_version`` stays at 2 —
+    the block is a wrapper-level aggregate over an unchanged inner report, the
+    same rule ``meeting_rate`` / ``conversion`` / ``gate_metrics`` followed.
+    """
+
+    bundle = build_tournament_eval_report(_realistic_tournament())
+
+    assert isinstance(bundle.deduction, DeductionMetricsReport)
+    assert bundle.report.format_version == CURRENT_FORMAT_VERSION
+    meetings_total = sum(len(game.meetings) for game in bundle.report.games)
+    assert bundle.deduction.meetings_total == meetings_total
+    assert bundle.deduction.meeting_flag_cross_tab.meetings_total == meetings_total
+    assert (
+        bundle.deduction.ejectee_proof_cross_tab.ejections_total
+        == bundle.deduction.ejections_total
+    )
+    # The block round-trips through the exact serialization the committed
+    # ``tournament-eval-report.json`` views ride on.
+    restored = TournamentEvalReport.model_validate_json(bundle.model_dump_json())
+    assert restored.deduction == bundle.deduction
+
+
+def test_eval_wrapper_rejects_a_payload_missing_the_deduction_block() -> None:
+    """A pre-19.14 wrapper JSON is rejected fail-loud, not defaulted.
+
+    ``deduction`` is REQUIRED with no default (unlike the Task 8.17 additive
+    per-game facts, which are defaulted so pre-fields reports still load). All
+    four committed reports are regenerated in the same PR, so no pre-19.14
+    wrapper JSON survives to be read — and one that turned up would be stale
+    rather than old-but-valid.
+    """
+
+    payload = build_tournament_eval_report(_realistic_tournament()).model_dump()
+    del payload["deduction"]
+    with pytest.raises(ValidationError, match="deduction"):
+        TournamentEvalReport.model_validate(payload)
 
 
 def test_unknown_top_level_field_is_rejected() -> None:

@@ -11083,5 +11083,192 @@
     "survivals_rendered_met": 3,
     "survivals_sheltered_sub_gate": 0,
     "survivals_unevidenced": 19
+  },
+  "deduction": {
+    "games_total": 50,
+    "meetings_total": 39,
+    "ejections_total": 12,
+    "ballots_total": 117,
+    "turns_total": 117,
+    "evidence_taxonomy": {
+      "flags_total": 16,
+      "role_proof_flags": 11,
+      "cross_statement_flags": 2,
+      "weak_signal_flags": 3,
+      "meetings_with_any_flag": 13,
+      "weak_signal_share": 0.1875
+    },
+    "meeting_flag_cross_tab": {
+      "meetings_total": 39,
+      "flagged_meetings": 10,
+      "unflagged_meetings": 29,
+      "flagged_ejections_impostor": 9,
+      "flagged_ejections_innocent": 1,
+      "unflagged_ejections_impostor": 1,
+      "unflagged_ejections_innocent": 1,
+      "flagged_meeting_accuracy": {
+        "numerator": 9,
+        "denominator": 10,
+        "rate": 0.9,
+        "wilson_low": 0.5958436145024278,
+        "wilson_high": 0.9821242504842788,
+        "advisory": false
+      },
+      "unflagged_meeting_accuracy": {
+        "numerator": 1,
+        "denominator": 2,
+        "rate": 0.5,
+        "wilson_low": 0.09452865480086614,
+        "wilson_high": 0.9054713451991339,
+        "advisory": true
+      }
+    },
+    "ejectee_proof_cross_tab": {
+      "ejections_total": 12,
+      "proof_present_ejections": 9,
+      "proof_present_impostor": 9,
+      "proof_present_innocent": 0,
+      "non_direct_ejections": 3,
+      "non_direct_impostor": 1,
+      "non_direct_innocent": 2,
+      "direct_proof_accuracy": {
+        "numerator": 9,
+        "denominator": 9,
+        "rate": 1.0,
+        "wilson_low": 0.7008472464490407,
+        "wilson_high": 1.0,
+        "advisory": false
+      },
+      "non_direct_accuracy": {
+        "numerator": 1,
+        "denominator": 3,
+        "rate": 0.3333333333333333,
+        "wilson_low": 0.061490315276160556,
+        "wilson_high": 0.792345044873512,
+        "advisory": true
+      }
+    },
+    "weak_flag_conviction": {
+      "flag_named_ejections": 12,
+      "weak_flag_only_convictions": 1,
+      "weak_flag_only_impostor": 0,
+      "weak_flag_only_innocent": 1,
+      "weak_flag_only_rate": {
+        "numerator": 1,
+        "denominator": 12,
+        "rate": 0.08333333333333333,
+        "wilson_low": 0.014864709450773478,
+        "wilson_high": 0.35388592179859524,
+        "advisory": true
+      },
+      "weak_flag_only_innocent_share": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1.0,
+        "wilson_low": 0.2065432914738929,
+        "wilson_high": 1.0,
+        "advisory": true
+      }
+    },
+    "turn_ballot_consistency": {
+      "accusations_total": 107,
+      "accusations_of_non_votable_targets": 0,
+      "accusing_ballots": 107,
+      "consistent_ballots": 22,
+      "inconsistent_skip_ballots": 83,
+      "inconsistent_other_target_ballots": 2,
+      "inconsistent_invalid_target_ballots": 0,
+      "excluded_no_votable_target_ballots": 0,
+      "guard_rewritten_ballots_unwound": 0,
+      "consistency_rate": 0.205607476635514
+    },
+    "public_response_coverage": {
+      "crew_turns": 78,
+      "crew_turns_with_whereabouts": 78,
+      "crew_pooled_coverage": 1.0,
+      "crew_macro_average_coverage": 1.0,
+      "crew_macro_meetings": 39,
+      "impostor_turns": 39,
+      "impostor_turns_with_whereabouts": 8,
+      "impostor_pooled_coverage": 0.20512820512820512,
+      "impostor_macro_average_coverage": 0.20512820512820512,
+      "impostor_macro_meetings": 39
+    },
+    "redirected_ballots": {
+      "ballots_total": 117,
+      "redirected_ballots": 0,
+      "redirected_eject_ballots": 0,
+      "redirect_coerced_skip_ballots": 0,
+      "redirected_ballot_share": 0.0
+    },
+    "scaffold_leakage": {
+      "ballots_total": 117,
+      "impostor_ballots": 39,
+      "crew_ballots": 78,
+      "turns_total": 117,
+      "model_partner_naming_ballots": 0,
+      "model_role_statement_ballots": 0,
+      "model_self_kill_disclosure_ballots": 2,
+      "model_omniscient_ballots": 2,
+      "crew_partner_naming_ballots": 0,
+      "crew_omniscient_control_ballots": 0,
+      "player_visible_leak_turns": 0,
+      "model_partner_naming_rate": {
+        "numerator": 0,
+        "denominator": 39,
+        "rate": 0.0,
+        "wilson_low": 0.0,
+        "wilson_high": 0.08966985360023902,
+        "advisory": true
+      },
+      "model_omniscient_rate": {
+        "numerator": 2,
+        "denominator": 39,
+        "rate": 0.05128205128205128,
+        "wilson_low": 0.014177657646399527,
+        "wilson_high": 0.1688593904563791,
+        "advisory": true
+      },
+      "model_machinery_quotation_ballots": 4,
+      "model_machinery_vocabulary_ballots": 20,
+      "model_machinery_quotation_share": 0.03418803418803419,
+      "model_source_pre_guard_ballots": 117,
+      "model_source_unavailable_ballots": 0,
+      "guard_provenance_verified_ballots": 117,
+      "guard_provenance_unverifiable_ballots": 0,
+      "guard_marked_ballots": 0,
+      "guard_target_rewrite_ballots": 0,
+      "guard_preserved_omniscient_ballots": 0,
+      "guard_preserved_omniscient_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "guard_marked_ballot_share": 0.0
+    },
+    "witnessed_supply": {
+      "kills_total": 61,
+      "crew_witnessed_kills": 1,
+      "co_present_crew_kills": 0,
+      "crew_witnessed_kill_rate": {
+        "numerator": 1,
+        "denominator": 61,
+        "rate": 0.01639344262295082,
+        "wilson_low": 0.002899656114363977,
+        "wilson_high": 0.08719065627768062,
+        "advisory": true
+      },
+      "co_present_crew_kill_rate": {
+        "numerator": 0,
+        "denominator": 61,
+        "rate": 0.0,
+        "wilson_low": 0.0,
+        "wilson_high": 0.05924591620194442,
+        "advisory": true
+      }
+    }
   }
 }

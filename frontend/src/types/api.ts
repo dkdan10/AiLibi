@@ -460,6 +460,7 @@ export interface TournamentEvalReport {
   meeting_rate: MeetingRateReport;
   conversion: ConversionReport;
   gate_metrics: GateMetricsReport;
+  deduction: DeductionMetricsReport;
 }
 
 export interface VoteCorrectnessReport {
@@ -584,6 +585,144 @@ export interface SuppliedChannelConversionReport {
   legacy_alibi_conversion_rate: number | null;
   note: string;
   legacy_note: string;
+}
+
+export interface DeductionMetricsReport {
+  games_total: number;
+  meetings_total: number;
+  ejections_total: number;
+  ballots_total: number;
+  turns_total: number;
+  evidence_taxonomy: EvidenceTaxonomyCensus;
+  meeting_flag_cross_tab: MeetingFlagCrossTab;
+  ejectee_proof_cross_tab: EjecteeProofCrossTab;
+  weak_flag_conviction: WeakFlagConvictionCells;
+  turn_ballot_consistency: TurnBallotConsistencyCells;
+  public_response_coverage: PublicResponseCoverageCells;
+  redirected_ballots: RedirectedBallotCells;
+  scaffold_leakage: ScaffoldLeakageCells;
+  witnessed_supply: WitnessedSupplyCells | null;
+}
+
+export interface EvidenceTaxonomyCensus {
+  flags_total: number;
+  role_proof_flags: number;
+  cross_statement_flags: number;
+  weak_signal_flags: number;
+  meetings_with_any_flag: number;
+  weak_signal_share: number | null;
+}
+
+export interface MeetingFlagCrossTab {
+  meetings_total: number;
+  flagged_meetings: number;
+  unflagged_meetings: number;
+  flagged_ejections_impostor: number;
+  flagged_ejections_innocent: number;
+  unflagged_ejections_impostor: number;
+  unflagged_ejections_innocent: number;
+  flagged_meeting_accuracy: WilsonRateCell;
+  unflagged_meeting_accuracy: WilsonRateCell;
+}
+
+export interface WilsonRateCell {
+  numerator: number;
+  denominator: number;
+  rate: number | null;
+  wilson_low: number | null;
+  wilson_high: number | null;
+  advisory: boolean;
+}
+
+export interface EjecteeProofCrossTab {
+  ejections_total: number;
+  proof_present_ejections: number;
+  proof_present_impostor: number;
+  proof_present_innocent: number;
+  non_direct_ejections: number;
+  non_direct_impostor: number;
+  non_direct_innocent: number;
+  direct_proof_accuracy: WilsonRateCell;
+  non_direct_accuracy: WilsonRateCell;
+}
+
+export interface WeakFlagConvictionCells {
+  flag_named_ejections: number;
+  weak_flag_only_convictions: number;
+  weak_flag_only_impostor: number;
+  weak_flag_only_innocent: number;
+  weak_flag_only_rate: WilsonRateCell;
+  weak_flag_only_innocent_share: WilsonRateCell;
+}
+
+export interface TurnBallotConsistencyCells {
+  accusations_total: number;
+  accusations_of_non_votable_targets: number;
+  accusing_ballots: number;
+  consistent_ballots: number;
+  inconsistent_skip_ballots: number;
+  inconsistent_other_target_ballots: number;
+  inconsistent_invalid_target_ballots: number;
+  excluded_no_votable_target_ballots: number;
+  guard_rewritten_ballots_unwound: number;
+  consistency_rate: number | null;
+}
+
+export interface PublicResponseCoverageCells {
+  crew_turns: number;
+  crew_turns_with_whereabouts: number;
+  crew_pooled_coverage: number | null;
+  crew_macro_average_coverage: number | null;
+  crew_macro_meetings: number;
+  impostor_turns: number;
+  impostor_turns_with_whereabouts: number;
+  impostor_pooled_coverage: number | null;
+  impostor_macro_average_coverage: number | null;
+  impostor_macro_meetings: number;
+}
+
+export interface RedirectedBallotCells {
+  ballots_total: number;
+  redirected_ballots: number;
+  redirected_eject_ballots: number;
+  redirect_coerced_skip_ballots: number;
+  redirected_ballot_share: number | null;
+}
+
+export interface ScaffoldLeakageCells {
+  ballots_total: number;
+  impostor_ballots: number;
+  crew_ballots: number;
+  turns_total: number;
+  model_partner_naming_ballots: number;
+  model_role_statement_ballots: number;
+  model_self_kill_disclosure_ballots: number;
+  model_omniscient_ballots: number;
+  crew_partner_naming_ballots: number;
+  crew_omniscient_control_ballots: number;
+  player_visible_leak_turns: number;
+  model_partner_naming_rate: WilsonRateCell;
+  model_omniscient_rate: WilsonRateCell;
+  model_machinery_quotation_ballots: number;
+  model_machinery_vocabulary_ballots: number;
+  model_machinery_quotation_share: number | null;
+  model_source_pre_guard_ballots: number;
+  model_source_unavailable_ballots: number;
+  guard_provenance_verified_ballots: number;
+  guard_provenance_unverifiable_ballots: number;
+  guard_marked_ballots: number;
+  guard_target_rewrite_ballots: number;
+  guard_preserved_omniscient_ballots: number;
+  guard_preserved_omniscient_rate: WilsonRateCell;
+  guard_marked_ballot_share: number | null;
+}
+
+export interface WitnessedSupplyCells {
+  kills_total: number;
+  crew_witnessed_kills: number;
+  co_present_crew_kills: number;
+  crew_witnessed_kill_rate: WilsonRateCell;
+  co_present_crew_kill_rate: WilsonRateCell;
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
