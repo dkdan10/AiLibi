@@ -1,0 +1,6 @@
+# Playwright run artifacts (Task 19.12). `playwright.config.ts` points both the
+# per-test output dir and the CI html report in here rather than at the package
+# root, so the browser leg's leftovers are ignored in ONE place next to the specs
+# that produce them.
+.artifacts/
+.report/

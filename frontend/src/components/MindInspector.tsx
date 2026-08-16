@@ -755,7 +755,12 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
   const memoryCache = useReplayStore((s) => s.memoryCache);
   const meetingCache = useReplayStore((s) => s.meetingCache);
   const perspective = useReplayStore((s) => s.perspective);
-  const memoryError = useReplayStore((s) => s.currentReplayError);
+  // The MEMORY-snapshot failure specifically (Task 19.12's error-field split).
+  // `MemoryGate` below prints it as "Failed to load memory: …", and before the
+  // split that sentence could be carrying a replay-load or meeting-transcript
+  // failure instead — the gate is only ever reached with `memory === undefined`,
+  // so the wrong error read as an explanation for the missing snapshot.
+  const memoryError = useReplayStore((s) => s.memoryError);
   const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
   const fetchMeeting = useReplayStore((s) => s.fetchMeeting);
   const selectAgent = useReplayStore((s) => s.selectAgent);

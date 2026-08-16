@@ -548,7 +548,11 @@ export function ReplayPicker() {
   const view = useReplayStore((s) => s.view);
   const replayList = useReplayStore((s) => s.replayList);
   const replayListError = useReplayStore((s) => s.replayListError);
-  const currentReplayError = useReplayStore((s) => s.currentReplayError);
+  // The REPLAY-LOAD failure specifically (Task 19.12's error-field split): this
+  // banner says "Failed to load replay", so it must read the field that only a
+  // failed `selectReplay` writes — before the split it could print a memory or
+  // meeting-transcript failure under that sentence.
+  const replayLoadError = useReplayStore((s) => s.replayLoadError);
   const clearReplayLoadError = useReplayStore((s) => s.clearReplayLoadError);
   const seedSet = useReplayStore((s) => s.seedSet);
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
@@ -725,12 +729,12 @@ export function ReplayPicker() {
       ) : (
         <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
       )}
-      {currentReplayError !== null && (
+      {replayLoadError !== null && (
         // Dismissable (Task 12.13): clears ONLY the replay-load error, so a
         // concurrent /replays list failure stays visible (not hidden behind a
         // spinner).
         <Banner tone="error" onDismiss={clearReplayLoadError}>
-          Failed to load replay: {currentReplayError}
+          Failed to load replay: {replayLoadError}
         </Banner>
       )}
       <ReplayBrowserView

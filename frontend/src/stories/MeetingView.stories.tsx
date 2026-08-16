@@ -429,7 +429,12 @@ function MeetingStoryHarness({
   useLayoutEffect(() => {
     useReplayStore.setState({
       currentReplay: replay,
-      currentReplayError: null,
+      // The three split error slots (Task 19.12) — seeded explicitly so a story
+      // always starts from the clean state, whatever a previously rendered story
+      // left in the shared store.
+      replayLoadError: null,
+      memoryError: null,
+      meetingError: null,
       currentTick: 0,
       isPlaying: false,
       selectedMeetingId: meetingId,

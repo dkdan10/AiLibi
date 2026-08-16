@@ -55,7 +55,28 @@ export interface ReplayStoreState {
 
   // Currently-selected replay.
   currentReplay: ReplayView | null;
-  currentReplayError: string | null;
+
+  // ── Task 19.12: the error-field split ──────────────────────────────────────
+  // Until now ONE field (`currentReplayError`) carried three unrelated failures:
+  // a replay that would not LOAD, a memory snapshot that would not fetch, and a
+  // meeting transcript that would not fetch. Three writers, one slot, so the
+  // last failure won and every reader was reading someone else's error —
+  // ReplayPicker rendered "Failed to load replay: <a memory 404>", MindInspector
+  // rendered "Failed to load memory: <a replay 500>", and `usePlaybackEngine`'s
+  // deep-link hydration cleared itself on a MEETING fetch failure that said
+  // nothing at all about whether the deep-linked replay had arrived.
+  //
+  // Three meanings, three fields. Each is written by exactly one action and read
+  // by the surface that owns that failure; all three are replay-scoped and reset
+  // by `selectReplay` (both branches), which is what the single field used to do
+  // by accident.
+
+  /** The REPLAY-LOAD failure: `selectReplay` could not fetch this game. */
+  replayLoadError: string | null;
+  /** The memory-snapshot failure: `fetchMemoryView` (the Mind inspector). */
+  memoryError: string | null;
+  /** The meeting-transcript failure: `fetchMeeting` (the lazy LLM bodies). */
+  meetingError: string | null;
 
   // Playback state.
   currentTick: number;
@@ -223,7 +244,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       replayList: null,
       replayListError: null,
       currentReplay: null,
-      currentReplayError: null,
+      replayLoadError: null,
+      memoryError: null,
+      meetingError: null,
       currentTick: 0,
       isPlaying: false,
       playbackSpeed: 1,
@@ -327,7 +350,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // lands, exactly as it does for perspective.
           set({
             currentReplay: windowReplay(replay),
-            currentReplayError: null,
+            // All three error slots are replay-scoped: a successful load clears
+            // the previous game's load failure AND any memory/meeting failure
+            // left over from it (the single field used to do this by accident).
+            replayLoadError: null,
+            memoryError: null,
+            meetingError: null,
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -353,8 +381,11 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           //   • STALE/normalized request set (a no-set deep link, or a ?set=old
           //     that loadSets normalized away — its set is null or no longer in
           //     availableSets): SURFACE it. That is what lets usePlayback's pending
-          //     URL hydration clear (it keys off currentReplayError); dropping it
-          //     silently would hang hydration forever (URL sync off, no replay).
+          //     URL hydration clear (it keys off `replayLoadError` — and after the
+          //     Task-19.12 split it keys off ONLY that, so a memory/meeting failure
+          //     no longer masquerades as "the deep-linked replay will never
+          //     arrive"); dropping it silently would hang hydration forever (URL
+          //     sync off, no replay).
           const setSwitchedToAvailable =
             activeSet !== null &&
             get().seedSet !== activeSet &&
@@ -367,7 +398,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // back to the browser so the picker + error are visible.
           set({
             currentReplay: null,
-            currentReplayError: errorMessage(error),
+            replayLoadError: errorMessage(error),
+            memoryError: null,
+            meetingError: null,
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -465,7 +498,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ currentReplayError: errorMessage(error) });
+          set({ memoryError: errorMessage(error) });
         }
       },
 
@@ -508,20 +541,30 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ currentReplayError: errorMessage(error) });
+          set({ meetingError: errorMessage(error) });
         }
       },
 
+      // Clear EVERY surfaced error at once (the "start clean" reset). After the
+      // Task-19.12 split that is four fields, not two — a caller asking for a
+      // blank slate must not leave a memory/meeting failure behind.
       clearError() {
-        set({ replayListError: null, currentReplayError: null });
+        set({
+          replayListError: null,
+          replayLoadError: null,
+          memoryError: null,
+          meetingError: null,
+        });
       },
 
       // Clear ONLY the replay-LOAD error (a failed selectReplay). The dismiss on
       // that banner must not also wipe replayListError — doing so would drop a
       // live /replays failure back into a permanent loading spinner with no retry
-      // (Task 12.13 review).
+      // (Task 12.13 review) — and, since the split, must not wipe the memory or
+      // meeting errors either: they belong to other surfaces with their own
+      // lifecycles, and this banner knows nothing about them.
       clearReplayLoadError() {
-        set({ currentReplayError: null });
+        set({ replayLoadError: null });
       },
 
       setView(view) {
