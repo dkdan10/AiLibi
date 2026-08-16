@@ -534,6 +534,18 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
+          // …and never report a failure for a key that has already SUCCEEDED.
+          // Only COMPLETED entries are de-duplicated, so two calls for one key
+          // can overlap (the inspector re-runs its fetch effect when the agent
+          // selection returns to a still-loading one). If the winner populates
+          // the cache and the loser then rejects, this would raise an error over
+          // data that is loaded and on screen — and, because every later call
+          // short-circuits at the cache-hit guard above, nothing would ever
+          // clear it again. Same "a stale completion must not clobber newer
+          // state" rule the request tokens enforce, at per-key granularity.
+          if (get().memoryCache[key] !== undefined) {
+            return;
+          }
           set({ memoryError: { key, message: errorMessage(error) } });
         }
       },
@@ -578,6 +590,13 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             get().currentReplay?.metadata.game_id !== gameId ||
             (activeSet !== null && get().seedSet !== activeSet)
           ) {
+            return;
+          }
+          // Same-key stale-failure guard as fetchMemoryView (see its note). The
+          // overlap is easiest to reach here: `bodiesNeeded` flips false→true on
+          // a Prompt → Belief → Prompt tab switch, re-running the effect and
+          // issuing a second request while the first is still in flight.
+          if (get().meetingCache[meetingId] !== undefined) {
             return;
           }
           set({ meetingError: { key: meetingId, message: errorMessage(error) } });

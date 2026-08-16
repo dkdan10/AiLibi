@@ -536,6 +536,69 @@ describe("the three error fields are independent", () => {
     expect(state.memoryError?.key === "m-1:p-1").toBe(false);
   });
 
+  it("ignores a stale SAME-KEY failure once that key has succeeded", async () => {
+    // Only COMPLETED cache entries are de-duplicated, so two calls for one key
+    // can overlap — reachable with an ordinary Prompt → Belief → Prompt tab
+    // switch, which flips `bodiesNeeded` false→true and re-runs the fetch effect
+    // while the first request is still in flight. If the winner loads the
+    // transcript and the LOSER then rejects, an error must not be raised over
+    // data that is already on screen: every later call short-circuits at the
+    // cache-hit guard, so nothing would ever clear it again.
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    const loser = deferred<MeetingView>();
+    const winner = deferred<MeetingView>();
+    mocked.getMeeting.mockReturnValueOnce(loser.promise).mockReturnValueOnce(winner.promise);
+
+    const first = useReplayStore.getState().fetchMeeting("m-1");
+    const second = useReplayStore.getState().fetchMeeting("m-1");
+
+    winner.resolve(meetingView("m-1"));
+    await second;
+    loser.reject(new Error("the slow duplicate 502"));
+    await first;
+
+    const state = useReplayStore.getState();
+    expect(state.meetingCache["m-1"]).toBeDefined();
+    expect(state.meetingError).toBeNull();
+  });
+
+  it("ignores a stale SAME-KEY memory failure once that key has succeeded", async () => {
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    const loser = deferred<AgentMemoryView>();
+    const winner = deferred<AgentMemoryView>();
+    mocked.getMemory.mockReturnValueOnce(loser.promise).mockReturnValueOnce(winner.promise);
+
+    const first = useReplayStore.getState().fetchMemoryView("m-1", "p-0");
+    const second = useReplayStore.getState().fetchMemoryView("m-1", "p-0");
+
+    winner.resolve(memoryView("p-0"));
+    await second;
+    loser.reject(new Error("the slow duplicate 502"));
+    await first;
+
+    const state = useReplayStore.getState();
+    expect(state.memoryCache["m-1:p-0"]).toBeDefined();
+    expect(state.memoryError).toBeNull();
+  });
+
+  it("still reports a same-key failure when BOTH overlapping calls fail", async () => {
+    // The guard must not swallow a genuine failure: with nothing in the cache
+    // there is no loaded data to protect, so the error stands.
+    useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
+    const a = deferred<MeetingView>();
+    const b = deferred<MeetingView>();
+    mocked.getMeeting.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+
+    const first = useReplayStore.getState().fetchMeeting("m-1");
+    const second = useReplayStore.getState().fetchMeeting("m-1");
+    b.reject(new Error("meeting 502"));
+    await second;
+    a.reject(new Error("meeting 502 again"));
+    await first;
+
+    expect(useReplayStore.getState().meetingError?.key).toBe("m-1");
+  });
+
   it("three failures coexist, each readable by its own surface", async () => {
     useReplayStore.setState({ currentReplay: replay("g-1"), seedSet: "9p2i" });
     mocked.getMemory.mockRejectedValueOnce(new Error("memory 404"));
