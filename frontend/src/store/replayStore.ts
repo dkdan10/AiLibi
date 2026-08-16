@@ -48,6 +48,23 @@ export interface HighlightedSighting {
   roomId: string;
 }
 
+/**
+ * Drop one key from an error map, preserving object identity when there is
+ * nothing to drop (a fresh object on every success would re-render every
+ * subscriber for no reason).
+ */
+function withoutKey(
+  errors: Record<string, string>,
+  key: string,
+): Record<string, string> {
+  if (errors[key] === undefined) {
+    return errors;
+  }
+  const next = { ...errors };
+  delete next[key];
+  return next;
+}
+
 export interface ReplayStoreState {
   // Available replays (loaded once via /replays on app mount).
   replayList: ReplayMetadataView[] | null;
@@ -55,7 +72,44 @@ export interface ReplayStoreState {
 
   // Currently-selected replay.
   currentReplay: ReplayView | null;
-  currentReplayError: string | null;
+
+  // ── Task 19.12: the error-field split ──────────────────────────────────────
+  // Until now ONE field (`currentReplayError`) carried three unrelated failures:
+  // a replay that would not LOAD, a memory snapshot that would not fetch, and a
+  // meeting transcript that would not fetch. Three writers, one slot, so the
+  // last failure won and every reader was reading someone else's error —
+  // ReplayPicker rendered "Failed to load replay: <a memory 404>", MindInspector
+  // rendered "Failed to load memory: <a replay 500>", and `usePlaybackEngine`'s
+  // deep-link hydration cleared itself on a MEETING fetch failure that said
+  // nothing at all about whether the deep-linked replay had arrived.
+  //
+  // Three meanings, three fields. Each is written by exactly one action and read
+  // by the surface that owns that failure; all three are replay-scoped and reset
+  // by `selectReplay` (both branches), which is what the single field used to do
+  // by accident.
+
+  /** The REPLAY-LOAD failure: `selectReplay` could not fetch this game. */
+  replayLoadError: string | null;
+
+  // The two KEYED failures are MAPS, mirroring the caches they shadow, and that
+  // shape is load-bearing rather than tidy. Splitting one field into three fixed
+  // "which SURFACE owns this failure"; it left "which REQUEST does it describe"
+  // unanswered, and for a keyed cache one slot per CATEGORY cannot answer that
+  // however it is tagged. A single slot holds one failure, so every concurrent
+  // request fights over it: agent A fails, agent B fails after it, and A's
+  // failure is simply gone — the panel showing A then has no data and no error,
+  // i.e. a spinner that never resolves even though every request completed.
+  // Per-key storage removes the contention instead of arbitrating it: each
+  // request owns its own slot, a consumer reads the slot for what it is
+  // displaying, and a success deletes exactly its own.
+  //
+  // `replayLoadError` stays a scalar on purpose: there is exactly one current
+  // replay, so the selection itself is the scope and `selectReplay` resets it.
+
+  /** Memory-snapshot failures by `${meetingId}:${agentId}` (mirrors `memoryCache`). */
+  memoryErrors: Record<string, string>;
+  /** Meeting-transcript failures by meeting id (mirrors `meetingCache`). */
+  meetingErrors: Record<string, string>;
 
   // Playback state.
   currentTick: number;
@@ -223,7 +277,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       replayList: null,
       replayListError: null,
       currentReplay: null,
-      currentReplayError: null,
+      replayLoadError: null,
+      memoryErrors: {},
+      meetingErrors: {},
       currentTick: 0,
       isPlaying: false,
       playbackSpeed: 1,
@@ -327,7 +383,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // lands, exactly as it does for perspective.
           set({
             currentReplay: windowReplay(replay),
-            currentReplayError: null,
+            // All three error slots are replay-scoped: a successful load clears
+            // the previous game's load failure AND any memory/meeting failure
+            // left over from it (the single field used to do this by accident).
+            replayLoadError: null,
+            memoryErrors: {},
+            meetingErrors: {},
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -353,8 +414,11 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           //   • STALE/normalized request set (a no-set deep link, or a ?set=old
           //     that loadSets normalized away — its set is null or no longer in
           //     availableSets): SURFACE it. That is what lets usePlayback's pending
-          //     URL hydration clear (it keys off currentReplayError); dropping it
-          //     silently would hang hydration forever (URL sync off, no replay).
+          //     URL hydration clear (it keys off `replayLoadError` — and after the
+          //     Task-19.12 split it keys off ONLY that, so a memory/meeting failure
+          //     no longer masquerades as "the deep-linked replay will never
+          //     arrive"); dropping it silently would hang hydration forever (URL
+          //     sync off, no replay).
           const setSwitchedToAvailable =
             activeSet !== null &&
             get().seedSet !== activeSet &&
@@ -367,7 +431,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // back to the browser so the picker + error are visible.
           set({
             currentReplay: null,
-            currentReplayError: errorMessage(error),
+            replayLoadError: errorMessage(error),
+            memoryErrors: {},
+            meetingErrors: {},
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
@@ -456,6 +522,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           }
           set((state) => ({
             memoryCache: { ...state.memoryCache, [key]: memory },
+            // A retry that WORKED clears its own failure, and only its own: a
+            // pending error for a different agent/meeting is still true.
+            memoryErrors: withoutKey(state.memoryErrors, key),
           }));
         } catch (error) {
           // Likewise, don't surface an error for a replay/set no longer selected.
@@ -465,7 +534,21 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ currentReplayError: errorMessage(error) });
+          // …and never report a failure for a key that has already SUCCEEDED.
+          // Only COMPLETED entries are de-duplicated, so two calls for one key
+          // can overlap (the inspector re-runs its fetch effect when the agent
+          // selection returns to a still-loading one). If the winner populates
+          // the cache and the loser then rejects, this would raise an error over
+          // data that is loaded and on screen — and, because every later call
+          // short-circuits at the cache-hit guard above, nothing would ever
+          // clear it again. Same "a stale completion must not clobber newer
+          // state" rule the request tokens enforce, at per-key granularity.
+          if (get().memoryCache[key] !== undefined) {
+            return;
+          }
+          set((state) => ({
+            memoryErrors: { ...state.memoryErrors, [key]: errorMessage(error) },
+          }));
         }
       },
 
@@ -500,6 +583,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           }
           set((state) => ({
             meetingCache: { ...state.meetingCache, [meetingId]: meeting },
+            // As in fetchMemoryView: a successful retry clears its own failure.
+            meetingErrors: withoutKey(state.meetingErrors, meetingId),
           }));
         } catch (error) {
           if (
@@ -508,20 +593,42 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           ) {
             return;
           }
-          set({ currentReplayError: errorMessage(error) });
+          // Same-key stale-failure guard as fetchMemoryView (see its note). The
+          // overlap is easiest to reach here: `bodiesNeeded` flips false→true on
+          // a Prompt → Belief → Prompt tab switch, re-running the effect and
+          // issuing a second request while the first is still in flight.
+          if (get().meetingCache[meetingId] !== undefined) {
+            return;
+          }
+          set((state) => ({
+            meetingErrors: {
+              ...state.meetingErrors,
+              [meetingId]: errorMessage(error),
+            },
+          }));
         }
       },
 
+      // Clear EVERY surfaced error at once (the "start clean" reset). After the
+      // Task-19.12 split that is four fields, not two — a caller asking for a
+      // blank slate must not leave a memory/meeting failure behind.
       clearError() {
-        set({ replayListError: null, currentReplayError: null });
+        set({
+          replayListError: null,
+          replayLoadError: null,
+          memoryErrors: {},
+          meetingErrors: {},
+        });
       },
 
       // Clear ONLY the replay-LOAD error (a failed selectReplay). The dismiss on
       // that banner must not also wipe replayListError — doing so would drop a
       // live /replays failure back into a permanent loading spinner with no retry
-      // (Task 12.13 review).
+      // (Task 12.13 review) — and, since the split, must not wipe the memory or
+      // meeting errors either: they belong to other surfaces with their own
+      // lifecycles, and this banner knows nothing about them.
       clearReplayLoadError() {
-        set({ currentReplayError: null });
+        set({ replayLoadError: null });
       },
 
       setView(view) {

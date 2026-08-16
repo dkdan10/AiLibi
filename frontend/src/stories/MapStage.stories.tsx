@@ -278,7 +278,12 @@ function MapStoryHarness({ perspective }: { perspective: Perspective }) {
   useLayoutEffect(() => {
     useReplayStore.setState({
       currentReplay: FIXTURE,
-      currentReplayError: null,
+      // The three split error slots (Task 19.12) — seeded explicitly so a story
+      // always starts from the clean state, whatever a previously rendered story
+      // left in the shared store.
+      replayLoadError: null,
+      memoryErrors: {},
+      meetingErrors: {},
       currentTick: PLAY_INDEX, // the emergence tick (engine tick 315)
       isPlaying: false,
       perspective,

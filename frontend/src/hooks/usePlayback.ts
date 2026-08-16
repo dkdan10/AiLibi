@@ -329,7 +329,13 @@ export function usePlaybackEngine(): void {
   const revealOutcome = useReplayStore((s) => s.revealOutcome);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
-  const currentReplayError = useReplayStore((s) => s.currentReplayError);
+  // The REPLAY-LOAD error, and only that one (Task 19.12's error-field split).
+  // Effect 3b below drops the pending deep-link hydration when this is non-null,
+  // on the reasoning "the URL's replay can never arrive". Before the split a
+  // MEMORY or MEETING fetch failure — neither of which says anything about the
+  // deep-linked replay — would trip that same branch and discard a shared moment
+  // that was still loading.
+  const replayLoadError = useReplayStore((s) => s.replayLoadError);
 
   // ── 1. Auto-advance timer ───────────────────────────────────────────────
   // `currentTick` is read fresh inside the interval (not closed over) so the
@@ -500,7 +506,7 @@ export function usePlaybackEngine(): void {
     }
     if (replay === null) {
       // Still loading keeps pending; a surfaced load error clears it.
-      if (currentReplayError !== null) {
+      if (replayLoadError !== null) {
         pendingRef.current = null;
       }
       return;
@@ -532,7 +538,7 @@ export function usePlaybackEngine(): void {
       store.setView(pending.view);
     }
     pendingRef.current = null;
-  }, [replay, currentReplayError]);
+  }, [replay, replayLoadError]);
 
   // ── 3c. Debounced URL write-back ─────────────────────────────────────────
   // Skip until initial hydration completes, and while a deferred apply is still

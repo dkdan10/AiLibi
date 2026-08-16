@@ -1,0 +1,18 @@
+{
+  // Typecheck the test-harness TypeScript (Task 19.12). `../tsconfig.json`
+  // covers `src/` (so the vitest suites ride along with the app's strict
+  // settings) and `../tsconfig.node.json` covers `vite.config.ts` — nothing
+  // covered the Playwright specs or the two new configs, and Playwright itself
+  // only TRANSPILES its specs, so a type error in `e2e/` would ship silently.
+  // `npm run tsc:check` runs this project as its third leg.
+  //
+  // Same strictness as the app: this is test code, not scratch code.
+  "extends": "../tsconfig.node.json",
+  "compilerOptions": {
+    // `lib.DOM` for the in-browser `page.evaluate` callbacks (they run in the
+    // page, not in Node); `types.node` for `process.env.CI` in the configs.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["**/*.ts", "../playwright.config.ts", "../vitest.config.ts"]
+}
