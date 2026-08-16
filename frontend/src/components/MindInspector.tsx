@@ -339,6 +339,39 @@ function MemoryGate({
   return <>{children(memory)}</>;
 }
 
+// The MEETING-TRANSCRIPT gate (Task 19.12) — `MemoryGate`'s sibling for the
+// Prompt / Response tabs, and the reader for the `meetingError` field the
+// error-field split introduced.
+//
+// The verbatim bodies are windowed out of the bulk payload (Task 6.7) and
+// lazy-fetched per meeting when one of those tabs opens. When that fetch FAILS
+// every call still renders — with an empty body — and `LLMCallCard` shows its
+// "Loading prompt…" spinner forever, because nothing ever tells it the fetch is
+// not coming. Before the split the failure landed in the one shared error slot,
+// where the only surface that rendered it was the MEMORY gate above, under the
+// wrong sentence; splitting the field without giving this half a reader would
+// have swapped a mislabelled error for a silent one. Both are the failure mode
+// AGENTS.md forbids ("No silent fallbacks"), so the gate says what happened.
+function VerbatimGate({
+  error,
+  children,
+}: {
+  error: string | null;
+  children: ReactNode;
+}) {
+  if (error === null) {
+    return <>{children}</>;
+  }
+  return (
+    <p
+      className="rounded-md border-2 border-ink-900 px-3 py-2 text-sm text-paper-0"
+      style={{ background: tokens.kill }}
+    >
+      Failed to load the meeting transcript: {error}
+    </p>
+  );
+}
+
 // ── presentational panel (Storybook drives this directly) ───────────────────
 
 export interface MindInspectorPanelProps {
@@ -347,6 +380,12 @@ export interface MindInspectorPanelProps {
   meeting: MeetingViewDTO | undefined;
   memory: AgentMemoryView | undefined;
   memoryError: string | null;
+  // The meeting-transcript failure (Task 19.12's error split), shown by
+  // `VerbatimGate` on the Prompt / Response tabs. OPTIONAL, defaulting to `null`:
+  // the connected wrapper always passes it, and Storybook — which drives this
+  // panel directly and knows nothing about a fetch that never happens there —
+  // keeps compiling untouched.
+  meetingError?: string | null;
   isAlive: boolean;
   ownKills: KillEventView[];
   coverTasks: CompletedTaskObsView[];
@@ -369,6 +408,7 @@ export function MindInspectorPanel({
   meeting,
   memory,
   memoryError,
+  meetingError = null,
   isAlive,
   ownKills,
   coverTasks,
@@ -409,6 +449,7 @@ export function MindInspectorPanel({
           meeting={meeting}
           memory={memory}
           memoryError={memoryError}
+          meetingError={meetingError}
           isAlive={isAlive}
           ownKills={ownKills}
           coverTasks={coverTasks}
@@ -429,6 +470,7 @@ function InspectedAgent({
   meeting,
   memory,
   memoryError,
+  meetingError,
   isAlive,
   ownKills,
   coverTasks,
@@ -443,6 +485,7 @@ function InspectedAgent({
   meeting: MeetingViewDTO | undefined;
   memory: AgentMemoryView | undefined;
   memoryError: string | null;
+  meetingError: string | null;
   isAlive: boolean;
   ownKills: KillEventView[];
   coverTasks: CompletedTaskObsView[];
@@ -634,22 +677,26 @@ function InspectedAgent({
 
             {tab === "prompt" &&
               (revealSecrets ? (
-                <LLMCallList
-                  calls={calls}
-                  hasUnattributed={hasUnattributed}
-                  field="prompt"
-                />
+                <VerbatimGate error={meetingError}>
+                  <LLMCallList
+                    calls={calls}
+                    hasUnattributed={hasUnattributed}
+                    field="prompt"
+                  />
+                </VerbatimGate>
               ) : (
                 <RedactedVerbatim field="prompt" />
               ))}
 
             {tab === "response" &&
               (revealSecrets ? (
-                <LLMCallList
-                  calls={calls}
-                  hasUnattributed={hasUnattributed}
-                  field="response"
-                />
+                <VerbatimGate error={meetingError}>
+                  <LLMCallList
+                    calls={calls}
+                    hasUnattributed={hasUnattributed}
+                    field="response"
+                  />
+                </VerbatimGate>
               ) : (
                 <RedactedVerbatim field="response" />
               ))}
@@ -761,6 +808,10 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
   // failure instead — the gate is only ever reached with `memory === undefined`,
   // so the wrong error read as an explanation for the missing snapshot.
   const memoryError = useReplayStore((s) => s.memoryError);
+  // …and the meeting-transcript failure, read by `VerbatimGate` on the Prompt /
+  // Response tabs. Two fields, two gates, two sentences — the split's whole
+  // point is that neither surface can print the other's failure.
+  const meetingError = useReplayStore((s) => s.meetingError);
   const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
   const fetchMeeting = useReplayStore((s) => s.fetchMeeting);
   const selectAgent = useReplayStore((s) => s.selectAgent);
@@ -858,6 +909,7 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
       meeting={meeting}
       memory={memory}
       memoryError={memoryError}
+      meetingError={meetingError}
       isAlive={isAlive}
       ownKills={ownKills}
       coverTasks={coverTasks}

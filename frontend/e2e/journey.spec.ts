@@ -161,7 +161,19 @@ test.describe("spectator journey", () => {
     // "Show finale" is the documented hand-off. Today's curated head ends that
     // way; a head that ends on a kill shows the card immediately. Take whichever
     // path this game presents rather than pinning the journey to one ending.
+    //
+    // SETTLE BEFORE BRANCHING. `End` only moves the playhead; auto-follow then
+    // opens the last frame's meeting from an EFFECT, so the two end states are
+    // several commits away. `isVisible()` is an instantaneous probe that does not
+    // wait, so branching on it directly would race that effect — read too early
+    // it reports "no hand-off button", the journey skips the click, and the
+    // meeting it did not close then hides the finale until the assertion times
+    // out. Waiting for EITHER terminal state first makes the branch a decision
+    // about a settled UI rather than about scheduler timing. (The two are
+    // mutually exclusive by construction: the card requires no open meeting, the
+    // button requires one.)
     const showFinale = page.getByRole("button", { name: "Show finale" });
+    await expect(finale.or(showFinale).first()).toBeVisible();
     if (await showFinale.isVisible()) {
       await showFinale.click();
     }
