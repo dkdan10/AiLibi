@@ -1799,9 +1799,16 @@ def test_model_counts_cannot_exceed_the_ballots_that_had_a_readable_body(
 
     payload = samples_9p2i.deduction.model_dump()
     leakage = payload["scaffold_leakage"]
-    leakage["model_source_pre_guard_ballots"] = 0
-    leakage["model_source_unavailable_ballots"] = leakage["ballots_total"]
-    with pytest.raises(ValidationError, match="model_partner_naming_ballots"):
+    # Set the readable pool to exactly what the role-disjoint pairs need, so
+    # the round-6 JOINT bound is satisfied and this test isolates the per-net
+    # one. The vocabulary net (116 on this set) is the cell left over-claiming.
+    readable = (
+        leakage["model_omniscient_ballots"] + leakage["crew_omniscient_control_ballots"]
+    )
+    leakage["model_source_pre_guard_ballots"] = readable
+    leakage["model_source_unavailable_ballots"] = leakage["ballots_total"] - readable
+    assert leakage["model_machinery_vocabulary_ballots"] > readable
+    with pytest.raises(ValidationError, match="model_machinery_vocabulary_ballots"):
         DeductionMetricsReport.model_validate(payload)
 
 
@@ -1859,3 +1866,152 @@ def _zeroed(cell: dict[str, object]) -> dict[str, object]:
         "wilson_high": high,
         "advisory": True,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Round 6 — the parse-default shape is exclusive; unencoded invariants closed.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_marker_chain_ending_in_parse_default_is_not_machinery() -> None:
+    """The writer emits the parse-default marker ALONE, never after another.
+
+    ``_collect_vote`` returns ``_vote_parse_default`` straight out of the
+    ``ValidationError`` handler, so no other guard has run or can run. A chain
+    of several markers ending in a parse default is a shape the writer cannot
+    produce, and must not be accepted as machinery.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.0,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=(
+                BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3")
+                + VOTE_PARSE_DEFAULT_MARKER.format(head="{")
+            ),
+        ),
+        (),
+    )
+    deduction = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    )
+
+    assert deduction.scaffold_leakage.guard_provenance_unverifiable_ballots == 1
+    assert deduction.scaffold_leakage.guard_marked_ballots == 0
+    assert deduction.redirected_ballots.redirected_ballots == 0
+
+
+def test_a_discarded_vote_response_is_not_a_pre_guard_body() -> None:
+    """A schema-invalid response is rejected WHOLESALE, rationale field included.
+
+    The manager raises on the ballot as a unit, so a ``rationale_text`` that
+    happens to parse out of the discarded payload is not this ballot's
+    pre-guard body — the recorded ballot is a parse default, which by
+    definition has none.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.0,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=VOTE_PARSE_DEFAULT_MARKER.format(head='{"target": 7'),
+        ),
+        # Parses as JSON and carries a rationale field — but the vote it came
+        # from failed validation on another field and was thrown away.
+        (_voter_call("p-1", "my suspicion is 0.45 and p-2 is my partner."),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.model_source_unavailable_ballots == 1
+    assert leakage.model_source_pre_guard_ballots == 0
+    assert leakage.model_machinery_quotation_ballots == 0
+    assert leakage.model_partner_naming_ballots == 0
+
+
+def test_an_unrecognised_leading_marker_fails_into_the_published_bucket() -> None:
+    """A prefix this codebase cannot account for is not this codebase's text.
+
+    A writer-side marker added without updating ``_BALLOT_MARKER_CHAIN`` would
+    otherwise verify while contributing nothing to the census — a silent
+    under-count. It lands in the published unverifiable bucket instead.
+    """
+
+    body = "they lied about Reactor."
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="[future guard 'p-9' applied] " + body,
+        ),
+        (_voter_call("p-1", body),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.guard_provenance_unverifiable_ballots == 1
+    assert leakage.guard_provenance_verified_ballots == 0
+    assert leakage.guard_marked_ballots == 0
+    # The model body is still readable, so the model half is unaffected.
+    assert leakage.model_source_pre_guard_ballots == 1
+
+
+def test_role_disjoint_nets_are_bounded_jointly_by_readable_ballots(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """Impostor and crew nets draw from disjoint halves of ONE readable pool.
+
+    Per-role minima alone let a payload claim more role-split matches than
+    there were bodies — which is how a corrupt report hides a non-zero crew
+    control, the cell whose entire job is to read 0.
+    """
+
+    payload = samples_9p2i.deduction.model_dump()
+    block = payload["scaffold_leakage"]
+    readable = block["model_source_pre_guard_ballots"]
+    block["crew_omniscient_control_ballots"] = (
+        readable - block["model_omniscient_ballots"] + 1
+    )
+    with pytest.raises(ValidationError, match="role-disjoint"):
+        DeductionMetricsReport.model_validate(payload)
+
+
+def test_a_meeting_cannot_carry_more_than_one_ejection(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """One ``MeetingReport``, one outcome — so ejections are bounded by meetings."""
+
+    payload = samples_9p2i.deduction.model_dump()
+    cross_tab = payload["meeting_flag_cross_tab"]
+    cross_tab["flagged_ejections_impostor"] = cross_tab["flagged_meetings"] + 1
+    with pytest.raises(ValidationError, match="cannot exceed flagged meetings"):
+        DeductionMetricsReport.model_validate(payload)
+
+
+def test_the_two_headline_views_cannot_disagree_about_role_proof(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """Partition A's FLAGGED predicate and the census's ROLE-PROOF are one test.
+
+    Read at two granularities, so a payload claiming 70 role-proof meetings and
+    zero role-proof flags is the two headline views contradicting each other.
+    """
+
+    payload = samples_9p2i.deduction.model_dump()
+    census = payload["evidence_taxonomy"]
+    census["cross_statement_flags"] += census["role_proof_flags"]
+    census["role_proof_flags"] = 0
+    with pytest.raises(ValidationError, match="role-proof flag"):
+        DeductionMetricsReport.model_validate(payload)

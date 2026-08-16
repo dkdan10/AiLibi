@@ -614,6 +614,7 @@ class _MarkerChain(BaseModel):
     rewrote_target: bool
     redirected: bool
     parse_default: bool
+    marker_count: int
     authored_target: str | None
     consumed: int
 
@@ -627,6 +628,7 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
     """
 
     position = 0
+    marker_count = 0
     any_marker = rewrote = redirected = parse_default = False
     authored: str | None = None
     while True:
@@ -640,6 +642,7 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
             if match is None:
                 continue
             any_marker = True
+            marker_count += 1
             redirected = redirected or is_redirect
             parse_default = parse_default or is_parse_default
             if rewrites_target:
@@ -667,6 +670,7 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
         rewrote_target=rewrote,
         redirected=redirected,
         parse_default=parse_default,
+        marker_count=marker_count,
         authored_target=authored,
         consumed=position,
     )
@@ -727,10 +731,45 @@ class _RationaleSplit(BaseModel):
 def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
     """Cut a recorded rationale along its provenance boundary (see the class)."""
 
+    # FIRST, because it settles the model body too. ``_vote_parse_default`` runs
+    # in the ``ValidationError`` handler and RETURNS immediately, so the record
+    # is that marker ALONE — no other guard ran, and none can have. A chain of
+    # several markers ending in a parse default is a shape the writer cannot
+    # emit, so it is unverifiable rather than machinery.
+    chain = _scan_marker_chain(rationale)
+    if (
+        chain.parse_default
+        and chain.marker_count == 1
+        and chain.consumed == len(rationale)
+    ):
+        # ``model_body`` is dropped, not passed through. The manager rejected
+        # the whole response, so a ``rationale_text`` that happened to parse out
+        # of it was DISCARDED — it is not this ballot's pre-guard body, and
+        # counting it would let a response the writer threw away re-enter the
+        # model-origin metrics through the one ballot that provably has none.
+        return _RationaleSplit(
+            marker_region=rationale,
+            body_region="",
+            model_body=None,
+            verified=True,
+        )
     if model_body is not None and rationale.endswith(model_body):
         cut = len(rationale) - len(model_body)
+        prefix = rationale[:cut]
+        # The prefix is only THIS codebase's if this codebase can account for
+        # all of it. An unrecognised leading marker — a writer-side marker added
+        # without updating the table — would otherwise verify while contributing
+        # nothing to the census, silently under-counting the guard side. Failing
+        # into the published unverifiable bucket surfaces it instead.
+        if _scan_marker_chain(prefix).consumed != len(prefix):
+            return _RationaleSplit(
+                marker_region="",
+                body_region=rationale,
+                model_body=model_body,
+                verified=False,
+            )
         return _RationaleSplit(
-            marker_region=rationale[:cut],
+            marker_region=prefix,
             body_region=model_body,
             model_body=model_body,
             verified=True,
@@ -743,22 +782,6 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
             model_body=model_body,
             verified=True,
         )
-    # The ONE shape the writer emits as a whole rationale. ``_vote_parse_default``
-    # REPLACES ``rationale_text`` with its marker; every other guard prepends to a
-    # body. So "the chain accounts for the record in full" is only evidence of
-    # machinery for THIS marker, and only when no model body contradicts it —
-    # a bare redirect marker beside a different pre-guard body is a disagreement
-    # to publish, not a record to trust. (A model that authored an EMPTY body
-    # never reaches here: the suffix rule above matches ``""`` and owns that case.)
-    if model_body is None:
-        chain = _scan_marker_chain(rationale)
-        if chain.parse_default and chain.consumed == len(rationale):
-            return _RationaleSplit(
-                marker_region=rationale,
-                body_region="",
-                model_body=model_body,
-                verified=True,
-            )
     return _RationaleSplit(
         marker_region="",
         body_region=rationale,
@@ -1019,6 +1042,27 @@ class MeetingFlagCrossTab(_FrozenModel):
                 f"{self.flagged_meetings} + {self.unflagged_meetings} != "
                 f"{self.meetings_total}"
             )
+        # A ``MeetingReport`` carries exactly one outcome, so a meeting
+        # contributes at most one ejection. Each side's ejections are therefore
+        # bounded by its own meeting count — the bound that stops "1 flagged
+        # meeting, 100 flagged ejections" from being served as a cross-tab.
+        for side, ejections, meetings in (
+            (
+                "flagged",
+                self.flagged_ejections_impostor + self.flagged_ejections_innocent,
+                self.flagged_meetings,
+            ),
+            (
+                "unflagged",
+                self.unflagged_ejections_impostor + self.unflagged_ejections_innocent,
+                self.unflagged_meetings,
+            ),
+        ):
+            if ejections > meetings:
+                raise ValueError(
+                    f"{side} ejections cannot exceed {side} meetings (one outcome "
+                    f"per meeting): {ejections} > {meetings}"
+                )
         _validate_cell_against(
             "flagged_meeting_accuracy",
             self.flagged_meeting_accuracy,
@@ -1633,6 +1677,30 @@ class ScaffoldLeakageCells(_FrozenModel):
                 f"control: {self.crew_partner_naming_ballots} > "
                 f"{self.crew_omniscient_control_ballots}"
             )
+        # The impostor and crew nets draw from DISJOINT halves of one readable
+        # pool, so their per-role minima do not constrain them jointly: a block
+        # could otherwise claim more role-split matches than there were bodies
+        # to match against, which is exactly how a corrupt payload hides a
+        # non-zero crew control (the cell whose whole job is to read 0).
+        for label, impostor_side, crew_side in (
+            (
+                "omniscient",
+                self.model_omniscient_ballots,
+                self.crew_omniscient_control_ballots,
+            ),
+            (
+                "partner-naming",
+                self.model_partner_naming_ballots,
+                self.crew_partner_naming_ballots,
+            ),
+        ):
+            if impostor_side + crew_side > self.model_source_pre_guard_ballots:
+                raise ValueError(
+                    f"the {label} nets are role-disjoint, so they cannot jointly "
+                    "exceed the ballots with a readable body: "
+                    f"{impostor_side} + {crew_side} > "
+                    f"{self.model_source_pre_guard_ballots}"
+                )
         if self.impostor_ballots + self.crew_ballots != self.ballots_total:
             raise ValueError(
                 "impostor + crew ballots must equal ballots_total: "
@@ -1889,6 +1957,25 @@ class DeductionMetricsReport(_FrozenModel):
                 "meetings_with_any_flag cannot exceed the meetings folded: "
                 f"{self.evidence_taxonomy.meetings_with_any_flag} > "
                 f"{self.meetings_total}"
+            )
+        # Partition A's FLAGGED predicate and the census's ROLE-PROOF category
+        # are the same ``classify_flag(...) == "role_proof"`` test read at two
+        # granularities, and each flagged meeting contributes >= 1 such flag. So
+        # the two headline views cannot contradict each other about whether role
+        # proof exists — without this, the committed 9p2i payload still
+        # validates with role_proof_flags zeroed and flagged_meetings left at 70.
+        flagged = self.meeting_flag_cross_tab.flagged_meetings
+        if flagged > self.evidence_taxonomy.role_proof_flags:
+            raise ValueError(
+                "a flagged meeting carries >= 1 role-proof flag, so flagged "
+                f"meetings cannot exceed them: {flagged} > "
+                f"{self.evidence_taxonomy.role_proof_flags}"
+            )
+        if flagged > self.evidence_taxonomy.meetings_with_any_flag:
+            raise ValueError(
+                "role-proof-flagged meetings are a subset of the meetings "
+                f"carrying any flag: {flagged} > "
+                f"{self.evidence_taxonomy.meetings_with_any_flag}"
             )
         flagged_ejections = (
             self.meeting_flag_cross_tab.flagged_ejections_impostor
