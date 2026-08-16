@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -557,6 +558,31 @@ def test_provenance_is_decided_by_bytes_not_by_path(tmp_path: Path) -> None:
         assert not bdb.sources_are_committed((untracked,))
     finally:
         untracked.unlink()
+
+    # An IGNORED file inside the checkout. This is the one that makes the check
+    # take two git commands instead of one: `git status --porcelain` prints
+    # NOTHING and exits 0 for an ignored path, so treating empty output as proof
+    # of tracking would call these bytes committed. `--samples-dir` can point at
+    # exactly such a place — `frontend/dist/`, or the `replays/*.jsonl` scratch
+    # the tournament runner writes.
+    ignored = _REPO_ROOT / "frontend" / "dist" / "probe" / "ignored.jsonl"
+    ignored.parent.mkdir(parents=True, exist_ok=True)
+    ignored.write_text("{}\n", encoding="utf-8")
+    try:
+        assert not bdb.sources_are_committed((ignored,))
+    finally:
+        shutil.rmtree(_REPO_ROOT / "frontend" / "dist", ignore_errors=True)
+
+    # A TRACKED file with a local modification: tracked, but not the committed
+    # bytes — so the claim must not hold for it either.
+    tracked = _SAMPLES / "4p1i" / "replay-seed-2.jsonl"
+    original = tracked.read_bytes()
+    tracked.write_bytes(original + b"\n")
+    try:
+        assert not bdb.sources_are_committed((tracked,))
+    finally:
+        tracked.write_bytes(original)
+    assert bdb.sources_are_committed((tracked,)), "restore must leave it clean"
 
     # Outside any repository, and the empty case: unverifiable, so False. The
     # claim fails CLOSED — "could not check" must never read as "fine".

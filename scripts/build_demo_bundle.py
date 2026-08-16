@@ -214,29 +214,42 @@ def sources_are_committed(paths: tuple[Path, ...]) -> bool:
     in place, so the canonical path can hold a local re-recording that exists
     nowhere but this machine, and the note would still have called it public.
 
-    ``git status --porcelain -- <paths>`` answers the real question in one call:
-    it prints a line for anything untracked or modified, so empty output means
-    every file is committed exactly as it sits on disk.
+    It takes TWO questions, because no single git command answers both and the
+    obvious one-call shortcut is wrong: ``git status --porcelain -- <path>``
+    prints nothing for an IGNORED file and exits 0, so "empty output" means
+    "nothing to report", not "tracked and clean". Point ``--samples-dir`` at
+    recordings under an ignored directory — ``frontend/dist/``, or the
+    ``replays/*.jsonl`` scratch the tournament runner writes — and that shortcut
+    would have called every one of them committed. Verified: an ignored path
+    yields empty output and exit 0 from ``status``, and exit 1 from
+    ``ls-files --error-unmatch``.
 
-    Any doubt resolves to False — git missing, not a repository, a non-zero
-    exit. The claim is an assurance handed to someone about to publish, so
-    "could not verify" must read as "do not assert" rather than as "fine"
-    (AGENTS.md: no silent fallbacks).
+    So: ``git ls-files --error-unmatch`` (is every path TRACKED? — fails for
+    untracked *and* ignored) and then ``git diff --quiet HEAD`` (does any
+    tracked path DIFFER from the committed state?). Both must pass.
+
+    Any doubt resolves to False — git missing, not a repository, a path outside
+    it, a non-zero exit. The claim is an assurance handed to someone about to
+    publish, so "could not verify" must read as "do not assert" rather than as
+    "fine" (AGENTS.md: no silent fallbacks).
     """
 
     if not paths:
         return False
-    try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain", "--", *(str(p) for p in paths)],
-            cwd=_REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return result.returncode == 0 and result.stdout.strip() == ""
+    args = [str(p) for p in paths]
+    for probe in (
+        ["git", "ls-files", "--error-unmatch", "--", *args],
+        ["git", "diff", "--quiet", "HEAD", "--", *args],
+    ):
+        try:
+            result = subprocess.run(
+                probe, cwd=_REPO_ROOT, capture_output=True, text=True, check=False
+            )
+        except OSError:
+            return False
+        if result.returncode != 0:
+            return False
+    return True
 
 
 def resolve_default_set(set_names: tuple[str, ...]) -> str:
