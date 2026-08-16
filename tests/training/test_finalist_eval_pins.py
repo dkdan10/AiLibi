@@ -33,8 +33,8 @@ What is pinned, and why:
   is the crew artifact (``crew_tactical_policy_stamp``) and the frozen
   impostor opponent lives in its own ``opponent_*`` fields. That is
   explicitly **not** the ``realpath-rerank-v3`` convention (``training/
-  realpath.py``), where ``stamp`` holds the IMPOSTOR read-back even on a crew
-  leg and ``opponent_stamp`` holds the DECLARATION; copying that shape here
+  realpath_schema.py``), where ``stamp`` holds the IMPOSTOR read-back even on a
+  crew leg and ``opponent_stamp`` holds the DECLARATION; copying that shape here
   would seat the opponent in the subject slot and label four crew diagnostics
   with the champion's identity (the 18.19 conflation guard, read-side). The
   realpath-v3 field NAMES are therefore asserted ABSENT from crew rows —
@@ -917,8 +917,9 @@ def test_the_f13_arm_is_the_49_seed_arm_and_declares_the_missing_seed() -> None:
 def test_the_comparator_row_proves_the_opponent_slot_was_empty() -> None:
     """The all-scripted arm loaded nothing, and says so with counted proof.
 
-    The mirror of 18.32's comparator-cell proof (``tests/training/
-    test_realpath.py``): an absent learned stamp MEANS the scripted FSM, and
+    The mirror of 18.32's comparator-cell proof (whose test retired with the
+    campaign machinery at Task 19.19): an absent learned stamp MEANS the
+    scripted FSM, and
     the row does not ASSUME that absence — it carries the canonical
     fsm-default stamp, states ZERO learned and ZERO crew stamp games, and
     flags ``opponent_absence_proven``. No artifact, no sidecar, no digest to
@@ -1086,7 +1087,7 @@ def test_crew_rows_keep_the_subject_and_the_opponent_in_distinct_slots() -> None
 def test_crew_rows_do_not_follow_the_realpath_v3_stamp_convention() -> None:
     """The realpath-v3 field NAMES are absent, deliberately (report §15).
 
-    ``realpath-rerank-v3`` (``training/realpath.py``) seats the IMPOSTOR
+    ``realpath-rerank-v3`` (``training/realpath_schema.py``) seats the IMPOSTOR
     read-back in ``stamp`` even on a crew leg and puts the frozen opponent's
     DECLARATION in ``opponent_stamp``. Reusing that shape in this file would
     seat the opponent in the subject slot and label four crew diagnostics with

@@ -22,11 +22,11 @@ never re-derives rewards from replay bytes. Roles come from the re-seeded state
 
 Episode horizon (Task 15.8 definition of done): a meeting runner is ALWAYS
 installed by the env, so ``meeting_runner=None`` truncation
-(``MEETING_PHASE_REACHED``) is structurally unreachable. The ONE deliberate
-boundary mode is the explicit ``episode_boundary="first_meeting"`` opt-in (the
-seam 15.13's fallback (b) rides): its episodes end at the first meeting trigger
-and are MARKED ``truncated``. A ``full_game`` episode is ``truncated`` only when
-the game never reached ``GAME_OVER`` (the tick budget capped it). Silent
+(``MEETING_PHASE_REACHED``) is structurally unreachable. ``full_game`` is the one
+episode boundary: such an episode is ``truncated`` only when the game never
+reached ``GAME_OVER`` (the tick budget capped it). Task 19.19 retired the
+``first_meeting`` opt-in — the 15.13 fallback-(b) seam it rode was never taken by
+a production caller. Silent
 truncation is structurally unreachable, and :func:`EpisodeRollout.complete`
 (``winner is not None and not truncated``) is the single gate the reward channel
 reads so no fitness term ever scores a truncated episode as a full game.
@@ -67,8 +67,10 @@ from orchestrator.replay import (
 )
 from orchestrator.seeder import seed_initial_state
 
-# The one deliberate boundary mode plus the full-game default (Task 15.8).
-EpisodeBoundary: TypeAlias = Literal["full_game", "first_meeting"]
+# The full-game boundary (Task 15.8); the ``first_meeting`` opt-in retired at
+# Task 19.19 with no production caller. Kept as a named alias — every caller
+# passes it explicitly, and ``_validate_episode_boundary`` still fails loud.
+EpisodeBoundary: TypeAlias = Literal["full_game"]
 
 # The runtime-valid boundary set, derived from the Literal so it never drifts.
 _VALID_EPISODE_BOUNDARIES: frozenset[str] = frozenset(get_args(EpisodeBoundary))
@@ -78,8 +80,8 @@ def _validate_episode_boundary(boundary: str) -> None:
     """Fail loud on an unknown ``episode_boundary`` (AGENTS.md no silent fallbacks).
 
     ``episode_boundary`` gates whether an episode is scoreable as a full game, so
-    a typo arriving from config/CLI (``"first-meeting"``) must NOT fall through to
-    the full-game path and silently mark a truncated-intent episode complete."""
+    a typo arriving from config/CLI (``"fullgame"``) must NOT fall through to the
+    full-game path and silently mark an unintended episode complete."""
 
     if boundary not in _VALID_EPISODE_BOUNDARIES:
         raise ValueError(
@@ -88,12 +90,9 @@ def _validate_episode_boundary(boundary: str) -> None:
         )
 
 
-# Terminal shape of one episode. ``FIRST_MEETING`` marks the explicit
-# first-meeting opt-in truncation; ``TICK_BUDGET`` marks a full-game episode the
-# scheduler capped before ``GAME_OVER``. Both are non-terminal for fitness.
-EpisodeOutcome: TypeAlias = Literal[
-    "CREWMATES", "IMPOSTORS", "TICK_BUDGET", "FIRST_MEETING"
-]
+# Terminal shape of one episode. ``TICK_BUDGET`` marks an episode the scheduler
+# capped before ``GAME_OVER``; it is non-terminal for fitness.
+EpisodeOutcome: TypeAlias = Literal["CREWMATES", "IMPOSTORS", "TICK_BUDGET"]
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -280,7 +279,7 @@ class EpisodeRollout:
                     f"truncated={self.truncated})"
                 )
         elif self.winner is not None or not self.truncated:
-            # FIRST_MEETING / TICK_BUDGET are non-terminal: no winner, truncated.
+            # TICK_BUDGET is non-terminal: no winner, truncated.
             raise ValueError(
                 f"non-terminal outcome {self.outcome!r} requires winner=None and "
                 f"truncated=True (got winner={self.winner!r}, "
@@ -298,9 +297,8 @@ class EpisodeRollout:
         """Whether this episode is a scoreable FULL game (Task 15.8).
 
         The single gate the reward channel reads: a terminal winner AND not
-        truncated. A first-meeting opt-in episode, or a tick-budget-capped
-        full-game episode, is NOT complete — so no fitness term ever scores a
-        truncated episode as a full game.
+        truncated. A tick-budget-capped episode is NOT complete — so no fitness
+        term ever scores a truncated episode as a full game.
         """
 
         return self.winner is not None and not self.truncated
@@ -486,10 +484,10 @@ def reconstruct_episode(
     ``state_hash_after``). The typed events, per-step frames, and descriptors are
     collected along the way.
 
-    ``episode_boundary="first_meeting"`` stops at the first meeting TRIGGER
-    (before applying it) and marks the episode ``truncated`` — the deliberate
-    15.13 fallback-(b) seam. A game that reaches ``GAME_OVER`` before any meeting
-    is a genuine full game under either boundary (``truncated=False``).
+    ``episode_boundary`` is ``"full_game"`` — the only boundary since Task 19.19
+    retired the unused ``first_meeting`` opt-in. It is still an explicit
+    parameter (every caller passes it) and still validated, so an unknown value
+    fails loud rather than falling back.
     """
 
     entries = read_all_entries(replay_path)
@@ -585,29 +583,6 @@ def reconstruct_episode(
             )
         meeting_entry = meeting_by_tick.get(entry.tick)
 
-        if episode_boundary == "first_meeting":
-            # The deliberate 15.13 fallback-(b) boundary: end at the first
-            # meeting trigger, MARK truncated, do NOT apply the meeting. The
-            # meeting has NOT resolved within this episode's horizon, so its
-            # outcome / ejection stay ``None`` — copying them from the full
-            # replay would leak a post-boundary result (who was ejected) into a
-            # pre-meeting training record. Only the trigger facts known at the
-            # trigger tick are recorded.
-            meetings.append(
-                MeetingRecord(
-                    tick=entry.tick,
-                    meeting_id=meeting_entry.meeting_id
-                    if meeting_entry is not None
-                    else f"seed-{seed}:meeting-{entry.tick}",
-                    trigger=trigger_event.trigger,
-                    triggered_by=trigger_event.actor,
-                    outcome=None,
-                    ejected_player_id=None,
-                )
-            )
-            truncated = True
-            break
-
         if meeting_entry is None:
             raise RolloutReconstructionError(
                 f"seed {seed}: tick {entry.tick} entered MEETING but the replay "
@@ -666,13 +641,11 @@ def reconstruct_episode(
         if state.phase == "GAME_OVER":
             break
 
-    if truncated:
-        outcome = "FIRST_MEETING"
-    elif winner is not None:
+    if winner is not None:
         outcome = winner
     else:
-        # No GameOverEvent and no first-meeting cut: the scheduler capped the
-        # game. A full-game episode that never terminated is not complete.
+        # No GameOverEvent: the scheduler capped the game. An episode that never
+        # terminated is not complete.
         outcome = "TICK_BUDGET"
         truncated = True
 

@@ -42,9 +42,9 @@ post-phase-14-ML-training-signal.md §3; DESIGN.md §"balance is a finding"):
 
 The reward channel REFUSES to score a truncated episode as a full game
 (:class:`TruncatedEpisodeError`): :func:`compute_shaped_reward` gates on
-:attr:`EpisodeRollout.complete`, so a first-meeting opt-in episode (or a
-tick-budget-capped one) can never be read as a terminal outcome — silent
-truncation is never a fitness path (Task 15.8 definition of done).
+:attr:`EpisodeRollout.complete`, so a tick-budget-capped episode can never be
+read as a terminal outcome — silent truncation is never a fitness path (Task
+15.8 definition of done).
 """
 
 from __future__ import annotations
@@ -91,8 +91,8 @@ class TruncatedEpisodeError(ValueError):
 
     The structural guard behind the Task 15.8 invariant "no fitness term ever
     reads a truncated episode as a full game": :func:`compute_shaped_reward`
-    raises this rather than returning a terminal reward for a first-meeting
-    opt-in episode or a tick-budget-capped full-game episode.
+    raises this rather than returning a terminal reward for a tick-budget-capped
+    episode.
     """
 
 
@@ -310,9 +310,9 @@ def compute_shaped_reward(
     """Score one COMPLETE episode's shaped reward for ``side`` (Task 15.8).
 
     Refuses a truncated / incomplete episode (:class:`TruncatedEpisodeError`): a
-    terminal win/loss is only defined for a full game, so a first-meeting opt-in
-    episode or a tick-budget-capped one is never scored as one — the structural
-    guard that keeps silent truncation off every fitness path.
+    terminal win/loss is only defined for a full game, so a tick-budget-capped
+    episode is never scored as one — the structural guard that keeps silent
+    truncation off every fitness path.
     """
 
     _validate_side(side)

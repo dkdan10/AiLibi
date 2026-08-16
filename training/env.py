@@ -28,10 +28,11 @@ Three capabilities land here and in the sibling modules:
 
 A meeting runner is ALWAYS installed (default: ``build_default_meeting_runner``
 on the fake provider), so ``meeting_runner=None`` truncation
-(``MEETING_PHASE_REACHED``) is structurally unreachable from the env. The
-explicit ``episode_boundary="first_meeting"`` opt-in is the one deliberate
-boundary mode (the 15.13 fallback-(b) seam); its episodes are MARKED truncated in
-the rollout record and the reward channel refuses to score them as full games.
+(``MEETING_PHASE_REACHED``) is structurally unreachable from the env.
+``episode_boundary="full_game"`` is the one boundary mode — Task 19.19 retired
+the ``first_meeting`` opt-in (the 15.13 fallback-(b) seam), which no production
+caller ever took. A tick-budget-capped episode is still MARKED truncated in the
+rollout record, and the reward channel refuses to score it as a full game.
 
 numpy is training-confined by a new import-linter contract (``agents`` must not
 import ``training``); the production inference path (15.10, Wave 2) stays
@@ -1034,27 +1035,6 @@ class TacticalRolloutEnv:
                     "MeetingTriggeredEvent in the captured events"
                 )
 
-            if episode_boundary == "first_meeting":
-                # The deliberate 15.13 fallback-(b) boundary: stop at the first
-                # meeting trigger, MARK truncated, do NOT record the (already
-                # applied) outcome — a pre-meeting training record must not leak a
-                # post-boundary ejection.
-                boundary_step = meeting_by_trigger.get(step.input_tick)
-                meetings.append(
-                    MeetingRecord(
-                        tick=step.input_tick,
-                        meeting_id=boundary_step.result.meeting_id
-                        if boundary_step is not None
-                        else f"seed-{seed}:meeting-{step.input_tick}",
-                        trigger=trigger_event.trigger,
-                        triggered_by=trigger_event.actor,
-                        outcome=None,
-                        ejected_player_id=None,
-                    )
-                )
-                truncated = True
-                break
-
             meeting_step = meeting_by_trigger.get(step.input_tick)
             if meeting_step is None:
                 raise RolloutReconstructionError(
@@ -1092,12 +1072,10 @@ class TacticalRolloutEnv:
             if meeting_step.state.phase == "GAME_OVER":
                 break
 
-        if truncated:
-            outcome = "FIRST_MEETING"
-        elif winner is not None:
+        if winner is not None:
             outcome = winner
         else:
-            # No GameOverEvent and no first-meeting cut: the scheduler capped it.
+            # No GameOverEvent: the scheduler capped it.
             outcome = "TICK_BUDGET"
             truncated = True
 

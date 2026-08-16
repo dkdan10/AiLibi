@@ -1842,8 +1842,9 @@ def test_utility_family_rejects_a_declared_hidden_width(tmp_path: Path) -> None:
 
     The consumer ignores ``hidden`` for this family, so such artifacts still
     load — but every ``config.json`` would falsely claim a masked-MLP width.
-    ``RealPathCandidate`` rejects the same combination for the same family
-    (Codex on PR #314).
+    The 18.17 re-rank library's candidate model rejected the same combination
+    for the same family (Codex on PR #314); it retired at Task 19.19, this
+    guard did not.
     """
 
     config = _make_config(tmp_path, impostor=_impostor_side(hidden=8))

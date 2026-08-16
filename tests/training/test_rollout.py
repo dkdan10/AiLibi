@@ -3,8 +3,9 @@
 Pins: the episode record carries every named behavioral descriptor with values
 FIXED on a scripted (frozen-FSM, fake-provider) game; the reconstruction is
 state-hash-verified against the recorded replay and fails loud on drift; the
-descriptors + hash chain are byte-deterministic; and the first-meeting boundary
-truncates while a completed full game does not.
+descriptors + hash chain are byte-deterministic; and a completed full game is
+not truncated (Task 19.19 retired the first-meeting boundary, leaving the
+tick-budget cap as the only truncation source).
 """
 
 from __future__ import annotations
@@ -147,7 +148,7 @@ def test_reconstruction_fails_loud_on_state_hash_drift() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Boundary semantics: full game vs first-meeting opt-in                        #
+# Boundary semantics: the full-game episode                                    #
 # --------------------------------------------------------------------------- #
 
 
@@ -157,20 +158,6 @@ def test_full_game_is_not_truncated() -> None:
     assert rollout.complete
     # The last frame is the terminal GAME_OVER state.
     assert rollout.frames[-1].phase == "GAME_OVER"
-
-
-def test_first_meeting_boundary_ends_at_the_trigger() -> None:
-    full = _env().rollout(0)
-    first_meeting = _env(episode_boundary="first_meeting").rollout(0)
-    assert first_meeting.truncated
-    assert first_meeting.outcome == "FIRST_MEETING"
-    assert first_meeting.episode_boundary == "first_meeting"
-    # The truncated episode ends no later than the full game and at its first
-    # meeting; its frame chain is a strict prefix window of the play.
-    assert first_meeting.final_tick <= full.final_tick
-    assert len(first_meeting.meetings) == 1
-    # A truncated episode's frames stop at the meeting-trigger tick (phase MEETING).
-    assert first_meeting.frames[-1].phase == "MEETING"
 
 
 def test_meeting_records_capture_trigger_and_outcome() -> None:
@@ -257,7 +244,7 @@ def test_episode_rollout_rejects_inconsistent_terminal_shape() -> None:
     assert _build(truncated=False, outcome="IMPOSTORS", winner="IMPOSTORS").complete
     # Truncated but carrying a winner — rejected.
     with pytest.raises(ValueError):
-        _build(truncated=True, outcome="FIRST_MEETING", winner="IMPOSTORS")
+        _build(truncated=True, outcome="TICK_BUDGET", winner="IMPOSTORS")
     # Terminal outcome disagreeing with the winner — rejected.
     with pytest.raises(ValueError):
         _build(truncated=False, outcome="IMPOSTORS", winner="CREWMATES")
@@ -282,22 +269,6 @@ def test_reconstruct_rejects_unknown_boundary() -> None:
                 tasks_per_crewmate=_TASKS,
                 episode_boundary="first-meeting",  # type: ignore[arg-type]
             )
-
-
-def test_first_meeting_record_hides_the_unresolved_outcome() -> None:
-    """A first-meeting episode ends BEFORE the meeting resolves, so its record
-    must not leak the post-boundary outcome/ejection from the full replay."""
-
-    rollout = _env(episode_boundary="first_meeting").rollout(0)
-    assert rollout.truncated
-    assert len(rollout.meetings) == 1
-    meeting = rollout.meetings[0]
-    # Only the trigger facts known at the trigger tick are recorded.
-    assert meeting.trigger in ("report", "emergency")
-    assert meeting.triggered_by in rollout.roles
-    # The meeting has NOT resolved within the episode horizon — no leaked result.
-    assert meeting.outcome is None
-    assert meeting.ejected_player_id is None
 
 
 # --------------------------------------------------------------------------- #

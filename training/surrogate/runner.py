@@ -40,12 +40,52 @@ Public surface (stable — downstream tasks import these):
 
 Phase 19 tier map (training/README.md §2a), the standalone-vs-dependency
 boundary: the surrogate RANKING channel is KEPT (46/60 top-1); the standalone
-DECISION arm is retired by 19.19 (all-SKIP census — the NO-GO in
-``training/reports/report-ballot-surrogate.md`` §5). The factory, the class,
-and the counter STAY: ``training/composed_runner.py``'s verification fence and
-``training/bakeoff/harness.py`` consume them. Only a surrogate-ONLY runner
-exposure proven consumer-free may retire — a no-free-exposure outcome is a
-recorded no-op.
+DECISION arm is the NO-GO in ``training/reports/report-ballot-surrogate.md`` §5
+(all-SKIP census). The factory, the class, and the counter STAY:
+``training/composed_runner.py``'s verification fence and
+``training/bakeoff/harness.py`` consume them.
+
+Task 19.19's retire item — a surrogate-ONLY runner exposure proven CONSUMER-FREE
+— resolved as a RECORDED NO-OP. A surrogate-only exposure does exist; what does
+not exist is a consumer-free one, and consumer-free was the retire condition.
+Every site that installs this runner as the sole meeting runner has a live
+consumer:
+
+* ``training/bakeoff/harness.py:2072`` — ``run_goodhart_surrogate_rerun`` hands
+  the factory straight to ``run_goodhart_probe``, so the probe's games run on
+  this runner ALONE. That IS a surrogate-only exposure, and it is driven by a
+  live CLI: the ``goodhart-surrogate`` subcommand of that module's own ``main``
+  (:2208/:2244). It is also pinned by
+  ``tests/training/test_bakeoff_harness.py:546``. Consumed, so it stays;
+* ``training/bakeoff/harness.py:1763`` — ``evaluate_candidate``'s surrogate-path
+  DIAGNOSTIC column, likewise surrogate-only for that pass, feeding
+  ``inner_fitness_surrogate`` / ``surrogate_real_divergence`` on the bake-off row;
+* ``training/composed_runner.py:278`` — the sha/staleness verification fence
+  (calls the factory, discards the result);
+* ``eval/balance_eval.py``'s ``meeting_runner_factory`` is a GENERIC seam that
+  accepts any :class:`~orchestrator.game.MeetingRunner` factory (the composed
+  runner included) — not a surrogate-only arm at all.
+
+Both surrogate-only exposures are DIAGNOSTIC, but they are not diagnostic in the
+same way, and the difference matters for the NO-GO:
+
+* the ``:1763`` column SCORES an already-chosen candidate
+  (``_score_eval_pass(candidate.policy, ...)``) — it selects nothing;
+* the ``:2072`` Goodhart arm DOES select. ``run_goodhart_probe`` runs a full
+  :func:`~training.bakeoff.es.evolve` against the referee score and evaluates
+  ``result.champion`` (``training/bakeoff/goodhart.py:879-884`` / ``:913``), so a
+  PROBE champion is selected on the surrogate path. That is the point of the
+  probe — it is the adversarial attack that asks whether the referee is gameable,
+  and it has to optimize to answer.
+
+What the surrogate never does is select an ADOPTED entrant: a probe champion is
+an artifact of the attack, and the bake-off's adopted numbers are rescored on a
+real meeting path (``eval/balance_eval.py``'s reporting rule). That narrower
+statement — not "the surrogate never selects a champion" — is what squares these
+arms with the standalone-DECISION NO-GO in
+``training/reports/report-ballot-surrogate.md`` §5.
+
+Nothing here was force-deleted.
 """
 
 from __future__ import annotations

@@ -121,11 +121,13 @@ def _make_rollout(
         num_players=_NUM_PLAYERS,
         num_impostors=_NUM_IMPOSTORS,
         tasks_per_crewmate=_TASKS,
-        episode_boundary="first_meeting" if truncated else "full_game",
+        episode_boundary="full_game",
         truncated=truncated,
         # The EpisodeRollout invariant requires outcome == winner for a completed
-        # episode, so the outcome tracks the winner when not truncated.
-        outcome="FIRST_MEETING" if truncated else winner,  # type: ignore[arg-type]
+        # episode, so the outcome tracks the winner when not truncated. A
+        # truncated full-game episode is the tick-budget cap (Task 19.19 retired
+        # the first_meeting boundary, the only other truncation source).
+        outcome="TICK_BUDGET" if truncated else winner,  # type: ignore[arg-type]
         winner=winner,  # type: ignore[arg-type]
         win_reason=None if winner is None else "IMPOSTOR_PARITY",
         final_tick=1,

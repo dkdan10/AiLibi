@@ -2,8 +2,9 @@
 
 Pins the definition-of-done contract: the env runs full fake-provider games
 through the injected factory; the always-installed meeting runner makes
-``MEETING_PHASE_REACHED`` truncation structurally unreachable; the explicit
-``first_meeting`` opt-in is the one deliberate boundary mode (marked truncated);
+``MEETING_PHASE_REACHED`` truncation structurally unreachable; ``full_game`` is
+the one boundary mode (Task 19.19 retired the unused ``first_meeting`` opt-in),
+so only a tick-budget cap marks an episode truncated;
 the mask is property-tested against the REAL engine (every masked-legal action
 resolves, every unmasked action is engine-rejected, and the impostor's pretend
 ``do_task`` camouflage is carried in the SUBMISSION set but excluded from the
@@ -61,7 +62,6 @@ from training.env import (
     build_action_mask,
     build_interposition_factory,
 )
-from training.rewards import TruncatedEpisodeError, compute_shaped_reward
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -192,8 +192,8 @@ def test_meeting_runner_always_installed_meeting_phase_unreachable() -> None:
     assert env._build_meeting_runner() is not None  # noqa: SLF001
     for seed in range(4):
         rollout = env.rollout(seed)
-        # The default boundary is full_game, so a terminal (or tick-budget)
-        # outcome — never FIRST_MEETING and never MEETING_PHASE_REACHED.
+        # full_game is the only boundary, so a terminal (or tick-budget)
+        # outcome — never MEETING_PHASE_REACHED.
         assert rollout.outcome in ("CREWMATES", "IMPOSTORS", "TICK_BUDGET")
 
 
@@ -222,21 +222,6 @@ def test_env_rejects_unknown_episode_boundary() -> None:
     # a full-game episode (which would then be scoreable).
     with pytest.raises(ValueError, match="unknown episode_boundary"):
         TacticalRolloutEnv(episode_boundary="first-meeting")  # type: ignore[arg-type]
-
-
-def test_first_meeting_boundary_marks_truncated_and_reward_refuses() -> None:
-    env = _env(episode_boundary="first_meeting")
-    rollout = env.rollout(0)
-    # Seed 0 reaches a meeting, so the episode is cut at the first trigger.
-    assert rollout.truncated
-    assert rollout.outcome == "FIRST_MEETING"
-    assert rollout.winner is None
-    assert not rollout.complete
-    assert len(rollout.meetings) == 1
-    with pytest.raises(TruncatedEpisodeError):
-        compute_shaped_reward(rollout, "IMPOSTOR")
-    with pytest.raises(TruncatedEpisodeError):
-        compute_shaped_reward(rollout, "CREWMATE")
 
 
 # --------------------------------------------------------------------------- #
