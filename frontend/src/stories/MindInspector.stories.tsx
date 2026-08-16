@@ -86,6 +86,9 @@ function ballot(voter: string, target: string): BallotView {
   };
 }
 
+// Task 19.11: `category` is the evidence taxonomy the badge now weights by. This
+// one is a CROSS-STATEMENT conflict — two unverified statements that cannot both
+// be true, which is not the same thing as proof and no longer renders like it.
 const CONTRADICTION: ContradictionView = {
   contradiction_id: "c-1",
   kind: "alibi_vs_sighting",
@@ -95,6 +98,36 @@ const CONTRADICTION: ContradictionView = {
   description: "p-5 claimed Cafeteria at tick 310 but was seen in Reactor.",
   weak: false,
   severity: "strong",
+  category: "cross_statement",
+};
+
+// The ROLE-PROOF exhibit: a grounded vent sighting, self-linked (both ids
+// reference the SAME spoken observation), so the badge weights it as proof.
+const VENT_PROOF: ContradictionView = {
+  contradiction_id: "c-2",
+  kind: "vent_sighting",
+  event_a_id: "e-vent",
+  event_b_id: "e-vent",
+  subjects: ["p-5"],
+  description:
+    "p-1 witnessed p-5 vent in REACTOR at tick 314; venting is impostor-only, and the spoken observation matches the witness's own record.",
+  weak: false,
+  severity: "strong",
+  category: "role_proof",
+};
+
+// The WEAK-SIGNAL exhibit: the detector stamped it itself, so the badge recedes.
+const WEAK_FLAG: ContradictionView = {
+  contradiction_id: "c-3",
+  kind: "alibi_conflict",
+  event_a_id: "e-c",
+  event_b_id: "e-d",
+  subjects: ["p-0"],
+  description:
+    "Alibis place p-0 in CAFETERIA (ticks 310-310) and in ADMIN (ticks 305-310); intervals overlap. [weak signal: self-stated alibi pair; endpoint-tick overlap]",
+  weak: true,
+  severity: "weak",
+  category: "weak_signal",
 };
 
 const MEETING: MeetingView = {
@@ -106,7 +139,7 @@ const MEETING: MeetingView = {
   ejected_player_id: "p-5",
   turns: [turn("p-1", "I saw p-5 head toward Reactor around tick 312."), turn("p-5", "I was in Cafeteria the whole time.")],
   ballots: [ballot("p-1", "p-5"), ballot("p-5", "p-0")],
-  contradictions: [CONTRADICTION],
+  contradictions: [VENT_PROOF, CONTRADICTION, WEAK_FLAG],
   llm_calls: [
     llmCall(
       "p-1",
@@ -143,7 +176,10 @@ function memory(agentId: string): AgentMemoryView {
       { subject: "p-2", suspicion: 0.18, confidence: 0.4, snapshot_tick: 320 },
       { subject: "p-0", suspicion: 0.34, confidence: 0.52, snapshot_tick: 320 },
     ],
-    open_contradictions: [CONTRADICTION],
+    // All three Task-19.11 categories, so the evidence badge's weighting has
+    // story coverage: proof reads as proof, the conflict as a conflict, the
+    // weak-stamped flag recedes.
+    open_contradictions: [VENT_PROOF, CONTRADICTION, WEAK_FLAG],
     rendered_memory_text: `=== Memory for ${agentId} ===\n- saw p-5 in Reactor at tick 312\n- found body of p-7 in Reactor at tick 318\n- belief: p-5 suspicion 0.81`,
   };
 }

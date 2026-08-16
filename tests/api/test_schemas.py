@@ -61,6 +61,7 @@ from api.schemas import (
     TurnView,
     VentEventView,
     VentView,
+    classify_evidence,
 )
 
 
@@ -130,6 +131,11 @@ def _turns() -> tuple[TurnView, ...]:
 
 
 def _contradiction() -> ContradictionView:
+    # Task 19.11: ``category`` is the derived evidence taxonomy. This flag is a
+    # CROSS-STATEMENT conflict (two different unverified statements, no weak
+    # stamp) — the classification ``api.schemas.classify_evidence`` produces for
+    # exactly these fields, kept consistent by
+    # ``test_contradiction_view_category_matches_the_classifier`` below.
     return ContradictionView(
         contradiction_id="c1",
         kind="alibi_vs_sighting",
@@ -139,6 +145,7 @@ def _contradiction() -> ContradictionView:
         description="p2 claims storage but was seen in cafeteria",
         weak=False,
         severity="strong",
+        category="cross_statement",
     )
 
 
@@ -650,3 +657,25 @@ def test_agent_memory_view_task_counts_are_own_instances() -> None:
     done = memory.model_copy(update={"tasks_completed": memory.tasks_assigned})
     assert done.tasks_completed == done.tasks_assigned
     assert AgentMemoryView.model_validate_json(done.model_dump_json()) == done
+
+
+def test_contradiction_view_category_matches_the_classifier() -> None:
+    """The hand-authored fixture's ``category`` is the derived one (Task 19.11).
+
+    ``ContradictionView.category`` is never authored — the loader derives it
+    with :func:`api.schemas.classify_evidence` from the recorded fields. This
+    keeps the fixture above from drifting into a combination the derivation
+    would never produce, and round-trips the additive field.
+    """
+
+    contradiction = _contradiction()
+    assert contradiction.category == classify_evidence(
+        kind=contradiction.kind,
+        event_a_id=contradiction.event_a_id,
+        event_b_id=contradiction.event_b_id,
+        weak=contradiction.weak,
+    )
+    assert (
+        ContradictionView.model_validate_json(contradiction.model_dump_json())
+        == contradiction
+    )

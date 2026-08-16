@@ -3,8 +3,9 @@
 // 05-meeting render). A card carrying a speaker chip + tick/kind tag, the
 // foregrounded free-text line, the turn's SIGHTINGS as hoverable chips (the
 // claim↔map cross-highlight device), and a collapsed-by-default structured
-// detail (observations + claims). Contradictions implicating the turn surface
-// as role-neutral markers (weak = dashed ink / strong = solid fuchsia — never
+// detail (observations + claims). Evidence implicating the turn surfaces as
+// role-neutral markers, drawn by the Task-19.11 taxonomy category (proof = solid
+// ink / contradiction = solid fuchsia / weak signal = dashed ink — never
 // hue-only). Threading: the card is indented by `depth` (computed from the
 // `reply_to` chain in MeetingView) and a reply cue names the parent turn.
 //
@@ -94,23 +95,66 @@ function SpeakerChip({
   );
 }
 
-// Role-neutral contradiction marker: weak = thin dashed ink, strong = bold solid
-// fuchsia (the reserved contradiction channel). Paired with a label so it never
-// reads by hue alone (firewall).
-function ContradictionMarker({
+// The INLINE evidence marker. It used to branch on `severity` alone, so a
+// self-linked `vent_sighting` — role PROOF, always strong — rendered in the
+// reserved fuchsia contradiction channel right beside the witness's own words
+// (Task 19.11; audits/audit-phase-19-triage.md §7 item 12). It now branches on
+// `ContradictionView.category`, the same taxonomy `MeetingView`'s evidence list
+// uses, so the three categories read as three things here too. Role-neutral and
+// never hue-only: every stroke is paired with its label.
+type EvidenceCategory = ContradictionView["category"];
+
+// A `Record` over the union: a fourth category is a compile error, not a marker
+// that silently renders blank. Proof draws as authoritative solid INK — it must
+// not spend the fuchsia contradiction channel, because it is not one.
+const EVIDENCE_MARKERS: Record<
+  EvidenceCategory,
+  { chip: string; stroke: string; strokeWidth: number; dash: string | undefined; label: string }
+> = {
+  role_proof: {
+    chip: "border-ink-900 text-ink-900",
+    stroke: tokens.ink[900],
+    strokeWidth: 3,
+    dash: undefined,
+    label: "proof",
+  },
+  cross_statement: {
+    chip: "border-contradiction-strong text-contradiction-strong",
+    stroke: tokens.contradiction,
+    strokeWidth: 3,
+    dash: undefined,
+    label: "contradiction",
+  },
+  weak_signal: {
+    chip: "border-ink-300 text-ink-500",
+    stroke: tokens.ink[500],
+    strokeWidth: 1.6,
+    dash: "4 4",
+    label: "weak",
+  },
+};
+
+// Card-accent precedence: proof outranks a contradiction, and a weak-only turn
+// gets no evidence accent at all (it keeps its speaker identity colour) — the
+// visual subordination the taxonomy exists to draw.
+const EVIDENCE_RANK: Record<EvidenceCategory, number> = {
+  role_proof: 0,
+  cross_statement: 1,
+  weak_signal: 2,
+};
+
+function EvidenceMarker({
   contradiction,
 }: {
   contradiction: ContradictionView;
 }) {
-  const strong = contradiction.severity === "strong";
+  const marker = EVIDENCE_MARKERS[contradiction.category];
   return (
     <span
       title={contradiction.description}
       className={
         "inline-flex items-center gap-2 rounded-md border px-1.5 py-1 font-mono text-3xs font-bold uppercase tracking-wide " +
-        (strong
-          ? "border-contradiction-strong text-contradiction-strong"
-          : "border-ink-200 text-ink-500")
+        marker.chip
       }
     >
       <svg width="22" height="8" aria-hidden className="shrink-0">
@@ -119,12 +163,12 @@ function ContradictionMarker({
           y1="4"
           x2="21"
           y2="4"
-          stroke={strong ? tokens.contradiction : tokens.ink[300]}
-          strokeWidth={strong ? 3 : 1.6}
-          strokeDasharray={strong ? undefined : "4 4"}
+          stroke={marker.stroke}
+          strokeWidth={marker.strokeWidth}
+          strokeDasharray={marker.dash}
         />
       </svg>
-      {strong ? "strong" : "weak"}
+      {marker.label}
     </span>
   );
 }
@@ -201,7 +245,7 @@ export function TurnCard({
   const flagged = dedupeContradictions([
     ...observations.flatMap((o) => o.contras),
     ...claims.flatMap((c) => c.contras),
-  ]);
+  ]).sort((a, b) => EVIDENCE_RANK[a.category] - EVIDENCE_RANK[b.category]);
   const detailCount = observations.length + claims.length;
 
   // The sightings (saw_player observations) are the cross-highlight targets, so
@@ -214,9 +258,19 @@ export function TurnCard({
   const accusation = turn.claims.find((claim) => claim.type === "accusation");
   const target = accusation?.against ?? null;
 
-  // A flagged turn gets a fuchsia left accent; otherwise the speaker's identity
+  // The left accent follows the taxonomy, not the raw flag count (Task 19.11):
+  // role proof accents in solid ink (the card carries hard evidence — and the
+  // speaker is the WITNESS, so painting it fuchsia read as an accusation against
+  // them), a real cross-statement conflict keeps the fuchsia contradiction
+  // channel, and a turn flagged ONLY by weak signals keeps its speaker identity
   // colour (identity ≠ guilt — it only ties the card to its speaker).
-  const accent = flagged.length > 0 ? tokens.contradiction : playerColor(turn.speaker, players);
+  const strongest = flagged[0]?.category;
+  const accent =
+    strongest === "role_proof"
+      ? tokens.ink[900]
+      : strongest === "cross_statement"
+        ? tokens.contradiction
+        : playerColor(turn.speaker, players);
   const indent = Math.min(depth, MAX_DEPTH) * INDENT_PX;
 
   return (
@@ -258,7 +312,7 @@ export function TurnCard({
         )}
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {flagged.map((c) => (
-            <ContradictionMarker key={c.contradiction_id} contradiction={c} />
+            <EvidenceMarker key={c.contradiction_id} contradiction={c} />
           ))}
         </span>
       </header>
@@ -297,7 +351,7 @@ export function TurnCard({
                     <span className="text-ink-500">•</span>
                     <ObservationLine obs={obs} />
                     {contras.map((c) => (
-                      <ContradictionMarker key={c.contradiction_id} contradiction={c} />
+                      <EvidenceMarker key={c.contradiction_id} contradiction={c} />
                     ))}
                   </li>
                 ))}
@@ -313,7 +367,7 @@ export function TurnCard({
                     <span className="text-ink-500">•</span>
                     <ClaimLine claim={claim} />
                     {contras.map((c) => (
-                      <ContradictionMarker key={c.contradiction_id} contradiction={c} />
+                      <EvidenceMarker key={c.contradiction_id} contradiction={c} />
                     ))}
                   </li>
                 ))}

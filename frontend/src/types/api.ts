@@ -318,6 +318,7 @@ export interface ContradictionView {
   description: string;
   weak: boolean;
   severity: "weak" | "strong";
+  category: "role_proof" | "cross_statement" | "weak_signal";
 }
 
 export interface LLMCallView {
