@@ -129,7 +129,11 @@ implementation hint) and the vote guard.
 
 * VOTABLE set of a meeting = the players who cast a ballot in it (every living
   participant votes, so this is the living roster read off the record rather
-  than reconstructed).
+  than reconstructed). Each voter's LEGAL target set is that minus THEMSELVES,
+  mirroring ``meetings.manager._candidate_targets(living, exclude=voter)``: a
+  player cannot vote for themselves, so a self-accusation names nobody they
+  could lawfully eject. It therefore cannot put a ballot into the denominator,
+  and a self-target can never score consistent.
 * AUTHORED target: **the target the AGENT wrote, not the one the record shows.**
   Four deterministic guards rewrite ``VoteBallot.target`` and each stamps the
   ORIGINAL into ``rationale_text`` as ``{target!r}`` — the graph redirect, the
@@ -152,11 +156,11 @@ implementation hint) and the vote guard.
   votable, so the SKIP-tolerance clause does not excuse it).
 * ``inconsistent_other_target_ballots``: the authored target is a VOTABLE player
   the voter never accused.
-* ``inconsistent_invalid_target_ballots``: the authored target names no votable
-  player at all — the hallucinated-id shape the invalid-target guard normalizes
-  to SKIP (2 on ``replays/samples/9p2i``, 0 elsewhere). It is its own bucket
-  because the voter neither voted their accusation nor voted anyone else;
-  folding it into either would misdescribe what happened.
+* ``inconsistent_invalid_target_ballots``: the authored target is not in the
+  voter's LEGAL set — a hallucinated id, or the voter themselves (3 on
+  ``replays/samples/9p2i``, 0 elsewhere). It is its own bucket because the voter
+  neither voted their accusation nor voted anyone else; folding it into either
+  neighbour would misdescribe what happened.
 * ``excluded_no_votable_target_ballots``: accusing ballots where NO accused
   player was votable — excluded from the denominator, published so the exclusion
   is visible rather than silent. ``accusations_of_non_votable_targets`` counts
@@ -187,12 +191,20 @@ tell produced by the templates' role-differentiated output contract.
 
 **7. Engine-redirected ballot share** (:class:`RedirectedBallotCells`) — how much
 of the ballot record is the deterministic vote guard rather than the model.
-Numerator: ballots whose ``rationale_text`` carries the pinned
-:data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER` prefix. Denominator: all
+Numerator: ballots whose LEADING MARKER CHAIN carries the pinned
+:data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER`. Denominator: all
 recorded ballots. The count splits by the recorded target: an eject the guard
 re-aimed vs a ballot coerced to SKIP. *Does NOT measure*: whether the redirect
 changed the meeting's OUTCOME (that needs a counterfactual tally, which recorded
 bytes cannot supply).
+
+Every guard-origin question in this module — this share, the leakage census's
+marker cells, and the authored-target unwind — reads the same ANCHORED chain
+(:func:`_scan_marker_chain`), never a substring search of the whole rationale.
+The manager guarantees "the ballot chain must only prepend audit markers", so a
+marker literal appearing anywhere else is by construction the MODEL quoting it;
+an unanchored test would count that ballot as guard-touched and inflate the
+census, the rewrite denominator, and the preserved-leak numerator at once.
 
 **8. Scaffold leakage, split by ORIGIN** (:class:`ScaffoldLeakageCells`) — the
 C5 finding restated as separately-defined metrics instead of one contested
@@ -241,7 +253,8 @@ sets, where the two sources agree cell for cell).
   deduction game says those words naturally. Both are over ALL ballots, not
   just impostor ones — machinery talk is role-independent.
 * GUARD-originated — text the deterministic machinery injected.
-  ``guard_marked_ballots``: ballots carrying any pinned manager/voting marker.
+  ``guard_marked_ballots``: ballots whose LEADING CHAIN carries any pinned
+  manager/voting marker.
   ``guard_target_rewrite_ballots``: the subset whose TARGET the guard rewrote.
   ``guard_preserved_omniscient_ballots`` and its own rate
   ``guard_preserved_omniscient_rate``: target-rewritten ballots whose preserved
@@ -498,48 +511,6 @@ ships beside :data:`MACHINERY_DECIMAL_PATTERN`, never instead of it.
 """
 
 
-def _marker_prefix(marker: str) -> str:
-    """The literal head of a ``.format()``-interpolated marker constant.
-
-    Mirrors ``eval/meeting_quality.py``'s prefix derivation: the constants are
-    imported (never hard-coded), and the first ``{`` placeholder is where the
-    fixed prefix ends, so a marker rename cannot silently break the match.
-    """
-
-    head, _, _ = marker.partition("{")
-    if not head:
-        raise ValueError(f"marker constant has no literal prefix: {marker!r}")
-    return head
-
-
-# Every pinned ballot-rationale marker the meeting layer can inject. The two
-# groups are separated because only the first REWRITES the recorded target,
-# which is the class Task 19.15's redaction is about.
-#
-# Matching is a plain unanchored substring test on the derived prefix — the same
-# shape ``eval/meeting_quality.py``'s redirect / invalid-target / teammate
-# censuses use. It is deliberately NOT the anchored, repr-aware regex that
-# module reserves for the citation-coerced SKIP tri-split: that precision exists
-# to keep a coerced ballot out of the ``threshold_inversions`` sentinel, whereas
-# these cells ask only "did the machinery write into this rationale at all", for
-# which the substring test is the honest (and slightly conservative-upward)
-# predicate. Consequence, stated rather than hidden: a model rationale that
-# quoted a marker's literal text verbatim would count as guard-originated here.
-# On the committed bytes none does — Task 19.8's disclosure found zero literal
-# implementation tokens in model output.
-_TARGET_REWRITE_MARKER_PREFIXES: Final[tuple[str, ...]] = (
-    _marker_prefix(BALLOT_TARGET_REDIRECT_MARKER),
-    _marker_prefix(INVALID_VOTE_TARGET_MARKER),
-    _marker_prefix(TEAMMATE_VOTE_TARGET_MARKER),
-    _marker_prefix(UNCITED_ZERO_FLAG_EJECT_MARKER),
-)
-_OTHER_GUARD_MARKER_PREFIXES: Final[tuple[str, ...]] = (
-    _marker_prefix(VOTE_PARSE_DEFAULT_MARKER),
-    _marker_prefix(INVALID_REASON_ID_MARKER),
-    _marker_prefix(INVALID_OBSERVATION_ID_MARKER),
-)
-_REDIRECT_MARKER_PREFIX: Final[str] = _marker_prefix(BALLOT_TARGET_REDIRECT_MARKER)
-
 # The repr-aware ANCHORED marker chain that recovers the AUTHORED target a
 # rewriting guard preserved. Each rewriting marker interpolates the target as it
 # stood BEFORE that guard ran (``meetings/manager.py``: "either way this marker
@@ -580,40 +551,64 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
     )
 
 
-# ``(pattern, rewrites_the_target)`` for every marker the ballot chain prepends.
-_BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool], ...]] = (
-    (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True),
-    (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True),
-    (_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER), True),
-    (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True),
-    (_marker_pattern(INVALID_REASON_ID_MARKER), False),
-    (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False),
-    (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False),
+# ``(pattern, rewrites_the_target, is_the_graph_redirect)`` for every marker the
+# ballot chain prepends. ONE table drives every guard-origin question — the
+# census, the redirect share, and the authored-target unwind — so no consumer
+# can disagree with another about what "the machinery wrote here" means.
+_BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool], ...]] = (
+    (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True, True),
+    (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True, False),
+    (_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER), True, False),
+    (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True, False),
+    (_marker_pattern(INVALID_REASON_ID_MARKER), False, False),
+    (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False, False),
+    (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False, False),
 )
 
 
-def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
-    """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
+class _MarkerChain(BaseModel):
+    """What the ANCHORED leading marker chain of one rationale says.
 
-    Walks the prepended marker chain from the start of ``rationale_text``,
-    keeping the LAST rewriting marker it reaches — the first guard to have run,
-    whose payload is the model's own target. When no rewriting marker is present
-    the recorded target IS the authored one.
+    Every guard-origin cell reads this, never a substring search of the whole
+    rationale. The manager guarantees "the ballot chain must only prepend audit
+    markers", so a marker literal appearing anywhere else is by construction the
+    MODEL quoting it — and counting that as machinery would inflate
+    ``guard_marked_ballots``, the rewrite denominator, and the preserved-leak
+    numerator for a ballot no guard ever touched.
+
+    ``authored_target`` is the LAST rewriting marker's payload — the first guard
+    to have run, whose target is the model's own — or ``None`` when no guard
+    rewrote the target.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    any_marker: bool
+    rewrote_target: bool
+    redirected: bool
+    authored_target: str | None
+
+
+def _scan_marker_chain(rationale: str) -> _MarkerChain:
+    """Walk the anchored prefix chain once and report everything it carries.
 
     Fail-loud on a malformed repr (AGENTS.md "no silent fallbacks"): a marker
     that matched its own pinned pattern but whose payload will not evaluate is a
     corrupt record, not something to shrug past.
     """
 
-    text = ballot.rationale_text
     position = 0
+    any_marker = rewrote = redirected = False
     authored: str | None = None
     while True:
-        for pattern, rewrites_target in _BALLOT_MARKER_CHAIN:
-            match = pattern.match(text, position)
+        for pattern, rewrites_target, is_redirect in _BALLOT_MARKER_CHAIN:
+            match = pattern.match(rationale, position)
             if match is None:
                 continue
+            any_marker = True
+            redirected = redirected or is_redirect
             if rewrites_target:
+                rewrote = True
                 try:
                     original = ast.literal_eval(match.group(1))
                 except (ValueError, SyntaxError) as error:  # pragma: no cover
@@ -632,9 +627,24 @@ def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
             break
         else:
             break
-    if authored is None:
+    return _MarkerChain(
+        any_marker=any_marker,
+        rewrote_target=rewrote,
+        redirected=redirected,
+        authored_target=authored,
+    )
+
+
+def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
+    """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
+
+    When no rewriting marker is present the recorded target IS the authored one.
+    """
+
+    chain = _scan_marker_chain(ballot.rationale_text)
+    if chain.authored_target is None:
         return ballot.target, False
-    return authored, True
+    return chain.authored_target, True
 
 
 # ---------------------------------------------------------------------------
@@ -1052,11 +1062,18 @@ class TurnBallotConsistencyCells(_FrozenModel):
     (votable = cast a ballot in that meeting). The four outcome buckets
     partition it exactly.
 
-    ``inconsistent_invalid_target_ballots`` is the hallucinated-id shape: the
-    authored target names no votable player, so the voter neither voted their
-    accusation nor voted anyone else. It is its own bucket rather than folded
-    into either neighbour, because both foldings would misdescribe it (2 on
-    ``replays/samples/9p2i``, 0 elsewhere).
+    Scored against each voter's LEGAL target set — the living roster minus
+    THEMSELVES, mirroring ``meetings.manager._candidate_targets``. A player
+    cannot vote for themselves, so a self-accusation names nobody they could
+    lawfully eject: it cannot put a ballot in the denominator, and a self-target
+    can never score consistent.
+
+    ``inconsistent_invalid_target_ballots`` is the unlawful-target shape: the
+    authored target is not in the voter's legal set — a hallucinated id, or the
+    voter themselves — so they neither voted their accusation nor voted anyone
+    else. It is its own bucket rather than folded into either neighbour, because
+    both foldings would misdescribe it (3 on ``replays/samples/9p2i``, 0
+    elsewhere).
 
     ``excluded_no_votable_target_ballots`` is the SKIP-tolerance clause made
     visible: accusing ballots whose every accused player was non-votable are
@@ -1325,12 +1342,16 @@ class ScaffoldLeakageCells(_FrozenModel):
 
     GUARD-originated (the deterministic machinery injected the text):
 
-    * ``guard_marked_ballots`` — any pinned manager/voting marker.
+    * ``guard_marked_ballots`` — any pinned manager/voting marker in the
+      LEADING chain (never a substring of the model's body).
     * ``guard_target_rewrite_ballots`` — the subset whose TARGET the guard
       rewrote.
     * ``guard_preserved_omniscient_ballots`` / ``guard_preserved_omniscient_rate``
-      — target-rewritten ballots whose preserved rationale still carries ANY
+      — target-rewritten ballots whose RECORDED rationale still carries ANY
       omniscient phrase, over the ``guard_target_rewrite_ballots`` denominator.
+      RECORDED, never the pre-guard body: "preserved" means what SURVIVED into
+      the record, so scoring the model's original here would report Task 19.15's
+      redaction as a preservation of the very text it removes.
       This is exactly the class Task 19.15 redacts going forward. It is 1/53 on
       ``replays/ml_corpus/9p2i`` (seed 1118 meeting 0) and 0 on the other three
       sets: rare on committed bytes, NOT absent. The rate ships as its own cell
@@ -1791,14 +1812,6 @@ def _matches(text: str, phrases: Sequence[str]) -> bool:
     return any(phrase in lowered for phrase in phrases)
 
 
-def _guard_marker_classes(rationale: str) -> tuple[bool, bool]:
-    """``(carries any guard marker, the guard rewrote the target)``."""
-
-    rewrote = any(prefix in rationale for prefix in _TARGET_REWRITE_MARKER_PREFIXES)
-    other = any(prefix in rationale for prefix in _OTHER_GUARD_MARKER_PREFIXES)
-    return (rewrote or other), rewrote
-
-
 def _is_omniscient(rationale: str) -> bool:
     """Whether a rationale carries ANY of the three omniscience nets.
 
@@ -2033,13 +2046,17 @@ def _fold_meeting(
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
                 acc.accusations_total += 1
-                if claim.against not in votable:
+                # Non-votable FOR THIS SPEAKER: dead, or the speaker themselves
+                # (``_candidate_targets`` excludes the voter, so a
+                # self-accusation names someone they could never vote for).
+                if claim.against not in votable - {turn.speaker}:
                     acc.accusations_non_votable += 1
 
     for ballot in meeting.ballots:
         acc.ballots_total += 1
         rationale = ballot.rationale_text
-        if _REDIRECT_MARKER_PREFIX in rationale:
+        chain = _scan_marker_chain(rationale)
+        if chain.redirected:
             acc.redirected += 1
             if ballot.target == SKIP_TARGET:
                 acc.redirect_coerced_skip += 1
@@ -2056,14 +2073,15 @@ def _fold_meeting(
         else:
             acc.model_source_pre_guard += 1
 
-        marked, rewrote = _guard_marker_classes(rationale)
-        if marked:
+        if chain.any_marker:
             acc.guard_marked += 1
-        if rewrote:
+        if chain.rewrote_target:
             acc.guard_rewrite += 1
-            # Scoped to the PRE-GUARD body too: the question is whether the text
-            # the guard carried forward discloses private knowledge.
-            if _is_omniscient(model_body):
+            # The RECORDED rationale, deliberately — "preserved" means what
+            # SURVIVED into the record. Reading the pre-guard body here would
+            # report Task 19.15's redaction as a preservation of the very text
+            # it removes, i.e. exactly backwards.
+            if _is_omniscient(rationale):
                 acc.guard_omniscient += 1
         if MACHINERY_DECIMAL_PATTERN.search(model_body):
             acc.machinery_quotation += 1
@@ -2089,9 +2107,15 @@ def _fold_meeting(
         accused = accused_by.get(ballot.voter)
         if not accused:
             continue
-        if not accused & votable:
-            # SKIP-tolerance: with no votable accused, a SKIP is the only lawful
-            # ballot, so the pair is excluded from the denominator, visibly.
+        # The voter's own LEGAL target set: the living roster minus themselves,
+        # mirroring ``meetings.manager._candidate_targets(living, exclude=voter)``.
+        # A self-accusation names someone the voter cannot lawfully vote for, so
+        # it must not enter the denominator, and a self-target must not score
+        # consistent.
+        legal_targets = votable - {ballot.voter}
+        if not accused & legal_targets:
+            # SKIP-tolerance: with no lawfully votable accused, a SKIP is the
+            # only lawful ballot, so the pair leaves the denominator, visibly.
             acc.excluded_no_votable += 1
             continue
         acc.accusing_ballots += 1
@@ -2101,15 +2125,16 @@ def _fold_meeting(
         authored, unwound = _authored_target(ballot)
         if unwound:
             acc.guard_unwound_in_denominator += 1
-        if authored in accused:
+        if authored in accused and authored in legal_targets:
             acc.consistent += 1
         elif authored == SKIP_TARGET:
             acc.inconsistent_skip += 1
-        elif authored in votable:
+        elif authored in legal_targets:
             acc.inconsistent_other += 1
         else:
-            # A hallucinated id naming no votable player: the voter neither
-            # voted their accusation nor voted anyone else.
+            # A target the voter could not lawfully cast: a hallucinated id, or
+            # the voter themselves. Either way they neither voted their
+            # accusation nor voted anyone else.
             acc.inconsistent_invalid += 1
 
 

@@ -74,6 +74,8 @@ from eval.report_schema import (
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_REASON_ID_MARKER,
+    TEAMMATE_COERCED_VOTE_RATIONALE,
+    TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
 )
 from meetings.schemas import (
@@ -86,6 +88,7 @@ from meetings.schemas import (
     WhereaboutsClaim,
 )
 from meetings.transcript import is_weak_contradiction
+from orchestrator.replay import LLMCallRecord
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I: Final[Path] = _REPO_ROOT / "replays" / "samples" / "4p1i"
@@ -609,8 +612,8 @@ def test_turn_ballot_consistency_pins(
     assert samples.accusing_ballots == 777
     assert samples.consistent_ballots == 347
     assert samples.inconsistent_skip_ballots == 336
-    assert samples.inconsistent_other_target_ballots == 92
-    assert samples.inconsistent_invalid_target_ballots == 2
+    assert samples.inconsistent_other_target_ballots == 91
+    assert samples.inconsistent_invalid_target_ballots == 3
     assert samples.guard_rewritten_ballots_unwound == 16
     assert samples.consistency_rate == pytest.approx(347 / 777)
 
@@ -763,6 +766,29 @@ def _synthetic_report(
         contradictions=(),
         llm_calls=(),
     )
+    game = GameReport(
+        game_id="g-0",
+        seed=0,
+        winner="CREWMATES",
+        reason="CREWMATE_TASKS",
+        final_tick=10,
+        roles=roles,
+        replay_ref="replay-seed-0.jsonl",
+        meetings=(meeting,),
+        failed_calls=(),
+        prompt_versions={},
+        cost=_EMPTY_COST,
+    )
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION, games=(game,), seeds_used=(0,)
+    )
+
+
+def _report_with(
+    meeting: MeetingReport, *, roles: Mapping[PlayerId, Role]
+) -> TournamentReport:
+    """One synthetic game carrying ``meeting`` — for the guard-origin fixtures."""
+
     game = GameReport(
         game_id="g-0",
         seed=0,
@@ -954,6 +980,140 @@ def test_guard_preserved_omniscient_rate_has_its_own_denominator(
     assert leakage.guard_marked_ballots == 55
     assert leakage.guard_marked_ballot_share == pytest.approx(55 / 2726)
     assert rate.rate != leakage.guard_marked_ballot_share
+
+
+def test_guard_preserved_leak_reads_the_recorded_rationale() -> None:
+    """ "Preserved" means what SURVIVED the guard, so the cell reads the RECORD.
+
+    Task 19.15 REPLACES the model body on a teammate-coerced ballot. Scoring the
+    pre-guard body here would report the redaction as a preservation of the very
+    text it removes — the metric would show the fix as ineffective precisely
+    when it worked. This fixture is a redacted future ballot: the model
+    disclosed a partner, the guard removed it, and the cell must read 0.
+    """
+
+    redacted = MeetingReport(
+        meeting_id="m",
+        tick=5,
+        triggered_by="p-1",
+        trigger="report",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=MeetingTranscript(turns=()),
+        ballots=(
+            VoteBallot(
+                voter="p-1",
+                target="SKIP",
+                confidence=0.5,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text=(
+                    TEAMMATE_VOTE_TARGET_MARKER.format(target="p-2")
+                    + TEAMMATE_COERCED_VOTE_RATIONALE
+                ),
+            ),
+        ),
+        contradictions=(),
+        llm_calls=(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="fake",
+                prompt="",
+                response_text=json.dumps(
+                    {"rationale_text": "p-2 is my partner, I cannot vote them."}
+                ),
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                agent_id="p-1",
+            ),
+        ),
+    )
+    report = _report_with(redacted, roles={"p-1": "IMPOSTOR", "p-2": "IMPOSTOR"})
+    leakage = compute_deduction_metrics(report).scaffold_leakage
+
+    # The guard rewrote the target and removed the disclosure: nothing preserved.
+    assert leakage.guard_target_rewrite_ballots == 1
+    assert leakage.guard_preserved_omniscient_ballots == 0
+    # The MODEL still authored it, and that half is counted from the pre-guard
+    # body — the two origins disagree here, which is the whole point.
+    assert leakage.model_partner_naming_ballots == 1
+    assert leakage.model_omniscient_ballots == 1
+
+
+def test_guard_census_ignores_a_marker_quoted_in_the_model_body() -> None:
+    """The guard census reads the LEADING chain, not a substring of the body.
+
+    A model rationale quoting a marker literal would otherwise inflate
+    ``guard_marked_ballots``, the rewrite denominator, AND the preserved-leak
+    numerator for a ballot no guard ever touched.
+    """
+
+    spoofed = MeetingReport(
+        meeting_id="m",
+        tick=5,
+        triggered_by="p-1",
+        trigger="report",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=MeetingTranscript(turns=()),
+        ballots=(
+            VoteBallot(
+                voter="p-1",
+                target="p-2",
+                confidence=0.5,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text=(
+                    "The system said "
+                    + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3")
+                    + "about my partner."
+                ),
+            ),
+        ),
+        contradictions=(),
+        llm_calls=(),
+    )
+    report = _report_with(spoofed, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    deduction = compute_deduction_metrics(report)
+
+    assert deduction.scaffold_leakage.guard_marked_ballots == 0
+    assert deduction.scaffold_leakage.guard_target_rewrite_ballots == 0
+    assert deduction.scaffold_leakage.guard_preserved_omniscient_ballots == 0
+    assert deduction.redirected_ballots.redirected_ballots == 0
+    # The model DID author partner text, and that is still counted.
+    assert deduction.scaffold_leakage.model_partner_naming_ballots == 1
+
+
+def test_a_voter_cannot_lawfully_target_themselves() -> None:
+    """A self-accusation names nobody the voter could vote for.
+
+    ``meetings.manager._candidate_targets(living, exclude=voter)`` removes the
+    voter, so a self-accusation must not enter the denominator and a self-target
+    must not score consistent.
+    """
+
+    report = _synthetic_report(
+        turns=(_turn(0, "p-1", accuses="p-1"),),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+    )
+    consistency = compute_deduction_metrics(report).turn_ballot_consistency
+    assert consistency.accusing_ballots == 0
+    assert consistency.excluded_no_votable_target_ballots == 1
+    assert consistency.accusations_of_non_votable_targets == 1
+
+    # And a self-TARGET is unlawful, not "some other player".
+    self_voted = _synthetic_report(
+        turns=(_turn(0, "p-1", accuses="p-2"),),
+        ballots=(_ballot("p-1", "p-1"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+    )
+    cells = compute_deduction_metrics(self_voted).turn_ballot_consistency
+    assert cells.accusing_ballots == 1
+    assert cells.inconsistent_invalid_target_ballots == 1
+    assert cells.inconsistent_other_target_ballots == 0
+    assert cells.consistent_ballots == 0
 
 
 def test_self_kill_net_is_first_person_only() -> None:
