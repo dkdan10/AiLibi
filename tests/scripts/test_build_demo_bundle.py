@@ -530,6 +530,35 @@ def test_the_note_never_claims_unverified_provenance(tmp_path: Path) -> None:
     bdb.write_bundle_readme(out, summary)
     note = (out / "README.md").read_text(encoding="utf-8")
 
-    assert "already" not in note or "already public" not in note
+    assert "already public" not in note
     assert str(alt.resolve()) in note
-    assert "cannot" in note and "publication status" in note
+    assert "cannot vouch" in note and "publication status" in note
+
+
+def test_provenance_is_decided_by_bytes_not_by_path(tmp_path: Path) -> None:
+    """The canonical PATH does not license the claim — the committed bytes do.
+
+    `scripts/refresh_samples.sh` re-records `replays/samples/` in place, so the
+    canonical directory can hold recordings that exist nowhere but one machine.
+    A path check would have told that operator their unpublished bytes were
+    already public, which is exactly the assurance they would have acted on.
+    """
+
+    # The committed samples, untouched: tracked and clean, so the claim holds.
+    assert bdb.sources_are_committed((_SAMPLES / "4p1i" / "replay-seed-29.jsonl",)), (
+        "the committed samples should verify as committed in a clean checkout"
+    )
+
+    # An UNTRACKED file at a canonical path — the shape a local re-record leaves
+    # behind, and the case a path check cannot see.
+    untracked = _SAMPLES / "4p1i" / ".probe-untracked.jsonl"
+    untracked.write_text("{}\n", encoding="utf-8")
+    try:
+        assert not bdb.sources_are_committed((untracked,))
+    finally:
+        untracked.unlink()
+
+    # Outside any repository, and the empty case: unverifiable, so False. The
+    # claim fails CLOSED — "could not check" must never read as "fine".
+    assert not bdb.sources_are_committed((tmp_path / "elsewhere.jsonl",))
+    assert not bdb.sources_are_committed(())

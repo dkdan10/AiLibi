@@ -26,8 +26,13 @@ sync. What is recorded here is the recipe, which is the part worth keeping.
 
 1. **Build the bundle** — `uv run python scripts/build_demo_bundle.py --out /tmp/bundle`
 2. **Serve it** on a loopback port (`python -m http.server -d /tmp/bundle 8080`).
-3. **Drive it** with the Playwright already installed under `frontend/`
-   (`npx playwright`, the pinned Chromium — no download), doing exactly what
+3. **Drive it** with the Playwright installed under `frontend/`. `npm ci`
+   installs the *package*, not the browser, so on a laptop this needs one
+   `npx playwright install chromium` first — the same prerequisite
+   `frontend/playwright.config.ts` documents. (In the agent/dev container it is
+   a no-op: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` already holds the build
+   the pinned version resolves to, which is why nothing downloads there — but
+   the recipe should not assume you are in that container.) Then do exactly what
    `bundle.spec.ts` does: suppress the first-run tour
    (`localStorage["ailibi.guidedTourSeen.v1"] = "1"`, so the tour does not
    auto-load a second replay mid-capture), open the head of the featured strip,

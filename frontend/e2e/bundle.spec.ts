@@ -31,7 +31,7 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 /** The first-run tour's "seen" key (frontend/src/components/GuidedTour.tsx). */
@@ -132,50 +132,73 @@ async function forbidApi(page: Page): Promise<string[]> {
   return attempted;
 }
 
-let server: Server | null = null;
-let origin = "";
-// Non-null only when THIS run built the bundle, so a caller-supplied one is
-// never deleted underneath them.
-let ownedBundleDir: string | null = null;
+/** The served bundle: an origin to browse, and the lifecycle behind it. */
+interface ServedBundle {
+  readonly origin: string;
+}
 
-test.beforeAll(async () => {
-  test.setTimeout(BUILD_TIMEOUT_MS);
-  const prebuilt = process.env.AILIBI_DEMO_BUNDLE_DIR;
-  let bundleDir: string;
-  if (prebuilt !== undefined && prebuilt !== "") {
-    bundleDir = prebuilt;
-  } else {
-    // A temp dir, NOT a path under `frontend/`: the bundle is ~8 MB of built
-    // output, and anything living inside the package gets swept up by the
-    // repo's own tooling (eslint walks `e2e/`, and a `dist/`-shaped ignore
-    // would have to be maintained in three config files for output nobody
-    // keeps).
-    bundleDir = mkdtempSync(join(tmpdir(), "ailibi-demo-bundle-"));
-    ownedBundleDir = bundleDir;
-    buildBundle(bundleDir);
-  }
-  const started = await serveStatic(resolve(bundleDir));
-  server = started.server;
-  origin = started.origin;
-});
-
-test.afterAll(async () => {
-  await new Promise<void>((done) => {
-    if (server === null) {
-      done();
-      return;
-    }
-    server.close(() => {
-      done();
-    });
-  });
-  if (ownedBundleDir !== null) {
-    rmSync(ownedBundleDir, { recursive: true, force: true });
-  }
+/**
+ * The bundle fixture — built once per worker, served, and torn down by Playwright.
+ *
+ * The server handle, the origin and "did we build this, so may we delete it"
+ * were module-level `let`s. That is the module-level mutable state AGENTS.md
+ * forbids, and it made the lifecycle implicit: teardown depended on bindings any
+ * test could have reassigned, and a setup that threw halfway left a live server
+ * with nothing tracking it. As a worker fixture the state is owned by the
+ * fixture's own closure, teardown runs after `use` returns whatever the tests
+ * did, and the tests receive an origin instead of reaching for a global.
+ *
+ * Worker-scoped, not test-scoped: the bundle costs a `vite build` plus an engine
+ * re-walk of seven games, and paying that per test would triple it for nothing.
+ */
+// `provide`, not `use`: Playwright names this callback `use`, which collides
+// with React's `use` hook and makes `react-hooks/rules-of-hooks` fire on the
+// try/finally below. The parameter name is ours to choose, so choosing one that
+// is not a hook name beats suppressing a rule that is doing its job elsewhere.
+const test = base.extend<object, { bundle: ServedBundle }>({
+  bundle: [
+    // Playwright REQUIRES a destructuring pattern as the first parameter — it
+    // parses the pattern to build the fixture dependency graph, and rejects a
+    // plain identifier at runtime ("First argument must use the object
+    // destructuring pattern"). This fixture depends on no other fixtures, so
+    // the empty pattern IS the API here, not an oversight.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, provide) => {
+      const prebuilt = process.env.AILIBI_DEMO_BUNDLE_DIR;
+      const reusing = prebuilt !== undefined && prebuilt !== "";
+      // A temp dir, NOT a path under `frontend/`: the bundle is ~8 MB of built
+      // output, and anything living inside the package gets swept up by the
+      // repo's own tooling (eslint walks `e2e/`, and a `dist/`-shaped ignore
+      // would have to be maintained in three config files for output nobody
+      // keeps).
+      const bundleDir = reusing
+        ? prebuilt
+        : mkdtempSync(join(tmpdir(), "ailibi-demo-bundle-"));
+      if (!reusing) {
+        buildBundle(bundleDir);
+      }
+      const { server, origin } = await serveStatic(resolve(bundleDir));
+      try {
+        await provide({ origin });
+      } finally {
+        await new Promise<void>((done) => {
+          server.close(() => {
+            done();
+          });
+        });
+        // Only a bundle THIS run built is ours to delete; a caller-supplied one
+        // is never removed underneath them.
+        if (!reusing) {
+          rmSync(bundleDir, { recursive: true, force: true });
+        }
+      }
+    },
+    { scope: "worker", timeout: BUILD_TIMEOUT_MS },
+  ],
 });
 
 /** Land on the head of the curated featured list, and return the seed it opened. */
-async function openFeaturedReplay(page: Page): Promise<number> {
+async function openFeaturedReplay(page: Page, origin: string): Promise<number> {
   // Suppressed for the same reason as in `journey.spec.ts`: on a virgin visit the
   // tour AUTO-LOADS its own teaching seed, and two replay loads in flight make
   // "which game am I looking at" a race.
@@ -200,12 +223,13 @@ async function openFeaturedReplay(page: Page): Promise<number> {
 test.describe("static demo bundle", () => {
   test("the built bundle plays the featured journey with ZERO /api requests", async ({
     page,
+    bundle,
   }) => {
     const apiAttempts = await forbidApi(page);
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    const seed = await openFeaturedReplay(page);
+    const seed = await openFeaturedReplay(page, bundle.origin);
 
     // The data really came from `data/*.json`: the header names the seed the
     // featured card opened, and the outcome is gated exactly as it is live.
@@ -274,12 +298,13 @@ test.describe("static demo bundle", () => {
 
   test("the Belief × Truth hero reads its frames from the bundle", async ({
     page,
+    bundle,
   }) => {
     // The belief frames are the one surface that fetches OUTSIDE `api/client`'s
     // methods (BeliefMatrix owns its own `fetch`), so it is the one most likely
     // to bypass the seam — hence its own case rather than a line in the walk.
     const apiAttempts = await forbidApi(page);
-    await openFeaturedReplay(page);
+    await openFeaturedReplay(page, bundle.origin);
 
     await page.getByRole("button", { name: /Belief . Truth/ }).click();
     const panel = page.getByRole("dialog", { name: /Belief/ });
@@ -290,7 +315,10 @@ test.describe("static demo bundle", () => {
     expect(apiAttempts).toEqual([]);
   });
 
-  test("the bundle ships no aggregate report, and says so", async ({ page }) => {
+  test("the bundle ships no aggregate report, and says so", async ({
+    page,
+    bundle,
+  }) => {
     // Deliberate omission, not an oversight: the 9p2i tournament report is 29 MB.
     // The dashboard's existing first-class no-report panel is the honest state,
     // and pinning it here keeps the omission a DECISION rather than a surprise.
@@ -298,7 +326,7 @@ test.describe("static demo bundle", () => {
     await page.addInitScript((key) => {
       window.localStorage.setItem(key, "1");
     }, TOUR_SEEN_KEY);
-    await page.goto(`${origin}/`);
+    await page.goto(`${bundle.origin}/`);
 
     await page.getByRole("button", { name: "Tournament" }).click();
     await expect(page.getByText("No tournament report.")).toBeVisible();
