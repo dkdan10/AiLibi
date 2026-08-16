@@ -1,53 +1,63 @@
-"""Vote-tally parity: two implementations of one ejection rule (Task 19.26).
+"""Vote-tally parity, and the consolidation it authorised (Task 19.26).
 
 audits/audit-phase-19-triage.md §7 item 27 [S-Claude; verified in the original
-triage]: the ejection rule the live game applies
+triage]: the ejection rule the live game applied
 (:meth:`meetings.manager.MeetingManager._tally`, written at Task 3.8) and the
 one eval / replay analysis re-checks
-(:func:`meetings.voting.tally_ballots`, Task 3.10) are two separate bodies of
-code whose equivalence is asserted by PROSE ONLY —
-``meetings/voting.py``'s module docstring ("the manager retains its own private
-copies … future work may consolidate the manager onto this canonical home …
-The threshold semantics in :func:`tally_ballots` exactly match the manager's
-``_tally`` so the two implementations agree on every input"). A paragraph is
-not a gate: nothing fails when one body drifts.
+(:func:`meetings.voting.tally_ballots`, Task 3.10) were two separate bodies of
+code whose equivalence was asserted by PROSE ONLY — ``meetings/voting.py``'s
+module docstring ("the manager retains its own private copies … future work
+may consolidate the manager onto this canonical home … The threshold semantics
+in :func:`tally_ballots` exactly match the manager's ``_tally`` so the two
+implementations agree on every input"). A paragraph is not a gate: nothing
+failed when one body drifted.
 
-This module is that gate. It runs BOTH implementations over:
+The parity sweep this module landed first ran BOTH bodies over every committed
+meeting's recorded ballots (707 meetings / 3,934 ballots, all four committed
+sets), those ballots re-tallied at seven confidence cutoffs, and a table of
+synthetic edges — and found ZERO disagreements, with the only structural
+difference (per-call vs construction-time threshold validation) provably
+unreachable. That authorised the consolidation: ``_tally`` is now a thin
+delegation to :func:`meetings.voting.tally_ballots`, the private copy is gone,
+and the rule has one implementation.
 
-1. **Every committed meeting's recorded ballots** — all four committed sets
-   (``replays/samples/{9p2i,4p1i}`` and ``replays/ml_corpus/{9p2i,4p1i}``),
-   707 meetings / 3,934 ballots, counts pinned below so a thinned checkout
-   cannot pass the sweep by walking fewer files. Driven off the RECORDED
-   ballot bytes (the hint's instruction) rather than by re-running 300 games
-   through the engine, which the determinism gates already cover.
-2. **The recorded ballots re-tallied at seven thresholds** — the corpus was
-   recorded at one threshold (0.6), so the confidence rule itself is only
-   lightly exercised by the bytes; re-tallying the same ballots across
-   ``[0.0, 1.0]`` sweeps the cutoff against real vote distributions.
-3. **Synthetic edge fixtures** — the shapes the contract names: ties (two-way,
-   three-way, SKIP-tied), coerced ballots, dead voters (a target nobody could
-   vote for), the SKIP thresholds (strictly under, exactly at, strictly over),
-   and every ballot-guard marker family.
+So the suite has pivoted, per the contract. It now pins:
 
-Beyond outcome parity the suite pins the four facts that make the two bodies
-substitutable at all: the shared ``SKIP`` sentinel and marker literals, the
-normaliser pair (:func:`meetings.manager._normalize_ballot_target` vs
-:func:`meetings.voting.normalize_ballot_target`), the ONE structural
-difference between the tallies (``tally_ballots`` validates its threshold per
-call; the manager validates once at construction — see
-:func:`test_the_manager_cannot_carry_an_out_of_range_threshold`, which shows
-the difference is unreachable rather than blocking), and — via
-:func:`test_a_perturbed_tally_disagrees_on_the_committed_corpus` — that the
-sweep can actually FAIL. A parity gate that cannot fail is not a gate.
+1. **The delegation** — that ``_tally`` forwards the ballots and the configured
+   threshold to :func:`meetings.voting.tally_ballots` and returns its result
+   verbatim, that it carries no plurality mechanics of its own any more, and
+   that the meeting protocol still resolves through the ``_tally`` call site
+   (the seam is kept, not deleted).
+2. **The recorded outcomes** — every committed meeting's recorded
+   ``outcome`` / ``ejected_player_id``, re-derived through the manager seam
+   AND through the canonical function, over all four sets with the file /
+   meeting / ballot counts pinned so a thinned checkout cannot pass the sweep
+   by walking fewer files. Driven off the RECORDED ballot bytes (the hint's
+   instruction) rather than by re-running 300 games through the engine, which
+   the determinism gates already cover.
+3. **The rule on the edges the corpus under-covers** — ties (two-way,
+   three-way, SKIP-tied), coerced ballots, dead / unknown targets, the SKIP
+   thresholds (strictly under, exactly at, strictly over), and every
+   ballot-guard marker family, each with its expected resolution written out
+   rather than merely compared against a second body.
+4. **The normaliser pair**, which is NOT consolidated (Task 19.26's contract
+   scopes the merge to the tally): the manager's private
+   ``_normalize_ballot_target`` and
+   :func:`meetings.voting.normalize_ballot_target` are still two
+   implementations, so the two-implementation guard survives here for them —
+   over every committed ballot and over synthetic hallucinated / self-vote /
+   ejected-target cases — together with the shared ``SKIP`` sentinel and
+   marker literals the module docstrings promise match byte for byte.
 
-The suite is written to survive the consolidation it authorises: if parity is
-total the manager delegates to :func:`meetings.voting.tally_ballots` and the
-outcome families below become the delegation's end-to-end proof; if it is not,
-they stay as the permanent two-implementation guard the contract asks for.
+:func:`test_a_perturbed_tally_disagrees_on_the_committed_corpus` and its
+synthetic twin keep the whole thing honest: they run a plausible WRONG rule
+through the same sweep and require it to be caught. A gate that cannot fail is
+not a gate.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -96,10 +106,10 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
     "ml_corpus/4p1i",
 )
 
-# THE COUNT PIN (recorded 2026-08 against the committed baseline-6 corpus). A
-# parity sweep is only as good as its coverage, so the file / meeting / ballot
+# THE COUNT PIN (recorded 2026-08-16 against the committed baseline-6 corpus).
+# A sweep is only as good as its coverage, so the file / meeting / ballot
 # counts are pinned per set: a thinned checkout, a glob typo, or a silently
-# dropped set fails here instead of passing the parity families vacuously.
+# dropped set fails here instead of passing the outcome families vacuously.
 _EXPECTED_REPLAY_FILES: Final[dict[str, int]] = {
     "samples/9p2i": 50,
     "samples/4p1i": 50,
@@ -123,7 +133,8 @@ _TOTAL_BALLOTS: Final[int] = 3934
 
 # The recorded outcome split over those 707 meetings. Pinned so the sweep
 # provably exercises BOTH branches of the rule (an all-SKIPPED corpus would
-# leave the eject path untested by the committed bytes).
+# leave the eject path — the one that removes a player from the game — proven
+# by synthetic fixtures alone).
 _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
     "EJECTED": 435,
     "SKIPPED": 272,
@@ -149,8 +160,7 @@ _MARKER_TEMPLATES: Final[dict[str, str]] = {
 # the contract's "the interesting edges are the ones production has actually
 # exercised". Zeros are written out rather than omitted so the sweep states
 # what it does NOT cover: ``vote_parse_default`` never fired on committed
-# bytes, so it is carried by a synthetic fixture instead (see
-# ``_EDGE_CASES``).
+# bytes, so it is carried by a synthetic fixture instead (see ``_EDGE_CASES``).
 _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {
     "samples/9p2i": {
         "invalid_target": 3,
@@ -309,7 +319,7 @@ def _marker_prefix(template: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# The two implementations, side by side
+# The two entry points: the manager seam and the canonical rule
 # ---------------------------------------------------------------------------
 
 
@@ -353,10 +363,10 @@ def _manager_at(threshold: float) -> MeetingManager:
     return _manager(skip_confidence_threshold=threshold)
 
 
-def _private_tally(
+def _through_the_manager(
     ballots: Sequence[VoteBallot], *, threshold: float
 ) -> tuple[MeetingOutcome, PlayerId | None]:
-    """The manager's implementation — the one the live game applies."""
+    """The seam the live game resolves through — now a delegation."""
 
     return _manager_at(threshold)._tally(ballots)  # noqa: SLF001
 
@@ -364,13 +374,80 @@ def _private_tally(
 def _canonical_tally(
     ballots: Sequence[VoteBallot], *, threshold: float
 ) -> tuple[MeetingOutcome, PlayerId | None]:
-    """The ``meetings.voting`` implementation — the one eval re-checks."""
+    """The rule itself, called directly — the way eval re-checks it."""
 
     return tally_ballots(ballots, skip_confidence_threshold=threshold)
 
 
 # ---------------------------------------------------------------------------
-# 1. The corpus is what the sweep claims it is
+# 1. The delegation
+# ---------------------------------------------------------------------------
+
+
+def test_the_manager_delegates_the_tally_to_the_canonical_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_tally`` forwards ballots + configured threshold and returns the result.
+
+    A sentinel return the real rule could never produce (``p-sentinel`` is in
+    nobody's ballot) proves the value is passed through rather than
+    recomputed.
+    """
+
+    calls: list[tuple[tuple[VoteBallot, ...], float]] = []
+    sentinel: tuple[MeetingOutcome, PlayerId | None] = ("EJECTED", "p-sentinel")
+
+    def _spy(
+        ballots: Sequence[VoteBallot], *, skip_confidence_threshold: float
+    ) -> tuple[MeetingOutcome, PlayerId | None]:
+        calls.append((tuple(ballots), skip_confidence_threshold))
+        return sentinel
+
+    monkeypatch.setattr("meetings.manager.tally_ballots", _spy)
+    ballots = (
+        _ballot(voter="p-1", target="p-2"),
+        _ballot(voter="p-2", target=SKIP_TARGET),
+    )
+
+    assert _manager(skip_confidence_threshold=0.42)._tally(ballots) == sentinel  # noqa: SLF001
+    assert calls == [(ballots, 0.42)]
+
+
+def test_the_manager_no_longer_carries_a_private_tally_body() -> None:
+    """The private copy is GONE, not merely equivalent.
+
+    Source inspection rather than behaviour: two bodies that agree today are
+    exactly the state Task 19.26 exists to end, so the gate has to see that
+    the plurality mechanics live in one module only.
+    """
+
+    body = inspect.getsource(MeetingManager._tally)  # noqa: SLF001
+    _, _, after_docstring = body.partition('"""')
+    _, _, code = after_docstring.partition('"""')
+
+    assert "tally_ballots(" in code
+    for mechanic in ("tallies", "max_votes", "leaders", "leader_max_confidence"):
+        assert mechanic not in code, mechanic
+    # And nowhere else in the module either — the mechanics moved, they were
+    # not copied to a second private helper.
+    manager_source = Path(inspect.getfile(MeetingManager)).read_text(encoding="utf-8")
+    for mechanic in ("max_votes", "leader_max_confidence"):
+        assert mechanic not in manager_source, mechanic
+
+
+def test_the_meeting_protocol_still_resolves_through_the_tally_call_site() -> None:
+    """The seam is kept, not deleted (the contract's "thin delegation" shape).
+
+    ``MeetingManager.run``'s resolution phase still calls ``self._tally``, so
+    a future change to how the manager resolves a meeting has one place to
+    touch and subclass / patch points survive the consolidation.
+    """
+
+    assert "self._tally(ballots)" in inspect.getsource(MeetingManager.run)
+
+
+# ---------------------------------------------------------------------------
+# 2. The corpus is what the sweep claims it is
 # ---------------------------------------------------------------------------
 
 
@@ -397,11 +474,7 @@ def test_committed_corpus_totals_are_pinned() -> None:
 
 
 def test_recorded_outcome_split_exercises_both_branches() -> None:
-    """Both arms of the rule are represented in the recorded bytes.
-
-    A corpus that only ever SKIPPED would leave the eject arm — the arm that
-    removes a player from the game — proven by synthetic fixtures alone.
-    """
+    """Both arms of the rule are represented in the recorded bytes."""
 
     counts: dict[MeetingOutcome, int] = {"EJECTED": 0, "SKIPPED": 0}
     for meeting in _all_recorded_meetings():
@@ -415,9 +488,9 @@ def test_committed_guard_marker_counts_are_pinned(set_name: str) -> None:
     """Which ballot coercions production actually exercised, per set.
 
     This is the coverage statement behind the contract's "coerced ballots and
-    redirects are greppable via their markers": the parity sweep runs over
-    ballots that really were normalised, teammate-coerced, citation-coerced,
-    and under-gate redirected, not only over clean ones.
+    redirects are greppable via their markers": the sweep runs over ballots
+    that really were normalised, teammate-coerced, citation-coerced, and
+    under-gate redirected, not only over clean ones.
     """
 
     counts = dict.fromkeys(_MARKER_TEMPLATES, 0)
@@ -431,52 +504,30 @@ def test_committed_guard_marker_counts_are_pinned(set_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Parity over every committed meeting
+# 3. The recorded outcomes, through both entry points
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
-def test_both_implementations_agree_on_every_committed_meeting(
+def test_the_recorded_outcome_is_reproduced_on_every_committed_meeting(
     set_name: str,
 ) -> None:
-    """THE PARITY CLAIM, over recorded bytes: identical outcomes, every meeting."""
+    """THE OUTCOME PIN: every committed meeting re-resolves as it was recorded.
 
-    disagreements = [
-        (
-            meeting.label,
-            _private_tally(
-                meeting.ballots, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD
-            ),
-            _canonical_tally(
-                meeting.ballots, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD
-            ),
-        )
-        for meeting in _recorded_meetings(set_name)
-        if _private_tally(meeting.ballots, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD)
-        != _canonical_tally(
-            meeting.ballots, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD
-        )
-    ]
-
-    assert disagreements == []
-
-
-@pytest.mark.parametrize("set_name", _CORPUS_SETS)
-def test_both_implementations_reproduce_the_recorded_outcome(set_name: str) -> None:
-    """Both bodies re-derive the resolution the replay actually recorded.
-
-    Agreeing with each other is necessary but not sufficient: two bodies could
-    agree on a rule that is not the one the committed games were resolved
-    under. Anchoring both to the recorded ``outcome`` /
-    ``ejected_player_id`` closes that.
+    Both entry points are exercised — the manager seam (what the live game
+    calls) and :func:`meetings.voting.tally_ballots` (what eval calls) — so
+    this is simultaneously the delegation's end-to-end proof and the pin that
+    the surviving rule is the one the committed games were resolved under.
+    Before the consolidation these were two independent implementations and
+    this family was the parity sweep itself.
     """
 
     mismatches = [
-        (meeting.label, meeting.recorded, private, canonical)
+        (meeting.label, meeting.recorded, via_manager, canonical)
         for meeting in _recorded_meetings(set_name)
-        for private, canonical in [
+        for via_manager, canonical in [
             (
-                _private_tally(
+                _through_the_manager(
                     meeting.ballots, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD
                 ),
                 _canonical_tally(
@@ -484,7 +535,7 @@ def test_both_implementations_reproduce_the_recorded_outcome(set_name: str) -> N
                 ),
             )
         ]
-        if not (meeting.recorded == private == canonical)
+        if not (meeting.recorded == via_manager == canonical)
     ]
 
     assert mismatches == []
@@ -492,20 +543,23 @@ def test_both_implementations_reproduce_the_recorded_outcome(set_name: str) -> N
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
 @pytest.mark.parametrize("threshold", _SWEEP_THRESHOLDS)
-def test_both_implementations_agree_at_every_threshold(
+def test_both_entry_points_agree_at_every_threshold(
     set_name: str, threshold: float
 ) -> None:
-    """Parity holds across the cutoff, not only at the recorded 0.6.
+    """The delegation carries the configured threshold, across the whole range.
 
-    The committed bytes were all recorded at ``DEFAULT_SKIP_CONFIDENCE_THRESHOLD``,
-    so they exercise exactly one point of the confidence rule. Re-tallying the
-    same real vote distributions across ``[0, 1]`` sweeps the rest of it.
+    The committed bytes were all recorded at
+    ``DEFAULT_SKIP_CONFIDENCE_THRESHOLD``, so they exercise exactly one point
+    of the confidence rule. Re-tallying the same real vote distributions
+    across ``[0, 1]`` sweeps the rest of it — and, post-consolidation, proves
+    the manager threads ``MeetingConfig.skip_confidence_threshold`` through
+    the delegation rather than closing over a constant.
     """
 
     disagreements = [
         meeting.label
         for meeting in _recorded_meetings(set_name)
-        if _private_tally(meeting.ballots, threshold=threshold)
+        if _through_the_manager(meeting.ballots, threshold=threshold)
         != _canonical_tally(meeting.ballots, threshold=threshold)
     ]
 
@@ -515,7 +569,7 @@ def test_both_implementations_agree_at_every_threshold(
 def test_the_threshold_sweep_actually_moves_outcomes() -> None:
     """The sweep is not vacuous — and it says exactly what the corpus misses.
 
-    Without this, :func:`test_both_implementations_agree_at_every_threshold`
+    Without this, :func:`test_both_entry_points_agree_at_every_threshold`
     could be seven identical re-runs of the 0.6 case.
 
     The pinned numbers below record a real property of the committed bytes: at
@@ -548,7 +602,7 @@ def test_the_threshold_sweep_actually_moves_outcomes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. The synthetic edges
+# 4. The synthetic edges
 # ---------------------------------------------------------------------------
 
 
@@ -607,7 +661,7 @@ def _marked(
 
     The two citation-nulling guards (16.5's observation id, the reason id)
     rewrite a cited id to ``None`` and leave ``target`` alone, so a marked
-    ballot still competes in the tally. Parity must hold on that shape too.
+    ballot still competes in the tally. The rule must hold on that shape too.
     """
 
     return _ballot(
@@ -618,16 +672,33 @@ def _marked(
     )
 
 
-# (name, ballots, threshold). The shapes the contract names: ties, coerced
-# ballots, dead voters, the SKIP thresholds, and the guard markers.
-_EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
-    ("empty", (), 0.6),
-    ("single_confident_vote", (_ballot(voter="p-1", target="p-2"),), 0.6),
-    ("single_skip", (_ballot(voter="p-1", target=SKIP_TARGET),), 0.6),
+_Resolution = tuple[MeetingOutcome, "PlayerId | None"]
+_EdgeCase = tuple[str, tuple[VoteBallot, ...], float, _Resolution]
+
+# (name, ballots, threshold, expected). The shapes the contract names: ties,
+# coerced ballots, dead voters, the SKIP thresholds, and the guard markers.
+# Post-consolidation the expected resolution is written out rather than
+# compared against a second implementation — with one body left, "they agree"
+# would only say the delegation is a delegation, which section 1 already pins.
+_EDGE_CASES: Final[tuple[_EdgeCase, ...]] = (
+    ("empty", (), 0.6, ("SKIPPED", None)),
+    (
+        "single_confident_vote",
+        (_ballot(voter="p-1", target="p-2"),),
+        0.6,
+        ("EJECTED", "p-2"),
+    ),
+    (
+        "single_skip",
+        (_ballot(voter="p-1", target=SKIP_TARGET),),
+        0.6,
+        ("SKIPPED", None),
+    ),
     (
         "all_skip",
         tuple(_ballot(voter=f"p-{i}", target=SKIP_TARGET) for i in (1, 2, 3)),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "two_way_tie",
@@ -636,6 +707,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target="p-4"),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "three_way_tie",
@@ -645,6 +717,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-3", target="p-6"),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "skip_tied_with_a_player",
@@ -653,6 +726,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target=SKIP_TARGET),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "skip_plurality_over_two_split_targets",
@@ -663,6 +737,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-4", target="p-5"),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "plurality_strictly_under_threshold",
@@ -671,6 +746,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target="p-3", confidence=0.5),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "plurality_exactly_at_threshold",
@@ -679,11 +755,13 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target="p-3", confidence=0.1),
         ),
         0.6,
+        ("EJECTED", "p-3"),
     ),
     (
         "plurality_one_ulp_over_threshold",
         (_ballot(voter="p-1", target="p-3", confidence=0.6000000000000001),),
         0.6,
+        ("EJECTED", "p-3"),
     ),
     (
         "max_confidence_across_the_targets_ballots_decides",
@@ -692,45 +770,53 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target="p-3", confidence=0.95),
         ),
         0.6,
+        ("EJECTED", "p-3"),
     ),
     (
         "threshold_floor_zero",
         (_ballot(voter="p-1", target="p-2", confidence=0.0),),
         0.0,
+        ("EJECTED", "p-2"),
     ),
     (
         "threshold_ceiling_one_met",
         (_ballot(voter="p-1", target="p-2", confidence=1.0),),
         1.0,
+        ("EJECTED", "p-2"),
     ),
     (
         "threshold_ceiling_one_missed",
         (_ballot(voter="p-1", target="p-2", confidence=0.999999),),
         1.0,
+        ("SKIPPED", None),
     ),
     (
         # A "dead voter": a target nobody living could legally have been given
         # as a candidate. The tally is target-agnostic by design — the
-        # normaliser is what keeps such an id out — so parity must hold on the
-        # un-normalised shape too, which is exactly the corruption case
-        # ``normalize_ballot_target`` exists to prevent.
-        "dead_or_unknown_target_survives_to_the_tally",
+        # normaliser is what keeps such an id out — so an un-normalised dead id
+        # WILL eject, which is exactly the corruption
+        # :func:`meetings.voting.normalize_ballot_target` exists to prevent.
+        "dead_or_unknown_target_would_eject_unnormalised",
         (
             _ballot(voter="p-1", target="p-9", confidence=0.9),
-            _ballot(voter="p-2", target=SKIP_TARGET),
+            _ballot(voter="p-2", target="p-9", confidence=0.9),
+            _ballot(voter="p-3", target=SKIP_TARGET),
         ),
         0.6,
+        ("EJECTED", "p-9"),
     ),
     (
-        "self_vote_survives_to_the_tally",
+        "self_vote_would_eject_unnormalised",
         (
             _ballot(voter="p-1", target="p-1", confidence=0.9),
-            _ballot(voter="p-2", target=SKIP_TARGET),
+            _ballot(voter="p-2", target="p-1", confidence=0.9),
+            _ballot(voter="p-3", target=SKIP_TARGET),
         ),
         0.6,
+        ("EJECTED", "p-1"),
     ),
     (
-        "invalid_target_marker",
+        "invalid_target_marker_does_not_block_a_real_plurality",
         (
             _coerced(
                 voter="p-1",
@@ -738,16 +824,19 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
                 original="imp-2",
             ),
             _ballot(voter="p-2", target="p-3", confidence=0.9),
+            _ballot(voter="p-3", target="p-3", confidence=0.7),
         ),
         0.6,
+        ("EJECTED", "p-3"),
     ),
     (
-        "teammate_coerced_marker",
+        "teammate_coerced_marker_ties_out_an_eject",
         (
             _coerced(voter="p-1", marker=TEAMMATE_VOTE_TARGET_MARKER, original="p-5"),
             _ballot(voter="p-2", target="p-3", confidence=0.9),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "under_gate_redirect_marker",
@@ -756,6 +845,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target=SKIP_TARGET),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "uncited_zero_flag_marker",
@@ -764,8 +854,10 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
                 voter="p-1", marker=UNCITED_ZERO_FLAG_EJECT_MARKER, original="p-6"
             ),
             _ballot(voter="p-2", target="p-6", confidence=0.9),
+            _ballot(voter="p-3", target="p-6", confidence=0.3),
         ),
         0.6,
+        ("EJECTED", "p-6"),
     ),
     (
         # The one guard family the committed corpus never exercised (see
@@ -776,6 +868,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target=SKIP_TARGET),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "invalid_reason_id_marker_keeps_its_target",
@@ -789,6 +882,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target=SKIP_TARGET),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "invalid_observation_id_marker_keeps_its_target",
@@ -802,6 +896,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-2", target="p-3", confidence=0.2),
         ),
         0.6,
+        ("EJECTED", "p-3"),
     ),
     (
         "every_ballot_coerced_to_skip",
@@ -810,6 +905,7 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             for i in (1, 2, 3)
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "coerced_skips_outvote_a_confident_ejector",
@@ -821,28 +917,32 @@ _EDGE_CASES: Final[tuple[tuple[str, tuple[VoteBallot, ...], float], ...]] = (
             _ballot(voter="p-3", target="p-4", confidence=1.0),
         ),
         0.6,
+        ("SKIPPED", None),
     ),
     (
         "unanimous_eject",
         tuple(_ballot(voter=f"p-{i}", target="p-9", confidence=0.9) for i in (1, 2, 3)),
         0.6,
+        ("EJECTED", "p-9"),
     ),
 )
 
 
 @pytest.mark.parametrize(
-    ("name", "ballots", "threshold"),
+    ("name", "ballots", "threshold", "expected"),
     _EDGE_CASES,
     ids=[case[0] for case in _EDGE_CASES],
 )
-def test_both_implementations_agree_on_the_synthetic_edges(
-    name: str, ballots: tuple[VoteBallot, ...], threshold: float
+def test_the_rule_resolves_every_synthetic_edge_as_pinned(
+    name: str,
+    ballots: tuple[VoteBallot, ...],
+    threshold: float,
+    expected: _Resolution,
 ) -> None:
-    """THE PARITY CLAIM, over constructed edges the corpus under-covers."""
+    """THE RULE, on the edges the corpus under-covers — through BOTH entry points."""
 
-    assert _private_tally(ballots, threshold=threshold) == _canonical_tally(
-        ballots, threshold=threshold
-    ), name
+    assert _canonical_tally(ballots, threshold=threshold) == expected, name
+    assert _through_the_manager(ballots, threshold=threshold) == expected, name
 
 
 def test_the_synthetic_edges_cover_both_outcomes_and_every_marker() -> None:
@@ -852,12 +952,9 @@ def test_the_synthetic_edges_cover_both_outcomes_and_every_marker() -> None:
     loses a marker family) and keeps passing while covering less.
     """
 
-    outcomes = {
-        _canonical_tally(ballots, threshold=threshold)[0]
-        for _, ballots, threshold in _EDGE_CASES
-    }
+    outcomes = {expected[0] for _, _, _, expected in _EDGE_CASES}
     rationales = " ".join(
-        ballot.rationale_text for _, ballots, _ in _EDGE_CASES for ballot in ballots
+        ballot.rationale_text for _, ballots, _, _ in _EDGE_CASES for ballot in ballots
     )
 
     assert outcomes == {"EJECTED", "SKIPPED"}
@@ -866,7 +963,7 @@ def test_the_synthetic_edges_cover_both_outcomes_and_every_marker() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. The normaliser pair and the shared literals
+# 5. The normaliser pair (still two implementations) and the shared literals
 # ---------------------------------------------------------------------------
 
 
@@ -880,11 +977,7 @@ def _normalizer_inputs() -> Iterable[tuple[str, VoteBallot, tuple[PlayerId, ...]
     yield "self_vote", _ballot(voter="p-1", target="p-1"), candidates
     yield "ejected_player", _ballot(voter="p-1", target="p-4"), candidates
     yield "empty_candidate_set", _ballot(voter="p-1", target="p-2"), ()
-    yield (
-        "lookalike_skip",
-        _ballot(voter="p-1", target="skip"),
-        candidates,
-    )
+    yield "lookalike_skip", _ballot(voter="p-1", target="skip"), candidates
 
 
 @pytest.mark.parametrize(
@@ -895,11 +988,12 @@ def _normalizer_inputs() -> Iterable[tuple[str, VoteBallot, tuple[PlayerId, ...]
 def test_both_normalizers_agree_on_the_synthetic_targets(
     name: str, ballot: VoteBallot, candidates: tuple[PlayerId, ...]
 ) -> None:
-    """The normaliser pair rides beside the tally pair and gets the same guard.
+    """The normaliser pair is what is LEFT of the two-implementation problem.
 
-    ``meetings/voting.py``'s note covers BOTH private copies, and a normaliser
-    drift corrupts the tally's input rather than its rule — a silent failure
-    the outcome families above would not catch.
+    Task 19.26 consolidated the tally only, so ``meetings/voting.py``'s note
+    still describes two normalisers. This family is the guard that replaces
+    that prose: a normaliser drift corrupts the tally's INPUT rather than its
+    rule, which the outcome families above would not catch.
     """
 
     assert manager_normalize_ballot_target(
@@ -909,7 +1003,7 @@ def test_both_normalizers_agree_on_the_synthetic_targets(
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
 def test_both_normalizers_agree_on_every_committed_ballot(set_name: str) -> None:
-    """Normaliser parity over the recorded bytes, at each voter's real candidate set."""
+    """Normaliser parity over recorded bytes, at each voter's real candidate set."""
 
     disagreements = [
         (meeting.label, ballot.voter)
@@ -929,10 +1023,11 @@ def test_both_normalizers_agree_on_every_committed_ballot(set_name: str) -> None
 
 
 def test_the_shared_literals_match_byte_for_byte() -> None:
-    """The sentinel and the audit marker the two homes each define separately.
+    """The sentinel and the audit marker the two homes each still define.
 
     ``meetings/voting.py`` documents both as matching the manager's
-    "byte for byte"; the tally families above are meaningless if they do not.
+    "byte for byte"; the normaliser family above is meaningless if they do
+    not, and the tally's ``SKIP``-as-a-target rule reads the sentinel.
     """
 
     assert MANAGER_SKIP_TARGET == SKIP_TARGET == "SKIP"
@@ -940,7 +1035,7 @@ def test_the_shared_literals_match_byte_for_byte() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. The one structural difference — and why it is not a blocking one
+# 6. The threshold's provenance — the difference the consolidation absorbed
 # ---------------------------------------------------------------------------
 
 
@@ -954,14 +1049,14 @@ def test_the_canonical_tally_rejects_an_out_of_range_threshold() -> None:
 def test_the_manager_cannot_carry_an_out_of_range_threshold() -> None:
     """The manager validates ONCE, at construction — the difference is unreachable.
 
-    This is the only structural difference between the two bodies:
+    This was the only structural difference between the two bodies, and the
+    reason the migration counted as mechanical:
     :func:`meetings.voting.tally_ballots` re-checks ``skip_confidence_threshold
-    in [0, 1]`` on every call, while ``_tally`` reads a
+    in [0, 1]`` on every call, while ``_tally`` reads a frozen
     :class:`MeetingConfig` whose threshold ``MeetingManager.__init__`` already
-    validated (and which is frozen thereafter). Because no manager can exist
-    with an out-of-range threshold, no ``_tally`` call can ever observe one, so
-    the difference cannot change an outcome — which is what makes the
-    consolidation mechanical rather than behavioural.
+    validated. Because no manager can exist with an out-of-range threshold, no
+    ``_tally`` call can ever observe one, so delegating could not change an
+    outcome — it only made the redundant check reachable.
     """
 
     with pytest.raises(ValueError, match=r"MeetingConfig.skip_confidence_threshold"):
@@ -971,7 +1066,7 @@ def test_the_manager_cannot_carry_an_out_of_range_threshold() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. The gate can fail
+# 7. The gate can fail
 # ---------------------------------------------------------------------------
 
 
@@ -1023,7 +1118,7 @@ def test_a_perturbed_tally_disagrees_on_the_synthetic_edges() -> None:
 
     disagreements = [
         name
-        for name, ballots, threshold in _EDGE_CASES
+        for name, ballots, threshold, _ in _EDGE_CASES
         if _tally_dropping_skip(ballots, threshold=threshold)
         != _canonical_tally(ballots, threshold=threshold)
     ]

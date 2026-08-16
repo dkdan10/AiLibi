@@ -35,16 +35,41 @@ LLM call, no I/O, no shared mutable state. They are safe to call
 from anywhere — the orchestrator's meeting-resolution step, replay
 analysis, or eval harnesses — without worrying about side effects.
 
-Manager-side implementation note
-================================
+Manager-side implementation note (2026-08-16, Task 19.26)
+=========================================================
 
-:class:`meetings.manager.MeetingManager` retains its own private
-copies of :func:`tally_ballots` and :func:`normalize_ballot_target`
-(written in Task 3.8). Task 3.10's contract scopes only the new
-module + its tests; future work may consolidate the manager onto
-this canonical home. The threshold semantics in :func:`tally_ballots`
-exactly match the manager's ``_tally`` so the two implementations
-agree on every input.
+:func:`tally_ballots` is the SINGLE implementation of the ejection
+rule. :meth:`meetings.manager.MeetingManager._tally` — the call site
+the live game resolves every meeting through — delegates to it, so
+the tally the game applies and the tally eval / replay analysis
+re-checks are the same code rather than two bodies held equal by this
+paragraph (audits/audit-phase-19-triage.md §7 item 27).
+
+Until Task 19.26 the manager carried its own private copy (written in
+Task 3.8, out of Task 3.10's scope) and this note claimed the two
+"agree on every input" on prose authority alone.
+``tests/meetings/test_vote_tally_parity.py`` replaced the claim with
+evidence — both bodies run over every committed meeting's recorded
+ballots (707 meetings / 3,934 ballots across all four committed sets)
+plus synthetic edge fixtures for ties, coerced ballots, dead targets,
+the SKIP thresholds and every ballot-guard marker family, at seven
+confidence cutoffs — and found zero disagreements, which is what
+authorised the merge. The one structural difference was the
+threshold's provenance: :func:`tally_ballots` validates it per call,
+while the manager validated its configured threshold once at
+construction — so no ``_tally`` call could ever observe an
+out-of-range value and the delegation is behaviour-preserving. That
+suite now pins the delegation itself plus the recorded outcomes.
+
+:func:`normalize_ballot_target` is NOT consolidated: the manager keeps
+its private ``_normalize_ballot_target`` (and the ``_SKIP_TARGET`` /
+``INVALID_VOTE_TARGET_MARKER`` literals this module documents as
+matching byte for byte), because Task 19.26's contract scopes the
+consolidation to the tally. The pair is no longer prose-protected
+either — the same suite runs both normalisers over every committed
+ballot at each voter's reconstructed candidate set and over synthetic
+hallucinated / self-vote / ejected-target cases, and pins the shared
+literals. Consolidating it is backlog work, not a standing risk.
 """
 
 from __future__ import annotations
