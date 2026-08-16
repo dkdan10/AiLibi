@@ -38,11 +38,11 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/src/store/replayStore.test.ts (new)
 - frontend/e2e/ (new)
 - frontend/playwright.config.ts (new)
-- frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer at :358)
+- frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer: the selector at :551, read at :728 and :733)
 - frontend/src/components/MindInspector.tsx; (same — verified consumer at :758)
 - frontend/src/hooks/usePlayback.ts; (ONLY the error-selector routing at :302/:431-460 — the URL-hydration clear keys off the REPLAY-LOAD error specifically after the split; 19.10's playback behavior is untouched)
-- frontend/src/stories/MeetingView.stories.tsx; (the typed store-state fixture seeds the split fields — :371)
-- frontend/src/stories/MapStage.stories.tsx; (same — :267)
+- frontend/src/stories/MeetingView.stories.tsx; (the typed store-state fixture seeds the split fields — the seed block at :428-440)
+- frontend/src/stories/MapStage.stories.tsx; (same — the `useReplayStore.setState({` block at :279)
 - .github/workflows/ci.yml
 - scripts/check.sh
 

@@ -23,9 +23,21 @@ prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
 orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
-carries the recovered finalist raw slate if 19.21's ruling found it (consumed from the
-`evidence/raw-slate-staging` ref the owner step pushed, verified against the committed
-manifest, with the staging ref retired after the fold) — with a per-file
+carries the recovered finalist raw slate. 19.21 RESOLVED ON THE RECOVERY PATH (ruling
+2026-08-15): the slate exists and the owner pushed `evidence/raw-slate-staging` at
+`c27ab7b5f5e7e10bfab5c6dc752362b137862cac`, carrying 1,569 files / 298.157 MiB under
+`finalist-eval-raw/` plus one ref-root `README.md`. Consume it FROM THAT SHA, not from
+the branch name, and re-verify every file against `training/reports/_finalist_eval_raw/
+MANIFEST.md` before folding (the coordination session confirmed the manifest's 1,569
+rows match the ref's path set exactly, with a sampled digest check clean); retire the
+staging ref after the fold. TWO CARRY-FORWARD CAUTIONS, both verified against the bytes:
+the ref-root `README.md` is the ONE staged file no committed sha covers (MANIFEST.md §2
+declares this openly — give it a digest in the evidence commit's own manifest), and that
+same README carries two figures that DISAGREE with the bytes it describes — "297.8 MiB"
+(actual 298.157 → 298.2, which the in-tree MANIFEST states correctly) and a
+"→ 2026-08-01" recording window (the last timestamp anywhere in the slate is
+2026-07-31T18:00:06Z). MANIFEST.md is the authority; do not copy the README's two
+numbers forward. The evidence commit carries a per-file
 sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
 in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
 branch name — the pin is the immutability guarantee), registering the class-(c) rows in
@@ -50,7 +62,7 @@ full-history clones stay heavy absent a future deliberate rewrite.
 **Definition of done:**
 - [ ] The consumer enumeration is committed (the manifest marks each retained path with its pinning test); the full suite passes with NO test edits — the prune provably removed only unpinned bytes.
 - [ ] Moved weight/sidecar PAIRS stay paired in the evidence branch and the in-tree manifest carries their hashes — verification-after-fetch must work (19.23 depends on it); a weight whose sidecar went one way while it went the other is a manifest error.
-- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate per 19.21's ruling), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them by that pinned sha; the working-tree size reduction is quoted in the PR.
+- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate, folded from the `evidence/raw-slate-staging` sha above and re-verified against the committed manifest before the fold), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, EVERY file it carries has a digest (including the ref-root README the staging manifest leaves uncovered), and `scripts/fetch_evidence.sh` restores them by that pinned sha; the staging ref is retired and the working-tree size reduction is quoted in the PR.
 - [ ] The fast-clone path is documented with the honest history caveat.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

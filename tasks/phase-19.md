@@ -919,11 +919,11 @@ pre-installed Chromium; never `playwright install` in CI without caching).
 - frontend/src/store/replayStore.test.ts (new)
 - frontend/e2e/ (new)
 - frontend/playwright.config.ts (new)
-- frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer at :358)
+- frontend/src/components/ReplayPicker.tsx; (ONLY the `currentReplayError` selector update the error-field split forces — verified consumer: the selector at :551, read at :728 and :733)
 - frontend/src/components/MindInspector.tsx; (same — verified consumer at :758)
 - frontend/src/hooks/usePlayback.ts; (ONLY the error-selector routing at :302/:431-460 — the URL-hydration clear keys off the REPLAY-LOAD error specifically after the split; 19.10's playback behavior is untouched)
-- frontend/src/stories/MeetingView.stories.tsx; (the typed store-state fixture seeds the split fields — :371)
-- frontend/src/stories/MapStage.stories.tsx; (same — :267)
+- frontend/src/stories/MeetingView.stories.tsx; (the typed store-state fixture seeds the split fields — the seed block at :428-440)
+- frontend/src/stories/MapStage.stories.tsx; (same — the `useReplayStore.setState({` block at :279)
 - .github/workflows/ci.yml
 - scripts/check.sh
 
@@ -1528,9 +1528,21 @@ prune: FIRST enumerate every byte the two consumer test files pin (they are the
 authority — the enumeration is the contract's first step and its output is committed
 into the manifest); everything else under `training/artifacts/coevo/` moves to the
 orphan evidence branch `evidence/phase-18-coevo` — as ONE immutable commit that also
-carries the recovered finalist raw slate if 19.21's ruling found it (consumed from the
-`evidence/raw-slate-staging` ref the owner step pushed, verified against the committed
-manifest, with the staging ref retired after the fold) — with a per-file
+carries the recovered finalist raw slate. 19.21 RESOLVED ON THE RECOVERY PATH (ruling
+2026-08-15): the slate exists and the owner pushed `evidence/raw-slate-staging` at
+`c27ab7b5f5e7e10bfab5c6dc752362b137862cac`, carrying 1,569 files / 298.157 MiB under
+`finalist-eval-raw/` plus one ref-root `README.md`. Consume it FROM THAT SHA, not from
+the branch name, and re-verify every file against `training/reports/_finalist_eval_raw/
+MANIFEST.md` before folding (the coordination session confirmed the manifest's 1,569
+rows match the ref's path set exactly, with a sampled digest check clean); retire the
+staging ref after the fold. TWO CARRY-FORWARD CAUTIONS, both verified against the bytes:
+the ref-root `README.md` is the ONE staged file no committed sha covers (MANIFEST.md §2
+declares this openly — give it a digest in the evidence commit's own manifest), and that
+same README carries two figures that DISAGREE with the bytes it describes — "297.8 MiB"
+(actual 298.157 → 298.2, which the in-tree MANIFEST states correctly) and a
+"→ 2026-08-01" recording window (the last timestamp anywhere in the slate is
+2026-07-31T18:00:06Z). MANIFEST.md is the authority; do not copy the README's two
+numbers forward. The evidence commit carries a per-file
 sha-256 manifest committed in-tree. The branch is PUSHED, its tip commit sha is PINNED
 in the in-tree manifest, and `scripts/fetch_evidence.sh` fetches BY THAT SHA (never by
 branch name — the pin is the immutability guarantee), registering the class-(c) rows in
@@ -1555,7 +1567,7 @@ full-history clones stay heavy absent a future deliberate rewrite.
 **Definition of done:**
 - [ ] The consumer enumeration is committed (the manifest marks each retained path with its pinning test); the full suite passes with NO test edits — the prune provably removed only unpinned bytes.
 - [ ] Moved weight/sidecar PAIRS stay paired in the evidence branch and the in-tree manifest carries their hashes — verification-after-fetch must work (19.23 depends on it); a weight whose sidecar went one way while it went the other is a manifest error.
-- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate per 19.21's ruling), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, and `scripts/fetch_evidence.sh` restores them by that pinned sha; the working-tree size reduction is quoted in the PR.
+- [ ] The evidence branch is pushed as ONE immutable commit (coevo bytes + the recovered slate, folded from the `evidence/raw-slate-staging` sha above and re-verified against the committed manifest before the fold), its TIP SHA is pinned in the in-tree manifest, its bytes match the manifest sha-for-sha, EVERY file it carries has a digest (including the ref-root README the staging manifest leaves uncovered), and `scripts/fetch_evidence.sh` restores them by that pinned sha; the staging ref is retired and the working-tree size reduction is quoted in the PR.
 - [ ] The fast-clone path is documented with the honest history caveat.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1844,7 +1856,7 @@ delete the call site.
 ### Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens
 **Branch:** `phase-19-test-structure`
 **Depends on:** 19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,089 LOC, ~173 literal pin lines)
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)
 **Complexity:** Medium
 
 The gate's structure work, driven by the tier map. Register markers (`slow`, `campaign`,

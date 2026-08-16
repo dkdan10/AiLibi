@@ -151,8 +151,9 @@ def _notify_bare_prompt_set_fallback() -> None:
     stdout, so it never contaminates the machine-readable stdout the CLI
     surfaces emit. The resolution points it rides are per-process or per-runner
     (the import-time :data:`_ENV`, ``build_prompt_renderers``,
-    ``orchestrator.game.build_default_meeting_runner``,
-    ``training.realpath``'s manifest stamp), not per-turn.
+    ``orchestrator.game.build_default_meeting_runner``), not per-turn.
+    Historical note: a fourth resolution point, ``training.realpath``'s
+    recording-identity manifest stamp, retired with that module at Task 19.19.
     """
 
     print(

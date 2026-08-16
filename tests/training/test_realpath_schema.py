@@ -5,10 +5,10 @@ The defensive tests that lived inside the deleted ``tests/training/test_realpath
 committed rankings' row contract keeps its coverage after the campaign machinery
 retired. What changed is only where the row comes from: the deleted test built
 one by RUNNING a re-rank; there is no re-rank any more, so these read the
-COMMITTED bytes the contract actually has to keep validating —
-``training/artifacts/coevo/realpath-crew/run-c1-crew-owned-tasks/ranking-4003-4005.jsonl``,
-the one committed ``-v3`` crew ranking. That makes the round-trip a stronger
-claim than before: it is checked against the real artifact, not a fixture.
+COMMITTED bytes the contract actually has to keep validating — all 16 ``-v3``
+crew rows, across the six committed ranking files that carry them. That makes
+the round-trip a stronger claim than before: it is checked against every real
+artifact row, not a fixture.
 
 Also pins :class:`RealPathSeedTelemetry`'s validators. They relocated with the
 row (the row carries the telemetry tuple) and were previously exercised only
@@ -31,30 +31,69 @@ from training.realpath_schema import (
     RealPathSeedTelemetry,
 )
 
-#: The one committed ``-v3`` ranking. The census over every committed
-#: ``ranking*.jsonl`` finds exactly two shapes: ``-v1`` impostor rows (which the
-#: generator validates through its own relaxed model, because the frozen 18.24
-#: corpus predates the two recorder-identity fields) and these ``-v3`` crew rows.
-_CREW_RANKING = Path(
-    "training/artifacts/coevo/realpath-crew/run-c1-crew-owned-tasks/"
-    "ranking-4003-4005.jsonl"
+#: Every committed ranking file carrying ``-v3`` crew rows. The census over
+#: every committed ``ranking*.jsonl`` finds exactly two shapes: 60 ``-v1``
+#: impostor rows (which the generator validates through its own relaxed model,
+#: because the frozen 18.24 corpus predates the two recorder-identity fields)
+#: and these 16 ``-v3`` crew rows. The list is pinned rather than globbed, and
+#: :func:`test_the_pinned_files_are_every_committed_v3_ranking` proves it stays
+#: exhaustive — a new ``-v3`` artifact must fail loud, not slip past uncovered.
+_ARTIFACT_ROOT = Path("training/artifacts/coevo")
+_CREW_RANKINGS: tuple[Path, ...] = tuple(
+    _ARTIFACT_ROOT / relative
+    for relative in (
+        "realpath-crew/run-c1-crew-owned-tasks/ranking-4000-4002.jsonl",
+        "realpath-crew/run-c1-crew-owned-tasks/ranking-4003-4005.jsonl",
+        "realpath-crew/run-c2-crew-general/ranking-4000-4002.jsonl",
+        "realpath-crew/run-c2-crew-general/ranking-4003-4005.jsonl",
+        "realpath-crew/run-c2-crew-general/stability-inputs-filtered/"
+        "ranking-4000-4002.jsonl",
+        "realpath-crew/run-c2-crew-general/stability-inputs-filtered/"
+        "ranking-4003-4005.jsonl",
+    )
 )
 
+#: The row the shape/validator cases mutate. One file's first row is enough for
+#: those — they assert on the MODEL's behaviour, not on corpus breadth, which
+#: :func:`test_committed_v3_rows_round_trip` covers over all of them.
+_CANONICAL_CREW_RANKING = _CREW_RANKINGS[1]
 
-def _committed_rows() -> list[str]:
-    lines = [line for line in _CREW_RANKING.read_text().splitlines() if line.strip()]
-    assert lines, f"{_CREW_RANKING} carries no rows"
+
+def _rows_of(path: Path) -> list[str]:
+    lines = [line for line in path.read_text().splitlines() if line.strip()]
+    assert lines, f"{path} carries no rows"
     return lines
 
 
+def _committed_rows() -> list[str]:
+    return [line for path in _CREW_RANKINGS for line in _rows_of(path)]
+
+
 def _crew_payload() -> dict[str, Any]:
-    payload: dict[str, Any] = json.loads(_committed_rows()[0])
+    payload: dict[str, Any] = json.loads(_rows_of(_CANONICAL_CREW_RANKING)[0])
     return payload
 
 
 # --------------------------------------------------------------------------- #
 # Round-trip: the committed bytes validate and re-serialize identically         #
 # --------------------------------------------------------------------------- #
+
+
+def test_the_pinned_files_are_every_committed_v3_ranking() -> None:
+    """The pin is exhaustive: no committed ``-v3`` row escapes the round-trip.
+
+    Without this, a new crew ranking could land carrying rows nothing validates
+    — the round-trip below would still pass while covering less than it claims.
+    """
+
+    discovered = {
+        path
+        for path in sorted(_ARTIFACT_ROOT.rglob("ranking*.jsonl"))
+        for line in _rows_of(path)
+        if json.loads(line)["schema_version"] == SCHEMA_VERSION
+    }
+    assert discovered == set(_CREW_RANKINGS)
+    assert len(_committed_rows()) == 16
 
 
 def test_committed_v3_rows_round_trip() -> None:
