@@ -36,10 +36,15 @@ So the suite has pivoted, per the contract. It now pins:
    instruction) rather than by re-running 300 games through the engine, which
    the determinism gates already cover.
 3. **The rule on the edges the corpus under-covers** — ties (two-way,
-   three-way, SKIP-tied), coerced ballots, dead / unknown targets, the SKIP
-   thresholds (strictly under, exactly at, strictly over), and every
+   three-way, SKIP-tied), coerced ballots, dead voters (a ballot cast by a
+   player who is no longer living) as well as dead / unknown / self targets,
+   the SKIP thresholds (strictly under, exactly at, strictly over), and every
    ballot-guard marker family, each with its expected resolution written out
-   rather than merely compared against a second body.
+   rather than merely compared against a second body. The dead-voter half is
+   necessarily synthetic — the manager collects ballots from living
+   participants only, so no committed meeting can carry one — and
+   :func:`test_the_tally_ignores_who_cast_each_ballot` states the underlying
+   property at corpus scale: the rule never reads ``VoteBallot.voter``.
 4. **The normaliser pair**, which is NOT consolidated (Task 19.26's contract
    scopes the merge to the tally): the manager's private
    ``_normalize_ballot_target`` and
@@ -675,6 +680,18 @@ def _marked(
 _Resolution = tuple[MeetingOutcome, "PlayerId | None"]
 _EdgeCase = tuple[str, tuple[VoteBallot, ...], float, _Resolution]
 
+# A meeting in which a DEAD player's ballot decides the outcome: ``p-9`` was
+# ejected in an earlier meeting, and without their vote ``p-2`` only ties the
+# SKIP. Hoisted out of the edge table so
+# :func:`test_a_dead_voters_ballot_is_what_changes_the_outcome` can drop the
+# dead voter and show the resolution flip, rather than the table's comment
+# merely asserting it in prose.
+_DEAD_VOTER_BALLOTS: Final[tuple[VoteBallot, ...]] = (
+    _ballot(voter="p-1", target="p-2", confidence=0.9),
+    _ballot(voter="p-9", target="p-2", confidence=0.9),
+    _ballot(voter="p-3", target=SKIP_TARGET),
+)
+
 # (name, ballots, threshold, expected). The shapes the contract names: ties,
 # coerced ballots, dead voters, the SKIP thresholds, and the guard markers.
 # Post-consolidation the expected resolution is written out rather than
@@ -791,8 +808,8 @@ _EDGE_CASES: Final[tuple[_EdgeCase, ...]] = (
         ("SKIPPED", None),
     ),
     (
-        # A "dead voter": a target nobody living could legally have been given
-        # as a candidate. The tally is target-agnostic by design — the
+        # A dead / unknown TARGET: an id nobody living could legally have been
+        # given as a candidate. The tally is target-agnostic by design — the
         # normaliser is what keeps such an id out — so an un-normalised dead id
         # WILL eject, which is exactly the corruption
         # :func:`meetings.voting.normalize_ballot_target` exists to prevent.
@@ -804,6 +821,44 @@ _EDGE_CASES: Final[tuple[_EdgeCase, ...]] = (
         ),
         0.6,
         ("EJECTED", "p-9"),
+    ),
+    (
+        # A dead VOTER — the other half of the contract's edge, and a distinct
+        # property: the tally never reads ``VoteBallot.voter`` at all, so a
+        # stale ballot from a player ejected in an earlier meeting counts like
+        # any other and here SWINGS the result. "Only living participants
+        # vote" is a meeting-protocol invariant enforced upstream (the manager
+        # collects ballots from living participants only), NOT something the
+        # tally re-checks; this fixture is what states that division of labour
+        # instead of leaving it uncharacterized.
+        "dead_voter_ballot_is_counted_and_swings_the_result",
+        _DEAD_VOTER_BALLOTS,
+        0.6,
+        ("EJECTED", "p-2"),
+    ),
+    (
+        # The same voter-blindness in the other direction: a dead voter's SKIP
+        # ties out an eject the living voters had won outright.
+        "dead_voter_skip_ties_out_an_eject",
+        (
+            _ballot(voter="p-1", target="p-2", confidence=0.9),
+            _ballot(voter="p-9", target=SKIP_TARGET),
+        ),
+        0.6,
+        ("SKIPPED", None),
+    ),
+    (
+        # A duplicate voter id — the shape a re-submitted or double-counted
+        # ballot would take. The tally counts ballots, not voters, so both
+        # count; nothing dedupes by ``voter``.
+        "duplicate_voter_id_counts_twice",
+        (
+            _ballot(voter="p-1", target="p-2", confidence=0.9),
+            _ballot(voter="p-1", target="p-2", confidence=0.9),
+            _ballot(voter="p-3", target=SKIP_TARGET),
+        ),
+        0.6,
+        ("EJECTED", "p-2"),
     ),
     (
         "self_vote_would_eject_unnormalised",
@@ -960,6 +1015,50 @@ def test_the_synthetic_edges_cover_both_outcomes_and_every_marker() -> None:
     assert outcomes == {"EJECTED", "SKIPPED"}
     for label, template in _MARKER_TEMPLATES.items():
         assert _marker_prefix(template) in rationales, label
+
+
+def test_a_dead_voters_ballot_is_what_changes_the_outcome() -> None:
+    """The dead-voter fixture earns its place: drop the dead ballot, lose the eject.
+
+    Without this, ``dead_voter_ballot_is_counted_and_swings_the_result`` would
+    be indistinguishable from any other 2-vs-1 eject and would not actually
+    demonstrate that a non-participant's ballot carries weight.
+    """
+
+    living_only = tuple(
+        ballot for ballot in _DEAD_VOTER_BALLOTS if ballot.voter != "p-9"
+    )
+
+    assert _canonical_tally(_DEAD_VOTER_BALLOTS, threshold=0.6) == ("EJECTED", "p-2")
+    assert _canonical_tally(living_only, threshold=0.6) == ("SKIPPED", None)
+
+
+@pytest.mark.parametrize("set_name", _CORPUS_SETS)
+def test_the_tally_ignores_who_cast_each_ballot(set_name: str) -> None:
+    """``VoteBallot.voter`` does not enter the rule — stated, not assumed.
+
+    The corpus can never exhibit a dead voter (the manager collects ballots
+    from living participants only), so the dead-voter edge fixtures are
+    necessarily synthetic. This is the corpus-scale statement of the same
+    property: rewriting EVERY recorded ballot's ``voter`` to an id that never
+    played leaves all 707 resolutions byte-identical, so a future rule that
+    started reading ``voter`` — deduping by it, weighting it, dropping ballots
+    from non-participants — would fail here rather than pass unnoticed.
+
+    That "only living participants vote" invariant lives upstream in the
+    meeting protocol, which is why the tally may safely stay voter-blind.
+    """
+
+    for meeting in _recorded_meetings(set_name):
+        relabelled = tuple(
+            ballot.model_copy(update={"voter": f"ghost-{index}"})
+            for index, ballot in enumerate(meeting.ballots)
+        )
+
+        assert (
+            _canonical_tally(relabelled, threshold=DEFAULT_SKIP_CONFIDENCE_THRESHOLD)
+            == meeting.recorded
+        ), meeting.label
 
 
 # ---------------------------------------------------------------------------
