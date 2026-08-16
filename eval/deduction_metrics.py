@@ -143,8 +143,11 @@ implementation hint) and the vote guard.
   otherwise the guard's choice would be charged to the agent, and the same
   rewrite would be counted twice — once here as "inconsistency" and once,
   correctly, in the separate redirect census (metric 7). On
-  ``replays/samples/9p2i`` 16 of the 777 scored ballots change bucket under the
-  unwind (46 of 2,186 on the corpus), so this is not a hypothetical.
+  ``replays/samples/9p2i`` 16 of the 777 scored ballots are unwound and all 16
+  change bucket; on the corpus 46 of 2,186 are unwound and 44 change bucket
+  (twice the authored AND rewritten targets were both legal players outside
+  the voter's accused set, so "inconsistent-other" held). Not a hypothetical
+  either way.
   ``guard_rewritten_ballots_unwound`` publishes how many were unwound.
 * Denominator ``accusing_ballots``: (meeting, voter) pairs where the voter cast
   a ballot, spoke at least one turn carrying an

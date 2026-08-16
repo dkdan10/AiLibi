@@ -987,7 +987,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 - frontend/src/components/BeliefMatrix.tsx; (its direct `fetch` at :30-46 routes through the seam — verified bypass — and the stale server-default comment at :33-35 is rewritten post-flip)
 - frontend/src/stories/BeliefMatrix.stories.tsx; (the :184-185 default claim — same sweep)
 - frontend/src/stories/ReplayBrowser.stories.tsx; (the :71 "common default" claim — same sweep)
-- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :753 routes through the seam, and the stale "default-served 4p1i" copy at :475-480 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
+- frontend/src/components/TournamentDashboard.tsx; (the direct rubric `fetch` at :1024 routes through the seam, and the stale "default-served 4p1i" copy at :741-751 is rewritten — this task depends on 19.9, so the sweep lands after the flip)
 - frontend/vite.config.ts; (the bundle build mode, if needed)
 - frontend/e2e/; (the built-bundle journey — served statically, network-intercepted)
 - tests/scripts/test_build_demo_bundle.py (new)
@@ -998,7 +998,7 @@ keeps the live API loopback-only; binding `0.0.0.0` remains forbidden.
 
 **Definition of done:**
 - [ ] `scripts/build_demo_bundle.py` builds offline from committed bytes into one directory; a Playwright case serves the BUILT bundle statically and plays the featured journey end-to-end (pause → finale) with network interception asserting ZERO `/api` requests — the browser test exercises the artifact itself, not only its Python builder.
-- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:475-480) plus its :101/:737-740 claims, BeliefMatrix's server-default comment (:33-35), and `BeliefMatrix.stories.tsx:184-185` now state the 9p2i default — and, as the LAST task in the default-flip chain, a repo-wide grep for 4p1i-default claims returns zero stale assertions (any newly discovered site is swept here or recorded with its owner).
+- [ ] The stale default-set copy this chain's flip falsified is swept in the files this task owns: the dashboard's "default-served 4p1i" paragraph (:741-751) plus its :115/:1008-1011 claims, BeliefMatrix's server-default comment (:33-35), and `BeliefMatrix.stories.tsx:184-185` now state the 9p2i default — and, as the LAST task in the default-flip chain, a repo-wide grep for 4p1i-default claims returns zero stale assertions (any newly discovered site is swept here or recorded with its owner).
 - [ ] README opens with the capture + screenshot and three commands that reproduce top claims (determinism double-run, verify_samples, the spectator boot); media files are committed at reasonable size (< a few MB total).
 - [ ] deployment.md documents the bundle path and restates the loopback boundary; the words that forbid exposing the GM API survive.
 - [ ] `uv run mypy .` passes.
@@ -1855,8 +1855,8 @@ delete the call site.
 
 ### Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens
 **Branch:** `phase-19-test-structure`
-**Depends on:** 19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)
+**Depends on:** 19.3, 19.4, 19.7, 19.12, 19.15, 19.18, 19.19, 19.22, 19.25 (the 19.15 edge is tests/meetings/test_vote_guard_rationale.py — it created the fifth test_manager importer this task migrates)
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by five sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54, test_vote_guard_rationale.py:79 — the fifth added by 19.15, mid-phase); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)
 **Complexity:** Medium
 
 The gate's structure work, driven by the tier map. Register markers (`slow`, `campaign`,
@@ -1866,7 +1866,7 @@ train/serve parity, the leak property sweep, the prompt byte-golden, the
 prompt-regression close gate. Add a session-scoped committed-replay walk fixture
 (verify-then-fix: measure how often the 9p2i set is re-walked per suite run FIRST, quote
 before/after). Extract the shared helpers out of `test_manager.py` into a non-test
-helper module so four modules stop importing a 7.5k-line test file as a library. Convert
+helper module so five modules stop importing a 7.5k-line test file as a library. Convert
 the exact-scalar transcription pin blocks in the two named files to generated goldens
 (committed JSON regenerated by a script), keeping derived-invariant assertions as code.
 Quote the default-gate runtime before/after in the PR.
@@ -1880,6 +1880,7 @@ Quote the default-gate runtime before/after in the PR.
 - tests/meetings/test_vouch_grounding.py
 - tests/meetings/test_elicitation_fixtures.py
 - tests/meetings/test_ballot_observation_citation.py
+- tests/meetings/test_vote_guard_rationale.py; (the fifth test_manager importer — added by 19.15 after this contract was authored)
 - tests/scripts/test_champion_flip_ruling.py
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
@@ -1896,7 +1897,7 @@ Quote the default-gate runtime before/after in the PR.
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
 - [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
-- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER FIVE repo cross-test imports (test_absence_prior:958, test_episodic_ids:480, and test_beliefs_hard_evidence_gate:751 → test_prompt_byte_golden; test_real_provider:56 → test_client; test_leak_property:68 → test_tick_properties) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
+- [ ] None of the five named `test_manager.py` importers imports a test module any longer (grep-pinned on those five); the OTHER FIVE repo cross-test imports (test_absence_prior:958, test_episodic_ids:480, and test_beliefs_hard_evidence_gate:751 → test_prompt_byte_golden; test_real_provider:56 → test_client; test_leak_property:68 → test_tick_properties) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1914,7 +1915,7 @@ untouched; the standing `-m campaign` home is this contract's SCHEDULED ci.yml j
 `check.sh` is henceforth the DEFAULT gate and the close runs both tiers — the phase-close
 contract (19.28) pins that. The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
-if all four importers migrate cleanly.
+if all five importers migrate cleanly.
 
 **Ready-to-paste prompt:** `agent_prompts/task-19-27-test-structure.md`
 

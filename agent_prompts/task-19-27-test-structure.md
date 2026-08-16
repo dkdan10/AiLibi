@@ -6,14 +6,14 @@ You are working on AiLibi. Before starting, read AGENTS.md, the architecture rou
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens, anchored to audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines). Do not implement work outside these references.
+Implement Task 19.27 — Test-suite structure: markers, the shared fixture, pins to goldens, anchored to audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by five sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54, test_vote_guard_rationale.py:79 — the fifth added by 19.15, mid-phase); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-19.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-19-test-structure`
-**Depends on:** 19.3, 19.4, 19.7, 19.12, 19.18, 19.19, 19.22, 19.25
-**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)
+**Depends on:** 19.3, 19.4, 19.7, 19.12, 19.15, 19.18, 19.19, 19.22, 19.25 (the 19.15 edge is tests/meetings/test_vote_guard_rationale.py — it created the fifth test_manager importer this task migrates)
+**Section refs:** audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by five sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54, test_vote_guard_rationale.py:79 — the fifth added by 19.15, mid-phase); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)
 **Complexity:** Medium
 
 The gate's structure work, driven by the tier map. Register markers (`slow`, `campaign`,
@@ -23,7 +23,7 @@ train/serve parity, the leak property sweep, the prompt byte-golden, the
 prompt-regression close gate. Add a session-scoped committed-replay walk fixture
 (verify-then-fix: measure how often the 9p2i set is re-walked per suite run FIRST, quote
 before/after). Extract the shared helpers out of `test_manager.py` into a non-test
-helper module so four modules stop importing a 7.5k-line test file as a library. Convert
+helper module so five modules stop importing a 7.5k-line test file as a library. Convert
 the exact-scalar transcription pin blocks in the two named files to generated goldens
 (committed JSON regenerated by a script), keeping derived-invariant assertions as code.
 Quote the default-gate runtime before/after in the PR.
@@ -37,6 +37,7 @@ Quote the default-gate runtime before/after in the PR.
 - tests/meetings/test_vouch_grounding.py
 - tests/meetings/test_elicitation_fixtures.py
 - tests/meetings/test_ballot_observation_citation.py
+- tests/meetings/test_vote_guard_rationale.py; (the fifth test_manager importer — added by 19.15 after this contract was authored)
 - tests/scripts/test_champion_flip_ruling.py
 - tests/training/test_finalist_eval_pins.py
 - tests/training/; (marker application on the campaign families named by the tier map)
@@ -53,7 +54,7 @@ Quote the default-gate runtime before/after in the PR.
 **Definition of done:**
 - [ ] Verify-then-fix: the re-walk count is measured before the fixture lands and the delta quoted after.
 - [ ] Markers are registered; `uv run pytest` (default) runs the always-on set green with the campaign families opt-in; `-m campaign` runs green too AND has a standing automated home (the scheduled/path-filtered CI job) — nothing is orphaned, by automation rather than by promise; the always-on list in the contract is asserted by a meta-test.
-- [ ] None of the four named `test_manager.py` importers imports a test module any longer (grep-pinned on those four); the OTHER FIVE repo cross-test imports (test_absence_prior:958, test_episodic_ids:480, and test_beliefs_hard_evidence_gate:751 → test_prompt_byte_golden; test_real_provider:56 → test_client; test_leak_property:68 → test_tick_properties) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
+- [ ] None of the five named `test_manager.py` importers imports a test module any longer (grep-pinned on those five); the OTHER FIVE repo cross-test imports (test_absence_prior:958, test_episodic_ids:480, and test_beliefs_hard_evidence_gate:751 → test_prompt_byte_golden; test_real_provider:56 → test_client; test_leak_property:68 → test_tick_properties) are out of this task's scope by the cut line — enumerated in the PR and recorded on the planning backlog, not silently left; the goldens regenerate byte-identically via the script; every conversion preserves the assertion's meaning (the derived-invariant checks remain code).
 - [ ] The default-gate runtime delta is quoted.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -71,7 +72,7 @@ untouched; the standing `-m campaign` home is this contract's SCHEDULED ci.yml j
 `check.sh` is henceforth the DEFAULT gate and the close runs both tiers — the phase-close
 contract (19.28) pins that. The helper extraction is mechanical: move, re-export
 from the old location for one release of grace, then drop the re-export in the same PR
-if all four importers migrate cleanly.
+if all five importers migrate cleanly.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
@@ -104,4 +105,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-19-test-structure` with a title like `task 19.27: test-suite structure: markers, the shared fixture, pins to goldens`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by four sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-phase-19-triage.md §7 items 19 (the tiering half) + 28 [S-Claude, Codex-compatible; the ~5× re-walk figure is source-specific — verify-then-fix]; the verified structure facts: NO pytest markers registered today (pyproject.toml:63-64 has only `pythonpath`), tests/meetings/test_manager.py = 7,531 LOC imported as a library by five sibling modules (test_citation_gate.py:61, test_vouch_grounding.py:80, test_elicitation_fixtures.py:57, test_ballot_observation_citation.py:54, test_vote_guard_rationale.py:79 — the fifth added by 19.15, mid-phase); tests/scripts/test_champion_flip_ruling.py (830 LOC, ~136 exact-literal pin lines — the audit's "~580" overstated; convert the pin DICTS, keep the logic) + tests/training/test_finalist_eval_pins.py (2,090 LOC, ~173 literal pin lines)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
