@@ -391,6 +391,18 @@ _RARE_EVENT_ADVISORY_MAX_NUMERATOR: Final[int] = 7
 
 SKIP_TARGET: Final[str] = "SKIP"
 
+# The keys that identify a parsed payload as a VOTE BALLOT rather than any other
+# meeting-phase response. ``LLMCallRecord.call_kind`` is only "meeting"/"trigger"
+# — turn calls and vote calls share it, and share ``agent_id`` — so the record
+# carries no phase discriminator and the payload SHAPE is the only evidence
+# available. ``rationale_text`` alone is not enough: a malformed TURN response
+# that hallucinated that field would be picked up as a ballot's pre-guard body
+# whenever the real vote call is missing. These three are the ballot schema's
+# required, turn-absent fields (``meetings.schemas.VoteBallot``).
+_VOTE_PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
+    {"target", "confidence", "rationale_text"}
+)
+
 
 # ---------------------------------------------------------------------------
 # The evidence taxonomy (the eval-side twin of Task 19.11's DTO rule table)
@@ -741,6 +753,12 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
         chain.parse_default
         and chain.marker_count == 1
         and chain.consumed == len(rationale)
+        # ...unless the model's OWN recovered body is the whole record. Then the
+        # strongest evidence available says the model authored that text — it
+        # quoted the audit literal — and shape must not overrule provenance. The
+        # suffix rule below takes it with an empty marker region, so no guard is
+        # credited and the model-side nets still read it.
+        and model_body != rationale
     ):
         # ``model_body`` is dropped, not passed through. The manager rejected
         # the whole response, so a ``rationale_text`` that happened to parse out
@@ -776,8 +794,21 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
         )
     if rationale.endswith(TEAMMATE_COERCED_VOTE_RATIONALE):
         cut = len(rationale) - len(TEAMMATE_COERCED_VOTE_RATIONALE)
+        prefix = rationale[:cut]
+        # Same accountability rule as the suffix branch above, for the same
+        # reason: an unregistered leading marker stops the walk early, so the
+        # KNOWN teammate marker behind it would go uncounted while the ballot
+        # still read as verified — a silent under-count of exactly the guard
+        # whose redaction this branch exists to recognise.
+        if _scan_marker_chain(prefix).consumed != len(prefix):
+            return _RationaleSplit(
+                marker_region="",
+                body_region=rationale,
+                model_body=model_body,
+                verified=False,
+            )
         return _RationaleSplit(
-            marker_region=rationale[:cut],
+            marker_region=prefix,
             body_region=TEAMMATE_COERCED_VOTE_RATIONALE,
             model_body=model_body,
             verified=True,
@@ -2149,7 +2180,7 @@ def _model_authored_bodies(meeting: MeetingReport) -> dict[PlayerId, str]:
         if not isinstance(payload, dict):
             continue
         body = payload.get("rationale_text")
-        if isinstance(body, str):
+        if isinstance(body, str) and _VOTE_PAYLOAD_KEYS <= payload.keys():
             bodies[call.agent_id] = body
     return bodies
 

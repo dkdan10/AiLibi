@@ -1037,7 +1037,11 @@ def test_guard_preserved_leak_reads_the_recorded_rationale() -> None:
                 model="fake",
                 prompt="",
                 response_text=json.dumps(
-                    {"rationale_text": "p-2 is my partner, I cannot vote them."}
+                    {
+                        "target": "p-2",
+                        "confidence": 0.5,
+                        "rationale_text": "p-2 is my partner, I cannot vote them.",
+                    }
                 ),
                 input_tokens=0,
                 output_tokens=0,
@@ -1097,7 +1101,9 @@ def test_guard_census_ignores_a_marker_quoted_in_the_model_body() -> None:
                 call_kind="meeting",
                 model="fake",
                 prompt="",
-                response_text=json.dumps({"rationale_text": body}),
+                response_text=json.dumps(
+                    {"target": "SKIP", "confidence": 0.5, "rationale_text": body}
+                ),
                 input_tokens=0,
                 output_tokens=0,
                 cost_usd=0.0,
@@ -1494,13 +1500,20 @@ def test_block_round_trips_through_json(samples_9p2i: TournamentEvalReport) -> N
 
 
 def _voter_call(agent_id: PlayerId, body: str) -> LLMCallRecord:
-    """A vote call whose parsed payload carries ``body`` as the pre-guard text."""
+    """A vote call whose parsed payload carries ``body`` as the pre-guard text.
+
+    Shaped like a real ballot response — ``target`` and ``confidence`` included
+    — because that shape is the only evidence distinguishing a vote call from
+    any other meeting-phase call (``call_kind`` is "meeting" for both).
+    """
 
     return LLMCallRecord(
         call_kind="meeting",
         model="fake",
         prompt="",
-        response_text=json.dumps({"rationale_text": body}),
+        response_text=json.dumps(
+            {"target": "SKIP", "confidence": 0.5, "rationale_text": body}
+        ),
         input_tokens=0,
         output_tokens=0,
         cost_usd=0.0,
@@ -2015,3 +2028,172 @@ def test_the_two_headline_views_cannot_disagree_about_role_proof(
     census["role_proof_flags"] = 0
     with pytest.raises(ValidationError, match="role-proof flag"):
         DeductionMetricsReport.model_validate(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Round 7 — provenance beats shape; every branch is accountable.               #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_model_quoting_the_parse_default_literal_is_not_machinery() -> None:
+    """An exactly-matching recovered body is the strongest evidence there is.
+
+    If the model's own pre-guard text IS the whole record, it authored that
+    text — even when the text happens to be the parse-default audit literal.
+    Shape must not overrule provenance in the one case where provenance is
+    unambiguous.
+    """
+
+    quoted = VOTE_PARSE_DEFAULT_MARKER.format(head="p-2 is my partner")
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.4,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=quoted,
+        ),
+        (_voter_call("p-1", quoted),),
+    )
+    deduction = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    )
+    leakage = deduction.scaffold_leakage
+
+    # No guard ran: the marker region is empty, so nothing is credited to it.
+    assert leakage.guard_marked_ballots == 0
+    assert leakage.guard_provenance_verified_ballots == 1
+    # And the model's text is read, not suppressed.
+    assert leakage.model_source_pre_guard_ballots == 1
+    assert leakage.model_source_unavailable_ballots == 0
+    assert leakage.model_partner_naming_ballots == 1
+
+
+def test_the_redaction_branch_rejects_an_unregistered_prefix() -> None:
+    """The prefix-accountability rule applies to EVERY verifying branch.
+
+    An unregistered leading marker stops the walk before the known teammate
+    marker, so the ballot would contribute neither a guard rewrite nor an
+    unwind while still counting as verified.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=(
+                "[future guard 'p-9' applied] "
+                + TEAMMATE_VOTE_TARGET_MARKER.format(target="p-2")
+                + TEAMMATE_COERCED_VOTE_RATIONALE
+            ),
+        ),
+        (_voter_call("p-1", "p-2 is my partner, I cannot vote them."),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "IMPOSTOR"})
+    ).scaffold_leakage
+
+    assert leakage.guard_provenance_unverifiable_ballots == 1
+    assert leakage.guard_provenance_verified_ballots == 0
+    assert leakage.guard_marked_ballots == 0
+    assert leakage.guard_target_rewrite_ballots == 0
+    # The model half is unaffected — the pre-guard body is still readable.
+    assert leakage.model_partner_naming_ballots == 1
+
+
+def test_a_malformed_turn_response_is_not_mistaken_for_a_vote() -> None:
+    """``call_kind`` is "meeting" for turns AND votes, so shape is the evidence.
+
+    A turn response that hallucinated a string ``rationale_text``, paired with a
+    vote call that never produced a record, would otherwise supply a pre-guard
+    body for a ballot whose model text is genuinely unavailable.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="they lied about Reactor.",
+        ),
+        # A TURN payload — no target, no confidence — that happens to carry a
+        # string rationale_text saying something the nets would match.
+        (
+            LLMCallRecord(
+                call_kind="meeting",
+                model="fake",
+                prompt="",
+                response_text=json.dumps(
+                    {
+                        "free_text": "I saw nothing.",
+                        "rationale_text": "my suspicion is 0.45, p-2 is my partner",
+                    }
+                ),
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                agent_id="p-1",
+            ),
+        ),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.model_source_unavailable_ballots == 1
+    assert leakage.model_source_pre_guard_ballots == 0
+    assert leakage.model_partner_naming_ballots == 0
+    assert leakage.model_machinery_quotation_ballots == 0
+
+
+def test_a_real_vote_payload_still_supplies_its_body() -> None:
+    """The tightened discriminator must not cost a genuine vote call.
+
+    Pinned beside the rejection above so a future narrowing cannot quietly
+    start dropping real bodies — the committed sets already assert 0
+    unavailable, and this states the mechanism.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="p-2 is my partner but I must vote them.",
+        ),
+        (
+            LLMCallRecord(
+                call_kind="meeting",
+                model="fake",
+                prompt="",
+                response_text=json.dumps(
+                    {
+                        "target": "p-2",
+                        "confidence": 0.5,
+                        "primary_reason_id": None,
+                        "considered_alternatives": [],
+                        "rationale_text": "p-2 is my partner but I must vote them.",
+                    }
+                ),
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                agent_id="p-1",
+            ),
+        ),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.model_source_pre_guard_ballots == 1
+    assert leakage.model_source_unavailable_ballots == 0
+    assert leakage.model_partner_naming_ballots == 1
