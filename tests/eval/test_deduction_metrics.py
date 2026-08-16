@@ -57,6 +57,8 @@ from eval.deduction_metrics import (
     UnclassifiableFlagError,
     WilsonRateCell,
     _authored_target,
+    _scan_marker_chain,
+    _split_rationale,
     _is_omniscient,
     classify_flag,
     compute_deduction_metrics,
@@ -74,9 +76,11 @@ from eval.report_schema import (
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_REASON_ID_MARKER,
+    INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_COERCED_VOTE_RATIONALE,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -665,6 +669,18 @@ def test_consistency_is_scored_against_the_authored_target(
     assert committed.guard_rewritten_ballots_unwound == 16
 
 
+def _authored(ballot: VoteBallot, model_body: str) -> tuple[str, bool]:
+    """The full authored-target path: provenance split, chain scan, then unwind.
+
+    ``model_body`` is the voter's pre-guard text — the boundary that separates
+    the machinery's marker region from the model's, so these fixtures exercise
+    the same split :func:`_fold_meeting` performs rather than a shortcut.
+    """
+
+    split = _split_rationale(ballot.rationale_text, model_body)
+    return _authored_target(ballot, _scan_marker_chain(split.marker_region))
+
+
 def test_authored_target_recovers_the_pre_guard_ballot() -> None:
     """The unwind reads the marker's own ``{target!r}``, on a synthetic ballot."""
 
@@ -677,7 +693,7 @@ def test_authored_target_recovers_the_pre_guard_ballot() -> None:
         rationale_text=BALLOT_TARGET_REDIRECT_MARKER.format(target="p-2")
         + "they lied about Reactor.",
     )
-    assert _authored_target(redirected) == ("p-2", True)
+    assert _authored(redirected, "they lied about Reactor.") == ("p-2", True)
 
     untouched = VoteBallot(
         voter="p-1",
@@ -687,7 +703,7 @@ def test_authored_target_recovers_the_pre_guard_ballot() -> None:
         considered_alternatives=(),
         rationale_text="they lied about Reactor.",
     )
-    assert _authored_target(untouched) == ("p-2", False)
+    assert _authored(untouched, "they lied about Reactor.") == ("p-2", False)
 
 
 @pytest.mark.parametrize(
@@ -933,7 +949,7 @@ def test_model_cells_read_the_pre_guard_body_not_the_recorded_one(
 
     for report in (samples_9p2i, corpus_9p2i):
         leakage = report.deduction.scaffold_leakage
-        assert leakage.model_source_recorded_fallback_ballots == 0
+        assert leakage.model_source_unavailable_ballots == 0
         assert leakage.model_source_pre_guard_ballots == leakage.ballots_total
 
 
@@ -1049,6 +1065,11 @@ def test_guard_census_ignores_a_marker_quoted_in_the_model_body() -> None:
     numerator for a ballot no guard ever touched.
     """
 
+    body = (
+        "The system said "
+        + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3")
+        + "about my partner."
+    )
     spoofed = MeetingReport(
         meeting_id="m",
         tick=5,
@@ -1064,15 +1085,24 @@ def test_guard_census_ignores_a_marker_quoted_in_the_model_body() -> None:
                 confidence=0.5,
                 primary_reason_id=None,
                 considered_alternatives=(),
-                rationale_text=(
-                    "The system said "
-                    + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3")
-                    + "about my partner."
-                ),
+                rationale_text=body,
             ),
         ),
         contradictions=(),
-        llm_calls=(),
+        # The model authored the whole string, marker literal included — which
+        # is exactly what makes it attributable to the model rather than a guard.
+        llm_calls=(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="fake",
+                prompt="",
+                response_text=json.dumps({"rationale_text": body}),
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                agent_id="p-1",
+            ),
+        ),
     )
     report = _report_with(spoofed, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
     deduction = compute_deduction_metrics(report)
@@ -1154,7 +1184,7 @@ def test_authored_target_reads_the_earliest_applied_rewrite() -> None:
             + "they lied about Reactor."
         ),
     )
-    assert _authored_target(stacked) == ("p-2", True)
+    assert _authored(stacked, "they lied about Reactor.") == ("p-2", True)
 
     # A non-rewriting marker in the chain is consumed, not mistaken for one.
     with_citation_null = VoteBallot(
@@ -1169,7 +1199,7 @@ def test_authored_target_reads_the_earliest_applied_rewrite() -> None:
             + "body"
         ),
     )
-    assert _authored_target(with_citation_null) == ("p-2", True)
+    assert _authored(with_citation_null, "body") == ("p-2", True)
 
 
 def test_authored_target_ignores_a_marker_quoted_inside_the_body() -> None:
@@ -1191,7 +1221,7 @@ def test_authored_target_ignores_a_marker_quoted_inside_the_body() -> None:
             + "is what the system would say."
         ),
     )
-    assert _authored_target(spoofed) == ("p-9", False)
+    assert _authored(spoofed, spoofed.rationale_text) == ("p-9", False)
 
 
 def test_machinery_quotation_reproduces_the_19_8_disclosure(
@@ -1455,3 +1485,240 @@ def test_block_round_trips_through_json(samples_9p2i: TournamentEvalReport) -> N
         committed["deduction"]["ejectee_proof_cross_tab"]["proof_present_ejections"]
         == 68
     )
+
+
+# --------------------------------------------------------------------------- #
+# Round 4 — provenance, not pattern; and the census bounds.                     #
+# --------------------------------------------------------------------------- #
+
+
+def _voter_call(agent_id: PlayerId, body: str) -> LLMCallRecord:
+    """A vote call whose parsed payload carries ``body`` as the pre-guard text."""
+
+    return LLMCallRecord(
+        call_kind="meeting",
+        model="fake",
+        prompt="",
+        response_text=json.dumps({"rationale_text": body}),
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=0.0,
+        agent_id=agent_id,
+    )
+
+
+def _one_ballot_meeting(
+    ballot: VoteBallot, calls: tuple[LLMCallRecord, ...]
+) -> MeetingReport:
+    return MeetingReport(
+        meeting_id="m",
+        tick=5,
+        triggered_by="p-1",
+        trigger="report",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=MeetingTranscript(turns=()),
+        ballots=(ballot,),
+        contradictions=(),
+        llm_calls=calls,
+    )
+
+
+def test_marker_payloads_are_not_scored_as_preserved_leakage() -> None:
+    """A hallucinated target is MODEL text riding inside the machinery's marker.
+
+    ``meetings.manager._normalize_ballot_target`` interpolates ``ballot.target``
+    verbatim, so a target reading "p-2 is my partner" lands inside
+    ``INVALID_VOTE_TARGET_MARKER``. Scanning the whole record would bill the
+    model's own words to the guard and invent guard-originated leakage.
+    """
+
+    body = "They have been quiet all round, so I am voting them."
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=(
+                INVALID_VOTE_TARGET_MARKER.format(target="p-2 is my partner") + body
+            ),
+        ),
+        (_voter_call("p-1", body),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    # The guard DID rewrite the target — that half is real and still counted.
+    assert leakage.guard_target_rewrite_ballots == 1
+    # But nothing omniscient survived into the BODY, which is what "preserved"
+    # means; the phrase lives in a payload the model supplied.
+    assert leakage.guard_preserved_omniscient_ballots == 0
+    # And the model did not author it in its rationale either.
+    assert leakage.model_partner_naming_ballots == 0
+
+
+def test_a_parse_default_envelope_never_feeds_the_model_nets() -> None:
+    """``_vote_parse_default`` records the raw envelope head; it is not rationale.
+
+    The head routinely carries ``"confidence": 0.NN`` — the very false positive
+    ``_model_authored_bodies`` extracts the parsed field to avoid (850 raw hits
+    against 39 real ones on ``replays/samples/9p2i``). With no parsed body the
+    model nets must scan NOTHING rather than fall back to the record.
+    """
+
+    raw = '{"target": "p-2", "confidence": 0.45, "rationale_tex'
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.0,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=VOTE_PARSE_DEFAULT_MARKER.format(head=raw),
+        ),
+        (),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.model_machinery_quotation_ballots == 0
+    assert leakage.model_machinery_vocabulary_ballots == 0
+    # The absent source is published rather than silently substituted.
+    assert leakage.model_source_unavailable_ballots == 1
+    assert leakage.model_source_pre_guard_ballots == 0
+    # A guard DID run: the marker accounts for the record in full, so its
+    # provenance is established without a body boundary.
+    assert leakage.guard_marked_ballots == 1
+    assert leakage.guard_provenance_verified_ballots == 1
+
+
+def test_a_model_body_opening_with_a_marker_is_not_machinery() -> None:
+    """Anchoring is not provenance: model text starts at position 0 too.
+
+    ``meetings.manager._preserved_ballot_markers`` makes the same argument for
+    the redaction it guards — "the split is by PROVENANCE, never by pattern" —
+    and resolves it with the pre-guard body as the boundary. So does this.
+    """
+
+    spoof = (
+        BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3") + "and p-2 is my partner."
+    )
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=spoof,
+        ),
+        # The model authored the ENTIRE string, marker shape and all.
+        (_voter_call("p-1", spoof),),
+    )
+    deduction = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "IMPOSTOR"})
+    )
+    leakage = deduction.scaffold_leakage
+
+    assert leakage.guard_marked_ballots == 0
+    assert leakage.guard_target_rewrite_ballots == 0
+    assert leakage.guard_preserved_omniscient_ballots == 0
+    assert deduction.redirected_ballots.redirected_ballots == 0
+    # The model authored partner text, and that half is still counted.
+    assert leakage.model_partner_naming_ballots == 1
+
+
+def test_an_unattributable_record_trusts_no_markers_and_says_so() -> None:
+    """Record and model call disagree: publish the loss, never guess the author.
+
+    With no boundary to establish, under-counting guard cells is a visible,
+    published outcome; trusting marker shape would mis-attribute silently.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=(
+                BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3") + "a recorded body."
+            ),
+        ),
+        # A body that is NOT a suffix of the record: nothing can be attributed.
+        (_voter_call("p-1", "an entirely different body."),),
+    )
+    leakage = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    ).scaffold_leakage
+
+    assert leakage.guard_provenance_unverifiable_ballots == 1
+    assert leakage.guard_provenance_verified_ballots == 0
+    assert leakage.guard_marked_ballots == 0
+    # The model side still reads the pre-guard body it does have.
+    assert leakage.model_source_pre_guard_ballots == 1
+
+
+def test_every_committed_ballot_is_provenance_verified(
+    samples_4p1i: TournamentEvalReport,
+    samples_9p2i: TournamentEvalReport,
+    corpus_4p1i: TournamentEvalReport,
+    corpus_9p2i: TournamentEvalReport,
+) -> None:
+    """The boundary exists for 100% of committed bytes, so nothing was lost.
+
+    This is what makes the round-4 provenance fixes forward-looking rather than
+    a recount: every committed rationale ends with its own pre-guard body.
+    """
+
+    sets = {
+        "samples/4p1i": samples_4p1i,
+        "samples/9p2i": samples_9p2i,
+        "ml_corpus/4p1i": corpus_4p1i,
+        "ml_corpus/9p2i": corpus_9p2i,
+    }
+    for name, report in sets.items():
+        leakage = report.deduction.scaffold_leakage
+        assert leakage.guard_provenance_verified_ballots == leakage.ballots_total, name
+        assert leakage.guard_provenance_unverifiable_ballots == 0, name
+        assert leakage.model_source_pre_guard_ballots == leakage.ballots_total, name
+        assert leakage.model_source_unavailable_ballots == 0, name
+
+
+def test_census_rejects_more_flagged_meetings_than_flags(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """Each counted meeting carries >= 1 flag, so the census cannot exceed them."""
+
+    payload = samples_9p2i.deduction.model_dump()
+    payload["evidence_taxonomy"]["meetings_with_any_flag"] = (
+        payload["evidence_taxonomy"]["flags_total"] + 1
+    )
+    with pytest.raises(ValidationError, match="cannot exceed flags_total"):
+        DeductionMetricsReport.model_validate(payload)
+
+
+def test_census_rejects_more_flagged_meetings_than_meetings(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """The report owns the meeting denominator, so it owns that bound."""
+
+    payload = samples_9p2i.deduction.model_dump()
+    census = payload["evidence_taxonomy"]
+    inflated = payload["meetings_total"] + 1
+    # Keep the census internally consistent — categories partitioning the total,
+    # and the total large enough to clear this block's own bound — so the only
+    # rule left to catch it is the report-level meeting denominator.
+    census["meetings_with_any_flag"] = inflated
+    census["flags_total"] = inflated
+    census["role_proof_flags"] = (
+        inflated - census["cross_statement_flags"] - census["weak_signal_flags"]
+    )
+    census["weak_signal_share"] = census["weak_signal_flags"] / inflated
+    with pytest.raises(ValidationError, match="cannot exceed the meetings folded"):
+        DeductionMetricsReport.model_validate(payload)

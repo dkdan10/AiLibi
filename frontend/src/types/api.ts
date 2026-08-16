@@ -707,7 +707,9 @@ export interface ScaffoldLeakageCells {
   model_machinery_vocabulary_ballots: number;
   model_machinery_quotation_share: number | null;
   model_source_pre_guard_ballots: number;
-  model_source_recorded_fallback_ballots: number;
+  model_source_unavailable_ballots: number;
+  guard_provenance_verified_ballots: number;
+  guard_provenance_unverifiable_ballots: number;
   guard_marked_ballots: number;
   guard_target_rewrite_ballots: number;
   guard_preserved_omniscient_ballots: number;

@@ -377,10 +377,13 @@ function baseReport(): TournamentEvalReport {
         model_machinery_quotation_ballots: 27,
         model_machinery_vocabulary_ballots: 81,
         model_machinery_quotation_share: 27 / 679,
-        // Every ballot's model-side nets came from the PRE-GUARD vote response;
-        // no ballot needed the recorded-rationale fallback.
+        // Every ballot's model-side nets came from the PRE-GUARD vote response,
+        // and every record's marker boundary was established against it — so no
+        // ballot scanned an envelope, and none had its markers taken on shape.
         model_source_pre_guard_ballots: 679,
-        model_source_recorded_fallback_ballots: 0,
+        model_source_unavailable_ballots: 0,
+        guard_provenance_verified_ballots: 679,
+        guard_provenance_unverifiable_ballots: 0,
         guard_marked_ballots: 12,
         guard_target_rewrite_ballots: 11,
         // Rare, not absent: the committed corpus carries exactly one (seed

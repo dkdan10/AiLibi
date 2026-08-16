@@ -424,6 +424,13 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 #     (``model_machinery_quotation_ballots`` — a quoted ``0.NN`` — and the
 #     explicitly-upper-bound ``model_machinery_vocabulary_ballots``), and the
 #     crew controls (``crew_omniscient_control_ballots``);
+#   * the two PROVENANCE splits that say which text each of those nets was
+#     allowed to read — ``model_source_pre_guard_ballots`` /
+#     ``model_source_unavailable_ballots`` for the model side, and
+#     ``guard_provenance_verified_ballots`` /
+#     ``guard_provenance_unverifiable_ballots`` for the guard side. Both are
+#     bare partitions of the ballot total (0 unavailable, 0 unverifiable on
+#     every committed set);
 #   * the shared ``WilsonRateCell`` leaf (``numerator`` / ``denominator`` /
 #     ``rate`` / ``wilson_low`` / ``wilson_high`` / ``advisory``).
 #
@@ -533,6 +540,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "guard_marked_ballots",
         "guard_preserved_omniscient_ballots",
         "guard_preserved_omniscient_rate",
+        "guard_provenance_unverifiable_ballots",
+        "guard_provenance_verified_ballots",
         "guard_rewritten_ballots_unwound",
         "guard_target_rewrite_ballots",
         "hi",
@@ -590,7 +599,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "model_role_statement_ballots",
         "model_self_kill_disclosure_ballots",
         "model_source_pre_guard_ballots",
-        "model_source_recorded_fallback_ballots",
+        "model_source_unavailable_ballots",
         "n_bins",
         "non_direct_accuracy",
         "non_direct_ejections",

@@ -213,16 +213,36 @@ statements and machinery statements — and one on the guard side; all three are
 counted, and the ROLE class is itself three nets because "omniscience" has three
 distinguishable shapes in the committed text.
 
-The two origins read DIFFERENT sources, by construction. Guard cells read the
-RECORDED ``rationale_text`` — that is where the machinery wrote. Model cells
-read the PRE-GUARD body parsed from the voter's own vote-call response, because
-Task 19.15's teammate coercion REPLACES the recorded rationale before the ballot
-is stored: a future teammate-aimed ballot disclosing a partner would read clean
-on the recorded surface, and this metric would under-count precisely the class
-that redaction exists to remove. ``model_source_pre_guard_ballots`` /
-``model_source_recorded_fallback_ballots`` partition every ballot so the
-substitution is counted rather than assumed (fallback 0 on all four committed
-sets, where the two sources agree cell for cell).
+The two origins read DIFFERENT sources, by construction, and the boundary
+between those sources is established by PROVENANCE rather than by pattern
+(:class:`_RationaleSplit`). A recorded ``rationale_text`` is a machinery-written
+marker region followed by a body; the model's own pre-guard text is the
+boundary that separates them, exactly as
+:func:`meetings.manager._preserved_ballot_markers` separates them for the
+redaction it guards. Three cells, three regions:
+
+* GUARD cells scan the MARKER REGION for markers. Not the whole record —
+  anchoring alone would let a model body that OPENS with marker-shaped prose
+  pass as machinery. Not the payloads either: those carry model-supplied targets
+  (``_normalize_ballot_target`` interpolates a hallucinated target verbatim) and
+  raw response heads.
+* ``guard_preserved_omniscient_ballots`` scans the recorded BODY — what survived
+  the guard, which is what "preserved" means.
+* MODEL cells scan the PRE-GUARD body and nothing else, because Task 19.15's
+  teammate coercion REPLACES the recorded rationale before the ballot is stored:
+  a future teammate-aimed ballot disclosing a partner would read clean on the
+  recorded surface, and this metric would under-count precisely the class that
+  redaction exists to remove. A ballot with no pre-guard body scans NOTHING
+  rather than falling back to the record, which for a parse-default ballot is a
+  bounded head of the raw JSON envelope — ``"confidence": 0.NN`` included.
+
+``model_source_pre_guard_ballots`` / ``model_source_unavailable_ballots`` and
+``guard_provenance_verified_ballots`` /
+``guard_provenance_unverifiable_ballots`` each partition every ballot, so both
+boundaries are counted rather than assumed. On all four committed sets every
+ballot is suffix-verified (unavailable 0, unverifiable 0) and every cell is
+identical to the whole-record reading — the fixes are forward-looking, and the
+pins say so.
 
 * MODEL-originated ROLE/omniscience — text the model authored.
   ``model_partner_naming_ballots`` (:data:`PARTNER_PHRASES`),
@@ -348,6 +368,7 @@ from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
+    TEAMMATE_COERCED_VOTE_RATIONALE,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -569,16 +590,20 @@ _BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool], ...]] = (
 class _MarkerChain(BaseModel):
     """What the ANCHORED leading marker chain of one rationale says.
 
-    Every guard-origin cell reads this, never a substring search of the whole
-    rationale. The manager guarantees "the ballot chain must only prepend audit
-    markers", so a marker literal appearing anywhere else is by construction the
-    MODEL quoting it — and counting that as machinery would inflate
-    ``guard_marked_ballots``, the rewrite denominator, and the preserved-leak
-    numerator for a ballot no guard ever touched.
+    Every guard-origin cell reads this, and reads it over the PROVENANCE-
+    established marker region only (:func:`_split_rationale`), never over the
+    whole rationale. Anchoring alone is not enough: a model body that OPENS
+    with marker-shaped prose sits at position 0 too, so shape cannot separate
+    the machinery's text from the model's. ``meetings.manager``'s own redaction
+    guard makes the same argument and resolves it the same way — "the split is
+    by PROVENANCE, never by pattern" (:func:`~meetings.manager.
+    _preserved_ballot_markers`) — using the pre-guard body as the boundary.
 
     ``authored_target`` is the LAST rewriting marker's payload — the first guard
     to have run, whose target is the model's own — or ``None`` when no guard
-    rewrote the target.
+    rewrote the target. ``consumed`` is how far into the scanned text the chain
+    reached, which is what lets a record made ENTIRELY of markers be recognized
+    as such.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -587,6 +612,7 @@ class _MarkerChain(BaseModel):
     rewrote_target: bool
     redirected: bool
     authored_target: str | None
+    consumed: int
 
 
 def _scan_marker_chain(rationale: str) -> _MarkerChain:
@@ -632,16 +658,101 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
         rewrote_target=rewrote,
         redirected=redirected,
         authored_target=authored,
+        consumed=position,
     )
 
 
-def _authored_target(ballot: VoteBallot) -> tuple[str, bool]:
-    """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
+class _RationaleSplit(BaseModel):
+    """One recorded rationale cut along its PROVENANCE boundary.
 
-    When no rewriting marker is present the recorded target IS the authored one.
+    A recorded ``rationale_text`` is two texts with two different authors, and
+    every cell in metric 8 depends on which one it is reading:
+
+    * ``marker_region`` — written by this codebase. Guard-origin cells scan it.
+      Its marker PAYLOADS are model-supplied (``_normalize_ballot_target``
+      interpolates the hallucinated target verbatim, ``_vote_parse_default`` a
+      bounded head of the unparseable response), so it is scanned for MARKERS
+      and never for leakage phrases.
+    * ``body_region`` — the body that SURVIVED into the record. The
+      guard-preserved cell scans this, because "preserved" means what survived.
+    * ``model_body`` — what the model wrote before any guard ran, or ``None``
+      when the vote response yielded no rationale field at all. Model-origin
+      cells scan this and NOTHING else: falling back to the recorded string
+      would feed a parse-default ballot's raw JSON envelope — ``"confidence":
+      0.NN`` and all — straight into the machinery-quotation net.
+
+    ``verified`` says whether the boundary was ESTABLISHED rather than assumed.
+    Three ways it can be, in the order they are tried:
+
+    1. the record ends with the model's own pre-guard body, so everything ahead
+       of that body is by construction this codebase's (the boundary
+       ``meetings.manager._preserved_ballot_markers`` uses);
+    2. the record ends with Task 19.15's fixed replacement note, i.e. the guard
+       replaced the body — checked AFTER (1) so a model body that merely quotes
+       the note cannot claim the machinery's side of the line;
+    3. the anchored chain accounts for the record in FULL, leaving no body the
+       model could have authored (the parse-default shape).
+
+    Failing all three, the record and the model's own call disagree in a way
+    this module cannot attribute, so nothing is trusted as machinery: the
+    marker region is empty and the ballot is counted in
+    ``guard_provenance_unverifiable_ballots``. That direction is deliberate —
+    under-counting guard cells is a visible, published loss, whereas trusting
+    shape mis-attributes model text as machinery silently.
     """
 
-    chain = _scan_marker_chain(ballot.rationale_text)
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    marker_region: str
+    body_region: str
+    model_body: str | None
+    verified: bool
+
+
+def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
+    """Cut a recorded rationale along its provenance boundary (see the class)."""
+
+    if model_body is not None and rationale.endswith(model_body):
+        cut = len(rationale) - len(model_body)
+        return _RationaleSplit(
+            marker_region=rationale[:cut],
+            body_region=model_body,
+            model_body=model_body,
+            verified=True,
+        )
+    if rationale.endswith(TEAMMATE_COERCED_VOTE_RATIONALE):
+        cut = len(rationale) - len(TEAMMATE_COERCED_VOTE_RATIONALE)
+        return _RationaleSplit(
+            marker_region=rationale[:cut],
+            body_region=TEAMMATE_COERCED_VOTE_RATIONALE,
+            model_body=model_body,
+            verified=True,
+        )
+    chain = _scan_marker_chain(rationale)
+    if chain.any_marker and chain.consumed == len(rationale):
+        return _RationaleSplit(
+            marker_region=rationale,
+            body_region="",
+            model_body=model_body,
+            verified=True,
+        )
+    return _RationaleSplit(
+        marker_region="",
+        body_region=rationale,
+        model_body=model_body,
+        verified=False,
+    )
+
+
+def _authored_target(ballot: VoteBallot, chain: _MarkerChain) -> tuple[str, bool]:
+    """``(the target the AGENT wrote, whether a guard rewrite was unwound)``.
+
+    ``chain`` is the scan of the ballot's PROVENANCE-established marker region,
+    so an unverifiable record contributes no rewrite and the recorded target
+    stands. When no rewriting marker is present the recorded target IS the
+    authored one.
+    """
+
     if chain.authored_target is None:
         return ballot.target, False
     return chain.authored_target, True
@@ -809,6 +920,16 @@ class EvidenceTaxonomyCensus(_FrozenModel):
                 "the three evidence categories must partition flags_total: "
                 f"{self.role_proof_flags} + {self.cross_statement_flags} + "
                 f"{self.weak_signal_flags} != {self.flags_total}"
+            )
+        # Every counted meeting contributes >= 1 flag by definition, so a
+        # payload claiming more flagged meetings than flags is arithmetically
+        # impossible. Without this a hand-edited or stale report validates and
+        # is served as evidence.
+        if self.meetings_with_any_flag > self.flags_total:
+            raise ValueError(
+                "meetings_with_any_flag cannot exceed flags_total (each counted "
+                f"meeting carries >= 1 flag): {self.meetings_with_any_flag} > "
+                f"{self.flags_total}"
             )
         _validate_rate(
             "weak_signal_share",
@@ -1302,17 +1423,29 @@ class RedirectedBallotCells(_FrozenModel):
 class ScaffoldLeakageCells(_FrozenModel):
     """Fourth-wall leakage, split by ORIGIN rather than pooled (metric 8).
 
-    **Source, by origin.** GUARD-originated cells read the RECORDED
-    ``rationale_text`` — that is where the machinery wrote. MODEL-originated
-    cells read the PRE-GUARD body parsed out of the voter's own vote-call
-    response (:func:`_model_authored_bodies`), because Task 19.15's teammate
-    coercion REPLACES the recorded rationale before the ballot is stored: a
-    future teammate-aimed ballot disclosing a partner would read clean on the
-    recorded surface and the metric would under-count exactly the class the
-    redaction removes. ``model_source_pre_guard_ballots`` /
-    ``model_source_recorded_fallback_ballots`` partition ``ballots_total`` so
-    the substitution is counted, never silent (the fallback is 0 on all four
-    committed sets, where the two sources also agree cell for cell).
+    **Source, by origin — and the boundary is provenance, not pattern.** Each
+    recorded rationale is cut by :func:`_split_rationale` into the machinery's
+    marker region and the body, using the model's own pre-guard text as the
+    boundary. GUARD-originated cells scan the MARKER REGION for markers (never
+    its payloads, which carry model-supplied targets and raw response heads);
+    ``guard_preserved_omniscient_ballots`` scans the recorded BODY;
+    MODEL-originated cells scan the PRE-GUARD body parsed out of the voter's own
+    vote-call response (:func:`_model_authored_bodies`) and nothing else,
+    because Task 19.15's teammate coercion REPLACES the recorded rationale
+    before the ballot is stored: a future teammate-aimed ballot disclosing a
+    partner would read clean on the recorded surface and the metric would
+    under-count exactly the class the redaction removes.
+
+    A ballot with no pre-guard body scans NOTHING model-side rather than falling
+    back to the record — a parse-default ballot's record is a bounded head of
+    the unparseable JSON envelope, whose ``"confidence": 0.NN`` the machinery
+    net would read as the model quoting its own scoring grid.
+    ``model_source_pre_guard_ballots`` / ``model_source_unavailable_ballots``
+    and ``guard_provenance_verified_ballots`` /
+    ``guard_provenance_unverifiable_ballots`` each partition ``ballots_total``,
+    so both boundaries are counted, never silent (0 unavailable and 0
+    unverifiable on all four committed sets, where every cell equals its
+    whole-record reading).
 
     MODEL-originated ROLE/omniscience (the model authored the text); all three
     nets are over ``impostor_ballots``:
@@ -1343,15 +1476,20 @@ class ScaffoldLeakageCells(_FrozenModel):
     GUARD-originated (the deterministic machinery injected the text):
 
     * ``guard_marked_ballots`` — any pinned manager/voting marker in the
-      LEADING chain (never a substring of the model's body).
+      provenance-established marker region (never a substring of the model's
+      body, and never marker-shaped prose the model opened with).
     * ``guard_target_rewrite_ballots`` — the subset whose TARGET the guard
       rewrote.
     * ``guard_preserved_omniscient_ballots`` / ``guard_preserved_omniscient_rate``
-      — target-rewritten ballots whose RECORDED rationale still carries ANY
+      — target-rewritten ballots whose recorded BODY still carries ANY
       omniscient phrase, over the ``guard_target_rewrite_ballots`` denominator.
-      RECORDED, never the pre-guard body: "preserved" means what SURVIVED into
-      the record, so scoring the model's original here would report Task 19.15's
-      redaction as a preservation of the very text it removes.
+      The recorded body, never the pre-guard one: "preserved" means what
+      SURVIVED into the record, so scoring the model's original here would
+      report Task 19.15's redaction as a preservation of the very text it
+      removes. The body, never the whole record: a marker payload holds the
+      model's own words (a hallucinated target reading "p-2 is my partner" is
+      interpolated verbatim), and billing those to the machinery would invent
+      guard-originated leakage out of model-originated text.
       This is exactly the class Task 19.15 redacts going forward. It is 1/53 on
       ``replays/ml_corpus/9p2i`` (seed 1118 meeting 0) and 0 on the other three
       sets: rare on committed bytes, NOT absent. The rate ships as its own cell
@@ -1383,7 +1521,9 @@ class ScaffoldLeakageCells(_FrozenModel):
     model_machinery_vocabulary_ballots: int
     model_machinery_quotation_share: float | None
     model_source_pre_guard_ballots: int
-    model_source_recorded_fallback_ballots: int
+    model_source_unavailable_ballots: int
+    guard_provenance_verified_ballots: int
+    guard_provenance_unverifiable_ballots: int
     guard_marked_ballots: int
     guard_target_rewrite_ballots: int
     guard_preserved_omniscient_ballots: int
@@ -1409,22 +1549,40 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.model_machinery_quotation_ballots,
                 self.model_machinery_vocabulary_ballots,
                 self.model_source_pre_guard_ballots,
-                self.model_source_recorded_fallback_ballots,
+                self.model_source_unavailable_ballots,
+                self.guard_provenance_verified_ballots,
+                self.guard_provenance_unverifiable_ballots,
                 self.guard_marked_ballots,
                 self.guard_target_rewrite_ballots,
                 self.guard_preserved_omniscient_ballots,
             ),
         )
         if (
-            self.model_source_pre_guard_ballots
-            + self.model_source_recorded_fallback_ballots
+            self.model_source_pre_guard_ballots + self.model_source_unavailable_ballots
             != self.ballots_total
         ):
             raise ValueError(
                 "the model-source provenance split must span every ballot: "
                 f"{self.model_source_pre_guard_ballots} + "
-                f"{self.model_source_recorded_fallback_ballots} != "
+                f"{self.model_source_unavailable_ballots} != "
                 f"{self.ballots_total}"
+            )
+        if (
+            self.guard_provenance_verified_ballots
+            + self.guard_provenance_unverifiable_ballots
+            != self.ballots_total
+        ):
+            raise ValueError(
+                "the guard-provenance split must span every ballot: "
+                f"{self.guard_provenance_verified_ballots} + "
+                f"{self.guard_provenance_unverifiable_ballots} != "
+                f"{self.ballots_total}"
+            )
+        if self.guard_marked_ballots > self.guard_provenance_verified_ballots:
+            raise ValueError(
+                "a guard marker can only be counted where its provenance was "
+                f"established: {self.guard_marked_ballots} marked > "
+                f"{self.guard_provenance_verified_ballots} verified"
             )
         # The union is bounded below by each net and above by their sum: a
         # ballot may hit several, so equality with the sum is NOT required, but
@@ -1693,6 +1851,15 @@ class DeductionMetricsReport(_FrozenModel):
                 "the meeting-flag partition must span every meeting: "
                 f"{self.meeting_flag_cross_tab.meetings_total} != {self.meetings_total}"
             )
+        # The census counts a SUBSET of the same meetings, so it cannot exceed
+        # them. Its own validator bounds it against flags_total; the report is
+        # the only place that knows the meeting denominator.
+        if self.evidence_taxonomy.meetings_with_any_flag > self.meetings_total:
+            raise ValueError(
+                "meetings_with_any_flag cannot exceed the meetings folded: "
+                f"{self.evidence_taxonomy.meetings_with_any_flag} > "
+                f"{self.meetings_total}"
+            )
         flagged_ejections = (
             self.meeting_flag_cross_tab.flagged_ejections_impostor
             + self.meeting_flag_cross_tab.flagged_ejections_innocent
@@ -1941,7 +2108,9 @@ class _Accumulator:
         self.guard_rewrite = 0
         self.guard_omniscient = 0
         self.model_source_pre_guard = 0
-        self.model_source_recorded_fallback = 0
+        self.model_source_unavailable = 0
+        self.guard_provenance_verified = 0
+        self.guard_provenance_unverifiable = 0
 
 
 def _fold_meeting(
@@ -2054,34 +2223,44 @@ def _fold_meeting(
 
     for ballot in meeting.ballots:
         acc.ballots_total += 1
-        rationale = ballot.rationale_text
-        chain = _scan_marker_chain(rationale)
+        # Cut the record along its provenance boundary FIRST: which text each
+        # cell may read is decided by who wrote it, never by what it looks like.
+        split = _split_rationale(ballot.rationale_text, model_bodies.get(ballot.voter))
+        chain = _scan_marker_chain(split.marker_region)
+        if split.verified:
+            acc.guard_provenance_verified += 1
+        else:
+            acc.guard_provenance_unverifiable += 1
         if chain.redirected:
             acc.redirected += 1
             if ballot.target == SKIP_TARGET:
                 acc.redirect_coerced_skip += 1
             else:
                 acc.redirected_eject += 1
-        # GUARD-originated cells read the RECORDED rationale (that is where the
-        # machinery wrote); MODEL-originated cells read the PRE-GUARD body the
-        # model actually authored, so Task 19.15's redaction cannot hide a
-        # disclosure from the metric that exists to count it.
-        model_body = model_bodies.get(ballot.voter)
-        if model_body is None:
-            model_body = rationale
-            acc.model_source_recorded_fallback += 1
+        # MODEL-originated cells read the PRE-GUARD body and nothing else, so
+        # Task 19.15's redaction cannot hide a disclosure from the metric that
+        # exists to count it. A ballot with no such body scans NOTHING: the old
+        # fallback to the recorded string fed a parse-default ballot's raw JSON
+        # envelope to the machinery net, the exact false positive
+        # ``_model_authored_bodies`` extracts the parsed field to avoid.
+        if split.model_body is None:
+            acc.model_source_unavailable += 1
         else:
             acc.model_source_pre_guard += 1
+        model_body = split.model_body or ""
 
         if chain.any_marker:
             acc.guard_marked += 1
         if chain.rewrote_target:
             acc.guard_rewrite += 1
-            # The RECORDED rationale, deliberately — "preserved" means what
-            # SURVIVED into the record. Reading the pre-guard body here would
-            # report Task 19.15's redaction as a preservation of the very text
-            # it removes, i.e. exactly backwards.
-            if _is_omniscient(rationale):
+            # The recorded BODY — not the whole record, and never the marker
+            # payloads, which carry model-supplied targets and response heads
+            # verbatim. "Preserved" means the stale body SURVIVED the guard, so
+            # scoring the model's pre-guard text would report Task 19.15's
+            # redaction as a preservation of the very text it removes, and
+            # scoring the payloads would bill the model's own words to the
+            # machinery.
+            if _is_omniscient(split.body_region):
                 acc.guard_omniscient += 1
         if MACHINERY_DECIMAL_PATTERN.search(model_body):
             acc.machinery_quotation += 1
@@ -2122,7 +2301,7 @@ def _fold_meeting(
         # SAME-AGENT: score the target the AGENT wrote, unwinding a guard
         # rewrite from its own marker. The guard's behaviour is metric 7's, and
         # charging it here would both misattribute it and double-count it.
-        authored, unwound = _authored_target(ballot)
+        authored, unwound = _authored_target(ballot, chain)
         if unwound:
             acc.guard_unwound_in_denominator += 1
         if authored in accused and authored in legal_targets:
@@ -2275,7 +2454,9 @@ def compute_deduction_metrics(
                 acc.machinery_quotation, acc.ballots_total
             ),
             model_source_pre_guard_ballots=acc.model_source_pre_guard,
-            model_source_recorded_fallback_ballots=(acc.model_source_recorded_fallback),
+            model_source_unavailable_ballots=acc.model_source_unavailable,
+            guard_provenance_verified_ballots=acc.guard_provenance_verified,
+            guard_provenance_unverifiable_ballots=acc.guard_provenance_unverifiable,
             guard_marked_ballots=acc.guard_marked,
             guard_target_rewrite_ballots=acc.guard_rewrite,
             guard_preserved_omniscient_ballots=acc.guard_omniscient,
