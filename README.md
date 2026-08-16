@@ -8,7 +8,7 @@
 
 [![The spectator mid-meeting: the reactive accusation chain, each agent's testimony with the observations backing it, and every ballot with its confidence and its reasoning](docs/media/spectator-meeting.png)](docs/media/spectator-meeting.png)
 
-*Inside one meeting (seed 2, tick 7). Left: the reactive accusation chain — p-1 accuses p-4, the accused answers next — with each claim's structured observations underneath it. Right: the ballots, each with its confidence and the sentence the agent voted on. Right rail: any agent's memory and beliefs at that moment. Nobody in the picture knows who the impostors are; the spectator does.*
+*Inside one meeting (seed 2, tick 7). Left: the reactive accusation chain — p-1 accuses p-4, the accused answers next — with each claim's structured observations underneath it. Right: the ballots, each with its confidence and the sentence the agent voted on. Right rail: any agent's memory and beliefs at that moment. The two impostors at this table know each other — they are told at game start; the seven crewmates are the ones reasoning in the dark, and the spectator sees all of it.*
 
 ### Reproduce the three claims above
 

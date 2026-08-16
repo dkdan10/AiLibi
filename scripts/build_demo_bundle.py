@@ -55,6 +55,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -129,19 +130,41 @@ class BakeSummary:
 def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, ...]:
     """The committed featured ``(set, seed)`` pairs, in their curated order.
 
-    Raises :class:`ValueError` when the block is missing or parses empty — a
-    silently empty featured list would build a bundle with no games in it.
+    Raises :class:`ValueError` when the block is missing, parses empty, or parses
+    PARTIALLY.
+
+    The partial case is the dangerous one and the reason for the brace count
+    below. ``findall`` is silent about entries it could not match, so a future
+    entry written on one line — or with ``seed`` before ``set`` — would be
+    dropped while every other entry still matched, and a "did anything match?"
+    check would sail straight past it. The bundle would then ship the compiled
+    frontend still carrying that editorial entry, with no baked replay behind it,
+    and the picker's metadata join would quietly drop the card: the exact
+    single-source-of-truth guarantee this parse exists to provide, broken
+    silently. One ``{`` per entry object is a format-independent count of what
+    the block declares, so a mismatch fails the build instead
+    (AGENTS.md: no silent fallbacks).
     """
 
     block = _FEATURED_BLOCK.search(picker_tsx.read_text(encoding="utf-8"))
     if block is None:
         raise ValueError(f"FEATURED_GAMES not found in {picker_tsx}")
+    body = block.group(1)
     games = tuple(
         FeaturedGame(set_name=set_name, seed=int(seed))
-        for set_name, seed in _FEATURED_ENTRY.findall(block.group(1))
+        for set_name, seed in _FEATURED_ENTRY.findall(body)
     )
     if not games:
         raise ValueError(f"FEATURED_GAMES in {picker_tsx} parsed to zero entries")
+    declared = body.count("{")
+    if len(games) != declared:
+        raise ValueError(
+            f"FEATURED_GAMES in {picker_tsx} parsed {len(games)} of {declared} "
+            "entries — an entry does not match the expected "
+            '`set: "<name>",\\n seed: <int>,` shape (reformatted? keys reordered?). '
+            "Fix the entry or this parser; a partially parsed curation would ship "
+            "a bundle missing a featured game."
+        )
     return games
 
 
@@ -311,7 +334,18 @@ def bake_data(
     games: tuple[FeaturedGame, ...],
     samples_dir: Path = _SAMPLES_DIR,
 ) -> BakeSummary:
-    """Write ``<out_dir>/data/`` — the API's URL space mirrored as files."""
+    """Write ``<out_dir>/data/`` — the API's URL space mirrored as files.
+
+    Any prior ``data/`` tree is REMOVED first, not overwritten in place. Baking
+    is not idempotent by overwrite: drop a seed from the curated list (or a whole
+    set) and its JSON would survive under a reused output directory, still
+    directly fetchable, while this note and ``docs/deployment.md`` both promise
+    the bundle ships the current featured games and nothing else. The normal path
+    gets this from ``vite build --emptyOutDir``; the ``--skip-frontend-build``
+    reuse path would not, and that is the path where a curation edit is most
+    likely to be re-baked over an old tree. Only ``data/`` is cleared — the
+    frontend assets beside it are what the reuse path exists to keep.
+    """
 
     seeds_by_set: dict[str, list[int]] = {}
     for game in games:
@@ -319,7 +353,10 @@ def bake_data(
     set_names = tuple(sorted(seeds_by_set))
     default_set = resolve_default_set(set_names)
 
-    writer = _Writer(out_dir / "data")
+    data_root = out_dir / "data"
+    if data_root.exists():
+        shutil.rmtree(data_root)
+    writer = _Writer(data_root)
     baked_games: list[str] = []
     for set_name in set_names:
         baked_games.extend(
@@ -393,10 +430,12 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
 
     index = out_dir / "index.html"
     if not index.is_file():
-        raise FileNotFoundError(f"frontend build produced no {index}")
+        # Worded for BOTH callers: a fresh build that emitted nothing, and
+        # `--skip-frontend-build` pointed at a directory holding no build.
+        raise FileNotFoundError(f"no frontend build in {out_dir}: {index} is missing")
     scripts = sorted(out_dir.glob("assets/*.js"))
     if not scripts:
-        raise FileNotFoundError(f"frontend build produced no assets/*.js in {out_dir}")
+        raise FileNotFoundError(f"no frontend build in {out_dir}: no assets/*.js")
     if not any(
         _STATIC_MODE_MARKER in script.read_text(encoding="utf-8", errors="replace")
         for script in scripts
@@ -409,14 +448,33 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
 
 
 def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
-    """A short note beside the artifact saying what it is and what it is not."""
+    """A short note beside the artifact saying what it is and what it is not.
+
+    This note is what the person PUBLISHING the bundle reads, so it has to be
+    exact about the one thing that matters for that decision: what removing the
+    API did and did not remove. It removed the live query surface. It did NOT
+    remove the game-master DATA — the spectator is a post-game GM view by design
+    (docs/architecture.md), so the baked JSON for the featured games carries
+    roles, kill attribution, vent usage, per-agent memories and the rendered LLM
+    prompts, exactly as the local spectator shows them. Those bytes are already
+    committed in ``replays/samples/``; the note says so rather than letting
+    "no GM surface" read as "the hidden information is stripped".
+    """
 
     lines = [
         "# AiLibi — static spectator demo",
         "",
         "A self-contained build of the AiLibi spectator UI. There is no API",
-        "process and no game-master surface here: every call reads the pre-baked",
-        "JSON under `data/`, so any static file server can host it.",
+        "process and no live game-master endpoint here: every call reads the",
+        "pre-baked JSON under `data/`, so any static file server can host it.",
+        "",
+        "**What that does not mean.** The spectator is a *post-game GM view* by",
+        "design, and this bundle keeps that view for the games it ships: `data/`",
+        "contains their roles, kill attribution, vent usage, per-agent memories",
+        "and rendered LLM prompts. What is gone is the live, unauthenticated,",
+        "unbounded query surface over whatever the host has on disk — not the",
+        "hidden information for these particular games, which is already public",
+        "in `replays/samples/`. Publish accordingly.",
         "",
         "```bash",
         "python -m http.server -d . 8080",
@@ -474,8 +532,11 @@ def main() -> int:
         "--skip-frontend-build",
         action="store_true",
         help=(
-            "Bake data/ only, leaving the existing build output in place (the "
-            "fast path when iterating on what gets baked)."
+            "Re-bake data/ over an EXISTING static-mode build in --out (the fast "
+            "path when iterating on what gets baked). The reused build is held to "
+            "the same static-mode check as a fresh one, so an empty directory or "
+            "an ordinary `npm run build` fails here rather than producing a "
+            "bundle that calls a live API."
         ),
     )
     args = parser.parse_args()
@@ -486,7 +547,13 @@ def main() -> int:
     default_set = resolve_default_set(set_names)
 
     if args.skip_frontend_build:
-        print(f"Skipping the frontend build; baking data/ into {out_dir}")
+        # The REUSED build is validated exactly like a fresh one. Skipping the
+        # check here would make the documented fast path the one way to produce a
+        # bundle that looks complete — data/, README and a zero exit — over an
+        # empty directory or an ordinary `npm run build`, i.e. one that calls an
+        # API nobody is running (AGENTS.md: no silent fallbacks).
+        _assert_static_mode_compiled_in(out_dir)
+        print(f"Reusing the static-mode build in {out_dir}; re-baking data/")
     else:
         build_frontend(out_dir, default_set=default_set)
     out_dir.mkdir(parents=True, exist_ok=True)

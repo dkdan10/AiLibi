@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -78,6 +79,46 @@ def test_a_missing_featured_block_fails_loud(tmp_path: Path) -> None:
     fake.write_text("export const NOTHING = [];\n", encoding="utf-8")
     with pytest.raises(ValueError, match="FEATURED_GAMES not found"):
         bdb.parse_featured_games(fake)
+
+
+def _picker_source(entries: str) -> str:
+    """A minimal `ReplayPicker.tsx` carrying just the curated block."""
+
+    return f"export const FEATURED_GAMES: readonly FeaturedGame[] = [\n{entries}\n];\n"
+
+
+def test_a_partially_parsed_curation_fails_loud(tmp_path: Path) -> None:
+    """An entry the regex cannot read is an ERROR, not a silently dropped game.
+
+    The dangerous case is not a broken block — it is a block where every entry
+    but one matches. ``findall`` says nothing about the one it skipped, so the
+    build would ship a frontend still advertising that featured game with no
+    baked replay behind it. The per-entry brace count catches it whatever the
+    reformatting was.
+    """
+
+    fake = tmp_path / "ReplayPicker.tsx"
+    # Second entry: keys reordered. The compiled frontend keeps it; the old
+    # "did anything match?" check would have passed with one game.
+    fake.write_text(
+        _picker_source(
+            '  {\n    set: "9p2i",\n    seed: 2,\n    label: "a",\n  },\n'
+            '  {\n    seed: 17,\n    set: "9p2i",\n    label: "b",\n  },'
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="parsed 1 of 2 entries"):
+        bdb.parse_featured_games(fake)
+
+    # …and the same block, correctly formatted, parses both.
+    fake.write_text(
+        _picker_source(
+            '  {\n    set: "9p2i",\n    seed: 2,\n    label: "a",\n  },\n'
+            '  {\n    set: "9p2i",\n    seed: 17,\n    label: "b",\n  },'
+        ),
+        encoding="utf-8",
+    )
+    assert [g.seed for g in bdb.parse_featured_games(fake)] == [2, 17]
 
 
 def test_a_featured_seed_the_set_does_not_carry_fails_loud(tmp_path: Path) -> None:
@@ -247,6 +288,34 @@ def test_an_unscored_set_bakes_no_rubric(tmp_path: Path) -> None:
     assert not (tmp_path / "data" / "4p1i" / "eval" / "rubric.json").exists()
 
 
+def test_rebaking_removes_the_previous_data_tree(tmp_path: Path) -> None:
+    """A de-curated game must LEAVE the bundle, not linger as fetchable JSON.
+
+    Overwrite-only baking would keep serving a dropped seed (or a dropped set)
+    out of a reused output directory, contradicting the bundle's own note that it
+    ships the current featured games and nothing else.
+    """
+
+    bdb.bake_data(
+        tmp_path,
+        games=(
+            bdb.FeaturedGame(set_name="9p2i", seed=2),
+            bdb.FeaturedGame(set_name="4p1i", seed=29),
+        ),
+        samples_dir=_SAMPLES,
+    )
+    assert (tmp_path / "data" / "4p1i" / "replays" / "headless-seed-29.json").is_file()
+
+    # Re-bake with 4p1i de-curated entirely, into the same directory.
+    summary = bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    assert summary.sets == ("9p2i",)
+    assert not (tmp_path / "data" / "4p1i").exists()
+    assert _read(tmp_path / "data" / "9p2i" / "sets.json") == {
+        "sets": ["9p2i"],
+        "default": "9p2i",
+    }
+
+
 # ── the frontend-build guard ─────────────────────────────────────────────────
 
 
@@ -275,6 +344,45 @@ def test_a_non_static_build_is_rejected(tmp_path: Path) -> None:
 def test_an_empty_build_dir_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="no .*index.html"):
         bdb._assert_static_mode_compiled_in(tmp_path)
+
+
+def _stamp_static_build(out: Path) -> None:
+    """The minimum a directory needs to pass the static-mode guard."""
+
+    (out / "assets").mkdir(parents=True)
+    (out / "index.html").write_text("<html></html>", encoding="utf-8")
+    (out / "assets" / "index.js").write_text('const o="./data";', encoding="utf-8")
+
+
+def test_skip_frontend_build_validates_the_reused_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The documented fast path is held to the SAME check as a fresh build.
+
+    Skipping it there would make `--skip-frontend-build` the one supported way to
+    get a zero exit and a complete-looking bundle — `data/`, a README, no
+    complaint — over an empty directory or an ordinary `npm run build`, i.e. a
+    bundle that calls an API nobody is running.
+    """
+
+    out = tmp_path / "bundle"
+    out.mkdir()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["build_demo_bundle.py", "--out", str(out), "--skip-frontend-build"],
+    )
+    with pytest.raises(FileNotFoundError, match="index.html"):
+        bdb.main()
+    # Nothing was written on the way to failing.
+    assert not (out / "data").exists()
+    assert not (out / "README.md").exists()
+
+    # A real static-mode build in the same place re-bakes normally.
+    _stamp_static_build(out)
+    assert bdb.main() == 0
+    assert (out / "data").is_dir()
+    assert (out / "README.md").is_file()
 
 
 # ── the shipped note ─────────────────────────────────────────────────────────
