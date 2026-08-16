@@ -429,6 +429,51 @@ def test_new_empty_and_previous_bundle_out_dirs_are_allowed(tmp_path: Path) -> N
     bdb.assert_safe_out_dir(previous)
 
 
+def test_a_failed_build_leaves_the_out_dir_rerunnable(tmp_path: Path) -> None:
+    """The ownership marker must not make a FAILED build sticky.
+
+    Vite empties and populates the directory before the bake can fail, so
+    without cleanup one wrong `--samples-dir` would leave it non-empty and
+    unmarked — refused by the guard on the next, corrected attempt, after having
+    already destroyed whatever bundle was there. The recovery must be "retype
+    the command", not "go and rm -rf it".
+    """
+
+    # (a) the directory pre-existed: rewind to empty, which the guard accepts.
+    existing = tmp_path / "existing"
+    (existing / "assets").mkdir(parents=True)
+    (existing / "index.html").write_text("half a build", encoding="utf-8")
+    bdb.discard_partial_output(existing, remove_dir=False)
+    assert existing.is_dir()
+    assert not any(existing.iterdir())
+    bdb.assert_safe_out_dir(existing)
+
+    # (b) this run created it: rewind to not existing, likewise accepted.
+    created = tmp_path / "created"
+    (created / "assets").mkdir(parents=True)
+    (created / "index.html").write_text("half a build", encoding="utf-8")
+    bdb.discard_partial_output(created, remove_dir=True)
+    assert not created.exists()
+    bdb.assert_safe_out_dir(created)
+
+    # Cleaning up something that is already gone is not an error.
+    bdb.discard_partial_output(tmp_path / "never-there", remove_dir=True)
+
+
+def test_the_marker_is_written_before_the_fallible_bake() -> None:
+    """Belt to the cleanup's braces: ownership precedes the steps that can fail.
+
+    If cleanup itself fails (permissions, a full disk), the directory is still
+    one the guard accepts, so the operator is never locked out of their own
+    output directory by a build that broke halfway.
+    """
+
+    source = Path(bdb.__file__).read_text(encoding="utf-8")
+    marker_at = source.index("write_bundle_marker(out_dir)\n        summary =")
+    bake_at = source.index("summary = bake_data(out_dir, games=games")
+    assert marker_at < bake_at
+
+
 def test_there_is_no_bake_only_fast_path() -> None:
     """Removed deliberately, so pin its absence.
 
@@ -459,3 +504,32 @@ def test_bundle_readme_names_what_is_missing(tmp_path: Path) -> None:
     note = (tmp_path / "README.md").read_text(encoding="utf-8")
     assert "No tournament report" in note or "tournament eval report" in note
     assert "9p2i" in note
+    # The committed corpus IS already public, so the note may say so.
+    assert "already" in note and "replays/samples/" in note
+
+
+def test_the_note_never_claims_unverified_provenance(tmp_path: Path) -> None:
+    """ "It was already public anyway" is stated only when it is true.
+
+    `--samples-dir` takes any directory. A bundle baked from local or
+    unpublished recordings carries THEIR hidden information, and telling that
+    operator it is already committed to this repository would be an assurance
+    nobody checked — handed to the one person about to act on it.
+    """
+
+    alt = tmp_path / "private-recordings"
+    (alt / "4p1i").mkdir(parents=True)
+    src = _SAMPLES / "4p1i" / "replay-seed-29.jsonl"
+    (alt / "4p1i" / src.name).write_bytes(src.read_bytes())
+
+    out = tmp_path / "bundle"
+    summary = bdb.bake_data(
+        out, games=(bdb.FeaturedGame(set_name="4p1i", seed=29),), samples_dir=alt
+    )
+    assert not summary.samples_are_committed
+    bdb.write_bundle_readme(out, summary)
+    note = (out / "README.md").read_text(encoding="utf-8")
+
+    assert "already" not in note or "already public" not in note
+    assert str(alt.resolve()) in note
+    assert "cannot" in note and "publication status" in note

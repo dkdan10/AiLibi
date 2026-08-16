@@ -144,6 +144,17 @@ class BakeSummary:
     games: tuple[str, ...]
     files: int
     bytes_written: int
+    # WHERE the baked bytes came from. Carried so the bundle's own note can
+    # describe its actual source instead of asserting a provenance nobody
+    # checked: ``--samples-dir`` accepts any directory, and only the committed
+    # ``replays/samples`` is already-public data.
+    samples_dir: Path
+
+    @property
+    def samples_are_committed(self) -> bool:
+        """True when the bake read the repository's own committed samples."""
+
+        return self.samples_dir == _SAMPLES_DIR
 
 
 def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, ...]:
@@ -403,6 +414,7 @@ def bake_data(
         games=tuple(baked_games),
         files=writer.files,
         bytes_written=writer.bytes_written,
+        samples_dir=samples_dir.resolve(),
     )
 
 
@@ -537,10 +549,31 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     remove the game-master DATA — the spectator is a post-game GM view by design
     (docs/architecture.md), so the baked JSON for the featured games carries
     roles, kill attribution, vent usage, per-agent memories and the rendered LLM
-    prompts, exactly as the local spectator shows them. Those bytes are already
-    committed in ``replays/samples/``; the note says so rather than letting
-    "no GM surface" read as "the hidden information is stripped".
+    prompts, exactly as the local spectator shows them; the note says so rather
+    than letting "no GM surface" read as "the hidden information is stripped".
+
+    The "and it was already public anyway" half is stated ONLY when it is true.
+    ``--samples-dir`` accepts any directory, and a bundle baked from local or
+    unpublished recordings carries THEIR hidden information — telling that
+    operator the data is already committed to this repository would be an
+    assurance nobody verified, handed to the one person acting on it. A
+    non-canonical source is named instead, and the publication question handed
+    back with it.
     """
+
+    provenance = (
+        [
+            "hidden information for these particular games, which is already",
+            "public in `replays/samples/` in this repository. Publish accordingly.",
+        ]
+        if summary.samples_are_committed
+        else [
+            "hidden information for these particular games, which was baked from",
+            f"`{summary.samples_dir}` — NOT the repository's committed samples.",
+            "This script bakes whatever recordings it is pointed at and cannot",
+            "vouch for their publication status; establish that before publishing.",
+        ]
+    )
 
     lines = [
         "# AiLibi — static spectator demo",
@@ -554,8 +587,7 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "contains their roles, kill attribution, vent usage, per-agent memories",
         "and rendered LLM prompts. What is gone is the live, unauthenticated,",
         "unbounded query surface over whatever the host has on disk — not the",
-        "hidden information for these particular games, which is already public",
-        "in `replays/samples/`. Publish accordingly.",
+        *provenance,
         "",
         "```bash",
         "python -m http.server -d . 8080",
@@ -576,6 +608,34 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "",
     ]
     (out_dir / "README.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def discard_partial_output(out_dir: Path, *, remove_dir: bool) -> None:
+    """Undo a half-built bundle so the next attempt is not blocked.
+
+    The ownership marker that makes :func:`assert_safe_out_dir` safe also makes
+    a FAILED build sticky: Vite empties the directory and writes its assets
+    first, so a later failure (a wrong ``--samples-dir``, a missing seed, a
+    partially emitted Vite error) leaves the directory non-empty and unmarked —
+    and the next, corrected invocation refuses it as unowned. One typo would
+    turn the documented one-line build into "go and `rm -rf` it yourself",
+    having already destroyed whatever bundle was there before.
+
+    So a failed build cleans up after itself: back to not-existing if this run
+    created the directory, back to empty if it did not. Either state is one the
+    guard accepts, so the fix for the typo is to retype the command.
+    """
+
+    if not out_dir.exists():
+        return
+    if remove_dir:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        return
+    for child in out_dir.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
 
 
 def write_bundle_marker(out_dir: Path) -> None:
@@ -636,12 +696,26 @@ def main() -> int:
     set_names = tuple(sorted({game.set_name for game in games}))
     default_set = resolve_default_set(set_names)
 
-    build_frontend(out_dir, default_set=default_set)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    summary = bake_data(out_dir, games=games, samples_dir=args.samples_dir)
-    write_bundle_readme(out_dir, summary)
-    write_bundle_marker(out_dir)
+    # Whether THIS run brings the directory into existence decides how far a
+    # failed build has to rewind: to nothing, or to empty.
+    assert_safe_out_dir(out_dir)
+    created_out_dir = not out_dir.exists()
+    try:
+        build_frontend(out_dir, default_set=default_set)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Ownership is recorded HERE, before the fallible bake, so that even a
+        # cleanup that itself fails leaves a directory the guard will accept.
+        write_bundle_marker(out_dir)
+        summary = bake_data(out_dir, games=games, samples_dir=args.samples_dir)
+        write_bundle_readme(out_dir, summary)
+    except BaseException:
+        discard_partial_output(out_dir, remove_dir=created_out_dir)
+        print(
+            f"Build failed; removed the partial output in {out_dir} so the next "
+            "run is not blocked by it.",
+            file=sys.stderr,
+        )
+        raise
 
     total = sum(p.stat().st_size for p in out_dir.rglob("*") if p.is_file())
     print(
