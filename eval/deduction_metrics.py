@@ -572,18 +572,20 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
     )
 
 
-# ``(pattern, rewrites_the_target, is_the_graph_redirect)`` for every marker the
-# ballot chain prepends. ONE table drives every guard-origin question — the
-# census, the redirect share, and the authored-target unwind — so no consumer
-# can disagree with another about what "the machinery wrote here" means.
-_BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool], ...]] = (
-    (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True, True),
-    (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True, False),
-    (_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER), True, False),
-    (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True, False),
-    (_marker_pattern(INVALID_REASON_ID_MARKER), False, False),
-    (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False, False),
-    (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False, False),
+# ``(pattern, rewrites_the_target, is_the_graph_redirect, is_the_parse_default)``
+# for every marker the ballot chain prepends. ONE table drives every guard-origin
+# question — the census, the redirect share, the authored-target unwind, and the
+# provenance split — so no consumer can disagree with another about what "the
+# machinery wrote here" means. The parse-default column is flagged because it is
+# the only marker the writer ever emits as a WHOLE rationale rather than a prefix.
+_BALLOT_MARKER_CHAIN: Final[tuple[tuple[re.Pattern[str], bool, bool, bool], ...]] = (
+    (_marker_pattern(BALLOT_TARGET_REDIRECT_MARKER), True, True, False),
+    (_marker_pattern(INVALID_VOTE_TARGET_MARKER), True, False, False),
+    (_marker_pattern(TEAMMATE_VOTE_TARGET_MARKER), True, False, False),
+    (_marker_pattern(UNCITED_ZERO_FLAG_EJECT_MARKER), True, False, False),
+    (_marker_pattern(INVALID_REASON_ID_MARKER), False, False, False),
+    (_marker_pattern(INVALID_OBSERVATION_ID_MARKER), False, False, False),
+    (_marker_pattern(VOTE_PARSE_DEFAULT_MARKER), False, False, True),
 )
 
 
@@ -611,6 +613,7 @@ class _MarkerChain(BaseModel):
     any_marker: bool
     rewrote_target: bool
     redirected: bool
+    parse_default: bool
     authored_target: str | None
     consumed: int
 
@@ -624,15 +627,21 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
     """
 
     position = 0
-    any_marker = rewrote = redirected = False
+    any_marker = rewrote = redirected = parse_default = False
     authored: str | None = None
     while True:
-        for pattern, rewrites_target, is_redirect in _BALLOT_MARKER_CHAIN:
+        for (
+            pattern,
+            rewrites_target,
+            is_redirect,
+            is_parse_default,
+        ) in _BALLOT_MARKER_CHAIN:
             match = pattern.match(rationale, position)
             if match is None:
                 continue
             any_marker = True
             redirected = redirected or is_redirect
+            parse_default = parse_default or is_parse_default
             if rewrites_target:
                 rewrote = True
                 try:
@@ -657,6 +666,7 @@ def _scan_marker_chain(rationale: str) -> _MarkerChain:
         any_marker=any_marker,
         rewrote_target=rewrote,
         redirected=redirected,
+        parse_default=parse_default,
         authored_target=authored,
         consumed=position,
     )
@@ -690,8 +700,13 @@ class _RationaleSplit(BaseModel):
     2. the record ends with Task 19.15's fixed replacement note, i.e. the guard
        replaced the body — checked AFTER (1) so a model body that merely quotes
        the note cannot claim the machinery's side of the line;
-    3. the anchored chain accounts for the record in FULL, leaving no body the
-       model could have authored (the parse-default shape).
+    3. the record is ENTIRELY the one marker the writer emits as a whole
+       rationale — ``VOTE_PARSE_DEFAULT_MARKER`` — and no model body exists to
+       contradict it. Every other guard PREPENDS to a body, so a full-record
+       chain of any other marker is not evidence of machinery: a bare redirect
+       marker sitting beside a different pre-guard body is a disagreement to
+       publish, not a record to trust. (A model that authored an empty body is
+       already covered by (1), which matches the empty suffix.)
 
     Failing all three, the record and the model's own call disagree in a way
     this module cannot attribute, so nothing is trusted as machinery: the
@@ -728,14 +743,22 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
             model_body=model_body,
             verified=True,
         )
-    chain = _scan_marker_chain(rationale)
-    if chain.any_marker and chain.consumed == len(rationale):
-        return _RationaleSplit(
-            marker_region=rationale,
-            body_region="",
-            model_body=model_body,
-            verified=True,
-        )
+    # The ONE shape the writer emits as a whole rationale. ``_vote_parse_default``
+    # REPLACES ``rationale_text`` with its marker; every other guard prepends to a
+    # body. So "the chain accounts for the record in full" is only evidence of
+    # machinery for THIS marker, and only when no model body contradicts it —
+    # a bare redirect marker beside a different pre-guard body is a disagreement
+    # to publish, not a record to trust. (A model that authored an EMPTY body
+    # never reaches here: the suffix rule above matches ``""`` and owns that case.)
+    if model_body is None:
+        chain = _scan_marker_chain(rationale)
+        if chain.parse_default and chain.consumed == len(rationale):
+            return _RationaleSplit(
+                marker_region=rationale,
+                body_region="",
+                model_body=model_body,
+                verified=True,
+            )
     return _RationaleSplit(
         marker_region="",
         body_region=rationale,
@@ -1616,36 +1639,43 @@ class ScaffoldLeakageCells(_FrozenModel):
                 f"{self.impostor_ballots} + {self.crew_ballots} != "
                 f"{self.ballots_total}"
             )
+        # Every model-originated BALLOT net increments only while scanning a
+        # pre-guard body, so no such count can exceed the ballots that had one.
+        # Without this the report could serve "0 readable model ballots" beside
+        # positive model leakage — an impossible pair the fold cannot produce.
+        # ``player_visible_leak_turns`` is deliberately NOT bounded this way: it
+        # is the partner net over turn ``free_text``, not over a ballot body.
+        readable = self.model_source_pre_guard_ballots
         for label, count, limit in (
             (
                 "model_partner_naming_ballots",
                 self.model_partner_naming_ballots,
-                self.impostor_ballots,
+                min(self.impostor_ballots, readable),
             ),
             (
                 "model_role_statement_ballots",
                 self.model_role_statement_ballots,
-                self.impostor_ballots,
+                min(self.impostor_ballots, readable),
             ),
             (
                 "model_self_kill_disclosure_ballots",
                 self.model_self_kill_disclosure_ballots,
-                self.impostor_ballots,
+                min(self.impostor_ballots, readable),
             ),
             (
                 "model_omniscient_ballots",
                 self.model_omniscient_ballots,
-                self.impostor_ballots,
+                min(self.impostor_ballots, readable),
             ),
             (
                 "crew_partner_naming_ballots",
                 self.crew_partner_naming_ballots,
-                self.crew_ballots,
+                min(self.crew_ballots, readable),
             ),
             (
                 "crew_omniscient_control_ballots",
                 self.crew_omniscient_control_ballots,
-                self.crew_ballots,
+                min(self.crew_ballots, readable),
             ),
             (
                 "player_visible_leak_turns",
@@ -1655,12 +1685,12 @@ class ScaffoldLeakageCells(_FrozenModel):
             (
                 "model_machinery_quotation_ballots",
                 self.model_machinery_quotation_ballots,
-                self.ballots_total,
+                readable,
             ),
             (
                 "model_machinery_vocabulary_ballots",
                 self.model_machinery_vocabulary_ballots,
-                self.ballots_total,
+                readable,
             ),
             ("guard_marked_ballots", self.guard_marked_ballots, self.ballots_total),
             (

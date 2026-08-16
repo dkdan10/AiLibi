@@ -59,6 +59,7 @@ from eval.deduction_metrics import (
     _authored_target,
     _scan_marker_chain,
     _split_rationale,
+    _wilson_interval,
     _is_omniscient,
     classify_flag,
     compute_deduction_metrics,
@@ -1722,3 +1723,139 @@ def test_census_rejects_more_flagged_meetings_than_meetings(
     census["weak_signal_share"] = census["weak_signal_flags"] / inflated
     with pytest.raises(ValidationError, match="cannot exceed the meetings folded"):
         DeductionMetricsReport.model_validate(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Round 5 — full-record trust is parse-default only; model counts need a body.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_full_record_marker_chain_is_trusted_only_for_parse_default() -> None:
+    """Only ``_vote_parse_default`` writes a marker as the WHOLE rationale.
+
+    Every other guard prepends to a body, so a bare redirect marker standing
+    alone beside a *different* pre-guard body is a disagreement between the
+    record and the model's own call — not evidence that a guard ran.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-4",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3"),
+        ),
+        (_voter_call("p-1", "an entirely different body."),),
+    )
+    deduction = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    )
+
+    assert deduction.scaffold_leakage.guard_provenance_unverifiable_ballots == 1
+    assert deduction.scaffold_leakage.guard_marked_ballots == 0
+    assert deduction.scaffold_leakage.guard_target_rewrite_ballots == 0
+    assert deduction.redirected_ballots.redirected_ballots == 0
+
+
+def test_an_empty_model_body_still_verifies_through_the_suffix_rule() -> None:
+    """The legitimate marker-only record: the model authored an empty rationale.
+
+    It reaches the SUFFIX rule (every string ends with ``""``), so tightening
+    the full-record rule to parse-default costs nothing real.
+    """
+
+    meeting = _one_ballot_meeting(
+        VoteBallot(
+            voter="p-1",
+            target="p-4",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3"),
+        ),
+        (_voter_call("p-1", ""),),
+    )
+    deduction = compute_deduction_metrics(
+        _report_with(meeting, roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"})
+    )
+
+    assert deduction.scaffold_leakage.guard_provenance_verified_ballots == 1
+    assert deduction.scaffold_leakage.guard_marked_ballots == 1
+    assert deduction.scaffold_leakage.guard_target_rewrite_ballots == 1
+    assert deduction.redirected_ballots.redirected_ballots == 1
+
+
+def test_model_counts_cannot_exceed_the_ballots_that_had_a_readable_body(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """Each model net increments only while scanning a pre-guard body.
+
+    A payload claiming no readable model ballots beside positive model leakage
+    is arithmetically impossible, and the fold cannot produce it — so the model
+    must not accept it either.
+    """
+
+    payload = samples_9p2i.deduction.model_dump()
+    leakage = payload["scaffold_leakage"]
+    leakage["model_source_pre_guard_ballots"] = 0
+    leakage["model_source_unavailable_ballots"] = leakage["ballots_total"]
+    with pytest.raises(ValidationError, match="model_partner_naming_ballots"):
+        DeductionMetricsReport.model_validate(payload)
+
+
+def test_player_visible_leak_turns_is_not_bounded_by_ballot_provenance(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """The turn net reads ``free_text``, not a ballot body — a different source.
+
+    Bounding it by the pre-guard BALLOT count would be a category error, so the
+    guard against over-tightening is pinned alongside the bound itself.
+    """
+
+    leakage = samples_9p2i.deduction.scaffold_leakage
+    # The committed set exercises the distinction only if the turn net is
+    # non-trivial and its denominator is the turn total, not the ballot total.
+    assert leakage.player_visible_leak_turns >= 0
+    assert leakage.turns_total > 0
+
+    payload = samples_9p2i.deduction.model_dump()
+    block = payload["scaffold_leakage"]
+    # Zero every model BALLOT net so the pre-guard bound is satisfiable at 0...
+    for field in (
+        "model_partner_naming_ballots",
+        "model_role_statement_ballots",
+        "model_self_kill_disclosure_ballots",
+        "model_omniscient_ballots",
+        "crew_partner_naming_ballots",
+        "crew_omniscient_control_ballots",
+        "model_machinery_quotation_ballots",
+        "model_machinery_vocabulary_ballots",
+    ):
+        block[field] = 0
+    block["model_partner_naming_rate"] = _zeroed(block["model_partner_naming_rate"])
+    block["model_omniscient_rate"] = _zeroed(block["model_omniscient_rate"])
+    block["model_machinery_quotation_share"] = 0.0
+    block["model_source_pre_guard_ballots"] = 0
+    block["model_source_unavailable_ballots"] = block["ballots_total"]
+    # ...and leave the TURN net at its real, positive value. It must survive.
+    block["player_visible_leak_turns"] = 1
+    restored = DeductionMetricsReport.model_validate(payload)
+    assert restored.scaffold_leakage.player_visible_leak_turns == 1
+
+
+def _zeroed(cell: dict[str, object]) -> dict[str, object]:
+    """The same Wilson cell with a zero numerator (denominator preserved)."""
+
+    denominator = cell["denominator"]
+    assert isinstance(denominator, int)
+    rate, low, high = _wilson_interval(0, denominator)
+    return {
+        "numerator": 0,
+        "denominator": denominator,
+        "rate": rate,
+        "wilson_low": low,
+        "wilson_high": high,
+        "advisory": True,
+    }
