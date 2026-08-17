@@ -53,19 +53,22 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, NoReturn
 
-from pydantic import TypeAdapter
-
-from engine.actions import Action
 from engine.entities import PlayerId, Role
 from engine.events import (
     EngineEvent,
     KilledEvent,
-    MeetingTriggeredEvent,
 )
-from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
+from eval.replay_walk import (
+    ReplayWalkConfig,
+    TickAdvanced,
+    TickOpened,
+    WalkComplete,
+    WalkViolation,
+    walk_replay,
+)
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -75,7 +78,6 @@ from eval.report_schema import (
 )
 from llm.budget import GameBudget
 from llm.provider import extract_parse_failure
-from meetings.schemas import MeetingResult
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
@@ -84,7 +86,6 @@ from orchestrator.game import (
     AgentFactory,
     HeadlessGame,
     MeetingRunner,
-    apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
 )
@@ -96,17 +97,11 @@ from orchestrator.replay import (
     ReplayEntry,
     ReplayLogEntry,
     TacticalPolicyStamp,
-    _state_hash,
     compute_cost_usd,
     read_all_entries,
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
-
-# Validates a recorded action row back into a typed :class:`engine.actions.Action`
-# for the kill-gifted engine walk (Task 8.17), mirroring
-# :data:`eval.win_condition_selfcheck._ACTION_ADAPTER`.
-_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 
 # --- Per-game budget configuration (Task 7.7; DESIGN.md §9, §11.4) -----------
@@ -724,25 +719,6 @@ def _kill_gift_accounting(
 
     num_players = len(roles)
     num_impostors = sum(1 for role in roles.values() if role == "IMPOSTOR")
-    game_id = f"headless-seed-{seed}"
-
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
-    game_end = next(
-        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
-    )
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
-    seeded_instance_count = len(state.tasks)
 
     # The events of the advance_tick that ended the game, plus the PRE-tick (=
     # pre-§3.5-drop) state that tick started from; both are only set when the game
@@ -753,58 +729,39 @@ def _kill_gift_accounting(
     final_tick_events: tuple[EngineEvent, ...] = ()
     pre_final_tick_state: WorldState | None = None
     game_over_on_tick = False
+    seeded_instance_count: int | None = None
+    final_state: WorldState | None = None
+    game_end = None
 
-    for entry in tick_entries:
-        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        pre_tick_state = state
-        state, events = advance_tick(state, actions, game_map=game_map)
-        _verify_walk_hash(game_id, entry.tick, entry.state_hash, _state_hash(state))
+    for walk_event in walk_replay(
+        replay_path,
+        seed=seed,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+        config=_KILL_GIFT_WALK_CONFIG,
+    ):
+        if isinstance(walk_event, TickOpened):
+            if seeded_instance_count is None:
+                seeded_instance_count = len(walk_event.state.tasks)
+        elif isinstance(walk_event, TickAdvanced):
+            if walk_event.state.phase == "GAME_OVER":
+                final_tick_events = walk_event.events
+                pre_final_tick_state = walk_event.pre_state
+                game_over_on_tick = True
+        elif isinstance(walk_event, WalkComplete):
+            final_state = walk_event.state
+            game_end = walk_event.game_end
 
-        if state.phase == "GAME_OVER":
-            final_tick_events = tuple(events)
-            pre_final_tick_state = pre_tick_state
-            game_over_on_tick = True
-            break
-        if state.phase != "MEETING":
-            continue
+    if final_state is None or seeded_instance_count is None:
+        # A recorded game always carries at least one tick row; an empty file is
+        # the zero-tick pathology handled by the missing-file default above.
+        return _NO_KILL_GIFT
 
-        meeting_entry = meeting_by_tick.get(entry.tick)
-        if meeting_entry is None:
-            # Partial replay: a meeting opened but never resolved (the run
-            # crashed mid-meeting). Stop the walk here, mirroring the loader's
-            # partial-replay handling.
-            break
-
-        body_id = next(
-            (
-                event.body_id
-                for event in events
-                if isinstance(event, MeetingTriggeredEvent)
-            ),
-            None,
-        )
-        result = MeetingResult(
-            meeting_id=meeting_entry.meeting_id,
-            triggered_by=meeting_entry.triggered_by,
-            trigger_tick=meeting_entry.tick,
-            outcome=meeting_entry.outcome,
-            ejected_player_id=meeting_entry.ejected_player_id,
-            ballots=meeting_entry.ballots,
-            contradictions=meeting_entry.contradictions,
-            transcript=meeting_entry.transcript,
-        )
-        state, _ = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
-        )
-        _verify_walk_hash(
-            game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
-        )
-        if state.phase == "GAME_OVER":
-            break
-
-    instances_dropped = seeded_instance_count - len(state.tasks)
+    instances_dropped = seeded_instance_count - len(final_state.tasks)
     instances_complete_at_win = sum(
-        1 for task in state.tasks.values() if task.completed
+        1 for task in final_state.tasks.values() if task.completed
     )
 
     winner = game_end.winner if game_end is not None else None
@@ -816,7 +773,7 @@ def _kill_gift_accounting(
         and _final_kill_dropped_victim_instance(
             final_tick_events=final_tick_events,
             pre_drop_state=pre_final_tick_state,
-            post_drop_state=state,
+            post_drop_state=final_state,
         )
     )
     return _KillGiftFacts(
@@ -877,22 +834,35 @@ def _final_kill_dropped_victim_instance(
     return False
 
 
-def _verify_walk_hash(game_id: str, tick: int, expected: str, actual: str) -> None:
+def _raise_kill_gift_walk_violation(violation: WalkViolation) -> NoReturn:
     """Fail loud if the kill-gift walk's reconstructed ``state_hash`` diverges.
 
-    Mirrors :func:`eval.win_condition_selfcheck._verify_hash`: a divergence means
-    the roster passed to :func:`_kill_gift_accounting` does not match the
-    recording (or engine playback is non-deterministic), so the derived counts
-    would be wrong -- raise rather than report a misleading number.
+    Mirrors :func:`eval.win_condition_selfcheck._raise_walk_violation`: a
+    divergence means the roster passed to :func:`_kill_gift_accounting` does not
+    match the recording (or engine playback is non-deterministic), so the
+    derived counts would be wrong -- raise rather than report a misleading
+    number.
     """
 
-    if actual != expected:
-        raise ValueError(
-            f"kill-gift accounting reconstruction diverged for {game_id!r} at "
-            f"tick {tick}: recorded {expected!r}, reconstructed {actual!r}. The "
-            "roster passed to _kill_gift_accounting does not match the recording, "
-            "or engine playback is non-deterministic."
-        )
+    raise ValueError(
+        f"kill-gift accounting reconstruction diverged for {violation.game_id!r} at "
+        f"tick {violation.tick}: recorded {violation.expected!r}, reconstructed "
+        f"{violation.actual!r}. The "
+        "roster passed to _kill_gift_accounting does not match the recording, "
+        "or engine playback is non-deterministic."
+    )
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
+# per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
+# meeting, mirroring the loader's partial-replay handling.
+_KILL_GIFT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="kill-gift",
+    on_violation=_raise_kill_gift_walk_violation,
+    verify_tick_hashes=True,
+    missing_meeting_row="truncate",
+    verify_meeting_post_hashes=True,
+)
 
 
 def _tournament_aggregates(
