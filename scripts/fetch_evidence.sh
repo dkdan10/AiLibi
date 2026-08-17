@@ -149,6 +149,16 @@ dest_dirs() {
     sort -u
 }
 
+# The two `tar -C` targets themselves. Deliberately NOT part of dest_dirs —
+# that list also drives `--clean`'s pruning, which must never try to rmdir a
+# destination root. They still need the mtime bookkeeping below: tar writes into
+# them, and GNU tar's default --overwrite unlinks and recreates each file, which
+# moves the root's mtime even on a re-fetch that adds nothing (found while
+# verifying the round-6 fix, PR #346).
+dest_roots() {
+  printf '%s\n' "${COEVO_DEST#"$REPO_ROOT/"}" "${SLATE_DEST#"$REPO_ROOT/"}"
+}
+
 tracked_paths() {
   git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
     training/reports/_finalist_eval_raw | sort
@@ -161,7 +171,24 @@ tracked_paths() {
 # array would grow there and the parent's trap would clean nothing (Codex
 # review, PR #346). `printf -v` keeps this working on bash 3.2 too.
 _scratch=()
+# 1 only between "the first byte may now be written" and "the restore
+# finished". An extraction that dies inside that window — a full disk, a killed
+# tar — otherwise exits under `set -e` BEFORE the directory metadata is put
+# back, leaving tracked-tree directories carrying the archive's mode and date:
+# the corruption rounds 3 and 5 fixed, resurrected on the failure path (Codex
+# review, PR #346; reproduced by capping the file size mid-restore).
+_restore_started=0
 cleanup() {
+  if [[ "$_restore_started" == "1" ]]; then
+    restore_dir_metadata || true
+    echo "" >&2
+    echo "The restore did NOT finish — the destinations hold a PARTIAL copy of" >&2
+    echo "the evidence. Directory metadata has been put back, and the .gitignore" >&2
+    echo "written at each destination BEFORE extraction keeps the partial bytes" >&2
+    echo "out of 'git add -A'. Clear them with:" >&2
+    echo "  bash scripts/fetch_evidence.sh --clean          # whole files" >&2
+    echo "  bash scripts/fetch_evidence.sh --clean --force  # + any half-written one" >&2
+  fi
   if [[ ${#_scratch[@]} -gt 0 ]]; then rm -rf "${_scratch[@]}"; fi
 }
 trap cleanup EXIT
@@ -283,6 +310,50 @@ $GITIGNORE_MARKER
 # file with them.
 *
 IGNORE
+}
+
+# The directory mode/mtime pass, shared by the success path and the EXIT trap so
+# a half-finished restore cannot leave the tracked tree stamped by the archive.
+# Reads two scratch files captured BEFORE extraction: $modes (mode + stamp id +
+# path, for the destination directories that already existed) and $absent
+# (gaining-directory + entry, for every entry that was not on disk yet).
+restore_dir_metadata() {
+  local gained want stamp d parent child repaired n=0
+  gained=""
+  scratch_file gained
+  # A directory GAINED an entry iff one of the entries that was absent before
+  # extraction is on disk now. Deciding that from the ENTRIES, rather than from
+  # each restored file's immediate parent, is what makes it right in three cases
+  # the parents-only list got wrong (Codex review, PR #346, both halves
+  # reproduced): a directory that gains only a new SUBDIRECTORY changed just as
+  # surely as one that gains a file (`intermediates/` gains
+  # `run-03-utility-bcanchor/` and `run-04-freepolicy-v3/` and nothing else — 6
+  # such directories here, all of them handed back their OLD mtime); a re-fetch
+  # that adds nothing must move NO mtime, where the old list moved 462; and a
+  # restore that aborted part-way counts only what actually landed.
+  while IFS=$'\t' read -r parent child; do
+    if [[ -e "$REPO_ROOT/$child" ]]; then printf '%s\n' "$parent"; fi
+  done < "$absent" | sort -u > "$gained"
+
+  while read -r want stamp d; do
+    if [[ -d "$REPO_ROOT/$d" ]]; then
+      repaired=0
+      if [[ "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
+        chmod "$want" "$REPO_ROOT/$d"
+        repaired=1
+      fi
+      if grep -qxF "$d" "$gained"; then
+        # It really did gain entries, so its mtime moved — to now, which is when
+        # that happened, rather than to the evidence commit's date.
+        touch "$REPO_ROOT/$d"
+      else
+        touch -r "$stamps/$stamp" "$REPO_ROOT/$d"
+        repaired=1
+      fi
+      if [[ "$repaired" == "1" ]]; then n=$((n + 1)); fi
+    fi
+  done < "$modes"
+  restored_meta="$n"
 }
 
 # EVERY mode runs this, and it is called HERE — once, before any mode branches —
@@ -468,13 +539,30 @@ if [[ "$mode" == "fetch" ]]; then
       touch -r "$REPO_ROOT/$d" "$stamps/$i"
       printf '%s %s %s\n' "$(file_mode "$REPO_ROOT/$d")" "$i" "$d" >> "$modes"
     fi
-  done < <(dest_dirs)
-  # The directories that actually GAIN entries — their mtime should move, and
-  # to now rather than back. Everything else is an ancestor the restore does
-  # not write into directly, so its original timestamp is the true one.
-  gains=""
-  scratch_file gains
-  restored_paths | sed 's#/[^/]*$##' | sort -u > "$gains"
+  done < <({ dest_roots; dest_dirs; })
+  # Every entry the restore will materialise that is NOT on disk yet, recorded
+  # as "the directory that will gain it" + "the entry itself". Files AND
+  # directories, because a directory entry is a change to its parent too. This
+  # is read back after extraction (`restore_dir_metadata`) to decide which
+  # directories really changed, so the answer stays right whether the restore
+  # adds everything, nothing, or — on the failure path — some of it.
+  absent=""
+  scratch_file absent
+  { restored_paths; dest_dirs; } | sort -u | while IFS= read -r p; do
+    if [[ ! -e "$REPO_ROOT/$p" ]]; then printf '%s\t%s\n' "${p%/*}" "$p"; fi
+  done > "$absent"
+
+  # The ignore files go down BEFORE the first byte, not after the last one.
+  # Their whole job is to keep restored evidence out of `git add -A`, and the
+  # bytes become stageable the moment tar starts writing — so an extraction that
+  # dies half-way (a full disk) previously left ~1,877 untracked paths with
+  # nothing stopping a commit (Codex review, PR #346; reproduced). Writing them
+  # first also covers what no trap can: a SIGKILL, or the power going out.
+  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+    write_gitignore "$dest"
+  done
+
+  _restore_started=1
 
   echo "Restoring coevo/ -> training/artifacts/coevo/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" coevo |
@@ -484,28 +572,11 @@ if [[ "$mode" == "fetch" ]]; then
   git -C "$REPO_ROOT" archive "$PINNED_SHA" finalist-eval-raw |
     tar -x --strip-components=1 -C "$SLATE_DEST"
 
-  restored_meta=0
-  while read -r want stamp d; do
-    if [[ -d "$REPO_ROOT/$d" ]]; then
-      if [[ "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
-        chmod "$want" "$REPO_ROOT/$d"
-        restored_meta=$((restored_meta + 1))
-      fi
-      if grep -qxF "$d" "$gains"; then
-        touch "$REPO_ROOT/$d"
-      else
-        touch -r "$stamps/$stamp" "$REPO_ROOT/$d"
-        restored_meta=$((restored_meta + 1))
-      fi
-    fi
-  done < "$modes"
+  restore_dir_metadata
+  _restore_started=0
   if [[ "$restored_meta" != "0" ]]; then
     echo "Repaired metadata on $restored_meta pre-existing director(ies)."
   fi
-
-  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
-    write_gitignore "$dest"
-  done
 fi
 
 # --------------------------------------------------------------------------- #
