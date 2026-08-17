@@ -594,7 +594,9 @@ def test_kill_gift_profile_bites_tampered_hash(
     seed = _seeds()[0]
     path = _write_game(tmp_path, seed, _flip_first_tick_hash(_game_lines(seed)))
     _, _, tasks_per_crewmate = knobs
-    with pytest.raises(ValueError, match="kill-gift accounting reconstruction diverged"):
+    with pytest.raises(
+        ValueError, match="kill-gift accounting reconstruction diverged"
+    ):
         balance_eval._kill_gift_accounting(
             path,
             seed=seed,

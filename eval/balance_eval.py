@@ -677,8 +677,8 @@ def _kill_gift_accounting(
     engine-rejected, and the task pool completes only via RESOLVED events, so the
     facts must come from re-running the engine, not from the raw rows. This
     re-seeds the game and re-applies the recorded action stream (and meeting
-    outcomes) through :func:`engine.tick.advance_tick` /
-    :func:`orchestrator.game.apply_meeting_result` -- the same read-only playback
+    outcomes) through :func:`eval.replay_walk.walk_replay` under the named
+    ``kill-gift`` profile (Task 19.25) -- the same read-only playback
     :func:`eval.win_condition_selfcheck.check_replay_win_condition` performs --
     verifying every reconstructed ``state_hash`` against the recording so a wrong
     roster (or a determinism break) fails loud rather than yielding misleading
