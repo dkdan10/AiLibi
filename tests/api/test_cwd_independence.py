@@ -58,10 +58,12 @@ print(
 """
 
 
-def _run_probe(cwd: Path) -> dict[str, object]:
+def _run_probe(cwd: Path, *, replay_dir: str | None = None) -> dict[str, object]:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(_REPO_ROOT)
     env.pop(ENV_REPLAY_DIR, None)
+    if replay_dir is not None:
+        env[ENV_REPLAY_DIR] = replay_dir
     proc = subprocess.run(
         [sys.executable, "-c", _PROBE],
         cwd=cwd,
@@ -120,3 +122,31 @@ def test_the_served_corpus_does_not_depend_on_the_working_directory(
     from_foreign = _run_probe(foreign)
 
     assert from_foreign["sets"] == from_repo["sets"]
+
+
+def test_a_relative_configured_replay_dir_is_anchored_too(tmp_path: Path) -> None:
+    """The shipped setters configure a RELATIVE path, so it gets the same test.
+
+    ``scripts/run_spectator.sh`` exports ``AILIBI_REPLAY_DIR=replays/samples`` and
+    ``frontend/playwright.config.ts`` passes the same string. Scrubbing the
+    variable (as the cases above do) would leave the most common real
+    configuration untested — and read against the CWD it lands on the decoy
+    planted here rather than the repo's corpus.
+    """
+
+    foreign = tmp_path / "relative-env-decoy"
+    decoy_set = foreign / "replays" / "samples" / "decoy-set"
+    decoy_set.mkdir(parents=True)
+    (decoy_set / "replay-seed-0.jsonl").write_text("{}\n", encoding="utf-8")
+
+    result = _run_probe(foreign, replay_dir="replays/samples")
+
+    assert result["sets_status"] == 200
+    sets = result["sets"]
+    assert isinstance(sets, dict)
+    assert "decoy-set" not in sets["sets"], (
+        "a relative AILIBI_REPLAY_DIR resolved against the working directory"
+    )
+    # Same answer as the unconfigured run from the repo root: the relative path
+    # names the repo's corpus from a foreign CWD, exactly as it does from home.
+    assert sets == _run_probe(_REPO_ROOT)["sets"]

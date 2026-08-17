@@ -6,8 +6,10 @@ directory holding at least one per-set subdir (a subdir with
 ``replay-seed-*.jsonl``). Since Task 19.24 the fallbacks are anchored to the REPO
 ROOT rather than the process working directory. Covers the resolution ladder:
 
-0. An injected ``replay_dir``: honored verbatim, over everything else.
-1. ``AILIBI_REPLAY_DIR`` set and non-empty: honored verbatim (populated or not).
+0. An injected ``replay_dir``: honored as named, over everything else.
+1. ``AILIBI_REPLAY_DIR`` set and non-empty: honored as named (populated or not).
+   A RELATIVE configured path — injected or env — is resolved against the anchor,
+   never the working directory; an absolute one is never rewritten.
 2. Env var unset, ``<anchor>/replays/`` is a parent of a set subdir: returns it.
 3. Env var unset, ``<anchor>/replays/`` is not a parent, ``<anchor>/replays/
    samples/`` is: returns that.
@@ -62,6 +64,54 @@ def test_env_var_takes_precedence(
     _make_set(tmp_path / "replays" / "samples", "9p2i")
 
     assert _resolve_replay_dir(anchor=tmp_path) == explicit
+
+
+def test_a_relative_env_path_is_anchored_not_read_from_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shipped setters pass RELATIVE paths, so this is the real-world case.
+
+    ``scripts/run_spectator.sh`` exports ``AILIBI_REPLAY_DIR=replays/samples`` and
+    ``frontend/playwright.config.ts`` passes the same. Read against the process
+    CWD, those would resolve to whatever ``replays/samples`` happens to exist next
+    to the caller — the exact ambiguity Task 19.24 removes from the fallbacks.
+    Anchored, they name one directory from everywhere.
+    """
+
+    monkeypatch.setenv(ENV_REPLAY_DIR, "replays/samples")
+    decoy = tmp_path / "decoy"
+    (decoy / "replays" / "samples").mkdir(parents=True)
+    monkeypatch.chdir(decoy)
+
+    assert _resolve_replay_dir(anchor=tmp_path) == tmp_path / "replays" / "samples"
+
+
+def test_an_absolute_configured_path_is_never_rewritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The escape hatch: an operator naming a corpus OUTSIDE the repo gets exactly
+    # that path, injected or configured.
+    outside = tmp_path / "elsewhere" / "corpus"
+    outside.mkdir(parents=True)
+
+    monkeypatch.setenv(ENV_REPLAY_DIR, str(outside))
+    assert _resolve_replay_dir(anchor=tmp_path / "anchor") == outside
+    assert (
+        _resolve_replay_dir(replay_dir=outside, anchor=tmp_path / "anchor") == outside
+    )
+
+
+def test_a_relative_injected_path_is_anchored_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One rule for both configured slots: whoever injects a relative root means it
+    # relative to the project, not to wherever the process was launched.
+    monkeypatch.delenv(ENV_REPLAY_DIR, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    resolved = _resolve_replay_dir(replay_dir=Path("replays/samples"), anchor=tmp_path)
+
+    assert resolved == tmp_path / "replays" / "samples"
 
 
 def test_falls_through_to_replays_dir(
