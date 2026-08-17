@@ -16,6 +16,13 @@ hint):
   carrying its literal ``type`` discriminant, so a TS ``switch (e.type)``
   narrows to the concrete member (the codegen's riskiest spot; pinned by the
   fidelity fixture this script also emits — see ``_render_fidelity``).
+* **The contract version is emitted as a runtime constant** (Task 19.24), not
+  only as the ``viewModelVersion: string`` field type. ``api.schemas`` stamps
+  :data:`api.schemas.VIEW_MODEL_VERSION` onto the served payloads, and
+  ``frontend/src/api/client.ts`` rejects a response whose stamp differs — a check
+  that is only meaningful if both sides read the SAME constant, which is what
+  emitting it here guarantees. A bumped version that is not regenerated fails the
+  drift gate exactly like a DTO change.
 * **Eval report tree is cut at the deliberate stubs.** The served
   ``/eval/tournament-report`` wrapper (``eval.meeting_quality.TournamentEvalReport``)
   is generated so the metric blocks (incl. ``conversion`` / ``gate_metrics``)
@@ -51,6 +58,7 @@ from pydantic import BaseModel  # noqa: E402
 
 import api.schemas as schemas  # noqa: E402
 from api.schemas import (  # noqa: E402
+    VIEW_MODEL_VERSION,
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
@@ -273,12 +281,33 @@ _HEADER: Final[str] = """\
 """
 
 
+def _render_version_constant() -> str:
+    """Emit the view-model contract version as a runtime TS constant (Task 19.24).
+
+    The one VALUE in an otherwise type-only module. It exists so the client's
+    runtime rejection of a mismatched ``viewModelVersion`` compares against the
+    server's own constant rather than a hand-copied literal: bump
+    ``api.schemas.VIEW_MODEL_VERSION`` and the only way to get a green CI is to
+    regenerate, which moves both sides at once.
+    """
+
+    return (
+        "// The view-model contract version (`api.schemas.VIEW_MODEL_VERSION`,\n"
+        "// DESIGN.md §7) the server stamps on every payload that carries one.\n"
+        "// `src/api/client.ts` REJECTS a response whose `viewModelVersion`\n"
+        "// differs from this, so a drifted contract fails loudly at the seam\n"
+        "// instead of mis-rendering; client and server can only move together,\n"
+        "// through this generated line.\n"
+        f"export const VIEW_MODEL_VERSION = {_ts_string_literal(VIEW_MODEL_VERSION)};"
+    )
+
+
 def render_types() -> str:
     gen = _Generator()
     for root in _ROOTS:
         gen.register(root)
 
-    sections: list[str] = [_HEADER.rstrip("\n")]
+    sections: list[str] = [_HEADER.rstrip("\n"), _render_version_constant()]
 
     # Enum aliases (only the ones actually referenced), in config order.
     enum_lines = [
