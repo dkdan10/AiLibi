@@ -138,8 +138,14 @@ restored_paths() {
 # immediate-parents-only list left 13 existing directories out of the
 # mode-preservation pass below (Codex review, PR #346).
 dest_dirs() {
+  # Confined to the two destination roots: the prefix expansion also yields
+  # `training/` and `training/artifacts/`, which sit ABOVE the `tar -C` roots
+  # and so can never be written by a restore. They are dropped rather than
+  # merely harmless, so neither the mode pass nor `--clean`'s pruning reaches a
+  # directory this script does not own.
   restored_paths |
     awk -F/ '{p=""; for (i=1; i<NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    grep -E '^(training/artifacts/coevo|training/reports/_finalist_eval_raw)/' |
     sort -u
 }
 
@@ -156,7 +162,7 @@ tracked_paths() {
 # review, PR #346). `printf -v` keeps this working on bash 3.2 too.
 _scratch=()
 cleanup() {
-  if [[ ${#_scratch[@]} -gt 0 ]]; then rm -f "${_scratch[@]}"; fi
+  if [[ ${#_scratch[@]} -gt 0 ]]; then rm -rf "${_scratch[@]}"; fi
 }
 trap cleanup EXIT
 scratch_file() { # scratch_file VARNAME
@@ -279,11 +285,19 @@ $GITIGNORE_MARKER
 IGNORE
 }
 
+# EVERY mode runs this, and it is called HERE — once, before any mode branches —
+# rather than inside each branch. Three rounds of review found the same defect
+# shape (a guard added to restore but not clean, to directories but not leaves,
+# to immediate parents but not ancestors), and `--verify` was the next instance:
+# it followed a symlinked path and reported the payload fully restored. A single
+# unconditional call is what stops that class, rather than remembering to repeat
+# it (Codex review, PR #346).
+assert_destination_paths_are_plain
+
 # --------------------------------------------------------------------------- #
 # clean                                                                        #
 # --------------------------------------------------------------------------- #
 if [[ "$mode" == "clean" ]]; then
-  assert_destination_paths_are_plain
   assert_gitignores_are_ours_or_absent
 
   # Tracked paths are never removed, whatever the manifest lists, and neither
@@ -315,8 +329,22 @@ if [[ "$mode" == "clean" ]]; then
     done < "$results"
   fi
 
+  # The ignore file goes only when the payload it protects is actually gone.
+  # Removing it unconditionally meant a --clean that KEPT a modified evidence
+  # file (the case above, which exits non-zero) left that file behind with
+  # nothing stopping `git add -A` from staging it (Codex review, PR #346).
   for dest in "$COEVO_DEST" "$SLATE_DEST"; do
-    if gitignore_is_ours "$dest/.gitignore"; then rm -f "$dest/.gitignore"; fi
+    rel="${dest#"$REPO_ROOT/"}"
+    remaining="$(restored_paths | grep -c "^$rel/" || true)"
+    left=0
+    while IFS= read -r r; do
+      if [[ -f "$REPO_ROOT/$r" ]]; then left=$((left + 1)); fi
+    done < <(restored_paths | grep "^$rel/" || true)
+    if [[ "$left" -eq 0 ]] && gitignore_is_ours "$dest/.gitignore"; then
+      rm -f "$dest/.gitignore"
+    elif [[ "$left" -gt 0 ]]; then
+      echo "Kept $rel/.gitignore — $left of $remaining evidence file(s) remain there." >&2
+    fi
   done
 
   # Only directories this restore could have created, deepest first, and only
@@ -380,10 +408,9 @@ if [[ "$mode" == "fetch" ]]; then
   # A restore may only ADD files, so nothing already on disk may be clobbered.
   # Three ways that could happen, all refused BEFORE anything is written.
   #
-  # (1) Anything unexpected on a destination path — see
-  #     assert_destination_paths_are_plain. The two generated .gitignore files
-  #     are not manifest paths, so they get their own ownership check.
-  assert_destination_paths_are_plain
+  # (1) The two generated .gitignore files are not manifest paths, so the
+  #     mode-independent guard above cannot see them; they get their own
+  #     ownership check, here and in --clean, the two modes that touch them.
   assert_gitignores_are_ours_or_absent
 
   # (2) An evidence path that is also a TRACKED path. The moved and retained
@@ -428,9 +455,26 @@ if [[ "$mode" == "fetch" ]]; then
   # that flag is GNU-only and this script also supports the BSD side.
   modes=""
   scratch_file modes
-  dest_dirs | while IFS= read -r d; do
-    if [[ -d "$REPO_ROOT/$d" ]]; then printf '%s %s\n' "$(file_mode "$REPO_ROOT/$d")" "$d"; fi
-  done > "$modes"
+  stamps="$(mktemp -d)"
+  _scratch+=("$stamps")
+  # Mode AND mtime. tar rewrites both from the archive, so a directory that
+  # already existed came back stamped with the evidence commit's timestamp —
+  # a fabricated past date on a tracked-tree directory (Codex review, PR #346).
+  # `touch -r` carries the timestamp portably, with no strftime parsing.
+  i=0
+  while IFS= read -r d; do
+    if [[ -d "$REPO_ROOT/$d" ]]; then
+      i=$((i + 1))
+      touch -r "$REPO_ROOT/$d" "$stamps/$i"
+      printf '%s %s %s\n' "$(file_mode "$REPO_ROOT/$d")" "$i" "$d" >> "$modes"
+    fi
+  done < <(dest_dirs)
+  # The directories that actually GAIN entries — their mtime should move, and
+  # to now rather than back. Everything else is an ancestor the restore does
+  # not write into directly, so its original timestamp is the true one.
+  gains=""
+  scratch_file gains
+  restored_paths | sed 's#/[^/]*$##' | sort -u > "$gains"
 
   echo "Restoring coevo/ -> training/artifacts/coevo/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" coevo |
@@ -440,15 +484,23 @@ if [[ "$mode" == "fetch" ]]; then
   git -C "$REPO_ROOT" archive "$PINNED_SHA" finalist-eval-raw |
     tar -x --strip-components=1 -C "$SLATE_DEST"
 
-  restored_modes=0
-  while read -r want d; do
-    if [[ -d "$REPO_ROOT/$d" && "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
-      chmod "$want" "$REPO_ROOT/$d"
-      restored_modes=$((restored_modes + 1))
+  restored_meta=0
+  while read -r want stamp d; do
+    if [[ -d "$REPO_ROOT/$d" ]]; then
+      if [[ "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
+        chmod "$want" "$REPO_ROOT/$d"
+        restored_meta=$((restored_meta + 1))
+      fi
+      if grep -qxF "$d" "$gains"; then
+        touch "$REPO_ROOT/$d"
+      else
+        touch -r "$stamps/$stamp" "$REPO_ROOT/$d"
+        restored_meta=$((restored_meta + 1))
+      fi
     fi
   done < "$modes"
-  if [[ "$restored_modes" != "0" ]]; then
-    echo "Restored the original mode on $restored_modes pre-existing director(ies)."
+  if [[ "$restored_meta" != "0" ]]; then
+    echo "Repaired metadata on $restored_meta pre-existing director(ies)."
   fi
 
   for dest in "$COEVO_DEST" "$SLATE_DEST"; do

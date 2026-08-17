@@ -48,8 +48,8 @@ more. Measured from the trees themselves, not by subtraction:
 | tracked working tree | files | bytes | MiB |
 |---|---:|---:|---:|
 | before | 3,049 | 374,298,090 | 356.958 |
-| after | 1,669 | 268,616,660 | 256.173 |
-| **net** | **-1,380** | **-105,681,430** | **-100.786** |
+| after | 1,669 | 268,620,686 | 256.177 |
+| **net** | **-1,380** | **-105,677,404** | **-100.782** |
 
 That is a **28.2%** reduction, all of it out of this one directory.
 `replays/` did not move (locked decision 5).

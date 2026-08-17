@@ -1,8 +1,18 @@
 # Artifact classes — what lives in git, and what lives on a pinned sha
 
-This document is the retention rule for every byte this repository produces. It
-is vendor-neutral on purpose: the classes describe *what an artifact is for*,
+This document is the retention rule for every byte this repository **produces**.
+It is vendor-neutral on purpose: the classes describe *what an artifact is for*,
 not which host holds it, so the rule survives a move off GitHub.
+
+**Where the boundary is**, because "every byte" needs one to be checkable:
+this covers *produced* artifacts — recordings, weights, measurements, manifests,
+renders, harness outputs. It does not cover **source** (code, prompt templates,
+the tests themselves, hand-authored assets such as `frontend/src/assets/`),
+**configuration** (`pyproject.toml`, `frontend/package.json`, lockfiles,
+`tsconfig.json`, `.env.example`) or **prose** (`docs/`, `tasks/`,
+`agent_prompts/`, `audits/`, per-package `README.md`), none of which is produced
+by running anything. The registry below is complete against that boundary — a
+family missing from it is a defect in this document, not an unclassified byte.
 
 Anchors: `audits/audit-phase-19-triage.md` §7 item 23 \[C; VERIFIED §8 row 11\]
 (*"define vendor-neutral artifact classes and manifests **before** moving
@@ -70,6 +80,9 @@ than its output preserved.
 |---|---|---|---|
 | `replays/samples/` — the baseline-6 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
+| `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
+| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs) | (a) | in git | 2.1 MB / 19 files |
+| `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
 | `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed-runner verdict, with their sidecars | (a) + (b) | in git | 52 KB / 10 files |
 | `training/artifacts/coevo/` — the 90 retained bytes (rankings, `measurement-stability.json`, the 8 pinned genome dirs, `provenance/`, `PATHS.md`) | (a) + (b) | in git | 495 KiB / 90 files |
@@ -78,6 +91,8 @@ than its output preserved.
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
 | `audits/` — the audit record | (b) | in git | 4.8 MB / 97 files |
 | `docs/media/` — the README capture + screenshot | (a) | in git | 1.7 MB / 3 files |
+| `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
+| `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate (Task 19.21's outcome, below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
