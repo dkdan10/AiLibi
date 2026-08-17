@@ -21,41 +21,34 @@ invariant is vacuously satisfied.
 
 The replay JSONL persists only ``state_hash`` + the recorded action stream
 (``orchestrator/replay.py``), never per-tick alive flags, so this module
-re-seeds the engine and re-applies the recorded actions through
-:func:`engine.tick.advance_tick` / :func:`orchestrator.game.apply_meeting_result`
-to recover the alive-impostor count per tick — the same read-only engine
-playback :class:`api.replay_loader.ReplayLoader` and :mod:`eval.leak_test`
-already perform (``eval`` is the privileged eval surface, not behind the
-observation firewall). Every reconstructed ``state_hash`` is checked against the
-recording, so a wrong roster or a determinism break fails loud rather than
-silently producing a misleading tick.
+reconstructs the recording through :func:`eval.replay_walk.walk_replay` under
+its named ``win-condition-selfcheck`` profile (Task 19.25; the walker's
+docstring is the profile drift record) to recover the alive-impostor count per
+tick (``eval`` is the privileged eval surface, not behind the observation
+firewall). The profile verifies every per-tick ``state_hash`` and each
+meeting's ``state_hash_after`` against the recording, so a wrong roster or a
+determinism break fails loud rather than silently producing a misleading tick,
+and tolerates a partial-meeting replay by truncating the walk there — matching
+the loader's partial-replay handling.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, NoReturn
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict
 
-from engine.actions import Action
-from engine.events import MeetingTriggeredEvent
-from engine.tick import advance_tick
-from engine.world import Map, load_canonical_map
-from meetings.schemas import MeetingResult
-from orchestrator.game import apply_meeting_result
-from orchestrator.replay import (
-    GameEndReplayEntry,
-    MeetingReplayEntry,
-    ReplayEntry,
-    WinnerSide,
-    _state_hash,
-    read_all_entries,
+from engine.world import Map, WorldState, load_canonical_map
+from eval.replay_walk import (
+    MeetingApplied,
+    ReplayWalkConfig,
+    TickAdvanced,
+    WalkComplete,
+    WalkViolation,
+    walk_replay,
 )
-from orchestrator.seeder import seed_initial_state
-
-_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
+from orchestrator.replay import GameEndReplayEntry, WinnerSide
 
 
 def win_condition_is_consistent(
@@ -155,26 +148,10 @@ def check_replay_win_condition(
     resolved_map = game_map if game_map is not None else load_canonical_map()
     game_id = f"headless-seed-{seed}"
 
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
-    game_end = next(
-        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
-    )
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=resolved_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
-
     first_zero_impostor_tick: int | None = None
+    game_end: GameEndReplayEntry | None = None
 
-    def _record_zero(tick: int) -> None:
+    def _record_zero(tick: int, state: WorldState) -> None:
         nonlocal first_zero_impostor_tick
         if first_zero_impostor_tick is not None:
             return
@@ -186,51 +163,19 @@ def check_replay_win_condition(
         if alive_impostors == 0:
             first_zero_impostor_tick = tick
 
-    for entry in tick_entries:
-        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        state, events = advance_tick(state, actions, game_map=resolved_map)
-        _verify_hash(game_id, entry.tick, entry.state_hash, _state_hash(state))
-        _record_zero(entry.tick)
-
-        if state.phase == "GAME_OVER":
-            break
-        if state.phase != "MEETING":
-            continue
-
-        meeting_entry = meeting_by_tick.get(entry.tick)
-        if meeting_entry is None:
-            # Partial replay: a meeting opened but never resolved (the run
-            # crashed mid-meeting). The recorded timeline stops here, so stop the
-            # walk — matching the loader's partial-replay handling.
-            break
-
-        body_id = next(
-            (
-                event.body_id
-                for event in events
-                if isinstance(event, MeetingTriggeredEvent)
-            ),
-            None,
-        )
-        result = MeetingResult(
-            meeting_id=meeting_entry.meeting_id,
-            triggered_by=meeting_entry.triggered_by,
-            trigger_tick=meeting_entry.tick,
-            outcome=meeting_entry.outcome,
-            ejected_player_id=meeting_entry.ejected_player_id,
-            ballots=meeting_entry.ballots,
-            contradictions=meeting_entry.contradictions,
-            transcript=meeting_entry.transcript,
-        )
-        state, _ = apply_meeting_result(
-            state, result, game_map=resolved_map, triggering_body_id=body_id
-        )
-        _verify_hash(
-            game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
-        )
-        _record_zero(meeting_entry.tick)
-        if state.phase == "GAME_OVER":
-            break
+    for event in walk_replay(
+        replay_path,
+        seed=seed,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=resolved_map,
+        config=_WALK_CONFIG,
+    ):
+        if isinstance(event, (TickAdvanced, MeetingApplied)):
+            _record_zero(event.entry.tick, event.state)
+        elif isinstance(event, WalkComplete):
+            game_end = event.game_end
 
     return WinConditionSelfCheck(
         game_id=game_id,
@@ -242,16 +187,28 @@ def check_replay_win_condition(
     )
 
 
-def _verify_hash(game_id: str, tick: int, expected: str, actual: str) -> None:
-    """Fail loud if a reconstructed ``state_hash`` diverges from the recording."""
+def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    """Fail loud when a reconstructed ``state_hash`` diverges from the recording."""
 
-    if actual != expected:
-        raise ValueError(
-            f"win-condition self-check reconstruction diverged for {game_id!r} at "
-            f"tick {tick}: recorded {expected!r}, reconstructed {actual!r}. The "
-            "roster passed to check_replay_win_condition does not match the "
-            "recording, or engine playback is non-deterministic."
-        )
+    raise ValueError(
+        f"win-condition self-check reconstruction diverged for "
+        f"{violation.game_id!r} at tick {violation.tick}: recorded "
+        f"{violation.expected!r}, reconstructed {violation.actual!r}. The "
+        "roster passed to check_replay_win_condition does not match the "
+        "recording, or engine playback is non-deterministic."
+    )
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
+# per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
+# meeting — this pass deliberately serves what a recording contains.
+_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="win-condition-selfcheck",
+    on_violation=_raise_walk_violation,
+    verify_tick_hashes=True,
+    missing_meeting_row="truncate",
+    verify_meeting_post_hashes=True,
+)
 
 
 __all__ = [
