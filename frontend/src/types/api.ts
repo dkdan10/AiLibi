@@ -13,6 +13,14 @@
 // tsconfig `exactOptionalPropertyTypes`). Discriminated unions carry the
 // literal `type` discriminant so a `switch (e.type)` narrows to the member.
 
+// The view-model contract version (`api.schemas.VIEW_MODEL_VERSION`,
+// DESIGN.md §7) the server stamps on every payload that carries one.
+// `src/api/client.ts` REJECTS a response whose `viewModelVersion`
+// differs from this, so a drifted contract fails loudly at the seam
+// instead of mis-rendering; client and server can only move together,
+// through this generated line.
+export const VIEW_MODEL_VERSION = "1";
+
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
 export type AgentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE";
 export type Winner = "CREWMATES" | "IMPOSTORS";

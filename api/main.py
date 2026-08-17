@@ -15,16 +15,26 @@ from api.routes import eval as eval_routes
 from api.routes import replays as replays_routes
 from api.routes import sets as sets_routes
 
+# The repo anchor (Task 19.24). The fallback replay directories are resolved
+# against the directory this file lives in — ``api/main.py`` -> repo root — and
+# NEVER against the process working directory. The old ``Path("./replays")``
+# fallbacks made app construction a function of where the interpreter happened to
+# be started: importing ``api.main`` from anywhere but the repo root raised at
+# import time (this module builds ``app`` at module scope for
+# ``uvicorn api.main:app``), and a run started from a subdirectory silently found
+# a different — or no — corpus. An anchored path answers the same question the
+# same way from every CWD.
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
+
 # Env var (documented in .env.example) configuring the PARENT directory of the
 # per-set replay subdirs (Task 12.12; ``replays/samples/`` -> ``4p1i/``, ``9p2i/``,
-# + future). When unset, falls through to ``./replays/`` then ``./replays/samples/``
-# — see ``_resolve_replay_dir`` below. The per-set loader resolves
-# ``<parent>/<set>/`` (``api.replay_loader.SetLoaderRegistry``).
+# + future). When unset, falls through to ``<repo>/replays/`` then
+# ``<repo>/replays/samples/`` — see ``_resolve_replay_dir`` below. The per-set
+# loader resolves ``<parent>/<set>/`` (``api.replay_loader.SetLoaderRegistry``).
 ENV_REPLAY_DIR: Final[str] = "AILIBI_REPLAY_DIR"
-_FALLBACK_PATHS: Final[tuple[Path, ...]] = (
-    Path("./replays"),
-    Path("./replays/samples"),
-)
+# Fallback slots RELATIVE TO THE ANCHOR (joined in ``_resolve_replay_dir``), in
+# priority order.
+_FALLBACK_RELATIVE_PATHS: Final[tuple[str, ...]] = ("replays", "replays/samples")
 
 # Optional comma-separated cross-origin allowlist (documented in
 # docs/deployment.md and .env.example). The spectator API is an
@@ -82,27 +92,59 @@ def _has_set_subdir(parent: Path) -> bool:
     return bool(SetLoaderRegistry(parent).available_sets())
 
 
-def _resolve_replay_dir() -> Path:
+def _anchored(path: Path, anchor: Path) -> Path:
+    """Return ``path`` as given if absolute, else resolved against ``anchor``.
+
+    A CONFIGURED path may be relative — the two setters that ship in this repo
+    both are (``scripts/run_spectator.sh`` exports ``replays/samples``,
+    ``frontend/playwright.config.ts`` passes the same). Both run the server from
+    the repo root, so anchoring resolves them to exactly the directory they mean
+    today; what it removes is the case where they DON'T, which is the whole point
+    of Task 19.24: a relative configured path read against the process CWD is the
+    same "which corpus is this?" ambiguity the fallbacks had.
+
+    An absolute path is never rewritten, so an operator pointing at a corpus
+    outside the repo is unaffected — and that is the escape hatch for anyone who
+    genuinely wants a directory the anchor cannot name.
+    """
+
+    return path if path.is_absolute() else anchor / path
+
+
+def _resolve_replay_dir(
+    *, replay_dir: Path | None = None, anchor: Path = _REPO_ROOT
+) -> Path:
     """Resolve the PARENT replay directory (a parent of per-set subdirs).
 
-    Priority: explicit env var, then ``./replays/``, then ``./replays/samples/``.
-    A fallback slot wins when it is a directory holding at least one per-set subdir
-    (Task 12.12). The env-var slot is honored as-is — populated or not — so callers
-    setting it deliberately get a clear registry-level error if the path is wrong,
-    rather than silent fallthrough.
+    Priority: the INJECTED ``replay_dir``, then the explicit env var, then
+    ``<anchor>/replays/``, then ``<anchor>/replays/samples/``. A fallback slot
+    wins when it is a directory holding at least one per-set subdir (Task 12.12).
+    The injected and env-var slots are honored as named — populated or not — so a
+    caller that named a root deliberately gets a clear registry-level error if the
+    path is wrong, rather than silent fallthrough; a RELATIVE one is resolved
+    against the anchor (:func:`_anchored`) rather than the working directory.
+
+    ``anchor`` defaults to the repo root and is a parameter only so tests can
+    exercise the ladder hermetically; nothing resolves against the process
+    working directory (Task 19.24), so where the server was started from cannot
+    change which corpus it serves.
     """
+
+    if replay_dir is not None:
+        return _anchored(replay_dir, anchor)
 
     explicit = os.environ.get(ENV_REPLAY_DIR, "").strip()
     if explicit:
-        return Path(explicit)
+        return _anchored(Path(explicit), anchor)
 
-    for candidate in _FALLBACK_PATHS:
+    candidates = tuple(anchor / relative for relative in _FALLBACK_RELATIVE_PATHS)
+    for candidate in candidates:
         if _has_set_subdir(candidate):
             return candidate
 
     raise RuntimeError(
         f"No replay sets found. Tried: ${ENV_REPLAY_DIR}, "
-        f"{_FALLBACK_PATHS[0]}, {_FALLBACK_PATHS[1]}. Each must be a parent of "
+        f"{candidates[0]}, {candidates[1]}. Each must be a parent of "
         "per-set subdirs (e.g. replays/samples/4p1i/). "
         "Run `bash scripts/run_spectator.sh` or record into a NAMED set subdir "
         "with `uv run python scripts/run_game.py --seed 0 "
@@ -149,7 +191,17 @@ def _parse_cors_origins(raw: str | None) -> list[str]:
     return origins
 
 
-def create_app() -> FastAPI:
+def create_app(*, replay_dir: Path | None = None) -> FastAPI:
+    """Build the spectator app, serving replays from a CWD-INDEPENDENT root.
+
+    ``replay_dir`` is the injection seam: pass a parent-of-per-set-subdirs and it
+    wins outright. Otherwise the root comes from ``AILIBI_REPLAY_DIR`` or, failing
+    that, from the repo anchor (see :func:`_resolve_replay_dir`) — never from the
+    working directory, including when the injected or configured path is itself
+    relative, so ``import api.main`` and every request it then serves behave
+    identically wherever the process was started.
+    """
+
     app = FastAPI(
         title="AiLibi API",
         version="0.1.0",
@@ -172,7 +224,7 @@ def create_app() -> FastAPI:
     # ``get_replay_loader`` / ``get_loader_registry`` dependencies (which read it
     # back off app.state). It serves ALL recorded sets in one run; per-set loaders
     # are built lazily on first request and cached (Task 12.12).
-    parent_dir = _resolve_replay_dir()
+    parent_dir = _resolve_replay_dir(replay_dir=replay_dir)
     registry = SetLoaderRegistry(parent_dir)
     _announce(parent_dir, registry.available_sets())
     app.state.loader_registry = registry

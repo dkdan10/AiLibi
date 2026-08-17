@@ -12,6 +12,7 @@
 // parallel client, no second set of methods, and nothing downstream of
 // `apiUrl()` knows which mode it is in.
 
+import { VIEW_MODEL_VERSION } from "../types/api";
 import type {
   AgentMemoryView,
   EvalCostSummaryView,
@@ -69,6 +70,68 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Raised when a response carries a `viewModelVersion` this build was not
+ * generated against (Task 19.24).
+ *
+ * A separate class from `ApiError` on purpose: the request SUCCEEDED — the
+ * transport is fine and the status was 2xx. What failed is the contract, and the
+ * only useful reaction is to rebuild or redeploy one of the two halves, not to
+ * retry.
+ */
+export class ViewModelVersionError extends Error {
+  readonly url: string;
+  readonly expected: string;
+  readonly received: string;
+
+  constructor(url: string, expected: string, received: string) {
+    super(
+      `View-model contract mismatch from ${url}: this build expects ` +
+        `viewModelVersion ${JSON.stringify(expected)} but the server sent ` +
+        `${JSON.stringify(received)}. The frontend types are generated from ` +
+        `the API DTOs — regenerate with ` +
+        `\`uv run python scripts/gen_frontend_types.py\` and rebuild, or serve ` +
+        `a matching API.`,
+    );
+    this.name = "ViewModelVersionError";
+    this.url = url;
+    this.expected = expected;
+    this.received = received;
+  }
+}
+
+/**
+ * Reject a payload stamped with a foreign contract version.
+ *
+ * The rule is "if it is stamped, it must match" — deliberately not "every
+ * payload must be stamped". The server stamps only the payloads whose DTO
+ * declares the field (`ReplayView`, `RubricView`); a `TickView`, a `MeetingView`
+ * or `GET /sets` carries no stamp and never did. Keying off the field's PRESENCE
+ * means this side needs no hand-maintained list of which endpoints are
+ * versioned, so adding the stamp to another DTO protects that endpoint the
+ * moment the types are regenerated — nothing here to forget to update.
+ *
+ * A stamp that is present but not a string is itself a contract break (the
+ * field is `viewModelVersion: string`), so it is rejected rather than coerced.
+ */
+function assertViewModelVersion(data: unknown, url: string): void {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return;
+  }
+  if (!("viewModelVersion" in data)) {
+    return;
+  }
+  const received = (data as { viewModelVersion: unknown }).viewModelVersion;
+  if (received === VIEW_MODEL_VERSION) {
+    return;
+  }
+  throw new ViewModelVersionError(
+    url,
+    VIEW_MODEL_VERSION,
+    typeof received === "string" ? received : JSON.stringify(received),
+  );
+}
+
 async function getJson<T>(url: string): Promise<T> {
   let response: Response;
   try {
@@ -81,13 +144,19 @@ async function getJson<T>(url: string): Promise<T> {
     const body = await response.text().catch(() => "");
     throw new ApiError(response.status, url, body);
   }
+  let data: unknown;
   try {
-    const data: unknown = await response.json();
-    return data as T;
+    data = await response.json();
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     throw new ApiError(response.status, url, `invalid JSON response: ${message}`);
   }
+  // The one thing checked at runtime before the cast below. `data as T` is a
+  // compile-time claim about bytes nobody validated; asserting the contract
+  // version is what makes that claim survive a server on a different version —
+  // beyond it, the generated types and the DTO drift gate are the guarantee.
+  assertViewModelVersion(data, url);
+  return data as T;
 }
 
 /**
