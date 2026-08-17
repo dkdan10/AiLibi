@@ -103,18 +103,14 @@ subgroup is empty.
 
 Reconstruction walk + fail-loud contract
 ----------------------------------------
-The per-game walk MIRRORS ``eval.watchability._reconstruct_game_kills`` (the
-kill-reconstruction precedent this fold extends, engine/events.py:76) and
-``eval.funnel._walk_game`` (the fail-loud instrument-walk precedent): re-seed via
-:func:`orchestrator.seeder.seed_initial_state`, feed the recorded actions through
-:func:`engine.tick.advance_tick`, verify every ``state_hash``, and on a MEETING
-tick rebuild the :class:`~meetings.schemas.MeetingResult` and apply it via
-:func:`orchestrator.game.apply_meeting_result` (verifying
-``state_hash_before`` / ``state_hash_after``). Neither private walk is imported:
-neither exposes the per-tick occupancy, the recorded per-actor actions, and the
-cooldown state this fold needs, and the referee (``eval/watchability.py``) is out
-of scope — so the walk is duplicated locally, and **the duplication is noted for
-Phase 19's review**.
+The per-game walk is :func:`eval.replay_walk.walk_replay` under the named
+``kill-craft`` profile (Task 19.25 closed the disclosed duplication this
+paragraph used to note): re-seed, feed the recorded actions through the engine,
+verify every ``state_hash`` (per-tick plus each meeting's ``state_hash_before``
+/ ``state_hash_after``), and rebuild + apply each meeting row. The per-tick
+occupancy, recorded per-actor actions, and cooldown state this fold needs are
+read off the walker's ``TickOpened`` pre-advance seam; the entropy and kill
+folds below consume the typed walk events.
 
 Fail-loud instrument semantics (the funnel precedent, NOT watchability's
 floor-the-set referee semantics): :class:`KillCraftReconstructionError` is raised
@@ -198,28 +194,22 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Final, NoReturn
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict
 
-from engine.actions import Action
 from engine.entities import PlayerId, PlayerState, Role, RoomId
-from engine.events import KilledEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick
+from engine.events import KilledEvent
 from engine.world import Map, load_canonical_map
-from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
-from meetings.schemas import MeetingResult
-from orchestrator.game import apply_meeting_result
-from orchestrator.replay import (
-    GameEndReplayEntry,
-    MeetingReplayEntry,
-    ReplayEntry,
-    _state_hash,
-    read_all_entries,
+from eval.replay_walk import (
+    ReplayWalkConfig,
+    TickAdvanced,
+    TickOpened,
+    WalkViolation,
+    walk_replay,
 )
-from orchestrator.seeder import seed_initial_state
-
-_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
+from orchestrator.replay import ReplayEntry
 
 # Occupancy-band edges (Fold 2): solo when <= 1, pair when == 2, crowd when >= 3.
 _SOLO_MAX = 1
@@ -402,13 +392,8 @@ def compute_kill_craft_report(sample_dir: Path) -> KillCraftReport:
 
 
 # --------------------------------------------------------------------------- #
-# The reconstruction walk (mirrors watchability._reconstruct_game_kills +      #
-# funnel._walk_game; see the module docstring's mirror/duplication note).      #
+# The reconstruction walk (eval.replay_walk under the 'kill-craft' profile).   #
 # --------------------------------------------------------------------------- #
-
-
-def _deserialize_actions(raw_actions: Sequence[Mapping[str, Any]]) -> list[Action]:
-    return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
 
 
 def _walk_game(
@@ -421,146 +406,136 @@ def _walk_game(
     roles: Mapping[PlayerId, Role],
     game_map: Map,
 ) -> _GameWalk:
-    """Re-seed + replay one game, folding both kill-craft measures per tick."""
+    """Re-seed + replay one game, folding both kill-craft measures per tick.
+
+    :func:`eval.replay_walk.walk_replay` under the named ``kill-craft`` profile
+    (Task 19.25; the walker's docstring is the drift record): the referee-grade
+    check set MINUS ballot-tally and forged-outcome verification (the folds
+    never read ballots or the recorded winner), every violation carrying its
+    own fail-loud message via :func:`_raise_walk_violation`.
+    """
 
     game_id = f"headless-seed-{seed}"
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_entries = [
-        entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    ]
-    meeting_by_tick: dict[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in meeting_entries
-    }
-    # A doubled meeting row (same tick or meeting id) would be silently collapsed
-    # by the dict above, leaving the dropped row's before/after hashes never
-    # validated (mirrors the watchability duplicate-meeting-row rejection).
-    if len(meeting_by_tick) != len(meeting_entries) or len(
-        {entry.meeting_id for entry in meeting_entries}
-    ) != len(meeting_entries):
+    walk = _GameWalk()
+    for walk_event in walk_replay(
+        replay_path,
+        seed=seed,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+        config=_WALK_CONFIG,
+    ):
+        if isinstance(walk_event, TickOpened):
+            # The pre-advance decision state: the recorded actions were decided
+            # here, and it is the census frame for both folds (see the docstring).
+            _fold_entropy(
+                entry=walk_event.entry,
+                game_id=game_id,
+                pre_players=walk_event.state.players,
+                pre_cooldowns=walk_event.state.cooldowns,
+                agent_counts=walk.agent_counts,
+            )
+        elif isinstance(walk_event, TickAdvanced):
+            for event in walk_event.events:
+                if isinstance(event, KilledEvent):
+                    walk.kills.append(
+                        _kill_row(
+                            seed,
+                            event,
+                            walk_event.pre_state.players,
+                            roles,
+                            game_map,
+                        )
+                    )
+    return walk
+
+
+def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    """The ``kill-craft`` profile's violation hook — one fail-loud message per kind."""
+
+    game_id = violation.game_id
+    if violation.kind == "duplicate_meeting_rows":
+        # A doubled meeting row (same tick or meeting id) would be silently
+        # collapsed by a tick-keyed lookup, leaving the dropped row's
+        # before/after hashes never validated (mirrors the watchability
+        # duplicate-meeting-row rejection).
         raise KillCraftReconstructionError(
             f"{game_id}: duplicate meeting rows (same tick or meeting id) — the "
             "collapsed duplicate's hashes would never be validated"
         )
-    game_end = next(
-        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
-    )
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
-
-    walk = _GameWalk()
-    terminal_tick: int | None = None
-    for entry in tick_entries:
-        # The pre-advance decision state: the recorded actions were decided here,
-        # and it is the census frame for both folds (see the docstring).
-        pre_players = state.players
-        pre_cooldowns = state.cooldowns
-
-        _fold_entropy(
-            entry=entry,
-            game_id=game_id,
-            pre_players=pre_players,
-            pre_cooldowns=pre_cooldowns,
-            agent_counts=walk.agent_counts,
-        )
-
-        actions = _deserialize_actions(entry.actions)
-        state, events = advance_tick(state, actions, game_map=game_map)
-        actual = _state_hash(state)
-        if actual != entry.state_hash:
-            raise KillCraftReconstructionError(
-                f"{game_id}: tick {entry.tick} reconstructed {actual!r} != recorded "
-                f"{entry.state_hash!r} (roster mismatch or engine non-determinism)"
-            )
-
-        for event in events:
-            if isinstance(event, KilledEvent):
-                walk.kills.append(_kill_row(seed, event, pre_players, roles, game_map))
-
-        if state.phase == "GAME_OVER":
-            terminal_tick = entry.tick
-            break
-        if state.phase != "MEETING":
-            continue
-
-        meeting_entry = meeting_by_tick.get(entry.tick)
-        if meeting_entry is None:
-            raise KillCraftReconstructionError(
-                f"{game_id}: tick {entry.tick} entered MEETING but the replay "
-                "carries no meeting row for that tick (partial recording or "
-                "drifted meeting tick) — refusing to silently under-measure"
-            )
-        if meeting_entry.state_hash_before != actual:
-            raise KillCraftReconstructionError(
-                f"{game_id}: meeting at tick {entry.tick} recorded state_hash_before "
-                f"{meeting_entry.state_hash_before!r} != reconstructed pre-meeting "
-                f"state {actual!r}"
-            )
-
-        body_id = next(
-            (e.body_id for e in events if isinstance(e, MeetingTriggeredEvent)), None
-        )
-        result = MeetingResult(
-            meeting_id=meeting_entry.meeting_id,
-            triggered_by=meeting_entry.triggered_by,
-            trigger_tick=meeting_entry.tick,
-            outcome=meeting_entry.outcome,
-            ejected_player_id=meeting_entry.ejected_player_id,
-            ballots=meeting_entry.ballots,
-            contradictions=meeting_entry.contradictions,
-            transcript=meeting_entry.transcript,
-        )
-        state, _post_events = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
-        )
-        after = _state_hash(state)
-        if after != meeting_entry.state_hash_after:
-            raise KillCraftReconstructionError(
-                f"{game_id}: meeting at tick {entry.tick} reconstructed {after!r} != "
-                f"recorded {meeting_entry.state_hash_after!r}"
-            )
-        if state.phase == "GAME_OVER":
-            terminal_tick = entry.tick
-            break
-
-    # Every committed game terminates: falling out of the entry loop means the
-    # bytes ended while the game was still in play — an EOF-truncated recording
-    # whose kills / actions would otherwise be silently under-counted.
-    if terminal_tick is None:
+    if violation.kind == "tick_hash_mismatch":
         raise KillCraftReconstructionError(
-            f"{game_id}: replay bytes end with phase {state.phase!r} at tick "
-            f"{state.tick} — the game never reached GAME_OVER (truncated / partial "
+            f"{game_id}: tick {violation.tick} reconstructed {violation.actual!r} "
+            f"!= recorded "
+            f"{violation.expected!r} (roster mismatch or engine non-determinism)"
+        )
+    if violation.kind == "missing_meeting_row":
+        raise KillCraftReconstructionError(
+            f"{game_id}: tick {violation.tick} entered MEETING but the replay "
+            "carries no meeting row for that tick (partial recording or "
+            "drifted meeting tick) — refusing to silently under-measure"
+        )
+    if violation.kind == "meeting_pre_hash_mismatch":
+        raise KillCraftReconstructionError(
+            f"{game_id}: meeting at tick {violation.tick} recorded "
+            f"state_hash_before "
+            f"{violation.expected!r} != reconstructed pre-meeting "
+            f"state {violation.actual!r}"
+        )
+    if violation.kind == "meeting_post_hash_mismatch":
+        raise KillCraftReconstructionError(
+            f"{game_id}: meeting at tick {violation.tick} reconstructed "
+            f"{violation.actual!r} != "
+            f"recorded {violation.expected!r}"
+        )
+    if violation.kind == "missing_terminal_tick":
+        # Every committed game terminates: bytes that end while the game is
+        # still in play are an EOF-truncated recording whose kills / actions
+        # would otherwise be silently under-counted.
+        raise KillCraftReconstructionError(
+            f"{game_id}: replay bytes end with phase {violation.phase!r} at tick "
+            f"{violation.state_tick} — the game never reached GAME_OVER "
+            "(truncated / partial "
             "recording); refusing to silently under-measure"
         )
-    # And no replay row may follow the terminal event: the walk stops at
-    # GAME_OVER, so trailing tick / meeting rows carry recorded actions and
-    # meetings it never validated or folded (mirrors the watchability
-    # trailing-row rejection, with instrument fail-loud semantics).
-    if any(entry.tick > terminal_tick for entry in tick_entries) or any(
-        tick > terminal_tick for tick in meeting_by_tick
-    ):
+    if violation.kind == "trailing_replay_rows":
+        # The walk stops at GAME_OVER, so trailing tick / meeting rows carry
+        # recorded actions and meetings it never validated or folded (mirrors
+        # the watchability trailing-row rejection, fail-loud).
         raise KillCraftReconstructionError(
             f"{game_id}: replay rows recorded after the terminal GAME_OVER tick "
-            f"{terminal_tick} — trailing bytes the walk never validated or "
+            f"{violation.terminal_tick} — trailing bytes the walk never "
+            "validated or "
             "folded; refusing to silently under-measure"
         )
-    # A complete recording also stamps its terminal game_over row: a file
-    # truncated BETWEEN the terminal tick and that stamp still sets
-    # ``terminal_tick``, so completeness requires the row itself (mirrors the
-    # missing-terminal-outcome check in ``eval.watchability``).
-    if game_end is None:
+    if violation.kind == "missing_game_end_row":
+        # A file truncated BETWEEN the terminal tick and the game_over stamp
+        # still reconstructs to GAME_OVER, so completeness requires the row
+        # itself (mirrors eval.watchability's missing-terminal-outcome check).
         raise KillCraftReconstructionError(
             f"{game_id}: no game_over row recorded — an incomplete recording "
             "(the recorder always stamps the terminal outcome); refusing to "
             "certify partial bytes"
         )
-    return walk
+    raise KillCraftReconstructionError(  # pragma: no cover - profile never enables it
+        f"{game_id}: unexpected walk violation {violation.kind!r}"
+    )
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record).
+_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="kill-craft",
+    on_violation=_raise_walk_violation,
+    verify_tick_hashes=True,
+    reject_duplicate_meeting_rows=True,
+    missing_meeting_row="violation",
+    verify_meeting_pre_hashes=True,
+    verify_meeting_post_hashes=True,
+    require_terminal_tick=True,
+    reject_trailing_rows=True,
+    require_game_end_row=True,
+)
 
 
 def _fold_entropy(
