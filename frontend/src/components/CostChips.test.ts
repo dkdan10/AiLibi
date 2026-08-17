@@ -78,6 +78,7 @@ describe("costToFrame", () => {
       inputTokens: 0,
       outputTokens: 0,
       costUsd: 0,
+      tokensComplete: true,
     });
   });
 
@@ -121,9 +122,43 @@ describe("costToFrame", () => {
     const cost = costToFrame(MEETINGS, failures, 14);
     expect(cost.failedCalls).toBe(1); // the tick-40 failure is still the future
     expect(cost.costUsd).toBeCloseTo(0.06 + 0.005, 10);
-    // A failed call recorded no tokens, so it moves neither token counter.
-    expect(cost.inputTokens).toBe(6_000);
-    expect(cost.outputTokens).toBe(600);
+  });
+
+  it("marks the token counters INCOMPLETE once a failed call is in range", () => {
+    // `FailedCallReplayEntry` requires `input_tokens` / `output_tokens` — the row
+    // exists precisely to capture the tokens a crashed call already burned, and
+    // `eval/balance_eval.py::_cost_summary` folds them into the eval totals. The
+    // served `FailedCallView` does not carry them (`_failed_call_view` drops
+    // them), so this surface CANNOT count them and must not present its figure
+    // as the token spend. Widening the DTO is `api/` work, out of scope here.
+    const failures = [failedCall(9, 0.005), failedCall(40, 0.5)];
+
+    // Before the failure: complete, and the chips render a bare number.
+    const before = costToFrame(MEETINGS, failures, 7);
+    expect(before.tokensComplete).toBe(true);
+
+    // At/after it: a LOWER BOUND, and the flag is what makes the chips say `≥`.
+    const after = costToFrame(MEETINGS, failures, 14);
+    expect(after.tokensComplete).toBe(false);
+    // The counters still carry every token they legitimately know about — the
+    // flag qualifies the number, it does not discard it.
+    expect(after.inputTokens).toBe(6_000);
+    expect(after.outputTokens).toBe(600);
+    // …and the DOLLARS remain complete: `cost_usd` IS on the served DTO.
+    expect(after.costUsd).toBeCloseTo(0.06 + 0.005, 10);
+  });
+
+  it("keys incompleteness on the PRESENCE of a failed call, not on a token count", () => {
+    // The DTO carries no tokens for a failed call, so "how short is this" is
+    // unknowable here — even a zero-dollar failure has to flip the flag.
+    const cost = costToFrame([], [failedCall(3, 0)], 5);
+    expect(cost.failedCalls).toBe(1);
+    expect(cost.tokensComplete).toBe(false);
+    expect(cost.inputTokens).toBe(0);
+  });
+
+  it("stays complete for a game with no failed calls at all", () => {
+    expect(costToFrame(MEETINGS, NO_FAILURES, 35).tokensComplete).toBe(true);
   });
 
   it("holds the recorded $0 of the flat-rate provider without inventing a price", () => {

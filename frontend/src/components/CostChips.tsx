@@ -38,6 +38,12 @@ export interface FrameCost {
   readonly outputTokens: number;
   /** Dollars as RECORDED — see the `$0.0000` note on the component below. */
   readonly costUsd: number;
+  /**
+   * Whether the token counters are the COMPLETE spend to this frame, or a lower
+   * bound. False as soon as any failed call is in range — see `costToFrame`.
+   * The dollars are unaffected: `FailedCallView.cost_usd` IS served.
+   */
+  readonly tokensComplete: boolean;
 }
 
 const ZERO_COST: FrameCost = {
@@ -46,6 +52,7 @@ const ZERO_COST: FrameCost = {
   inputTokens: 0,
   outputTokens: 0,
   costUsd: 0,
+  tokensComplete: true,
 };
 
 /**
@@ -58,8 +65,22 @@ const ZERO_COST: FrameCost = {
  *
  * A failed call still spent money and still happened at a tick, so it is counted
  * in `costUsd` and surfaced separately rather than being quietly dropped
- * (AGENTS.md — no silent fallbacks); it contributes no tokens because a call
- * that failed recorded none.
+ * (AGENTS.md — no silent fallbacks).
+ *
+ * ITS TOKENS ARE REAL BUT UNREACHABLE FROM HERE, and that asymmetry is disclosed
+ * rather than papered over. `orchestrator.replay.FailedCallReplayEntry` REQUIRES
+ * `input_tokens` / `output_tokens` — capturing exactly those burned tokens is
+ * the row's stated reason to exist — and `eval/balance_eval.py::_cost_summary`
+ * folds them into the eval token totals. The frontend cannot: the DTO projection
+ * `api/replay_loader.py::_failed_call_view` does not carry them onto
+ * `FailedCallView`, and `api/` is out of scope for Task 19.17 ("no new server
+ * data — client-side data only"). So the token counters here are a LOWER BOUND
+ * whenever a failed call is in range, and `tokensComplete` says so; the chips
+ * render `≥` rather than presenting a partial figure as the game's token spend.
+ *
+ * Dormant on the committed sample sets, which contain zero `failed_call` rows —
+ * but a false comment is not made true by being unreachable, and the honest
+ * label is what stops the next reader trusting a number that is short.
  */
 export function costToFrame(
   meetings: readonly MeetingView[],
@@ -89,7 +110,17 @@ export function costToFrame(
     failed += 1;
     costUsd += call.cost_usd;
   }
-  return { calls, failedCalls: failed, inputTokens, outputTokens, costUsd };
+  return {
+    calls,
+    failedCalls: failed,
+    inputTokens,
+    outputTokens,
+    costUsd,
+    // Keyed on the PRESENCE of a failed call, not on a token count: the DTO
+    // does not carry the tokens, so "how short is this" is not knowable here.
+    // Unknown-and-said-so beats a confident undercount.
+    tokensComplete: failed === 0,
+  };
 }
 
 function formatInt(value: number): string {
@@ -148,6 +179,11 @@ export function CostChips() {
     return null;
   }
 
+  const tokenPrefix = cost.tokensComplete ? "" : "≥ ";
+  const tokenTitle = cost.tokensComplete
+    ? "Tokens recorded on completed model calls at or before this frame"
+    : "A LOWER BOUND: a failed call in range burned tokens that the replay bytes record but the served DTO does not carry, so they cannot be counted here";
+
   return (
     <div
       role="group"
@@ -162,8 +198,21 @@ export function CostChips() {
         value={formatInt(cost.calls)}
         title="Completed model calls recorded at or before this frame"
       />
-      <Chip label="in" value={`${formatInt(cost.inputTokens)} tok`} />
-      <Chip label="out" value={`${formatInt(cost.outputTokens)} tok`} />
+      {/* `≥` when a failed call is in range: its burned tokens are recorded in
+          the replay bytes but are not projected onto `FailedCallView`, so this
+          figure is a lower bound and must not be presented as the token spend.
+          Reaching the real number means widening the DTO — `api/`, which this
+          task is scoped out of. */}
+      <Chip
+        label="in"
+        value={`${tokenPrefix}${formatInt(cost.inputTokens)} tok`}
+        title={tokenTitle}
+      />
+      <Chip
+        label="out"
+        value={`${tokenPrefix}${formatInt(cost.outputTokens)} tok`}
+        title={tokenTitle}
+      />
       <Chip
         label="usd"
         value={`$${cost.costUsd.toFixed(4)}`}
@@ -177,7 +226,7 @@ export function CostChips() {
         <Chip
           label="failed"
           value={formatInt(cost.failedCalls)}
-          title="Calls that were billed and then failed — counted in the dollars, no tokens recorded"
+          title="Calls that were billed and then failed. Their dollars ARE counted; their tokens are recorded in the replay bytes but not served on the failed-call DTO, which is why the token chips read ≥"
         />
       )}
     </div>
