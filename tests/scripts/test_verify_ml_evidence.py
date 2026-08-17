@@ -453,21 +453,6 @@ def test_a_corpus_path_field_is_compared_not_dropped(tmp_path: Path) -> None:
     assert "replay_set_dir" in different.detail
 
 
-def test_the_carried_adoption_constraints_are_pinned_by_name() -> None:
-    """The composed verdict's three Goodhart constraints cannot be emptied quietly.
-
-    They are carried metadata the fidelity cannot re-derive, so the identity row
-    splices them — which is exactly why they need their own pin.
-    """
-
-    committed = json.loads((_REPO_ROOT / vme.COMPOSED_DIR / "verdict.json").read_text())
-    assert [
-        str(item).split(":", 1)[0] for item in committed["adoption_constraints"]
-    ] == list(vme._COMPOSED_ADOPTION_CONSTRAINTS)
-    # And the pin is not vacuous: the committed list is non-empty.
-    assert len(vme._COMPOSED_ADOPTION_CONSTRAINTS) == 3
-
-
 def test_malformed_manifest_block_raises_rather_than_shrinking_the_guards(
     tmp_path: Path,
 ) -> None:
@@ -738,3 +723,107 @@ def test_the_command_writes_nothing_outside_a_temp_dir(tmp_path: Path) -> None:
     vme.run_paired(ctx)
     vme.run_availability(ctx)
     assert _tree_snapshot(root) == before
+
+
+# --------------------------------------------------------------------------- #
+# 5. the second review round (Codex, PR #348)                                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_loss_path_may_omit_the_slate_manifest(tmp_path: Path) -> None:
+    """Task 19.21's LOSS path creates no slate manifest, and must still run.
+
+    `tasks/phase-19.md` puts `_finalist_eval_raw/MANIFEST.md` in scope "only on
+    the recovery path", so on a ratified loss it does not exist. Reading it
+    unconditionally killed context construction with usage error 2 — making the
+    whole loss-acceptance route unreachable (Codex review, PR #348).
+    """
+
+    root = tmp_path / "repo"
+    (root / vme.COEVO_DEST).mkdir(parents=True)
+    (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
+    (root / vme.EVIDENCE_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
+        "```sha256\n"
+        f"{'0' * 64}  coevo/moved.json\n"
+        f"{'1' * 64}  README.md\n"
+        "```\n"
+    )
+    (root / vme.ARTIFACTS_DOC).parent.mkdir(parents=True, exist_ok=True)
+    (root / vme.ARTIFACTS_DOC).write_text("**Ruling 2026-08-15: LOST**\n")
+    assert not (root / vme.SLATE_MANIFEST).exists()
+
+    rows = vme.evidence_rows(root, slate_lost=True)
+    assert rows and not any(
+        row.manifest_path.startswith(vme._SLATE_PREFIX) for row in rows
+    )
+
+    # ... and the same tree with a RECOVERY ruling is a drifted tree, not a
+    # close state: the manifest's absence then has to fail loud.
+    with pytest.raises(vme.EvidenceError, match="records no loss"):
+        vme.evidence_rows(root, slate_lost=False)
+
+
+def test_an_evidence_row_cannot_escape_its_destination(tmp_path: Path) -> None:
+    """A `..` in a digest row would map onto an unrelated in-tree artifact."""
+
+    root = tmp_path / "repo"
+    (root / vme.COEVO_DEST).mkdir(parents=True)
+    (root / vme.EVIDENCE_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
+        "```sha256\n"
+        f"{'0' * 64}  coevo/../surrogate/ballot-predictor.json\n"
+        "```\n"
+    )
+    with pytest.raises(vme.EvidenceError, match="escapes its destination root"):
+        vme.evidence_rows(root, slate_lost=True)
+
+
+def test_git_reads_disable_partial_clone_lazy_fetching() -> None:
+    """The documented clone is blobless; a blob read must not reach the network.
+
+    `git clone --filter=blob:none` is what README.md / docs/artifacts.md /
+    docs/reading-guide.md tell a reader to run, and on such a checkout reading an
+    omitted blob makes git fetch it from origin — a network call and a `.git`
+    mutation inside a command whose contract is offline and read-only.
+    """
+
+    assert vme._GIT_ENV["GIT_NO_LAZY_FETCH"] == "1"
+    # The helper every git read goes through, so neither call site can regress.
+    completed = vme._git(_REPO_ROOT, "rev-parse", "--is-inside-work-tree")
+    assert completed is not None and completed.returncode == 0
+
+
+def test_adoption_constraints_are_compared_in_full(tmp_path: Path) -> None:
+    """Editing a constraint's text after its name must not pass.
+
+    The prefix-only comparison let the substantive guidance drift while every
+    field still read identical — and that text reaches campaign meters verbatim
+    (Codex review, PR #348).
+    """
+
+    committed = json.loads((_REPO_ROOT / vme.COMPOSED_DIR / "verdict.json").read_text())
+    assert [str(item) for item in committed["adoption_constraints"]] == list(
+        vme._COMPOSED_ADOPTION_CONSTRAINTS
+    )
+    # The pin is over whole strings, not names: every one carries its guidance.
+    for pinned in vme._COMPOSED_ADOPTION_CONSTRAINTS:
+        name, _, guidance = pinned.partition(":")
+        assert guidance.strip(), f"{name} pinned by name only"
+        assert len(pinned) > len(name) + 40
+
+
+def test_a_registry_class_contradicting_its_storage_raises(tmp_path: Path) -> None:
+    """`(a)` beside `pinned sha` is an invalid committed input, not a label."""
+
+    root = tmp_path / "repo"
+    doc = _copy(root, vme.ARTIFACTS_DOC)
+    doc.write_text(
+        doc.read_text().replace(
+            "| **(c)** | pinned sha |", "| **(a)** | pinned sha |", 1
+        )
+    )
+    with pytest.raises(vme.EvidenceError, match="contradicts its storage policy"):
+        vme.registry_rows(root)

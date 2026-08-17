@@ -68,7 +68,8 @@ import sys
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from itertools import zip_longest
+from pathlib import Path, PurePosixPath
 from typing import Final, Literal
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
@@ -345,7 +346,34 @@ def read_digest_block(repo_root: Path, rel: str) -> list[tuple[str, str]]:
     return rows
 
 
-def evidence_rows(repo_root: Path) -> tuple[EvidenceRow, ...]:
+def _confined(dest_root: str, relative: str, manifest: str, raw: str) -> str:
+    """Map a manifest row under its destination root, refusing any escape.
+
+    ``coevo/../surrogate/ballot-predictor.json`` passes a bare ``startswith``
+    check and lands on an unrelated in-tree artifact, so a one-for-one row
+    swap could keep every count green while the real archived path went
+    unpromised and unchecked (Codex review, PR #348). Absolute paths and ``..``
+    components are refused exactly as :func:`sidecar_targets` refuses them, and
+    the normalized result must still sit beneath the destination root.
+    """
+
+    if relative.startswith("/") or ".." in PurePosixPath(relative).parts:
+        raise EvidenceError(
+            f"{manifest}: digest row {raw!r} escapes its destination root "
+            f"({dest_root}); refusing to map it"
+        )
+    mapped = PurePosixPath(f"{dest_root}/{relative}")
+    if not mapped.is_relative_to(PurePosixPath(dest_root)):
+        raise EvidenceError(
+            f"{manifest}: digest row {raw!r} normalizes to {mapped}, outside "
+            f"{dest_root}; refusing to map it"
+        )
+    return str(mapped)
+
+
+def evidence_rows(
+    repo_root: Path, *, slate_lost: bool = False
+) -> tuple[EvidenceRow, ...]:
     """Every file the pinned evidence commit carries, with its restore path.
 
     Composes the two manifests exactly as ``scripts/fetch_evidence.sh``'s
@@ -360,12 +388,14 @@ def evidence_rows(repo_root: Path) -> tuple[EvidenceRow, ...]:
         if raw == "README.md":
             # The branch's own README: hashed here, deliberately not restored.
             rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=None))
-        elif raw.startswith("coevo/"):
+        elif raw.startswith(_COEVO_PREFIX):
             rows.append(
                 EvidenceRow(
                     digest=digest,
                     manifest_path=raw,
-                    repo_path=f"{COEVO_DEST}/{raw[len('coevo/') :]}",
+                    repo_path=_confined(
+                        COEVO_DEST, raw[len(_COEVO_PREFIX) :], EVIDENCE_MANIFEST, raw
+                    ),
                 )
             )
         else:
@@ -373,20 +403,47 @@ def evidence_rows(repo_root: Path) -> tuple[EvidenceRow, ...]:
                 f"{EVIDENCE_MANIFEST}: digest row {raw!r} is neither the branch "
                 "README nor a 'coevo/' path — the restore map does not cover it"
             )
-    for digest, raw in read_digest_block(repo_root, SLATE_MANIFEST):
-        if not raw.startswith("./"):
-            raise EvidenceError(
-                f"{SLATE_MANIFEST}: digest row {raw!r} is not a './' path — the "
-                "restore map does not cover it"
+
+    # The slate manifest is created ONLY on Task 19.21's recovery path
+    # (`tasks/phase-19.md`, 19.21 files in scope), so on the ratified LOSS path
+    # it does not exist. Requiring it unconditionally made the whole
+    # loss-acceptance route unreachable: the run died with usage error 2 inside
+    # context construction, before `--complete` could accept the recorded loss
+    # (Codex review, PR #348). Absent + a recorded loss is the expected shape;
+    # absent + a recovery ruling is still a hard error.
+    if (repo_root / SLATE_MANIFEST).is_file():
+        for digest, raw in read_digest_block(repo_root, SLATE_MANIFEST):
+            if not raw.startswith("./"):
+                raise EvidenceError(
+                    f"{SLATE_MANIFEST}: digest row {raw!r} is not a './' path — "
+                    "the restore map does not cover it"
+                )
+            rows.append(
+                EvidenceRow(
+                    digest=digest,
+                    manifest_path=f"{_SLATE_PREFIX}{raw[2:]}",
+                    repo_path=_confined(SLATE_DEST, raw[2:], SLATE_MANIFEST, raw),
+                )
             )
-        rows.append(
-            EvidenceRow(
-                digest=digest,
-                manifest_path=f"finalist-eval-raw/{raw[2:]}",
-                repo_path=f"{SLATE_DEST}/{raw[2:]}",
-            )
+    elif not slate_lost:
+        raise EvidenceError(
+            f"{SLATE_MANIFEST} is missing, and {ARTIFACTS_DOC} records no loss "
+            "for the Phase-18 finalist slate. That manifest is created on Task "
+            "19.21's RECOVERY path, so its absence beside a recovery ruling is a "
+            "drifted tree, not a close state"
         )
     return tuple(rows)
+
+
+def _slate_lost(repo_root: Path) -> bool:
+    """Whether the committed ruling records the finalist slate as LOST.
+
+    Read BEFORE the manifests, because on the loss path the slate manifest does
+    not exist and the ruling is what says so.
+    """
+
+    ruling = read_slate_ruling(repo_root)
+    return ruling is not None and ruling.lost
 
 
 def read_pinned_sha(repo_root: Path) -> str:
@@ -448,6 +505,33 @@ def retained_in_tree_paths(repo_root: Path) -> list[str]:
     return paths
 
 
+#: Git's own opt-out from partial-clone lazy fetching (git >= 2.41). The
+#: DOCUMENTED clone for this repository is `git clone --filter=blob:none`
+#: (README.md, docs/artifacts.md, docs/reading-guide.md), and on such a checkout
+#: reading an omitted blob makes git fetch it from origin — verified on git
+#: 2.43 under GIT_TRACE=1, which showed a `git fetch ... --filter=blob:none`
+#: plus a promisor pack install and a maintenance run. That would put a network
+#: call and a `.git` mutation inside a command whose contract is "offline and
+#: read-only", and would hang on an actually offline machine. With this set the
+#: read fails locally instead, which this command reports as ABSENT (Codex
+#: review, PR #348).
+_GIT_ENV: Final[dict[str, str]] = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
+
+
+def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes] | None:
+    """Run a read-only git command with lazy fetching disabled, or ``None``."""
+
+    try:
+        return subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            check=False,
+            env=_GIT_ENV,
+        )
+    except OSError:
+        return None
+
+
 def git_tracked_sidecars(repo_root: Path) -> list[str] | None:
     """Every tracked ``*.sha256`` path, or ``None`` when there is no git index.
 
@@ -458,44 +542,24 @@ def git_tracked_sidecars(repo_root: Path) -> list[str] | None:
     deletion.
     """
 
-    try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
-            [
-                "git",
-                "-C",
-                str(repo_root),
-                "ls-files",
-                "-z",
-                "--",
-                f"*{_SIDECAR_SUFFIX}",
-            ],
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return None
-    if completed.returncode != 0:
+    completed = _git(repo_root, "ls-files", "-z", "--", f"*{_SIDECAR_SUFFIX}")
+    if completed is None or completed.returncode != 0:
         return None
     return [name for name in completed.stdout.decode().split("\0") if name]
 
 
 def _git_blob(repo_root: Path, revision: str, path: str) -> bytes | None:
-    """A blob out of a local git object, or ``None`` when it is not here.
+    """A blob out of a LOCAL git object, or ``None`` when it is not here.
 
-    Local and offline — ``git cat-file`` never reaches the network. ``None``
-    means the pinned commit has not been fetched into this checkout, which is a
-    reportable availability state, not an error.
+    Offline by construction: :data:`_GIT_ENV` disables partial-clone lazy
+    fetching, so on the documented blobless clone an omitted blob fails locally
+    rather than being fetched from origin. ``None`` means the pinned commit's
+    blob is not in this checkout, which is a reportable availability state, not
+    an error.
     """
 
-    try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
-            ["git", "-C", str(repo_root), "cat-file", "blob", f"{revision}:{path}"],
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return None
-    if completed.returncode != 0:
+    completed = _git(repo_root, "cat-file", "blob", f"{revision}:{path}")
+    if completed is None or completed.returncode != 0:
         return None
     return completed.stdout
 
@@ -1096,14 +1160,19 @@ def run_corpus(ctx: Context) -> LegResult:
 #: evidence drift.
 FLOAT_TOLERANCE: Final = 1e-12
 
-#: The three constraint keys the composed verdict was adopted with, in order.
-#: Carried metadata the fidelity cannot re-derive, so it is pinned by name here
-#: exactly as ``tests/training/test_composed_runner.py`` pins it — an emptied or
-#: reordered list is a drift, not a normalization.
+#: The three adoption constraints the composed verdict was adopted with, in
+#: order and IN FULL. Carried metadata: the fidelity report holds nothing that
+#: could re-derive them, so the identity row splices them from the committed
+#: side — which means a transcription pin here is the only thing that can catch
+#: an edit. Comparing only the key before the ":" let the substantive guidance
+#: drift silently while the verifier reported every field identical, and that
+#: guidance is surfaced verbatim to campaign meters by `training/coevo/driver.py`
+#: (Codex review, PR #348). Transcribed deliberately, and the whole string is
+#: compared.
 _COMPOSED_ADOPTION_CONSTRAINTS: Final[tuple[str, ...]] = (
-    "composed-provenance-validity[all-arms,9p2i]",
-    "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]",
-    "emergency-predicted-supply-above-bar[emergency,9p2i]",
+    "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) — composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
+    "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]: predicted floors PASS while the composed substrate mints 0 flags in bytes — a pre-screen PASS is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read",
+    "emergency-predicted-supply-above-bar[emergency,9p2i]: forced-emergency predicted-supply delta +29.5% >= the 25% materiality bar with recorded 0.0 — the laundering shape, validity-gated out of the machinery's findings",
 )
 
 
@@ -1327,30 +1396,29 @@ def run_recompute(ctx: Context) -> LegResult:
             source=f"{COMPOSED_DIR}/verdict.json",
         )
     )
-    carried = composed_committed.adoption_constraints
-    measured_prefixes = [str(item).split(":", 1)[0] for item in carried]
+    carried = tuple(str(item) for item in composed_committed.adoption_constraints)
+    constraint_drift = [
+        f"[{index}] committed {committed_item!r} != pinned {pinned!r}"
+        for index, (committed_item, pinned) in enumerate(
+            zip_longest(carried, _COMPOSED_ADOPTION_CONSTRAINTS)
+        )
+        if committed_item != pinned
+    ]
     rows.append(
         CheckRow(
             name="composed adoption constraints",
             measured=(
-                f"{len(carried)} carried: {', '.join(measured_prefixes)}"
+                f"{len(carried)} carried, compared in full: "
+                + ", ".join(item.split(":", 1)[0] for item in carried)
                 if carried
                 else "none carried"
             ),
-            committed=", ".join(_COMPOSED_ADOPTION_CONSTRAINTS),
-            source=f"{COMPOSED_DIR}/verdict.json (adoption_constraints)",
-            status="OK"
-            if measured_prefixes == list(_COMPOSED_ADOPTION_CONSTRAINTS)
-            else "FAIL",
-            detail=(
-                ""
-                if measured_prefixes == list(_COMPOSED_ADOPTION_CONSTRAINTS)
-                else (
-                    "the Goodhart leg's carried constraints are not the three "
-                    "the composed verdict was adopted with; a silently emptied "
-                    "list is the drift this row exists to catch"
-                )
+            committed=(
+                f"{len(_COMPOSED_ADOPTION_CONSTRAINTS)} constraints, full text pinned"
             ),
+            source=f"{COMPOSED_DIR}/verdict.json (adoption_constraints)",
+            status="OK" if not constraint_drift else "FAIL",
+            detail="\n".join(constraint_drift[:5]),
         )
     )
 
@@ -1644,6 +1712,21 @@ _WHERE_TO_CLASS: Final[dict[str, AvailabilityClass]] = {
     "regenerated (`.gitignore`d)": "REGENERATED",
 }
 
+#: Which `docs/artifacts.md` CLASS cells may sit beside which `where` cell. The
+#: document defines four classes and a storage policy per class, so a row whose
+#: class contradicts its storage is an invalid committed input — and reading the
+#: availability from `where` alone meant such a row was carried into the label
+#: and still reported OK (Codex review, PR #348). Class (a)/(b) live in git,
+#: (c) on the pinned sha, (d) is regenerated; a combined "(a) + (b)" cell is the
+#: document's own shorthand for bytes plus their manifest.
+_ALLOWED_CLASS_WHERE: Final[dict[str, str]] = {
+    "(a)": "in git",
+    "(b)": "in git",
+    "(a) + (b)": "in git",
+    "(c)": "pinned sha",
+    "(d)": "regenerated (`.gitignore`d)",
+}
+
 #: The probe paths for each registry row, keyed by the row's FIRST backticked
 #: token. The doc's artifact cell is prose (it names sibling directories
 #: relatively and expands a brace), so the paths are declared here — and the KEY
@@ -1778,9 +1861,19 @@ def registry_rows(repo_root: Path) -> list[tuple[str, str, str, str]]:
                 f"{ARTIFACTS_DOC}:{lineno}: registry row {cells[0]!r} names no "
                 "artifact path"
             )
-        rows.append(
-            (match.group(1), cells[1].replace("**", "").strip(), where, cells[3])
-        )
+        declared = cells[1].replace("**", "").strip()
+        if declared not in _ALLOWED_CLASS_WHERE:
+            raise EvidenceError(
+                f"{ARTIFACTS_DOC}:{lineno}: registry row declares class "
+                f"{declared!r}, which is none of {sorted(_ALLOWED_CLASS_WHERE)}"
+            )
+        if _ALLOWED_CLASS_WHERE[declared] != where:
+            raise EvidenceError(
+                f"{ARTIFACTS_DOC}:{lineno}: class {declared!r} is stored "
+                f"{_ALLOWED_CLASS_WHERE[declared]!r}, but this row says "
+                f"{where!r} — the declared class contradicts its storage policy"
+            )
+        rows.append((match.group(1), declared, where, cells[3]))
     if not inside:
         raise EvidenceError(
             f"{ARTIFACTS_DOC}: no registry table "
@@ -2147,7 +2240,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=repo_root,
             fast=fast,
             complete=complete,
-            evidence=evidence_rows(repo_root),
+            evidence=evidence_rows(repo_root, slate_lost=_slate_lost(repo_root)),
             pinned_sha=read_pinned_sha(repo_root),
             slate_ruling=read_slate_ruling(repo_root),
         )
