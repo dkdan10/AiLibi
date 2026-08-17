@@ -18,10 +18,15 @@
 #   * restored bytes are UNTRACKED BY DESIGN and must never be committed back.
 #     `--clean` removes them again; `docs/artifacts.md` states the rule.
 #
+# Nothing here overwrites or deletes a byte it cannot re-fetch: the restore
+# refuses on any local file that differs from the manifest, and `--clean`
+# removes only files that still match it.
+#
 # Usage:
-#   scripts/fetch_evidence.sh            fetch by the pinned sha, restore, verify
-#   scripts/fetch_evidence.sh --verify   verify what is already restored
-#   scripts/fetch_evidence.sh --clean    remove the restored bytes again
+#   scripts/fetch_evidence.sh              fetch by the pinned sha, restore, verify
+#   scripts/fetch_evidence.sh --verify     verify what is already restored
+#   scripts/fetch_evidence.sh --clean      remove restored files that still match
+#   scripts/fetch_evidence.sh --clean --force   ... and the modified ones too
 #
 # Needs network only for the fetch leg; --verify and --clean are offline.
 
@@ -42,27 +47,39 @@ SLATE_DEST="$REPO_ROOT/training/reports/_finalist_eval_raw"
 LOCAL_REF="refs/evidence/phase-18-coevo"
 
 mode="fetch"
-case "${1:-}" in
-  "") ;;
-  --verify) mode="verify" ;;
-  --clean) mode="clean" ;;
-  -h | --help)
-    sed -n '3,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
-    exit 0
-    ;;
-  *)
-    echo "unknown argument '$1' (expected nothing, --verify, --clean or --help)" >&2
-    exit 2
-    ;;
-esac
+force=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verify) mode="verify" ;;
+    --clean) mode="clean" ;;
+    --force) force=1 ;;
+    -h | --help)
+      sed -n '/^# fetch_evidence.sh /,/^# Needs network only/p' \
+        "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *)
+      echo "unknown argument '$1' (expected --verify, --clean, --force, --help)" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+if [[ "$force" == "1" && "$mode" != "clean" ]]; then
+  echo "--force only means anything with --clean." >&2
+  exit 2
+fi
 
-# sha256sum (GNU) or shasum -a 256 (macOS). Both read the same manifest format —
-# that is why the manifest is written shasum-compatible.
+# sha256sum (GNU) or shasum -a 256 (macOS). Both read the same manifest format
+# — that is why the manifest is written shasum-compatible — and both report
+# per-file results as "<path>: OK" / "<path>: FAILED", which --clean parses.
 if command -v sha256sum >/dev/null 2>&1; then
   sha256_check() { sha256sum -c --quiet "$1"; }
+  sha256_report() { sha256sum -c "$1" 2>/dev/null || true; }
   sha256_stdin() { sha256sum | cut -d' ' -f1; }
 elif command -v shasum >/dev/null 2>&1; then
   sha256_check() { shasum -a 256 -c "$1" >/dev/null; }
+  sha256_report() { shasum -a 256 -c "$1" 2>/dev/null || true; }
   sha256_stdin() { shasum -a 256 | cut -d' ' -f1; }
 else
   echo "neither sha256sum nor shasum is available; cannot verify" >&2
@@ -74,8 +91,11 @@ fi
 # --------------------------------------------------------------------------- #
 read_pin() {
   local sha
+  # `|| true`: with `set -o pipefail` a no-match grep fails the whole
+  # substitution and kills the script BEFORE the diagnostic below can explain
+  # why — the corrupt-manifest case would exit silently (Codex review, PR #346).
   sha="$(grep -F 'tip sha — THE PIN' "$MANIFEST" |
-    grep -oE '[0-9a-f]{40}' | head -1)"
+    grep -oE '[0-9a-f]{40}' | head -1 || true)"
   if [[ -z "$sha" ]]; then
     echo "no pinned sha in $MANIFEST (the '**tip sha — THE PIN**' row)" >&2
     exit 1
@@ -100,42 +120,92 @@ restored_paths() {
   peel_digests | sed 's/^[0-9a-f]\{64\}  //'
 }
 
+tracked_paths() {
+  git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
+    training/reports/_finalist_eval_raw | sort
+}
+
 # One cleanup list and one trap: several legs below need scratch files, and a
 # second `trap ... EXIT` would silently replace the first and leak the earlier
-# file.
+# file. The path is returned through a caller-named variable rather than on
+# stdout, because `f="$(scratch_file)"` runs the function in a SUBSHELL — the
+# array would grow there and the parent's trap would clean nothing (Codex
+# review, PR #346). `printf -v` keeps this working on bash 3.2 too.
 _scratch=()
 cleanup() {
   if [[ ${#_scratch[@]} -gt 0 ]]; then rm -f "${_scratch[@]}"; fi
 }
 trap cleanup EXIT
-scratch_file() {
+scratch_file() { # scratch_file VARNAME
   local f
   f="$(mktemp)"
   _scratch+=("$f")
-  printf '%s\n' "$f"
+  printf -v "$1" '%s' "$f"
+}
+
+# The manifest rows for evidence paths that exist on disk and are NOT tracked —
+# i.e. everything a restore would overwrite and a clean would remove.
+present_untracked_rows() { # present_untracked_rows OUTFILE
+  local tracked
+  scratch_file tracked
+  tracked_paths > "$tracked"
+  # `if`, not `&&`: a final iteration whose test is false would make the loop —
+  # and so the pipeline — return 1, and `set -e` would kill the script here with
+  # no output at all.
+  peel_digests | while IFS= read -r row; do
+    local rel="${row#*  }"
+    if [[ -f "$REPO_ROOT/$rel" ]] && ! grep -qxF "$rel" "$tracked"; then
+      printf '%s\n' "$row"
+    fi
+  done > "$1"
 }
 
 # --------------------------------------------------------------------------- #
 # clean                                                                        #
 # --------------------------------------------------------------------------- #
 if [[ "$mode" == "clean" ]]; then
-  # Tracked paths are never removed, whatever the manifest lists. The two sets
-  # are disjoint by construction; this makes "--clean cannot delete your
-  # checkout" true by code rather than by that construction holding.
-  tracked="$(scratch_file)"
-  git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
-    training/reports/_finalist_eval_raw | sort > "$tracked"
+  # Tracked paths are never removed, whatever the manifest lists, and neither
+  # are files that no longer MATCH the manifest: the restore guard refuses on a
+  # modified local file and points here, so a --clean that deleted it anyway
+  # would destroy exactly what that guard was protecting (Codex review, PR
+  # #346). --force is the explicit opt-in to discard them.
+  candidates=""
+  scratch_file candidates
+  present_untracked_rows "$candidates"
+
   removed=0
-  while IFS= read -r rel; do
-    if [[ -f "$REPO_ROOT/$rel" ]] && ! grep -qxF "$rel" "$tracked"; then
-      rm -f "$REPO_ROOT/$rel"
-      removed=$((removed + 1))
-    fi
-  done < <(restored_paths)
+  kept=""
+  scratch_file kept
+  : > "$kept"
+  if [[ -s "$candidates" ]]; then
+    results=""
+    scratch_file results
+    (cd "$REPO_ROOT" && sha256_report "$candidates") > "$results"
+    while IFS= read -r line; do
+      rel="${line%: *}"
+      verdict="${line##*: }"
+      if [[ "$verdict" == "OK" || "$force" == "1" ]]; then
+        rm -f "$REPO_ROOT/$rel"
+        removed=$((removed + 1))
+      else
+        printf '%s\n' "$rel" >> "$kept"
+      fi
+    done < "$results"
+  fi
+
   # Only directories the restore created can end up empty; tracked files keep
   # their own directories alive, so this never removes an in-tree path.
   find "$COEVO_DEST" "$SLATE_DEST" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+
   echo "Removed $removed restored file(s). Tracked bytes are untouched."
+  if [[ -s "$kept" ]]; then
+    echo ""
+    echo "KEPT $(wc -l < "$kept" | tr -d ' ') file(s) that do NOT match the manifest —" >&2
+    echo "they are not restored evidence, so they are not this script's to delete:" >&2
+    head -5 "$kept" >&2
+    echo "Move them aside, or re-run with --clean --force to discard them." >&2
+    exit 1
+  fi
   exit 0
 fi
 
@@ -146,16 +216,22 @@ PINNED_SHA="$(read_pin)"
 
 if [[ "$mode" == "fetch" ]]; then
   if ! git -C "$REPO_ROOT" cat-file -e "${PINNED_SHA}^{commit}" 2>/dev/null; then
-    remote_url="$(git -C "$REPO_ROOT" remote get-url origin)"
-    echo "Fetching the evidence commit ${PINNED_SHA} from ${remote_url} ..."
-    git -C "$REPO_ROOT" fetch --depth 1 "$remote_url" "$PINNED_SHA"
+    # Fetch through the remote NAME, and print only the name. `git remote
+    # get-url` can carry inline credentials (https://x-access-token:<PAT>@...),
+    # and echoing it would write the secret to the terminal and to CI logs
+    # (Codex review, PR #346).
+    echo "Fetching the evidence commit ${PINNED_SHA} from origin ..."
+    git -C "$REPO_ROOT" fetch --depth 1 origin "$PINNED_SHA"
   fi
+
   # The pin buys immutability only if what came back really is the ONE-commit
   # orphan the manifest describes — asserted loudly, before a single byte lands
   # in the tree. Read from the RAW commit object, not from `rev-list --parents`:
   # a --depth 1 fetch makes the commit a shallow boundary, and rev-list then
   # suppresses its parents and reports any parented commit as an orphan
-  # (Codex review on PR #346, reproduced against a two-commit repo).
+  # (Codex review on PR #346, reproduced against a two-commit repo). The `sed`
+  # stops at the header/body boundary so a "parent ..." line in a commit
+  # MESSAGE cannot masquerade as a header.
   if git -C "$REPO_ROOT" cat-file commit "$PINNED_SHA" |
     sed -n '/^$/q;p' | grep -q '^parent '; then
     echo "${PINNED_SHA} has a parent header; the evidence commit is an orphan." >&2
@@ -169,21 +245,13 @@ if [[ "$mode" == "fetch" ]]; then
   git -C "$REPO_ROOT" update-ref "$LOCAL_REF" "$PINNED_SHA"
 
   # A restore may only ADD files, so nothing already on disk may be clobbered.
-  # Two ways that could happen, both refused BEFORE anything is written:
+  # Three ways that could happen, all refused BEFORE anything is written.
   #
-  #   1. an evidence path that is also a TRACKED path — the moved and retained
-  #      sets are disjoint by construction (EVIDENCE-MANIFEST.md §3), so this
-  #      means the manifest and the commit have drifted apart, which is the one
-  #      failure this whole scheme exists to make impossible to miss;
-  #   2. an evidence path that already exists UNTRACKED and differs from the
-  #      manifest — an edited earlier restore, or regenerated output parked at
-  #      the same path. `git ls-files` cannot see those (Codex review on PR
-  #      #346), so they are checked by digest. Untracked files that already
-  #      MATCH the manifest are not a collision: re-running the restore over
-  #      them is a no-op, which keeps the command idempotent.
-  overlap="$(comm -12 <(restored_paths | sort) \
-    <(git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
-      training/reports/_finalist_eval_raw | sort))"
+  # (1) An evidence path that is also a TRACKED path. The moved and retained
+  #     sets are disjoint by construction (EVIDENCE-MANIFEST.md §3), so this
+  #     means the manifest and the commit have drifted apart — the one failure
+  #     this whole scheme exists to make impossible to miss.
+  overlap="$(comm -12 <(restored_paths | sort) <(tracked_paths))"
   if [[ -n "$overlap" ]]; then
     echo "The evidence commit carries paths that are ALSO tracked in-tree;" >&2
     echo "the manifest and the commit disagree. Nothing was written." >&2
@@ -191,19 +259,42 @@ if [[ "$mode" == "fetch" ]]; then
     exit 1
   fi
 
-  present="$(scratch_file)"
-  # `if`, not `&&`: a final iteration whose test is false would make the loop —
-  # and so the pipeline — return 1, and `set -e` would kill the script here with
-  # no output at all.
-  peel_digests | while IFS= read -r row; do
-    if [[ -f "$REPO_ROOT/${row#*  }" ]]; then printf '%s\n' "$row"; fi
-  done > "$present"
+  # (2) A DIRECTORY SYMLINK anywhere on a destination path — the layout an
+  #     operator uses to park the ~399 MiB payload on another volume. GNU tar
+  #     REPLACES such a symlink with a real directory unless
+  #     --keep-directory-symlink is passed (verified against tar 1.35; the flag
+  #     is not portable to BSD tar, so refusing is the portable answer), which
+  #     would silently strand whatever the link pointed at (Codex review, PR
+  #     #346). Every ancestor of every destination path is checked, deduped.
+  symlinked="$(restored_paths | sed 's#/[^/]*$##' | sort -u |
+    awk -F/ '{p=""; for (i=1; i<=NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    sort -u |
+    while IFS= read -r dir; do
+      if [[ -L "$REPO_ROOT/$dir" ]]; then printf '%s\n' "$dir"; fi
+    done)"
+  if [[ -n "$symlinked" ]]; then
+    echo "A destination path runs through a SYMLINKED directory; extracting" >&2
+    echo "would replace the symlink with a real directory and strand whatever" >&2
+    echo "it points at. Nothing was written. Resolve these first:" >&2
+    printf '%s\n' "$symlinked" | head -5 >&2
+    exit 1
+  fi
+
+  # (3) An evidence path that already exists UNTRACKED and DIFFERS from the
+  #     manifest — an edited earlier restore, or regenerated output parked at
+  #     the same path. `git ls-files` cannot see those, so they are checked by
+  #     digest. Untracked files that already MATCH are not a collision:
+  #     re-running the restore over them is a no-op, which keeps the command
+  #     idempotent.
+  present=""
+  scratch_file present
+  present_untracked_rows "$present"
   if [[ -s "$present" ]]; then
     if ! (cd "$REPO_ROOT" && sha256_check "$present"); then
       echo "" >&2
       echo "Files listed above already exist and do NOT match the manifest;" >&2
-      echo "restoring would overwrite them. Nothing was written. Remove or move" >&2
-      echo "them (or run 'bash scripts/fetch_evidence.sh --clean') and retry." >&2
+      echo "restoring would overwrite them. Nothing was written. Move them" >&2
+      echo "aside, or discard them with 'fetch_evidence.sh --clean --force'." >&2
       exit 1
     fi
     echo "$(wc -l < "$present" | tr -d ' ') file(s) already restored and matching; re-restoring is a no-op."
@@ -221,12 +312,13 @@ fi
 # --------------------------------------------------------------------------- #
 # verify                                                                       #
 # --------------------------------------------------------------------------- #
-digests="$(scratch_file)"
+digests=""
+scratch_file digests
 peel_digests > "$digests"
 expected="$(wc -l < "$digests" | tr -d ' ')"
 
 missing="$(while IFS= read -r rel; do
-  [[ -f "$REPO_ROOT/$rel" ]] || printf '%s\n' "$rel"
+  if [[ ! -f "$REPO_ROOT/$rel" ]]; then printf '%s\n' "$rel"; fi
 done < <(restored_paths) | wc -l | tr -d ' ')"
 if [[ "$missing" != "0" ]]; then
   echo "$missing of $expected evidence file(s) are not present." >&2
