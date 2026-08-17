@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "crew-option-features-v2",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-run-01-utility-champion-crew-crew/gen-9",
-  "weights_sha256": "31c01b9ae1ac47b3fe9fdf7707f1b0f1cd9c80a7065a71bb0a8cc155a7520b24"
-}

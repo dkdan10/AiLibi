@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "impostor-option-features-v1",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-run-c1-crew-owned-tasks-impostor-alternating-freeze-champion-gen6-0ca3a382a0e3566dfb225d99cd72abd48e988709dba0cbae9fa5f96d68fa4f52",
-  "weights_sha256": "0ca3a382a0e3566dfb225d99cd72abd48e988709dba0cbae9fa5f96d68fa4f52"
-}

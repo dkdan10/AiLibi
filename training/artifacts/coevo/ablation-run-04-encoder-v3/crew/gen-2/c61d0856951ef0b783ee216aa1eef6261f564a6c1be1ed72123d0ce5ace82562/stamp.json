@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "crew-option-features-v2",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-ablation-run-04-encoder-v3-crew-crew/gen-2",
-  "weights_sha256": "c61d0856951ef0b783ee216aa1eef6261f564a6c1be1ed72123d0ce5ace82562"
-}

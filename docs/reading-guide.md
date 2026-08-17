@@ -73,9 +73,21 @@ composed decision figure is `0.8646`).
 ## 2. The demo path — what to run, what to watch
 
 ```bash
+git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git && cd AiLibi
 bash scripts/setup_env.sh      # one-time: Python deps + npm ci in frontend/
 bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 ```
+
+`--filter=blob:none` is the fast path: a blobless partial clone pulls file
+contents on demand, so you download roughly the 256 MiB the working tree needs
+rather than every version of every blob in the history. **The honest caveat:** a
+full-history clone stays heavy. Task 19.22 moved the Phase-18 co-evolution bytes
+no test reads onto a pinned evidence commit (−101 MiB in the working tree) but
+rewrote no history, so a plain `git clone` still pays for them, and will until
+someone deliberately rewrites history — which invalidates every existing clone
+and every commit sha these audits cite, and is not scheduled.
+[docs/artifacts.md](artifacts.md) is the retention rule; `scripts/fetch_evidence.sh`
+restores the moved bytes by their pinned sha.
 
 The served default is the 9-player / 2-impostor set — the one with meetings,
 suspicion arcs and a scored highlight reel (`api/replay_loader.py::DEFAULT_SET`,
@@ -361,4 +373,6 @@ Current architecture: [docs/architecture.md](architecture.md). Workflow
 protocol: [AGENTS.md](../AGENTS.md). Design *history*, not current shape:
 [DESIGN.md](../DESIGN.md). The spectator API's exposure posture — an
 unauthenticated GM view, loopback-only by design:
-[docs/deployment.md](deployment.md).
+[docs/deployment.md](deployment.md). Which bytes live in git, which live on a
+pinned evidence sha, and how to fetch them:
+[docs/artifacts.md](artifacts.md).

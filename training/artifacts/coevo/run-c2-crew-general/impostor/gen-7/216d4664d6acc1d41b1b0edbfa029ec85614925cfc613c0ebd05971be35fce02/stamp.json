@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "impostor-option-features-v1",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-run-c2-crew-general-impostor-exploiter-probe-gen7-216d4664d6acc1d41b1b0edbfa029ec85614925cfc613c0ebd05971be35fce02",
-  "weights_sha256": "216d4664d6acc1d41b1b0edbfa029ec85614925cfc613c0ebd05971be35fce02"
-}

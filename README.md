@@ -207,6 +207,9 @@ The acceptance gate is a deterministic regression loop, not a live eval: change 
 ## Setup
 
 ```bash
+# clone — the fast path (see the caveat below)
+git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git && cd AiLibi
+
 # install
 bash scripts/setup_env.sh
 
@@ -223,6 +226,8 @@ uv run python scripts/run_tournament.py --num-games 50 --output-dir replays
 ```
 
 Python 3.11 only. The [`uv`](https://docs.astral.sh/uv/) package manager is required. Node.js + npm are required too: `setup_env.sh` runs `npm ci` in `frontend/` whenever `frontend/package.json` is present (it is), `check.sh` ends on the frontend `tsc:check` + `build` legs, and `run_spectator.sh` serves the Vite frontend.
+
+**`--filter=blob:none` is the fast path, and here is the honest caveat.** A blobless partial clone fetches file contents on demand, so you download roughly the 256 MiB the working tree needs instead of every version of every blob in the history — which matters here because the repo carries committed evidence (100 sample replays, the ML corpus, the co-evolution measurement record). Task 19.22 moved the Phase-18 co-evolution bytes no test reads onto a pinned evidence commit and shrank the working tree by 101 MiB, but it **rewrote no history**: a plain full clone still pays for those bytes, and will until someone deliberately rewrites history — a `filter-repo` pass and a force-push that invalidates every existing clone and every commit sha cited in the audits. That is not scheduled. [docs/artifacts.md](docs/artifacts.md) has the retention rules and `scripts/fetch_evidence.sh` restores the moved bytes by their pinned sha.
 
 ---
 
