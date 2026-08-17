@@ -328,14 +328,12 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, NoReturn
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.events import GameOverEvent, KilledEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick
+from engine.events import KilledEvent
 from engine.world import Map, load_canonical_map
 from eval._suspicion_parse import SKIP_SUSPICION_THRESHOLD
 from eval.meeting_quality import (
@@ -349,28 +347,22 @@ from eval.validity import (
     roles_by_seed,
     seeds_on_disk,
 )
+from eval.replay_walk import (
+    ReplayWalkConfig,
+    TickAdvanced,
+    WalkViolation,
+    walk_replay,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     FoundBodyObservation,
-    MeetingResult,
     MeetingTurn,
     SawPlayerObservation,
     SawVentObservation,
 )
 from meetings.transcript import detect_contradictions, is_weak_contradiction
-from meetings.voting import tally_ballots
-from orchestrator.game import apply_meeting_result
-from orchestrator.replay import (
-    GameEndReplayEntry,
-    MeetingReplayEntry,
-    ReplayEntry,
-    ReplayLog,
-    WinnerSide,
-    _state_hash,
-    read_all_entries,
-)
-from orchestrator.seeder import seed_initial_state
+from orchestrator.replay import ReplayLog
 
 # --------------------------------------------------------------------------- #
 # The geomean composition constants — promoted VERBATIM from the lab scorer    #
@@ -395,8 +387,6 @@ _RAILROAD_GATE: Final[float] = SKIP_SUSPICION_THRESHOLD
 # rendered suspicion of >= this maps to 1.0 (committed max ~0.42; a clean +0.30
 # separation is a decisively truth-tracking table). report-rubric-design.md §8.
 _D2_SEPARATION_SCALE: Final[float] = 0.30
-
-_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 # Malformed-candidate errors that must FAIL CLOSED (integrity_ok=False) rather
 # than escape as a traceback — the referee is a machine-readable bake-off gate
@@ -1193,136 +1183,64 @@ def _reconstruct_game_kills(
     roles: Mapping[PlayerId, Role],
     game_map: Map,
 ) -> list[_KillWitnessFact]:
-    """One read-only playback recovering each kill's crew-witness status."""
+    """One read-only playback recovering each kill's crew-witness status.
 
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_entries = [
-        entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    ]
-    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in meeting_entries
-    }
-    # A duplicate meeting row (same tick or meeting id) makes the report loader
-    # double-count it into D2 / the supply floors while this reconstruction dict
-    # silently keeps one — floor the set (mirrors the validity gate's dedup check).
-    if len(meeting_by_tick) != len(meeting_entries) or len(
-        {entry.meeting_id for entry in meeting_entries}
-    ) != len(meeting_entries):
-        raise _IntegrityBreach
-    game_end = next(
-        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
-    )
+    :func:`eval.replay_walk.walk_replay` under the named
+    ``watchability-referee`` profile (Task 19.25; the walker's docstring is the
+    drift record): EVERY profile option is ON — per-tick / meeting pre / post
+    hash verification, duplicate-meeting-row and ballot-tally rejection, and
+    the completeness / trailing-row / forged-outcome post-walk checks — and
+    every violation collapses to the same bare :class:`_IntegrityBreach` (the
+    referee floors the whole set, whatever the breach).
+    """
 
-    state = seed_initial_state(
+    kills: list[_KillWitnessFact] = []
+    for walk_event in walk_replay(
+        replay_path,
         seed=seed,
-        game_map=game_map,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
-    )
-
-    kills: list[_KillWitnessFact] = []
-    reconstructed_winner: WinnerSide | None = None
-    reconstructed_reason: str | None = None
-    terminal_tick: int | None = None
-    for entry in tick_entries:
-        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        state, events = advance_tick(state, actions, game_map=game_map)
-        if _state_hash(state) != entry.state_hash:
-            raise _IntegrityBreach
-        for event in events:
-            if isinstance(event, GameOverEvent):
-                reconstructed_winner = event.winner
-                reconstructed_reason = event.reason
-            elif isinstance(event, KilledEvent):
-                kills.append(
-                    _KillWitnessFact(
-                        seed=seed,
-                        victim_role=roles.get(event.target),
-                        crew_witnessed=any(
-                            roles.get(witness) == "CREWMATE"
-                            for witness in event.witnesses
-                        ),
+        game_map=game_map,
+        config=_REFEREE_WALK_CONFIG,
+    ):
+        if isinstance(walk_event, TickAdvanced):
+            for event in walk_event.events:
+                if isinstance(event, KilledEvent):
+                    kills.append(
+                        _KillWitnessFact(
+                            seed=seed,
+                            victim_role=roles.get(event.target),
+                            crew_witnessed=any(
+                                roles.get(witness) == "CREWMATE"
+                                for witness in event.witnesses
+                            ),
+                        )
                     )
-                )
-        if state.phase == "GAME_OVER":
-            terminal_tick = entry.tick
-            break
-        if state.phase != "MEETING":
-            continue
-        meeting_entry = meeting_by_tick.get(entry.tick)
-        if meeting_entry is None:
-            # A game reached MEETING phase but no resolved meeting row was
-            # recorded (a truncated / crashed-mid-meeting replay). For a valid
-            # complete recording every entered meeting resolves, so this is a
-            # corruption — floor the set rather than silently stop the walk with
-            # the remaining hashes unchecked (which would certify a truncated
-            # candidate as clean).
-            raise _IntegrityBreach
-        # The recorded pre-meeting hash must equal the state the meeting ran on
-        # (this trigger tick's verified state) — a corrupted state_hash_before is
-        # a byte-identity failure the verify-samples walk rejects, so it must not
-        # silently certify here either.
-        if meeting_entry.state_hash_before != entry.state_hash:
-            raise _IntegrityBreach
-        # The recorded ballots must tally (the frozen §5.2/§4.6 rule) to the
-        # recorded outcome + ejected player. apply_meeting_result consumes only
-        # outcome / ejected_player_id, so tampered ballots pass the hash chain yet
-        # feed plurality_margin / ejecting-voters into D3/D4/the railroad floor.
-        if tally_ballots(
-            meeting_entry.ballots, skip_confidence_threshold=SKIP_SUSPICION_THRESHOLD
-        ) != (meeting_entry.outcome, meeting_entry.ejected_player_id):
-            raise _IntegrityBreach
-        body_id = next(
-            (e.body_id for e in events if isinstance(e, MeetingTriggeredEvent)), None
-        )
-        result = MeetingResult(
-            meeting_id=meeting_entry.meeting_id,
-            triggered_by=meeting_entry.triggered_by,
-            trigger_tick=meeting_entry.tick,
-            outcome=meeting_entry.outcome,
-            ejected_player_id=meeting_entry.ejected_player_id,
-            ballots=meeting_entry.ballots,
-            contradictions=meeting_entry.contradictions,
-            transcript=meeting_entry.transcript,
-        )
-        state, meeting_events = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
-        )
-        for event in meeting_events:
-            if isinstance(event, GameOverEvent):
-                reconstructed_winner = event.winner
-                reconstructed_reason = event.reason
-        if _state_hash(state) != meeting_entry.state_hash_after:
-            raise _IntegrityBreach
-        if state.phase == "GAME_OVER":
-            terminal_tick = entry.tick
-            break
-
-    # A valid, complete game has BOTH a recorded game_over row and a reconstructed
-    # terminal GameOverEvent. A set missing either — the game_over line deleted, or
-    # a playback that never reaches a terminal event — is incomplete/corrupt and is
-    # floored, not silently certified (a partial replay that broke mid-walk already
-    # raised above on its unresolved meeting / hash).
-    if game_end is None or reconstructed_reason is None or terminal_tick is None:
-        raise _IntegrityBreach
-    # No replay row may follow the terminal event: a fabricated post-game tick /
-    # meeting is unvalidated by the walk (it breaks at game over) yet the report
-    # loader still folds every meeting row into D2 / the supply floors.
-    if any(e.tick > terminal_tick for e in tick_entries) or any(
-        e.tick > terminal_tick for e in meeting_entries
-    ):
-        raise _IntegrityBreach
-    # The recorded game_over winner/reason are NOT covered by the state-hash chain
-    # (eval.validity check 1), so a forged outcome label reconstructs byte-clean
-    # yet inflates D1/mean_score. Floor a mismatch against the reconstructed event.
-    if (
-        game_end.winner != reconstructed_winner
-        or game_end.reason != reconstructed_reason
-    ):
-        raise _IntegrityBreach
     return kills
+
+
+def _raise_integrity_breach(violation: WalkViolation) -> NoReturn:
+    raise _IntegrityBreach
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record): the
+# referee-grade walk — every option ON, every violation the same bare breach.
+_REFEREE_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="watchability-referee",
+    on_violation=_raise_integrity_breach,
+    verify_tick_hashes=True,
+    reject_duplicate_meeting_rows=True,
+    missing_meeting_row="violation",
+    verify_meeting_pre_hashes=True,
+    ballot_tally_threshold=SKIP_SUSPICION_THRESHOLD,
+    verify_meeting_post_hashes=True,
+    require_terminal_tick=True,
+    require_reconstructed_outcome=True,
+    reject_trailing_rows=True,
+    require_game_end_row=True,
+    verify_recorded_outcome=True,
+)
 
 
 # --------------------------------------------------------------------------- #
