@@ -177,6 +177,24 @@ describe("costToFrame", () => {
     expect(cost.costUsd).toBeCloseTo(0.06, 10);
   });
 
+  it("complete + a non-zero failed count implies EVERY in-range row is a marker", () => {
+    // The implication the chip's copy and its `aria-describedby` both rely on:
+    // when `tokensComplete` is true with failures present, the totals are exact
+    // and the lower-bound note is not rendered — so the failed chip must not
+    // claim a gap or point at a missing element. Asserted as a property over the
+    // pure function rather than trusted from the component, since the chip row
+    // itself is DOM and this suite is `environment: "node"`.
+    const markersOnly = costToFrame(MEETINGS, [deadlineMarker(9), deadlineMarker(10)], 14);
+    expect(markersOnly.failedCalls).toBe(2);
+    expect(markersOnly.tokensComplete).toBe(true);
+
+    // …and any real burned row in range breaks the implication, which is what
+    // keeps the conditional honest rather than vacuous.
+    const mixed = costToFrame(MEETINGS, [deadlineMarker(9), failedCall(10, 0.01)], 14);
+    expect(mixed.failedCalls).toBe(2);
+    expect(mixed.tokensComplete).toBe(false);
+  });
+
   it("still marks tokens incomplete for a REAL burned call beside a marker", () => {
     // `_record_deadline_defaults` writes both kinds; a default carrying
     // `parse_failures` records real spend under its true model. Only the

@@ -222,6 +222,14 @@ export function CostChips() {
   const tokenTitle = cost.tokensComplete
     ? "Tokens recorded on completed model calls at or before this frame"
     : "A LOWER BOUND: a failed call in range burned tokens that the replay bytes record but the served DTO does not carry, so they cannot be counted here";
+  // `tokensComplete` with a non-zero failed count means every in-range row is a
+  // zero-spend marker — that is exactly how `costToFrame` computes the flag — so
+  // the chip can say which case it is rather than describing a gap that is not
+  // there. Both kinds are still named in the incomplete wording, because the
+  // COUNT covers both.
+  const failedTitle = cost.tokensComplete
+    ? "Recorded failed-call rows. Every one in range is a zero-spend deadline-default marker: nothing was billed and no tokens were burned, so the totals beside it are exact."
+    : "Recorded failed-call rows: calls that burned spend, plus any zero-spend deadline-default markers. Burned dollars ARE counted; those calls' tokens are in the replay bytes but not served on the failed-call DTO, which is what makes the token chips read ≥";
 
   return (
     <div
@@ -276,12 +284,14 @@ export function CostChips() {
         <Chip
           label="failed"
           value={formatInt(cost.failedCalls)}
-          // Deliberately covers BOTH row kinds, because the count does: a burned
-          // call whose spend is real, and a zero-spend `deadline_default`
-          // visibility marker. Saying only "billed and then failed" would be
-          // false for the marker.
-          title="Recorded failed-call rows: calls that burned spend, plus zero-spend deadline-default markers. Burned dollars ARE counted; their tokens are in the replay bytes but not served on the failed-call DTO, which is what makes the token chips read ≥"
-          describedBy={LOWER_BOUND_NOTE_ID}
+          // Both the tooltip and the description track `tokensComplete`, because
+          // the note they explain does. When every in-range row is a zero-spend
+          // marker the totals ARE exact, so the `≥` sentence would contradict
+          // the chips beside it and the `aria-describedby` would point at an
+          // element that is not rendered — a dangling reference and a false
+          // explanation, from the one chip whose job is to account for the gap.
+          title={failedTitle}
+          describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
         />
       )}
       {/* The `≥` explained in the open, for every reader: on screen, in the
