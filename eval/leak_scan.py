@@ -45,7 +45,13 @@ from engine.events import (
     VentExitedEvent,
 )
 from engine.world import Map, WorldState, load_canonical_map
-from eval.replay_walk import ReplayWalkConfig, TickOpened, WalkViolation, walk_replay
+from eval.replay_walk import (
+    MeetingOpened,
+    ReplayWalkConfig,
+    TickOpened,
+    WalkViolation,
+    walk_replay,
+)
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.packet import ObservationPacket
 from observation.service import ObservationService, impostor_pretend_task_set
@@ -515,6 +521,20 @@ def _reconstruct_factory_records(
             game_map=game_map,
             config=_FACTORY_WALK_CONFIG,
         ):
+            if isinstance(walk_event, MeetingOpened):
+                if walk_event.trigger is None:  # pragma: no cover - engine invariant
+                    # Pre-19.25 this path crashed as a bare StopIteration from a
+                    # ``next()`` with no default; StopIteration cannot propagate
+                    # through the walker generator (PEP 479), so the fail-loud
+                    # shape is an explicit error. Continuing would scan packets
+                    # from a walk the engine contract does not cover.
+                    raise RuntimeError(
+                        f"{replay_path.name}: tick {walk_event.entry.tick} "
+                        "entered MEETING without a MeetingTriggeredEvent "
+                        "(engine invariant violation) — refusing to scan "
+                        "packets reconstructed past it"
+                    )
+                continue
             if not isinstance(walk_event, TickOpened):
                 continue
             # Build packets from the PRE-advance state + prior events (the live

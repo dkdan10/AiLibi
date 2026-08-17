@@ -12,6 +12,20 @@ integrity checking at all. A union of checks would CHANGE validation behavior
 verification and doubled-record detection included — is a profile-declared
 OPTION on :class:`ReplayWalkConfig`. NO check is core-mandatory.
 
+Scope of that claim, precisely: it covers every check THE WALKER ITSELF
+performs. The walker parses recordings through
+:func:`orchestrator.replay.read_all_entries`, which keeps its own pre-existing
+mandatory malformed-bytes rejections (two ``tick`` rows sharing a tick, or a
+second ``game_over`` row — the doubled-FILE corruption pattern, DESIGN.md
+§11.4 / Task 4.16 — plus Pydantic validation of each row). Those parse-layer
+rejections applied identically to ALL NINE pre-migration loop bodies (every
+one called ``read_all_entries``), so they are not profile options and
+loosening them here would WIDEN what the no-check profile accepts — the exact
+behavior change this task forbids. The profile-optional "doubled-record
+detection" is the doubled MEETING-row check, which the parser cannot see: a
+tick-keyed lookup silently collapses it unless a profile enables
+``reject_duplicate_meeting_rows``.
+
 The mechanics core (always on, check-free)
 ------------------------------------------
 Re-seed via :func:`orchestrator.seeder.seed_initial_state`; per recorded tick
@@ -48,6 +62,17 @@ A check that fails calls the profile's ``on_violation`` hook with a typed
 :class:`WalkViolation` and REQUIRES it to raise (the walker raises
 ``RuntimeError`` if a hook returns — no silent fallbacks), so every consumer
 keeps its own exception type and byte-identical message.
+
+The config, events, and violation records are FROZEN DATACLASSES, not
+Pydantic, deliberately: they carry engine frozen dataclasses
+(:class:`~engine.world.WorldState`, ``EngineEvent``) across an eval-internal
+seam — the :class:`eval.funnel._VJMeeting` / ``_VJGameWalk`` precedent (the
+same kind of walk carrier, crossing the same kind of boundary). A Pydantic
+wrapper would need ``arbitrary_types_allowed`` for every engine field and
+would re-validate already-typed parser/engine values per tick per game while
+validating nothing new; AGENTS.md's Pydantic rule targets boundary DTOs, and
+its companion rule ("frozen dataclasses for engine state") is the one these
+carriers follow.
 
 The profile table (the Task 19.25 drift record)
 -----------------------------------------------
@@ -115,7 +140,13 @@ What each profile deliberately relaxes, and why:
   doubled-record detection before Task 19.25 — enabling either would change
   what it accepts. Its ``on_violation`` preserves the pre-migration byte
   behavior for the one policy it must declare (a missing meeting row raises
-  ``KeyError(tick)``, exactly what the old direct dict index raised).
+  ``KeyError(tick)``, exactly what the old direct dict index raised), and its
+  fold fails loud on a MEETING transition with no
+  :class:`MeetingTriggeredEvent` (pre-migration a bare ``StopIteration`` from
+  a defaultless ``next()``; ``StopIteration`` cannot propagate through a
+  generator — PEP 479 — so an explicit ``RuntimeError`` keeps the path
+  fail-loud instead of silently continuing over an engine-invariant
+  violation).
 
 Byte-parity contract: migrating a consumer onto its profile changes NO
 committed pin, report cell, or metric value. A behavior difference between a
