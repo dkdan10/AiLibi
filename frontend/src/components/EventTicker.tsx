@@ -448,7 +448,12 @@ export function projectTickerTimeline(
     // a compliant payload.)
     for (const meeting of meetingsByTick.get(frame.tick) ?? []) {
       const ejectedId = meeting.ejected_player_id ?? null;
-      if (meeting.outcome === "EJECTED") {
+      // `MeetingOutcome` is a CLOSED pair. A bare `else` would have swept a
+      // third value ("CANCELLED", a typo, a future outcome) into "Vote resolved
+      // — no ejection", which is a specific claim about what the table did, not
+      // a neutral fallback.
+      const outcome = meeting.outcome as string;
+      if (outcome === "EJECTED") {
         if (ejectedId === null) {
           throw new Error(
             `EventTicker: meeting ${meeting.meeting_id} at tick ${meeting.tick} is ` +
@@ -458,16 +463,23 @@ export function projectTickerTimeline(
           );
         }
         push("ejection", `${ejectedId} ejected by the vote`);
-      } else {
+      } else if (outcome === "SKIPPED") {
         if (ejectedId !== null) {
           throw new Error(
             `EventTicker: meeting ${meeting.meeting_id} at tick ${meeting.tick} is ` +
-              `${meeting.outcome} but names an ejected player (${ejectedId}). The DTO ` +
-              "couples the two (EJECTED <=> non-null id), so this is an " +
-              "incompatible payload, not a skip.",
+              `SKIPPED but names an ejected player (${ejectedId}). The DTO couples ` +
+              "the two (EJECTED <=> non-null id), so this is an incompatible " +
+              "payload, not a skip.",
           );
         }
         push("ejection", "Vote resolved — no ejection");
+      } else {
+        throw new Error(
+          `EventTicker: meeting ${meeting.meeting_id} at tick ${meeting.tick} has ` +
+            `outcome ${JSON.stringify(meeting.outcome)}; the DTO admits only ` +
+            '"EJECTED" or "SKIPPED". An unknown outcome is an incompatible ' +
+            "payload — it must not be narrated as a skip.",
+        );
       }
     }
 

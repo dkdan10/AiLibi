@@ -46,6 +46,24 @@ export interface FrameCost {
   readonly tokensComplete: boolean;
 }
 
+/**
+ * The sentinel `model` on a zero-spend `deadline_default` marker
+ * (`orchestrator/game.py::_DEADLINE_DEFAULT_MODEL`).
+ *
+ * Not every `failed_calls` row is burned spend. `_record_deadline_defaults`
+ * writes a VISIBILITY marker when a deadline miss completed nothing, or when a
+ * returned-but-invalid payload's real spend is already inside the meeting's
+ * `llm_calls` — charging it again would double-count. Those rows carry zero
+ * tokens and zero dollars, and the constant's own comment says the sentinel
+ * "must never be mistaken for a model call".
+ *
+ * The same recorder ALSO writes real rows: a default carrying `parse_failures`
+ * records one row per burned generation with its true model, tokens and cost.
+ * Those are genuine unserved spend. So the discriminator is the MODEL, not
+ * `error_type` — both kinds share `error_type="deadline_default"`.
+ */
+const DEADLINE_DEFAULT_MODEL = "(deadline_default)";
+
 const ZERO_COST: FrameCost = {
   calls: 0,
   failedCalls: 0,
@@ -103,12 +121,21 @@ export function costToFrame(
     }
   }
   let failed = 0;
+  // Whether any in-range failed row could be hiding burned tokens. A zero-spend
+  // `deadline_default` marker cannot — it records that nothing was spent — so
+  // counting it here would put a `≥` on totals that are exact, claiming an
+  // undercount that does not exist. The opposite error to the one this flag was
+  // added for, and just as false.
+  let unservedSpend = false;
   for (const call of failedCalls) {
     if (call.tick > tickNumber) {
       continue;
     }
     failed += 1;
     costUsd += call.cost_usd;
+    if (call.model !== DEADLINE_DEFAULT_MODEL) {
+      unservedSpend = true;
+    }
   }
   return {
     calls,
@@ -116,10 +143,11 @@ export function costToFrame(
     inputTokens,
     outputTokens,
     costUsd,
-    // Keyed on the PRESENCE of a failed call, not on a token count: the DTO
-    // does not carry the tokens, so "how short is this" is not knowable here.
-    // Unknown-and-said-so beats a confident undercount.
-    tokensComplete: failed === 0,
+    // Keyed on the PRESENCE of a spend-bearing failed call, not on a token
+    // count: for those rows the DTO does not carry the tokens, so "how short is
+    // this" is not knowable here. Unknown-and-said-so beats a confident
+    // undercount — but only where something is genuinely unknown.
+    tokensComplete: !unservedSpend,
   };
 }
 
@@ -248,7 +276,11 @@ export function CostChips() {
         <Chip
           label="failed"
           value={formatInt(cost.failedCalls)}
-          title="Calls that were billed and then failed. Their dollars ARE counted; their tokens are recorded in the replay bytes but not served on the failed-call DTO, which is why the token chips read ≥"
+          // Deliberately covers BOTH row kinds, because the count does: a burned
+          // call whose spend is real, and a zero-spend `deadline_default`
+          // visibility marker. Saying only "billed and then failed" would be
+          // false for the marker.
+          title="Recorded failed-call rows: calls that burned spend, plus zero-spend deadline-default markers. Burned dollars ARE counted; their tokens are in the replay bytes but not served on the failed-call DTO, which is what makes the token chips read ≥"
           describedBy={LOWER_BOUND_NOTE_ID}
         />
       )}

@@ -580,6 +580,19 @@ describe("public beats", () => {
     );
   });
 
+  it("REJECTS a meeting whose outcome is neither EJECTED nor SKIPPED", () => {
+    // `MeetingOutcome` is a closed pair, so a bare `else` swept a third value
+    // into "Vote resolved — no ejection" — a specific claim about what the table
+    // did, not a neutral fallback.
+    const unknown = {
+      ...meeting(7, "SKIPPED", null),
+      outcome: "CANCELLED",
+    } as unknown as MeetingView;
+    expect(() => projectTicker(TICKS, [unknown], 1, OMNISCIENT)).toThrow(
+      /admits only "EJECTED" or "SKIPPED"/,
+    );
+  });
+
   it("REJECTS a vent whose phase is neither enter nor exit", () => {
     // `!== "enter"` alone treated anything unknown as an EXIT and then fabricated
     // an emergence — a route in Omniscient, an endpoint in the actor's own fog.

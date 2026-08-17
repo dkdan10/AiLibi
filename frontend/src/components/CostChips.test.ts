@@ -58,6 +58,24 @@ function failedCall(tick: number, costUsd: number): FailedCallView {
   };
 }
 
+/**
+ * A zero-spend `deadline_default` visibility marker
+ * (`orchestrator/game.py::_record_deadline_defaults`): a deadline miss that
+ * completed nothing, or a validation default whose real spend is already in
+ * `llm_calls`. The sentinel `model` is what distinguishes it — both kinds carry
+ * `error_type="deadline_default"`, so the error type cannot.
+ */
+function deadlineMarker(tick: number): FailedCallView {
+  return {
+    meeting_id: `m-${tick}`,
+    tick,
+    model: "(deadline_default)",
+    cost_usd: 0,
+    error_type: "deadline_default",
+    error_message: "vote defaulted (deadline) for p-3",
+  };
+}
+
 // Three meetings across a game, at ticks 7 / 14 / 35.
 const MEETINGS: readonly MeetingView[] = [
   meeting(7, [call(1_000, 100, 0.01), call(2_000, 200, 0.02)]),
@@ -148,7 +166,27 @@ describe("costToFrame", () => {
     expect(after.costUsd).toBeCloseTo(0.06 + 0.005, 10);
   });
 
-  it("keys incompleteness on the PRESENCE of a failed call, not on a token count", () => {
+  it("does NOT mark tokens incomplete for a zero-spend deadline marker", () => {
+    // The marker records that nothing was spent, so the totals beside it are
+    // EXACT. Flagging `≥` there would claim an undercount that does not exist —
+    // the mirror image of the error the flag was added to fix.
+    const cost = costToFrame(MEETINGS, [deadlineMarker(9)], 14);
+    expect(cost.failedCalls).toBe(1); // still counted and surfaced
+    expect(cost.tokensComplete).toBe(true); // …but the numbers are exact
+    expect(cost.inputTokens).toBe(6_000);
+    expect(cost.costUsd).toBeCloseTo(0.06, 10);
+  });
+
+  it("still marks tokens incomplete for a REAL burned call beside a marker", () => {
+    // `_record_deadline_defaults` writes both kinds; a default carrying
+    // `parse_failures` records real spend under its true model. Only the
+    // sentinel model is exempt, so the discriminator has to be the model.
+    const cost = costToFrame(MEETINGS, [deadlineMarker(9), failedCall(10, 0.02)], 14);
+    expect(cost.failedCalls).toBe(2);
+    expect(cost.tokensComplete).toBe(false);
+  });
+
+  it("keys incompleteness on the PRESENCE of a spend-bearing failed call", () => {
     // The DTO carries no tokens for a failed call, so "how short is this" is
     // unknowable here — even a zero-dollar failure has to flip the flag.
     const cost = costToFrame([], [failedCall(3, 0)], 5);
