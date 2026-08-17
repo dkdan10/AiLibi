@@ -31,7 +31,7 @@ import json
 import tempfile
 from collections.abc import Collection, Iterator, Sequence
 from pathlib import Path
-from typing import TypeAlias, cast
+from typing import NoReturn, TypeAlias, cast
 
 from pydantic import TypeAdapter
 
@@ -40,27 +40,22 @@ from engine.entities import RoomId
 from engine.events import (
     EngineEvent,
     KilledEvent,
-    MeetingTriggeredEvent,
     MovedEvent,
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
+from eval.replay_walk import ReplayWalkConfig, TickOpened, WalkViolation, walk_replay
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
-from meetings.schemas import MeetingResult
 from observation.packet import ObservationPacket
 from observation.service import ObservationService, impostor_pretend_task_set
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     AgentFactory,
     HeadlessGame,
-    apply_meeting_result,
     build_default_meeting_runner,
 )
-from orchestrator.replay import MeetingReplayEntry, ReplayEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
-from orchestrator.seeder import seed_initial_state
 
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
 _FORBIDDEN_BODY_FIELDS = frozenset({"killed_by", "kill_attribution", "player_id"})
@@ -71,6 +66,10 @@ _FORBIDDEN_RECURSIVE_FIELD_NAMES = frozenset(
 _ALLOWED_RECURSIVE_FIELD_PATHS = frozenset({("self_state", "role")})
 _FORBIDDEN_VALUE_SUBSTRINGS = ("impostor", "crewmate", "crew")
 _ALLOWED_VALUE_PATHS = frozenset({("self_state", "role")})
+# The recorded-action validator. The 19.25 walker deserializes for the factory
+# walk below; this stays exported because the ``eval/leak_test.py`` wrapper's
+# scripted-fixture runner validates its fixture actions through the same
+# adapter (the 19.24 library surface).
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -455,17 +454,27 @@ _FACTORY_TASKS_PER_CREWMATE = 2
 PacketRecord: TypeAlias = tuple[ObservationPacket, list[EngineEvent]]
 
 
-def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
-    return MeetingResult(
-        meeting_id=entry.meeting_id,
-        triggered_by=entry.triggered_by,
-        trigger_tick=entry.tick,
-        outcome=entry.outcome,
-        ejected_player_id=entry.ejected_player_id,
-        ballots=entry.ballots,
-        contradictions=entry.contradictions,
-        transcript=entry.transcript,
-    )
+def _raise_factory_walk_violation(violation: WalkViolation) -> NoReturn:
+    """The ``leak-scan-factory`` profile's one declared policy, byte-preserved.
+
+    The pre-19.25 walk indexed ``meeting_by_tick[entry.tick]`` directly, so a
+    MEETING tick with no meeting row raised ``KeyError(tick)`` — impossible for
+    a replay the harness itself just recorded, but preserved exactly.
+    """
+
+    raise KeyError(violation.tick)
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record): NO
+# checks, deliberately — the factory walk scans packets from replays recorded
+# moments earlier in the same process, and it performed neither hash
+# verification nor doubled-record detection before 19.25; enabling either
+# would change what it accepts.
+_FACTORY_WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
+    profile="leak-scan-factory",
+    on_violation=_raise_factory_walk_violation,
+    missing_meeting_row="violation",
+)
 
 
 def _reconstruct_factory_records(
@@ -480,68 +489,46 @@ def _reconstruct_factory_records(
 ) -> list[PacketRecord]:
     """Re-seed + replay one factory game, yielding (packet, engine_events) records.
 
-    Mirrors ``HeadlessGame._run_loop`` EXACTLY (``orchestrator/game.py``): each
-    iteration builds every living agent's packet from the CURRENT (pre-advance)
-    state plus the PRIOR tick's events (``last_events``) — the same
+    :func:`eval.replay_walk.walk_replay` (the ``leak-scan-factory`` profile)
+    threads ``last_events`` EXACTLY as ``HeadlessGame._run_loop`` does
+    (``orchestrator/game.py``): each ``TickOpened`` carries the CURRENT
+    (pre-advance) state plus the PRIOR tick's events — the same
     ``build_packet(engine_events=last_events)`` the live loop hands the agents —
-    THEN translates and advances that tick's recorded actions, THEN applies any
-    meeting. So the scanned stream is exactly the packets the encoder consumed:
-    it includes the tick-0 opening packet and every post-meeting resume packet,
-    and excludes the terminal GAME_OVER state (no agent decides there). Each packet
-    is paired with the events it was BUILT with, so the witness-permission check
+    before that tick's recorded actions advance and any meeting applies. So the
+    scanned stream is exactly the packets the encoder consumed: it includes the
+    tick-0 opening packet and every post-meeting resume packet, and excludes
+    the terminal GAME_OVER state (no agent decides there). Each packet is
+    paired with the events it was BUILT with, so the witness-permission check
     reads the right events.
     """
 
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
     records: list[PacketRecord] = []
     audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
     service = ObservationService(game_map=game_map, audit_log_path=audit_path)
-    last_events: tuple[EngineEvent, ...] = ()
     try:
-        for entry in tick_entries:
+        for walk_event in walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_FACTORY_WALK_CONFIG,
+        ):
+            if not isinstance(walk_event, TickOpened):
+                continue
             # Build packets from the PRE-advance state + prior events (the live
-            # loop's exact contract), before applying this tick's actions.
-            events_for_packets = list(last_events)
+            # loop's exact contract), before this tick's actions apply.
+            state = walk_event.state
+            events_for_packets = list(walk_event.last_events)
             for player_id in sorted(state.players):
                 if state.players[player_id].alive:
                     packet = service.build_packet(
                         world_state=state,
                         agent_id=player_id,
-                        engine_events=last_events,
+                        engine_events=walk_event.last_events,
                     )
                     records.append((packet, events_for_packets))
-            actions = [
-                _ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions
-            ]
-            state, events = advance_tick(state, actions, game_map=game_map)
-            last_events = tuple(events)
-            if state.phase == "MEETING":
-                trigger = next(
-                    e for e in events if isinstance(e, MeetingTriggeredEvent)
-                )
-                pre_meeting_events = last_events
-                state, post_events = apply_meeting_result(
-                    state,
-                    _meeting_result_from_entry(meeting_by_tick[entry.tick]),
-                    game_map=game_map,
-                    triggering_body_id=trigger.body_id,
-                )
-                # Mirror the live loop: the resume packet sees the pre-meeting
-                # events (a same-tick kill) plus the meeting's post events.
-                last_events = pre_meeting_events + tuple(post_events)
-            if state.phase == "GAME_OVER":
-                break
     finally:
         service.close()
         audit_path.unlink(missing_ok=True)
