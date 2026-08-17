@@ -155,10 +155,13 @@ function formatInt(value: number): string {
   return value.toLocaleString("en-US");
 }
 
-// The id the token chips point `aria-describedby` at when the figure is a lower
-// bound. Module-scope constant, not `useId`: there is exactly one chip row in the
+// The id of the one visible note explaining the failed-call rows in range —
+// either the `≥` lower bound, or the no-unaccounted-spend marker case. ONE id
+// for one note: the two cases are mutually exclusive and never render together,
+// so a second id would only create a way for a chip to point at the wrong one.
+// Module-scope constant, not `useId`: there is exactly one chip row in the
 // workspace, and a stable literal keeps the association readable in the DOM.
-const LOWER_BOUND_NOTE_ID = "cost-chips-lower-bound";
+const FAILED_NOTE_ID = "cost-chips-failed-note";
 
 /** One chip. Mono value, muted label — the dense-data hairline, not chrome. */
 function Chip({
@@ -222,13 +225,19 @@ export function CostChips() {
   const tokenTitle = cost.tokensComplete
     ? "Tokens recorded on completed model calls at or before this frame"
     : "A LOWER BOUND: a failed call in range burned tokens that the replay bytes record but the served DTO does not carry, so they cannot be counted here";
-  // `tokensComplete` with a non-zero failed count means every in-range row is a
-  // zero-spend marker — that is exactly how `costToFrame` computes the flag — so
-  // the chip can say which case it is rather than describing a gap that is not
-  // there. Both kinds are still named in the incomplete wording, because the
-  // COUNT covers both.
+  // NO UNACCOUNTED SPEND — not "nothing was spent". A zero-spend marker covers
+  // TWO cases (`_record_deadline_defaults`): a deadline miss, which genuinely
+  // completed nothing, AND a manager-side validation of a returned-but-invalid
+  // payload, whose completion DID burn tokens and money — already counted in
+  // `llm_calls`, which is exactly why the marker row carries zero (charging it
+  // twice would double-count). Saying "no tokens were burned" is false for the
+  // second, so the wording describes what is true of both: the totals beside it
+  // are already complete.
+  const failedNote = cost.tokensComplete
+    ? "Failed rows in range are zero-spend deadline-default markers — they add no unaccounted spend: a deadline that completed nothing, or a validation whose completion is already counted in the totals above."
+    : "≥ token counts exclude a failed call's burned tokens — recorded in the replay, not served on the failed-call DTO. Dollars are complete.";
   const failedTitle = cost.tokensComplete
-    ? "Recorded failed-call rows. Every one in range is a zero-spend deadline-default marker: nothing was billed and no tokens were burned, so the totals beside it are exact."
+    ? `Recorded failed-call rows. ${failedNote}`
     : "Recorded failed-call rows: calls that burned spend, plus any zero-spend deadline-default markers. Burned dollars ARE counted; those calls' tokens are in the replay bytes but not served on the failed-call DTO, which is what makes the token chips read ≥";
 
   return (
@@ -262,13 +271,13 @@ export function CostChips() {
         label="in"
         value={`${tokenPrefix}${formatInt(cost.inputTokens)} tok`}
         title={tokenTitle}
-        describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
+        describedBy={cost.tokensComplete ? undefined : FAILED_NOTE_ID}
       />
       <Chip
         label="out"
         value={`${tokenPrefix}${formatInt(cost.outputTokens)} tok`}
         title={tokenTitle}
-        describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
+        describedBy={cost.tokensComplete ? undefined : FAILED_NOTE_ID}
       />
       <Chip
         label="usd"
@@ -284,28 +293,30 @@ export function CostChips() {
         <Chip
           label="failed"
           value={formatInt(cost.failedCalls)}
-          // Both the tooltip and the description track `tokensComplete`, because
-          // the note they explain does. When every in-range row is a zero-spend
-          // marker the totals ARE exact, so the `≥` sentence would contradict
-          // the chips beside it and the `aria-describedby` would point at an
-          // element that is not rendered — a dangling reference and a false
-          // explanation, from the one chip whose job is to account for the gap.
           title={failedTitle}
-          describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
+          // Unconditional: the note below renders whenever this chip does, so
+          // this can never dangle. See the render gate for why the two
+          // conditions coincide.
+          describedBy={FAILED_NOTE_ID}
         />
       )}
-      {/* The `≥` explained in the open, for every reader: on screen, in the
-          accessibility tree, and reachable without a pointer. It renders only
-          when the qualifier applies, so the ordinary row stays a clean chip
-          strip — and because it is real text inside the labelled group, a screen
-          reader meets it whether or not it follows the `aria-describedby`. */}
-      {!cost.tokensComplete && (
+      {/* Explained in the OPEN, for every reader — on screen, in the
+          accessibility tree, and reachable without a pointer. A `title` is a
+          pointer convenience only: on a non-focusable span it cannot be reached
+          by keyboard and is merely a fallback description to a screen reader, so
+          it is never the sole channel for EITHER case.
+
+          Rendered whenever a failed row is in range, which is exactly when the
+          count needs explaining — and that subsumes `!tokensComplete`, since an
+          unserved-spend row IS a failed row. So the failed chip points here
+          unconditionally while the token chips point here only when the `≥`
+          applies to them, and neither can reference a missing element. */}
+      {cost.failedCalls > 0 && (
         <span
-          id={LOWER_BOUND_NOTE_ID}
+          id={FAILED_NOTE_ID}
           className="font-mono text-3xs leading-snug text-ink-600"
         >
-          ≥ token counts exclude a failed call&apos;s burned tokens — recorded in
-          the replay, not served on the failed-call DTO. Dollars are complete.
+          {failedNote}
         </span>
       )}
     </div>
