@@ -739,3 +739,37 @@ def test_the_pytest_wrapper_is_the_half_that_needs_pytest() -> None:
 
     assert probe.returncode != 0
     assert "reached a production import path" in probe.stderr
+
+
+def test_moved_players_scanner_can_gate_on_departure_time_visibility() -> None:
+    # The tick-interior case (Codex P1 on PR #345): p-8 walks INTO the room p-3
+    # walks OUT of, in the same tick. Post-move, p-8 stands in STORAGE and "sees"
+    # it; at the moment of departure it was still in ENGINEERING and saw nothing.
+    #
+    # Both answers are asserted here because the difference is a MODELING choice
+    # about the interior of an atomic tick, not a bug with one right answer: the
+    # service gates on the post-move set today, and this scanner can express the
+    # stricter pre-move rule for whoever flips it. What must never happen is the
+    # strict rule silently not biting.
+    arrival_only = _moved_packet(
+        agent_id="p-8",
+        room="STORAGE",
+        moved=(MovedPlayerView(id="p-3", from_room="STORAGE", to_room="ENGINEERING"),),
+    )
+    departure = MovedEvent(
+        type="Moved", tick=4, actor="p-3", from_room="STORAGE", to_room="ENGINEERING"
+    )
+
+    # The rule observation/service.py implements: p-8 can see STORAGE now.
+    assert_moved_players_are_witness_gated(
+        arrival_only, engine_events=[departure], visible_rooms=("STORAGE",)
+    )
+
+    # The stricter rule: at the departure p-8 was still in ENGINEERING.
+    with pytest.raises(AssertionError, match="cannot see at the departure"):
+        assert_moved_players_are_witness_gated(
+            arrival_only,
+            engine_events=[departure],
+            visible_rooms=("STORAGE",),
+            departure_visible_rooms=("ENGINEERING",),
+        )

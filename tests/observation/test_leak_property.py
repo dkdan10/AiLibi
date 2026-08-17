@@ -46,6 +46,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from pydantic import TypeAdapter
@@ -816,3 +817,86 @@ def test_a_witnessed_transition_really_does_reach_a_packet(tmp_path: Path) -> No
     # the same rule's other side: it walked, it did not watch.
     assert packets["p-7"].moved_players == ()
     assert packets["p-9"].moved_players == ()
+
+
+def test_the_tick_interior_choice_is_pinned_on_both_sides(tmp_path: Path) -> None:
+    """A tick is atomic, so "witnessed the departure" has TWO defensible answers.
+
+    Raised as a P1 on PR #345 and reproduced before this test was written. Inside
+    one ``advance_tick`` every move applies at once and the engine emits no
+    intra-tick ordering, so there is no state in which "the moment p-3 left" is a
+    thing the code can consult. Only two states exist to gate on, and they differ
+    for exactly the players who moved this tick:
+
+    * POST-move (what ``_moved_players_for_agent`` gates on today): the observer
+      that ARRIVED in the departure room this tick is served; the observer that
+      stood there and LEFT in the same tick is not.
+    * PRE-move: the mirror image.
+
+    Neither is uniformly stricter, so this is a modelling choice about the
+    interior of a tick, owned by ``observation/service.py`` — which Task 19.24
+    covers but does not change (perception feeds memory feeds actions feeds
+    replay bytes, so flipping it is a substrate lever with a baseline
+    re-adoption). Both real answers are pinned here so that flip cannot happen
+    silently, and ``eval/leak_scan`` can express the stricter rule
+    (``departure_visible_rooms``) for whoever makes it.
+    """
+
+    game_map = load_canonical_map()
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    def _move(actor: PlayerId, to_room: str) -> Action:
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "move", "actor": actor, "payload": {"to_room": to_room}}
+        )
+
+    # ── the same-tick ARRIVER: served today ──────────────────────────────────
+    state = _roster_initial_state(seed=1, num_impostors=2, game_map=game_map)
+    state, _ = advance_tick(state, [_move("p-3", "WEST_HALL")], game_map=game_map)
+    # p-3 leaves WEST_HALL for MEDBAY exactly as p-8 arrives from CAFETERIA.
+    state, events = advance_tick(
+        state, [_move("p-3", "MEDBAY"), _move("p-8", "WEST_HALL")], game_map=game_map
+    )
+    arriver = service.build_packet(
+        world_state=state, agent_id="p-8", engine_events=events
+    )
+    assert [(m.id, m.from_room) for m in arriver.moved_players] == [
+        ("p-3", "WEST_HALL")
+    ], "the same-tick arriver stopped receiving the departure — the gate flipped"
+    # The sweep's rule (the service's) accepts it; the strict rule rejects it,
+    # p-8 having been in CAFETERIA when p-3 left.
+    assert_moved_players_are_witness_gated(
+        arriver,
+        engine_events=events,
+        visible_rooms=compute_visibility_for_player(
+            observer_id="p-8", world_state=state, game_map=game_map
+        ).visible_rooms,
+    )
+    with pytest.raises(AssertionError, match="cannot see at the departure"):
+        assert_moved_players_are_witness_gated(
+            arriver,
+            engine_events=events,
+            visible_rooms=("WEST_HALL",),
+            departure_visible_rooms=("CAFETERIA",),
+        )
+
+    # ── the same-tick LEAVER: NOT served today ───────────────────────────────
+    state = _roster_initial_state(seed=1, num_impostors=2, game_map=game_map)
+    state, _ = advance_tick(
+        state,
+        [_move("p-3", "WEST_HALL"), _move("p-8", "WEST_HALL")],
+        game_map=game_map,
+    )
+    # p-8 stood in WEST_HALL WITH p-3 and walks back to CAFETERIA as p-3 leaves.
+    state, events = advance_tick(
+        state, [_move("p-3", "MEDBAY"), _move("p-8", "CAFETERIA")], game_map=game_map
+    )
+    leaver = service.build_packet(
+        world_state=state, agent_id="p-8", engine_events=events
+    )
+    service.close()
+    assert leaver.moved_players == (), (
+        "the same-tick leaver started receiving the departure — the gate flipped"
+    )

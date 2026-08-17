@@ -186,12 +186,13 @@ def assert_moved_players_are_witness_gated(
     *,
     engine_events: Sequence[EngineEvent],
     visible_rooms: Collection[RoomId],
+    departure_visible_rooms: Collection[RoomId] | None = None,
 ) -> None:
     """Assert every ``moved_players`` entry is a transition the observer WITNESSED.
 
     Four properties, each a way the channel could leak or drift:
 
-    1. **Departure-witnessed.** ``from_room`` is in ``visible_rooms`` — the
+    1. **Departure-witnessed.** ``from_room`` is in the gating room set — the
        observer could see the room the actor LEFT. This is the exact predicate
        the prior bug got wrong (it gated on the arrival instead), so a packet
        built by arrival-gating trips here.
@@ -203,13 +204,38 @@ def assert_moved_players_are_witness_gated(
     4. **Replay-stable byte shape.** Sorted ascending by ``id``, no duplicate
        actor — the packet ordering the service promises.
 
-    Takes ``visible_rooms`` as an argument rather than recomputing it: the caller
-    supplies it from ``engine.visibility.compute_visibility_for_player`` over the
-    same world state, so the check is INDEPENDENT of the service's own gating
-    (the point — a scanner that reused the code under test would prove nothing).
-    That is also why this is not folded into
-    :func:`assert_packet_is_leak_clean`, whose factory-mode callers hold packets
-    and events but no world state.
+    Takes the room sets as arguments rather than recomputing them: the caller
+    supplies them from ``engine.visibility.compute_visibility_for_player``, so
+    the check is INDEPENDENT of the service's own gating (the point — a scanner
+    that reused the code under test would prove nothing). That is also why this
+    is not folded into :func:`assert_packet_is_leak_clean`, whose factory-mode
+    callers hold packets and events but no world state.
+
+    WHICH ROOM SET GATES PROPERTY 1 — the tick-interior question (Codex P1 review
+    on PR #345, reproduced before this text was written). A tick is atomic: the
+    engine applies every move at once and emits no intra-tick ordering, so
+    "visible when the actor left" is not a state the engine ever holds. There are
+    only two states to gate against, and they differ for exactly one population —
+    players who moved this tick:
+
+    * ``visible_rooms`` (POST-move, what ``observation/service.py`` gates on
+      today): an observer that ARRIVED in ``from_room`` this tick receives the
+      departure of an actor that left it in the same tick; an observer that stood
+      there and LEFT in the same tick receives nothing.
+    * ``departure_visible_rooms`` (PRE-move): the mirror image — the same-tick
+      leaver is served, the same-tick arriver is not.
+
+    Neither slice is uniformly stricter, so which one is right is a MODELING
+    choice about the interior of a tick, and it belongs to
+    ``observation/service.py`` — the packet channel this task covers but does not
+    change (agent perception feeds memory feeds actions feeds replay bytes, so a
+    flip is a substrate lever with a baseline re-adoption, not a test change).
+    Passing ``departure_visible_rooms`` therefore asserts the STRICTER pre-move
+    rule and is how a future task would gate a flip; leaving it ``None`` asserts
+    the rule the service implements today. Both are exercised by planted
+    self-tests in ``eval/leak_test.py``, and
+    ``tests/observation/test_leak_property.py`` pins the two real-service answers
+    so a silent flip fails.
 
     Raises ``AssertionError`` on any violation.
     """
@@ -223,7 +249,11 @@ def assert_moved_players_are_witness_gated(
         for event in engine_events
         if isinstance(event, MovedEvent)
     }
-    visible = set(visible_rooms)
+    gating_rooms = (
+        visible_rooms if departure_visible_rooms is None else departure_visible_rooms
+    )
+    when = "at the departure" if departure_visible_rooms is not None else "now"
+    visible = set(gating_rooms)
     for entry in moved:
         assert entry.from_room != entry.to_room, (
             f"{agent} packet carries a no-op move for {entry.id!r} "
@@ -236,7 +266,7 @@ def assert_moved_players_are_witness_gated(
         )
         assert entry.from_room in visible, (
             f"{agent} packet leaked an unwitnessed departure: {entry.id!r} left "
-            f"{entry.from_room!r}, which {agent} cannot see"
+            f"{entry.from_room!r}, which {agent} cannot see {when}"
         )
     ids = [entry.id for entry in moved]
     assert ids == sorted(set(ids)), (
