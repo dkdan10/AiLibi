@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "crew-option-features-v2",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-ablation-run-c1-conviction-term-crew-alternating-freeze-champion-gen9-a0ab72e26d40e289fc64c719d079e070ece960956d73bf4eae230f7c8fa7fbd3",
-  "weights_sha256": "a0ab72e26d40e289fc64c719d079e070ece960956d73bf4eae230f7c8fa7fbd3"
-}

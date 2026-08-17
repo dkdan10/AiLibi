@@ -1,9 +1,0 @@
-{
-  "anchor_weight": 1.0,
-  "campaign": "task-18.24-impostor-campaign",
-  "encoder_version": "crew-option-features-v2",
-  "entrant": "ablation-run-01-conviction-term/crew/gen-12/81ea76a44ab6cfe39f648c7d88f0a7c3dad4cbf5a91e72efc4496b92d4256473",
-  "genome_length": 27,
-  "side": "crew",
-  "source_lineage": "ablation-run-01-conviction-term"
-}

@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "filtered-bc-anchor",
-  "encoder_version": "crew-option-features-v2",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-run-03-utility-bcanchor-crew-crew/gen-6",
-  "weights_sha256": "1ae4883b4293d0481ed7939648a2e690b029a3ac2352d4b9e60127a55e50fc3d"
-}

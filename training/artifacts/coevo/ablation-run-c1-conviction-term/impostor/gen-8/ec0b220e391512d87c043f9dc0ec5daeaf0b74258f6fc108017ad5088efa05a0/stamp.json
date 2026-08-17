@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "fsm-default",
-  "encoder_version": "impostor-option-features-v1",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-ablation-run-c1-conviction-term-impostor-exploiter-probe-gen8-ec0b220e391512d87c043f9dc0ec5daeaf0b74258f6fc108017ad5088efa05a0",
-  "weights_sha256": "ec0b220e391512d87c043f9dc0ec5daeaf0b74258f6fc108017ad5088efa05a0"
-}

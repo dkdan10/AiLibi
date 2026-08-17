@@ -1,9 +1,0 @@
-{
-  "anchor_weight": 1.0,
-  "campaign": "task-18.24-impostor-campaign",
-  "encoder_version": "crew-option-features-v2",
-  "entrant": "run-01-utility-champion/crew/gen-12/31ca14b5a05c017d543e76c3ec78d42556515b1e123ac22b16a2e0680b79f119",
-  "genome_length": 27,
-  "side": "crew",
-  "source_lineage": "run-01-utility-champion"
-}

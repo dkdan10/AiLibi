@@ -1,7 +1,0 @@
-{
-  "anchor_policy": "filtered-bc-anchor",
-  "encoder_version": "impostor-option-features-v1",
-  "method": "alternating-freeze-es",
-  "policy_id": "coevo-run-03-utility-bcanchor-exploiter-probe-gen4",
-  "weights_sha256": "56a8e5b956e10c157c6b04f908faec90e1ea777451e30e0ea5d2898c593c97c8"
-}
