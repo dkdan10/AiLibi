@@ -356,8 +356,22 @@ test.describe("spectator journey", () => {
 
     await expect(ticker(page)).toContainText("omniscient");
     await expect(ticker(page)).toContainText(/p-\d+ killed p-\d+/);
-    const omniscientBeats = await ticker(page).getByRole("listitem").count();
+    const omniscientRows = await ticker(page).getByRole("listitem").allInnerTexts();
+    const omniscientBeats = omniscientRows.length;
     expect(omniscientBeats).toBeGreaterThan(0);
+
+    // No vent route may name the same room twice. On a real traversal the engine
+    // repeats the SOURCE in the dive event's `to_room_id` — the destination is
+    // only resolved on the exit event — so a route read off the dive renders
+    // `STORAGE → STORAGE`. Unit fixtures can encode the right byte shape, but
+    // only the committed corpus proves the shape; this is the guard that reads
+    // it. Vacuous on a game with no vents, which is the correct behaviour.
+    for (const row of omniscientRows) {
+      const route = /([A-Z_]+) → ([A-Z_]+)/.exec(row);
+      if (route !== null) {
+        expect(route[1]).not.toBe(route[2]);
+      }
+    }
 
     await page.getByRole("button", { name: "As-agent" }).click();
     await expect(ticker(page)).toContainText(/as p-\d+ · fog/);

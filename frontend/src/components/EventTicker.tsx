@@ -34,20 +34,28 @@
 //                      DISCOVERY, when the victim's body enters this agent's
 //                      `visible_bodies` — killer-free by construction
 //                      (`VisibleBodyView` has no `killed_by`).
-//   witnessed vent   → the actor and the ONE endpoint the witness saw. Never the
-//                      route: `_ObservedAction` records a single witnessed room,
-//                      so a `from → to` line would invent perception.
+//   witnessed vent   → the actor and the ONE endpoint the witness saw, on
+//                      EITHER phase (both vent events carry `source_witnesses`
+//                      and `destination_witnesses`, so an agent may witness only
+//                      the dive, only the emergence, or both). Never the route:
+//                      `_ObservedAction` records a single witnessed room, so a
+//                      `from → to` line would invent perception.
 //   unwitnessed vent → nothing at all, through any channel. (`vent_use_heard` is
 //                      not a second chance: `observation/service.py` derives the
 //                      audible cue from the SAME witness-gated observed action,
 //                      so heard-but-unseen is not a state the bytes contain.)
 //
-// One consequence worth naming because it looks like a bug and is not: an
-// impostor watching its OWN kill in fog does not see it either. The engine
-// excludes a killer from its own kill's witnesses, and the privileged self
-// channel that would carry it (`SelfView.own_kill`) is deliberately not
-// projected into `AgentVisibilityView` — so the bytes the ticker reads simply do
-// not contain it. The map has the same blind spot for the same reason.
+// A fifth case sits beside them: the agent's OWN kill or vent. The engine
+// excludes an actor from its own witness sets, so the four rules above would
+// drop it — and worse, an own kill would then resurface through the body pass as
+// "Found p-5's body", telling an impostor it had stumbled on a body it made
+// itself. Own acts are the one thing an agent knows for certain, and the map
+// already treats them that way under fog (the self token draws
+// `selfActionGlyph(selfState.current_action)`, KILL and VENT included), so they
+// get an explicit self branch. It is a carve-out for ONE actor, never a hole in
+// the gate: other agents' unwitnessed acts stay invisible in the same frame, and
+// the self's vent still shows one endpoint rather than a route, so "no vent
+// route survives the fog" holds for every agent.
 //
 // PUBLIC beats — a body report, a meeting being called, and how the vote
 // resolved — surface in every perspective. They are table-level facts the
@@ -96,8 +104,7 @@ const KIND_LABEL: Record<TickerKind, string> = {
   vent: "vent",
 };
 
-const EMPTY_TICKS: readonly TickView[] = [];
-const EMPTY_MEETINGS: readonly MeetingView[] = [];
+const EMPTY_ENTRIES: readonly TickerEntry[] = [];
 
 /**
  * This agent's field of view at a frame, or `null` when it has none.
@@ -202,6 +209,19 @@ export function projectTicker(
             push("kill", `${event.killer_id} killed ${event.victim_id} · ${event.room_id}`);
             break;
           }
+          // The agent's OWN act is self-knowledge, and it needs its own branch
+          // because the engine excludes a killer from its own kill's witnesses
+          // (`engine/rules.py`) — so `witnessedAction` below can NEVER match it.
+          // Without this the fog would drop the kill and the body pass would
+          // then report the victim as a discovery, telling an impostor it had
+          // stumbled on a body it made itself. The map already carries this
+          // exact fact under fog: the self token draws
+          // `selfActionGlyph(selfState.current_action)`, which includes KILL.
+          if (event.killer_id === fogAgentId) {
+            accountedVictims.add(event.victim_id);
+            push("kill", `${event.killer_id} killed ${event.victim_id} · ${event.room_id}`);
+            break;
+          }
           const seen = witnessedAction(visibility, event.killer_id, "kill");
           if (seen === null) {
             // Unwitnessed: the privileged attribution stops here. The body pass
@@ -213,21 +233,46 @@ export function projectTicker(
           break;
         }
         case "vent": {
-          // The dive is the beat; `exit` is the same act re-emitted at the far
-          // end, so surfacing both would double every vent.
-          if (event.phase !== "enter") {
+          // BOTH phases are beats, and which room each one knows is the whole
+          // point. On a real traversal the ENTER event's `to_room_id` EQUALS its
+          // `from_room_id` — the destination is not resolved yet, which is why
+          // `MapView.buildVentSegments` pairs the two events to get a route — so
+          // only the EXIT event carries the emergence room. Reading a route off
+          // the enter event printed `STORAGE → STORAGE`, and skipping the exit
+          // dropped the destination entirely *and*, under fog, silently
+          // discarded an emergence the agent genuinely witnessed.
+          const entering = event.phase === "enter";
+          if (fogAgentId === null) {
+            push(
+              "vent",
+              entering
+                ? `${event.actor_id} entered a vent · ${event.from_room_id}`
+                : `${event.actor_id} emerged from a vent · ${event.from_room_id} → ${event.to_room_id}`,
+            );
             break;
           }
-          if (fogAgentId === null) {
-            push("vent", `${event.actor_id} vented ${event.from_room_id} → ${event.to_room_id}`);
+          if (event.actor_id === fogAgentId) {
+            // Self-knowledge, same as the own-kill branch above (the actor is
+            // excluded from its own witness sets). The endpoint it was AT on
+            // this tick, never the route — so the "no vent route survives the
+            // fog" invariant holds for every agent, impostors included.
+            push(
+              "vent",
+              entering
+                ? `${event.actor_id} entered a vent · ${event.from_room_id}`
+                : `${event.actor_id} emerged from a vent · ${event.to_room_id}`,
+            );
             break;
           }
           const seen = witnessedAction(visibility, event.actor_id, "vent");
           if (seen === null) {
             break;
           }
-          // The witnessed ENDPOINT only — never `from → to`. A witness at one
-          // mouth of the network did not see where the actor came out.
+          // Endpoint-agnostic wording on purpose: BOTH vent events carry
+          // `source_witnesses` AND `destination_witnesses`, and
+          // `_vent_observation_for_agent` projects whichever endpoint THIS
+          // observer stood at — so naming the phase would assert perception the
+          // packet does not support.
           push("vent", `${event.actor_id} used a vent · ${seen.room}`);
           break;
         }
@@ -281,14 +326,17 @@ export function EventTicker() {
   const perspective = useReplayStore((s) => s.perspective);
   const { frameIndex, tickNumber } = usePlayback();
 
+  // `replay === null` is the only guard, and `ticks` / `meetings` are read
+  // DIRECTLY off it. Both are required fields of the versioned DTO, so an
+  // `?? []` normalisation would turn a malformed payload into an empty feed that
+  // looks exactly like "nothing has happened yet" — a plausible false result,
+  // which is the silent fallback AGENTS.md forbids. Read them straight: an
+  // incompatible payload throws where a reader can see it.
   const entries = useMemo(
     () =>
-      projectTicker(
-        replay?.ticks ?? EMPTY_TICKS,
-        replay?.meetings ?? EMPTY_MEETINGS,
-        frameIndex,
-        perspective,
-      ),
+      replay === null
+        ? EMPTY_ENTRIES
+        : projectTicker(replay.ticks, replay.meetings, frameIndex, perspective),
     [replay, frameIndex, perspective],
   );
 
@@ -301,6 +349,7 @@ export function EventTicker() {
   // needs no scroll management to stay current (and none of the auto-scrolling a
   // reduced-motion reader would have to opt out of).
   const newestFirst = [...entries].reverse();
+  const newest = newestFirst[0];
 
   return (
     <section
@@ -322,6 +371,20 @@ export function EventTicker() {
           {inFog ? `as ${perspective.agentId} · fog` : "omniscient"} · to t{tickNumber}
         </span>
       </div>
+      {/* The beats arrive on their own during autoplay and keyboard stepping,
+          which is exactly the otherwise-silent playback transition the meeting
+          pause bar solves with `role="status"`. This is the same device for the
+          same reason.
+
+          It holds ONLY the newest entry, never the accumulated feed: the live
+          region announces its content when that content CHANGES, so a node
+          containing the whole list would re-read every beat on every step. With
+          one entry in it, landing on a new beat announces that beat and stepping
+          between beats announces nothing (the text is unchanged). The visible
+          <ol> below is deliberately NOT live for the same reason. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {newest === undefined ? "" : `tick ${newest.tick}: ${newest.text}`}
+      </p>
       {newestFirst.length === 0 ? (
         <p className="mt-2 font-mono text-2xs text-ink-500">
           {inFog

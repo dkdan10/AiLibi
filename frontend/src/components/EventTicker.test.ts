@@ -98,6 +98,13 @@ function kill(tick: number, killer = "p-3", victim = "p-5"): TickEventView {
   return { type: "kill", tick, killer_id: killer, victim_id: victim, room_id: "REACTOR" };
 }
 
+// The ENTER event's `to_room_id` EQUALS its `from_room_id` — this is the real
+// byte shape, verified against every traversal in the committed 9p2i sets
+// (e.g. seed 2: `t9 enter from=STORAGE to=STORAGE`, `t10 exit from=STORAGE
+// to=ENGINEERING`). The destination is not resolved at dive time. A fixture that
+// put the destination on the enter event would be fiction, and it would hide
+// exactly the defect these tests exist to prevent: a route rendered off the
+// enter event reads `STORAGE → STORAGE`.
 function vent(tick: number, actor = "p-3"): TickEventView {
   return {
     type: "vent",
@@ -105,7 +112,7 @@ function vent(tick: number, actor = "p-3"): TickEventView {
     actor_id: actor,
     phase: "enter",
     from_room_id: "REACTOR",
-    to_room_id: "ELECTRICAL",
+    to_room_id: "REACTOR",
     traversal_ticks: 3,
   };
 }
@@ -269,6 +276,8 @@ describe("kills through the As-agent projection", () => {
 // ── fog case 3 + 4: vents ────────────────────────────────────────────────────
 
 describe("vents through the As-agent projection", () => {
+  // Witnessed at the SOURCE mouth only: the watcher sees p-3 dive at REACTOR and
+  // is nowhere near ELECTRICAL when it comes out.
   const WITNESSED: readonly TickView[] = [
     frame(START_TICK, [], [watcherState(visibility())]),
     frame(
@@ -278,6 +287,19 @@ describe("vents through the As-agent projection", () => {
     ),
     // The far end of the same traversal, which this agent did NOT see.
     frame(9, [ventExit(9)], [watcherState(visibility())]),
+  ];
+
+  // The mirror image: the watcher misses the dive and witnesses only the
+  // EMERGENCE. Both vent events carry `source_witnesses` AND
+  // `destination_witnesses`, so this is a real packet the projection must honour.
+  const WITNESSED_EMERGENCE: readonly TickView[] = [
+    frame(START_TICK, [], [watcherState(visibility())]),
+    frame(6, [vent(6)], [watcherState(visibility())]),
+    frame(
+      9,
+      [ventExit(9)],
+      [watcherState(visibility([{ id: "p-3", room: "ELECTRICAL", action: "vent" }]))],
+    ),
   ];
 
   const UNWITNESSED: readonly TickView[] = [
@@ -301,21 +323,123 @@ describe("vents through the As-agent projection", () => {
     expect(lines(entries)).not.toContain("→");
   });
 
+  it("WITNESSED at the EXIT: an emergence-only witness still gets its beat", () => {
+    const entries = projectTicker(WITNESSED_EMERGENCE, NO_MEETINGS, 2, AS_WATCHER);
+    expect(entries.map((entry) => entry.kind)).toEqual(["vent"]);
+    expect(entries[0]?.tick).toBe(9);
+    expect(lines(entries)).toBe("p-3 used a vent · ELECTRICAL");
+    // Still no route: this observer saw a player come OUT of a vent, not where
+    // they went in.
+    expect(lines(entries)).not.toContain("REACTOR");
+    expect(lines(entries)).not.toContain("→");
+  });
+
   it("UNWITNESSED: does not surface at all, through any channel", () => {
     for (let index = 0; index < UNWITNESSED.length; index++) {
       expect(projectTicker(UNWITNESSED, NO_MEETINGS, index, AS_WATCHER)).toEqual([]);
     }
   });
 
-  it("OMNISCIENT: the same bytes carry actor and full route", () => {
+  it("OMNISCIENT: the route comes off the EXIT event, never the dive", () => {
+    // The dive knows only where it started — its own `to_room_id` is the source
+    // repeated, so a route printed here would read `REACTOR → REACTOR`.
+    expect(lines(projectTicker(UNWITNESSED, NO_MEETINGS, 1, OMNISCIENT))).toBe(
+      "p-3 entered a vent · REACTOR",
+    );
+    expect(lines(projectTicker(UNWITNESSED, NO_MEETINGS, 1, OMNISCIENT))).not.toContain("→");
+    // The emergence is where the destination becomes known.
     expect(lines(projectTicker(UNWITNESSED, NO_MEETINGS, 2, OMNISCIENT))).toBe(
-      "p-3 vented REACTOR → ELECTRICAL",
+      ["p-3 entered a vent · REACTOR", "p-3 emerged from a vent · REACTOR → ELECTRICAL"].join(
+        "\n",
+      ),
     );
   });
 
-  it("counts the dive once — the exit is the same act re-emitted", () => {
-    const kinds = projectTicker(WITNESSED, NO_MEETINGS, 2, OMNISCIENT).map((e) => e.kind);
-    expect(kinds.filter((kind) => kind === "vent")).toHaveLength(1);
+  it("never prints a same-room route from the dive event's duplicated field", () => {
+    for (let index = 0; index < UNWITNESSED.length; index++) {
+      expect(lines(projectTicker(UNWITNESSED, NO_MEETINGS, index, OMNISCIENT))).not.toContain(
+        "REACTOR → REACTOR",
+      );
+    }
+  });
+
+  it("emits both phases as beats — a dive and an emergence are different moments", () => {
+    const kinds = projectTicker(UNWITNESSED, NO_MEETINGS, 2, OMNISCIENT).map((e) => e.kind);
+    expect(kinds.filter((kind) => kind === "vent")).toHaveLength(2);
+  });
+
+  it("a dive with no recorded emergence yields the dive alone", () => {
+    // The actor was ejected or killed mid-traversal — `buildVentSegments` has a
+    // pending-dive fallback for the same shape. Per-event projection needs no
+    // pairing state, so this is simply one beat.
+    const stranded: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(6, [vent(6)], [watcherState(visibility())]),
+    ];
+    expect(lines(projectTicker(stranded, NO_MEETINGS, 1, OMNISCIENT))).toBe(
+      "p-3 entered a vent · REACTOR",
+    );
+  });
+});
+
+// ── the selected agent's OWN actions ─────────────────────────────────────────
+
+describe("the fog agent's own actions", () => {
+  // The engine excludes an actor from its own kill's / vent's witness sets
+  // (`engine/rules.py`), so `visible_players` can never carry them — yet these
+  // are the acts the agent knows best. The map already renders them for the self
+  // token under fog via `selfActionGlyph(current_action)`.
+  const OWN_KILL: readonly TickView[] = [
+    frame(START_TICK, [], [watcherState(visibility())]),
+    frame(
+      4,
+      [kill(4, WATCHER, "p-5")],
+      // The watcher IS the killer, so nothing witness-gated names it — and the
+      // body is right there in its own field of view.
+      [watcherState(visibility([], [{ id: "b-1", room: "REACTOR", victim_id: "p-5" }]))],
+    ),
+  ];
+
+  it("renders its own kill instead of dropping it", () => {
+    const entries = projectTicker(OWN_KILL, NO_MEETINGS, 1, AS_WATCHER);
+    expect(entries.map((entry) => entry.kind)).toEqual(["kill"]);
+    expect(lines(entries)).toBe(`${WATCHER} killed p-5 · REACTOR`);
+  });
+
+  it("does not then report its own victim as a body it stumbled upon", () => {
+    // The regression this branch exists for: with the kill suppressed, the body
+    // pass told an impostor it had "found" a body it made itself.
+    const kinds = projectTicker(OWN_KILL, NO_MEETINGS, 1, AS_WATCHER).map((e) => e.kind);
+    expect(kinds).not.toContain("body");
+  });
+
+  it("renders its own vent at the endpoint it was at — and still no route", () => {
+    const ownVent: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(6, [vent(6, WATCHER)], [watcherState(visibility())]),
+      frame(9, [ventExit(9, WATCHER)], [watcherState(visibility())]),
+    ];
+    const entries = projectTicker(ownVent, NO_MEETINGS, 2, AS_WATCHER);
+    expect(lines(entries)).toBe(
+      [
+        `${WATCHER} entered a vent · REACTOR`,
+        `${WATCHER} emerged from a vent · ELECTRICAL`,
+      ].join("\n"),
+    );
+    // The invariant the browser journey asserts for ANY agent holds here too:
+    // no vent route survives the fog, impostors included.
+    expect(lines(entries)).not.toContain("→");
+  });
+
+  it("still hides OTHER agents' unwitnessed acts from the same agent", () => {
+    // The self branch is a carve-out for one actor, not a hole in the gate.
+    const mixed: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(4, [kill(4, WATCHER, "p-5"), kill(4, "p-8", "p-6")], [watcherState(visibility())]),
+    ];
+    const text = lines(projectTicker(mixed, NO_MEETINGS, 1, AS_WATCHER));
+    expect(text).toBe(`${WATCHER} killed p-5 · REACTOR`);
+    expect(text).not.toContain("p-8");
   });
 });
 

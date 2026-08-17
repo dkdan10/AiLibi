@@ -40,9 +40,6 @@ export interface FrameCost {
   readonly costUsd: number;
 }
 
-const EMPTY_MEETINGS: readonly MeetingView[] = [];
-const EMPTY_FAILED: readonly FailedCallView[] = [];
-
 const ZERO_COST: FrameCost = {
   calls: 0,
   failedCalls: 0,
@@ -132,19 +129,18 @@ export function CostChips() {
   const replay = useReplayStore((s) => s.currentReplay);
   const { tickNumber } = usePlayback();
 
+  // `replay === null` is the only guard, and `meetings` / `failed_calls` are
+  // read DIRECTLY off it. An `?? []` normalisation would be the worst possible
+  // failure here: both are required fields of the versioned DTO, so a payload
+  // missing one is incompatible, and defaulting it would print a confident
+  // `0 tok · $0.0000` — a plausible false total, indistinguishable from the
+  // genuine frame-zero reading. AGENTS.md: no silent fallbacks. Reading them
+  // straight means an incompatible payload fails where a reader can see it.
   const cost = useMemo(
     () =>
       replay === null
         ? ZERO_COST
-        : costToFrame(
-            // `?? EMPTY_*` rather than a bare read, the same normalisation
-            // App.tsx applies to `meeting_resolution`: `api/client.ts` casts
-            // unvalidated JSON, so an older backend can yield `undefined` where
-            // TS insists the field is there — and `for…of undefined` throws.
-            replay.meetings ?? EMPTY_MEETINGS,
-            replay.failed_calls ?? EMPTY_FAILED,
-            tickNumber,
-          ),
+        : costToFrame(replay.meetings, replay.failed_calls, tickNumber),
     [replay, tickNumber],
   );
 
