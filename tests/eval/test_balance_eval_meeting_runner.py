@@ -170,12 +170,14 @@ def _seed_meeting_setup(
 ) -> str:
     """Pre-seed a world state with a corpse so the report action validates.
 
-    Patches ``seed_initial_state`` on BOTH modules the tournament path reads it
-    through: ``orchestrator.game`` (the live game) and ``eval.balance_eval`` (the
-    Task 8.17 kill-gift accounting walk, which re-seeds and verifies every
-    reconstructed ``state_hash`` against the recording). Patching only the game
-    would make the walk re-seed a corpse-free state and diverge fail-loud, so
-    both bindings must resolve to the same pre-corpse state.
+    Patches ``seed_initial_state`` on EVERY module the tournament path reads it
+    through: ``orchestrator.game`` (the live game), ``eval.balance_eval`` (the
+    seeded-setup reads of the report fold), and ``eval.replay_walk`` (the shared
+    walker the Task 8.17 kill-gift accounting walk re-seeds through since Task
+    19.25, verifying every reconstructed ``state_hash`` against the recording).
+    Patching only the game would make the walk re-seed a corpse-free state and
+    diverge fail-loud, so all bindings must resolve to the same pre-corpse
+    state.
     """
 
     initial = seed_initial_state(seed=seed, game_map=game_map, num_players=4)
@@ -209,6 +211,7 @@ def _seed_meeting_setup(
 
     monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub)
     monkeypatch.setattr("eval.balance_eval.seed_initial_state", _stub)
+    monkeypatch.setattr("eval.replay_walk.seed_initial_state", _stub)
     return body_id
 
 
