@@ -16,11 +16,15 @@
 #     pointer and a sha is not, so the sha is the immutability guarantee: bytes
 #     restored here are the bytes the manifest hashed, or the verify fails.
 #   * restored bytes are UNTRACKED BY DESIGN and must never be committed back.
-#     `--clean` removes them again; `docs/artifacts.md` states the rule.
+#     The restore writes a .gitignore at each destination root so `git add -A`
+#     cannot stage them; `--clean` removes both; `docs/artifacts.md` states the
+#     rule.
 #
-# Nothing here overwrites or deletes a byte it cannot re-fetch: the restore
-# refuses on any local file that differs from the manifest, and `--clean`
-# removes only files that still match it.
+# Nothing here overwrites or deletes a byte it cannot re-fetch. Every mode
+# refuses, before touching anything, on: a symlink anywhere along a destination
+# path (the off-volume layout), a manifest path that is also tracked, or a local
+# file whose digest differs from the manifest. `--clean` removes only files that
+# still match, and the restore leaves the metadata of existing directories alone.
 #
 # Usage:
 #   scripts/fetch_evidence.sh              fetch by the pinned sha, restore, verify
@@ -77,13 +81,21 @@ if command -v sha256sum >/dev/null 2>&1; then
   sha256_check() { sha256sum -c --quiet "$1"; }
   sha256_report() { sha256sum -c "$1" 2>/dev/null || true; }
   sha256_stdin() { sha256sum | cut -d' ' -f1; }
-elif command -v shasum >/dev/null 2>&1; then
+else
+  if ! command -v shasum >/dev/null 2>&1; then
+    echo "neither sha256sum nor shasum is available; cannot verify" >&2
+    exit 1
+  fi
   sha256_check() { shasum -a 256 -c "$1" >/dev/null; }
   sha256_report() { shasum -a 256 -c "$1" 2>/dev/null || true; }
   sha256_stdin() { shasum -a 256 | cut -d' ' -f1; }
+fi
+
+# stat(1) is not portable: GNU spells the mode %a, BSD spells it %Lp.
+if stat -c '%a' . >/dev/null 2>&1; then
+  file_mode() { stat -c '%a' "$1"; }
 else
-  echo "neither sha256sum nor shasum is available; cannot verify" >&2
-  exit 1
+  file_mode() { stat -f '%Lp' "$1"; }
 fi
 
 # --------------------------------------------------------------------------- #
@@ -120,6 +132,11 @@ restored_paths() {
   peel_digests | sed 's/^[0-9a-f]\{64\}  //'
 }
 
+# Every directory the restore writes into.
+dest_dirs() {
+  restored_paths | sed 's#/[^/]*$##' | sort -u
+}
+
 tracked_paths() {
   git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
     training/reports/_finalist_eval_raw | sort
@@ -143,6 +160,34 @@ scratch_file() { # scratch_file VARNAME
   printf -v "$1" '%s' "$f"
 }
 
+# --------------------------------------------------------------------------- #
+# Guard: no symlink anywhere on a destination path.                            #
+# --------------------------------------------------------------------------- #
+# Parking the ~399 MiB payload on another volume through a symlinked directory
+# is a layout an operator may reasonably choose, and every mode here would
+# otherwise walk straight through it: `tar` REPLACES a symlink — directory or
+# leaf — with a real entry (verified against GNU tar 1.35), and `[[ -f … ]]`
+# follows a link rather than seeing it, so `--clean` would delete the operator's
+# off-volume file. So this refuses in EVERY mode, `--clean` included, before any
+# candidate is collected (Codex review, PR #346). Expanding each manifest path
+# into its own prefixes covers the leaf and every ancestor in one pass.
+assert_no_symlinks() {
+  local offenders
+  offenders="$(restored_paths |
+    awk -F/ '{p=""; for (i=1; i<=NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    sort -u |
+    while IFS= read -r p; do
+      if [[ -L "$REPO_ROOT/$p" ]]; then printf '%s\n' "$p"; fi
+    done)"
+  if [[ -n "$offenders" ]]; then
+    echo "A destination path is, or runs through, a SYMLINK. Extracting would" >&2
+    echo "replace it and strand what it points at; cleaning would delete the" >&2
+    echo "target. Nothing was touched. Resolve these first:" >&2
+    printf '%s\n' "$offenders" | head -5 >&2
+    exit 1
+  fi
+}
+
 # The manifest rows for evidence paths that exist on disk and are NOT tracked —
 # i.e. everything a restore would overwrite and a clean would remove.
 present_untracked_rows() { # present_untracked_rows OUTFILE
@@ -160,10 +205,34 @@ present_untracked_rows() { # present_untracked_rows OUTFILE
   done > "$1"
 }
 
+# The restored bytes are untracked, and nothing in .gitignore covers them, so a
+# routine `git add -A` would stage up to 399 MiB of class-(c) evidence straight
+# back into the tree the prune emptied. A terminal warning is not an enforcement
+# mechanism (Codex review, PR #346), so the restore writes one of these at each
+# destination root. Tracked files are unaffected by an ignore rule, so the
+# retained in-tree bytes keep showing up in `git status` exactly as before.
+write_gitignore() { # write_gitignore DEST
+  cat > "$1/.gitignore" <<'IGNORE'
+# Written by scripts/fetch_evidence.sh — NOT part of the committed tree.
+#
+# Everything untracked in this directory is RESTORED CLASS-(c) EVIDENCE: it
+# lives on the pinned evidence commit (training/artifacts/coevo/
+# EVIDENCE-MANIFEST.md) and must never be committed back here
+# (docs/artifacts.md). This file exists so `git add -A` cannot stage it.
+# Tracked files ignore this rule, so the retained in-tree bytes are unaffected.
+#
+# `bash scripts/fetch_evidence.sh --clean` removes the restored bytes and this
+# file with them.
+*
+IGNORE
+}
+
 # --------------------------------------------------------------------------- #
 # clean                                                                        #
 # --------------------------------------------------------------------------- #
 if [[ "$mode" == "clean" ]]; then
+  assert_no_symlinks
+
   # Tracked paths are never removed, whatever the manifest lists, and neither
   # are files that no longer MATCH the manifest: the restore guard refuses on a
   # modified local file and points here, so a --clean that deleted it anyway
@@ -193,9 +262,20 @@ if [[ "$mode" == "clean" ]]; then
     done < "$results"
   fi
 
-  # Only directories the restore created can end up empty; tracked files keep
-  # their own directories alive, so this never removes an in-tree path.
-  find "$COEVO_DEST" "$SLATE_DEST" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+    rm -f "$dest/.gitignore"
+  done
+
+  # Only directories this restore could have created, deepest first, and only
+  # when empty. A blanket `find -type d -empty -delete` over the destinations
+  # would also delete an unrelated empty directory the user put there, which is
+  # local state this script does not own (Codex review, PR #346).
+  dest_dirs |
+    awk -F/ '{p=""; for (i=1; i<=NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    sort -ru |
+    while IFS= read -r d; do
+      rmdir "$REPO_ROOT/$d" 2>/dev/null || true
+    done
 
   echo "Removed $removed restored file(s). Tracked bytes are untouched."
   if [[ -s "$kept" ]]; then
@@ -247,7 +327,10 @@ if [[ "$mode" == "fetch" ]]; then
   # A restore may only ADD files, so nothing already on disk may be clobbered.
   # Three ways that could happen, all refused BEFORE anything is written.
   #
-  # (1) An evidence path that is also a TRACKED path. The moved and retained
+  # (1) A symlink on a destination path — see assert_no_symlinks.
+  assert_no_symlinks
+
+  # (2) An evidence path that is also a TRACKED path. The moved and retained
   #     sets are disjoint by construction (EVIDENCE-MANIFEST.md §3), so this
   #     means the manifest and the commit have drifted apart — the one failure
   #     this whole scheme exists to make impossible to miss.
@@ -256,27 +339,6 @@ if [[ "$mode" == "fetch" ]]; then
     echo "The evidence commit carries paths that are ALSO tracked in-tree;" >&2
     echo "the manifest and the commit disagree. Nothing was written." >&2
     printf '%s\n' "$overlap" | head -5 >&2
-    exit 1
-  fi
-
-  # (2) A DIRECTORY SYMLINK anywhere on a destination path — the layout an
-  #     operator uses to park the ~399 MiB payload on another volume. GNU tar
-  #     REPLACES such a symlink with a real directory unless
-  #     --keep-directory-symlink is passed (verified against tar 1.35; the flag
-  #     is not portable to BSD tar, so refusing is the portable answer), which
-  #     would silently strand whatever the link pointed at (Codex review, PR
-  #     #346). Every ancestor of every destination path is checked, deduped.
-  symlinked="$(restored_paths | sed 's#/[^/]*$##' | sort -u |
-    awk -F/ '{p=""; for (i=1; i<=NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
-    sort -u |
-    while IFS= read -r dir; do
-      if [[ -L "$REPO_ROOT/$dir" ]]; then printf '%s\n' "$dir"; fi
-    done)"
-  if [[ -n "$symlinked" ]]; then
-    echo "A destination path runs through a SYMLINKED directory; extracting" >&2
-    echo "would replace the symlink with a real directory and strand whatever" >&2
-    echo "it points at. Nothing was written. Resolve these first:" >&2
-    printf '%s\n' "$symlinked" | head -5 >&2
     exit 1
   fi
 
@@ -300,6 +362,20 @@ if [[ "$mode" == "fetch" ]]; then
     echo "$(wc -l < "$present" | tr -d ' ') file(s) already restored and matching; re-restoring is a no-op."
   fi
 
+  # 33 of the archive's directories ALREADY EXIST, because they hold retained
+  # tracked files. GNU tar's documented default is --overwrite-dir, so an
+  # extraction rewrites their mode and mtime from the archive — git encodes
+  # directories as 0775, so a 0755 checkout directory comes back 0775 and an
+  # "add-only" restore has quietly relaxed permissions inside the tracked tree
+  # (Codex review, PR #346; reproduced). Their modes are captured here and
+  # reapplied below. Done by hand rather than with --no-overwrite-dir because
+  # that flag is GNU-only and this script also supports the BSD side.
+  modes=""
+  scratch_file modes
+  dest_dirs | while IFS= read -r d; do
+    if [[ -d "$REPO_ROOT/$d" ]]; then printf '%s %s\n' "$(file_mode "$REPO_ROOT/$d")" "$d"; fi
+  done > "$modes"
+
   echo "Restoring coevo/ -> training/artifacts/coevo/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" coevo |
     tar -x --strip-components=1 -C "$COEVO_DEST"
@@ -307,6 +383,21 @@ if [[ "$mode" == "fetch" ]]; then
   echo "Restoring finalist-eval-raw/ -> training/reports/_finalist_eval_raw/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" finalist-eval-raw |
     tar -x --strip-components=1 -C "$SLATE_DEST"
+
+  restored_modes=0
+  while read -r want d; do
+    if [[ -d "$REPO_ROOT/$d" && "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
+      chmod "$want" "$REPO_ROOT/$d"
+      restored_modes=$((restored_modes + 1))
+    fi
+  done < "$modes"
+  if [[ "$restored_modes" != "0" ]]; then
+    echo "Restored the original mode on $restored_modes pre-existing director(ies)."
+  fi
+
+  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+    write_gitignore "$dest"
+  done
 fi
 
 # --------------------------------------------------------------------------- #
@@ -355,5 +446,6 @@ fi
 expected=$((expected + 1))
 
 echo "OK: $expected/$expected files match ${PINNED_SHA}."
-echo "These bytes are UNTRACKED BY DESIGN — do not commit them back."
+echo "These bytes are UNTRACKED BY DESIGN and are .gitignore'd at each"
+echo "destination root — do not commit them back."
 echo "Remove them again with: bash scripts/fetch_evidence.sh --clean"

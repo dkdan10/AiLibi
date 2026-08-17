@@ -49,7 +49,11 @@ they are simply not in your working tree until you ask for them.
 in-tree class-(b) manifest**, fetched by that sha and never by branch name.
 A branch name is a moving pointer; the sha is not, and that is the entire
 immutability guarantee. Restored bytes are **untracked by design** and must
-never be committed back into the tree.
+never be committed back into the tree — `scripts/fetch_evidence.sh` enforces
+that rather than merely asking, by writing a `.gitignore` at each destination
+root so `git add -A` cannot stage them (tracked files are unaffected by an
+ignore rule, so the retained in-tree bytes still show up in `git status`).
+`--clean` removes the restored bytes and those files together.
 
 ### (d) Disposable regenerated views — **not committed**
 
