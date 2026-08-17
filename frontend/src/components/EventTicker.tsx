@@ -111,16 +111,39 @@ const EMPTY_ENTRIES: readonly TickerEntry[] = [];
  *
  * The same rule MapView's `fogNoView` applies: an agent that is absent from the
  * frame or not alive has no perception to project, so nothing fog-gated may
- * surface for it. `?? null` on `visibility` because the API client casts
- * unvalidated JSON — a stale payload yields `undefined` where TS insists on a
- * field.
+ * surface for it.
+ *
+ * MISSING IS NOT EMPTY. `visibility` is `AgentVisibilityView | None` on the DTO,
+ * and `null` is a LOAD-BEARING value there — `api/schemas.py` defines it as "the
+ * agent is dead, it has no field of view". That makes this the subtlest place in
+ * the file to swallow a malformed payload: an `undefined` coerced to `null`
+ * would read as a perfectly legitimate blind agent, and the feed would then
+ * suppress every witnessed kill, vent and body discovery while the public beats
+ * kept rendering — a plausible sparse fog feed with nothing to distinguish it
+ * from a real one. So the two cases are separated and the absent field is
+ * REJECTED (AGENTS.md: if something is invalid, raise; do not paper over).
+ *
+ * The check is precise rather than paranoid: it runs only for a LIVING agent,
+ * which is exactly where the loader guarantees a value ("the served replay path
+ * always sets it"). The cast is the honest part — `api/client.ts` casts
+ * unvalidated JSON, so the runtime can deliver a shape the generated type says
+ * is impossible, and pretending otherwise is what let the coercion hide here.
  */
 function fogVisibility(frame: TickView, agentId: string): AgentVisibilityView | null {
   const self = frame.agent_states.find((state) => state.agent_id === agentId) ?? null;
   if (self === null || !self.is_alive) {
     return null;
   }
-  return self.visibility ?? null;
+  const visibility = self.visibility as AgentVisibilityView | null | undefined;
+  if (visibility === undefined) {
+    throw new Error(
+      `EventTicker: agent_states["${agentId}"] at tick ${frame.tick} carries no ` +
+        "`visibility` field. The versioned DTO requires it, and `null` there means " +
+        '"dead agent, no field of view" — an ABSENT field is an incompatible ' +
+        "payload, not an empty fog, and must not be rendered as one.",
+    );
+  }
+  return visibility;
 }
 
 /**

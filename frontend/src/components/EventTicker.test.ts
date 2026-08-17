@@ -262,6 +262,38 @@ describe("kills through the As-agent projection", () => {
     expect(kinds).toEqual(["kill"]);
   });
 
+  it("REJECTS a living agent whose `visibility` field is absent, rather than fogging it", () => {
+    // `null` is legitimate ("dead agent, no field of view"), so a missing field
+    // coerced to it would read as a real blind agent: every witnessed kill, vent
+    // and body discovery suppressed, public beats still rendering, and nothing
+    // to tell the result apart from a genuine sparse fog feed. The cast models a
+    // stale backend — `api/client.ts` casts unvalidated JSON, so the runtime can
+    // deliver a shape the generated type forbids.
+    const stateWithoutField = {
+      ...watcherState(visibility()),
+      visibility: undefined,
+    } as unknown as AgentTickStateView;
+    const malformed: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(4, [kill(4)], [stateWithoutField]),
+    ];
+    expect(() => projectTicker(malformed, NO_MEETINGS, 1, AS_WATCHER)).toThrow(
+      /carries no `visibility` field/,
+    );
+    // Omniscient never consults the field, so it is unaffected.
+    expect(projectTicker(malformed, NO_MEETINGS, 1, OMNISCIENT)).toHaveLength(1);
+  });
+
+  it("accepts an explicit null `visibility` as the real blind-agent state", () => {
+    // The other half of the distinction: `null` must keep working, or the guard
+    // above would have broken every dead-agent frame in the corpus.
+    const blind: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(4, [kill(4)], [watcherState(null)]),
+    ];
+    expect(projectTicker(blind, NO_MEETINGS, 1, AS_WATCHER)).toEqual([]);
+  });
+
   it("an agent with no field of view (dead / absent) sees no kill at all", () => {
     const dead: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
