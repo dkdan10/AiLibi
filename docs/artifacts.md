@@ -70,6 +70,8 @@ than its output preserved.
 |---|---|---|---|
 | `replays/samples/` — the baseline-6 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
+| `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
+| `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed-runner verdict, with their sidecars | (a) + (b) | in git | 52 KB / 10 files |
 | `training/artifacts/coevo/` — the 90 retained bytes (rankings, `measurement-stability.json`, the 8 pinned genome dirs, `provenance/`, `PATHS.md`) | (a) + (b) | in git | 495 KiB / 90 files |
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
@@ -79,6 +81,14 @@ than its output preserved.
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate (Task 19.21's outcome, below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
+
+**Why the other `training/artifacts/` families are class (a) and coevo mostly is
+not.** The six sibling families above are the *live* learned artifacts — the
+weights the inference path loads and the sidecars 19.23 verifies offline — and
+the test suite opens them directly, which is what class (a) means. `coevo/` is
+the *record of a closed campaign*: 90 of its files are opened by a test and stay,
+and the 1,383 nobody opens are class (c). Same directory tree, two different
+classes, decided the same way in both cases — by what the consumers read.
 
 ### The class-(c) rows in detail
 

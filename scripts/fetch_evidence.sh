@@ -132,9 +132,15 @@ restored_paths() {
   peel_digests | sed 's/^[0-9a-f]\{64\}  //'
 }
 
-# Every directory the restore writes into.
+# Every directory the restore writes into — EVERY prefix, not just each file's
+# immediate parent. `intermediates/`, `runnerups/` and the `realpath-*` roots
+# hold retained tracked files but no moved file directly, so an
+# immediate-parents-only list left 13 existing directories out of the
+# mode-preservation pass below (Codex review, PR #346).
 dest_dirs() {
-  restored_paths | sed 's#/[^/]*$##' | sort -u
+  restored_paths |
+    awk -F/ '{p=""; for (i=1; i<NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    sort -u
 }
 
 tracked_paths() {
@@ -161,28 +167,44 @@ scratch_file() { # scratch_file VARNAME
 }
 
 # --------------------------------------------------------------------------- #
-# Guard: no symlink anywhere on a destination path.                            #
+# Guard: every destination path is absent, or is the plain thing we expect.     #
 # --------------------------------------------------------------------------- #
-# Parking the ~399 MiB payload on another volume through a symlinked directory
-# is a layout an operator may reasonably choose, and every mode here would
-# otherwise walk straight through it: `tar` REPLACES a symlink — directory or
-# leaf — with a real entry (verified against GNU tar 1.35), and `[[ -f … ]]`
-# follows a link rather than seeing it, so `--clean` would delete the operator's
-# off-volume file. So this refuses in EVERY mode, `--clean` included, before any
-# candidate is collected (Codex review, PR #346). Expanding each manifest path
-# into its own prefixes covers the leaf and every ancestor in one pass.
-assert_no_symlinks() {
+# `tar -x` and `rm -f` both walk straight through anything unexpected sitting on
+# a destination path, and the shell tests that would notice are the ones that
+# follow links. Two families, both refused in EVERY mode — `--clean` included —
+# before any candidate is collected (Codex review, PR #346):
+#
+#   * SYMLINKS, leaf or ancestor. Parking the ~399 MiB payload on another volume
+#     behind a link is a layout an operator may reasonably choose; `tar`
+#     REPLACES the link with a real entry (verified against GNU tar 1.35) and
+#     `[[ -f … ]]` follows it, so a plain `--clean` would delete the off-volume
+#     file.
+#   * NON-REGULAR entries: a FIFO, socket or device where a file belongs (tar
+#     silently replaces a FIFO with a regular file — verified), a directory
+#     where a file belongs (extraction fails partway, after earlier entries have
+#     landed), or a non-directory where a directory belongs. `[[ -f … ]]` is
+#     FALSE for all of these, so the digest collision check never saw them.
+#
+# Expanding each manifest path into its own prefixes covers the leaf and every
+# ancestor in one pass; `-L` is tested first because `-e` follows links.
+assert_destination_paths_are_plain() {
   local offenders
   offenders="$(restored_paths |
-    awk -F/ '{p=""; for (i=1; i<=NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
+    awk -F/ '{p=""; for (i=1; i<NF; i++) {p = (i==1 ? $i : p "/" $i); print "dir " p} print "file " $0}' |
     sort -u |
-    while IFS= read -r p; do
-      if [[ -L "$REPO_ROOT/$p" ]]; then printf '%s\n' "$p"; fi
+    while IFS=' ' read -r kind p; do
+      if [[ -L "$REPO_ROOT/$p" ]]; then
+        printf '%s — symlink\n' "$p"
+      elif [[ "$kind" == "dir" && -e "$REPO_ROOT/$p" && ! -d "$REPO_ROOT/$p" ]]; then
+        printf '%s — exists but is not a directory\n' "$p"
+      elif [[ "$kind" == "file" && -e "$REPO_ROOT/$p" && ! -f "$REPO_ROOT/$p" ]]; then
+        printf '%s — exists but is not a regular file\n' "$p"
+      fi
     done)"
   if [[ -n "$offenders" ]]; then
-    echo "A destination path is, or runs through, a SYMLINK. Extracting would" >&2
-    echo "replace it and strand what it points at; cleaning would delete the" >&2
-    echo "target. Nothing was touched. Resolve these first:" >&2
+    echo "A destination path is not what it must be. Extracting would replace" >&2
+    echo "it (and strand whatever it stands for); cleaning would delete it." >&2
+    echo "Nothing was touched. Resolve these first:" >&2
     printf '%s\n' "$offenders" | head -5 >&2
     exit 1
   fi
@@ -211,17 +233,47 @@ present_untracked_rows() { # present_untracked_rows OUTFILE
 # mechanism (Codex review, PR #346), so the restore writes one of these at each
 # destination root. Tracked files are unaffected by an ignore rule, so the
 # retained in-tree bytes keep showing up in `git status` exactly as before.
+#
+# These two paths are NOT in the manifest, so they bypass the guards above and
+# need their own: this script writes and deletes only files it can prove it
+# wrote, identified by the marker on their first line. Anything else at that
+# path — an operator's own ignore rules, or a symlink pointing off-tree that a
+# redirection would truncate — refuses the run (Codex review, PR #346).
+GITIGNORE_MARKER="# fetch_evidence.sh-owned — safe to delete (Task 19.22)"
+
+gitignore_is_ours() { # gitignore_is_ours PATH
+  [[ ! -L "$1" ]] && [[ -f "$1" ]] && [[ "$(head -1 "$1")" == "$GITIGNORE_MARKER" ]]
+}
+
+assert_gitignores_are_ours_or_absent() {
+  local dest offenders=""
+  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+    if [[ -L "$dest/.gitignore" ]]; then
+      offenders+="${dest#"$REPO_ROOT/"}/.gitignore — symlink"$'\n'
+    elif [[ -e "$dest/.gitignore" ]] && ! gitignore_is_ours "$dest/.gitignore"; then
+      offenders+="${dest#"$REPO_ROOT/"}/.gitignore — not written by this script"$'\n'
+    fi
+  done
+  if [[ -n "$offenders" ]]; then
+    echo "A destination already has its own .gitignore. This script only writes" >&2
+    echo "and removes ignore files it wrote itself, so it will not touch these:" >&2
+    printf '%s' "$offenders" >&2
+    echo "Move them aside first (the restored bytes must stay unstageable)." >&2
+    exit 1
+  fi
+}
+
 write_gitignore() { # write_gitignore DEST
-  cat > "$1/.gitignore" <<'IGNORE'
-# Written by scripts/fetch_evidence.sh — NOT part of the committed tree.
+  cat > "$1/.gitignore" <<IGNORE
+$GITIGNORE_MARKER
 #
 # Everything untracked in this directory is RESTORED CLASS-(c) EVIDENCE: it
 # lives on the pinned evidence commit (training/artifacts/coevo/
 # EVIDENCE-MANIFEST.md) and must never be committed back here
-# (docs/artifacts.md). This file exists so `git add -A` cannot stage it.
+# (docs/artifacts.md). This file exists so \`git add -A\` cannot stage it.
 # Tracked files ignore this rule, so the retained in-tree bytes are unaffected.
 #
-# `bash scripts/fetch_evidence.sh --clean` removes the restored bytes and this
+# \`bash scripts/fetch_evidence.sh --clean\` removes the restored bytes and this
 # file with them.
 *
 IGNORE
@@ -231,7 +283,8 @@ IGNORE
 # clean                                                                        #
 # --------------------------------------------------------------------------- #
 if [[ "$mode" == "clean" ]]; then
-  assert_no_symlinks
+  assert_destination_paths_are_plain
+  assert_gitignores_are_ours_or_absent
 
   # Tracked paths are never removed, whatever the manifest lists, and neither
   # are files that no longer MATCH the manifest: the restore guard refuses on a
@@ -263,7 +316,7 @@ if [[ "$mode" == "clean" ]]; then
   fi
 
   for dest in "$COEVO_DEST" "$SLATE_DEST"; do
-    rm -f "$dest/.gitignore"
+    if gitignore_is_ours "$dest/.gitignore"; then rm -f "$dest/.gitignore"; fi
   done
 
   # Only directories this restore could have created, deepest first, and only
@@ -327,8 +380,11 @@ if [[ "$mode" == "fetch" ]]; then
   # A restore may only ADD files, so nothing already on disk may be clobbered.
   # Three ways that could happen, all refused BEFORE anything is written.
   #
-  # (1) A symlink on a destination path — see assert_no_symlinks.
-  assert_no_symlinks
+  # (1) Anything unexpected on a destination path — see
+  #     assert_destination_paths_are_plain. The two generated .gitignore files
+  #     are not manifest paths, so they get their own ownership check.
+  assert_destination_paths_are_plain
+  assert_gitignores_are_ours_or_absent
 
   # (2) An evidence path that is also a TRACKED path. The moved and retained
   #     sets are disjoint by construction (EVIDENCE-MANIFEST.md §3), so this
