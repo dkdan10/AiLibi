@@ -1,0 +1,1890 @@
+#!/usr/bin/env python3
+"""One read-only, offline command for the whole ML evidence story (Task 19.23).
+
+The Phase-19 Codex audit reproduced this project's ML evidence by hand, one
+recomputation at a time (`audits/audit-phase-19-input-codex.md` §"Executed
+evidence": *"Offline ML evidence recomputation — PASS for corpus verifier,
+surrogate, conviction, and composed runner"*), and the triage's work-list asked
+for the consolidation: *"One `verify-ml-evidence` command for hashes, corpus
+reconstruction, surrogate/conviction/composed recomputation, paired statistics,
+and artifact-availability reporting"* (`audits/audit-phase-19-triage.md` §7 item
+24 [S-Codex / S-Claude]). This is that command. Five legs, one exit code:
+
+1. **sidecars** — PER-CLASS sha-256 verification. The in-tree sidecars verify
+   fully offline on a bare checkout. The sidecars whose bytes Task 19.22 moved
+   onto the pinned evidence commit verify hash-for-hash once
+   `scripts/fetch_evidence.sh` has restored them, and otherwise report as their
+   own EVIDENCE-BRANCH-ABSENT class with the count quoted — never a silent skip,
+   and never a network call (this command does not fetch; it reads what is on
+   disk and what the committed manifests say should be).
+2. **corpus** — replay reconstruction, delegated to
+   ``scripts/_verify_samples.py`` (the byte verifier behind
+   ``scripts/verify_samples.sh``), plus the fit-corpus identity fingerprint the
+   surrogate artifact commits.
+3. **recompute** — the surrogate ranking/decision channels, the conviction
+   model's flag and conversion channels, and the composed runner's decision and
+   exact-outcome channels, each re-derived from the FROZEN committed weights and
+   compared against the committed verdict that owns the number.
+4. **paired** — the finalist paired statistics, via ``scripts/paired_stats``
+   (Task 19.20), compared against the erratum table that report commits.
+5. **availability** — the availability class of every named evidence artifact,
+   read from `docs/artifacts.md`'s registry (in-tree / evidence-branch /
+   repo-external / lost), including the Task 19.21 raw-slate outcome.
+
+Nothing here retrains, re-records, or writes an artifact: every leg reads
+committed bytes, and the only path this command ever writes to is a
+:func:`tempfile.TemporaryDirectory` used by ``--fast`` to mirror a sampled
+subset of a replay set. It never opens a socket.
+
+Usage::
+
+    uv run python scripts/verify_ml_evidence.py
+    uv run python scripts/verify_ml_evidence.py --fast
+    uv run python scripts/verify_ml_evidence.py --complete
+    uv run python scripts/verify_ml_evidence.py --only sidecars --only availability
+
+``--fast`` samples the corpus reconstruction rather than walking every committed
+replay, and says so in the output (the sampled seeds are printed; a sampled run
+is never reported as a full walk). ``--complete`` is the close gate
+(`tasks/phase-19.md` Task 19.28): it FAILS on any byte that was promised
+archival availability and is absent, while ACCEPTING an availability class that
+a committed manifest RECORDS as lost — a ratified loss is a valid close state,
+a silent one is not. ``--only`` restricts the run to named legs and is refused
+under ``--complete``, because a partial run cannot certify completeness.
+
+Exit codes: ``0`` every check passed, ``1`` at least one check failed, ``2``
+usage error (bad leg name, missing repo file the run cannot proceed without).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final, Literal
+
+_REPO_ROOT: Final = Path(__file__).resolve().parents[1]
+_SCRIPTS_DIR: Final = Path(__file__).resolve().parent
+# Make both the top-level packages (``training``) and the sibling script modules
+# (``paired_stats``, ``_verify_samples`` — top-level names per
+# ``mypy_path = "scripts"``) importable under
+# ``uv run python scripts/verify_ml_evidence.py``. Mirrors
+# scripts/check_doc_facts.py.
+for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
+    if str(_bootstrap_path) not in sys.path:
+        sys.path.insert(0, str(_bootstrap_path))
+
+import paired_stats  # noqa: E402
+
+from _verify_samples import verify_samples  # noqa: E402
+
+# --------------------------------------------------------------------------- #
+# The committed files this command reads. Every one of them is class (a)/(b) —  #
+# in git — so a bare checkout can run every leg except the evidence-branch      #
+# ones, which report themselves absent rather than failing.                     #
+# --------------------------------------------------------------------------- #
+ARTIFACTS_DOC: Final = "docs/artifacts.md"
+PATHS_DOC: Final = "training/artifacts/coevo/PATHS.md"
+EVIDENCE_MANIFEST: Final = "training/artifacts/coevo/EVIDENCE-MANIFEST.md"
+SLATE_MANIFEST: Final = "training/reports/_finalist_eval_raw/MANIFEST.md"
+COEVO_DEST: Final = "training/artifacts/coevo"
+SLATE_DEST: Final = "training/reports/_finalist_eval_raw"
+
+CORPUS_SET: Final = "replays/ml_corpus/9p2i"
+SURROGATE_DIR: Final = "training/artifacts/surrogate"
+CONVICTION_DIR: Final = "training/artifacts/conviction"
+COMPOSED_DIR: Final = "training/artifacts/composed"
+
+SURROGATE_REPORT: Final = "training/reports/report-ballot-surrogate.md"
+CONVICTION_REPORT: Final = "training/reports/report-conviction-model.md"
+FINALIST_REPORT: Final = "training/reports/report-finalist-eval.md"
+FINALIST_RESULTS: Final = "training/reports/results-finalist-eval.jsonl"
+
+REPLAY_ROOTS: Final[tuple[str, ...]] = ("replays/samples", "replays/ml_corpus")
+
+#: The legs, in run order. ``--only`` selects from exactly these names.
+LEGS: Final[tuple[str, ...]] = (
+    "sidecars",
+    "corpus",
+    "recompute",
+    "paired",
+    "availability",
+)
+
+#: How many seeds per replay set ``--fast`` verifies. Eight is enough to catch a
+#: whole-set drift (an engine change moves every chain, not one) while keeping
+#: the leg to a second or two; the exact seeds are printed, so a --fast run is
+#: never mistakable for the full walk.
+FAST_SAMPLE_PER_SET: Final = 8
+
+#: Directories the sidecar walk never descends into: build output, caches and
+#: dependency trees hold no committed artifact, and `.git` holds every historical
+#: version of the ones that count.
+WALK_SKIP_DIRS: Final[frozenset[str]] = frozenset(
+    {
+        ".git",
+        ".hypothesis",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "dist",
+        "node_modules",
+    }
+)
+
+_SIDECAR_SUFFIX: Final = ".sha256"
+_REPLAY_GLOB: Final = "replay-seed-*.jsonl"
+
+# The fenced digest blocks both evidence manifests carry, and the row shape
+# inside them: ``<64 hex>  <path>`` — shasum-compatible, which is why
+# scripts/fetch_evidence.sh can feed them straight to ``sha256sum -c``.
+_DIGEST_FENCE_OPEN: Final = "```sha256"
+_DIGEST_FENCE_CLOSE: Final = "```"
+_DIGEST_ROW: Final = re.compile(r"^([0-9a-f]{64})  (\S.*)$")
+# The pin lives in EVIDENCE-MANIFEST.md §1; read, never hardcoded (the manifest
+# owns it, exactly as scripts/fetch_evidence.sh reads it).
+_PIN_ROW_MARKER: Final = "tip sha — THE PIN"
+_SHA1_RE: Final = re.compile(r"\b[0-9a-f]{40}\b")
+
+Status = Literal["OK", "FAIL", "ABSENT", "INFO"]
+
+#: The availability vocabulary of `docs/artifacts.md`, plus the two outcomes for
+#: named evidence the registry table does not hold a row for.
+AvailabilityClass = Literal[
+    "IN-TREE", "EVIDENCE-BRANCH", "REPO-EXTERNAL", "LOST", "REGENERATED"
+]
+
+
+class EvidenceError(RuntimeError):
+    """A committed input this command cannot proceed without is missing or malformed.
+
+    Raised — never swallowed — when the manifests, the registry document or a
+    report have drifted out of the shape every guard below is built from.
+    Reporting a green count off a manifest that no longer parses would be the
+    silent fallback AGENTS.md forbids outright.
+    """
+
+
+# --------------------------------------------------------------------------- #
+# Result rows                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CheckRow:
+    """One check: what was measured, what the committed record says, and where.
+
+    ``status`` is the whole verdict surface. ``OK`` passed; ``FAIL`` is a
+    measured disagreement and always fails the run; ``ABSENT`` is a byte that is
+    not on this checkout and is expected not to be (the evidence-branch class
+    before a restore) — it passes a default run and FAILS ``--complete``;
+    ``INFO`` is a recorded state that is not a measurement of this checkout
+    (a repo-external working root, a manifest-recorded loss, a class-(d) view)
+    and never fails.
+    """
+
+    name: str
+    measured: str
+    committed: str
+    source: str
+    status: Status
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class LegResult:
+    """Every row a leg produced, plus the notes it wants printed above them."""
+
+    leg: str
+    rows: tuple[CheckRow, ...]
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class EvidenceRow:
+    """One file the pinned evidence commit carries, as a manifest row.
+
+    ``repo_path`` is where ``scripts/fetch_evidence.sh`` restores it, relative to
+    the repo root; it is ``None`` for the evidence branch's own ``README.md``,
+    which the manifest hashes but the restore deliberately does not place in the
+    tree (it is branch metadata, checked straight out of the commit object).
+    """
+
+    digest: str
+    manifest_path: str
+    repo_path: str | None
+
+
+@dataclass(frozen=True)
+class Context:
+    """Everything the legs share: the tree under test and the run's mode."""
+
+    repo_root: Path
+    fast: bool
+    complete: bool
+    evidence: tuple[EvidenceRow, ...]
+    pinned_sha: str
+
+
+# --------------------------------------------------------------------------- #
+# Small shared readers                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def _read_text(repo_root: Path, rel: str) -> str:
+    path = repo_root / rel
+    if not path.is_file():
+        raise EvidenceError(f"{rel} is missing from {repo_root} — cannot verify")
+    return path.read_text(encoding="utf-8")
+
+
+def sha256_file(path: Path) -> str:
+    """Stream a file's sha-256 (the manifests' digest, 1 MiB at a time)."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def read_digest_block(repo_root: Path, rel: str) -> list[tuple[str, str]]:
+    """Peel a manifest's fenced ``sha256`` block into ``(digest, path)`` rows.
+
+    The same block ``scripts/fetch_evidence.sh`` feeds to ``sha256sum -c``. A
+    manifest with no block, or with a row that is not a digest row, is a drifted
+    manifest and raises: every guard in this command is built from these rows, so
+    a silently short list would shrink each of them at once (the failure mode PR
+    #346 reproduced on the fetch side).
+    """
+
+    rows: list[tuple[str, str]] = []
+    inside = False
+    found_block = False
+    for lineno, line in enumerate(_read_text(repo_root, rel).splitlines(), start=1):
+        if not inside:
+            if line.rstrip() == _DIGEST_FENCE_OPEN:
+                inside = True
+                found_block = True
+            continue
+        if line.rstrip() == _DIGEST_FENCE_CLOSE:
+            inside = False
+            continue
+        match = _DIGEST_ROW.match(line)
+        if match is None:
+            raise EvidenceError(
+                f"{rel}:{lineno}: not a '<sha256>  <path>' row inside the "
+                f"sha256 block: {line!r}"
+            )
+        rows.append((match.group(1), match.group(2)))
+    if inside:
+        raise EvidenceError(f"{rel}: an unterminated ```sha256 block")
+    if not found_block:
+        raise EvidenceError(f"{rel}: no ```sha256 digest block to verify against")
+    if not rows:
+        raise EvidenceError(f"{rel}: the ```sha256 block is empty")
+    return rows
+
+
+def evidence_rows(repo_root: Path) -> tuple[EvidenceRow, ...]:
+    """Every file the pinned evidence commit carries, with its restore path.
+
+    Composes the two manifests exactly as ``scripts/fetch_evidence.sh``'s
+    ``peel_digests`` does: EVIDENCE-MANIFEST.md §7 covers ``coevo/`` plus the
+    branch README, and §8 delegates the slate's 1,569 digests to the Task 19.21
+    manifest rather than copying them. Both sides are rewritten to where the
+    restore actually puts them.
+    """
+
+    rows: list[EvidenceRow] = []
+    for digest, raw in read_digest_block(repo_root, EVIDENCE_MANIFEST):
+        if raw == "README.md":
+            # The branch's own README: hashed here, deliberately not restored.
+            rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=None))
+        elif raw.startswith("coevo/"):
+            rows.append(
+                EvidenceRow(
+                    digest=digest,
+                    manifest_path=raw,
+                    repo_path=f"{COEVO_DEST}/{raw[len('coevo/') :]}",
+                )
+            )
+        else:
+            raise EvidenceError(
+                f"{EVIDENCE_MANIFEST}: digest row {raw!r} is neither the branch "
+                "README nor a 'coevo/' path — the restore map does not cover it"
+            )
+    for digest, raw in read_digest_block(repo_root, SLATE_MANIFEST):
+        if not raw.startswith("./"):
+            raise EvidenceError(
+                f"{SLATE_MANIFEST}: digest row {raw!r} is not a './' path — the "
+                "restore map does not cover it"
+            )
+        rows.append(
+            EvidenceRow(
+                digest=digest,
+                manifest_path=f"finalist-eval-raw/{raw[2:]}",
+                repo_path=f"{SLATE_DEST}/{raw[2:]}",
+            )
+        )
+    return tuple(rows)
+
+
+def read_pinned_sha(repo_root: Path) -> str:
+    """The evidence commit's tip sha, read from the manifest row that owns it."""
+
+    for line in _read_text(repo_root, EVIDENCE_MANIFEST).splitlines():
+        if _PIN_ROW_MARKER in line:
+            match = _SHA1_RE.search(line)
+            if match is not None:
+                return match.group(0)
+    raise EvidenceError(
+        f"{EVIDENCE_MANIFEST}: no pinned sha on the '{_PIN_ROW_MARKER}' row"
+    )
+
+
+def _git_blob(repo_root: Path, revision: str, path: str) -> bytes | None:
+    """A blob out of a local git object, or ``None`` when it is not here.
+
+    Local and offline — ``git cat-file`` never reaches the network. ``None``
+    means the pinned commit has not been fetched into this checkout, which is a
+    reportable availability state, not an error.
+    """
+
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "-C", str(repo_root), "cat-file", "blob", f"{revision}:{path}"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout
+
+
+# --------------------------------------------------------------------------- #
+# Markdown readers — the committed verdicts that live in a report, not a JSON   #
+# --------------------------------------------------------------------------- #
+
+
+def _table_rows(text: str) -> Iterator[list[str]]:
+    """Every markdown table row in ``text``, as its list of cells.
+
+    A row is a line that both starts and ends with ``|`` after stripping — which
+    excludes a table row QUOTED inside a blockquote (the reports quote their own
+    rows in errata sections, and a quoted row is a citation of a number, not a
+    second statement of it).
+    """
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or not stripped.endswith("|"):
+            continue
+        yield [cell.strip() for cell in stripped[1:-1].split("|")]
+
+
+def _normalize_label(cell: str) -> str:
+    return cell.replace("**", "").replace("`", "").strip().lower()
+
+
+_FRACTION: Final = re.compile(r"(?<![\d.])(\d+)\s*/\s*(\d+)(?![\d.])")
+
+
+def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, int]:
+    """The ``n/d`` a report's table states for ``label`` — the committed verdict.
+
+    The surrogate's decision channel and the conviction model's conversion
+    accuracy have no machine-readable verdict artifact: the committed report IS
+    the record (`training/reports/report-ballot-surrogate.md` §3;
+    `training/reports/report-conviction-model.md` §4). Rather than transcribe
+    those numbers into this file — a copied fact, which the phase's ruling puts
+    below a generated one — they are read back out of the row that owns them, so
+    a report edit that drifts the figure turns this command red.
+
+    Every row whose first cell equals ``label`` and whose value cell states a
+    fraction must state the SAME fraction; a row with no fraction (a sibling
+    table quoting a bare percentage) is not a second statement and is skipped.
+    Zero fractions, or two that disagree, raise.
+    """
+
+    found: dict[tuple[int, int], int] = {}
+    for cells in _table_rows(_read_text(repo_root, rel)):
+        if len(cells) < 2 or _normalize_label(cells[0]) != label.lower():
+            continue
+        matches = _FRACTION.findall(cells[1])
+        for numerator, denominator in matches:
+            pair = (int(numerator), int(denominator))
+            found[pair] = found.get(pair, 0) + 1
+    if not found:
+        raise EvidenceError(
+            f"{rel}: no table row labelled {label!r} states an 'n/d' fraction — "
+            "the committed verdict this check compares against is gone"
+        )
+    if len(found) > 1:
+        stated = ", ".join(f"{n}/{d}" for n, d in sorted(found))
+        raise EvidenceError(
+            f"{rel}: rows labelled {label!r} state DIFFERENT fractions "
+            f"({stated}); the report disagrees with itself"
+        )
+    return next(iter(found))
+
+
+# --------------------------------------------------------------------------- #
+# Leg 1 — per-class sidecar / sha verification                                 #
+# --------------------------------------------------------------------------- #
+
+
+def walk_sidecars(repo_root: Path) -> list[Path]:
+    """Every ``*.sha256`` in the working tree, skipping caches and build output."""
+
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = sorted(name for name in dirnames if name not in WALK_SKIP_DIRS)
+        for filename in sorted(filenames):
+            if filename.endswith(_SIDECAR_SUFFIX):
+                found.append(Path(dirpath) / filename)
+    return found
+
+
+def sidecar_targets(sidecar: Path) -> list[tuple[str, str]]:
+    """A sidecar's ``(digest, name)`` rows; names are relative to its directory.
+
+    Covers both shapes the repo ships: the one-line ``weights.json.sha256``
+    beside a genome, and the multi-line per-tranche
+    ``recordings-manifest*.sha256`` that hashes a whole recording tree with
+    ``./``-prefixed paths. A row that escapes the sidecar's own directory is
+    refused rather than followed.
+    """
+
+    rows: list[tuple[str, str]] = []
+    for lineno, line in enumerate(
+        sidecar.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        match = _DIGEST_ROW.match(line)
+        if match is None:
+            raise EvidenceError(
+                f"{sidecar}:{lineno}: not a '<sha256>  <path>' row: {line!r}"
+            )
+        name = match.group(2)
+        if name.startswith("./"):
+            name = name[2:]
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise EvidenceError(
+                f"{sidecar}:{lineno}: target {name!r} escapes the sidecar's "
+                "directory; refusing to follow it"
+            )
+        rows.append((match.group(1), name))
+    if not rows:
+        raise EvidenceError(f"{sidecar}: no digest rows — an empty sidecar")
+    return rows
+
+
+def _verify_sidecar(sidecar: Path, repo_root: Path) -> tuple[int, list[str]]:
+    """Verify every target a sidecar names; returns ``(checked, failures)``."""
+
+    failures: list[str] = []
+    checked = 0
+    for digest, name in sidecar_targets(sidecar):
+        target = sidecar.parent / name
+        rel = _relative(target, repo_root)
+        if not target.is_file():
+            failures.append(f"{rel}: named by {_relative(sidecar, repo_root)}, absent")
+            continue
+        checked += 1
+        actual = sha256_file(target)
+        if actual != digest:
+            failures.append(
+                f"{rel}: sha256 {actual[:12]}… != sidecar {digest[:12]}… "
+                f"({_relative(sidecar, repo_root)})"
+            )
+    return checked, failures
+
+
+def _relative(path: Path, repo_root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def run_sidecars(ctx: Context) -> LegResult:
+    """Per-class sha verification: in-tree offline, evidence-branch on restore."""
+
+    moved_paths = {row.repo_path for row in ctx.evidence if row.repo_path is not None}
+    moved_sidecars = sorted(
+        path for path in moved_paths if path.endswith(_SIDECAR_SUFFIX)
+    )
+    on_disk = walk_sidecars(ctx.repo_root)
+    in_tree = [
+        path for path in on_disk if _relative(path, ctx.repo_root) not in moved_paths
+    ]
+
+    rows: list[CheckRow] = []
+
+    # --- class IN-TREE: verifies on a bare checkout, no network, no restore. ---
+    in_tree_targets = 0
+    in_tree_failures: list[str] = []
+    for sidecar in in_tree:
+        checked, failures = _verify_sidecar(sidecar, ctx.repo_root)
+        in_tree_targets += checked
+        in_tree_failures.extend(failures)
+    rows.append(
+        CheckRow(
+            name="sidecars[IN-TREE]",
+            measured=(
+                f"{len(in_tree)} sidecars / {in_tree_targets} targets verified, "
+                f"{len(in_tree_failures)} failure(s)"
+            ),
+            committed=f"{len(in_tree)} sidecars found in the working tree",
+            source="the working tree (every *.sha256 outside caches/build output)",
+            status="FAIL" if in_tree_failures else "OK",
+            detail="\n".join(in_tree_failures[:10]),
+        )
+    )
+
+    # --- class EVIDENCE-BRANCH: the sidecars whose bytes 19.22 moved. ---
+    present = [path for path in moved_sidecars if (ctx.repo_root / path).is_file()]
+    restored = set(present)
+    absent = [path for path in moved_sidecars if path not in restored]
+    moved_failures: list[str] = []
+    moved_targets = 0
+    by_path = {row.repo_path: row for row in ctx.evidence if row.repo_path is not None}
+    for rel in present:
+        path = ctx.repo_root / rel
+        # Two hashes, both required: the sidecar's OWN digest against the
+        # manifest (the restore put back the right sidecar) and the targets it
+        # names (the sidecar still describes the bytes beside it). A weight in
+        # one place and its sidecar in the other is the manifest error
+        # EVIDENCE-MANIFEST.md §5 exists to make impossible.
+        actual = sha256_file(path)
+        if actual != by_path[rel].digest:
+            moved_failures.append(
+                f"{rel}: sha256 {actual[:12]}… != manifest {by_path[rel].digest[:12]}…"
+            )
+            continue
+        checked, failures = _verify_sidecar(path, ctx.repo_root)
+        moved_targets += checked
+        moved_failures.extend(failures)
+    if moved_failures:
+        moved_status: Status = "FAIL"
+    elif absent and not present:
+        moved_status = "ABSENT"
+    elif absent:
+        moved_status = "FAIL"
+    else:
+        moved_status = "OK"
+    rows.append(
+        CheckRow(
+            name="sidecars[EVIDENCE-BRANCH]",
+            measured=(
+                f"{len(present)} of {len(moved_sidecars)} restored; "
+                f"{moved_targets} target(s) verified; {len(absent)} "
+                "EVIDENCE-BRANCH-ABSENT"
+            ),
+            committed=(
+                f"{len(moved_sidecars)} sidecars moved to the evidence commit "
+                f"@ {ctx.pinned_sha[:12]}…"
+            ),
+            source=f"{EVIDENCE_MANIFEST} §4/§5/§7",
+            status=moved_status,
+            detail=(
+                "\n".join(moved_failures[:10])
+                if moved_failures
+                else (
+                    "not restored on this checkout — run "
+                    "`bash scripts/fetch_evidence.sh` to place them, then re-run"
+                    if absent
+                    else ""
+                )
+            ),
+        )
+    )
+
+    # --- class EVIDENCE-BRANCH: the whole payload, not only its sidecars. ---
+    payload = [
+        (row.repo_path, row.digest) for row in ctx.evidence if row.repo_path is not None
+    ]
+    payload_present = 0
+    payload_failures: list[str] = []
+    for repo_path, digest in payload:
+        path = ctx.repo_root / repo_path
+        if not path.is_file():
+            continue
+        payload_present += 1
+        actual = sha256_file(path)
+        if actual != digest:
+            payload_failures.append(
+                f"{repo_path}: sha256 {actual[:12]}… != manifest {digest[:12]}…"
+            )
+    payload_absent = len(payload) - payload_present
+    if payload_failures:
+        payload_status: Status = "FAIL"
+    elif payload_absent == len(payload):
+        payload_status = "ABSENT"
+    elif payload_absent:
+        payload_status = "FAIL"
+    else:
+        payload_status = "OK"
+    rows.append(
+        CheckRow(
+            name="evidence payload",
+            measured=(
+                f"{payload_present} of {len(payload)} restored and hashed; "
+                f"{payload_absent} EVIDENCE-BRANCH-ABSENT"
+            ),
+            committed=f"{len(payload)} files on {ctx.pinned_sha[:12]}…",
+            source=f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7",
+            status=payload_status,
+            detail=(
+                "\n".join(payload_failures[:10])
+                if payload_failures
+                else (
+                    "not restored on this checkout — run "
+                    "`bash scripts/fetch_evidence.sh` to place them, then re-run"
+                    if payload_absent
+                    else ""
+                )
+            ),
+        )
+    )
+
+    # --- the branch's own README: hashed by the manifest, never restored. ---
+    readme_rows = [row for row in ctx.evidence if row.repo_path is None]
+    if len(readme_rows) != 1:
+        raise EvidenceError(
+            f"{EVIDENCE_MANIFEST}: expected exactly one non-restored row (the "
+            f"branch README), found {len(readme_rows)}"
+        )
+    readme = readme_rows[0]
+    blob = _git_blob(ctx.repo_root, ctx.pinned_sha, readme.manifest_path)
+    if blob is None:
+        readme_status: Status = "ABSENT"
+        readme_measured = "the pinned commit object is not in this checkout"
+    else:
+        actual = hashlib.sha256(blob).hexdigest()
+        readme_status = "OK" if actual == readme.digest else "FAIL"
+        readme_measured = f"sha256 {actual[:12]}…"
+    rows.append(
+        CheckRow(
+            name="evidence branch README",
+            measured=readme_measured,
+            committed=f"sha256 {readme.digest[:12]}…",
+            source=f"{EVIDENCE_MANIFEST} §7 (row 'README.md')",
+            status=readme_status,
+            detail=(
+                ""
+                if readme_status != "ABSENT"
+                else (
+                    "branch metadata, checked straight out of the commit — "
+                    "`bash scripts/fetch_evidence.sh` pins it locally"
+                )
+            ),
+        )
+    )
+    return LegResult(leg="sidecars", rows=tuple(rows))
+
+
+# --------------------------------------------------------------------------- #
+# Leg 2 — corpus reconstruction                                                #
+# --------------------------------------------------------------------------- #
+
+
+def replay_sets(repo_root: Path) -> list[Path]:
+    """Every committed replay set (a directory holding ``replay-seed-*.jsonl``)."""
+
+    sets: list[Path] = []
+    for root_rel in REPLAY_ROOTS:
+        root = repo_root / root_rel
+        if not root.is_dir():
+            raise EvidenceError(f"{root_rel} is missing — the corpus cannot be walked")
+        for child in sorted(root.iterdir()):
+            if child.is_dir() and any(child.glob(_REPLAY_GLOB)):
+                sets.append(child)
+    if not sets:
+        raise EvidenceError(
+            f"no committed replay sets under {', '.join(REPLAY_ROOTS)} — "
+            "there is nothing to reconstruct"
+        )
+    return sets
+
+
+def _seed_of(path: Path) -> int:
+    return int(path.stem[len("replay-seed-") :])
+
+
+def sampled_seeds(set_dir: Path, limit: int) -> list[int]:
+    """A deterministic, evenly-spread subset of a set's seeds (``--fast``).
+
+    Evenly spread rather than the first ``limit``: a drift from an engine change
+    moves every chain, but a sample taken off one end of the seed order would
+    read as a full-coverage claim while covering one corner of the set.
+    """
+
+    seeds = sorted(_seed_of(path) for path in set_dir.glob(_REPLAY_GLOB))
+    if len(seeds) <= limit:
+        return seeds
+    step = len(seeds) / limit
+    return [seeds[int(index * step)] for index in range(limit)]
+
+
+def mirror_sampled_set(set_dir: Path, seeds: Sequence[int], dest: Path) -> None:
+    """Mirror ``seeds`` of ``set_dir`` into ``dest`` so the real verifier runs on it.
+
+    ``--fast`` samples by handing the unmodified verifier a smaller set, rather
+    than by reimplementing a per-seed walk: the state-hash chain check, the
+    meeting pre-hash cross-check and the manifest completeness check all still
+    run, over fewer games. The replays and the set's auxiliary files are
+    SYMLINKED (nothing is copied and nothing in the repo is written); only
+    ``MANIFEST.md`` is rewritten, filtered to the sampled rows so the verifier's
+    completeness check stays meaningful instead of reporting every unsampled
+    seed missing.
+    """
+
+    keep = set(seeds)
+    for seed in sorted(keep):
+        source = set_dir / f"replay-seed-{seed}.jsonl"
+        os.symlink(source, dest / source.name)
+    for child in sorted(set_dir.iterdir()):
+        if child.name.startswith("replay-seed-") or child.name == "MANIFEST.md":
+            continue
+        if child.is_file():
+            os.symlink(child, dest / child.name)
+    manifest = set_dir / "MANIFEST.md"
+    if not manifest.is_file():
+        return
+    lines: list[str] = []
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            first = stripped.strip("|").split("|", 1)[0].strip()
+            if first.isdigit() and int(first) not in keep:
+                continue
+        lines.append(line)
+    (dest / "MANIFEST.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_corpus(ctx: Context) -> LegResult:
+    """Replay reconstruction + the committed fit-corpus identity fingerprint."""
+
+    rows: list[CheckRow] = []
+    notes: list[str] = []
+    for set_dir in replay_sets(ctx.repo_root):
+        rel = _relative(set_dir, ctx.repo_root)
+        total = len(list(set_dir.glob(_REPLAY_GLOB)))
+        if ctx.fast:
+            seeds = sampled_seeds(set_dir, FAST_SAMPLE_PER_SET)
+            with tempfile.TemporaryDirectory(prefix="verify-ml-evidence-") as tmp:
+                dest = Path(tmp)
+                mirror_sampled_set(set_dir, seeds, dest)
+                failures = verify_samples(dest)
+            measured = (
+                f"{len(seeds) - len(failures)}/{len(seeds)} reconstructed "
+                f"(SAMPLED from {total}; seeds {', '.join(str(s) for s in seeds)})"
+            )
+            committed = f"{total} committed replays (--fast sampled {len(seeds)})"
+        else:
+            failures = verify_samples(set_dir)
+            measured = f"{total - len(failures)}/{total} reconstructed"
+            committed = f"{total} committed replays"
+        rows.append(
+            CheckRow(
+                name=f"corpus reconstruction: {rel}",
+                measured=measured,
+                committed=committed,
+                source=f"{rel}/MANIFEST.md via scripts/_verify_samples.py",
+                status="FAIL" if failures else "OK",
+                detail="\n".join(failure.render() for failure in failures[:10]),
+            )
+        )
+    if ctx.fast:
+        notes.append(
+            "--fast: the reconstruction walked a SAMPLE of each set (seeds listed "
+            f"per row, {FAST_SAMPLE_PER_SET} per set). This is not a full-corpus "
+            "verification; drop --fast, or run `bash scripts/verify_samples.sh`, "
+            "for the whole walk."
+        )
+
+    # The fit-corpus identity the surrogate artifact commits: one digest over
+    # every replay byte plus the split and the provenance, so it moves when ANY
+    # recorded game, the by-game split, or the manifest moves. Always full — it
+    # only hashes, so --fast has nothing to save here.
+    from training.surrogate.runner import fit_corpus_fingerprint
+
+    fit_corpus = json.loads(
+        _read_text(ctx.repo_root, f"{SURROGATE_DIR}/fit-corpus.json")
+    )
+    committed_sha = str(fit_corpus["corpus_sha256"])
+    measured_sha = fit_corpus_fingerprint(ctx.repo_root / CORPUS_SET)
+    rows.append(
+        CheckRow(
+            name="fit-corpus identity fingerprint",
+            measured=f"sha256 {measured_sha[:16]}…",
+            committed=f"sha256 {committed_sha[:16]}…",
+            source=f"{SURROGATE_DIR}/fit-corpus.json (corpus_sha256)",
+            status="OK" if measured_sha == committed_sha else "FAIL",
+            detail=(
+                ""
+                if measured_sha == committed_sha
+                else (
+                    f"{CORPUS_SET} no longer fingerprints to the corpus the "
+                    "committed surrogate weights were fitted on"
+                )
+            ),
+        )
+    )
+    return LegResult(leg="corpus", rows=tuple(rows), notes=tuple(notes))
+
+
+# --------------------------------------------------------------------------- #
+# Leg 3 — surrogate / conviction / composed recomputation                      #
+# --------------------------------------------------------------------------- #
+
+
+#: The comparison tolerance for a recomputed channel — the same absolute
+#: tolerance the committed pin tests use (``tests/training/test_surrogate_runner.py``).
+#: These are inferences from FIXED committed weights, so anything looser would
+#: stop being a pin, and anything tighter would read platform libm variance as
+#: evidence drift.
+FLOAT_TOLERANCE: Final = 1e-12
+
+
+def _float_row(
+    name: str,
+    measured: float,
+    committed: float,
+    source: str,
+    *,
+    census: str = "",
+    note: str = "",
+) -> CheckRow:
+    """One recomputed float against its committed verdict.
+
+    ``census`` is the integer count behind the ratio (``46/60``), printed beside
+    the float because a ratio is easier to argue with than a decimal; ``note``
+    is standing context and is printed whether the row passes or fails.
+    """
+
+    return CheckRow(
+        name=name,
+        measured=f"{measured:.10f}" + (f"  ({census})" if census else ""),
+        committed=f"{committed:.10f}",
+        source=source,
+        status="OK" if abs(measured - committed) <= FLOAT_TOLERANCE else "FAIL",
+        detail=note,
+    )
+
+
+def run_recompute(ctx: Context) -> LegResult:
+    """Re-derive the three instruments from the FROZEN committed weights.
+
+    Wraps the existing entry points rather than reimplementing a metric: the
+    surrogate channels come from the frozen predictor over the committed
+    held-out split (the ``BallotSurrogateModel(predictor=…)`` reload path), the
+    conviction channels from ``run_conviction_fidelity`` + ``decide_conviction_go``,
+    and the composed channels from ``run_composed_fidelity`` + ``decide_composed_go``.
+    Nothing refits and nothing retrains.
+    """
+
+    from training.composed_runner import (
+        decide_composed_go,
+        load_composed_verdict,
+        run_composed_fidelity,
+    )
+    from training.conviction.dataset import build_conviction_table
+    from training.conviction.fidelity import (
+        decide_conviction_go,
+        load_conviction_verdict,
+        run_conviction_fidelity,
+    )
+    from training.conviction.model import load_conviction_model_artifact
+    from training.surrogate.ballots import (
+        BallotSurrogateModel,
+        load_ballot_predictor_artifact,
+    )
+    from training.surrogate.dataset import build_meeting_table
+    from training.surrogate.fidelity import build_meeting_views
+
+    corpus = ctx.repo_root / CORPUS_SET
+    surrogate_dir = ctx.repo_root / SURROGATE_DIR
+    conviction_dir = ctx.repo_root / CONVICTION_DIR
+    composed_dir = ctx.repo_root / COMPOSED_DIR
+    rows: list[CheckRow] = []
+
+    # ---- the ballot surrogate: the RANKING channel kept, the DECISION arm's
+    # all-SKIP census retired (training/README.md §2a). ----
+    table = build_meeting_table(corpus)
+    if table.splits is None:
+        raise EvidenceError(
+            f"{CORPUS_SET} ships no committed splits.json; the surrogate numbers "
+            "are a single held-out evaluation and cannot be re-derived without it"
+        )
+    test_seeds = frozenset(table.splits.test)
+    predictor, surrogate_sha = load_ballot_predictor_artifact(surrogate_dir)
+    frozen = BallotSurrogateModel(table, predictor=predictor)
+    test_views = [
+        view for view in build_meeting_views(table) if view.seed in test_seeds
+    ]
+    top1_hits = 0
+    ejections = 0
+    correct_decisions = 0
+    for view in test_views:
+        prediction = frozen.predict(view)
+        if view.is_ejection:
+            ejections += 1
+            if prediction.ranking[0] == view.ejected:
+                top1_hits += 1
+        if prediction.ejected == view.ejected:
+            correct_decisions += 1
+
+    top1_num, top1_den = fraction_from_report(
+        ctx.repo_root, SURROGATE_REPORT, "top-1 (ejected target ranked first)"
+    )
+    rows.append(
+        _float_row(
+            "surrogate top-1 (ranking channel)",
+            top1_hits / ejections,
+            top1_num / top1_den,
+            f"{SURROGATE_REPORT} §3 ('top-1 (ejected target ranked first)' "
+            f"= {top1_num}/{top1_den})",
+            census=f"{top1_hits}/{ejections}",
+        )
+    )
+    decision_num, decision_den = fraction_from_report(
+        ctx.repo_root, SURROGATE_REPORT, "SKIP-vs-eject decision accuracy"
+    )
+    rows.append(
+        _float_row(
+            "surrogate SKIP-vs-eject decision accuracy",
+            correct_decisions / len(test_views),
+            decision_num / decision_den,
+            f"{SURROGATE_REPORT} §3 ('SKIP-vs-eject decision accuracy' "
+            f"= {decision_num}/{decision_den})",
+            census=f"{correct_decisions}/{len(test_views)}",
+        )
+    )
+
+    # ---- the conviction model: the WHETHER channel. ----
+    conviction_table = build_conviction_table(corpus)
+    model, conviction_sha = load_conviction_model_artifact(conviction_dir)
+    conviction_report, _ = run_conviction_fidelity(conviction_table, model=model)
+    conviction_rederived = decide_conviction_go(
+        conviction_report, weights_sha256=conviction_sha
+    )
+    conviction_committed = load_conviction_verdict(conviction_dir)
+    rows.append(
+        _float_row(
+            "conviction flag-count Spearman",
+            conviction_report.flag_spearman,
+            conviction_committed.flag_spearman,
+            f"{CONVICTION_DIR}/verdict.json (flag_spearman)",
+        )
+    )
+    conversion_num, conversion_den = fraction_from_report(
+        ctx.repo_root, CONVICTION_REPORT, "conversion accuracy"
+    )
+    rows.append(
+        _float_row(
+            "conviction conversion-label accuracy",
+            conviction_report.conversion_accuracy,
+            conversion_num / conversion_den,
+            f"{CONVICTION_REPORT} §4 ('conversion accuracy' "
+            f"= {conversion_num}/{conversion_den})",
+            note=(
+                "this is CONVERSION-LABEL accuracy, never a meeting decision "
+                "number (training/README.md §2, the terminology ruling)"
+            ),
+        )
+    )
+    rows.append(
+        _verdict_identity_row(
+            "conviction verdict.json reproduces",
+            rederived=conviction_rederived.model_dump(),
+            committed=conviction_committed.model_dump(),
+            # The committed artifact stores the REPO-RELATIVE corpus path; this
+            # run built its table from an absolute one, so the identity field is
+            # normalized and every MEASURED field compares raw (the
+            # test_committed_verdict_reproduces_from_the_frozen_weights idiom).
+            normalized={"replay_set_dir"},
+            source=f"{CONVICTION_DIR}/verdict.json",
+        )
+    )
+
+    # ---- the composed runner: the FROZEN optional-diagnostic composition. ----
+    composed_report = run_composed_fidelity(
+        corpus,
+        conviction_artifact_dir=conviction_dir,
+        surrogate_artifact_dir=surrogate_dir,
+    )
+    composed_committed = load_composed_verdict(composed_dir)
+    composed_rederived = decide_composed_go(
+        composed_report,
+        conviction_weights_sha256=conviction_sha,
+        surrogate_weights_sha256=surrogate_sha,
+    )
+    rows.append(
+        _float_row(
+            "composed decision accuracy",
+            composed_report.decision_accuracy,
+            composed_committed.decision_accuracy,
+            f"{COMPOSED_DIR}/verdict.json (decision_accuracy)",
+        )
+    )
+    rows.append(
+        _float_row(
+            "composed exact-outcome match",
+            composed_report.exact_outcome_match,
+            composed_committed.exact_outcome_match,
+            f"{COMPOSED_DIR}/verdict.json (exact_outcome_match)",
+        )
+    )
+    rows.append(
+        _float_row(
+            "composed convicting top-1",
+            composed_report.convicting_top1,
+            composed_committed.convicting_top1,
+            f"{COMPOSED_DIR}/verdict.json (convicting_top1)",
+        )
+    )
+    rows.append(
+        _verdict_identity_row(
+            "composed verdict.json reproduces",
+            rederived=composed_rederived.model_dump(),
+            committed=composed_committed.model_dump(),
+            # ``adoption_constraints`` is the Goodhart leg's carried metadata,
+            # not derivable from the fidelity, so it is normalized like the path.
+            normalized={"replay_set_dir", "adoption_constraints"},
+            source=f"{COMPOSED_DIR}/verdict.json",
+        )
+    )
+
+    # ---- the shas the verdicts are keyed to. ----
+    manifest = json.loads(_read_text(ctx.repo_root, f"{COMPOSED_DIR}/manifest.json"))
+    for label, measured_sha, committed_sha, source in (
+        (
+            "surrogate weights sha256",
+            surrogate_sha,
+            str(manifest["surrogate_weights_sha256"]),
+            f"{COMPOSED_DIR}/manifest.json",
+        ),
+        (
+            "conviction weights sha256",
+            conviction_sha,
+            str(manifest["conviction_weights_sha256"]),
+            f"{COMPOSED_DIR}/manifest.json",
+        ),
+    ):
+        rows.append(
+            CheckRow(
+                name=label,
+                measured=f"{measured_sha[:16]}…",
+                committed=f"{committed_sha[:16]}…",
+                source=source,
+                status="OK" if measured_sha == committed_sha else "FAIL",
+            )
+        )
+    return LegResult(leg="recompute", rows=tuple(rows))
+
+
+def _verdict_identity_row(
+    name: str,
+    *,
+    rederived: dict[str, object],
+    committed: dict[str, object],
+    normalized: set[str],
+    source: str,
+) -> CheckRow:
+    """The strongest pin: the whole committed verdict object, field for field."""
+
+    drifted = sorted(
+        key
+        for key in set(rederived) | set(committed)
+        if key not in normalized and rederived.get(key) != committed.get(key)
+    )
+    compared = len(set(rederived) | set(committed)) - len(normalized)
+    return CheckRow(
+        name=name,
+        measured=(
+            f"{compared - len(drifted)}/{compared} fields identical"
+            f" ({len(normalized)} normalized: {', '.join(sorted(normalized))})"
+        ),
+        committed=f"{compared} measured fields",
+        source=source,
+        status="OK" if not drifted else "FAIL",
+        detail="\n".join(
+            f"{key}: re-derived {rederived.get(key)!r} != committed "
+            f"{committed.get(key)!r}"
+            for key in drifted[:10]
+        ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Leg 4 — the paired finalist statistics (via scripts/paired_stats, 19.20)     #
+# --------------------------------------------------------------------------- #
+
+#: The erratum table's arm rows: entrant, n, "wins arm / comparator", delta,
+#: "b/c", exact p, and the two Wilson intervals.
+_ERRATUM_ARM: Final = re.compile(r"^`(p18-imp-[0-9a-f]+)`$")
+_WINS_CELL: Final = re.compile(r"^(\d+)\s*/\s*(\d+)$")
+_DISCORDANT_CELL: Final = re.compile(r"^(\d+)\s*/\s*(\d+)(?:\s*\(\d+ seeds\))?$")
+_FIRST_FLOAT: Final = re.compile(r"[-+]?\d+\.\d+")
+_INTERVAL_CELL: Final = re.compile(r"^\[\s*(\d+\.\d+)\s*,\s*(\d+\.\d+)\s*\]$")
+
+
+def _decimals(text: str) -> int:
+    """How many decimal places a committed cell states (its own precision)."""
+
+    match = _FIRST_FLOAT.search(text)
+    if match is None:
+        raise EvidenceError(f"no decimal number in {text!r}")
+    _, _, fraction = match.group(0).partition(".")
+    return len(fraction)
+
+
+def _cell_float(text: str) -> float:
+    match = _FIRST_FLOAT.search(text)
+    if match is None:
+        raise EvidenceError(f"no decimal number in {text!r}")
+    return float(match.group(0))
+
+
+def erratum_paired_rows(repo_root: Path) -> dict[str, list[str]]:
+    """The finalist report's paired-statistics erratum table, arm by arm.
+
+    Task 19.20 committed this table into `training/reports/report-finalist-eval.md`
+    §18 item 1; it is the committed verdict this leg's recomputation is compared
+    against. Rows are keyed by entrant and kept as raw cells so each number can
+    be compared at the precision the report itself states.
+    """
+
+    rows: dict[str, list[str]] = {}
+    for cells in _table_rows(_read_text(repo_root, FINALIST_REPORT)):
+        if len(cells) != 8:
+            continue
+        match = _ERRATUM_ARM.match(cells[0].replace("**", "").strip())
+        if match is None:
+            continue
+        entrant = match.group(1)
+        if entrant in rows:
+            raise EvidenceError(
+                f"{FINALIST_REPORT}: two paired-erratum rows for {entrant!r}"
+            )
+        rows[entrant] = cells
+    if not rows:
+        raise EvidenceError(
+            f"{FINALIST_REPORT}: no paired-statistics erratum rows "
+            "(`p18-imp-…` | n | wins | delta | b/c | p | Wilson | Wilson) — the "
+            "committed verdict this leg compares against is gone"
+        )
+    return rows
+
+
+def run_paired(ctx: Context) -> LegResult:
+    """Recompute the paired finalist statistics and pin them to the erratum."""
+
+    stats = paired_stats.compute_paired_stats(ctx.repo_root / FINALIST_RESULTS)
+    committed = erratum_paired_rows(ctx.repo_root)
+    measured = {row.entrant: row for row in stats}
+
+    rows: list[CheckRow] = []
+    # Coverage in both directions: an erratum row with no recomputation behind
+    # it is an unverifiable published statistic, and a recomputed arm with no
+    # erratum row is a published table that no longer describes the measurement.
+    unmatched = sorted(set(committed) - set(measured))
+    unpublished = sorted(set(measured) - set(committed))
+    if unmatched or unpublished:
+        rows.append(
+            CheckRow(
+                name="paired arm coverage",
+                measured=f"{len(measured)} arm(s) recomputed: {', '.join(measured)}",
+                committed=f"{len(committed)} arm(s) in the erratum table",
+                source=f"{FINALIST_REPORT} §18 item 1",
+                status="FAIL",
+                detail="\n".join(
+                    part
+                    for part in (
+                        f"no recomputation for: {', '.join(unmatched)}"
+                        if unmatched
+                        else "",
+                        f"recomputed but not in the erratum table: "
+                        f"{', '.join(unpublished)}"
+                        if unpublished
+                        else "",
+                    )
+                    if part
+                ),
+            )
+        )
+    for entrant in sorted(committed):
+        if entrant not in measured:
+            continue
+        cells = committed[entrant]
+        arm = measured[entrant]
+        problems: list[str] = []
+
+        n_cell = int(cells[1])
+        if arm.n != n_cell:
+            problems.append(f"n {arm.n} != {n_cell}")
+        wins = _WINS_CELL.match(cells[2].replace("**", "").strip())
+        if wins is None:
+            raise EvidenceError(
+                f"{FINALIST_REPORT}: {entrant} wins cell {cells[2]!r} is not 'a / b'"
+            )
+        if (arm.arm_wins, arm.baseline_wins) != (
+            int(wins.group(1)),
+            int(wins.group(2)),
+        ):
+            problems.append(
+                f"wins {arm.arm_wins}/{arm.baseline_wins} != "
+                f"{wins.group(1)}/{wins.group(2)}"
+            )
+        delta_cell = cells[3].replace("**", "").strip()
+        if round(arm.delta, _decimals(delta_cell)) != _cell_float(delta_cell):
+            problems.append(f"delta {arm.delta} != {delta_cell}")
+        discordant = _DISCORDANT_CELL.match(cells[4].replace("**", "").strip())
+        if discordant is None:
+            raise EvidenceError(
+                f"{FINALIST_REPORT}: {entrant} discordant cell {cells[4]!r} "
+                "is not 'b/c'"
+            )
+        if (arm.b, arm.c) != (int(discordant.group(1)), int(discordant.group(2))):
+            problems.append(
+                f"discordant {arm.b}/{arm.c} != "
+                f"{discordant.group(1)}/{discordant.group(2)}"
+            )
+        p_cell = cells[5]
+        if round(arm.p_exact, _decimals(p_cell)) != _cell_float(p_cell):
+            problems.append(f"p_exact {arm.p_exact} != {p_cell}")
+        for label, cell, low, high in (
+            ("arm Wilson", cells[6], arm.arm_wilson_low, arm.arm_wilson_high),
+            (
+                "baseline Wilson",
+                cells[7],
+                arm.baseline_wilson_low,
+                arm.baseline_wilson_high,
+            ),
+        ):
+            interval = _INTERVAL_CELL.match(cell.replace("**", "").strip())
+            if interval is None:
+                raise EvidenceError(
+                    f"{FINALIST_REPORT}: {entrant} {label} cell {cell!r} is not "
+                    "'[low, high]'"
+                )
+            places = len(interval.group(1).partition(".")[2])
+            if (round(low, places), round(high, places)) != (
+                float(interval.group(1)),
+                float(interval.group(2)),
+            ):
+                problems.append(
+                    f"{label} [{low:.4f}, {high:.4f}] != "
+                    f"[{interval.group(1)}, {interval.group(2)}]"
+                )
+        rows.append(
+            CheckRow(
+                name=f"paired McNemar + Wilson: {entrant}",
+                measured=(
+                    f"n={arm.n} wins {arm.arm_wins}/{arm.baseline_wins} "
+                    f"delta {arm.delta:+.4f} discordant {arm.b}/{arm.c} "
+                    f"p_exact {arm.p_exact:.4f}"
+                ),
+                committed=(
+                    f"n={cells[1]} wins {cells[2]} delta {delta_cell} "
+                    f"discordant {cells[4].replace('**', '')} "
+                    f"p {p_cell.replace('**', '')}"
+                ),
+                source=f"{FINALIST_REPORT} §18 item 1 via scripts/paired_stats",
+                status="FAIL" if problems else "OK",
+                detail="\n".join(problems),
+            )
+        )
+
+    # The multiplicity line the erratum draws its conclusion from, recomputed.
+    threshold = paired_stats.FAMILY_ALPHA / len(stats)
+    clears = sorted(row.entrant for row in stats if row.p_exact < threshold)
+    rows.append(
+        CheckRow(
+            name="Bonferroni family bar",
+            measured=(
+                f"alpha {paired_stats.FAMILY_ALPHA}/{len(stats)} = {threshold:.4f}; "
+                f"clears: {', '.join(clears) if clears else '(none)'}"
+            ),
+            committed="reported, not pinned — the per-arm p values above are",
+            source="scripts/paired_stats.py (FAMILY_ALPHA)",
+            status="INFO",
+        )
+    )
+    return LegResult(leg="paired", rows=tuple(rows))
+
+
+# --------------------------------------------------------------------------- #
+# Leg 5 — the artifact-availability report                                     #
+# --------------------------------------------------------------------------- #
+
+#: The registry document's ``where`` cell, mapped to an availability class. An
+#: unrecognised value fails the run: `docs/artifacts.md` is the authority on what
+#: each class means, so a new phrasing is a decision this command must be taught,
+#: never one it may guess at.
+_WHERE_TO_CLASS: Final[dict[str, AvailabilityClass]] = {
+    "in git": "IN-TREE",
+    "pinned sha": "EVIDENCE-BRANCH",
+    "regenerated (`.gitignore`d)": "REGENERATED",
+}
+
+#: The probe paths for each registry row, keyed by the row's FIRST backticked
+#: token. The doc's artifact cell is prose (it names sibling directories
+#: relatively and expands a brace), so the paths are declared here — and the KEY
+#: SET is cross-checked against the document on every run, so a row added to
+#: `docs/artifacts.md` fails this command rather than going unreported.
+_IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
+    "replays/samples/": ("replays/samples/4p1i", "replays/samples/9p2i"),
+    "replays/ml_corpus/": ("replays/ml_corpus/4p1i", "replays/ml_corpus/9p2i"),
+    "agents/tactical/learned/{weights,crew_weights}.json": (
+        "agents/tactical/learned/weights.json",
+        "agents/tactical/learned/weights.json.sha256",
+        "agents/tactical/learned/crew_weights.json",
+        "agents/tactical/learned/crew_weights.json.sha256",
+    ),
+    "tests/fixtures/": ("tests/fixtures",),
+    "data/personas.json": ("data/personas.json",),
+    "training/artifacts/impostor/": (
+        "training/artifacts/impostor",
+        "training/artifacts/crew",
+        "training/artifacts/anchor_study",
+    ),
+    "training/artifacts/surrogate/": (
+        SURROGATE_DIR,
+        CONVICTION_DIR,
+        COMPOSED_DIR,
+    ),
+    "training/artifacts/coevo/": (COEVO_DEST, f"{COEVO_DEST}/PATHS.md"),
+    "training/artifacts/coevo/EVIDENCE-MANIFEST.md": (EVIDENCE_MANIFEST,),
+    "training/reports/": ("training/reports", FINALIST_RESULTS),
+    "training/reports/_finalist_eval_raw/MANIFEST.md": (SLATE_MANIFEST,),
+    "audits/": ("audits",),
+    "docs/media/": ("docs/media",),
+    "design/phase-12/": ("design/phase-12",),
+    "experiments/lab/": ("experiments/lab", "experiments/model_probe"),
+    "replays/*.jsonl": (),
+}
+
+#: The two class-(c) rows, keyed the same way, with the evidence-commit prefix
+#: whose manifest rows they cover.
+_EVIDENCE_PREFIXES: Final[dict[str, str]] = {
+    "coevo/": "coevo/",
+    "finalist-eval-raw/": "finalist-eval-raw/",
+}
+
+#: Named evidence that `docs/artifacts.md`'s registry table holds no row for,
+#: because it is not in this repository and never will be. Each entry names the
+#: committed line that RECORDS its class — the anchor is re-read on every run, so
+#: a class this command reports is always one the tree still states.
+_OFF_TREE_ANCHORS: Final[tuple[tuple[str, AvailabilityClass, str, str], ...]] = (
+    (
+        "co-evolution audit sidecars (`**/*.audit.jsonl`)",
+        "REPO-EXTERNAL",
+        PATHS_DOC,
+        "Audit sidecars (`*.audit.jsonl`) are excluded from the committed tree",
+    ),
+    (
+        "operator campaign root `~/ailibi-campaign-1824/` (Phase-18 co-evolution)",
+        "REPO-EXTERNAL",
+        PATHS_DOC,
+        "/Users/danielkeinan/ailibi-campaign-1824/",
+    ),
+    (
+        "operator campaign root `~/ailibi-campaign-1825/` (the 18.25 crew campaign)",
+        "REPO-EXTERNAL",
+        PATHS_DOC,
+        "operator root `/Users/danielkeinan/ailibi-campaign-1825/`",
+    ),
+    (
+        "operator campaign root `~/ailibi-campaign-1826/` (the finalist slate)",
+        "REPO-EXTERNAL",
+        FINALIST_REPORT,
+        "Working root `~/ailibi-campaign-1826/`",
+    ),
+)
+
+#: The Task 19.21 raw-slate ruling, read out of the registry document rather than
+#: transcribed. RECOVERED means the bytes are on the pinned commit (and the
+#: evidence-branch row above covers them); a LOST/NON-REPRODUCIBLE ruling is the
+#: manifest-recorded loss ``--complete`` accepts as a valid close state.
+_RULING_RE: Final = re.compile(r"\*\*Ruling (\d{4}-\d{2}-\d{2}): ([A-Z-]+)\*\*")
+_LOSS_RULINGS: Final[frozenset[str]] = frozenset({"LOST", "NON-REPRODUCIBLE"})
+
+
+#: The registry table's header row, which is how it is located: the table is
+#: read from there to the first non-table line, so EVERY row in it is classed
+#: and none can be passed over by failing to match a pattern.
+_REGISTRY_HEADER: Final[tuple[str, ...]] = ("artifact", "class", "where", "size")
+_TABLE_SEPARATOR: Final = re.compile(r"^[-: ]+$")
+
+
+def registry_rows(repo_root: Path) -> list[tuple[str, str, str, str]]:
+    """`docs/artifacts.md`'s registry table as ``(key, class, where, size)``.
+
+    ``key`` is the row's first backticked token, which is what
+    :data:`_IN_TREE_PROBES` / :data:`_EVIDENCE_PREFIXES` are keyed by. A row
+    whose ``where`` cell is not one of the document's three known values raises:
+    `docs/artifacts.md` is the authority on what each class means, so a new
+    phrasing is a decision this command must be taught, never one it may skip.
+    """
+
+    rows: list[tuple[str, str, str, str]] = []
+    inside = False
+    for lineno, line in enumerate(
+        _read_text(repo_root, ARTIFACTS_DOC).splitlines(), start=1
+    ):
+        stripped = line.strip()
+        is_row = stripped.startswith("|") and stripped.endswith("|")
+        cells = [cell.strip() for cell in stripped[1:-1].split("|")] if is_row else []
+        if not inside:
+            if is_row and tuple(cell.lower() for cell in cells) == _REGISTRY_HEADER:
+                inside = True
+            continue
+        if not is_row:
+            break
+        if cells and all(_TABLE_SEPARATOR.match(cell) for cell in cells):
+            continue
+        if len(cells) != len(_REGISTRY_HEADER):
+            raise EvidenceError(
+                f"{ARTIFACTS_DOC}:{lineno}: registry row has {len(cells)} cells, "
+                f"not {len(_REGISTRY_HEADER)}"
+            )
+        where = cells[2].replace("**", "").strip()
+        if where not in _WHERE_TO_CLASS:
+            raise EvidenceError(
+                f"{ARTIFACTS_DOC}:{lineno}: registry row states where={where!r}, "
+                f"which is none of {sorted(_WHERE_TO_CLASS)} — this command must "
+                "be taught a new availability class, never guess at one"
+            )
+        match = re.search(r"`([^`]+)`", cells[0])
+        if match is None:
+            raise EvidenceError(
+                f"{ARTIFACTS_DOC}:{lineno}: registry row {cells[0]!r} names no "
+                "artifact path"
+            )
+        rows.append(
+            (match.group(1), cells[1].replace("**", "").strip(), where, cells[3])
+        )
+    if not inside:
+        raise EvidenceError(
+            f"{ARTIFACTS_DOC}: no registry table "
+            f"(a `| {' | '.join(_REGISTRY_HEADER)} |` header) — the availability "
+            "classes cannot be read"
+        )
+    if not rows:
+        raise EvidenceError(f"{ARTIFACTS_DOC}: the registry table has no rows")
+    return rows
+
+
+def _availability_row(
+    name: str,
+    measured: AvailabilityClass | str,
+    recorded: AvailabilityClass,
+    source: str,
+    status: Status,
+    detail: str = "",
+) -> CheckRow:
+    return CheckRow(
+        name=name,
+        measured=str(measured),
+        committed=recorded,
+        source=source,
+        status=status,
+        detail=detail,
+    )
+
+
+def run_availability(ctx: Context) -> LegResult:
+    """The availability class of every named evidence artifact, measured."""
+
+    rows: list[CheckRow] = []
+    doc_rows = registry_rows(ctx.repo_root)
+    known = set(_IN_TREE_PROBES) | set(_EVIDENCE_PREFIXES)
+    doc_keys = {key for key, _, _, _ in doc_rows}
+    # Double entry: the document is the registry, and this command's probe table
+    # must cover it exactly. A row added to docs/artifacts.md that nothing here
+    # probes would be an artifact silently absent from the availability report,
+    # which is precisely what this leg exists to prevent.
+    if doc_keys != known:
+        missing = ", ".join(sorted(doc_keys - known)) or "(none)"
+        extra = ", ".join(sorted(known - doc_keys)) or "(none)"
+        rows.append(
+            CheckRow(
+                name="registry coverage",
+                measured=f"{len(known)} probed row(s)",
+                committed=f"{len(doc_keys)} registry row(s)",
+                source=ARTIFACTS_DOC,
+                status="FAIL",
+                detail=(
+                    f"in {ARTIFACTS_DOC} but not probed here: {missing}\n"
+                    f"probed here but not in {ARTIFACTS_DOC}: {extra}"
+                ),
+            )
+        )
+    else:
+        rows.append(
+            CheckRow(
+                name="registry coverage",
+                measured=f"{len(known)} row(s) probed",
+                committed=f"{len(doc_keys)} row(s) in the registry",
+                source=ARTIFACTS_DOC,
+                status="OK",
+            )
+        )
+
+    present_by_prefix: dict[str, int] = {}
+    total_by_prefix: dict[str, int] = {}
+    for row in ctx.evidence:
+        if row.repo_path is None:
+            continue
+        prefix = row.manifest_path.split("/", 1)[0] + "/"
+        total_by_prefix[prefix] = total_by_prefix.get(prefix, 0) + 1
+        if (ctx.repo_root / row.repo_path).is_file():
+            present_by_prefix[prefix] = present_by_prefix.get(prefix, 0) + 1
+
+    for key, class_cell, where, size_cell in doc_rows:
+        recorded = _WHERE_TO_CLASS[where]
+        label = f"{key} [{class_cell}]"
+        if recorded == "IN-TREE":
+            probes = _IN_TREE_PROBES.get(key, ())
+            missing_paths = [p for p in probes if not (ctx.repo_root / p).exists()]
+            rows.append(
+                _availability_row(
+                    label,
+                    "IN-TREE" if not missing_paths else "MISSING",
+                    recorded,
+                    f"{ARTIFACTS_DOC} (registry: '{where}')",
+                    "OK" if not missing_paths else "FAIL",
+                    detail="absent: " + ", ".join(missing_paths)
+                    if missing_paths
+                    else "",
+                )
+            )
+        elif recorded == "EVIDENCE-BRANCH":
+            prefix = _EVIDENCE_PREFIXES[key]
+            total = total_by_prefix.get(prefix, 0)
+            present = present_by_prefix.get(prefix, 0)
+            # The registry states each class-(c) row's file count; those bytes
+            # are immutable by construction, so the manifest must agree with it.
+            stated = re.search(r"([\d,]+) files", size_cell)
+            count_note = ""
+            if stated is not None and int(stated.group(1).replace(",", "")) != total:
+                count_note = (
+                    f"{ARTIFACTS_DOC} states {stated.group(1)} files; the "
+                    f"manifest carries {total}"
+                )
+            if count_note:
+                status: Status = "FAIL"
+                measured: str = "MANIFEST/REGISTRY DISAGREE"
+            elif present == total:
+                status = "OK"
+                measured = "EVIDENCE-BRANCH-RESTORED"
+            elif present == 0:
+                status = "ABSENT"
+                measured = "EVIDENCE-BRANCH-ABSENT"
+            else:
+                status = "FAIL"
+                measured = "EVIDENCE-BRANCH-PARTIAL"
+            rows.append(
+                _availability_row(
+                    label,
+                    f"{measured} ({present}/{total} present)",
+                    recorded,
+                    f"{ARTIFACTS_DOC} + {EVIDENCE_MANIFEST} §1 "
+                    f"(pin {ctx.pinned_sha[:12]}…)",
+                    status,
+                    detail=count_note
+                    or (
+                        "restore with `bash scripts/fetch_evidence.sh`"
+                        if status == "ABSENT"
+                        else ""
+                    ),
+                )
+            )
+        else:
+            rows.append(
+                _availability_row(
+                    label,
+                    "REGENERATED (class (d) — never committed)",
+                    recorded,
+                    f"{ARTIFACTS_DOC} (registry: '{where}')",
+                    "INFO",
+                    detail="regenerated by the documented command, not preserved",
+                )
+            )
+
+    # ---- named evidence with no registry row: recorded off-tree, or lost. ----
+    for name, recorded_class, anchor_file, anchor_text in _OFF_TREE_ANCHORS:
+        anchored = anchor_text in _read_text(ctx.repo_root, anchor_file)
+        rows.append(
+            _availability_row(
+                name,
+                recorded_class if anchored else "UNRECORDED",
+                recorded_class,
+                f"{anchor_file} ({anchor_text!r})",
+                "INFO" if anchored else "FAIL",
+                detail=""
+                if anchored
+                else (
+                    f"{anchor_file} no longer records this class; an availability "
+                    "class this command reports must be one the tree still states"
+                ),
+            )
+        )
+
+    # ---- the Task 19.21 raw-slate ruling, read from the registry document. ----
+    ruling = _RULING_RE.search(_read_text(ctx.repo_root, ARTIFACTS_DOC))
+    if ruling is None:
+        rows.append(
+            CheckRow(
+                name="Phase-18 finalist raw slate (Task 19.21 outcome)",
+                measured="NO RULING RECORDED",
+                committed="a dated '**Ruling <date>: <outcome>**' line",
+                source=f"{ARTIFACTS_DOC} (the class-(c) rows in detail)",
+                status="FAIL",
+                detail=(
+                    "Task 19.21 records either recovery or loss; an unrecorded "
+                    "outcome is the silent state the close forbids"
+                ),
+            )
+        )
+    else:
+        ruling_date, outcome = ruling.group(1), ruling.group(2)
+        lost = outcome in _LOSS_RULINGS
+        slate_present = present_by_prefix.get("finalist-eval-raw/", 0)
+        slate_total = total_by_prefix.get("finalist-eval-raw/", 0)
+        if lost:
+            slate_status: Status = "INFO"
+            slate_measured = f"LOST (recorded {ruling_date})"
+        elif slate_present == slate_total and slate_total:
+            slate_status = "OK"
+            slate_measured = (
+                f"{outcome} → EVIDENCE-BRANCH-RESTORED ({slate_present}/{slate_total})"
+            )
+        elif slate_present == 0:
+            slate_status = "ABSENT"
+            slate_measured = (
+                f"{outcome} → EVIDENCE-BRANCH-ABSENT (0/{slate_total} restored)"
+            )
+        else:
+            slate_status = "FAIL"
+            slate_measured = (
+                f"{outcome} → EVIDENCE-BRANCH-PARTIAL ({slate_present}/{slate_total})"
+            )
+        rows.append(
+            CheckRow(
+                name="Phase-18 finalist raw slate (Task 19.21 outcome)",
+                measured=slate_measured,
+                committed=f"Ruling {ruling_date}: {outcome}",
+                source=f"{ARTIFACTS_DOC} (the class-(c) rows in detail)",
+                status=slate_status,
+                detail=(
+                    "a manifest-recorded loss is a valid close state — the bytes "
+                    "are gone, the record is not"
+                    if lost
+                    else (
+                        "restore with `bash scripts/fetch_evidence.sh`"
+                        if slate_status == "ABSENT"
+                        else ""
+                    )
+                ),
+            )
+        )
+    return LegResult(leg="availability", rows=tuple(rows))
+
+
+# --------------------------------------------------------------------------- #
+# Rendering + the CLI                                                          #
+# --------------------------------------------------------------------------- #
+
+LEG_TITLES: Final[dict[str, str]] = {
+    "sidecars": "per-class sha-256 verification (in-tree + evidence branch)",
+    "corpus": "corpus reconstruction (engine playback) + corpus identity",
+    "recompute": "surrogate / conviction / composed, from the frozen weights",
+    "paired": "the paired finalist statistics (scripts/paired_stats, 19.20)",
+    "availability": "the artifact-availability report (docs/artifacts.md classes)",
+}
+
+
+def render(result: LegResult) -> str:
+    lines = [
+        "",
+        f"--- {result.leg}: {LEG_TITLES[result.leg]} ---",
+    ]
+    for note in result.notes:
+        lines.extend([f"  ! {note}", ""])
+    for row in result.rows:
+        lines.append(f"[{row.status:^6}] {row.name}")
+        lines.append(f"          measured : {row.measured}")
+        lines.append(f"          committed: {row.committed}")
+        lines.append(f"          source   : {row.source}")
+        if row.detail:
+            for detail_line in row.detail.splitlines():
+                lines.append(f"          note     : {detail_line}")
+    return "\n".join(lines)
+
+
+def _failed(rows: Sequence[CheckRow], *, complete: bool) -> list[CheckRow]:
+    """The rows that fail this run. ``ABSENT`` fails only under ``--complete``."""
+
+    return [
+        row
+        for row in rows
+        if row.status == "FAIL" or (complete and row.status == "ABSENT")
+    ]
+
+
+#: Leg name -> the function that runs it. Kept beside :data:`LEG_TITLES` so a
+#: leg cannot be selectable without both a runner and a heading.
+LEG_RUNNERS: Final[dict[str, Callable[[Context], LegResult]]] = {
+    "sidecars": run_sidecars,
+    "corpus": run_corpus,
+    "recompute": run_recompute,
+    "paired": run_paired,
+    "availability": run_availability,
+}
+
+
+def run_legs(ctx: Context, legs: Sequence[str]) -> list[LegResult]:
+    """Run the named legs in order. ``main`` streams instead, leg by leg."""
+
+    return [LEG_RUNNERS[leg](ctx) for leg in legs]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify the whole ML evidence story in one read-only, offline "
+            "command (Task 19.23): per-class sidecar/sha verification, corpus "
+            "reconstruction, surrogate/conviction/composed recomputation, the "
+            "paired finalist statistics, and the artifact-availability report."
+        ),
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "sample the corpus reconstruction instead of walking every committed "
+            f"replay ({FAST_SAMPLE_PER_SET} seeds per set; the sampling is "
+            "disclosed in the output)"
+        ),
+    )
+    parser.add_argument(
+        "--complete",
+        action="store_true",
+        help=(
+            "the close gate: FAIL on any byte promised archival availability "
+            "that is absent, while accepting a manifest-recorded LOST class. Run "
+            "`bash scripts/fetch_evidence.sh` first"
+        ),
+    )
+    parser.add_argument(
+        "--only",
+        action="append",
+        choices=LEGS,
+        metavar="LEG",
+        help=(
+            f"run only the named leg (repeatable; one of {', '.join(LEGS)}). "
+            "Refused with --complete: a partial run cannot certify completeness"
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=_REPO_ROOT,
+        help="the checkout to verify (defaults to this one)",
+    )
+    args = parser.parse_args(argv)
+    fast: bool = args.fast
+    complete: bool = args.complete
+    only: list[str] | None = args.only
+    repo_root: Path = args.repo_root
+
+    if complete and only:
+        print(
+            "--complete verifies EVERY leg; it cannot be combined with --only "
+            "(a partial run cannot certify completeness).",
+            file=sys.stderr,
+        )
+        return 2
+    if complete and fast:
+        print(
+            "--complete verifies every committed replay; it cannot be combined "
+            "with --fast (a sampled walk is not a complete one).",
+            file=sys.stderr,
+        )
+        return 2
+    legs = [leg for leg in LEGS if only is None or leg in only]
+
+    try:
+        ctx = Context(
+            repo_root=repo_root,
+            fast=fast,
+            complete=complete,
+            evidence=evidence_rows(repo_root),
+            pinned_sha=read_pinned_sha(repo_root),
+        )
+        mode = "complete" if complete else ("fast" if fast else "full")
+        print(f"=== verify-ml-evidence ({mode}) — {repo_root} ===")
+        print(f"evidence pin: {ctx.pinned_sha} ({EVIDENCE_MANIFEST} §1)")
+        print("read-only and offline: no artifact is written and no socket is opened.")
+        if only is not None:
+            print(f"PARTIAL RUN — only: {', '.join(legs)}")
+        # Streamed leg by leg rather than collected first: the recomputation leg
+        # is tens of seconds of corpus tables, and a command whose whole job is
+        # to show its work should not sit silent through it.
+        results: list[LegResult] = []
+        for leg in legs:
+            result = LEG_RUNNERS[leg](ctx)
+            results.append(result)
+            print(render(result), flush=True)
+    except EvidenceError as exc:
+        print(f"verify-ml-evidence: {exc}", file=sys.stderr)
+        return 2
+
+    every_row = [row for result in results for row in result.rows]
+    failures = _failed(every_row, complete=complete)
+    absent = [row for row in every_row if row.status == "ABSENT"]
+    print("")
+    print(
+        f"checks: {len(every_row)} | "
+        f"OK {sum(1 for row in every_row if row.status == 'OK')} | "
+        f"FAIL {sum(1 for row in every_row if row.status == 'FAIL')} | "
+        f"ABSENT {len(absent)} | "
+        f"INFO {sum(1 for row in every_row if row.status == 'INFO')}"
+    )
+    if absent and not complete:
+        print(
+            f"{len(absent)} check(s) report EVIDENCE-BRANCH-ABSENT — the bytes "
+            "Task 19.22 moved are not on this checkout. That is the expected "
+            "state of a fresh clone; `bash scripts/fetch_evidence.sh` restores "
+            "them and `--complete` requires them."
+        )
+    if failures:
+        print("")
+        print("FAILED:")
+        for row in failures:
+            print(f"  - [{row.status}] {row.name}: {row.measured}")
+        return 1
+    print("verify-ml-evidence: every check passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
