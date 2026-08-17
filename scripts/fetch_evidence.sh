@@ -94,8 +94,10 @@ fi
 # stat(1) is not portable: GNU spells the mode %a, BSD spells it %Lp.
 if stat -c '%a' . >/dev/null 2>&1; then
   file_mode() { stat -c '%a' "$1"; }
+  file_owner() { stat -c '%u:%g' "$1"; }
 else
   file_mode() { stat -f '%Lp' "$1"; }
+  file_owner() { stat -f '%u:%g' "$1"; }
 fi
 
 # --------------------------------------------------------------------------- #
@@ -296,27 +298,10 @@ assert_gitignores_are_ours_or_absent() {
   fi
 }
 
-gitignore_is_complete() { # gitignore_is_complete PATH
-  gitignore_is_ours "$1" && grep -qxF '*' "$1"
-}
-
-write_gitignore() { # write_gitignore DEST
-  local dest="$1" tmp
-  # An owned AND complete file is left exactly as it stands. Rewriting it would
-  # truncate first and refill after, and anything interrupting that window — a
-  # kill, power loss — leaves an EMPTY ignore file, at which point every
-  # already-restored byte under this root is stageable again. That would have
-  # contradicted the very claim this step makes below (Codex review, PR #346).
-  if gitignore_is_complete "$dest/.gitignore"; then
-    return 0
-  fi
-  # Otherwise build it beside the target and move it into place: rename(2)
-  # within a single directory is atomic, so a reader sees either the old file or
-  # the complete new one and never a half-written one. Registered for cleanup so
-  # an interrupted write cannot leave the temporary behind.
-  tmp="$dest/.gitignore.$$.tmp"
-  _scratch+=("$tmp")
-  cat > "$tmp" <<IGNORE
+# The canonical body, defined once, so the skip test below can compare against
+# it byte for byte instead of sampling a line.
+gitignore_body() {
+  cat <<IGNORE
 $GITIGNORE_MARKER
 #
 # Everything untracked in this directory is RESTORED CLASS-(c) EVIDENCE: it
@@ -329,7 +314,68 @@ $GITIGNORE_MARKER
 # file with them.
 *
 IGNORE
+}
+
+write_gitignore() { # write_gitignore DEST
+  local dest="$1" tmp
+  # Skip ONLY on an exact match with the canonical body. "Has our marker and a
+  # line that is `*`" was not strong enough: gitignore(5) gives the LAST
+  # matching pattern precedence, so an appended `!some-evidence-file` re-includes
+  # that file while still passing the spot check, and the payload this script
+  # claims to protect is stageable again (Codex review, PR #346). Anything not
+  # byte-identical — edited, truncated, negated — is rewritten.
+  if [[ ! -L "$dest/.gitignore" ]] && [[ -f "$dest/.gitignore" ]] &&
+    [[ "$(cat "$dest/.gitignore")" == "$(gitignore_body)" ]]; then
+    return 0
+  fi
+  # Build beside the target and rename it into place: rename(2) within a single
+  # directory is atomic, so a reader sees the old file or the complete new one
+  # and never a half-written one. The sibling is made by `mktemp`, not by a
+  # PID-predictable name — a symlink parked at a predictable name would be
+  # FOLLOWED by the redirect and its target truncated, off-tree and outside
+  # every destination guard (Codex review, PR #346). mktemp creates exclusively,
+  # so it neither follows a link nor clobbers an existing entry.
+  tmp="$(mktemp "$dest/.gitignore.XXXXXX")"
+  _scratch+=("$tmp")
+  gitignore_body > "$tmp"
+  chmod 644 "$tmp"
   mv -f "$tmp" "$dest/.gitignore"
+}
+
+# The manifest is the allowlist EVERY guard is built from — the collision scan,
+# the type guard, the expected verify count — and nothing checked that it
+# actually enumerates the archive. A truncated digest block with the pin still
+# readable therefore shrank every guard silently while `git archive` went on
+# extracting the whole tree: reproduced by dropping ONE row, after which tar
+# overwrote an unrelated untracked file no guard had preflighted, and the run
+# still reported `OK: 2952/2952` (Codex review, PR #346).
+archive_paths() {
+  git -C "$REPO_ROOT" ls-tree -r --name-only "$PINNED_SHA" |
+    grep -v '^README.md$' |
+    sed -e 's#^coevo/#training/artifacts/coevo/#' \
+      -e 's#^finalist-eval-raw/#training/reports/_finalist_eval_raw/#'
+}
+
+# Called by the two modes that have the commit in hand. `--clean` is offline by
+# design and returns long before this, so it cannot make the comparison — and it
+# does not need to: it removes only what already matches a digest.
+assert_archive_matches_manifest() {
+  local only_archive only_manifest
+  only_archive="$(comm -23 <(archive_paths | sort) <(restored_paths | sort))"
+  only_manifest="$(comm -13 <(archive_paths | sort) <(restored_paths | sort))"
+  if [[ -n "$only_archive" ]] || [[ -n "$only_manifest" ]]; then
+    echo "The pinned commit and the manifest describe DIFFERENT file sets, so" >&2
+    echo "the manifest cannot be used as the allowlist. Refusing." >&2
+    if [[ -n "$only_archive" ]]; then
+      echo "  in the commit but NOT in the manifest ($(printf '%s\n' "$only_archive" | wc -l | tr -d ' ')):" >&2
+      printf '%s\n' "$only_archive" | head -5 | sed 's/^/    /' >&2
+    fi
+    if [[ -n "$only_manifest" ]]; then
+      echo "  in the manifest but NOT in the commit ($(printf '%s\n' "$only_manifest" | wc -l | tr -d ' ')):" >&2
+      printf '%s\n' "$only_manifest" | head -5 | sed 's/^/    /' >&2
+    fi
+    exit 1
+  fi
 }
 
 # The directory mode/mtime pass, shared by the success path and the EXIT trap so
@@ -383,11 +429,18 @@ restore_dir_metadata() {
     echo "repaired, and every captured directory is stamped NOW ($absent)." >&2
   fi
 
-  while read -r want stamp d; do
+  while read -r want owner stamp d; do
     if [[ -d "$REPO_ROOT/$d" ]]; then
       repaired=0
       if [[ "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
         if chmod "$want" "$REPO_ROOT/$d" 2>/dev/null; then
+          repaired=1
+        else
+          failed=$((failed + 1))
+        fi
+      fi
+      if [[ "$(file_owner "$REPO_ROOT/$d")" != "$owner" ]]; then
+        if chown "$owner" "$REPO_ROOT/$d" 2>/dev/null; then
           repaired=1
         else
           failed=$((failed + 1))
@@ -593,6 +646,10 @@ if [[ "$mode" == "fetch" ]]; then
   scratch_file modes
   stamps="$(mktemp -d)"
   _scratch+=("$stamps")
+  # The manifest is this restore's allowlist, so prove it matches the commit
+  # BEFORE anything is captured or written.
+  assert_archive_matches_manifest
+
   # Mode AND mtime. tar rewrites both from the archive, so a directory that
   # already existed came back stamped with the evidence commit's timestamp —
   # a fabricated past date on a tracked-tree directory (Codex review, PR #346).
@@ -602,7 +659,12 @@ if [[ "$mode" == "fetch" ]]; then
     if [[ -d "$REPO_ROOT/$d" ]]; then
       i=$((i + 1))
       touch -r "$REPO_ROOT/$d" "$stamps/$i"
-      printf '%s %s %s\n' "$(file_mode "$REPO_ROOT/$d")" "$i" "$d" >> "$modes"
+      # Owner too, not just mode: `--same-owner` is tar's default for the
+      # superuser, so a root restore rewrote the uid/gid of every pre-existing
+      # directory it extracted into — reproduced, 65534:65534 -> 0:0 on a
+      # directory that was only GAINING entries (Codex review, PR #346).
+      printf '%s %s %s %s\n' "$(file_mode "$REPO_ROOT/$d")" \
+        "$(file_owner "$REPO_ROOT/$d")" "$i" "$d" >> "$modes"
     fi
   done < <({ dest_roots; dest_dirs; })
   # Every entry the restore will materialise that is NOT on disk yet, recorded
@@ -647,6 +709,11 @@ fi
 # --------------------------------------------------------------------------- #
 # verify                                                                       #
 # --------------------------------------------------------------------------- #
+# Also here, so `--verify` cannot report a green count that silently omits the
+# rows a truncated manifest dropped. Cheap, and re-running it after a restore
+# costs two `ls-tree`s rather than a per-mode conditional to get wrong.
+assert_archive_matches_manifest
+
 digests=""
 scratch_file digests
 peel_digests > "$digests"
