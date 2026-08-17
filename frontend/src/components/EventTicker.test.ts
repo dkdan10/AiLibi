@@ -469,6 +469,35 @@ describe("public beats", () => {
     expect(lines(fogged)).toBe(expected);
   });
 
+  it("a body's public report accounts it — the same discovery is not narrated twice", () => {
+    // The loader deliberately reopens the reported body in `visible_bodies` for
+    // co-located agents on the report tick, so without accounting the victim the
+    // feed reads "p-1 reported p-5's body" then "Found p-5's body" on one frame.
+    // Real on committed bytes: 9p2i seed 1, tick 8, for p-1 and p-6.
+    const reportTick: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(
+        7,
+        [meetingTriggered(7), reportBody(7)],
+        [watcherState(visibility([], [{ id: "b-1", room: "REACTOR", victim_id: "p-5" }]))],
+      ),
+    ];
+    const kinds = projectTicker(reportTick, NO_MEETINGS, 1, AS_WATCHER).map((e) => e.kind);
+    expect(kinds).toEqual(["meeting", "report"]);
+    expect(kinds).not.toContain("body");
+  });
+
+  it("a body reported earlier is not re-discovered on a later walk-past", () => {
+    const later: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(7, [reportBody(7)], [watcherState(visibility())]),
+      // The agent wanders into the room several ticks on; it already knows.
+      frame(20, [], [watcherState(visibility([], [{ id: "b-1", room: "REACTOR", victim_id: "p-5" }]))]),
+    ];
+    const kinds = projectTicker(later, NO_MEETINGS, 2, AS_WATCHER).map((e) => e.kind);
+    expect(kinds).toEqual(["report"]);
+  });
+
   it("a skipped meeting says the vote resolved, never who was suspected", () => {
     const entries = projectTicker(TICKS, [meeting(7, "SKIPPED", null)], 1, AS_WATCHER);
     expect(lines(entries)).toContain("Vote resolved — no ejection");

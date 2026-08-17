@@ -127,19 +127,30 @@ function formatInt(value: number): string {
   return value.toLocaleString("en-US");
 }
 
+// The id the token chips point `aria-describedby` at when the figure is a lower
+// bound. Module-scope constant, not `useId`: there is exactly one chip row in the
+// workspace, and a stable literal keeps the association readable in the DOM.
+const LOWER_BOUND_NOTE_ID = "cost-chips-lower-bound";
+
 /** One chip. Mono value, muted label — the dense-data hairline, not chrome. */
 function Chip({
   label,
   value,
   title,
+  describedBy,
 }: {
   label: string;
   value: string;
   title?: string;
+  // Required-but-nullable rather than optional: `exactOptionalPropertyTypes`
+  // rejects passing an explicit `undefined` to a `?:` prop, and the call sites
+  // genuinely compute "described, or not" per render.
+  describedBy: string | undefined;
 }) {
   return (
     <span
       title={title}
+      aria-describedby={describedBy}
       className="inline-flex items-center gap-1 rounded-pill border border-ink-200 bg-paper-0 px-2 py-0.5"
     >
       <span className="font-mono text-4xs uppercase tracking-wide text-ink-500">
@@ -197,21 +208,31 @@ export function CostChips() {
         label="calls"
         value={formatInt(cost.calls)}
         title="Completed model calls recorded at or before this frame"
+        describedBy={undefined}
       />
       {/* `≥` when a failed call is in range: its burned tokens are recorded in
           the replay bytes but are not projected onto `FailedCallView`, so this
           figure is a lower bound and must not be presented as the token spend.
           Reaching the real number means widening the DTO — `api/`, which this
-          task is scoped out of. */}
+          task is scoped out of.
+
+          The `≥` alone is a symbol, not an explanation, and a `title` is not one
+          either: a tooltip on a non-focusable span is unreachable by keyboard and
+          is only a fallback DESCRIPTION for a screen reader. So the reason is
+          rendered as VISIBLE text below and associated here — the qualifier
+          travels with the number for every reader, and the `title` stays as a
+          pointer convenience rather than the sole channel. */}
       <Chip
         label="in"
         value={`${tokenPrefix}${formatInt(cost.inputTokens)} tok`}
         title={tokenTitle}
+        describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
       />
       <Chip
         label="out"
         value={`${tokenPrefix}${formatInt(cost.outputTokens)} tok`}
         title={tokenTitle}
+        describedBy={cost.tokensComplete ? undefined : LOWER_BOUND_NOTE_ID}
       />
       <Chip
         label="usd"
@@ -221,13 +242,29 @@ export function CostChips() {
         // subscription, which the recorder stamps as $0 per call (AGENTS.md).
         // Say so rather than hiding a zero that looks like a bug.
         title="Recorded dollars. The committed sample sets were recorded on a flat-rate provider that bills $0 per call, so $0.0000 there is the recorded truth, not a missing value."
+        describedBy={undefined}
       />
       {cost.failedCalls > 0 && (
         <Chip
           label="failed"
           value={formatInt(cost.failedCalls)}
           title="Calls that were billed and then failed. Their dollars ARE counted; their tokens are recorded in the replay bytes but not served on the failed-call DTO, which is why the token chips read ≥"
+          describedBy={LOWER_BOUND_NOTE_ID}
         />
+      )}
+      {/* The `≥` explained in the open, for every reader: on screen, in the
+          accessibility tree, and reachable without a pointer. It renders only
+          when the qualifier applies, so the ordinary row stays a clean chip
+          strip — and because it is real text inside the labelled group, a screen
+          reader meets it whether or not it follows the `aria-describedby`. */}
+      {!cost.tokensComplete && (
+        <span
+          id={LOWER_BOUND_NOTE_ID}
+          className="font-mono text-3xs leading-snug text-ink-600"
+        >
+          ≥ token counts exclude a failed call&apos;s burned tokens — recorded in
+          the replay, not served on the failed-call DTO. Dollars are complete.
+        </span>
       )}
     </div>
   );

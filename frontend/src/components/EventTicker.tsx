@@ -277,6 +277,19 @@ export function projectTicker(
           break;
         }
         case "report_body":
+          // A public report IS this body's discovery, so it accounts the victim
+          // before the body pass below runs. Without this the fog narrates the
+          // same discovery twice on one frame: the loader deliberately reopens
+          // the reported body in `visible_bodies` for co-located agents, so a
+          // report tick reads "p-8 reported p-4's body" immediately followed by
+          // "Found p-4's body". Real on committed bytes — 9p2i seed 1, tick 8,
+          // for p-1 and p-6 (not p-8, whose earlier sighting already accounted
+          // it, which is exactly why the duplicate is easy to miss).
+          //
+          // Unconditional rather than fog-only: `accountedVictims` is read only
+          // by the fog body pass, so this costs Omniscient nothing and keeps the
+          // "one death, one beat" rule in one place.
+          accountedVictims.add(event.body_of);
           push(
             "report",
             `${event.reporter_id} reported ${event.body_of}'s body · ${event.room_id}`,
@@ -349,7 +362,20 @@ export function EventTicker() {
   // needs no scroll management to stay current (and none of the auto-scrolling a
   // reduced-motion reader would have to opt out of).
   const newestFirst = [...entries].reverse();
-  const newest = newestFirst[0];
+  // EVERY beat on the frame just reached, not merely the last one. A single tick
+  // routinely carries several — `meeting_triggered` + `report_body` + the vote
+  // resolution all land together (the multi-beat case `EventTicker.test.ts`
+  // already pins at four entries on one tick) — so announcing `newestFirst[0]`
+  // alone would read out the ejection and silently drop the report and the
+  // meeting that explain it.
+  //
+  // Selected by TICK rather than by diffing against the previous render: the
+  // projection is position-derived, so "the beats belonging to this frame" is
+  // exactly the set a reader has just arrived at, and it stays correct after a
+  // scrub or a jump — where a diff would either flood (every beat since the last
+  // position) or go silent. Chronological, so the announcement matches the order
+  // the beats happened rather than the newest-first visual order.
+  const arriving = entries.filter((entry) => entry.tick === tickNumber);
 
   return (
     <section
@@ -376,14 +402,18 @@ export function EventTicker() {
           pause bar solves with `role="status"`. This is the same device for the
           same reason.
 
-          It holds ONLY the newest entry, never the accumulated feed: the live
+          It holds ONLY this frame's beats, never the accumulated feed: a live
           region announces its content when that content CHANGES, so a node
-          containing the whole list would re-read every beat on every step. With
-          one entry in it, landing on a new beat announces that beat and stepping
-          between beats announces nothing (the text is unchanged). The visible
-          <ol> below is deliberately NOT live for the same reason. */}
+          containing the whole list would re-read every beat on every step —
+          worse than silence by the time a game has twenty of them. Scoped to the
+          arriving frame, landing on a tick announces everything that happened
+          there and nothing that did not, and a frame with no beats announces
+          nothing (empty content). The visible <ol> below is deliberately NOT
+          live for the same reason — do not add `aria-live` to it. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {newest === undefined ? "" : `tick ${newest.tick}: ${newest.text}`}
+        {arriving.length === 0
+          ? ""
+          : `tick ${tickNumber}: ${arriving.map((entry) => entry.text).join("; ")}`}
       </p>
       {newestFirst.length === 0 ? (
         <p className="mt-2 font-mono text-2xs text-ink-500">
