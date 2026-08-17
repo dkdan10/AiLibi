@@ -1,0 +1,325 @@
+{
+  "report": {
+    "format_version": 2,
+    "games": [
+      {
+        "game_id": "headless-seed-49",
+        "seed": 49,
+        "winner": "IMPOSTORS",
+        "reason": "IMPOSTOR_PARITY",
+        "final_tick": 21,
+        "roles": {
+          "p-1": "CREWMATE",
+          "p-2": "CREWMATE",
+          "p-3": "CREWMATE",
+          "p-4": "CREWMATE",
+          "p-5": "CREWMATE",
+          "p-6": "CREWMATE",
+          "p-7": "IMPOSTOR",
+          "p-8": "CREWMATE",
+          "p-9": "IMPOSTOR"
+        },
+        "replay_ref": "replay-seed-49.jsonl",
+        "meetings": [],
+        "failed_calls": [],
+        "prompt_versions": {},
+        "cost": {
+          "total_cost_usd": 0.0,
+          "total_input_tokens": 0,
+          "total_output_tokens": 0,
+          "by_model": {}
+        },
+        "kill_gifted": false,
+        "instances_dropped": 0,
+        "instances_complete_at_win": 11
+      }
+    ],
+    "seeds_used": [
+      49
+    ],
+    "kill_gifted_wins": 0,
+    "instances_dropped_total": 0,
+    "mean_instances_complete_at_win": null
+  },
+  "vote_correctness": {
+    "total_ejections": 0,
+    "impostor_ejections": 0,
+    "crewmate_ejections": 0,
+    "evidence_backed_impostor_ejections": 0,
+    "vote_correctness_rate": null,
+    "ejection_accuracy": null,
+    "vote_correctness_small_n": true,
+    "contradictions_flagged_but_ignored": 0
+  },
+  "accusation_calibration": {
+    "n_bins": 10,
+    "accusation_claim_bins": [
+      {
+        "bin_index": 0,
+        "lo": 0.0,
+        "hi": 0.1,
+        "midpoint": 0.05,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 1,
+        "lo": 0.1,
+        "hi": 0.2,
+        "midpoint": 0.15000000000000002,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 2,
+        "lo": 0.2,
+        "hi": 0.3,
+        "midpoint": 0.25,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 3,
+        "lo": 0.3,
+        "hi": 0.4,
+        "midpoint": 0.35,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 4,
+        "lo": 0.4,
+        "hi": 0.5,
+        "midpoint": 0.45,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 5,
+        "lo": 0.5,
+        "hi": 0.6,
+        "midpoint": 0.55,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 6,
+        "lo": 0.6,
+        "hi": 0.7,
+        "midpoint": 0.6499999999999999,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 7,
+        "lo": 0.7,
+        "hi": 0.8,
+        "midpoint": 0.75,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 8,
+        "lo": 0.8,
+        "hi": 0.9,
+        "midpoint": 0.8500000000000001,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 9,
+        "lo": 0.9,
+        "hi": 1.0,
+        "midpoint": 0.95,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      }
+    ],
+    "accusation_claim_total": 0,
+    "accusation_claim_ece": null,
+    "accusation_claim_populated_bins": 0,
+    "accusation_claim_low_power": true,
+    "vote_ballot_bins": [
+      {
+        "bin_index": 0,
+        "lo": 0.0,
+        "hi": 0.1,
+        "midpoint": 0.05,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 1,
+        "lo": 0.1,
+        "hi": 0.2,
+        "midpoint": 0.15000000000000002,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 2,
+        "lo": 0.2,
+        "hi": 0.3,
+        "midpoint": 0.25,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 3,
+        "lo": 0.3,
+        "hi": 0.4,
+        "midpoint": 0.35,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 4,
+        "lo": 0.4,
+        "hi": 0.5,
+        "midpoint": 0.45,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 5,
+        "lo": 0.5,
+        "hi": 0.6,
+        "midpoint": 0.55,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 6,
+        "lo": 0.6,
+        "hi": 0.7,
+        "midpoint": 0.6499999999999999,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 7,
+        "lo": 0.7,
+        "hi": 0.8,
+        "midpoint": 0.75,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 8,
+        "lo": 0.8,
+        "hi": 0.9,
+        "midpoint": 0.8500000000000001,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 9,
+        "lo": 0.9,
+        "hi": 1.0,
+        "midpoint": 0.95,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      }
+    ],
+    "vote_ballot_total": 0,
+    "vote_ballot_ece": null,
+    "vote_ballot_populated_bins": 0,
+    "vote_ballot_low_power": true
+  },
+  "alibi_fabrication": {
+    "total_impostor_alibis": 0,
+    "survived": 0,
+    "survival_rate": 0.0
+  },
+  "cost_dashboard": {
+    "total_cost_usd": 0.0,
+    "total_input_tokens": 0,
+    "total_output_tokens": 0,
+    "game_count": 1,
+    "mean_cost_per_game": 0.0,
+    "by_model": {},
+    "per_prompt_version": []
+  },
+  "meeting_rate": {
+    "games_total": 1,
+    "games_with_meeting": 0,
+    "meeting_rate": 0.0,
+    "meetings_total": 0,
+    "body_report_meetings": 0,
+    "emergency_meetings": 0,
+    "skipped_meetings": 0,
+    "ejected_meetings": 0
+  },
+  "conversion": {
+    "total_ejections": 0,
+    "impostor_ejections": 0,
+    "ejection_accuracy": null,
+    "impostor_accused_meetings": 0,
+    "impostor_accused_conversions": 0,
+    "impostor_accused_conversion_rate": null,
+    "skip_ballots": 0,
+    "correct_skip_ballots": 0,
+    "missed_skip_ballots": 0,
+    "unclassified_skip_ballots": 0,
+    "citation_coerced_skip_ballots": 0,
+    "missed_skip_impostor_voters": 0,
+    "missed_skip_teammate_coerced": 0,
+    "missed_skip_invalid_target": 0,
+    "threshold_inversions": 0
+  },
+  "gate_metrics": {
+    "genuine_class_conversion": {
+      "supplied": 0,
+      "converted": 0,
+      "conversion_rate": null,
+      "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins)."
+    },
+    "lost_opening_accusations": 0,
+    "cap_defaulted_turns": 0,
+    "accused_impostor_events": 0,
+    "accused_impostor_survivals": 0,
+    "survivals_rendered_met": 0,
+    "survivals_sheltered_sub_gate": 0,
+    "survivals_unevidenced": 0
+  }
+}

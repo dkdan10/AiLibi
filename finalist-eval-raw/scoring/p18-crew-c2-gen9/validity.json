@@ -1,0 +1,118 @@
+{
+  "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-crew-c2-gen9",
+  "passed": false,
+  "games_total": 50,
+  "checks": [
+    {
+      "name": "all_games_reach_game_over",
+      "passed": false,
+      "summary": "48/50 games reached game_over with a consistent win condition",
+      "violations": [
+        "seed 19: no game_over row (game never reached game_over)",
+        "seed 20: no game_over row (game never reached game_over)"
+      ],
+      "facts": {
+        "games_total": 50,
+        "games_reached_game_over": 48
+      }
+    },
+    {
+      "name": "meeting_rate_and_resolution",
+      "passed": true,
+      "summary": "meeting_rate 0.6 (floor 0.60); 33 resolved meetings; 0 unresolved",
+      "violations": [],
+      "facts": {
+        "meeting_rate": 0.6,
+        "resolved_meetings": 33,
+        "games_with_meeting": 30,
+        "unresolved_meetings": 0,
+        "min_resolved_meetings_note": 30
+      }
+    },
+    {
+      "name": "no_duplicate_meeting_rows",
+      "passed": true,
+      "summary": "0 duplicate meeting rows over 33 (want 0)",
+      "violations": [],
+      "facts": {
+        "duplicate_meeting_rows": 0,
+        "meetings_total": 33
+      }
+    },
+    {
+      "name": "no_tick_1_kills",
+      "passed": true,
+      "summary": "0 kills at tick <= 1 (want 0)",
+      "violations": [],
+      "facts": {
+        "tick_1_kills": 0,
+        "total_kills": 238
+      }
+    },
+    {
+      "name": "no_friendly_fire_kills",
+      "passed": true,
+      "summary": "0 impostor-on-impostor kills (want 0)",
+      "violations": [],
+      "facts": {
+        "friendly_fire_kills": 0,
+        "total_kills": 238
+      }
+    },
+    {
+      "name": "no_betrayal_ballots_or_accusations",
+      "passed": true,
+      "summary": "0 teammate-betrayal ballots/accusations over 188 multi-impostor ballots (want 0)",
+      "violations": [],
+      "facts": {
+        "betrayals": 0,
+        "multi_impostor_ballots": 188,
+        "impostor_accusations": 55
+      }
+    },
+    {
+      "name": "no_railroaded_crew_ejections",
+      "passed": true,
+      "summary": "0 railroaded crew rows over 331 rendered crew suspicions (want 0)",
+      "violations": [],
+      "facts": {
+        "railroaded_crew_rows": 0,
+        "rendered_crew_rows": 331
+      }
+    },
+    {
+      "name": "no_dangling_primary_reason_id",
+      "passed": true,
+      "summary": "0 dangling primary_reason_id over 188 ballots (want 0)",
+      "violations": [],
+      "facts": {
+        "dangling_reason_ids": 0,
+        "ballots_total": 188
+      }
+    },
+    {
+      "name": "cost_and_provenance_exact",
+      "passed": false,
+      "summary": "model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on 50 games",
+      "violations": [
+        "seed 19: no substrate_flags stamp on game_over",
+        "seed 20: no substrate_flags stamp on game_over"
+      ],
+      "facts": {
+        "model": "Qwen/Qwen3.6-27B",
+        "prompt_versions": 4,
+        "substrate_stamp_ok": false,
+        "games_total": 50
+      }
+    },
+    {
+      "name": "byte_identical_reconstruction",
+      "passed": true,
+      "summary": "0 samples drifted from byte-identical reconstruction (want 0)",
+      "violations": [],
+      "facts": {
+        "drifted_samples": 0
+      }
+    }
+  ]
+}

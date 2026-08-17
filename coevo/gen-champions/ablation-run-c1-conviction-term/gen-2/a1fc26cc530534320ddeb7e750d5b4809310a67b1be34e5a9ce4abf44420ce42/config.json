@@ -1,0 +1,15 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "ablation-run-c1-conviction-term",
+  "champion_updated": true,
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "ablation-run-c1-conviction-term/crew/gen-champions/gen-2/a1fc26cc530534320ddeb7e750d5b4809310a67b1be34e5a9ce4abf44420ce42",
+  "generation": 2,
+  "generation_in_swap": 2,
+  "genome_length": 27,
+  "hall_origin": "generation-champion",
+  "side": "crew",
+  "source_lineage": "ablation-run-c1-conviction-term",
+  "swap_index": 0,
+  "trained_against": "d8afecd74e2a8aa048c561e569409d5e6a9c0c0d77eb97fca4997b198f85a92f"
+}

@@ -1,0 +1,11 @@
+games:                1
+crew_wins:            1
+impostor_wins:        0
+tick_budget_reached:  0
+decisive_split:       CREWMATES=100.00% IMPOSTORS=0.00% of 1 decisive
+meetings_total:       2
+meeting_rate:         100.00% (1/1 games)
+meeting_triggers:     body=2 emergency=0
+total_cost_usd:       0.0000
+mean_cost_per_game:   0.0000
+report:               /Users/danielkeinan/ailibi-campaign-1826/p18-fsm-comparator/tournament-eval-report.json

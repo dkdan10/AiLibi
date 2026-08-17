@@ -1,0 +1,29 @@
+[
+  {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-crew-c1-gen9",
+    "games_total": 50,
+    "crew_wins": 26,
+    "impostor_wins": 24,
+    "tick_budget_reached": 0,
+    "impostor_win_rate": 0.48,
+    "reason_histogram": {
+      "CREWMATE_EJECT": 24,
+      "IMPOSTOR_PARITY": 24,
+      "CREWMATE_TASKS": 2
+    },
+    "r1_eject_decided_wins": 24,
+    "total_ejections": 86,
+    "impostor_ejections": 60,
+    "crewmate_ejections": 26,
+    "ejection_accuracy": 0.6976744186046512,
+    "genuine_class_supplied": 5,
+    "genuine_class_converted": 3,
+    "genuine_class_conversion": 0.6,
+    "meeting_rate": 1.0,
+    "resolved_meetings": 149,
+    "accusation_claim_ece": 0.3154949784791966,
+    "accusation_claim_total": 697,
+    "vote_ballot_ece": 0.23329004329004158,
+    "vote_ballot_total": 462
+  }
+]

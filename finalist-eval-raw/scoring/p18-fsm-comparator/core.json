@@ -1,0 +1,29 @@
+[
+  {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-fsm-comparator",
+    "games_total": 50,
+    "crew_wins": 37,
+    "impostor_wins": 13,
+    "tick_budget_reached": 0,
+    "impostor_win_rate": 0.26,
+    "reason_histogram": {
+      "CREWMATE_EJECT": 35,
+      "IMPOSTOR_PARITY": 13,
+      "CREWMATE_TASKS": 2
+    },
+    "r1_eject_decided_wins": 35,
+    "total_ejections": 97,
+    "impostor_ejections": 81,
+    "crewmate_ejections": 16,
+    "ejection_accuracy": 0.8350515463917526,
+    "genuine_class_supplied": 7,
+    "genuine_class_converted": 7,
+    "genuine_class_conversion": 1.0,
+    "meeting_rate": 1.0,
+    "resolved_meetings": 157,
+    "accusation_claim_ece": 0.2763724137931033,
+    "accusation_claim_total": 725,
+    "vote_ballot_ece": 0.12343137254901718,
+    "vote_ballot_total": 510
+  }
+]

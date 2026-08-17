@@ -1,0 +1,2251 @@
+{
+  "kill_craft": {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-imp-bfd145cb",
+    "num_players": 9,
+    "num_impostors": 2,
+    "tasks_per_crewmate": 2,
+    "games_total": 50,
+    "kills_total": 203,
+    "crew_witnessed_kills": 30,
+    "co_present_histogram": {
+      "0": 182,
+      "1": 21
+    },
+    "one_hop_histogram": {
+      "0": 121,
+      "1": 44,
+      "2": 30,
+      "3": 8
+    },
+    "mean_co_present_witnessed": 0.6666666666666666,
+    "mean_co_present_unwitnessed": 0.005780346820809248,
+    "mean_one_hop_witnessed": 0.5,
+    "mean_one_hop_unwitnessed": 0.653179190751445,
+    "witnessed_point_biserial_co_present": 0.7701318767288942,
+    "witnessed_point_biserial_within_one_hop": 0.20847237961802323,
+    "per_kill": [
+      {
+        "seed": 0,
+        "tick": 9,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 0,
+        "tick": 9,
+        "room": "ADMIN",
+        "killer": "p-8",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 0,
+        "tick": 17,
+        "room": "EAST_HALL",
+        "killer": "p-6",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 0,
+        "tick": 20,
+        "room": "REACTOR",
+        "killer": "p-8",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 0,
+        "tick": 41,
+        "room": "MEDBAY",
+        "killer": "p-6",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 1,
+        "tick": 7,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 1,
+        "tick": 7,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 1,
+        "tick": 14,
+        "room": "MEDBAY",
+        "killer": "p-6",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 1,
+        "tick": 15,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 2,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 2,
+        "tick": 8,
+        "room": "STORAGE",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 2,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 2,
+        "tick": 32,
+        "room": "MEDBAY",
+        "killer": "p-7",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 3,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-2",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 3,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-5",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 3,
+        "tick": 10,
+        "room": "LABS",
+        "killer": "p-2",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 3,
+        "tick": 26,
+        "room": "ADMIN",
+        "killer": "p-6",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 3,
+        "tick": 39,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 4,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-3",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 4,
+        "tick": 7,
+        "room": "REACTOR",
+        "killer": "p-2",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 4,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-3",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 4,
+        "tick": 13,
+        "room": "ADMIN",
+        "killer": "p-2",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 4,
+        "tick": 18,
+        "room": "EAST_HALL",
+        "killer": "p-3",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-3",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 12,
+        "room": "EAST_HALL",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 15,
+        "room": "EAST_HALL",
+        "killer": "p-3",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 32,
+        "room": "REACTOR",
+        "killer": "p-3",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 5,
+        "tick": 63,
+        "room": "ADMIN",
+        "killer": "p-3",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 6,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 6,
+        "tick": 7,
+        "room": "REACTOR",
+        "killer": "p-6",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 6,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 6,
+        "tick": 14,
+        "room": "ADMIN",
+        "killer": "p-6",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 7,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-2",
+        "victim": "p-6",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 7,
+        "tick": 10,
+        "room": "LABS",
+        "killer": "p-2",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 7,
+        "tick": 12,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 7,
+        "tick": 16,
+        "room": "ENGINEERING",
+        "killer": "p-2",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 7,
+        "tick": 21,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 8,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 8,
+        "tick": 6,
+        "room": "ADMIN",
+        "killer": "p-3",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 8,
+        "tick": 17,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 8,
+        "tick": 28,
+        "room": "EAST_HALL",
+        "killer": "p-5",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 8,
+        "tick": 37,
+        "room": "REACTOR",
+        "killer": "p-5",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 8,
+        "tick": 43,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 9,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-4",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 9,
+        "tick": 10,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 9,
+        "tick": 18,
+        "room": "REACTOR",
+        "killer": "p-7",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 10,
+        "tick": 5,
+        "room": "EAST_HALL",
+        "killer": "p-3",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 10,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 10,
+        "tick": 16,
+        "room": "ENGINEERING",
+        "killer": "p-3",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 11,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 11,
+        "tick": 7,
+        "room": "ENGINEERING",
+        "killer": "p-3",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 11,
+        "tick": 11,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 21,
+        "room": "STORAGE",
+        "killer": "p-7",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 36,
+        "room": "REACTOR",
+        "killer": "p-7",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 12,
+        "tick": 42,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 13,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 13,
+        "tick": 6,
+        "room": "ENGINEERING",
+        "killer": "p-1",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 13,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 13,
+        "tick": 13,
+        "room": "MEDBAY",
+        "killer": "p-1",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 13,
+        "tick": 17,
+        "room": "ENGINEERING",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 14,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-1",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 14,
+        "tick": 7,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 15,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-3",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 15,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-1",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 15,
+        "tick": 14,
+        "room": "ENGINEERING",
+        "killer": "p-9",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 16,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 16,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 16,
+        "tick": 11,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 17,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-2",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 17,
+        "tick": 9,
+        "room": "ADMIN",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 17,
+        "tick": 15,
+        "room": "STORAGE",
+        "killer": "p-4",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 17,
+        "tick": 21,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 17,
+        "tick": 27,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 18,
+        "tick": 5,
+        "room": "REACTOR",
+        "killer": "p-5",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 18,
+        "tick": 15,
+        "room": "ADMIN",
+        "killer": "p-5",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 18,
+        "tick": 17,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 19,
+        "tick": 9,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 19,
+        "tick": 9,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 19,
+        "tick": 19,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 20,
+        "tick": 5,
+        "room": "REACTOR",
+        "killer": "p-2",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 20,
+        "tick": 6,
+        "room": "ADMIN",
+        "killer": "p-8",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 20,
+        "tick": 13,
+        "room": "ADMIN",
+        "killer": "p-2",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 20,
+        "tick": 17,
+        "room": "EAST_HALL",
+        "killer": "p-8",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 20,
+        "tick": 32,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 21,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 21,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-2",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 21,
+        "tick": 19,
+        "room": "REACTOR",
+        "killer": "p-2",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 21,
+        "tick": 22,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 22,
+        "tick": 5,
+        "room": "REACTOR",
+        "killer": "p-6",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 22,
+        "tick": 12,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 22,
+        "tick": 26,
+        "room": "REACTOR",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 23,
+        "tick": 7,
+        "room": "MEDBAY",
+        "killer": "p-7",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 23,
+        "tick": 9,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 23,
+        "tick": 25,
+        "room": "MEDBAY",
+        "killer": "p-7",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 24,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-2",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 24,
+        "tick": 5,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 24,
+        "tick": 12,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 24,
+        "tick": 14,
+        "room": "LABS",
+        "killer": "p-4",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 25,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 25,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 25,
+        "tick": 11,
+        "room": "EAST_HALL",
+        "killer": "p-6",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 25,
+        "tick": 13,
+        "room": "ADMIN",
+        "killer": "p-5",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 25,
+        "tick": 21,
+        "room": "REACTOR",
+        "killer": "p-6",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 26,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-2",
+        "victim": "p-4",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 26,
+        "tick": 9,
+        "room": "ADMIN",
+        "killer": "p-3",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 26,
+        "tick": 11,
+        "room": "MEDBAY",
+        "killer": "p-2",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 26,
+        "tick": 15,
+        "room": "STORAGE",
+        "killer": "p-3",
+        "victim": "p-1",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 26,
+        "tick": 22,
+        "room": "CAFETERIA",
+        "killer": "p-3",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 27,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 27,
+        "tick": 7,
+        "room": "ENGINEERING",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 27,
+        "tick": 11,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 28,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-4",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 28,
+        "tick": 8,
+        "room": "ADMIN",
+        "killer": "p-8",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 28,
+        "tick": 11,
+        "room": "MEDBAY",
+        "killer": "p-4",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 28,
+        "tick": 20,
+        "room": "ADMIN",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 28,
+        "tick": 42,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 29,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 29,
+        "tick": 6,
+        "room": "ADMIN",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 29,
+        "tick": 11,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 29,
+        "tick": 46,
+        "room": "MEDBAY",
+        "killer": "p-8",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 30,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 30,
+        "tick": 6,
+        "room": "ENGINEERING",
+        "killer": "p-3",
+        "victim": "p-5",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 30,
+        "tick": 11,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 30,
+        "tick": 12,
+        "room": "LABS",
+        "killer": "p-3",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 30,
+        "tick": 19,
+        "room": "STORAGE",
+        "killer": "p-6",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 31,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-1",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 31,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 31,
+        "tick": 24,
+        "room": "REACTOR",
+        "killer": "p-5",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 31,
+        "tick": 31,
+        "room": "ADMIN",
+        "killer": "p-5",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 32,
+        "tick": 5,
+        "room": "REACTOR",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 32,
+        "tick": 12,
+        "room": "ADMIN",
+        "killer": "p-6",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 32,
+        "tick": 18,
+        "room": "STORAGE",
+        "killer": "p-6",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 33,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-5",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 33,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 33,
+        "tick": 14,
+        "room": "ADMIN",
+        "killer": "p-5",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 33,
+        "tick": 27,
+        "room": "ADMIN",
+        "killer": "p-1",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 33,
+        "tick": 35,
+        "room": "ADMIN",
+        "killer": "p-1",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 34,
+        "tick": 5,
+        "room": "STORAGE",
+        "killer": "p-3",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 34,
+        "tick": 10,
+        "room": "WEST_HALL",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 34,
+        "tick": 30,
+        "room": "REACTOR",
+        "killer": "p-4",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 34,
+        "tick": 37,
+        "room": "REACTOR",
+        "killer": "p-4",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 34,
+        "tick": 43,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-7",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 34,
+        "tick": 49,
+        "room": "EAST_HALL",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 35,
+        "tick": 7,
+        "room": "EAST_HALL",
+        "killer": "p-1",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 35,
+        "tick": 7,
+        "room": "MEDBAY",
+        "killer": "p-5",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 35,
+        "tick": 16,
+        "room": "ADMIN",
+        "killer": "p-5",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 35,
+        "tick": 19,
+        "room": "ADMIN",
+        "killer": "p-1",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 36,
+        "tick": 5,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 36,
+        "tick": 7,
+        "room": "ADMIN",
+        "killer": "p-2",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 36,
+        "tick": 15,
+        "room": "REACTOR",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 36,
+        "tick": 22,
+        "room": "CAFETERIA",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 37,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-5",
+        "victim": "p-3",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 37,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-1",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 37,
+        "tick": 11,
+        "room": "LABS",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 37,
+        "tick": 13,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 38,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-3",
+        "victim": "p-2",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 38,
+        "tick": 10,
+        "room": "ADMIN",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 39,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 39,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-3",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 39,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 39,
+        "tick": 18,
+        "room": "EAST_HALL",
+        "killer": "p-3",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 40,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 40,
+        "tick": 7,
+        "room": "ENGINEERING",
+        "killer": "p-6",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 41,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 41,
+        "tick": 7,
+        "room": "REACTOR",
+        "killer": "p-1",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 41,
+        "tick": 10,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 41,
+        "tick": 16,
+        "room": "CAFETERIA",
+        "killer": "p-1",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 42,
+        "tick": 5,
+        "room": "EAST_HALL",
+        "killer": "p-4",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 42,
+        "tick": 9,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 42,
+        "tick": 11,
+        "room": "LABS",
+        "killer": "p-4",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 43,
+        "tick": 7,
+        "room": "MEDBAY",
+        "killer": "p-9",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 43,
+        "tick": 9,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 43,
+        "tick": 20,
+        "room": "EAST_HALL",
+        "killer": "p-7",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 43,
+        "tick": 32,
+        "room": "ADMIN",
+        "killer": "p-7",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 44,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-5",
+        "victim": "p-2",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 44,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-1",
+        "co_present_crew": 1,
+        "one_hop_crew": 0,
+        "crew_witnessed": true
+      },
+      {
+        "seed": 44,
+        "tick": 11,
+        "room": "LABS",
+        "killer": "p-5",
+        "victim": "p-7",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 44,
+        "tick": 11,
+        "room": "CAFETERIA",
+        "killer": "p-6",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 44,
+        "tick": 16,
+        "room": "STORAGE",
+        "killer": "p-6",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 45,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-8",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 45,
+        "tick": 10,
+        "room": "LABS",
+        "killer": "p-9",
+        "victim": "p-4",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 45,
+        "tick": 39,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 5,
+        "room": "STORAGE",
+        "killer": "p-4",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 9,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 12,
+        "room": "EAST_HALL",
+        "killer": "p-4",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 17,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-1",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 42,
+        "room": "REACTOR",
+        "killer": "p-8",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 46,
+        "tick": 48,
+        "room": "CAFETERIA",
+        "killer": "p-8",
+        "victim": "p-9",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 47,
+        "tick": 7,
+        "room": "ADMIN",
+        "killer": "p-1",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 2,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 47,
+        "tick": 13,
+        "room": "WEST_HALL",
+        "killer": "p-1",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 3,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 47,
+        "tick": 19,
+        "room": "CAFETERIA",
+        "killer": "p-9",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 47,
+        "tick": 22,
+        "room": "REACTOR",
+        "killer": "p-1",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 48,
+        "tick": 4,
+        "room": "CAFETERIA",
+        "killer": "p-7",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 48,
+        "tick": 7,
+        "room": "STORAGE",
+        "killer": "p-1",
+        "victim": "p-8",
+        "co_present_crew": 0,
+        "one_hop_crew": 1,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 48,
+        "tick": 13,
+        "room": "ADMIN",
+        "killer": "p-1",
+        "victim": "p-6",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 48,
+        "tick": 28,
+        "room": "REACTOR",
+        "killer": "p-1",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 48,
+        "tick": 34,
+        "room": "REACTOR",
+        "killer": "p-7",
+        "victim": "p-3",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 49,
+        "tick": 4,
+        "room": "ENGINEERING",
+        "killer": "p-7",
+        "victim": "p-2",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      },
+      {
+        "seed": 49,
+        "tick": 10,
+        "room": "ADMIN",
+        "killer": "p-9",
+        "victim": "p-5",
+        "co_present_crew": 0,
+        "one_hop_crew": 0,
+        "crew_witnessed": false
+      }
+    ],
+    "entropy_by_side": {
+      "CREWMATE": {
+        "agents": 350,
+        "decisions": 6318,
+        "mean_conditional_entropy": 0.7491956199498662,
+        "mean_unconditional_entropy": 1.0521947476809428,
+        "buckets": {
+          "none|crowd": {
+            "decisions": 1964,
+            "action_kinds": {
+              "do_task": 803,
+              "move": 799,
+              "report": 12,
+              "wait": 350
+            },
+            "entropy": 1.5438075990673275
+          },
+          "none|pair": {
+            "decisions": 1873,
+            "action_kinds": {
+              "do_task": 983,
+              "emergency": 3,
+              "move": 525,
+              "report": 58,
+              "wait": 304
+            },
+            "entropy": 1.5983489093205772
+          },
+          "none|solo": {
+            "decisions": 2481,
+            "action_kinds": {
+              "do_task": 1519,
+              "emergency": 2,
+              "move": 702,
+              "report": 108,
+              "wait": 150
+            },
+            "entropy": 1.3985686514319298
+          }
+        }
+      },
+      "IMPOSTOR": {
+        "agents": 100,
+        "decisions": 2083,
+        "mean_conditional_entropy": 0.6154311848092987,
+        "mean_unconditional_entropy": 1.706645238059252,
+        "buckets": {
+          "cooling|crowd": {
+            "decisions": 339,
+            "action_kinds": {
+              "do_task": 211,
+              "move": 123,
+              "wait": 5
+            },
+            "entropy": 1.0461713939670831
+          },
+          "cooling|pair": {
+            "decisions": 286,
+            "action_kinds": {
+              "do_task": 126,
+              "move": 132,
+              "vent": 7,
+              "wait": 21
+            },
+            "entropy": 1.4434816708725764
+          },
+          "cooling|solo": {
+            "decisions": 522,
+            "action_kinds": {
+              "do_task": 61,
+              "move": 198,
+              "vent": 202,
+              "wait": 61
+            },
+            "entropy": 1.784378629760886
+          },
+          "ready|crowd": {
+            "decisions": 149,
+            "action_kinds": {
+              "do_task": 5,
+              "kill": 37,
+              "move": 107
+            },
+            "entropy": 1.0064411208136335
+          },
+          "ready|pair": {
+            "decisions": 302,
+            "action_kinds": {
+              "do_task": 4,
+              "kill": 251,
+              "move": 46,
+              "vent": 1
+            },
+            "entropy": 0.7452216862778391
+          },
+          "ready|solo": {
+            "decisions": 485,
+            "action_kinds": {
+              "do_task": 9,
+              "move": 475,
+              "vent": 1
+            },
+            "entropy": 0.1545696297720609
+          }
+        }
+      }
+    }
+  },
+  "deception": {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-imp-bfd145cb",
+    "num_players": 9,
+    "num_impostors": 2,
+    "tasks_per_crewmate": 2,
+    "games_total": 50,
+    "meetings_total": 160,
+    "impostor_accusations_total": 217,
+    "frame_attempts": 217,
+    "impostor_self_accusations": 0,
+    "teammate_accusations": {
+      "numerator": 0,
+      "denominator": 217,
+      "rate": 0.0,
+      "wilson_low": 0.0,
+      "wilson_high": 0.017395273354295568,
+      "advisory": true
+    },
+    "frame_attempt_meetings": 153,
+    "frame_conversions": {
+      "numerator": 13,
+      "denominator": 153,
+      "rate": 0.08496732026143791,
+      "wilson_low": 0.0503260360334627,
+      "wilson_high": 0.13993981180282566,
+      "advisory": false
+    },
+    "crew_ejected_meetings": 27,
+    "impostor_ejected_meetings": 55,
+    "no_eject_meetings": 78,
+    "vouch_observations_impostor": 217,
+    "false_vouch_saw_player_observations": 30,
+    "false_vouch_saw_player_rate": 0.1382488479262673,
+    "corroboration_claims_total": 330,
+    "corroboration_claims_impostor": 71,
+    "false_vouch_corroborations": 13,
+    "false_vouch_corroboration_rate": 0.18309859154929578,
+    "false_vouches_total": 43,
+    "false_vouch_subject_events": 23,
+    "false_vouch_grounded": 17,
+    "false_vouch_fabricated": 6,
+    "false_vouch_grounded_share": 0.7391304347826086,
+    "false_vouch_grounded_subject_observations": 23,
+    "false_vouch_fabricated_subject_observations": 7,
+    "alibi_fabrication": {
+      "total_impostor_alibis": 33,
+      "survived": 29,
+      "survival_rate": 0.8787878787878788
+    },
+    "effective_deflection": {
+      "accused_impostor_events": 157,
+      "accused_impostor_survivals": 102,
+      "active_survivals": 96,
+      "effective_deflections": 38,
+      "named_target_deflections": 12,
+      "third_party_deflections": 26,
+      "skip_saved_active_survivals": 58
+    }
+  },
+  "off_menu": {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-imp-bfd145cb",
+    "num_players": 9,
+    "num_impostors": 2,
+    "tasks_per_crewmate": 2,
+    "games_total": 50,
+    "impostor_decisions": 2083,
+    "on_menu_total": 2083,
+    "off_menu_total": 0,
+    "off_menu_rate": 0.0,
+    "off_menu_by_kind": 0,
+    "off_menu_by_target": 0,
+    "scope_note": "The menu-bounded champion is on-menu by construction (off-menu rate 0 always), so this instrument is VACUOUS for the champion and meaningful only for free-policy-family recordings (Tasks 18.22/18.24). FSM-generated bytes are the all-on-menu fixture (rate 0). It is the emergence gauge for behaviour classes unreachable by the FSM menu and a Tier-B pre-registration input (18.4 quotes the impostor_decisions denominator + the off-menu counters pinned here). It is NOT the training harness anchor cross-entropy (rollout-time, distributional) \u2014 do not conflate the two.",
+    "off_menu_decisions": []
+  },
+  "roll_call": {
+    "roll_call_meetings": 160,
+    "roll_call_coverage_mean": 0.8419196428571428,
+    "roll_call_placed_crew_total": 651,
+    "roll_call_placed_impostor_total": 127,
+    "roll_call_coverage_crew_mean": 0.9888541666666667,
+    "roll_call_coverage_impostor_mean": 0.45625,
+    "roll_call_asked_total": 912,
+    "roll_call_answered_total": 778,
+    "roll_call_answer_rate": 0.8530701754385965
+  }
+}

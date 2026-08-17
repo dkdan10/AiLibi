@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "ablation-run-c2-conviction-term",
+  "encoder_version": "crew-option-features-v1",
+  "entrant": "ablation-run-c2-conviction-term/crew/gen-4/b049c4f2037484d3f818ecca6086a9cdb465375bc874358601d7c1ceb81d0b3e",
+  "generation": 4,
+  "genome_length": 22,
+  "hall_origin": "exploiter-probe",
+  "side": "crew",
+  "source_lineage": "ablation-run-c2-conviction-term",
+  "trained_against": "1577942ba6435b20c9298dd2ce3c07af1135a70c55d69905675bfcf3e94dc9a4"
+}

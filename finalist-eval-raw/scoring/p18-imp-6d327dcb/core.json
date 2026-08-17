@@ -1,0 +1,29 @@
+[
+  {
+    "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-imp-6d327dcb",
+    "games_total": 50,
+    "crew_wins": 31,
+    "impostor_wins": 19,
+    "tick_budget_reached": 0,
+    "impostor_win_rate": 0.38,
+    "reason_histogram": {
+      "CREWMATE_EJECT": 29,
+      "IMPOSTOR_PARITY": 19,
+      "CREWMATE_TASKS": 2
+    },
+    "r1_eject_decided_wins": 29,
+    "total_ejections": 90,
+    "impostor_ejections": 66,
+    "crewmate_ejections": 24,
+    "ejection_accuracy": 0.7333333333333333,
+    "genuine_class_supplied": 3,
+    "genuine_class_converted": 1,
+    "genuine_class_conversion": 0.3333333333333333,
+    "meeting_rate": 1.0,
+    "resolved_meetings": 162,
+    "accusation_claim_ece": 0.33643044619422546,
+    "accusation_claim_total": 762,
+    "vote_ballot_ece": 0.25762886597937873,
+    "vote_ballot_total": 485
+  }
+]

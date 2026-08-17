@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "ablation-run-02-anchor-lambda/crew/gen-3/ed9c1d2cc528380fe59fd4ea5969fd7e61e94a229d5eaef959572def55a58921",
+  "genome_length": 27,
+  "side": "crew",
+  "source_lineage": "ablation-run-02-anchor-lambda"
+}

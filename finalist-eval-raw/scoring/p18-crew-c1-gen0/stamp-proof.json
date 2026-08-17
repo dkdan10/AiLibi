@@ -1,0 +1,12 @@
+{
+  "games": 50,
+  "mode": "crew-dual",
+  "crew_sha": "bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c",
+  "opponent_sha": "ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f",
+  "stamped_games": 49,
+  "stalemate_games_no_game_over": [
+    "replay-seed-20.jsonl"
+  ],
+  "crew_uniform_over_stamped": true,
+  "opponent_uniform_over_stamped": true
+}

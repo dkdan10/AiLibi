@@ -1,0 +1,19 @@
+{
+  "committed_champions": {
+    "1": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "2": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "3": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+    "7": "9bc30c15684e831d974c2dc35af20ec30f7e5ce2d295cfae327b605a625e069f",
+    "8": "9bc30c15684e831d974c2dc35af20ec30f7e5ce2d295cfae327b605a625e069f",
+    "9": "a89be618bfbbd2a73941d1de9ead774b588206c513b58393b1f1747b1a68386e"
+  },
+  "note": "regenerated from exact-rescore.json (the driver's exact objective: conviction serving wrapper, slate with multiplicity, lineage lambda). An earlier index held the conviction-free approximation's picks; gen-3 of run-02 differed (2bac4cfe -> 76400d72) and the superseded artifact is retained on disk with a SUPERSEDED- prefix. This file is authoritative.",
+  "runner_ups": {
+    "1": "98171e870e74d62fb181ef7face49f8bf7b3fdbad30bb6d133f94cd366abf6e0",
+    "2": "62499b47ca73db000fb0ac6c9e8af37655ba672506421f8de1031646e3422461",
+    "3": "b1c8f9147845d526a4d6fc699385aa67981d1e0ba67ec8110448a936058dc34a",
+    "7": "f07bfa9fb89d5b63cae3ccdd993ddbb933f4ba100f52c503d6b58eca5e2f8d76",
+    "8": "7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e",
+    "9": "0c7a75b47b85fc50992ddbee01a3cedc8a8012ef6157e6963e0b7b743dc92279"
+  }
+}

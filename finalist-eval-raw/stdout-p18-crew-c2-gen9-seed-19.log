@@ -1,0 +1,11 @@
+games:                1
+crew_wins:            0
+impostor_wins:        0
+tick_budget_reached:  1
+decisive_split:       (no decisive games)
+meetings_total:       0
+meeting_rate:         0.00% (0/1 games)
+meeting_triggers:     body=0 emergency=0
+total_cost_usd:       0.0000
+mean_cost_per_game:   0.0000
+report:               /Users/danielkeinan/ailibi-campaign-1826/p18-crew-c2-gen9/tournament-eval-report.json

@@ -1,0 +1,117 @@
+{
+  "replay_set_dir": "/Users/danielkeinan/ailibi-campaign-1826/p18-crew-c2-gen0",
+  "passed": false,
+  "games_total": 50,
+  "checks": [
+    {
+      "name": "all_games_reach_game_over",
+      "passed": true,
+      "summary": "50/50 games reached game_over with a consistent win condition",
+      "violations": [],
+      "facts": {
+        "games_total": 50,
+        "games_reached_game_over": 50
+      }
+    },
+    {
+      "name": "meeting_rate_and_resolution",
+      "passed": false,
+      "summary": "meeting_rate 0.0 (floor 0.60); 0 resolved meetings; 0 unresolved",
+      "violations": [
+        "meeting_rate 0.000 < floor 0.60"
+      ],
+      "facts": {
+        "meeting_rate": 0.0,
+        "resolved_meetings": 0,
+        "games_with_meeting": 0,
+        "unresolved_meetings": 0,
+        "min_resolved_meetings_note": 30
+      }
+    },
+    {
+      "name": "no_duplicate_meeting_rows",
+      "passed": true,
+      "summary": "0 duplicate meeting rows over 0 (want 0)",
+      "violations": [],
+      "facts": {
+        "duplicate_meeting_rows": 0,
+        "meetings_total": 0
+      }
+    },
+    {
+      "name": "no_tick_1_kills",
+      "passed": true,
+      "summary": "0 kills at tick <= 1 (want 0)",
+      "violations": [],
+      "facts": {
+        "tick_1_kills": 0,
+        "total_kills": 251
+      }
+    },
+    {
+      "name": "no_friendly_fire_kills",
+      "passed": true,
+      "summary": "0 impostor-on-impostor kills (want 0)",
+      "violations": [],
+      "facts": {
+        "friendly_fire_kills": 0,
+        "total_kills": 251
+      }
+    },
+    {
+      "name": "no_betrayal_ballots_or_accusations",
+      "passed": true,
+      "summary": "0 teammate-betrayal ballots/accusations over 0 multi-impostor ballots (want 0)",
+      "violations": [],
+      "facts": {
+        "betrayals": 0,
+        "multi_impostor_ballots": 0,
+        "impostor_accusations": 0
+      }
+    },
+    {
+      "name": "no_railroaded_crew_ejections",
+      "passed": true,
+      "summary": "0 railroaded crew rows over 0 rendered crew suspicions (want 0)",
+      "violations": [],
+      "facts": {
+        "railroaded_crew_rows": 0,
+        "rendered_crew_rows": 0
+      }
+    },
+    {
+      "name": "no_dangling_primary_reason_id",
+      "passed": true,
+      "summary": "0 dangling primary_reason_id over 0 ballots (want 0)",
+      "violations": [],
+      "facts": {
+        "dangling_reason_ids": 0,
+        "ballots_total": 0
+      }
+    },
+    {
+      "name": "cost_and_provenance_exact",
+      "passed": false,
+      "summary": "model=None, 0 prompt versions, substrate stamped exact on 50 games",
+      "violations": [
+        "no model recorded on any game cost row",
+        "model provenance [] != expected ['Qwen/Qwen3.6-27B']"
+      ],
+      "facts": {
+        "model": null,
+        "prompt_versions": 0,
+        "substrate_stamp_ok": true,
+        "games_total": 50
+      }
+    },
+    {
+      "name": "byte_identical_reconstruction",
+      "passed": true,
+      "summary": "0 samples drifted from byte-identical reconstruction (want 0)",
+      "violations": [],
+      "facts": {
+        "drifted_samples": 0
+      }
+    }
+  ]
+}

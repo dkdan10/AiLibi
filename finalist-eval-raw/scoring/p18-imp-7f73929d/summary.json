@@ -1,0 +1,95 @@
+{
+  "arm": "p18-imp-7f73929d",
+  "audit_sidecars_moved": 50,
+  "roster_json": "written",
+  "validity": {
+    "exit_code": 0,
+    "passed": true,
+    "failed_checks": []
+  },
+  "core": {
+    "games_total": 49,
+    "impostor_win_rate": 0.42857142857142855,
+    "crew_wins": 28,
+    "impostor_wins": 21,
+    "ejection_accuracy": 0.75,
+    "meeting_rate": 1.0,
+    "genuine_class_conversion": 0.5555555555555556
+  },
+  "watchability": {
+    "referee_passed": false,
+    "supply_floors_passed": false,
+    "integrity_ok": true,
+    "mean_score": 52.49,
+    "median_score": 53.7,
+    "gauges": {
+      "witnessed_event_rate": {
+        "measured": 0.22,
+        "floor": 0.03389830508474576,
+        "distance": 0.18610169491525425,
+        "passed": true
+      },
+      "flags_per_meeting": {
+        "measured": 0.8284023668639053,
+        "floor": 1.0909090909090908,
+        "distance": -0.2625067240451855,
+        "passed": false
+      },
+      "testimony_backed_conversion": {
+        "measured": 0.38926174496644295,
+        "floor": 0.7552711993888463,
+        "distance": -0.3660094544224034,
+        "passed": false
+      }
+    }
+  },
+  "stamp_proof": {
+    "games": 49,
+    "mode": "impostor",
+    "sha": "7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e",
+    "uniform_50": true,
+    "no_crew_stamp": true
+  },
+  "split_half": {
+    "witnessed_event_rate": {
+      "h1": 0.1792452830188679,
+      "h2": 0.26595744680851063,
+      "noise": 0.08671216378964272,
+      "threshold_base": 0.03389830508474576,
+      "ceiling_25pct": 0.00847457627118644,
+      "precondition": "UNRESOLVABLE"
+    },
+    "flags_per_meeting": {
+      "h1": 0.8202247191011236,
+      "h2": 0.8375,
+      "noise": 0.01727528089887642,
+      "threshold_base": 1.0909090909090908,
+      "ceiling_25pct": 0.2727272727272727,
+      "precondition": "clears"
+    },
+    "testimony_backed_conversion": {
+      "h1": 0.391304347826087,
+      "h2": 0.3875,
+      "noise": 0.0038043478260869623,
+      "threshold_base": 0.7552711993888463,
+      "ceiling_25pct": 0.1888177998472116,
+      "precondition": "clears"
+    }
+  },
+  "instruments": {
+    "crew_witnessed_kills": 44,
+    "kills_total": 200,
+    "off_menu_total": 0,
+    "impostor_decisions": 2176,
+    "roll_call_coverage_mean": 0.8449845026768104,
+    "roll_call_coverage_crew_mean": 0.9955621301775148
+  },
+  "duration": {
+    "games_ok": 49,
+    "retry_events": 5,
+    "sum_wall_seconds": 49685,
+    "mean_min_per_game": 16.89965986394558,
+    "leg_start": "2026-07-30T08:23:42Z",
+    "leg_end": "2026-07-30T23:23:31Z"
+  }
+}

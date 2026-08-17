@@ -1,0 +1,15 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "run-c1-crew-owned-tasks",
+  "champion_updated": true,
+  "encoder_version": "crew-option-features-v2",
+  "entrant": "run-c1-crew-owned-tasks/crew/gen-champions/gen-8/3a7e1c285fca5e15b7e6ab9e8fcbd4fc8cc824004cd4f1c57eff6edbc5a00001",
+  "generation": 8,
+  "generation_in_swap": 2,
+  "genome_length": 27,
+  "hall_origin": "generation-champion",
+  "side": "crew",
+  "source_lineage": "run-c1-crew-owned-tasks",
+  "swap_index": 2,
+  "trained_against": "005850f0531519f6e2fe78a0b85ca229392c54a4e62f96ab71c059dca49b9397"
+}

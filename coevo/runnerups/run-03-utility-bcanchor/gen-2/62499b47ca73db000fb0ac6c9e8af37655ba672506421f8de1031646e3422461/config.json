@@ -1,0 +1,9 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "task-18.24-impostor-campaign",
+  "encoder_version": "impostor-option-features-v1",
+  "entrant": "run-03-utility-bcanchor/runnerups/gen-2",
+  "genome_length": 19,
+  "provenance": "recovered via the driver's public scenario_provider seam on a deterministic re-run; rows assert-matched to the committed campaign block and genome digest-matched (see report \u00a74.9/\u00a74.10)",
+  "source_lineage": "run-03-utility-bcanchor"
+}

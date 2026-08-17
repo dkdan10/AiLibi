@@ -1,0 +1,12 @@
+{
+  "anchor_weight": 1.0,
+  "campaign": "run-c2-crew-general",
+  "encoder_version": "crew-option-features-v1",
+  "entrant": "run-c2-crew-general/crew/gen-3/7fa59718d8810a3c26214309eaf6b637a1afc66dc3ea923ab887152f4e985acd",
+  "generation": 3,
+  "genome_length": 22,
+  "hall_origin": "alternating-freeze-champion",
+  "side": "crew",
+  "source_lineage": "run-c2-crew-general",
+  "trained_against": "c5671ccab33bb27393e37ae3879b062e6199011688140f9329007e66afe07b8f"
+}

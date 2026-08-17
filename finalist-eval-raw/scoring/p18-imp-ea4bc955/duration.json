@@ -1,0 +1,8 @@
+{
+  "games_ok": 52,
+  "retry_events": 5,
+  "sum_wall_seconds": 46460,
+  "mean_min_per_game": 14.89102564102564,
+  "leg_start": "2026-07-29T07:17:48Z",
+  "leg_end": "2026-07-29T21:35:29Z"
+}

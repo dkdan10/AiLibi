@@ -1,0 +1,10 @@
+{
+  "games": 50,
+  "mode": "comparator",
+  "opponent_absence_proven": true,
+  "tactical_ids": [
+    "fsm-default"
+  ],
+  "learned_stamp_games": 0,
+  "crew_stamp_games": 0
+}

@@ -1,0 +1,7 @@
+{
+  "anchor_policy": "fsm-default",
+  "encoder_version": "impostor-option-features-v1",
+  "method": "alternating-freeze-es",
+  "policy_id": "coevo-run-02-utility-lambda4-alternating-freeze-champion-gen9",
+  "weights_sha256": "2ca474514b86cb8e2e47ef90dd552c34e7076371e97611f7a47fbc387826d4e0"
+}

@@ -1,0 +1,26 @@
+{
+  "witnessed_event_rate": {
+    "h1": 0.1568627450980392,
+    "h2": 0.17346938775510204,
+    "noise": 0.016606642657062826,
+    "threshold_base": 0.03389830508474576,
+    "ceiling_25pct": 0.00847457627118644,
+    "precondition": "UNRESOLVABLE"
+  },
+  "flags_per_meeting": {
+    "h1": 0.8493150684931506,
+    "h2": 1.0,
+    "noise": 0.15068493150684936,
+    "threshold_base": 1.0909090909090908,
+    "ceiling_25pct": 0.2727272727272727,
+    "precondition": "clears"
+  },
+  "testimony_backed_conversion": {
+    "h1": 0.417910447761194,
+    "h2": 0.41025641025641024,
+    "noise": 0.007654037504783773,
+    "threshold_base": 0.6751817797099219,
+    "ceiling_25pct": 0.16879544492748047,
+    "precondition": "clears"
+  }
+}
