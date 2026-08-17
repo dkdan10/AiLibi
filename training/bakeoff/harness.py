@@ -77,9 +77,11 @@ ejection/SKIP rate (an under-ejecting surrogate can hold the meeting-driven
 floors for the wrong reason).
 
 Import posture: this harness is the ONLY bake-off module that imports
-``eval.validity`` / ``eval.watchability`` / ``eval.leak_test`` — a committed
+``eval.validity`` / ``eval.watchability`` / ``eval.leak_scan`` — a committed
 test AST-scans the entrant modules for those imports (the firewall-test
-pattern), so no entrant can grow a private eval loop.
+pattern), so no entrant can grow a private eval loop. (The leak scanners live in
+``eval.leak_scan``, not ``eval.leak_test``, since Task 19.24: the champion gate
+must not import a pytest module.)
 """
 
 from __future__ import annotations
@@ -104,7 +106,7 @@ from agents.tactical.features import weights_from_hex_json, weights_to_hex_json
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
-from eval.leak_test import scan_factory_packets
+from eval.leak_scan import scan_factory_packets
 from eval.validity import run_validity_gate
 from eval.watchability import (
     WatchabilityReport,

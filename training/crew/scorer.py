@@ -113,7 +113,7 @@ from agents.tactical.features import beliefs_suspicion, quantize_unit_interval
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
-from eval.leak_test import scan_factory_packets
+from eval.leak_scan import scan_factory_packets
 from eval.validity import run_validity_gate
 from eval.watchability import WatchabilityReport, compute_watchability
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client

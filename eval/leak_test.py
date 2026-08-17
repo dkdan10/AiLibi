@@ -1,70 +1,86 @@
+"""The pytest wrapper around the packet leak scanners (Task 19.24).
+
+The scanners themselves live in :mod:`eval.leak_scan`, which imports no pytest
+so the ML champion gate can call them without dragging a dev-only dependency
+onto a production path. This module owns what only pytest can run: the
+scripted-fixture sweep, the factory-mode sweeps, and — the crown jewel — the
+PLANTED-LEAK self-tests, each of which asserts a scanner still BITES on a
+deliberately poisoned packet. The move was import-path only; every test body
+below is the one that guarded the boundary before it.
+"""
+
 from __future__ import annotations
 
 import json
-import tempfile
-from collections.abc import Iterator, Sequence
+import subprocess
+import sys
 from pathlib import Path
-from typing import TypeAlias, cast
+from typing import cast
 
 import pytest
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict
 
 from agents.base import AgentInterface
 from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.events import (
-    EngineEvent,
-    KilledEvent,
-    MeetingTriggeredEvent,
-    VentEnteredEvent,
-    VentExitedEvent,
-)
+from engine.events import EngineEvent, KilledEvent, MovedEvent
 from engine.tick import advance_tick
-from engine.world import Map, WorldState, load_canonical_map
-from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
-from meetings.schemas import MeetingResult
+from engine.world import WorldState, load_canonical_map
+from eval.leak_scan import (
+    _ACTION_ADAPTER,
+    _FORBIDDEN_BODY_FIELDS,
+    _FORBIDDEN_VISIBLE_PLAYER_ACTIONS,
+    _FORBIDDEN_VISIBLE_PLAYER_FIELDS,
+    JsonValue,
+    _action_is_permitted_by_witness_event,
+    _assert_no_recursive_hidden_fields,
+    _assert_no_role_bearing_values,
+    _assert_owned_task_discipline,
+    _assert_owned_tasks_match_engine_truth,
+    _format_json_path,
+    _walk_json,
+    assert_moved_players_are_witness_gated,
+    assert_no_factory_packet_leaks,
+    scan_factory_packets,
+)
 from observation.action_intent import ActionIntent, MoveIntent, WaitIntent
 from observation.packet import (
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     PlayerView,
     SelfView,
 )
 from observation.public_map import PublicMapView
-from observation.service import ObservationService, impostor_pretend_task_set
+from observation.service import ObservationService
 from orchestrator.game import (
-    DEFAULT_MAX_TICKS,
     AgentFactory,
-    HeadlessGame,
-    apply_meeting_result,
     build_default_agent_factory,
-    build_default_meeting_runner,
 )
-from orchestrator.replay import MeetingReplayEntry, ReplayEntry, read_all_entries
-from orchestrator.scheduler import TickScheduler
-from orchestrator.seeder import seed_initial_state
 from tests._helpers.world_state import scripted_initial_world_state
+
+# Re-exports (Task 19.24). The scanners moved to :mod:`eval.leak_scan`, but this
+# module remains the address several suites mirror the canonical leak scan from
+# (``tests/api/test_leak.py``, ``tests/agents/test_memory_rendering.py``,
+# ``tests/training/test_learned_factory_acceptance.py``). Naming them here keeps
+# those imports resolving against the module the docs and docstrings point at,
+# while the definitions live in the pytest-free library.
+__all__ = [
+    "JsonValue",
+    "_assert_no_recursive_hidden_fields",
+    "_assert_no_role_bearing_values",
+    "_format_json_path",
+    "_walk_json",
+    "assert_moved_players_are_witness_gated",
+    "assert_no_factory_packet_leaks",
+    "scan_factory_packets",
+]
 
 _SCRIPTED_GAMES = (
     "scripted_game_basic_tasks.json",
     "scripted_game_kill_report_meeting.json",
     "scripted_game_vent_and_emergency.json",
 )
-_FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
-_FORBIDDEN_BODY_FIELDS = frozenset({"killed_by", "kill_attribution", "player_id"})
-_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = frozenset({"sabotage"})
-_FORBIDDEN_RECURSIVE_FIELD_NAMES = frozenset(
-    {"killed_by", "kill_attribution", "player_id"}
-)
-_ALLOWED_RECURSIVE_FIELD_PATHS = frozenset({("self_state", "role")})
-_FORBIDDEN_VALUE_SUBSTRINGS = ("impostor", "crewmate", "crew")
-_ALLOWED_VALUE_PATHS = frozenset({("self_state", "role")})
-_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
-
-JsonScalar: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
-JsonPathPart: TypeAlias = str | int
-JsonPath: TypeAlias = tuple[JsonPathPart, ...]
 
 
 class _ScriptedAction(BaseModel):
@@ -140,241 +156,6 @@ def _run_scripted_game(
         packet.model_dump(mode="json") for packet, _ in packet_records
     ]
     return packet_records
-
-
-def _action_is_permitted_by_witness_event(
-    *,
-    action: str | None,
-    actor_id: str,
-    agent_id: str,
-    engine_events: list[EngineEvent],
-) -> bool:
-    if action is None:
-        return False
-    for event in engine_events:
-        if action == "kill" and isinstance(event, KilledEvent):
-            if event.actor == actor_id:
-                return agent_id in event.witnesses
-        elif action == "vent" and isinstance(
-            event, (VentEnteredEvent, VentExitedEvent)
-        ):
-            if event.actor == actor_id:
-                return agent_id in event.witnesses
-    return False
-
-
-def _walk_json(
-    value: JsonValue, path: JsonPath = ()
-) -> Iterator[tuple[JsonPath, JsonValue]]:
-    yield path, value
-    if isinstance(value, dict):
-        for key, child in value.items():
-            yield from _walk_json(child, (*path, key))
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from _walk_json(child, (*path, index))
-
-
-def _format_json_path(path: JsonPath) -> str:
-    formatted_path = "$"
-    for part in path:
-        if isinstance(part, int):
-            formatted_path = f"{formatted_path}[{part}]"
-        else:
-            formatted_path = f"{formatted_path}.{part}"
-    return formatted_path
-
-
-def _assert_no_recursive_hidden_fields(packet_dump: JsonValue) -> None:
-    for path, _ in _walk_json(packet_dump):
-        if not path:
-            continue
-        field_name = path[-1]
-        if not isinstance(field_name, str):
-            continue
-        if field_name == "role" and path not in _ALLOWED_RECURSIVE_FIELD_PATHS:
-            raise AssertionError(
-                f"hidden field {field_name!r} leaked at {_format_json_path(path)}"
-            )
-        if field_name in _FORBIDDEN_RECURSIVE_FIELD_NAMES:
-            raise AssertionError(
-                f"hidden field {field_name!r} leaked at {_format_json_path(path)}"
-            )
-
-
-def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
-    """Scan every string value in the packet for role-bearing substrings.
-
-    The recursive field-name scanner catches keys named ``role``,
-    ``killed_by``, ``kill_attribution`` and ``player_id``. This pass
-    complements it by catching role information that leaks through a
-    value — most notably player ids that encode the role inline (e.g.
-    a sentinel such as ``"crew_role_leak_fixture"`` planted into
-    ``visible_players[].id``), which the field-name scanner cannot see
-    because the leaky string sits in an ``id`` slot a packet legitimately
-    uses for non-role-bearing ids. ``self_state.role`` is the single
-    value path allowed to contain the role string because the agent is
-    allowed to know its own role.
-    """
-
-    for path, value in _walk_json(packet_dump):
-        if not isinstance(value, str):
-            continue
-        if path in _ALLOWED_VALUE_PATHS:
-            continue
-        lowered = value.lower()
-        for forbidden in _FORBIDDEN_VALUE_SUBSTRINGS:
-            if forbidden in lowered:
-                raise AssertionError(
-                    f"role-bearing value {value!r} leaked at {_format_json_path(path)}"
-                )
-
-
-# --------------------------------------------------------------------------- #
-# The owned-task leak assertions (Task 15.22).
-#
-# ``SelfView.owned_task_ids`` widens the privileged self channel with the
-# recipient's OWN unfinished map task ids (crewmate) / its per-seat camouflage
-# pretend window (impostor), assembled owner-scoped by ``ObservationService`` so
-# no packet ever carries another player's task (DESIGN.md §1.3;
-# audit-phase-15-pause decision 5). This region extends the leak suite with the
-# four-item review's item (2) -- absence of foreign task ids in EVERY packet
-# field -- and the byte discipline: a stable, "versioned" SelfView key set the
-# next widening must extend deliberately.
-# --------------------------------------------------------------------------- #
-
-# The deliberate SelfView byte-shape pin (the packet-discipline "versioned"
-# guard): a future SelfView widening must extend this pin deliberately, so an
-# accidental field add or drop trips the discipline assertion below.
-_SELF_STATE_KEY_SET = frozenset(
-    {
-        "room",
-        "role",
-        "pending_task_id",
-        "owned_task_ids",
-        "fellow_impostor_ids",
-        "in_vent",
-        "own_kill",
-    }
-)
-
-
-def _assert_owned_task_discipline(packet: ObservationPacket) -> None:
-    """Assert the ``owned_task_ids`` byte shape + role-blind consistency invariant.
-
-    Role-blind by construction: every assertion below holds IDENTICALLY for a
-    crewmate's owned frontier and an impostor's camouflage window, so none asserts
-    a role bit. Each message names the packet's ``agent_id`` for a legible
-    failure. Guards: (1) the SelfView key set is EXACTLY ``_SELF_STATE_KEY_SET``
-    (byte-shape stability -- the packet discipline); (2) every owned id is a
-    non-empty ``str`` containing NO ``":"`` (never a composite instance id, whose
-    owner prefix would leak ownership); (3) the tuple is sorted ascending with no
-    duplicates (replay-stable byte shape); (4) ``pending_task_id``, when set, is a
-    member of ``owned_task_ids`` -- the role-blind consistency invariant, which
-    holds identically for a crewmate's owned frontier (pending is its head) and an
-    impostor's camouflage window (pending is the rotating pretend id).
-    """
-
-    agent = packet.agent_id
-    self_state_keys = set(packet.self_state.model_dump(mode="json").keys())
-    assert self_state_keys == _SELF_STATE_KEY_SET, (
-        f"{agent} self_state key set {sorted(self_state_keys)} != pinned "
-        f"{sorted(_SELF_STATE_KEY_SET)} (SelfView byte shape drifted)"
-    )
-    owned = packet.self_state.owned_task_ids
-    for task_id in owned:
-        assert isinstance(task_id, str) and task_id, (
-            f"{agent} owned_task_ids carries a non-string/empty id {task_id!r}"
-        )
-        assert ":" not in task_id, (
-            f"{agent} owned task id {task_id!r} is a composite instance id "
-            f"(the owner prefix would leak ownership)"
-        )
-    assert list(owned) == sorted(set(owned)), (
-        f"{agent} owned_task_ids {owned} must be sorted ascending with no "
-        f"duplicates (replay-stable byte shape)"
-    )
-    pending = packet.self_state.pending_task_id
-    assert pending is None or pending in owned, (
-        f"{agent} pending_task_id {pending!r} is not a member of owned_task_ids "
-        f"{owned} (the role-blind consistency invariant)"
-    )
-
-
-def _assert_owned_tasks_match_engine_truth(
-    packet: ObservationPacket, *, state: WorldState, game_map: Map
-) -> None:
-    """Cross-player engine-truth check: ``owned_task_ids`` == the recipient's OWN set.
-
-    The STRONG scripted-sweep guard (Task 15.22, four-item review item (2)): the
-    owned set is verified against per-tick engine truth INDEPENDENTLY of the code
-    under test, and no foreign task id appears in ANY packet field.
-
-    * CREWMATE: ``owned_task_ids`` equals EXACTLY the recipient's OWN unfinished
-      map ids -- nothing else. Kills redistribute tasks mid-game, so per-tick
-      ``state`` truth is the right side (a crewmate may now own an inherited
-      re-keyed instance).
-    * IMPOSTOR: equals its per-seat ``impostor_pretend_task_set`` camouflage
-      window, and the impostor owns ZERO ``state.tasks`` instance.
-    * Foreign absence: no OTHER player's owned unfinished map id and no OTHER
-      impostor's pretend window id (minus the recipient's own owned set) appears
-      as a substring of the whole-packet JSON -- mirroring
-      ``test_service.py::test_multi_impostor_packets_carry_no_foreign_task_ownership``.
-    """
-
-    agent = packet.agent_id
-    impostor_ids = sorted(
-        pid for pid, player in state.players.items() if player.role == "IMPOSTOR"
-    )
-    if state.players[agent].role == "CREWMATE":
-        expected = tuple(
-            sorted(
-                task.map_task_id
-                for task in state.tasks.values()
-                if task.owner == agent and not task.completed
-            )
-        )
-        assert packet.self_state.owned_task_ids == expected, (
-            f"{agent} owned_task_ids {packet.self_state.owned_task_ids} != "
-            f"engine-truth own unfinished set {expected}"
-        )
-    else:
-        expected = impostor_pretend_task_set(
-            game_map=game_map, agent_id=agent, impostor_ids=impostor_ids
-        )
-        assert packet.self_state.owned_task_ids == expected, (
-            f"{agent} impostor owned_task_ids {packet.self_state.owned_task_ids} "
-            f"!= camouflage window {expected}"
-        )
-        assert not any(task.owner == agent for task in state.tasks.values()), (
-            f"impostor {agent} unexpectedly owns a WorldState.tasks instance"
-        )
-
-    foreign: set[str] = set()
-    for other_id in state.players:
-        if other_id == agent:
-            continue
-        foreign |= {
-            task.map_task_id
-            for task in state.tasks.values()
-            if task.owner == other_id and not task.completed
-        }
-    for other_impostor in impostor_ids:
-        if other_impostor == agent:
-            continue
-        foreign |= set(
-            impostor_pretend_task_set(
-                game_map=game_map,
-                agent_id=other_impostor,
-                impostor_ids=impostor_ids,
-            )
-        )
-    foreign -= set(packet.self_state.owned_task_ids)
-    dumped = json.dumps(packet.model_dump(mode="json"), sort_keys=True)
-    for foreign_id in sorted(foreign):
-        assert foreign_id not in dumped, (
-            f"{agent} packet leaked foreign task id {foreign_id!r}"
-        )
 
 
 def test_recursive_hidden_field_scanner_reports_nested_path() -> None:
@@ -494,260 +275,14 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
 # The scripted-fixture sweep above walks 3 hand-authored games with NO factory
 # parameter. A learned mover (Encoder v2 + a policy head) drives the engine into
 # regions those fixtures never reach — so packets from those regions were
-# UNSCANNED (the ml-spike Gap #7). This region adds a factory mode: run
-# factory-built agents through FULL production games and apply the SAME leak
-# scanners — the recursive role-leak scanners
-# (:func:`_assert_no_recursive_hidden_fields` + :func:`_assert_no_role_bearing_values`)
-# AND the witness-permission check (:func:`_action_is_permitted_by_witness_event`)
-# — to every packet the encoder consumes. To run the witness check, each factory
-# game is RECONSTRUCTED (re-seeded + re-fed its recorded actions) so the per-tick
-# engine events are recovered alongside the packets; the reconstructed packets are
-# byte-identical to the ones the live game handed the agents (the engine is a
-# deterministic function of state + actions). The 3 scripted fixtures above stay
-# byte-identical; this is purely additive.
+# UNSCANNED (the ml-spike Gap #7). The factory mode runs factory-built agents
+# through FULL production games and applies the SAME leak scanners to every
+# packet the encoder consumes; the walk and the scan live in
+# :mod:`eval.leak_scan` (:func:`eval.leak_scan.scan_factory_packets`) because the
+# ML champion gate calls them outside pytest. What lives HERE is the pytest half:
+# the two clean-factory sweeps and the planted-leak self-tests that prove the
+# scanners still bite.
 # --------------------------------------------------------------------------- #
-
-# 9p/2i is the primary preset the committed corpora use: two impostors reliably
-# reach kills → bodies → reports → meetings → vents (the leak-prone regions), so
-# the scan actually covers what it claims to. A coverage assertion fails the test
-# loud if the games never reach a body.
-_FACTORY_MODE_SEEDS: tuple[int, ...] = (0, 1)
-_FACTORY_NUM_PLAYERS = 9
-_FACTORY_NUM_IMPOSTORS = 2
-_FACTORY_TASKS_PER_CREWMATE = 2
-
-# A factory-consumed packet paired with the engine events of the tick it was
-# built on (needed for the witness-permission check).
-PacketRecord: TypeAlias = tuple[ObservationPacket, list[EngineEvent]]
-
-
-def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
-    return MeetingResult(
-        meeting_id=entry.meeting_id,
-        triggered_by=entry.triggered_by,
-        trigger_tick=entry.tick,
-        outcome=entry.outcome,
-        ejected_player_id=entry.ejected_player_id,
-        ballots=entry.ballots,
-        contradictions=entry.contradictions,
-        transcript=entry.transcript,
-    )
-
-
-def _reconstruct_factory_records(
-    replay_path: Path,
-    *,
-    game_map: Map,
-    seed: int,
-    num_players: int,
-    num_impostors: int,
-    tasks_per_crewmate: int,
-    audit_dir: Path,
-) -> list[PacketRecord]:
-    """Re-seed + replay one factory game, yielding (packet, engine_events) records.
-
-    Mirrors ``HeadlessGame._run_loop`` EXACTLY (``orchestrator/game.py``): each
-    iteration builds every living agent's packet from the CURRENT (pre-advance)
-    state plus the PRIOR tick's events (``last_events``) — the same
-    ``build_packet(engine_events=last_events)`` the live loop hands the agents —
-    THEN translates and advances that tick's recorded actions, THEN applies any
-    meeting. So the scanned stream is exactly the packets the encoder consumed:
-    it includes the tick-0 opening packet and every post-meeting resume packet,
-    and excludes the terminal GAME_OVER state (no agent decides there). Each packet
-    is paired with the events it was BUILT with, so the witness-permission check
-    reads the right events.
-    """
-
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
-    records: list[PacketRecord] = []
-    audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
-    service = ObservationService(game_map=game_map, audit_log_path=audit_path)
-    last_events: tuple[EngineEvent, ...] = ()
-    try:
-        for entry in tick_entries:
-            # Build packets from the PRE-advance state + prior events (the live
-            # loop's exact contract), before applying this tick's actions.
-            events_for_packets = list(last_events)
-            for player_id in sorted(state.players):
-                if state.players[player_id].alive:
-                    packet = service.build_packet(
-                        world_state=state,
-                        agent_id=player_id,
-                        engine_events=last_events,
-                    )
-                    records.append((packet, events_for_packets))
-            actions = [
-                _ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions
-            ]
-            state, events = advance_tick(state, actions, game_map=game_map)
-            last_events = tuple(events)
-            if state.phase == "MEETING":
-                trigger = next(
-                    e for e in events if isinstance(e, MeetingTriggeredEvent)
-                )
-                pre_meeting_events = last_events
-                state, post_events = apply_meeting_result(
-                    state,
-                    _meeting_result_from_entry(meeting_by_tick[entry.tick]),
-                    game_map=game_map,
-                    triggering_body_id=trigger.body_id,
-                )
-                # Mirror the live loop: the resume packet sees the pre-meeting
-                # events (a same-tick kill) plus the meeting's post events.
-                last_events = pre_meeting_events + tuple(post_events)
-            if state.phase == "GAME_OVER":
-                break
-    finally:
-        service.close()
-        audit_path.unlink(missing_ok=True)
-    return records
-
-
-def collect_factory_packet_records(
-    agent_factory: AgentFactory,
-    *,
-    seeds: Sequence[int] = _FACTORY_MODE_SEEDS,
-    num_players: int = _FACTORY_NUM_PLAYERS,
-    num_impostors: int = _FACTORY_NUM_IMPOSTORS,
-    tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
-) -> list[PacketRecord]:
-    """Run ``agent_factory`` through full games; return (packet, events) records.
-
-    Each game runs the REAL production loop (:class:`orchestrator.game.HeadlessGame`
-    on the deterministic fake provider) to write a replay reflecting the factory's
-    trajectory, then reconstructs that replay to recover the per-tick packets +
-    engine events.
-    """
-
-    game_map = load_canonical_map()
-    records: list[PacketRecord] = []
-    with tempfile.TemporaryDirectory(prefix="ailibi-leak-factory-") as tmp:
-        directory = Path(tmp)
-        for seed in seeds:
-            replay_path = directory / f"replay-seed-{seed}.jsonl"
-            game = HeadlessGame(
-                seed=seed,
-                game_map=game_map,
-                agent_factory=agent_factory,
-                replay_path=replay_path,
-                num_players=num_players,
-                num_impostors=num_impostors,
-                tasks_per_crewmate=tasks_per_crewmate,
-                scheduler=TickScheduler(max_ticks=DEFAULT_MAX_TICKS),
-                meeting_runner=build_default_meeting_runner(
-                    llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
-                ),
-                force=True,
-            )
-            game.run()
-            records.extend(
-                _reconstruct_factory_records(
-                    replay_path,
-                    game_map=game_map,
-                    seed=seed,
-                    num_players=num_players,
-                    num_impostors=num_impostors,
-                    tasks_per_crewmate=tasks_per_crewmate,
-                    audit_dir=directory,
-                )
-            )
-    return records
-
-
-def assert_packet_is_leak_clean(
-    packet: ObservationPacket, engine_events: Sequence[EngineEvent] = ()
-) -> None:
-    """Apply the full leak scan to one packet — the SAME checks the scripted sweep runs.
-
-    The recursive hidden-field scanner, the role-bearing value scanner, the
-    ``visible_players`` key-set + forbidden-action pin, the ``visible_bodies``
-    key-set pin, the crew ``fellow_impostor_ids`` firewall, AND — critically for
-    the factory extension — the witness-permission check: a ``PlayerView`` stamped
-    with a ``kill`` / ``vent`` action must be backed by a witness-permitted engine
-    event for THIS observer. Raises ``AssertionError`` on any leak.
-    """
-
-    packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
-    _assert_no_recursive_hidden_fields(packet_dump)
-    _assert_no_role_bearing_values(packet_dump)
-    events = list(engine_events)
-    for visible_player in packet.visible_players:
-        visible_player_dump = visible_player.model_dump(mode="json")
-        assert set(visible_player_dump.keys()) == {"id", "room", "action"}
-        assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player_dump.keys())
-        assert visible_player.action not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
-        if visible_player.action in {"kill", "vent"}:
-            assert _action_is_permitted_by_witness_event(
-                action=visible_player.action,
-                actor_id=visible_player.id,
-                agent_id=packet.agent_id,
-                engine_events=events,
-            ), (
-                f"unwitnessed {visible_player.action!r} action stamped on "
-                f"{visible_player.id!r} in {packet.agent_id!r}'s packet"
-            )
-    for visible_body in packet.visible_bodies:
-        visible_body_dump = visible_body.model_dump(mode="json")
-        assert set(visible_body_dump.keys()) == {"id", "room", "victim_id"}
-        assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body_dump.keys())
-    if packet.self_state.role == "CREWMATE":
-        assert packet.cooldown is None
-        assert packet.self_state.fellow_impostor_ids == ()
-    # The owned-task byte-shape + role-blind consistency discipline (Task 15.22),
-    # scanned on EVERY factory-mode packet.
-    _assert_owned_task_discipline(packet)
-
-
-def assert_no_factory_packet_leaks(records: Sequence[PacketRecord]) -> None:
-    """Scan a reconstructed (packet, events) stream; raise on the first leak."""
-
-    for packet, engine_events in records:
-        assert_packet_is_leak_clean(packet, engine_events)
-
-
-def scan_factory_packets(
-    agent_factory: AgentFactory,
-    *,
-    seeds: Sequence[int] = _FACTORY_MODE_SEEDS,
-    num_players: int = _FACTORY_NUM_PLAYERS,
-    num_impostors: int = _FACTORY_NUM_IMPOSTORS,
-    tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
-) -> int:
-    """Run a factory through full games and leak-scan every packet it consumed.
-
-    Returns the number of packets scanned. Asserts COVERAGE — the games must reach
-    at least one body (proof they got past task-rush into the kill → body → report
-    → meeting → vent regions the scan claims to cover), so a config that
-    task-rushes to a win cannot pass on thin early-game packets. Raises
-    ``AssertionError`` on a leak.
-    """
-
-    records = collect_factory_packet_records(
-        agent_factory,
-        seeds=seeds,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
-    assert records, "factory mode captured no packets"
-    assert_no_factory_packet_leaks(records)
-    bodies_seen = sum(len(packet.visible_bodies) for packet, _ in records)
-    assert bodies_seen > 0, (
-        "factory games never reached a body — the kill → body → meeting regions "
-        "the factory leak scan exists to cover went unexercised"
-    )
-    return len(records)
 
 
 class _IdleExploreAgent:
@@ -996,3 +531,211 @@ def test_owned_task_discipline_trips_on_pending_absent_from_owned() -> None:
     )
     with pytest.raises(AssertionError, match="is not a member of owned_task_ids"):
         _assert_owned_task_discipline(poisoned_empty_owned)
+
+
+# --------------------------------------------------------------------------- #
+# The movement-perception witness gate (Task 19.24).
+#
+# ``moved_players`` was the one packet channel with ZERO leak-suite coverage,
+# and it is the channel whose own docstring
+# (``observation/service.py::_moved_players_for_agent``) narrates a SHIPPED
+# gating bug: gating on the post-advance ``visible_player_ids`` — the actor's
+# ARRIVAL room — leaked the transition's ORIGIN to an observer who only saw the
+# actor arrive, and dropped the departure for the observer left behind who
+# actually saw it leave. These planted-leak self-tests are the proof the new
+# scanner detects exactly that bug class; the breadth sweep over real service
+# packets lives in ``tests/observation/test_leak_property.py``.
+# --------------------------------------------------------------------------- #
+
+
+def _moved_packet(
+    *,
+    agent_id: PlayerId,
+    room: str,
+    moved: tuple[MovedPlayerView, ...],
+) -> ObservationPacket:
+    """A minimal packet for the observer ``agent_id``, carrying ``moved``."""
+
+    return ObservationPacket(
+        tick=4,
+        agent_id=agent_id,
+        self_state=SelfView(room=room, role="CREWMATE", pending_task_id=None),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        moved_players=moved,
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+
+
+_MOVE_EVENT = MovedEvent(
+    type="Moved", tick=4, actor="p-3", from_room="STORAGE", to_room="ENGINEERING"
+)
+
+
+def test_moved_players_scanner_accepts_a_witnessed_departure() -> None:
+    # The legitimate case the gate exists to permit: p-2 stayed behind in
+    # STORAGE and SAW p-3 leave it, so the transition (origin included) is p-2's
+    # to know. The scanner must not fire.
+    witnessed = _moved_packet(
+        agent_id="p-2",
+        room="STORAGE",
+        moved=(MovedPlayerView(id="p-3", from_room="STORAGE", to_room="ENGINEERING"),),
+    )
+    assert_moved_players_are_witness_gated(
+        witnessed, engine_events=[_MOVE_EVENT], visible_rooms=("STORAGE",)
+    )
+
+
+def test_moved_players_scanner_trips_on_arrival_only_observer() -> None:
+    # THE planted leak — the exact prior bug: an observer standing in the
+    # ARRIVAL room (ENGINEERING) who never saw STORAGE is handed the origin it
+    # could not witness. Arrival-gated code mints this packet; the departure
+    # gate must reject it.
+    poisoned = _moved_packet(
+        agent_id="p-2",
+        room="ENGINEERING",
+        moved=(MovedPlayerView(id="p-3", from_room="STORAGE", to_room="ENGINEERING"),),
+    )
+    with pytest.raises(AssertionError, match="unwitnessed departure"):
+        assert_moved_players_are_witness_gated(
+            poisoned, engine_events=[_MOVE_EVENT], visible_rooms=("ENGINEERING",)
+        )
+
+
+def test_moved_players_scanner_trips_on_transition_with_no_engine_event() -> None:
+    # A transition no ``MovedEvent`` backs is fabricated — either invented
+    # wholesale or a STALE origin stitched onto a current arrival. Visibility
+    # alone cannot catch it (the observer does see STORAGE), so the
+    # traceability check is what bites.
+    poisoned = _moved_packet(
+        agent_id="p-2",
+        room="STORAGE",
+        moved=(MovedPlayerView(id="p-3", from_room="STORAGE", to_room="MEDBAY"),),
+    )
+    with pytest.raises(AssertionError, match="no matching MovedEvent this tick"):
+        assert_moved_players_are_witness_gated(
+            poisoned,
+            engine_events=[_MOVE_EVENT],
+            visible_rooms=("STORAGE", "MEDBAY"),
+        )
+
+
+def test_moved_players_scanner_trips_on_a_no_op_move() -> None:
+    # ``from_room == to_room`` is not a transition; surfacing one would tell an
+    # observer an actor "moved" when it stood still. The service skips these, so
+    # a packet carrying one is planted here.
+    poisoned = _moved_packet(
+        agent_id="p-2",
+        room="STORAGE",
+        moved=(MovedPlayerView(id="p-3", from_room="STORAGE", to_room="STORAGE"),),
+    )
+    no_op_event = MovedEvent(
+        type="Moved", tick=4, actor="p-3", from_room="STORAGE", to_room="STORAGE"
+    )
+    with pytest.raises(AssertionError, match="no-op move"):
+        assert_moved_players_are_witness_gated(
+            poisoned, engine_events=[no_op_event], visible_rooms=("STORAGE",)
+        )
+
+
+# --------------------------------------------------------------------------- #
+# The dependency partition (Task 19.24).
+#
+# The whole point of splitting the scanners out is that the ML champion gate can
+# reach them without pytest. That claim decays silently — someone adds a
+# ``pytest.mark`` import to a module ``eval.leak_scan`` pulls in, and nothing
+# fails until a runtime-only install breaks in production. So it is pinned here,
+# in the pytest half, where a reader looking at the split finds the proof next to
+# the thing it is about. The manual form is the 19.7 idiom
+# (``uv run --no-dev --exact python -c "import ..."``, which needs a dev-free
+# environment); this is the hermetic form of the same claim, and it runs every
+# time.
+# --------------------------------------------------------------------------- #
+
+# Import the library and BOTH production consumers with the dev toolchain made
+# unimportable, so a transitive dev import fails with a traceback naming the
+# offender rather than a bare "pytest is in sys.modules" at the end.
+_IMPORT_PURITY_PROBE = '''
+import sys
+
+_BLOCKED = ("pytest", "_pytest", "hypothesis", "mypy")
+
+
+class _RefuseDevImports:
+    """A meta-path finder that makes the dev toolchain unimportable."""
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in _BLOCKED:
+            raise ImportError(
+                f"{fullname} reached a production import path "
+                "(the runtime/dev dependency partition forbids it)"
+            )
+        return None
+
+
+sys.meta_path.insert(0, _RefuseDevImports())
+
+import eval.leak_scan
+import training.bakeoff.harness
+import training.crew.scorer
+
+assert callable(eval.leak_scan.scan_factory_packets)
+assert training.bakeoff.harness.scan_factory_packets is (
+    eval.leak_scan.scan_factory_packets
+)
+assert training.crew.scorer.scan_factory_packets is (
+    eval.leak_scan.scan_factory_packets
+)
+leaked = sorted(name for name in sys.modules if name.split(".")[0] in _BLOCKED)
+assert not leaked, f"dev modules on the production path: {leaked}"
+print("PARTITION_OK")
+'''
+
+
+def test_leak_scan_and_its_production_consumers_import_without_pytest() -> None:
+    # A SUBPROCESS is load-bearing: this very process is pytest, so an in-process
+    # check would pass vacuously with pytest already in sys.modules.
+    probe = subprocess.run(
+        [sys.executable, "-c", _IMPORT_PURITY_PROBE],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert probe.returncode == 0, (
+        "eval.leak_scan or one of its production consumers still reaches the dev "
+        f"toolchain:\n{probe.stderr}"
+    )
+    assert "PARTITION_OK" in probe.stdout
+
+
+def test_the_pytest_wrapper_is_the_half_that_needs_pytest() -> None:
+    # The control for the test above: importing THIS module under the same block
+    # must FAIL. Without it, a probe that silently stopped exercising the block
+    # (a typo in the finder, say) would keep reporting a partition that is not
+    # being enforced.
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _IMPORT_PURITY_PROBE.replace(
+                "import eval.leak_scan\n", "import eval.leak_test\n"
+            ),
+        ],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert probe.returncode != 0
+    assert "reached a production import path" in probe.stderr

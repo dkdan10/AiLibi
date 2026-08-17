@@ -6,7 +6,9 @@ many-seeds / property-based purity sweep. The fixture-driven check in
 leak that only manifests under an unseen packet shape would slip through
 (audit I-I-2). This module closes that gap: it drives ``ObservationService``
 over every living agent on every tick across many Hypothesis-generated games
-and feeds each packet through the EXISTING scanners from ``eval/leak_test.py``.
+and feeds each packet through the EXISTING scanners from ``eval/leak_scan.py``
+(the pytest-free scanner library the leak suite and the ML champion gate share
+since Task 19.24).
 
 The scanners are imported, not reimplemented -- the value here is breadth of
 inputs. Task 7.2 parametrizes the sweep over ``num_impostors`` and asserts the
@@ -30,7 +32,11 @@ The action vocabulary mirrors the role-aware strategy from
 ``tests/engine/test_tick_properties.py`` but is generalized off that module's
 single-impostor roster so the sweep exercises kills, vents, and reports across
 the whole multi-impostor roster -- the events that populate ``visible_players``
-/ ``visible_bodies`` / ``audible_events`` where a leak would surface.
+/ ``visible_bodies`` / ``audible_events`` where a leak would surface. Task 19.24
+adds a third vocabulary that MOVES players, because none of the earlier ones
+did: ``moved_players`` scanned vacuously (always empty) until packets carried
+transitions, and that channel's witness gate is the one the audits flagged as
+uncovered.
 """
 
 from __future__ import annotations
@@ -56,13 +62,14 @@ from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
-from eval.leak_test import (
+from eval.leak_scan import (
     _FORBIDDEN_VISIBLE_PLAYER_ACTIONS,
     JsonValue,
     _action_is_permitted_by_witness_event,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
     _walk_json,
+    assert_moved_players_are_witness_gated,
 )
 from observation.service import ObservationService, impostor_pretend_task_id
 from tests.engine.test_tick_properties import _unique_actions_per_actor
@@ -596,3 +603,216 @@ def test_observed_task_annotation_never_leaks_hidden_information(
             break
 
     service.close()
+
+
+# --------------------------------------------------------------------------- #
+# The movement-perception witness gate (Task 19.24).
+#
+# ``moved_players`` (``observation/service.py::_moved_players_for_agent``) was
+# the one packet channel with ZERO leak-suite coverage — and it is the channel
+# whose own docstring narrates a SHIPPED gating bug: gating on the post-advance
+# ``visible_player_ids`` (the actor's ARRIVAL room) handed the transition's
+# ORIGIN to an observer who only saw the actor arrive, and dropped the departure
+# for the observer left behind who actually saw it leave. The sweeps above never
+# issue a ``move``, so every packet they scan carries an EMPTY ``moved_players``:
+# the gap was structural, not incidental. This region closes it with a sweep
+# whose vocabulary moves players, plus a deterministic case that proves the
+# sweep is not vacuous (a real witnessed transition really does reach a packet).
+# The planted-leak proofs that the scanner BITES live in ``eval/leak_test.py``.
+# --------------------------------------------------------------------------- #
+
+# CAFETERIA (the spawn room, ``_roster_initial_state``) and its neighbors. Draws
+# from the full room list would make almost every move a rejected non-adjacent
+# attempt; drawing the hub's neighbors keeps a healthy share of the sweep's moves
+# RESOLVING into real ``MovedEvent``s while the strategy still emits
+# out-of-range destinations (a room the actor is not adjacent to once it has
+# walked away), which the engine rejects via ``ActionRejectedEvent``.
+_ROSTER_MOVE_ROOMS = ("CAFETERIA", "EAST_HALL", "UPPER_HALL", "WEST_HALL")
+
+
+@st.composite
+def _roster_movement_action(draw: st.DrawFn) -> Action:
+    """Draw the leak-sweep vocabulary EXTENDED with ``move``.
+
+    The kill/vent/report/wait draws mirror :func:`_roster_action`; ``move`` draws
+    a destination from the spawn hub's neighborhood so transitions actually
+    resolve. Movement is weighted (``move`` is drawn twice as often as any other
+    verb) because an empty ``moved_players`` scans vacuously — the sweep is only
+    worth its runtime when packets carry transitions.
+    """
+
+    kind = draw(st.sampled_from(("move", "move", "kill", "vent", "report", "wait")))
+    actor = draw(st.sampled_from(_ROSTER_PLAYER_IDS))
+    if kind == "move":
+        to_room = draw(st.sampled_from(_ROSTER_MOVE_ROOMS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "move", "actor": actor, "payload": {"to_room": to_room}}
+        )
+    if kind == "kill":
+        target = draw(
+            st.sampled_from(tuple(pid for pid in _ROSTER_PLAYER_IDS if pid != actor))
+        )
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "kill", "actor": actor, "payload": {"target": target}}
+        )
+    if kind == "vent":
+        vent_id = draw(st.sampled_from(_ROSTER_VENT_IDS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "vent", "actor": actor, "payload": {"vent_id": vent_id}}
+        )
+    if kind == "report":
+        body_id = draw(st.sampled_from(_ROSTER_BODY_ID_DRAWS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "report", "actor": actor, "payload": {"body_id": body_id}}
+        )
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "wait", "actor": actor, "payload": {}}
+    )
+
+
+@given(
+    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    num_impostors=st.sampled_from(_VALID_IMPOSTOR_COUNTS),
+    action_batches=st.lists(
+        st.lists(_roster_movement_action(), max_size=3), max_size=10
+    ),
+)
+@settings(
+    max_examples=50,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_moved_players_are_departure_witness_gated(
+    seed: int,
+    num_impostors: int,
+    action_batches: list[list[Action]],
+    tmp_path: Path,
+) -> None:
+    """No packet ever carries a transition its recipient could not witness.
+
+    Per packet, on top of the imported leak scanners: every ``moved_players``
+    entry is departure-witnessed (``from_room`` is in the observer's
+    INDEPENDENTLY recomputed ``visible_rooms`` — never merely the arrival),
+    traceable to a real ``MovedEvent`` of this tick on actor AND both rooms, not
+    a no-op, and sorted by actor id. Visibility is recomputed here through
+    ``engine.visibility.compute_visibility_for_player`` rather than read back off
+    the service, so the gate is checked against engine truth and not against the
+    code that implemented it — the same independence the task-annotation sweep
+    above uses.
+    """
+
+    game_map = load_canonical_map()
+    state = _roster_initial_state(
+        seed=seed, num_impostors=num_impostors, game_map=game_map
+    )
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    for batch in action_batches:
+        if state.phase != "PLAY":
+            break
+        state, events = advance_tick(
+            state, _unique_actions_per_actor(batch), game_map=game_map
+        )
+        for player_id, player in state.players.items():
+            if not player.alive:
+                continue
+            packet = service.build_packet(
+                world_state=state,
+                agent_id=player_id,
+                engine_events=events,
+            )
+            packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
+            _assert_no_recursive_hidden_fields(packet_dump)
+            _assert_no_role_bearing_values(packet_dump)
+            visibility = compute_visibility_for_player(
+                observer_id=player_id, world_state=state, game_map=game_map
+            )
+            assert_moved_players_are_witness_gated(
+                packet,
+                engine_events=events,
+                visible_rooms=visibility.visible_rooms,
+            )
+        if state.phase != "PLAY":
+            break
+
+    service.close()
+
+
+def test_a_witnessed_transition_really_does_reach_a_packet(tmp_path: Path) -> None:
+    """The sweep above is not vacuous, and the gate cuts BOTH ways.
+
+    A property sweep that never populates ``moved_players`` would pass on empty
+    tuples forever, so this pins the channel deterministically on real service
+    packets — and it pins the exact pair the prior bug got backwards:
+
+    * ``p-9`` walks CAFETERIA -> WEST_HALL;
+    * ``p-8`` stays behind in CAFETERIA (the DEPARTURE room) and receives the
+      transition, which the scanner accepts;
+    * ``p-7`` is standing in WEST_HALL (the ARRIVAL room) and receives NOTHING —
+      arrival-gated code would hand it the origin it never saw.
+
+    Both observers are crewmates, whose base visibility is ``same_room_only``
+    (Task 13.8), so "the room I am in" is exactly "what I can witness" and the
+    two sides of the gate are unambiguous.
+    """
+
+    game_map = load_canonical_map()
+    state = _roster_initial_state(seed=7, num_impostors=2, game_map=game_map)
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    # Tick 0: p-7 walks ahead into WEST_HALL, so it occupies the ARRIVAL room
+    # before the transition under test happens.
+    state, _events = advance_tick(
+        state,
+        [
+            _ACTION_ADAPTER.validate_python(
+                {"type": "move", "actor": "p-7", "payload": {"to_room": "WEST_HALL"}}
+            )
+        ],
+        game_map=game_map,
+    )
+    assert state.players["p-7"].room == "WEST_HALL"
+
+    # Tick 1: p-9 leaves CAFETERIA for WEST_HALL, watched by p-8 who stays put.
+    state, events = advance_tick(
+        state,
+        [
+            _ACTION_ADAPTER.validate_python(
+                {"type": "move", "actor": "p-9", "payload": {"to_room": "WEST_HALL"}}
+            )
+        ],
+        game_map=game_map,
+    )
+    assert state.players["p-8"].room == "CAFETERIA"
+
+    packets = {
+        agent_id: service.build_packet(
+            world_state=state, agent_id=agent_id, engine_events=events
+        )
+        for agent_id in ("p-7", "p-8", "p-9")
+    }
+    service.close()
+
+    # The witness gets the transition — origin included — and it scans clean.
+    left_behind = packets["p-8"]
+    assert [
+        (moved.id, moved.from_room, moved.to_room)
+        for moved in left_behind.moved_players
+    ] == [("p-9", "CAFETERIA", "WEST_HALL")]
+    assert_moved_players_are_witness_gated(
+        left_behind,
+        engine_events=events,
+        visible_rooms=compute_visibility_for_player(
+            observer_id="p-8", world_state=state, game_map=game_map
+        ).visible_rooms,
+    )
+
+    # p-7, standing in the ARRIVAL room, is told nothing about where p-9 came
+    # from — the leak the prior arrival-gated code shipped. The mover itself is
+    # the same rule's other side: it walked, it did not watch.
+    assert packets["p-7"].moved_players == ()
+    assert packets["p-9"].moved_players == ()
