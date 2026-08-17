@@ -298,26 +298,55 @@ assert_gitignores_are_ours_or_absent() {
   fi
 }
 
-# The canonical body, defined once, so the skip test below can compare against
-# it byte for byte instead of sampling a line.
-gitignore_body() {
+# The canonical body for ONE destination, defined once so the skip test below
+# can compare against it byte for byte instead of sampling a line.
+#
+# The rules name the restored files ONE BY ONE, anchored, rather than the `*`
+# this used to write. `*` ignored the whole directory, so an unrelated untracked
+# file an operator had left in a destination vanished from `git status` and from
+# `git add -A` — this script hiding local work it does not own (Codex review,
+# PR #346). None of the 2,952 manifest paths contains a gitignore
+# metacharacter, checked, so each path is its own literal rule.
+gitignore_body() { # gitignore_body DEST_REL
   cat <<IGNORE
 $GITIGNORE_MARKER
 #
-# Everything untracked in this directory is RESTORED CLASS-(c) EVIDENCE: it
-# lives on the pinned evidence commit (training/artifacts/coevo/
-# EVIDENCE-MANIFEST.md) and must never be committed back here
-# (docs/artifacts.md). This file exists so \`git add -A\` cannot stage it.
-# Tracked files ignore this rule, so the retained in-tree bytes are unaffected.
+# Each line below is one RESTORED CLASS-(c) EVIDENCE file: it lives on the
+# pinned evidence commit (training/artifacts/coevo/EVIDENCE-MANIFEST.md) and
+# must never be committed back here (docs/artifacts.md). This file exists so
+# \`git add -A\` cannot stage them. Tracked files are unaffected by ignore rules,
+# so the retained in-tree bytes still show up in \`git status\` — and so does
+# anything else you leave here, which is why these rules are per-file.
 #
 # \`bash scripts/fetch_evidence.sh --clean\` removes the restored bytes and this
 # file with them.
-*
 IGNORE
+  # This file itself. The blanket `*` used to cover it implicitly; per-file
+  # rules do not, and without this line the generated ignore file is itself an
+  # untracked file that `git add -A` would stage (caught while verifying the
+  # round-9 fix, PR #346).
+  printf '/.gitignore\n'
+  restored_paths | grep "^$1/" | sed "s#^$1/#/#" | sort
+}
+
+# What is actually untracked under a destination right now — read from the
+# filesystem and `git ls-files`, with no reference to the manifest. `--clean`
+# decides whether to keep an ignore file from THIS, because deriving it from
+# `restored_paths` meant a truncated manifest could leave real evidence on disk
+# while the same truncated list reported nothing was left (Codex review,
+# PR #346).
+untracked_under() { # untracked_under DEST_REL
+  comm -23 \
+    <(find "$REPO_ROOT/$1" \( -type f -o -type l \) |
+      sed "s#^$REPO_ROOT/##" |
+      grep -v "^$1/\.gitignore" |
+      sort) \
+    <(git -C "$REPO_ROOT" ls-files -- "$1" | sort)
 }
 
 write_gitignore() { # write_gitignore DEST
-  local dest="$1" tmp
+  local dest="$1" tmp rel
+  rel="${dest#"$REPO_ROOT/"}"
   # Skip ONLY on an exact match with the canonical body. "Has our marker and a
   # line that is `*`" was not strong enough: gitignore(5) gives the LAST
   # matching pattern precedence, so an appended `!some-evidence-file` re-includes
@@ -325,7 +354,7 @@ write_gitignore() { # write_gitignore DEST
   # claims to protect is stageable again (Codex review, PR #346). Anything not
   # byte-identical — edited, truncated, negated — is rewritten.
   if [[ ! -L "$dest/.gitignore" ]] && [[ -f "$dest/.gitignore" ]] &&
-    [[ "$(cat "$dest/.gitignore")" == "$(gitignore_body)" ]]; then
+    [[ "$(cat "$dest/.gitignore")" == "$(gitignore_body "$rel")" ]]; then
     return 0
   fi
   # Build beside the target and rename it into place: rename(2) within a single
@@ -337,7 +366,7 @@ write_gitignore() { # write_gitignore DEST
   # so it neither follows a link nor clobbers an existing entry.
   tmp="$(mktemp "$dest/.gitignore.XXXXXX")"
   _scratch+=("$tmp")
-  gitignore_body > "$tmp"
+  gitignore_body "$rel" > "$tmp"
   chmod 644 "$tmp"
   mv -f "$tmp" "$dest/.gitignore"
 }
@@ -524,15 +553,23 @@ if [[ "$mode" == "clean" ]]; then
   # nothing stopping `git add -A` from staging it (Codex review, PR #346).
   for dest in "$COEVO_DEST" "$SLATE_DEST"; do
     rel="${dest#"$REPO_ROOT/"}"
-    remaining="$(restored_paths | grep -c "^$rel/" || true)"
-    left=0
-    while IFS= read -r r; do
-      if [[ -f "$REPO_ROOT/$r" ]]; then left=$((left + 1)); fi
-    done < <(restored_paths | grep "^$rel/" || true)
-    if [[ "$left" -eq 0 ]] && gitignore_is_ours "$dest/.gitignore"; then
-      rm -f "$dest/.gitignore"
-    elif [[ "$left" -gt 0 ]]; then
-      echo "Kept $rel/.gitignore — $left of $remaining evidence file(s) remain there." >&2
+    # Counted from the FILESYSTEM, not from the manifest. `--clean` is offline
+    # and cannot run the archive/manifest comparison, so a manifest truncated
+    # after the restore would report "nothing left" from the same short list
+    # that hid the leftovers — and this branch would then remove the ignore file
+    # protecting them (Codex review, PR #346).
+    left="$(untracked_under "$rel" | wc -l | tr -d ' ')"
+    if [[ "$left" -eq 0 ]]; then
+      if gitignore_is_ours "$dest/.gitignore"; then
+        rm -f "$dest/.gitignore"
+      fi
+    else
+      # Keeping it is not enough: an owned file that had been truncated or had a
+      # negation appended was kept AS-IS and reported as protecting a payload it
+      # no longer covered. Rewrite it to canonical, which is a no-op when it
+      # already is (Codex review, PR #346).
+      write_gitignore "$dest"
+      echo "Kept $rel/.gitignore — $left untracked evidence file(s) remain there." >&2
     fi
   done
 
@@ -650,6 +687,18 @@ if [[ "$mode" == "fetch" ]]; then
   # BEFORE anything is captured or written.
   assert_archive_matches_manifest
 
+  # A re-fetch must not rewrite files that are already correct. The preflight
+  # has already refused unless every existing destination file matches its
+  # digest, so anything present is by definition the right bytes — replacing it
+  # discards whatever mode, owner or timestamp it carries locally, on a run the
+  # collision path reports as a no-op (Codex review, PR #346). `--skip-old-files`
+  # is GNU-only, so it is probed rather than assumed; without it the behaviour
+  # falls back to replacing, exactly as before.
+  TAR_SKIP=()
+  if tar --skip-old-files --version >/dev/null 2>&1; then
+    TAR_SKIP=(--skip-old-files)
+  fi
+
   # Mode AND mtime. tar rewrites both from the archive, so a directory that
   # already existed came back stamped with the evidence commit's timestamp —
   # a fabricated past date on a tracked-tree directory (Codex review, PR #346).
@@ -693,11 +742,11 @@ if [[ "$mode" == "fetch" ]]; then
 
   echo "Restoring coevo/ -> training/artifacts/coevo/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" coevo |
-    tar -x --strip-components=1 -C "$COEVO_DEST"
+    tar -x ${TAR_SKIP[@]+"${TAR_SKIP[@]}"} --strip-components=1 -C "$COEVO_DEST"
 
   echo "Restoring finalist-eval-raw/ -> training/reports/_finalist_eval_raw/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" finalist-eval-raw |
-    tar -x --strip-components=1 -C "$SLATE_DEST"
+    tar -x ${TAR_SKIP[@]+"${TAR_SKIP[@]}"} --strip-components=1 -C "$SLATE_DEST"
 
   restore_dir_metadata
   _restore_started=0
