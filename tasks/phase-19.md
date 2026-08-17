@@ -1726,7 +1726,7 @@ session sanctions the split at dispatch, and the DoD applies to the sequence's t
 ### Task 19.25 — The parameterized replay walker + the eval consumer migration
 **Branch:** `phase-19-replay-walker`
 **Depends on:** 19.24
-**Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_test.py:593-600; eval/deception_instruments.py:169 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 25 [C; count VERIFIED §8 row 15 — eight modules, nine loop bodies] + C3 + close §7 items 1–2 (the disclosed duplication); the loop bodies re-verified at HEAD: eval/watchability.py:1229-1231/1290, eval/validity.py:402-404/453, eval/funnel.py:365/471 + :1217/1324, eval/kill_craft.py:474-519, eval/win_condition_selfcheck.py:191-225, eval/balance_eval.py:760-796, eval/leak_scan.py:512-527 (the leak walk, relocated from eval/leak_test.py by 19.24's library promotion); eval/deception_instruments.py:169 (the one module that already imports a shared walk — the consumption exemplar); eval/off_menu.py EXCLUDED (frozen, 19.18)
 **Complexity:** Integration
 
 "Reconstructs cleanly" currently denotes eight subtly different predicates — and the
@@ -1739,7 +1739,7 @@ per-consumer PROFILES: the walker's core is the reconstruction MECHANICS ONLY (r
 `advance_tick` → `apply_meeting_result`, pluggable fact collectors) — EVERY integrity
 check, state-hash verification and doubled-record detection included, is a
 profile-declared OPTION, because at least one consumer (the leak-scan walk at
-`leak_test.py:593-600`) performs neither today and mandatory core checks would change
+`leak_scan.py:512-527`, post-19.24 home) performs neither today and mandatory core checks would change
 what it accepts — and each consumer declares a NAMED validation
 profile that preserves its current, deliberate semantics — the drift record documents
 per profile which checks it enforces, which it deliberately relaxes, and why, each with
