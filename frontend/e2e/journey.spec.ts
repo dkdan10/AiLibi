@@ -92,6 +92,15 @@ function frameIndex(page: Page) {
   return page.getByLabel("Seek tick");
 }
 
+/** The Task-19.17 tail surfaces: the running beat feed and the spend chips. */
+function ticker(page: Page) {
+  return page.getByRole("region", { name: "Event ticker" });
+}
+
+function costChips(page: Page) {
+  return page.getByRole("group", { name: "LLM cost to the current frame" });
+}
+
 test.describe("spectator journey", () => {
   test("featured replay → play → meeting pause → ballots → finale (unspoiled → reveal)", async ({
     page,
@@ -119,6 +128,15 @@ test.describe("spectator journey", () => {
     await expect(banner).not.toContainText("IMPOSTORS");
     await expect(frameIndex(page)).toHaveValue("0");
 
+    // ── the tail surfaces open EMPTY (Task 19.17) ────────────────────────────
+    // This is the frame-bounding, stated where it is easiest to see it fail: at
+    // the synthetic Start frame nothing has played, so the feed is empty and the
+    // chips are zero. A GAME TOTAL — the thing these chips must never be — would
+    // already read the whole game's token spend right here, before a tick.
+    await expect(ticker(page)).toContainText("Nothing has happened yet.");
+    await expect(costChips(page)).toContainText("in 0 tok");
+    await expect(costChips(page)).toContainText("out 0 tok");
+
     // ── play → the meeting pause ─────────────────────────────────────────────
     await page.getByRole("button", { name: "▶ Play" }).click();
 
@@ -133,6 +151,15 @@ test.describe("spectator journey", () => {
     await expect(page.getByRole("button", { name: "▶ Play" })).toBeVisible();
     await expect(pauseBar.getByRole("button", { name: /Resume/ })).toBeVisible();
     await expect(pauseBar.getByRole("button", { name: /Next beat/ })).toBeVisible();
+
+    // ── the tail surfaces followed the playhead (Task 19.17) ─────────────────
+    // The feed carries the beat the transport just stopped on, and the chips
+    // moved off zero at exactly the frame the meeting's calls entered the
+    // window. Both are still frame-bounded — this is the SAME cumulative number
+    // as before, one meeting later, not a total that was always there.
+    await expect(ticker(page)).toContainText(/Meeting called by p-\d+/);
+    await expect(costChips(page)).toContainText(/in [1-9][\d,]* tok/);
+    await expect(costChips(page)).not.toContainText("in 0 tok");
 
     // ── inspect the ballots ──────────────────────────────────────────────────
     // Auto-follow opened the meeting on entering its tick.
@@ -310,6 +337,60 @@ test.describe("spectator journey", () => {
     await expect(perspective).toHaveText("Omniscient");
     await expect(roleBadges).toHaveCount(omniscientRoleCount);
     await expect(page).not.toHaveURL(/[?&]perspective=p-\d+\b/);
+
+    // ── the ticker rides the SAME projection (Task 19.17) ────────────────────
+    // The served event views are PRIVILEGED — `KillEventView` carries
+    // `killer_id`, `VentEventView` carries the whole route — so a feed that
+    // printed them verbatim would publish exactly what this test's other
+    // assertions prove the fog withholds. Walk to the end first, because at
+    // frame zero the feed is (correctly) empty and proves nothing.
+    //
+    // Auto-follow OFF and the end-of-replay card dismissed: both would otherwise
+    // sit over the map toolbar that owns the As-agent switch. Neither is
+    // incidental to the ticker — this is the pause/finale flow being driven, and
+    // it still behaves exactly as Task 19.10 left it.
+    await page.getByRole("button", { name: "Auto-follow on" }).click();
+    await resetFocus(page);
+    await page.keyboard.press("End");
+    await page.getByRole("button", { name: "Dismiss the end-of-replay card" }).click();
+
+    await expect(ticker(page)).toContainText("omniscient");
+    await expect(ticker(page)).toContainText(/p-\d+ killed p-\d+/);
+    const omniscientRows = await ticker(page).getByRole("listitem").allInnerTexts();
+    const omniscientBeats = omniscientRows.length;
+    expect(omniscientBeats).toBeGreaterThan(0);
+
+    // No vent route may name the same room twice. On a real traversal the engine
+    // repeats the SOURCE in the dive event's `to_room_id` — the destination is
+    // only resolved on the exit event — so a route read off the dive renders
+    // `STORAGE → STORAGE`. Unit fixtures can encode the right byte shape, but
+    // only the committed corpus proves the shape; this is the guard that reads
+    // it. Vacuous on a game with no vents, which is the correct behaviour.
+    for (const row of omniscientRows) {
+      const route = /([A-Z_]+) → ([A-Z_]+)/.exec(row);
+      if (route !== null) {
+        expect(route[1]).not.toBe(route[2]);
+      }
+    }
+
+    await page.getByRole("button", { name: "As-agent" }).click();
+    await expect(ticker(page)).toContainText(/as p-\d+ · fog/);
+    // A re-projection, not a styling change: the fog feed is a SUBSET. WHICH
+    // beats survive depends on which agent the switcher lands on and what it
+    // happened to see, so the four exact fog cases (witnessed/unwitnessed ×
+    // kill/vent) are pinned deterministically in
+    // `src/components/EventTicker.test.ts`; what only a browser can show is that
+    // the live switch really re-runs the projection over the real bytes.
+    const foggedBeats = await ticker(page).getByRole("listitem").count();
+    expect(foggedBeats).toBeLessThanOrEqual(omniscientBeats);
+    // No vent ROUTE survives the fog, for any agent: a witness at one mouth of
+    // the network never saw where the actor came out, so the `from → to` line
+    // the Omniscient feed renders has no fogged form at all.
+    await expect(ticker(page)).not.toContainText("→");
+
+    await page.getByRole("button", { name: "Exit fog" }).click();
+    await expect(ticker(page)).toContainText("omniscient");
+    expect(await ticker(page).getByRole("listitem").count()).toBe(omniscientBeats);
   });
 
   test("reduced motion collapses DOM transitions and is visible to the canvas layer", async ({

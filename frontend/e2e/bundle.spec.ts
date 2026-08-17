@@ -245,6 +245,17 @@ test.describe("static demo bundle", () => {
     await expect(pauseBar).toBeVisible({ timeout: 60_000 });
     await expect(pauseBar).toContainText(/Meeting at tick \d+ — playback paused/);
 
+    // The Task-19.17 tail surfaces read PER-CALL token counts out of the same
+    // baked replay JSON — a payload the bundle builder writes and nothing here
+    // re-fetches. Non-zero here is the proof those counts survived the bake;
+    // frame-bounded (not the game total) is proved in `journey.spec.ts`.
+    await expect(page.getByRole("region", { name: "Event ticker" })).toContainText(
+      /Meeting called by p-\d+/,
+    );
+    await expect(
+      page.getByRole("group", { name: "LLM cost to the current frame" }),
+    ).toContainText(/in [1-9][\d,]* tok/);
+
     // ── the meeting's own payload ────────────────────────────────────────────
     // Auto-follow opened it. Ballots are a SEPARATE baked file from the replay
     // view (`…/meetings/<id>.json`), so this is the step that proves the meeting

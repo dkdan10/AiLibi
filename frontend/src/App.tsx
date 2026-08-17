@@ -40,12 +40,18 @@
 // Phase 19 re-opens the file deliberately (tasks/phase-19.md lists App.tsx under
 // 19.10 → 19.17): Task 19.10 adds the playback-coherence surfaces — the header's
 // outcome gate, the roster's pre/post-vote labeling, the meeting pause bar in
-// the transport region, and the finale card overlay.
+// the transport region, and the finale card overlay. Task 19.17 then MOUNTS the
+// two additive surfaces at the tail of that chain — <CostChips/> in the stage's
+// pill row and <EventTicker/> under it. Mounting only: both are self-contained
+// sections in the ordinary document flow, so they claim no z-index, no
+// `--transport-h`, and nothing 19.10's pause/finale flow depends on.
 
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
+import { CostChips } from "./components/CostChips";
+import { EventTicker } from "./components/EventTicker";
 import { GuidedTour, openGuidedTour } from "./components/GuidedTour";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
@@ -1078,7 +1084,18 @@ function Workspace() {
             </Suspense>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <MeetingPill />
+              {/* Task 19.17. Frame-bounded model spend — cumulative to the
+                  current frame, never the game total (a total is an
+                  outcome-shape leak under unspoiled mode). It shares the pill
+                  row because it is a chip strip, not a panel. */}
+              <CostChips />
             </div>
+            {/* Task 19.17. The running feed of kills / reports / meetings /
+                ejections / vents, rendered through the SAME perspective
+                projection the map above it enforces — the served event views
+                carry privileged kill attribution and vent routes, so the fog is
+                the firewall, not the unspoiled-mode gate. */}
+            <EventTicker />
           </div>
         </div>
       </section>
