@@ -2038,10 +2038,37 @@ class HeadlessGame:
         packets: Mapping[PlayerId, ObservationPacket],
         agents: Mapping[PlayerId, AgentInterface],
     ) -> list[ActionIntent]:
-        return [
-            agents[player_id].decide(packets[player_id], self._public_map)
-            for player_id in sorted(packets)
-        ]
+        """Ask every living agent for its intent, refusing any forged ``actor``.
+
+        The identity check is the whole of the orchestrator's trust in an agent's
+        return value: ``ActionIntent.actor`` is a plain field the agent fills in,
+        and everything downstream — ``translate_action_intents_for_tick``, the
+        engine's per-actor legality checks, the replay row — takes it as the
+        acting seat. An agent that returns an intent naming a DIFFERENT player
+        therefore acts as that player: it could move, kill, or call a meeting on
+        someone else's behalf, and the replay would record it as that player's
+        action with nothing marking the substitution.
+
+        Nothing in the ``AgentInterface`` Protocol prevents it, and the seam is
+        widening on purpose — a learned mover (Phase 15+) constructs its intent
+        from a policy head's output rather than copying the packet's ``agent_id``,
+        so a mask/decode bug produces exactly this shape. Fail loud here
+        (AGENTS.md "no silent fallbacks"): the dispatch loop knows which seat it
+        asked, so the mismatch is detectable at the only place that still holds
+        both halves.
+        """
+
+        intents: list[ActionIntent] = []
+        for player_id in sorted(packets):
+            intent = agents[player_id].decide(packets[player_id], self._public_map)
+            if intent.actor != player_id:
+                raise ValueError(
+                    f"agent for {player_id!r} returned an intent acting as "
+                    f"{intent.actor!r} (type {intent.type!r}); an ActionIntent may "
+                    "only act as the player it was asked to decide for"
+                )
+            intents.append(intent)
+        return intents
 
     def _game_over_event(self, last_events: tuple[EngineEvent, ...]) -> GameOverEvent:
         for event in last_events:

@@ -172,6 +172,74 @@ def test_headless_game_dispatches_only_public_types_to_agents(
             assert isinstance(public_map, PublicMapView)
 
 
+class _ForgingAgent:
+    """Test-only agent that acts as SOMEONE ELSE — the seam under test.
+
+    ``ActionIntent.actor`` is a field the agent fills in, so nothing in the
+    ``AgentInterface`` Protocol stops a decide() from naming a different seat.
+    A learned mover that decodes its intent from a policy head (rather than
+    copying the packet's ``agent_id``) can produce exactly this on a mask or
+    decode bug, which is why the orchestrator validates it.
+    """
+
+    def __init__(self, *, agent_id: PlayerId, acting_as: PlayerId) -> None:
+        self._agent_id = agent_id
+        self._acting_as = acting_as
+
+    def decide(
+        self, packet: ObservationPacket, public_map: PublicMapView
+    ) -> ActionIntent:
+        return _intent({"type": "wait", "actor": self._acting_as, "payload": {}})
+
+
+def test_headless_game_refuses_an_intent_forging_another_actor(
+    tmp_path: Path,
+) -> None:
+    # p-2's agent returns an intent acting as p-3. Untranslated, that action
+    # would reach the engine as p-3's — moving, killing, or calling a meeting on
+    # another player's behalf, recorded in the replay as that player's row. The
+    # boundary refuses it loudly rather than dispatching it.
+    def factory(agent_id: PlayerId, role: Role) -> _ForgingAgent | _ScriptedAgent:
+        if agent_id == "p-2":
+            return _ForgingAgent(agent_id=agent_id, acting_as="p-3")
+        return _ScriptedAgent(agent_id=agent_id)
+
+    game = HeadlessGame(
+        seed=42,
+        game_map=load_canonical_map(),
+        agent_factory=factory,
+        replay_path=tmp_path / "replay.jsonl",
+        scheduler=TickScheduler(max_ticks=2),
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        game.run()
+
+    message = str(excinfo.value)
+    # Names both seats: which agent was asked, and who it tried to act as.
+    assert "'p-2'" in message
+    assert "'p-3'" in message
+
+
+def test_headless_game_accepts_an_intent_for_its_own_actor(tmp_path: Path) -> None:
+    # The other side of the check: an agent naming ITS OWN seat is untouched by
+    # the validation (the whole suite depends on this, so it is pinned here).
+    def factory(agent_id: PlayerId, role: Role) -> _ForgingAgent:
+        return _ForgingAgent(agent_id=agent_id, acting_as=agent_id)
+
+    game = HeadlessGame(
+        seed=42,
+        game_map=load_canonical_map(),
+        agent_factory=factory,
+        replay_path=tmp_path / "replay.jsonl",
+        scheduler=TickScheduler(max_ticks=2),
+    )
+
+    result = game.run()
+
+    assert result.outcome == "TICK_BUDGET_REACHED"
+
+
 def test_headless_game_replay_is_byte_identical_for_same_seed(
     tmp_path: Path,
 ) -> None:
