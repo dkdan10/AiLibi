@@ -104,7 +104,39 @@ const KIND_LABEL: Record<TickerKind, string> = {
   vent: "vent",
 };
 
-const EMPTY_ENTRIES: readonly TickerEntry[] = [];
+// CAUSAL order for beats sharing one tick — the DTO's order is not it. The
+// loader appends `meeting_triggered` BEFORE `report_body`
+// (`api/replay_loader.py`), so rendering in arrival order narrated the meeting
+// before the report that triggered it, and the newest-first feed then stacked
+// the report ABOVE the meeting as though it happened later. Both readings are
+// backwards, and a feed whose job is narration cannot be backwards about cause.
+//
+// The rank is the physical sequence within a tick: an act, then its trace, then
+// the table's response to it. Sorting is STABLE, so several beats of one kind
+// keep the order the walk produced them in.
+const KIND_ORDER: Record<TickerKind, number> = {
+  kill: 0,
+  vent: 1,
+  body: 2,
+  report: 3,
+  meeting: 4,
+  ejection: 5,
+};
+
+/**
+ * The whole replay's beats, plus the per-frame boundary that makes any frame's
+ * prefix an O(1) slice.
+ *
+ * `countAtFrame[i]` is `entries.length` after frame `i` was walked, so
+ * `entries.slice(0, countAtFrame[i])` is exactly the frame-bounded feed — the
+ * cumulative walk stays a single pass and the frame-bounding stays exact.
+ */
+export interface TickerTimeline {
+  readonly entries: readonly TickerEntry[];
+  readonly countAtFrame: readonly number[];
+}
+
+const EMPTY_TIMELINE: TickerTimeline = { entries: [], countAtFrame: [] };
 
 /**
  * This agent's field of view at a frame, or `null` when it has none.
@@ -113,34 +145,43 @@ const EMPTY_ENTRIES: readonly TickerEntry[] = [];
  * frame or not alive has no perception to project, so nothing fog-gated may
  * surface for it.
  *
- * MISSING IS NOT EMPTY. `visibility` is `AgentVisibilityView | None` on the DTO,
- * and `null` is a LOAD-BEARING value there — `api/schemas.py` defines it as "the
- * agent is dead, it has no field of view". That makes this the subtlest place in
- * the file to swallow a malformed payload: an `undefined` coerced to `null`
- * would read as a perfectly legitimate blind agent, and the feed would then
- * suppress every witnessed kill, vent and body discovery while the public beats
- * kept rendering — a plausible sparse fog feed with nothing to distinguish it
- * from a real one. So the two cases are separated and the absent field is
- * REJECTED (AGENTS.md: if something is invalid, raise; do not paper over).
+ * NO FIELD OF VIEW IS A FACT ABOUT LIVENESS, NOT A DEFAULT. `api/schemas.py`
+ * states the invariant exactly: `visibility` is "`None` for a dead agent (no
+ * field of view) and populated for every living agent". So `alive` is the ONLY
+ * thing that may produce an empty fog, and it does so through the early return
+ * above. Once past it, both `undefined` (field absent — an incompatible payload)
+ * and `null` (a value the invariant forbids for a living agent) are REJECTED.
  *
- * The check is precise rather than paranoid: it runs only for a LIVING agent,
- * which is exactly where the loader guarantees a value ("the served replay path
- * always sets it"). The cast is the honest part — `api/client.ts` casts
- * unvalidated JSON, so the runtime can deliver a shape the generated type says
- * is impossible, and pretending otherwise is what let the coercion hide here.
+ * This is the subtlest place in the file to swallow a malformed payload, because
+ * an empty fog is a perfectly LEGITIMATE state elsewhere: coerced quietly, it
+ * reads as a real blind agent — every witnessed kill, vent and body discovery
+ * suppressed while the public beats keep rendering — and nothing in the output
+ * distinguishes it from a genuine sparse feed. A wrong answer that cannot be
+ * told from a right one is precisely what AGENTS.md's "raise, do not paper over"
+ * exists for.
+ *
+ * Verified rather than assumed before tightening: across all 18,649 agent-frames
+ * in the committed 9p2i + 4p1i sets, `alive && visibility === null` occurs zero
+ * times, and so does `!alive && visibility !== null`. The invariant is exact on
+ * served data, so the guard cannot fire on a compliant payload.
+ *
+ * The cast is the honest part — `api/client.ts` casts unvalidated JSON, so the
+ * runtime can deliver a shape the generated type calls impossible, and
+ * pretending otherwise is what let the original coercion look reasonable.
  */
 function fogVisibility(frame: TickView, agentId: string): AgentVisibilityView | null {
   const self = frame.agent_states.find((state) => state.agent_id === agentId) ?? null;
   if (self === null || !self.is_alive) {
-    return null;
+    return null; // the ONE legitimate no-fog path
   }
   const visibility = self.visibility as AgentVisibilityView | null | undefined;
-  if (visibility === undefined) {
+  if (visibility === undefined || visibility === null) {
     throw new Error(
-      `EventTicker: agent_states["${agentId}"] at tick ${frame.tick} carries no ` +
-        "`visibility` field. The versioned DTO requires it, and `null` there means " +
-        '"dead agent, no field of view" — an ABSENT field is an incompatible ' +
-        "payload, not an empty fog, and must not be rendered as one.",
+      `EventTicker: agent_states["${agentId}"] at tick ${frame.tick} is alive but ` +
+        `carries ${visibility === undefined ? "no `visibility` field" : "`visibility: null`"}. ` +
+        "The DTO promises visibility is populated for every living agent and `null` " +
+        'means "dead agent, no field of view" — so this is an incompatible payload, ' +
+        "not an empty fog, and must not be rendered as one.",
     );
   }
   return visibility;
@@ -171,32 +212,36 @@ function witnessedAction(
 }
 
 /**
- * The ticker's entries for everything that has played UP TO AND INCLUDING
- * `frameIndex`, projected through `perspective`.
+ * Walk the WHOLE replay once, recording where each frame's beats end.
  *
- * Pure and exported so the four fog cases are unit-pinnable without a renderer
- * (the vitest baseline Task 19.12 landed runs `environment: "node"`).
+ * ONE PASS PER (replay, perspective), not one per frame. The frame-scoped
+ * `projectTicker` below is the readable contract and the unit-test surface, but
+ * calling it on every `frameIndex` change makes a full playthrough quadratic in
+ * ticks — the same shape Task 6.7 removed from `MapView`, which precomputes
+ * `buildBodyStatesByTick` once per replay and indexes it by tick. This is that
+ * pattern: the component memoizes the timeline on `[replay, perspective]` and
+ * slices per frame, so autoplay costs a slice rather than a re-walk.
  *
- * Chronological — the component reverses for display, so "newest first" is a
- * presentation choice and this stays the natural order to reason about. The walk
- * ALWAYS starts at frame 0 rather than resuming from somewhere: body discovery
- * is de-duplicated across the whole walk (a body stays visible for many ticks,
- * and one sighting is one beat), which makes the result a function of the
- * position alone — the same frame yields the same feed however you arrived.
+ * (Honest magnitude: committed replays run 6–69 frames, so the quadratic is
+ * latent rather than a live bottleneck — 69² is nothing. It matters against the
+ * 1,000-tick `DEFAULT_MAX_TICKS` budget, and the fix is cheap and already the
+ * house pattern, so there is no reason to leave the shape in place.)
+ *
+ * Chronological, with each frame's beats in CAUSAL order (see `KIND_ORDER`). The
+ * walk always starts at frame 0: body discovery is de-duplicated across the
+ * whole walk, which is what makes the result a function of position alone — the
+ * same frame yields the same feed however you arrived.
  */
-export function projectTicker(
+export function projectTickerTimeline(
   ticks: readonly TickView[],
   meetings: readonly MeetingView[],
-  frameIndex: number,
   perspective: Perspective,
-): TickerEntry[] {
+): TickerTimeline {
   const entries: TickerEntry[] = [];
+  const countAtFrame: number[] = [];
   if (ticks.length === 0) {
-    return entries;
+    return { entries, countAtFrame };
   }
-  // Clamp rather than trust: an out-of-range index is a position, not a licence
-  // to read past the frame the viewer has actually reached.
-  const lastIndex = Math.max(0, Math.min(frameIndex, ticks.length - 1));
   const fogAgentId = perspective.mode === "agent" ? perspective.agentId : null;
 
   const meetingsByTick = new Map<number, MeetingView[]>();
@@ -213,15 +258,25 @@ export function projectTicker(
   // finding the body earlier. Fog only; Omniscient reports the kill itself.
   const accountedVictims = new Set<string>();
 
-  for (let index = 0; index <= lastIndex; index++) {
+  for (let index = 0; index < ticks.length; index++) {
     const frame = ticks[index];
     if (frame === undefined) {
+      countAtFrame.push(entries.length);
       continue;
     }
     const visibility = fogAgentId === null ? null : fogVisibility(frame, fogAgentId);
+    // Collected per frame so the whole frame can be causally ordered before it
+    // joins the timeline; `ordinal` is assigned at push time, so the keys stay
+    // unique regardless of how the sort below rearranges them.
+    const frameEntries: TickerEntry[] = [];
     let ordinal = 0;
     const push = (kind: TickerKind, text: string): void => {
-      entries.push({ key: `${frame.tick}:${ordinal}:${kind}`, tick: frame.tick, kind, text });
+      frameEntries.push({
+        key: `${frame.tick}:${ordinal}:${kind}`,
+        tick: frame.tick,
+        kind,
+        text,
+      });
       ordinal += 1;
     };
 
@@ -351,9 +406,56 @@ export function projectTicker(
         push("ejection", "Vote resolved — no ejection");
       }
     }
+
+    // Causal order within the tick, then the frame joins the timeline and its
+    // boundary is recorded. `Array.prototype.sort` is stable (ES2019+), so beats
+    // of equal rank keep the order the walk produced them in.
+    frameEntries.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
+    entries.push(...frameEntries);
+    countAtFrame.push(entries.length);
   }
 
-  return entries;
+  return { entries, countAtFrame };
+}
+
+/**
+ * The ticker's entries for everything that has played UP TO AND INCLUDING
+ * `frameIndex`, projected through `perspective`.
+ *
+ * The readable contract, and the unit-test surface: pure, frame-bounded, and
+ * expressible without a renderer (the vitest baseline Task 19.12 landed runs
+ * `environment: "node"`). The component does NOT call this per frame — it
+ * memoizes {@link projectTickerTimeline} and slices, which is the same work
+ * without the per-frame re-walk.
+ */
+export function projectTicker(
+  ticks: readonly TickView[],
+  meetings: readonly MeetingView[],
+  frameIndex: number,
+  perspective: Perspective,
+): TickerEntry[] {
+  const timeline = projectTickerTimeline(ticks, meetings, perspective);
+  return entriesThroughFrame(timeline, frameIndex, ticks.length);
+}
+
+/**
+ * The frame-bounded prefix of an already-walked timeline.
+ *
+ * Clamps rather than trusts, at BOTH ends — the same convention
+ * `lib/playback`'s `tickNumberAt` uses: an out-of-range index is a position, not
+ * a licence to read past the frame the viewer has actually reached, and not a
+ * reason to invent one either.
+ */
+export function entriesThroughFrame(
+  timeline: TickerTimeline,
+  frameIndex: number,
+  frameCount: number,
+): TickerEntry[] {
+  if (frameCount === 0) {
+    return [];
+  }
+  const clamped = Math.max(0, Math.min(frameIndex, frameCount - 1));
+  return timeline.entries.slice(0, timeline.countAtFrame[clamped] ?? 0);
 }
 
 /** The running feed beside the stage. Renders nothing until a replay is open. */
@@ -362,18 +464,28 @@ export function EventTicker() {
   const perspective = useReplayStore((s) => s.perspective);
   const { frameIndex, tickNumber } = usePlayback();
 
+  // Memoized on [replay, perspective] and deliberately NOT on `frameIndex`: the
+  // walk happens ONCE per replay/perspective and each frame is an O(1) slice of
+  // it. Depending on the frame here is what would make autoplay quadratic — the
+  // shape Task 6.7 removed from MapView, whose per-replay invariants
+  // (`buildBodyStatesByTick`) are memoized exactly like this.
+  //
   // `replay === null` is the only guard, and `ticks` / `meetings` are read
   // DIRECTLY off it. Both are required fields of the versioned DTO, so an
   // `?? []` normalisation would turn a malformed payload into an empty feed that
   // looks exactly like "nothing has happened yet" — a plausible false result,
   // which is the silent fallback AGENTS.md forbids. Read them straight: an
   // incompatible payload throws where a reader can see it.
-  const entries = useMemo(
+  const timeline = useMemo(
     () =>
       replay === null
-        ? EMPTY_ENTRIES
-        : projectTicker(replay.ticks, replay.meetings, frameIndex, perspective),
-    [replay, frameIndex, perspective],
+        ? EMPTY_TIMELINE
+        : projectTickerTimeline(replay.ticks, replay.meetings, perspective),
+    [replay, perspective],
+  );
+  const entries = useMemo(
+    () => entriesThroughFrame(timeline, frameIndex, replay?.ticks.length ?? 0),
+    [timeline, frameIndex, replay],
   );
 
   if (replay === null) {

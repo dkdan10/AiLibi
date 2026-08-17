@@ -28,7 +28,7 @@ import type {
   VisibleBodyView,
   VisiblePlayerView,
 } from "../types/api";
-import { projectTicker } from "./EventTicker";
+import { entriesThroughFrame, projectTicker, projectTickerTimeline } from "./EventTicker";
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -284,14 +284,32 @@ describe("kills through the As-agent projection", () => {
     expect(projectTicker(malformed, NO_MEETINGS, 1, OMNISCIENT)).toHaveLength(1);
   });
 
-  it("accepts an explicit null `visibility` as the real blind-agent state", () => {
-    // The other half of the distinction: `null` must keep working, or the guard
-    // above would have broken every dead-agent frame in the corpus.
+  it("accepts a DEAD agent's null `visibility` as the real blind state", () => {
+    // The other half of the distinction: `null` must keep working through the
+    // dead-agent path, or the guard would break every dead-agent frame in the
+    // corpus. Note `alive = false` — an earlier version of this test passed
+    // `watcherState(null)`, whose `alive` defaults to TRUE, and so pinned the
+    // INVALID combination below as acceptable. The schema is explicit that
+    // visibility is "populated for every living agent".
     const blind: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
-      frame(4, [kill(4)], [watcherState(null)]),
+      frame(4, [kill(4)], [watcherState(null, false)]),
     ];
     expect(projectTicker(blind, NO_MEETINGS, 1, AS_WATCHER)).toEqual([]);
+  });
+
+  it("REJECTS a LIVING agent whose `visibility` is null — the invariant forbids it", () => {
+    // Verified against the corpus before tightening: across all 18,649
+    // agent-frames in the committed 9p2i + 4p1i sets, `alive && visibility ===
+    // null` occurs zero times (and `!alive && visibility !== null` likewise), so
+    // this can only ever be a malformed payload.
+    const impossible: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(4, [kill(4)], [watcherState(null, true)]),
+    ];
+    expect(() => projectTicker(impossible, NO_MEETINGS, 1, AS_WATCHER)).toThrow(
+      /is alive but carries `visibility: null`/,
+    );
   });
 
   it("an agent with no field of view (dead / absent) sees no kill at all", () => {
@@ -492,9 +510,15 @@ describe("public beats", () => {
   it("a report, the meeting it opens, and how the vote resolved show in BOTH modes", () => {
     const omniscient = projectTicker(TICKS, [meeting(7)], 1, OMNISCIENT);
     const fogged = projectTicker(TICKS, [meeting(7)], 1, AS_WATCHER);
+    // CAUSAL order, which is NOT the DTO's: `api/replay_loader.py` appends
+    // `meeting_triggered` before `report_body`, so rendering in arrival order
+    // announced the meeting before the report that triggered it — and the
+    // newest-first feed then stacked the report above the meeting, as though the
+    // report came later. The body is reported, the meeting is called, the table
+    // votes.
     const expected = [
-      "Meeting called by p-1 · body",
       "p-1 reported p-5's body · REACTOR",
+      "Meeting called by p-1 · body",
       "p-4 ejected by the vote",
     ].join("\n");
     expect(lines(omniscient)).toBe(expected);
@@ -515,7 +539,7 @@ describe("public beats", () => {
       ),
     ];
     const kinds = projectTicker(reportTick, NO_MEETINGS, 1, AS_WATCHER).map((e) => e.kind);
-    expect(kinds).toEqual(["meeting", "report"]);
+    expect(kinds).toEqual(["report", "meeting"]);
     expect(kinds).not.toContain("body");
   });
 
@@ -602,6 +626,30 @@ describe("frame-bounding", () => {
 
   it("yields nothing for an empty timeline", () => {
     expect(projectTicker([], MEETINGS, 3, OMNISCIENT)).toEqual([]);
+    const timeline = projectTickerTimeline([], MEETINGS, OMNISCIENT);
+    expect(timeline.entries).toEqual([]);
+    expect(timeline.countAtFrame).toEqual([]);
+  });
+
+  it("walks ONCE: every frame's prefix is a slice of one timeline", () => {
+    // The component memoizes the timeline on [replay, perspective] and slices
+    // per frame; `projectTicker` is the same thing computed on demand. They must
+    // agree at every frame, or the O(1) playback path and the tested contract
+    // would be two different projections.
+    for (const perspective of [OMNISCIENT, AS_WATCHER]) {
+      const timeline = projectTickerTimeline(TICKS, MEETINGS, perspective);
+      // One boundary per frame, non-decreasing, ending at the full set.
+      expect(timeline.countAtFrame).toHaveLength(TICKS.length);
+      expect([...timeline.countAtFrame].sort((a, b) => a - b)).toEqual([
+        ...timeline.countAtFrame,
+      ]);
+      expect(timeline.countAtFrame.at(-1)).toBe(timeline.entries.length);
+      for (let index = 0; index < TICKS.length; index++) {
+        expect(entriesThroughFrame(timeline, index, TICKS.length)).toEqual(
+          projectTicker(TICKS, MEETINGS, index, perspective),
+        );
+      }
+    }
   });
 
   it("the fog projection is a SUBSET of the omniscient one at every frame", () => {
@@ -610,6 +658,37 @@ describe("frame-bounding", () => {
       const omniscient = projectTicker(TICKS, MEETINGS, index, OMNISCIENT);
       expect(fogged.length).toBeLessThanOrEqual(omniscient.length);
     }
+  });
+
+  it("orders a tick's beats CAUSALLY, not in the DTO's arrival order", () => {
+    // `api/replay_loader.py` appends `meeting_triggered` BEFORE `report_body`,
+    // and a kill can land on the same tick. Physical sequence: the act, its
+    // trace, then the table's response.
+    const busy: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(
+        7,
+        // Deliberately supplied in the loader's own (non-causal) order.
+        [meetingTriggered(7), reportBody(7), kill(7)],
+        [watcherState(visibility())],
+      ),
+    ];
+    const kinds = projectTicker(busy, [meeting(7)], 1, OMNISCIENT).map((e) => e.kind);
+    expect(kinds).toEqual(["kill", "report", "meeting", "ejection"]);
+  });
+
+  it("orders a fog body discovery before the report and meeting on its tick", () => {
+    const busy: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(
+        7,
+        [meetingTriggered(7), reportBody(7, "p-1", "p-9")],
+        // A DIFFERENT victim, so the report does not account this body away.
+        [watcherState(visibility([], [{ id: "b-2", room: "ADMIN", victim_id: "p-5" }]))],
+      ),
+    ];
+    const kinds = projectTicker(busy, NO_MEETINGS, 1, AS_WATCHER).map((e) => e.kind);
+    expect(kinds).toEqual(["body", "report", "meeting"]);
   });
 
   it("gives every entry a distinct key, including several on one tick", () => {
