@@ -82,8 +82,8 @@ bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 contents on demand, so you download roughly the 256 MiB the working tree needs
 rather than every version of every blob in the history. **The honest caveat:** a
 full-history clone stays heavy. Task 19.22 moved the Phase-18 co-evolution bytes
-no test reads onto a pinned evidence commit (−101 MiB in the working tree) but
-rewrote no history, so a plain `git clone` still pays for them, and will until
+no test reads onto a pinned evidence commit (a 28% smaller tracked working tree)
+but rewrote no history, so a plain `git clone` still pays for them, and will until
 someone deliberately rewrites history — which invalidates every existing clone
 and every commit sha these audits cite, and is not scheduled.
 [docs/artifacts.md](artifacts.md) is the retention rule; `scripts/fetch_evidence.sh`

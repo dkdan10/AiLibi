@@ -35,6 +35,12 @@ SLATE_MANIFEST="$REPO_ROOT/training/reports/_finalist_eval_raw/MANIFEST.md"
 COEVO_DEST="$REPO_ROOT/training/artifacts/coevo"
 SLATE_DEST="$REPO_ROOT/training/reports/_finalist_eval_raw"
 
+# Where the fetched commit is pinned locally. A fetch with no ref leaves the
+# objects unreachable, so a later `git gc` may prune them and a subsequent
+# offline --verify would lose the branch README it must check. NOT under
+# refs/heads: this is a pinned object, not a branch to work on.
+LOCAL_REF="refs/evidence/phase-18-coevo"
+
 mode="fetch"
 case "${1:-}" in
   "") ;;
@@ -94,6 +100,21 @@ restored_paths() {
   peel_digests | sed 's/^[0-9a-f]\{64\}  //'
 }
 
+# One cleanup list and one trap: several legs below need scratch files, and a
+# second `trap ... EXIT` would silently replace the first and leak the earlier
+# file.
+_scratch=()
+cleanup() {
+  if [[ ${#_scratch[@]} -gt 0 ]]; then rm -f "${_scratch[@]}"; fi
+}
+trap cleanup EXIT
+scratch_file() {
+  local f
+  f="$(mktemp)"
+  _scratch+=("$f")
+  printf '%s\n' "$f"
+}
+
 # --------------------------------------------------------------------------- #
 # clean                                                                        #
 # --------------------------------------------------------------------------- #
@@ -101,8 +122,7 @@ if [[ "$mode" == "clean" ]]; then
   # Tracked paths are never removed, whatever the manifest lists. The two sets
   # are disjoint by construction; this makes "--clean cannot delete your
   # checkout" true by code rather than by that construction holding.
-  tracked="$(mktemp)"
-  trap 'rm -f "$tracked"' EXIT
+  tracked="$(scratch_file)"
   git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
     training/reports/_finalist_eval_raw | sort > "$tracked"
   removed=0
@@ -130,24 +150,37 @@ if [[ "$mode" == "fetch" ]]; then
     echo "Fetching the evidence commit ${PINNED_SHA} from ${remote_url} ..."
     git -C "$REPO_ROOT" fetch --depth 1 "$remote_url" "$PINNED_SHA"
   fi
-
-  # The pin buys immutability only if what came back really is that commit, and
-  # really is the ONE-commit orphan the manifest describes. Both are asserted,
-  # loudly, before a single byte lands in the tree.
-  # "<sha> <parent>..." — an orphan commit lists itself and nothing else.
-  lineage="$(git -C "$REPO_ROOT" rev-list --parents -n 1 "$PINNED_SHA")"
-  if [[ "$lineage" != "$PINNED_SHA" ]]; then
-    echo "${PINNED_SHA} has a parent; the evidence commit is an orphan." >&2
-    echo "Refusing to restore from it (lineage: ${lineage})." >&2
+  # The pin buys immutability only if what came back really is the ONE-commit
+  # orphan the manifest describes — asserted loudly, before a single byte lands
+  # in the tree. Read from the RAW commit object, not from `rev-list --parents`:
+  # a --depth 1 fetch makes the commit a shallow boundary, and rev-list then
+  # suppresses its parents and reports any parented commit as an orphan
+  # (Codex review on PR #346, reproduced against a two-commit repo).
+  if git -C "$REPO_ROOT" cat-file commit "$PINNED_SHA" |
+    sed -n '/^$/q;p' | grep -q '^parent '; then
+    echo "${PINNED_SHA} has a parent header; the evidence commit is an orphan." >&2
+    echo "Refusing to restore from it." >&2
     exit 1
   fi
 
-  # A restore may only ADD files. The moved set and the retained set are
-  # disjoint by construction (EVIDENCE-MANIFEST.md §3), so an evidence path that
-  # is ALSO a tracked path means the manifest and the commit have drifted apart
-  # — the one failure this whole scheme exists to make impossible to miss.
-  # Checked against the index rather than the working tree, so unrelated local
-  # edits cannot masquerade as drift, and checked BEFORE anything is written.
+  # Pin the object locally so `git gc` cannot prune it: a bare sha fetch leaves
+  # it unreachable, and a later offline --verify needs the commit to check the
+  # branch README the manifest also covers.
+  git -C "$REPO_ROOT" update-ref "$LOCAL_REF" "$PINNED_SHA"
+
+  # A restore may only ADD files, so nothing already on disk may be clobbered.
+  # Two ways that could happen, both refused BEFORE anything is written:
+  #
+  #   1. an evidence path that is also a TRACKED path — the moved and retained
+  #      sets are disjoint by construction (EVIDENCE-MANIFEST.md §3), so this
+  #      means the manifest and the commit have drifted apart, which is the one
+  #      failure this whole scheme exists to make impossible to miss;
+  #   2. an evidence path that already exists UNTRACKED and differs from the
+  #      manifest — an edited earlier restore, or regenerated output parked at
+  #      the same path. `git ls-files` cannot see those (Codex review on PR
+  #      #346), so they are checked by digest. Untracked files that already
+  #      MATCH the manifest are not a collision: re-running the restore over
+  #      them is a no-op, which keeps the command idempotent.
   overlap="$(comm -12 <(restored_paths | sort) \
     <(git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
       training/reports/_finalist_eval_raw | sort))"
@@ -156,6 +189,24 @@ if [[ "$mode" == "fetch" ]]; then
     echo "the manifest and the commit disagree. Nothing was written." >&2
     printf '%s\n' "$overlap" | head -5 >&2
     exit 1
+  fi
+
+  present="$(scratch_file)"
+  # `if`, not `&&`: a final iteration whose test is false would make the loop —
+  # and so the pipeline — return 1, and `set -e` would kill the script here with
+  # no output at all.
+  peel_digests | while IFS= read -r row; do
+    if [[ -f "$REPO_ROOT/${row#*  }" ]]; then printf '%s\n' "$row"; fi
+  done > "$present"
+  if [[ -s "$present" ]]; then
+    if ! (cd "$REPO_ROOT" && sha256_check "$present"); then
+      echo "" >&2
+      echo "Files listed above already exist and do NOT match the manifest;" >&2
+      echo "restoring would overwrite them. Nothing was written. Remove or move" >&2
+      echo "them (or run 'bash scripts/fetch_evidence.sh --clean') and retry." >&2
+      exit 1
+    fi
+    echo "$(wc -l < "$present" | tr -d ' ') file(s) already restored and matching; re-restoring is a no-op."
   fi
 
   echo "Restoring coevo/ -> training/artifacts/coevo/ ..."
@@ -170,8 +221,7 @@ fi
 # --------------------------------------------------------------------------- #
 # verify                                                                       #
 # --------------------------------------------------------------------------- #
-digests="$(mktemp)"
-trap 'rm -f "$digests"' EXIT
+digests="$(scratch_file)"
 peel_digests > "$digests"
 expected="$(wc -l < "$digests" | tr -d ' ')"
 
@@ -190,18 +240,27 @@ echo "Verifying $expected restored file(s) against the manifest ..."
 # The branch's own README is manifest-covered too, but it is branch metadata
 # and is not restored into the tree — so it is checked straight out of the
 # commit, which keeps "every file the evidence commit carries has a digest"
-# literally true rather than true-except-one.
-if git -C "$REPO_ROOT" cat-file -e "${PINNED_SHA}:README.md" 2>/dev/null; then
-  readme_expected="$(awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$MANIFEST" |
-    awk '$2 == "README.md" {print $1}')"
-  readme_actual="$(git -C "$REPO_ROOT" cat-file blob "${PINNED_SHA}:README.md" |
-    sha256_stdin)"
-  if [[ "$readme_expected" != "$readme_actual" ]]; then
-    echo "The evidence commit's README.md does not match its manifest digest." >&2
-    exit 1
-  fi
-  expected=$((expected + 1))
+# literally true rather than true-except-one. If the commit object is not here,
+# that file cannot be covered, and reporting a clean 2,952 would quietly
+# under-deliver on what the manifest promises — so it FAILS instead of skipping
+# (Codex review on PR #346; AGENTS.md "no silent fallbacks").
+if ! git -C "$REPO_ROOT" cat-file -e "${PINNED_SHA}:README.md" 2>/dev/null; then
+  echo "The pinned commit ${PINNED_SHA} is not in this repository, so the" >&2
+  echo "evidence branch's own README.md cannot be verified and $expected of the" >&2
+  echo "manifest's $((expected + 1)) files would be covered. Run" >&2
+  echo "'bash scripts/fetch_evidence.sh' — it fetches the commit and pins it" >&2
+  echo "locally at ${LOCAL_REF}, after which --verify works offline." >&2
+  exit 1
 fi
+readme_expected="$(awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$MANIFEST" |
+  awk '$2 == "README.md" {print $1}')"
+readme_actual="$(git -C "$REPO_ROOT" cat-file blob "${PINNED_SHA}:README.md" |
+  sha256_stdin)"
+if [[ "$readme_expected" != "$readme_actual" ]]; then
+  echo "The evidence commit's README.md does not match its manifest digest." >&2
+  exit 1
+fi
+expected=$((expected + 1))
 
 echo "OK: $expected/$expected files match ${PINNED_SHA}."
 echo "These bytes are UNTRACKED BY DESIGN — do not commit them back."

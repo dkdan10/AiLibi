@@ -40,9 +40,19 @@ point.
 | **moved** to the evidence commit | **1,383** | **106,008,002** | **101.097** |
 | retained in-tree (§3) | 90 | 506,776 | 0.483 (494.9 KiB) |
 
-Across the whole tracked working tree that is **3,049 files / 356.958 MiB →
-1,666 files / 255.861 MiB** — a 28.3% reduction, all of it from
-this one directory. `replays/` did not move (locked decision 5).
+The **net** effect on the whole tracked working tree is smaller than the
+moved figure, because this task also ADDS three tracked files (this
+manifest, `docs/artifacts.md`, `scripts/fetch_evidence.sh`) and grows two
+more. Measured from the trees themselves, not by subtraction:
+
+| tracked working tree | files | bytes | MiB |
+|---|---:|---:|---:|
+| before | 3,049 | 374,298,090 | 356.958 |
+| after | 1,669 | 268,604,592 | 256.161 |
+| **net** | **-1,380** | **-105,693,498** | **-100.797** |
+
+That is a **28.2%** reduction, all of it out of this one directory.
+`replays/` did not move (locked decision 5).
 
 **No history was rewritten.** The moved blobs remain in this repository's
 history, so a full-history clone is not smaller — see the fast-clone note in
