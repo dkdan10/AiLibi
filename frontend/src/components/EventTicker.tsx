@@ -74,6 +74,7 @@ import { useReplayStore } from "../store/replayStore";
 import type {
   AgentVisibilityView,
   MeetingView,
+  TickEventView,
   TickView,
   VisiblePlayerView,
 } from "../types/api";
@@ -104,24 +105,47 @@ const KIND_LABEL: Record<TickerKind, string> = {
   vent: "vent",
 };
 
-// CAUSAL order for beats sharing one tick — the DTO's order is not it. The
-// loader appends `meeting_triggered` BEFORE `report_body`
-// (`api/replay_loader.py`), so rendering in arrival order narrated the meeting
-// before the report that triggered it, and the newest-first feed then stacked
-// the report ABOVE the meeting as though it happened later. Both readings are
-// backwards, and a feed whose job is narration cannot be backwards about cause.
-//
-// The rank is the physical sequence within a tick: an act, then its trace, then
-// the table's response to it. Sorting is STABLE, so several beats of one kind
-// keep the order the walk produced them in.
-const KIND_ORDER: Record<TickerKind, number> = {
-  kill: 0,
-  vent: 1,
-  body: 2,
-  report: 3,
-  meeting: 4,
-  ejection: 5,
-};
+/**
+ * A frame's events with the loader's ONE causal inversion corrected, and
+ * everything else exactly where the engine put it.
+ *
+ * The inversion: `api/replay_loader.py` appends `MeetingTriggeredEventView`
+ * and then, inside the body-trigger branch, the `ReportBodyEventView` that
+ * caused it. Rendered in arrival order the feed announced the meeting before the
+ * report, and the newest-first view stacked the report above it as though it
+ * came later — backwards in both reading directions.
+ *
+ * WHY THIS IS A SURGICAL SWAP AND NOT A SORT BY KIND. Arrival order is the
+ * engine's deterministic emission order, which IS chronological, so ranking
+ * independent events by kind corrupts real information: 9p2i seed 1 tick 7 emits
+ * p-6's vent EXIT before p-7's kill, and a kill-before-vent rank flips two
+ * unrelated acts — then the reversed feed shows the earlier vent above the later
+ * kill. Only the report/meeting pair is known to arrive inverted, so only it
+ * moves; every other event keeps its position.
+ */
+function orderFrameEvents(events: readonly TickEventView[]): TickEventView[] {
+  const ordered = [...events];
+  for (let index = 0; index < ordered.length; index++) {
+    if (ordered[index]?.type !== "report_body") {
+      continue;
+    }
+    let meetingAt = -1;
+    for (let back = index - 1; back >= 0; back--) {
+      if (ordered[back]?.type === "meeting_triggered") {
+        meetingAt = back;
+        break;
+      }
+    }
+    if (meetingAt === -1) {
+      continue; // already ahead of its meeting, or a report with no meeting
+    }
+    const [report] = ordered.splice(index, 1);
+    if (report !== undefined) {
+      ordered.splice(meetingAt, 0, report);
+    }
+  }
+  return ordered;
+}
 
 /**
  * The whole replay's beats, plus the per-frame boundary that makes any frame's
@@ -280,7 +304,7 @@ export function projectTickerTimeline(
       ordinal += 1;
     };
 
-    for (const event of frame.events) {
+    for (const event of orderFrameEvents(frame.events)) {
       switch (event.type) {
         case "kill": {
           if (fogAgentId === null) {
@@ -319,7 +343,20 @@ export function projectTickerTimeline(
           // the enter event printed `STORAGE → STORAGE`, and skipping the exit
           // dropped the destination entirely *and*, under fog, silently
           // discarded an emergence the agent genuinely witnessed.
-          const entering = event.phase === "enter";
+          // `phase` decides whether this beat is a dive or an emergence, and an
+          // unrecognised value must not default into either. `!== "enter"` alone
+          // would treat a missing or unknown phase as an EXIT and then fabricate
+          // an emergence — a route in Omniscient, an emergence endpoint in the
+          // actor's own fog — out of data that says no such thing.
+          const phase = event.phase as string;
+          if (phase !== "enter" && phase !== "exit") {
+            throw new Error(
+              `EventTicker: vent event at tick ${event.tick} has phase ` +
+                `${JSON.stringify(event.phase)}; the DTO admits only "enter" or ` +
+                '"exit". An unknown phase is an incompatible payload, not an exit.',
+            );
+          }
+          const entering = phase === "enter";
           if (fogAgentId === null) {
             push(
               "vent",
@@ -399,18 +436,46 @@ export function projectTickerTimeline(
     // How the table resolved. Public in both perspectives — the ejection is a
     // table-level fact; only the ejectee's ROLE is Omniscient-gated, and that
     // lives on MeetingView, not here.
+    //
+    // The two fields are COUPLED by the schema — `api/schemas.py` states it in
+    // as many words: "``outcome`` and ``ejected_player_id`` are coupled
+    // (EJECTED <=> non-null id)". So a contradiction is rejected rather than
+    // resolved into whichever branch it happens to fall through to. The previous
+    // `else` was the trap: an `EJECTED` meeting with a null id printed
+    // "Vote resolved — no ejection", which is not a degraded rendering of the
+    // truth but its exact opposite, and indistinguishable from a real SKIP.
+    // (0 contradictions across the 204 committed meetings — this cannot fire on
+    // a compliant payload.)
     for (const meeting of meetingsByTick.get(frame.tick) ?? []) {
-      if (meeting.outcome === "EJECTED" && meeting.ejected_player_id !== null) {
-        push("ejection", `${meeting.ejected_player_id} ejected by the vote`);
+      const ejectedId = meeting.ejected_player_id ?? null;
+      if (meeting.outcome === "EJECTED") {
+        if (ejectedId === null) {
+          throw new Error(
+            `EventTicker: meeting ${meeting.meeting_id} at tick ${meeting.tick} is ` +
+              "EJECTED with no `ejected_player_id`. The DTO couples the two " +
+              "(EJECTED <=> non-null id), so this is an incompatible payload — " +
+              'rendering it as "no ejection" would state the opposite of the outcome.',
+          );
+        }
+        push("ejection", `${ejectedId} ejected by the vote`);
       } else {
+        if (ejectedId !== null) {
+          throw new Error(
+            `EventTicker: meeting ${meeting.meeting_id} at tick ${meeting.tick} is ` +
+              `${meeting.outcome} but names an ejected player (${ejectedId}). The DTO ` +
+              "couples the two (EJECTED <=> non-null id), so this is an " +
+              "incompatible payload, not a skip.",
+          );
+        }
         push("ejection", "Vote resolved — no ejection");
       }
     }
 
-    // Causal order within the tick, then the frame joins the timeline and its
-    // boundary is recorded. `Array.prototype.sort` is stable (ES2019+), so beats
-    // of equal rank keep the order the walk produced them in.
-    frameEntries.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
+    // The frame joins the timeline in walk order and its boundary is recorded.
+    // No re-sort here: the events were already ordered on the way in, the fog's
+    // body discoveries follow them (they are derived from `visible_bodies`, not
+    // engine-emitted, so they carry no emission time of their own), and the
+    // resolution is last because that is when the table actually resolved.
     entries.push(...frameEntries);
     countAtFrame.push(entries.length);
   }

@@ -559,6 +559,40 @@ describe("public beats", () => {
     expect(lines(entries)).toContain("Vote resolved — no ejection");
   });
 
+  it("REJECTS an EJECTED meeting with no ejected player", () => {
+    // The schema couples them ("EJECTED <=> non-null id"; 0 contradictions across
+    // the 204 committed meetings). The old `else` printed "Vote resolved — no
+    // ejection" here, which is not a degraded rendering of the truth but its
+    // exact opposite, and indistinguishable from a real SKIP.
+    const contradictory: MeetingView = { ...meeting(7), ejected_player_id: null };
+    expect(() => projectTicker(TICKS, [contradictory], 1, OMNISCIENT)).toThrow(
+      /EJECTED with no `ejected_player_id`/,
+    );
+  });
+
+  it("REJECTS a SKIPPED meeting that names an ejected player", () => {
+    const contradictory: MeetingView = {
+      ...meeting(7, "SKIPPED", null),
+      ejected_player_id: "p-4",
+    };
+    expect(() => projectTicker(TICKS, [contradictory], 1, OMNISCIENT)).toThrow(
+      /names an ejected player/,
+    );
+  });
+
+  it("REJECTS a vent whose phase is neither enter nor exit", () => {
+    // `!== "enter"` alone treated anything unknown as an EXIT and then fabricated
+    // an emergence — a route in Omniscient, an endpoint in the actor's own fog.
+    const bogus = { ...vent(6), phase: "sideways" } as unknown as TickEventView;
+    const malformed: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(6, [bogus], [watcherState(visibility())]),
+    ];
+    expect(() => projectTicker(malformed, NO_MEETINGS, 1, OMNISCIENT)).toThrow(
+      /admits only "enter" or "exit"/,
+    );
+  });
+
   it("leaves out task completions and sabotage (sabotage would name an impostor)", () => {
     const noisy: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
@@ -660,16 +694,15 @@ describe("frame-bounding", () => {
     }
   });
 
-  it("orders a tick's beats CAUSALLY, not in the DTO's arrival order", () => {
-    // `api/replay_loader.py` appends `meeting_triggered` BEFORE `report_body`,
-    // and a kill can land on the same tick. Physical sequence: the act, its
-    // trace, then the table's response.
+  it("puts a body report before the meeting it triggered — the loader inverts them", () => {
+    // `api/replay_loader.py` appends `meeting_triggered` and only then the
+    // `report_body` that caused it, so arrival order announces the effect first.
     const busy: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
       frame(
         7,
-        // Deliberately supplied in the loader's own (non-causal) order.
-        [meetingTriggered(7), reportBody(7), kill(7)],
+        // The loader's own order: kill, then the inverted meeting/report pair.
+        [kill(7), meetingTriggered(7), reportBody(7)],
         [watcherState(visibility())],
       ),
     ];
@@ -677,18 +710,28 @@ describe("frame-bounding", () => {
     expect(kinds).toEqual(["kill", "report", "meeting", "ejection"]);
   });
 
-  it("orders a fog body discovery before the report and meeting on its tick", () => {
-    const busy: readonly TickView[] = [
+  it("PRESERVES engine order for independent events on one tick", () => {
+    // The counterpart of the swap above, and the reason it is surgical rather
+    // than a sort by kind: arrival order is the engine's deterministic emission
+    // order, so it is chronological and re-ranking it destroys real information.
+    // This is the committed case — 9p2i seed 1 tick 7 emits p-6's vent EXIT
+    // before p-7's kill — which a kill-before-vent rank would flip, and the
+    // reversed feed would then show the earlier vent above the later kill.
+    const independent: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
-      frame(
-        7,
-        [meetingTriggered(7), reportBody(7, "p-1", "p-9")],
-        // A DIFFERENT victim, so the report does not account this body away.
-        [watcherState(visibility([], [{ id: "b-2", room: "ADMIN", victim_id: "p-5" }]))],
-      ),
+      frame(7, [ventExit(7, "p-6"), kill(7, "p-7", "p-2")], [watcherState(visibility())]),
     ];
-    const kinds = projectTicker(busy, NO_MEETINGS, 1, AS_WATCHER).map((e) => e.kind);
-    expect(kinds).toEqual(["body", "report", "meeting"]);
+    const kinds = projectTicker(independent, NO_MEETINGS, 1, OMNISCIENT).map((e) => e.kind);
+    expect(kinds).toEqual(["vent", "kill"]);
+  });
+
+  it("leaves a report already ahead of its meeting alone", () => {
+    const already: readonly TickView[] = [
+      frame(START_TICK, [], [watcherState(visibility())]),
+      frame(7, [reportBody(7), meetingTriggered(7)], [watcherState(visibility())]),
+    ];
+    const kinds = projectTicker(already, NO_MEETINGS, 1, OMNISCIENT).map((e) => e.kind);
+    expect(kinds).toEqual(["report", "meeting"]);
   });
 
   it("gives every entry a distinct key, including several on one tick", () => {
