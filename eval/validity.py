@@ -88,31 +88,31 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final, NoReturn, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api import replay_loader
-from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.events import GameOverEvent, KilledEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick
-from engine.world import Map, load_canonical_map
+from engine.events import GameOverEvent, KilledEvent
+from engine.world import Map, WorldState, load_canonical_map
 from eval.balance_eval import load_tournament_report
 from eval.meeting_quality import compute_meeting_rate
+from eval.replay_walk import (
+    MeetingApplied,
+    ReplayWalkConfig,
+    TickAdvanced,
+    WalkComplete,
+    WalkViolation,
+    walk_replay,
+)
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.win_condition_selfcheck import WinConditionSelfCheck
-from meetings.schemas import AccusationClaim, MeetingResult
-from orchestrator.game import apply_meeting_result
+from meetings.schemas import AccusationClaim
 from orchestrator.replay import (
-    GameEndReplayEntry,
-    MeetingReplayEntry,
-    ReplayEntry,
     ReplayLog,
     SUBSTRATE_FLAG_KEYS,
     WinnerSide,
-    _state_hash,
-    read_all_entries,
     read_substrate_flags,
     substrate_flag_snapshot,
 )
@@ -171,8 +171,6 @@ _SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
     r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
     r"trust (?P<trust>[0-9]*\.?[0-9]+)"
 )
-
-_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 # The flat 4p/1i MVP baseline is the only committed set without a roster.json
 # (mirrors scripts/build_sample_report.py). A dir with no descriptor defaults
@@ -353,8 +351,9 @@ def _reconstruct_game(
 ) -> _GameReconstruction:
     """Re-seed + replay one game to recover its resolved kills + §6.3 self-check.
 
-    A single read-only engine playback (the same reconstruction
-    :func:`eval.win_condition_selfcheck.check_replay_win_condition` documents)
+    A single read-only engine playback — :func:`eval.replay_walk.walk_replay`
+    under the named ``validity-gate`` profile (Task 19.25; the same walk
+    :func:`eval.win_condition_selfcheck.check_replay_win_condition` performs) —
     that additionally collects every resolved :class:`~engine.events.KilledEvent`
     — kills have no importable metric home, so they are recovered here. Every
     reconstructed ``state_hash`` is verified against the recording, so a wrong
@@ -365,29 +364,14 @@ def _reconstruct_game(
     """
 
     game_id = f"headless-seed-{seed}"
-    entries = read_all_entries(replay_path)
-    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
-    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
-    }
-    game_end = next(
-        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
-    )
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
 
     kills: list[_KillFact] = []
     first_zero_impostor_tick: int | None = None
     reconstructed_winner: WinnerSide | None = None
     reconstructed_reason: str | None = None
+    game_end = None
 
-    def _record_zero(tick: int) -> None:
+    def _record_zero(tick: int, state: WorldState) -> None:
         nonlocal first_zero_impostor_tick
         if first_zero_impostor_tick is not None:
             return
@@ -399,70 +383,40 @@ def _reconstruct_game(
         if alive_impostors == 0:
             first_zero_impostor_tick = tick
 
-    for entry in tick_entries:
-        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        state, events = advance_tick(state, actions, game_map=game_map)
-        _verify_reconstruction(
-            game_id, entry.tick, entry.state_hash, _state_hash(state)
-        )
-        for event in events:
-            if isinstance(event, GameOverEvent):
-                reconstructed_winner = event.winner
-                reconstructed_reason = event.reason
-            elif isinstance(event, KilledEvent):
-                kills.append(
-                    _KillFact(
-                        seed=seed,
-                        tick=event.tick,
-                        killer=event.actor,
-                        killer_role=roles.get(event.actor),
-                        victim=event.target,
-                        victim_role=roles.get(event.target),
+    for walk_event in walk_replay(
+        replay_path,
+        seed=seed,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+        config=_WALK_CONFIG,
+    ):
+        if isinstance(walk_event, TickAdvanced):
+            for event in walk_event.events:
+                if isinstance(event, GameOverEvent):
+                    reconstructed_winner = event.winner
+                    reconstructed_reason = event.reason
+                elif isinstance(event, KilledEvent):
+                    kills.append(
+                        _KillFact(
+                            seed=seed,
+                            tick=event.tick,
+                            killer=event.actor,
+                            killer_role=roles.get(event.actor),
+                            victim=event.target,
+                            victim_role=roles.get(event.target),
+                        )
                     )
-                )
-        _record_zero(entry.tick)
-
-        if state.phase == "GAME_OVER":
-            break
-        if state.phase != "MEETING":
-            continue
-
-        meeting_entry = meeting_by_tick.get(entry.tick)
-        if meeting_entry is None:
-            # Partial replay: a meeting opened but never resolved (the run
-            # crashed mid-meeting). Stop the walk, matching the loader.
-            break
-        body_id = next(
-            (
-                event.body_id
-                for event in events
-                if isinstance(event, MeetingTriggeredEvent)
-            ),
-            None,
-        )
-        result = MeetingResult(
-            meeting_id=meeting_entry.meeting_id,
-            triggered_by=meeting_entry.triggered_by,
-            trigger_tick=meeting_entry.tick,
-            outcome=meeting_entry.outcome,
-            ejected_player_id=meeting_entry.ejected_player_id,
-            ballots=meeting_entry.ballots,
-            contradictions=meeting_entry.contradictions,
-            transcript=meeting_entry.transcript,
-        )
-        state, meeting_events = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
-        )
-        for event in meeting_events:
-            if isinstance(event, GameOverEvent):
-                reconstructed_winner = event.winner
-                reconstructed_reason = event.reason
-        _verify_reconstruction(
-            game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
-        )
-        _record_zero(meeting_entry.tick)
-        if state.phase == "GAME_OVER":
-            break
+            _record_zero(walk_event.entry.tick, walk_event.state)
+        elif isinstance(walk_event, MeetingApplied):
+            for event in walk_event.post_events:
+                if isinstance(event, GameOverEvent):
+                    reconstructed_winner = event.winner
+                    reconstructed_reason = event.reason
+            _record_zero(walk_event.entry.tick, walk_event.state)
+        elif isinstance(walk_event, WalkComplete):
+            game_end = walk_event.game_end
 
     win_check = WinConditionSelfCheck(
         game_id=game_id,
@@ -481,13 +435,26 @@ def _reconstruct_game(
     )
 
 
-def _verify_reconstruction(game_id: str, tick: int, expected: str, actual: str) -> None:
-    if actual != expected:
-        raise ValueError(
-            f"validity-gate reconstruction diverged for {game_id!r} at tick "
-            f"{tick}: recorded {expected!r}, reconstructed {actual!r}. The roster "
-            "does not match the recording, or engine playback is non-deterministic."
-        )
+def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    raise ValueError(
+        f"validity-gate reconstruction diverged for {violation.game_id!r} at tick "
+        f"{violation.tick}: recorded {violation.expected!r}, reconstructed "
+        f"{violation.actual!r}. The roster "
+        "does not match the recording, or engine playback is non-deterministic."
+    )
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
+# per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
+# meeting — the gate deliberately serves what a recording contains, matching
+# the loader (the completeness checks own game-over/duplicate-row policing).
+_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="validity-gate",
+    on_violation=_raise_walk_violation,
+    verify_tick_hashes=True,
+    missing_meeting_row="truncate",
+    verify_meeting_post_hashes=True,
+)
 
 
 def _reconstruct_set(sample_dir: Path) -> list[_GameReconstruction]:
