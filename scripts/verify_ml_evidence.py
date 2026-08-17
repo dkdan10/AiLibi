@@ -145,6 +145,14 @@ WALK_SKIP_DIRS: Final[frozenset[str]] = frozenset(
 _SIDECAR_SUFFIX: Final = ".sha256"
 _REPLAY_GLOB: Final = "replay-seed-*.jsonl"
 
+#: The evidence commit's two top-level prefixes, as the manifests spell them.
+_COEVO_PREFIX: Final = "coevo/"
+_SLATE_PREFIX: Final = "finalist-eval-raw/"
+
+#: The EVIDENCE-MANIFEST section heading whose table enumerates the bytes the
+#: 19.22 prune RETAINED in-tree — the committed in-tree inventory.
+_RETAINED_SECTION: Final = "## 3. What stayed in-tree"
+
 # The fenced digest blocks both evidence manifests carry, and the row shape
 # inside them: ``<64 hex>  <path>`` — shasum-compatible, which is why
 # scripts/fetch_evidence.sh can feed them straight to ``sha256sum -c``.
@@ -226,6 +234,24 @@ class EvidenceRow:
 
 
 @dataclass(frozen=True)
+class Ruling:
+    """A dated availability ruling recorded in `docs/artifacts.md`.
+
+    ``lost`` is the whole point: a ruling that records a LOSS means the bytes it
+    covers were never promised archival availability, so they are not part of
+    the promised set ``--complete`` requires. A ratified loss is a valid close
+    state; the deadlock it would otherwise cause is not.
+    """
+
+    date: str
+    outcome: str
+
+    @property
+    def lost(self) -> bool:
+        return self.outcome in _LOSS_RULINGS
+
+
+@dataclass(frozen=True)
 class Context:
     """Everything the legs share: the tree under test and the run's mode."""
 
@@ -234,6 +260,29 @@ class Context:
     complete: bool
     evidence: tuple[EvidenceRow, ...]
     pinned_sha: str
+    #: The Task 19.21 raw-slate ruling, or ``None`` when the document records
+    #: none (which is itself a failure the availability leg reports).
+    slate_ruling: Ruling | None
+
+    @property
+    def lost_prefixes(self) -> frozenset[str]:
+        """Evidence-commit prefixes a committed ruling records as LOST.
+
+        Every promised-byte check subtracts these. Excluding them at the SOURCE
+        rather than relabelling a summary row afterwards is what makes a
+        recorded loss acceptable to ``--complete``: with the coevo payload
+        restored and a lost slate absent, an aggregate that still counted the
+        slate would read PARTIAL and fail the close on bytes nobody promised.
+        """
+
+        if self.slate_ruling is not None and self.slate_ruling.lost:
+            return frozenset({_SLATE_PREFIX})
+        return frozenset()
+
+    def is_lost(self, row: EvidenceRow) -> bool:
+        return any(
+            row.manifest_path.startswith(prefix) for prefix in self.lost_prefixes
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -351,6 +400,83 @@ def read_pinned_sha(repo_root: Path) -> str:
     raise EvidenceError(
         f"{EVIDENCE_MANIFEST}: no pinned sha on the '{_PIN_ROW_MARKER}' row"
     )
+
+
+def read_slate_ruling(repo_root: Path) -> Ruling | None:
+    """The Task 19.21 raw-slate ruling, read from the registry document.
+
+    ``None`` when the document records no dated ruling at all — which the
+    availability leg reports as a FAILURE, because an unrecorded outcome is
+    exactly the silent state the close forbids. Read rather than transcribed, so
+    a later ruling change moves this command with it.
+    """
+
+    match = _RULING_RE.search(_read_text(repo_root, ARTIFACTS_DOC))
+    if match is None:
+        return None
+    return Ruling(date=match.group(1), outcome=match.group(2))
+
+
+def retained_in_tree_paths(repo_root: Path) -> list[str]:
+    """The paths `EVIDENCE-MANIFEST.md` §3 enumerates as RETAINED in-tree.
+
+    Task 19.22's consumer enumeration, taken empirically from a full pytest run
+    and committed as the record of what may not move. It is the only committed
+    INVENTORY of in-tree evidence this repository owns, which is what makes it
+    the answer to "did a retained byte disappear?" — a question a walk of the
+    working tree cannot ask itself, because a file and its sidecar deleted
+    together simply shrink the walk.
+    """
+
+    text = _read_text(repo_root, EVIDENCE_MANIFEST)
+    if _RETAINED_SECTION not in text:
+        raise EvidenceError(
+            f"{EVIDENCE_MANIFEST}: no '{_RETAINED_SECTION}' section — the "
+            "committed in-tree inventory cannot be read"
+        )
+    section = text.split(_RETAINED_SECTION, 1)[1].split("\n## ", 1)[0]
+    paths = [
+        cells[0].strip("`")
+        for cells in _table_rows(section)
+        if len(cells) == 2 and cells[0].startswith("`") and cells[0].endswith("`")
+    ]
+    if not paths:
+        raise EvidenceError(
+            f"{EVIDENCE_MANIFEST} §3: no retained-path rows — the committed "
+            "in-tree inventory cannot be read"
+        )
+    return paths
+
+
+def git_tracked_sidecars(repo_root: Path) -> list[str] | None:
+    """Every tracked ``*.sha256`` path, or ``None`` when there is no git index.
+
+    Git is the only committed record of the in-tree sidecars that no manifest
+    enumerates (the map-elites cells, the torch-probe artifacts). ``None`` is
+    reported as its own ABSENT row rather than skipped: without an inventory the
+    in-tree count is self-derived, and a self-derived count cannot notice a
+    deletion.
+    """
+
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "ls-files",
+                "-z",
+                "--",
+                f"*{_SIDECAR_SUFFIX}",
+            ],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return [name for name in completed.stdout.decode().split("\0") if name]
 
 
 def _git_blob(repo_root: Path, revision: str, path: str) -> bytes | None:
@@ -524,9 +650,15 @@ def _relative(path: Path, repo_root: Path) -> str:
 def run_sidecars(ctx: Context) -> LegResult:
     """Per-class sha verification: in-tree offline, evidence-branch on restore."""
 
+    # The FULL moved set classifies what is not in-tree; the PROMISED subset is
+    # what a restore is required to produce (a recorded loss is not a promise).
     moved_paths = {row.repo_path for row in ctx.evidence if row.repo_path is not None}
     moved_sidecars = sorted(
-        path for path in moved_paths if path.endswith(_SIDECAR_SUFFIX)
+        row.repo_path
+        for row in ctx.evidence
+        if row.repo_path is not None
+        and row.repo_path.endswith(_SIDECAR_SUFFIX)
+        and not ctx.is_lost(row)
     )
     on_disk = walk_sidecars(ctx.repo_root)
     in_tree = [
@@ -549,10 +681,84 @@ def run_sidecars(ctx: Context) -> LegResult:
                 f"{len(in_tree)} sidecars / {in_tree_targets} targets verified, "
                 f"{len(in_tree_failures)} failure(s)"
             ),
-            committed=f"{len(in_tree)} sidecars found in the working tree",
+            # Deliberately NOT "<n> sidecars, as expected": a walk of the working
+            # tree cannot state its own expected size. A file and its sidecar
+            # deleted together shrink the walk and every count derived from it,
+            # so the inventory is checked against a committed record below —
+            # this row only says that what IS here hashes correctly.
+            committed="every sidecar present hashes its target (inventory: below)",
             source="the working tree (every *.sha256 outside caches/build output)",
             status="FAIL" if in_tree_failures else "OK",
             detail="\n".join(in_tree_failures[:10]),
+        )
+    )
+
+    # --- the in-tree INVENTORY, from the two committed records that own it. ---
+    tracked = git_tracked_sidecars(ctx.repo_root)
+    if tracked is None:
+        rows.append(
+            CheckRow(
+                name="sidecars[IN-TREE] inventory",
+                measured=f"{len(in_tree)} on disk; no git index here",
+                committed="`git ls-files '*.sha256'` — the committed inventory",
+                source="git (the only record covering non-manifest sidecars)",
+                status="ABSENT",
+                detail=(
+                    "without an inventory the in-tree count is self-derived, and "
+                    "a self-derived count cannot notice a deletion — so this is "
+                    "reported, never assumed clean"
+                ),
+            )
+        )
+    else:
+        expected = {path for path in tracked if path not in moved_paths}
+        found = {_relative(path, ctx.repo_root) for path in in_tree}
+        missing = sorted(expected - found)
+        extra = sorted(found - expected)
+        rows.append(
+            CheckRow(
+                name="sidecars[IN-TREE] inventory",
+                measured=f"{len(found)} on disk, {len(missing)} tracked but absent",
+                committed=f"{len(expected)} tracked in-tree sidecars",
+                source="`git ls-files '*.sha256'` minus the moved set",
+                status="FAIL" if missing else "OK",
+                detail="\n".join(
+                    part
+                    for part in (
+                        "tracked but absent: " + ", ".join(missing[:10])
+                        if missing
+                        else "",
+                        # Untracked extras are local state, not a defect —
+                        # reported so the count is explainable, never failed on.
+                        f"{len(extra)} untracked sidecar(s) on disk: "
+                        + ", ".join(extra[:5])
+                        if extra
+                        else "",
+                    )
+                    if part
+                ),
+            )
+        )
+
+    # --- the RETAINED in-tree evidence the prune's own enumeration names. ---
+    retained = retained_in_tree_paths(ctx.repo_root)
+    retained_missing = [
+        rel for rel in retained if not (ctx.repo_root / COEVO_DEST / rel).exists()
+    ]
+    rows.append(
+        CheckRow(
+            name="retained in-tree evidence",
+            measured=(
+                f"{len(retained) - len(retained_missing)}/{len(retained)} present"
+            ),
+            committed=f"{len(retained)} paths the prune retained",
+            source=f"{EVIDENCE_MANIFEST} §3 (the consumer enumeration)",
+            status="FAIL" if retained_missing else "OK",
+            detail=(
+                "absent: " + ", ".join(retained_missing[:10])
+                if retained_missing
+                else ""
+            ),
         )
     )
 
@@ -615,12 +821,19 @@ def run_sidecars(ctx: Context) -> LegResult:
     )
 
     # --- class EVIDENCE-BRANCH: the whole payload, not only its sidecars. ---
-    payload = [
-        (row.repo_path, row.digest) for row in ctx.evidence if row.repo_path is not None
+    # The PROMISED set only. Bytes a committed ruling records as LOST were never
+    # promised archival availability, so they are subtracted here rather than
+    # relabelled downstream: with the coevo payload restored and a lost slate
+    # absent, an aggregate that still counted the slate would read PARTIAL and
+    # fail the close on bytes nobody promised (Codex review, PR #348).
+    promised = [
+        (row.repo_path, row.digest)
+        for row in ctx.evidence
+        if row.repo_path is not None and not ctx.is_lost(row)
     ]
     payload_present = 0
     payload_failures: list[str] = []
-    for repo_path, digest in payload:
+    for repo_path, digest in promised:
         path = ctx.repo_root / repo_path
         if not path.is_file():
             continue
@@ -630,10 +843,10 @@ def run_sidecars(ctx: Context) -> LegResult:
             payload_failures.append(
                 f"{repo_path}: sha256 {actual[:12]}… != manifest {digest[:12]}…"
             )
-    payload_absent = len(payload) - payload_present
+    payload_absent = len(promised) - payload_present
     if payload_failures:
         payload_status: Status = "FAIL"
-    elif payload_absent == len(payload):
+    elif payload_absent == len(promised):
         payload_status = "ABSENT"
     elif payload_absent:
         payload_status = "FAIL"
@@ -643,10 +856,10 @@ def run_sidecars(ctx: Context) -> LegResult:
         CheckRow(
             name="evidence payload",
             measured=(
-                f"{payload_present} of {len(payload)} restored and hashed; "
+                f"{payload_present} of {len(promised)} restored and hashed; "
                 f"{payload_absent} EVIDENCE-BRANCH-ABSENT"
             ),
-            committed=f"{len(payload)} files on {ctx.pinned_sha[:12]}…",
+            committed=f"{len(promised)} PROMISED files on {ctx.pinned_sha[:12]}…",
             source=f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7",
             status=payload_status,
             detail=(
@@ -661,6 +874,28 @@ def run_sidecars(ctx: Context) -> LegResult:
             ),
         )
     )
+
+    # --- and, separately, whatever a ruling records as LOST. ---
+    lost_rows = [row for row in ctx.evidence if ctx.is_lost(row)]
+    if lost_rows:
+        ruling = ctx.slate_ruling
+        assert ruling is not None  # lost_prefixes is empty without a ruling
+        rows.append(
+            CheckRow(
+                name="evidence payload[LOST]",
+                measured=(
+                    f"{len(lost_rows)} file(s) recorded LOST "
+                    f"({ruling.outcome}, {ruling.date})"
+                ),
+                committed=f"{ruling.outcome} — a ratified loss, not a promise",
+                source=f"{ARTIFACTS_DOC} (the Task 19.21 ruling)",
+                status="INFO",
+                detail=(
+                    "the bytes are gone and the record is not; a recorded loss "
+                    "is a valid close state, which is why --complete accepts it"
+                ),
+            )
+        )
 
     # --- the branch's own README: hashed by the manifest, never restored. ---
     readme_rows = [row for row in ctx.evidence if row.repo_path is None]
@@ -861,6 +1096,16 @@ def run_corpus(ctx: Context) -> LegResult:
 #: evidence drift.
 FLOAT_TOLERANCE: Final = 1e-12
 
+#: The three constraint keys the composed verdict was adopted with, in order.
+#: Carried metadata the fidelity cannot re-derive, so it is pinned by name here
+#: exactly as ``tests/training/test_composed_runner.py`` pins it — an emptied or
+#: reordered list is a drift, not a normalization.
+_COMPOSED_ADOPTION_CONSTRAINTS: Final[tuple[str, ...]] = (
+    "composed-provenance-validity[all-arms,9p2i]",
+    "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]",
+    "emergency-predicted-supply-above-bar[emergency,9p2i]",
+)
+
 
 def _float_row(
     name: str,
@@ -1014,11 +1259,12 @@ def run_recompute(ctx: Context) -> LegResult:
             "conviction verdict.json reproduces",
             rederived=conviction_rederived.model_dump(),
             committed=conviction_committed.model_dump(),
+            repo_root=ctx.repo_root,
             # The committed artifact stores the REPO-RELATIVE corpus path; this
             # run built its table from an absolute one, so the identity field is
-            # normalized and every MEASURED field compares raw (the
+            # resolved on both sides and every other field compares raw (the
             # test_committed_verdict_reproduces_from_the_frozen_weights idiom).
-            normalized={"replay_set_dir"},
+            path_fields=("replay_set_dir",),
             source=f"{CONVICTION_DIR}/verdict.json",
         )
     )
@@ -1059,15 +1305,52 @@ def run_recompute(ctx: Context) -> LegResult:
             f"{COMPOSED_DIR}/verdict.json (convicting_top1)",
         )
     )
+    # ``adoption_constraints`` is the Goodhart leg's CARRIED metadata: the
+    # re-derived verdict cannot produce it (nothing in the fidelity report holds
+    # it), so it is spliced from the committed side before the identity compare
+    # — and then pinned by name in its own row below, because excluding it
+    # outright meant the three named constraints could be edited or emptied and
+    # the identity row would still read "all fields identical" (Codex review,
+    # PR #348). This is exactly what tests/training/test_composed_runner.py does.
+    composed_rederived_dump = composed_rederived.model_dump()
+    composed_committed_dump = composed_committed.model_dump()
+    composed_rederived_dump["adoption_constraints"] = composed_committed_dump[
+        "adoption_constraints"
+    ]
     rows.append(
         _verdict_identity_row(
             "composed verdict.json reproduces",
-            rederived=composed_rederived.model_dump(),
-            committed=composed_committed.model_dump(),
-            # ``adoption_constraints`` is the Goodhart leg's carried metadata,
-            # not derivable from the fidelity, so it is normalized like the path.
-            normalized={"replay_set_dir", "adoption_constraints"},
+            rederived=composed_rederived_dump,
+            committed=composed_committed_dump,
+            repo_root=ctx.repo_root,
+            path_fields=("replay_set_dir",),
             source=f"{COMPOSED_DIR}/verdict.json",
+        )
+    )
+    carried = composed_committed.adoption_constraints
+    measured_prefixes = [str(item).split(":", 1)[0] for item in carried]
+    rows.append(
+        CheckRow(
+            name="composed adoption constraints",
+            measured=(
+                f"{len(carried)} carried: {', '.join(measured_prefixes)}"
+                if carried
+                else "none carried"
+            ),
+            committed=", ".join(_COMPOSED_ADOPTION_CONSTRAINTS),
+            source=f"{COMPOSED_DIR}/verdict.json (adoption_constraints)",
+            status="OK"
+            if measured_prefixes == list(_COMPOSED_ADOPTION_CONSTRAINTS)
+            else "FAIL",
+            detail=(
+                ""
+                if measured_prefixes == list(_COMPOSED_ADOPTION_CONSTRAINTS)
+                else (
+                    "the Goodhart leg's carried constraints are not the three "
+                    "the composed verdict was adopted with; a silently emptied "
+                    "list is the drift this row exists to catch"
+                )
+            ),
         )
     )
 
@@ -1104,24 +1387,41 @@ def _verdict_identity_row(
     *,
     rederived: dict[str, object],
     committed: dict[str, object],
-    normalized: set[str],
+    repo_root: Path,
+    path_fields: tuple[str, ...],
     source: str,
 ) -> CheckRow:
-    """The strongest pin: the whole committed verdict object, field for field."""
+    """The strongest pin: the whole committed verdict object, field for field.
 
-    drifted = sorted(
-        key
-        for key in set(rederived) | set(committed)
-        if key not in normalized and rederived.get(key) != committed.get(key)
-    )
-    compared = len(set(rederived) | set(committed)) - len(normalized)
+    ``path_fields`` name the corpus-identity fields the committed artifact
+    stores REPO-RELATIVE while a live run produces an absolute path. They are
+    normalized and then COMPARED — not dropped. Dropping them meant a verdict
+    pointing at a different corpus still read "all fields identical", which is
+    the opposite of what an identity pin is for (Codex review, PR #348). Every
+    other field, including carried metadata, compares raw.
+    """
+
+    keys = set(rederived) | set(committed)
+    drifted: list[str] = []
+    for key in sorted(keys):
+        ours, theirs = rederived.get(key), committed.get(key)
+        if key in path_fields:
+            # Same corpus, spelled two ways: resolve both against the repo root.
+            if not (isinstance(ours, str) and isinstance(theirs, str)):
+                drifted.append(key)
+                continue
+            if (repo_root / ours).resolve() != (repo_root / theirs).resolve():
+                drifted.append(key)
+            continue
+        if ours != theirs:
+            drifted.append(key)
     return CheckRow(
         name=name,
-        measured=(
-            f"{compared - len(drifted)}/{compared} fields identical"
-            f" ({len(normalized)} normalized: {', '.join(sorted(normalized))})"
+        measured=f"{len(keys) - len(drifted)}/{len(keys)} fields identical",
+        committed=(
+            f"{len(keys)} fields ({len(path_fields)} corpus-path field(s) "
+            "compared after resolving)"
         ),
-        committed=f"{compared} measured fields",
         source=source,
         status="OK" if not drifted else "FAIL",
         detail="\n".join(
@@ -1592,6 +1892,16 @@ def run_availability(ctx: Context) -> LegResult:
             if count_note:
                 status: Status = "FAIL"
                 measured: str = "MANIFEST/REGISTRY DISAGREE"
+            elif prefix in ctx.lost_prefixes:
+                # A ruling records these bytes as gone, so their absence is the
+                # recorded outcome rather than an unmet promise.
+                ruling = ctx.slate_ruling
+                status = "INFO"
+                measured = (
+                    f"LOST (recorded {ruling.date})"
+                    if ruling is not None
+                    else "LOST (recorded)"
+                )
             elif present == total:
                 status = "OK"
                 measured = "EVIDENCE-BRANCH-RESTORED"
@@ -1649,8 +1959,8 @@ def run_availability(ctx: Context) -> LegResult:
         )
 
     # ---- the Task 19.21 raw-slate ruling, read from the registry document. ----
-    ruling = _RULING_RE.search(_read_text(ctx.repo_root, ARTIFACTS_DOC))
-    if ruling is None:
+    slate_ruling = ctx.slate_ruling
+    if slate_ruling is None:
         rows.append(
             CheckRow(
                 name="Phase-18 finalist raw slate (Task 19.21 outcome)",
@@ -1665,10 +1975,10 @@ def run_availability(ctx: Context) -> LegResult:
             )
         )
     else:
-        ruling_date, outcome = ruling.group(1), ruling.group(2)
-        lost = outcome in _LOSS_RULINGS
-        slate_present = present_by_prefix.get("finalist-eval-raw/", 0)
-        slate_total = total_by_prefix.get("finalist-eval-raw/", 0)
+        ruling_date, outcome = slate_ruling.date, slate_ruling.outcome
+        lost = slate_ruling.lost
+        slate_present = present_by_prefix.get(_SLATE_PREFIX, 0)
+        slate_total = total_by_prefix.get(_SLATE_PREFIX, 0)
         if lost:
             slate_status: Status = "INFO"
             slate_measured = f"LOST (recorded {ruling_date})"
@@ -1839,6 +2149,7 @@ def main(argv: list[str] | None = None) -> int:
             complete=complete,
             evidence=evidence_rows(repo_root),
             pinned_sha=read_pinned_sha(repo_root),
+            slate_ruling=read_slate_ruling(repo_root),
         )
         mode = "complete" if complete else ("fast" if fast else "full")
         print(f"=== verify-ml-evidence ({mode}) — {repo_root} ===")

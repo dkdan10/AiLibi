@@ -35,6 +35,16 @@ import verify_ml_evidence as vme
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLE_SET = "replays/samples/4p1i"
 
+#: The minimum §3 section a synthetic EVIDENCE-MANIFEST needs: the sidecar leg
+#: reads the retained-path enumeration from it, so a scratch manifest carries an
+#: empty-but-well-formed one rather than none.
+_RETAINED_SECTION_STUB = (
+    "## 3. What stayed in-tree — the consumer enumeration\n\n"
+    "| retained path | retained because |\n"
+    "|---|---|\n"
+    "| `PATHS.md` | **rule** |\n\n"
+)
+
 
 # --------------------------------------------------------------------------- #
 # scratch-tree helpers                                                          #
@@ -76,6 +86,11 @@ def _context(root: Path, *, fast: bool = False, complete: bool = False) -> vme.C
         complete=complete,
         evidence=vme.evidence_rows(root),
         pinned_sha=vme.read_pinned_sha(root),
+        slate_ruling=(
+            vme.read_slate_ruling(root)
+            if (root / vme.ARTIFACTS_DOC).is_file()
+            else None
+        ),
     )
 
 
@@ -278,11 +293,13 @@ def test_drifted_evidence_manifest_digest_fails_the_payload_check(
     (root / vme.COEVO_DEST / "moved.json").write_text("{}\n")
     (root / vme.EVIDENCE_MANIFEST).write_text(
         "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
         "```sha256\n"
         f"{'0' * 64}  coevo/moved.json\n"
         f"{'1' * 64}  README.md\n"
         "```\n"
     )
+    (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
     (root / vme.SLATE_DEST).mkdir(parents=True)
     (root / vme.SLATE_MANIFEST).write_text(
         f"```sha256\n{'2' * 64}  ./absent.jsonl\n```\n"
@@ -406,6 +423,51 @@ def test_registry_row_with_an_unknown_where_raises(tmp_path: Path) -> None:
         vme.registry_rows(root)
 
 
+def test_a_corpus_path_field_is_compared_not_dropped(tmp_path: Path) -> None:
+    """A normalized field is RESOLVED and compared — never excluded.
+
+    Excluding it meant a verdict pointing at a different corpus still read "all
+    fields identical", which is the opposite of what an identity pin is for
+    (Codex review, PR #348).
+    """
+
+    same = vme._verdict_identity_row(
+        "same corpus, two spellings",
+        rederived={"replay_set_dir": str(_REPO_ROOT / vme.CORPUS_SET), "n": 1},
+        committed={"replay_set_dir": vme.CORPUS_SET, "n": 1},
+        repo_root=_REPO_ROOT,
+        path_fields=("replay_set_dir",),
+        source="test",
+    )
+    assert same.status == "OK", same.detail
+
+    different = vme._verdict_identity_row(
+        "a different corpus",
+        rederived={"replay_set_dir": "replays/ml_corpus/4p1i", "n": 1},
+        committed={"replay_set_dir": vme.CORPUS_SET, "n": 1},
+        repo_root=_REPO_ROOT,
+        path_fields=("replay_set_dir",),
+        source="test",
+    )
+    assert different.status == "FAIL"
+    assert "replay_set_dir" in different.detail
+
+
+def test_the_carried_adoption_constraints_are_pinned_by_name() -> None:
+    """The composed verdict's three Goodhart constraints cannot be emptied quietly.
+
+    They are carried metadata the fidelity cannot re-derive, so the identity row
+    splices them — which is exactly why they need their own pin.
+    """
+
+    committed = json.loads((_REPO_ROOT / vme.COMPOSED_DIR / "verdict.json").read_text())
+    assert [
+        str(item).split(":", 1)[0] for item in committed["adoption_constraints"]
+    ] == list(vme._COMPOSED_ADOPTION_CONSTRAINTS)
+    # And the pin is not vacuous: the committed list is non-empty.
+    assert len(vme._COMPOSED_ADOPTION_CONSTRAINTS) == 3
+
+
 def test_malformed_manifest_block_raises_rather_than_shrinking_the_guards(
     tmp_path: Path,
 ) -> None:
@@ -479,13 +541,8 @@ def test_complete_fails_absent_bytes_but_a_default_run_does_not() -> None:
     assert [row.name for row in vme._failed(rows, complete=True)] == ["promised"]
 
 
-def test_complete_accepts_a_manifest_recorded_loss(tmp_path: Path) -> None:
-    """A ratified LOSS is a valid close state; an unrecorded absence is not.
-
-    The 19.21 outcome at HEAD is RECOVERED, so the loss path is exercised by
-    rewriting the ruling the registry document owns: the slate then reports LOST
-    with no restored bytes, and ``--complete`` does NOT fail on it.
-    """
+def _lost_ruling_tree(tmp_path: Path) -> Path:
+    """A scratch tree whose 19.21 ruling records the slate as LOST."""
 
     root = tmp_path / "repo"
     _manifests(root)
@@ -496,12 +553,90 @@ def test_complete_accepts_a_manifest_recorded_loss(tmp_path: Path) -> None:
             "**Ruling 2026-08-15: RECOVERED**", "**Ruling 2026-08-15: LOST**"
         )
     )
+    return root
 
-    rows = vme.run_availability(_context(root, complete=True)).rows
+
+def test_complete_accepts_a_manifest_recorded_loss(tmp_path: Path) -> None:
+    """A ratified LOSS is a valid close state; an unrecorded absence is not.
+
+    The 19.21 outcome at HEAD is RECOVERED, so the loss path is exercised by
+    rewriting the ruling the registry document owns: the slate then reports LOST
+    with no restored bytes, and ``--complete`` does NOT fail on it.
+    """
+
+    root = _lost_ruling_tree(tmp_path)
+    ctx = _context(root, complete=True)
+    assert ctx.lost_prefixes == frozenset({vme._SLATE_PREFIX})
+
+    rows = vme.run_availability(ctx).rows
     slate = _row(rows, "Phase-18 finalist raw slate (Task 19.21 outcome)")
     assert slate.status == "INFO"
     assert slate.measured == "LOST (recorded 2026-08-15)"
     assert slate not in vme._failed(rows, complete=True)
+    # The class-(c) registry row for the slate must ALSO stop demanding the
+    # bytes; leaving it ABSENT is what deadlocked the close. (The coevo row is
+    # still ABSENT here — those bytes ARE promised and this tree has none.)
+    registry_row = next(
+        row for row in rows if row.name.startswith("finalist-eval-raw/")
+    )
+    assert registry_row.status == "INFO"
+    # NOTHING about the slate fails the close gate. (Other rows in this scratch
+    # tree do — it has no artifact families and no restored coevo bytes — so the
+    # assertion is scoped to the slate rather than to an empty failure list.)
+    failed = {row.name for row in vme._failed(rows, complete=True)}
+    assert slate.name not in failed
+    assert registry_row.name not in failed
+
+
+def test_a_recorded_loss_does_not_deadlock_a_restored_payload(
+    tmp_path: Path,
+) -> None:
+    """The whole-payload check excludes recorded-lost bytes, not just the summary.
+
+    The deadlock this pins (Codex review, PR #348): with the coevo payload
+    RESTORED and a LOST slate absent, an aggregate that still counted the slate
+    read PARTIAL — a `FAIL` that exits `--complete` non-zero on bytes nobody
+    promised, before the slate's own INFO row could accept the loss. Here the
+    scratch tree restores every coevo byte the manifest names and leaves the
+    lost slate absent; nothing in the leg may fail.
+    """
+
+    root = tmp_path / "repo"
+    coevo_byte = root / vme.COEVO_DEST / "restored.json"
+    coevo_byte.parent.mkdir(parents=True)
+    coevo_byte.write_text("{}\n")
+    (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
+    (root / vme.EVIDENCE_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
+        "```sha256\n"
+        f"{vme.sha256_file(coevo_byte)}  coevo/restored.json\n"
+        f"{'1' * 64}  README.md\n"
+        "```\n"
+    )
+    (root / vme.SLATE_DEST).mkdir(parents=True)
+    (root / vme.SLATE_MANIFEST).write_text(
+        f"```sha256\n{'2' * 64}  ./gone.jsonl\n```\n"
+    )
+    (root / vme.ARTIFACTS_DOC).parent.mkdir(parents=True, exist_ok=True)
+    (root / vme.ARTIFACTS_DOC).write_text("**Ruling 2026-08-15: LOST**\n")
+
+    ctx = _context(root, complete=True)
+    assert ctx.lost_prefixes == frozenset({vme._SLATE_PREFIX})
+    rows = vme.run_sidecars(ctx).rows
+
+    payload = _row(rows, "evidence payload")
+    # 1 promised byte, restored and hashed — the lost slate is not counted.
+    assert payload.status == "OK", payload.detail
+    assert payload.measured.startswith("1 of 1 restored")
+    assert "PROMISED" in payload.committed
+    lost_row = _row(rows, "evidence payload[LOST]")
+    assert lost_row.status == "INFO"
+    assert lost_row.measured.startswith("1 file(s) recorded LOST")
+    # Neither row fails the close gate — that is the deadlock this pins.
+    failed = vme._failed(rows, complete=True)
+    assert payload not in failed
+    assert lost_row not in failed
 
 
 def test_unrecorded_ruling_fails_the_availability_leg(tmp_path: Path) -> None:

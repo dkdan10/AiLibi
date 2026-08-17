@@ -350,10 +350,16 @@ campaign anyone should start.
    restores them. Verify the whole picture — hashes, corpus, recomputation,
    availability — with `uv run python scripts/verify_ml_evidence.py`.
 
-**The substrate fence still holds.** Every harness asserts
+**The substrate fence still holds — on the four harnesses that carry it.** The
+**campaign** harnesses (§8.1) each assert
 `compute_substrate_sha().startswith("9bc00af0")` — the 18.24 composite the seed
 was trained at, so that a moved substrate makes the seed re-run-before-use
-rather than a config edit. Recomputed at this HEAD:
+rather than a config edit. The **four real-path leg scripts (§8.2) contain no
+such assertion**: none of them imports `compute_substrate_sha`, so the legs ran
+with no substrate fence of their own and inherited only whatever the campaign
+that produced their candidates had checked. That is recorded rather than
+smoothed over — it is a property of the evidence, not of this appendix.
+Recomputed at this HEAD:
 
 ```
 uv run python -c "from training.anchor_study import compute_substrate_sha; print(compute_substrate_sha())"
@@ -508,10 +514,19 @@ SWAP0 = ("c1-swap0-champ-gen3", 3, "72adb41c9286d61d5a81ea4ed2bd347c0d7da52ad89a
 SWAP2 = ("c1-swap2-champ-gen9", 9, "0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df")
 # ---------------------------------------------------------------------------
 
-# As-recorded: "/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/".
-# PATHS.md maps that prefix to this repository-relative root, which is where the
-# recordings and their manifest actually live (on the evidence commit since 19.22).
-ROOT = REPO / "training/artifacts/coevo/realpath-crew" / RUN
+# WHERE THE ARCHIVED BYTES LIVE (read-only). As-recorded, this leg wrote to
+# "/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/"; PATHS.md maps that
+# prefix here, which is where the recordings and their manifest were archived
+# (on the evidence commit since 19.22, restored by scripts/fetch_evidence.sh).
+ARCHIVE = REPO / "training/artifacts/coevo/realpath-crew" / RUN
+
+# WHERE A RERUN WRITES. Deliberately NOT the archive: `run_realpath_rerank`
+# creates `recordings-<tranche>/` and `ranking-<tranche>.jsonl` under whatever it
+# is handed, so pointing it at ARCHIVE would mix fresh output into immutable
+# class-(c) evidence — or overwrite it. The original ran under an operator root
+# outside the tree and this keeps that property (docs/artifacts.md: the archive
+# is where the bytes ENDED UP, never a workspace).
+ROOT = Path("/tmp/ailibi-campaign-1825/realpath") / RUN
 HALL = REPO / "training/artifacts/coevo" / RUN / "crew"
 OPPONENT = (
     REPO
@@ -552,6 +567,7 @@ candidates = [
 print(f"[{LEG}] candidates: {[(c.label, c.encoder_version) for c in candidates]}", flush=True)
 print(f"[{LEG}] opponent: ea4bc955 (the 18.24 frozen champion)  seeds={SEEDS}", flush=True)
 print(f"[{LEG}] meeting_timeout_seconds=900.0 (F7 kept)  prescreen=None (protocol-fixed slate)", flush=True)
+print(f"[{LEG}] writing to {ROOT}; the ARCHIVED run is at {ARCHIVE} (read-only)", flush=True)
 
 result = run_realpath_rerank(
     candidates,
