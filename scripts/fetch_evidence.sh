@@ -296,8 +296,27 @@ assert_gitignores_are_ours_or_absent() {
   fi
 }
 
+gitignore_is_complete() { # gitignore_is_complete PATH
+  gitignore_is_ours "$1" && grep -qxF '*' "$1"
+}
+
 write_gitignore() { # write_gitignore DEST
-  cat > "$1/.gitignore" <<IGNORE
+  local dest="$1" tmp
+  # An owned AND complete file is left exactly as it stands. Rewriting it would
+  # truncate first and refill after, and anything interrupting that window — a
+  # kill, power loss — leaves an EMPTY ignore file, at which point every
+  # already-restored byte under this root is stageable again. That would have
+  # contradicted the very claim this step makes below (Codex review, PR #346).
+  if gitignore_is_complete "$dest/.gitignore"; then
+    return 0
+  fi
+  # Otherwise build it beside the target and move it into place: rename(2)
+  # within a single directory is atomic, so a reader sees either the old file or
+  # the complete new one and never a half-written one. Registered for cleanup so
+  # an interrupted write cannot leave the temporary behind.
+  tmp="$dest/.gitignore.$$.tmp"
+  _scratch+=("$tmp")
+  cat > "$tmp" <<IGNORE
 $GITIGNORE_MARKER
 #
 # Everything untracked in this directory is RESTORED CLASS-(c) EVIDENCE: it
@@ -310,6 +329,7 @@ $GITIGNORE_MARKER
 # file with them.
 *
 IGNORE
+  mv -f "$tmp" "$dest/.gitignore"
 }
 
 # The directory mode/mtime pass, shared by the success path and the EXIT trap so
@@ -318,9 +338,26 @@ IGNORE
 # path, for the destination directories that already existed) and $absent
 # (gaining-directory + entry, for every entry that was not on disk yet).
 restore_dir_metadata() {
-  local gained want stamp d parent child repaired n=0
-  gained=""
-  scratch_file gained
+  local gained want stamp d parent child repaired n=0 failed=0 know_gains=1
+  restored_meta=0
+  # NOTHING is allocated in here. This also runs from the EXIT trap on the
+  # disk-full path, where /tmp is very often the filesystem that just filled, so
+  # a `mktemp` fails exactly when it is needed most — and because `cleanup`
+  # calls this as `restore_dir_metadata || true`, bash suppresses errexit for
+  # the whole function: the failed allocation stopped nothing, the redirect died
+  # silently, every gain test read false, and directories that HAD received
+  # entries were handed back their pre-restore date while the script announced
+  # the metadata was repaired. Reproduced by fault injection (Codex review,
+  # PR #346). That is a silent fallback producing a wrong answer, which
+  # AGENTS.md forbids outright, so the gain set now lives in a shell variable
+  # and every failure below is counted and reported rather than swallowed.
+  if [[ ! -r "$modes" ]]; then
+    echo "WARNING: the captured directory modes are unreadable, so NO directory" >&2
+    echo "metadata could be repaired; directories keep whatever the extraction" >&2
+    echo "left them ($modes)." >&2
+    return 0
+  fi
+
   # A directory GAINED an entry iff one of the entries that was absent before
   # extraction is on disk now. Deciding that from the ENTRIES, rather than from
   # each restored file's immediate parent, is what makes it right in three cases
@@ -331,29 +368,57 @@ restore_dir_metadata() {
   # such directories here, all of them handed back their OLD mtime); a re-fetch
   # that adds nothing must move NO mtime, where the old list moved 462; and a
   # restore that aborted part-way counts only what actually landed.
-  while IFS=$'\t' read -r parent child; do
-    if [[ -e "$REPO_ROOT/$child" ]]; then printf '%s\n' "$parent"; fi
-  done < "$absent" | sort -u > "$gained"
+  gained=$'\n'
+  if [[ -r "$absent" ]]; then
+    while IFS=$'\t' read -r parent child; do
+      if [[ -e "$REPO_ROOT/$child" ]] &&
+        [[ "$gained" != *$'\n'"$parent"$'\n'* ]]; then
+        gained+="$parent"$'\n'
+      fi
+    done < "$absent"
+  else
+    know_gains=0
+    echo "WARNING: the pre-extraction entry record is unreadable, so which" >&2
+    echo "directories gained entries cannot be established. Modes are still" >&2
+    echo "repaired, and every captured directory is stamped NOW ($absent)." >&2
+  fi
 
   while read -r want stamp d; do
     if [[ -d "$REPO_ROOT/$d" ]]; then
       repaired=0
       if [[ "$(file_mode "$REPO_ROOT/$d")" != "$want" ]]; then
-        chmod "$want" "$REPO_ROOT/$d"
-        repaired=1
+        if chmod "$want" "$REPO_ROOT/$d" 2>/dev/null; then
+          repaired=1
+        else
+          failed=$((failed + 1))
+        fi
       fi
-      if grep -qxF "$d" "$gained"; then
-        # It really did gain entries, so its mtime moved — to now, which is when
-        # that happened, rather than to the evidence commit's date.
-        touch "$REPO_ROOT/$d"
+      if [[ "$know_gains" == "1" ]]; then
+        if [[ "$gained" == *$'\n'"$d"$'\n'* ]]; then
+          # It really did gain entries, so its mtime moved — to now, which is
+          # when that happened, rather than to the evidence commit's date.
+          touch "$REPO_ROOT/$d" 2>/dev/null || failed=$((failed + 1))
+        elif touch -r "$stamps/$stamp" "$REPO_ROOT/$d" 2>/dev/null; then
+          repaired=1
+        else
+          failed=$((failed + 1))
+        fi
       else
-        touch -r "$stamps/$stamp" "$REPO_ROOT/$d"
-        repaired=1
+        # Gains unknown. NOW is the one timestamp certainly true of this tree —
+        # the extraction just ran through it. Leaving tar's value would keep a
+        # date fabricated by the archive (the thing this whole pass exists to
+        # remove), and restoring every original would backdate whatever really
+        # did gain entries.
+        touch "$REPO_ROOT/$d" 2>/dev/null || failed=$((failed + 1))
       fi
       if [[ "$repaired" == "1" ]]; then n=$((n + 1)); fi
     fi
   done < "$modes"
   restored_meta="$n"
+  if [[ "$failed" != "0" ]]; then
+    echo "WARNING: $failed directory metadata repair(s) FAILED — those" >&2
+    echo "directories keep the mode or date the extraction left on them." >&2
+  fi
 }
 
 # EVERY mode runs this, and it is called HERE — once, before any mode branches —
