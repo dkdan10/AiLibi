@@ -1,0 +1,145 @@
+// Unit tests for the cost chips' frame-bounding (Task 19.17).
+//
+// The chips exist to be CHEAP and HONEST; the one way they could stop being
+// honest is by printing the game total, which is a monotone proxy for how long
+// the game ran and how many meetings it took — an outcome-shape statistic
+// rendered at frame zero, before a tick has played. So the tests below are
+// mostly one assertion said several ways: what has not happened yet does not
+// count.
+
+import { describe, expect, it } from "vitest";
+
+import { START_TICK } from "../lib/playback";
+import type { FailedCallView, LLMCallView, MeetingView } from "../types/api";
+import { costToFrame } from "./CostChips";
+
+function call(inputTokens: number, outputTokens: number, costUsd: number): LLMCallView {
+  return {
+    call_kind: "meeting",
+    model: "Qwen/Qwen3.6-27B",
+    prompt_template_id: "meeting_opening@3",
+    // The store's `windowReplay` blanks both text fields on the bulk payload;
+    // the counts survive, which is exactly what these chips read.
+    prompt_text: "",
+    response_text: "",
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cost_usd: costUsd,
+    agent_id: "p-1",
+  };
+}
+
+function meeting(tick: number, calls: LLMCallView[]): MeetingView {
+  return {
+    meeting_id: `m-${tick}`,
+    tick,
+    triggered_by: "p-1",
+    trigger_kind: "body",
+    outcome: "EJECTED",
+    ejected_player_id: "p-4",
+    turns: [],
+    ballots: [],
+    contradictions: [],
+    llm_calls: calls,
+    prompt_versions: {},
+    total_cost_usd: calls.reduce((sum, entry) => sum + entry.cost_usd, 0),
+    gate: { leader: "p-4", leader_max_confidence: 0.8, threshold: 0.6, passed: true },
+  };
+}
+
+function failedCall(tick: number, costUsd: number): FailedCallView {
+  return {
+    meeting_id: `m-${tick}`,
+    tick,
+    model: "Qwen/Qwen3.6-27B",
+    cost_usd: costUsd,
+    error_type: "TimeoutError",
+    error_message: "deadline exceeded",
+  };
+}
+
+// Three meetings across a game, at ticks 7 / 14 / 35.
+const MEETINGS: readonly MeetingView[] = [
+  meeting(7, [call(1_000, 100, 0.01), call(2_000, 200, 0.02)]),
+  meeting(14, [call(3_000, 300, 0.03)]),
+  meeting(35, [call(4_000, 400, 0.04)]),
+];
+const NO_FAILURES: readonly FailedCallView[] = [];
+
+// The game TOTAL, for contrast — the number these chips must never print.
+const TOTAL_INPUT = 10_000;
+const TOTAL_OUTPUT = 1_000;
+
+describe("costToFrame", () => {
+  it("is zero at the synthetic Start frame, where a total would be the whole game", () => {
+    expect(costToFrame(MEETINGS, NO_FAILURES, START_TICK)).toEqual({
+      calls: 0,
+      failedCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+  });
+
+  it("counts a meeting AT the current tick — its calls happened to reach it", () => {
+    const cost = costToFrame(MEETINGS, NO_FAILURES, 7);
+    expect(cost.calls).toBe(2);
+    expect(cost.inputTokens).toBe(3_000);
+    expect(cost.outputTokens).toBe(300);
+    expect(cost.costUsd).toBeCloseTo(0.03, 10);
+  });
+
+  it("excludes every meeting still in the future", () => {
+    const cost = costToFrame(MEETINGS, NO_FAILURES, 20);
+    expect(cost.calls).toBe(3);
+    expect(cost.inputTokens).toBe(6_000);
+    expect(cost.inputTokens).toBeLessThan(TOTAL_INPUT);
+    expect(cost.outputTokens).toBeLessThan(TOTAL_OUTPUT);
+  });
+
+  it("reaches the game total only at the last frame — never before it", () => {
+    const cost = costToFrame(MEETINGS, NO_FAILURES, 35);
+    expect(cost.inputTokens).toBe(TOTAL_INPUT);
+    expect(cost.outputTokens).toBe(TOTAL_OUTPUT);
+    expect(cost.calls).toBe(4);
+  });
+
+  it("is monotone non-decreasing in the tick", () => {
+    let previous = costToFrame(MEETINGS, NO_FAILURES, START_TICK);
+    for (const tick of [0, 6, 7, 13, 14, 34, 35, 40]) {
+      const cost = costToFrame(MEETINGS, NO_FAILURES, tick);
+      expect(cost.calls).toBeGreaterThanOrEqual(previous.calls);
+      expect(cost.inputTokens).toBeGreaterThanOrEqual(previous.inputTokens);
+      expect(cost.outputTokens).toBeGreaterThanOrEqual(previous.outputTokens);
+      expect(cost.costUsd).toBeGreaterThanOrEqual(previous.costUsd);
+      previous = cost;
+    }
+  });
+
+  it("counts a failed call's dollars and its count — never silently drops it", () => {
+    const failures = [failedCall(9, 0.005), failedCall(40, 0.5)];
+    const cost = costToFrame(MEETINGS, failures, 14);
+    expect(cost.failedCalls).toBe(1); // the tick-40 failure is still the future
+    expect(cost.costUsd).toBeCloseTo(0.06 + 0.005, 10);
+    // A failed call recorded no tokens, so it moves neither token counter.
+    expect(cost.inputTokens).toBe(6_000);
+    expect(cost.outputTokens).toBe(600);
+  });
+
+  it("holds the recorded $0 of the flat-rate provider without inventing a price", () => {
+    // The committed sample sets were recorded on Featherless, which the recorder
+    // stamps as $0 per call (AGENTS.md). Real token counts, zero dollars — the
+    // chips must show exactly that rather than back-filling a fallback price.
+    const flatRate = [meeting(7, [call(3_091, 177, 0)])];
+    const cost = costToFrame(flatRate, NO_FAILURES, 7);
+    expect(cost.costUsd).toBe(0);
+    expect(cost.inputTokens).toBe(3_091);
+    expect(cost.outputTokens).toBe(177);
+    expect(cost.calls).toBe(1);
+  });
+
+  it("is zero for a game with no meetings at all", () => {
+    expect(costToFrame([], NO_FAILURES, 99).calls).toBe(0);
+    expect(costToFrame([], NO_FAILURES, 99).costUsd).toBe(0);
+  });
+});
