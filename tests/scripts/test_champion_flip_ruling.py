@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import inspect
 import json
-import math
 from pathlib import Path
 from typing import Any, Final
 
@@ -60,6 +59,13 @@ import pytest
 
 import run_tournament as rt
 from _manifest_writer import _render_policy, parse_manifest
+from regen_test_goldens import (
+    f13_cell,
+    fisher_z,
+    impostor_win_seeds,
+    pooled_z,
+    rate_cells,
+)
 from agents.tactical.learned.crew_forward import committed_crew_weights_sha256
 from agents.tactical.learned.factory import (
     CHAMPION_ANCHOR_POLICY,
@@ -87,6 +93,20 @@ _RESULTS_PATH: Final[Path] = Path("training/reports/results-finalist-eval.jsonl"
 # The committed baseline-5 scripted comparator: seeds 0-49 at the same
 # substrate, recorded fsm-default (the 16.17 close re-record).
 _SAMPLES_9P2I: Final[Path] = Path("replays/samples/9p2i")
+
+# The committed golden (Task 19.27): every measured cell and derived statistic
+# this module used to carry as hand-transcribed literals, regenerated from the
+# evidence bytes by `scripts/regen_test_goldens.py` (whose --check mode pins
+# byte-identical regeneration). The tests below still RE-DERIVE each value
+# from the evidence and compare against the golden, so an evidence re-record
+# fails loud until the golden is regenerated and its diff reviewed. Loaded
+# file-relative — the evidence inputs above stay repo-root-relative — so a
+# cwd change cannot split the two conventions silently.
+_GOLDEN: Final[dict[str, Any]] = json.loads(
+    (Path(__file__).parent / "_goldens" / "champion_flip_ruling.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 # The committed champion digest (audits/audit-phase-15-pause.md decision 1) —
 # unchanged by this task's FAIL ruling, and identical to the re-selected
@@ -150,9 +170,9 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     # baseline-6 re-record moves it 0.36 -> 0.30 (15/50 IMPOSTORS). The finalist-eval
     # rows below are frozen (results-finalist-eval.jsonl, not re-recorded), so only
     # this comparator and the two win-edge deltas that subtract it move.
-    assert fsm_rate == pytest.approx(0.30)
+    assert fsm_rate == pytest.approx(_GOLDEN["fsm_comparator_win_rate"])
 
-    for row in rows.values():
+    for entrant, row in rows.items():
         # The stamp-proof precondition: all 50 recordings named the loaded
         # candidate (stamp == committed sidecar) before any cell is trusted.
         assert row["stamp_verified_games"] == 50
@@ -164,60 +184,54 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
         # Locked decision 2's AND-criterion — FAIL for every finalist.
         assert not (referee_passed and retained_edge)
 
-    # utility-es: win edge YES, referee FAIL (the starved conversion economy).
-    utility = rows["utility-es"]
-    assert utility["core"]["impostor_win_rate"] == pytest.approx(0.52)
-    assert utility["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(0.22)
-    assert utility["watchability"]["referee_passed"] is False
-    assert utility["watchability"]["mean_score"] == pytest.approx(41.47, abs=0.01)
-    gauges = {
-        gauge["name"]: gauge for gauge in utility["watchability"]["supply_gauges"]
-    }
-    witnessed = gauges["witnessed_event_rate"]
-    assert witnessed["passed"] is True
-    assert witnessed["floor"] == pytest.approx(7 / 203)
-    assert witnessed["measured"] == pytest.approx(0.2078, abs=1e-4)
-    flags = gauges["flags_per_meeting"]
-    assert flags["passed"] is False
-    assert flags["floor"] == pytest.approx(90 / 179)
-    assert flags["measured"] == pytest.approx(0.4255, abs=1e-4)
-    conversion = gauges["testimony_backed_conversion"]
-    assert conversion["passed"] is False
-    assert conversion["measured"] == pytest.approx(0.3585, abs=1e-4)
-    # The population-relative floor RISES to 0.5601 because the starved flag
-    # supply lifts it: floor = min(1.0, pin × (flags_floor / measured_flags))
-    # with the 64/135 baseline-5 conversion pin (16.11; 17.11 re-pins).
-    assert conversion["floor"] == pytest.approx(0.5601, abs=1e-4)
-    assert conversion["floor"] == pytest.approx(
-        min(1.0, (64 / 135) * ((90 / 179) / flags["measured"]))
-    )
+        # The measured cells, golden-pinned (win rate, edge, verdict, referee
+        # mean, and the three gauge cells) — re-derived from the row here and
+        # compared against the committed golden, so neither can drift alone.
+        expected = _GOLDEN["finalists"][entrant]
+        assert row["core"]["impostor_win_rate"] == pytest.approx(
+            expected["impostor_win_rate"]
+        )
+        assert row["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(
+            expected["win_edge_vs_fsm"]
+        )
+        assert row["watchability"]["referee_passed"] is expected["referee_passed"]
+        assert row["watchability"]["mean_score"] == pytest.approx(
+            expected["mean_score"], abs=0.01
+        )
+        gauges = {
+            gauge["name"]: gauge for gauge in row["watchability"]["supply_gauges"]
+        }
+        assert set(gauges) == set(expected["gauges"])
+        for name, cell in expected["gauges"].items():
+            assert gauges[name]["passed"] is cell["passed"]
+            assert gauges[name]["floor"] == pytest.approx(cell["floor"])
+            assert gauges[name]["measured"] == pytest.approx(cell["measured"])
 
-    # policy-es: referee PASS on every floor, win edge NO (competitively
-    # annihilated — the crew converts the vent tell, which is why the referee
-    # is read WITH the win edge, never alone).
+        # The ratified baseline-5 floor fractions and the 16.11
+        # population-relative conversion-floor derivation with the 64/135
+        # baseline-5 conversion pin (17.11 re-pins) stay ARITHMETIC, never
+        # golden: a starved flag supply LIFTS the derived floor (utility-es),
+        # a flooded one EASES it (policy-es).
+        assert gauges["witnessed_event_rate"]["floor"] == pytest.approx(7 / 203)
+        assert gauges["flags_per_meeting"]["floor"] == pytest.approx(90 / 179)
+        assert gauges["testimony_backed_conversion"]["floor"] == pytest.approx(
+            min(
+                1.0,
+                (64 / 135) * ((90 / 179) / gauges["flags_per_meeting"]["measured"]),
+            )
+        )
+
+    # The ruling's SHAPE, as logic: utility-es keeps the win edge and fails
+    # the referee (the starved conversion economy); policy-es passes the
+    # referee on every floor and loses the edge (competitively annihilated —
+    # the crew converts the vent tell, which is why the referee is read WITH
+    # the win edge, never alone).
+    utility = rows["utility-es"]
     policy = rows["policy-es"]
+    assert utility["core"]["impostor_win_rate"] > fsm_rate
+    assert utility["watchability"]["referee_passed"] is False
     assert policy["watchability"]["referee_passed"] is True
-    assert policy["watchability"]["mean_score"] == pytest.approx(48.20, abs=0.01)
-    gauges = {gauge["name"]: gauge for gauge in policy["watchability"]["supply_gauges"]}
-    witnessed = gauges["witnessed_event_rate"]
-    assert witnessed["passed"] is True
-    assert witnessed["floor"] == pytest.approx(7 / 203)
-    assert witnessed["measured"] == pytest.approx(0.1194, abs=1e-4)
-    flags = gauges["flags_per_meeting"]
-    assert flags["passed"] is True
-    assert flags["floor"] == pytest.approx(90 / 179)
-    assert flags["measured"] == pytest.approx(1.7748, abs=1e-4)
-    conversion = gauges["testimony_backed_conversion"]
-    assert conversion["passed"] is True
-    assert conversion["measured"] == pytest.approx(0.9417, abs=1e-4)
-    # The same population-relative derivation, EASED by the flooded flag
-    # supply: the derived floor drops to 0.1343.
-    assert conversion["floor"] == pytest.approx(0.1343, abs=1e-4)
-    assert conversion["floor"] == pytest.approx(
-        min(1.0, (64 / 135) * ((90 / 179) / flags["measured"]))
-    )
-    assert policy["core"]["impostor_win_rate"] == pytest.approx(0.02)
-    assert policy["core"]["impostor_win_rate"] - fsm_rate == pytest.approx(-0.28)
+    assert policy["core"]["impostor_win_rate"] < fsm_rate
 
 
 # -- on FAIL the default provably does not move -------------------------------
@@ -425,35 +439,11 @@ def _p18_rows() -> dict[str, dict[str, Any]]:
     return rows
 
 
-def _pooled_z(k_c: int, n_c: int, k_f: int, n_f: int) -> float | None:
-    """The §6.a pooled two-proportion z; None where no delta exists."""
-
-    if n_c == 0 or n_f == 0:
-        return None
-    pooled = (k_c + k_f) / (n_c + n_f)
-    if pooled in (0.0, 1.0):
-        return None
-    return (k_c / n_c - k_f / n_f) / math.sqrt(
-        pooled * (1 - pooled) * (1 / n_c + 1 / n_f)
-    )
-
-
-def _fisher_z(r_c: float, n_c: int, r_f: float, n_f: int) -> float:
-    """The §6.a Fisher r-to-z for the correlation cell."""
-
-    return (math.atanh(r_c) - math.atanh(r_f)) / math.sqrt(
-        1 / (n_c - 3) + 1 / (n_f - 3)
-    )
-
-
-def _impostor_win_seeds(row: dict[str, Any]) -> set[int]:
-    """Impostor-win seeds from a row's per-game watchability reasons."""
-
-    return {
-        game["seed"]
-        for game in row["watchability"]["per_game"]
-        if game["reason"] in ("IMPOSTOR_PARITY", "IMPOSTOR_SABOTAGE")
-    }
+# The §6.a statistics (pooled two-proportion z, Fisher r-to-z), the per-game
+# win-seed reader, the eleven registered rate cells, and the F13 cell rule all
+# live in scripts/regen_test_goldens.py now (Task 19.27) — ONE derivation both
+# the golden generator and these re-derivations run, so the two can never
+# disagree about the formula while the golden pins the inputs' outputs.
 
 
 def test_18_27_axis_1_reads_fail_on_every_p18_candidate() -> None:
@@ -470,35 +460,34 @@ def test_18_27_axis_1_reads_fail_on_every_p18_candidate() -> None:
     """
 
     rows = _p18_rows()
+    golden_p18 = _GOLDEN["p18"]
     comparator = rows[_P18_COMPARATOR]
     assert comparator["watchability"]["referee_passed"] is True
-    assert comparator["core"]["impostor_win_rate"] == pytest.approx(13 / 50)
+    assert comparator["core"]["impostor_win_rate"] == pytest.approx(
+        golden_p18["comparator"]["win_rate"]
+    )
     assert comparator["tactical_policy_stamp"]["policy_id"] == FSM_DEFAULT_POLICY_ID
     assert comparator["opponent_absence_proven"] is True
-    comparator_win_seeds = _impostor_win_seeds(comparator)
-    assert len(comparator_win_seeds) == 13
+    comparator_win_seeds = impostor_win_seeds(comparator)
+    assert len(comparator_win_seeds) == golden_p18["comparator"]["win_seed_count"]
     assert 35 in comparator_win_seeds  # seed 35: IMPOSTOR_PARITY (§2.2.iii)
     intersection_rate = len(comparator_win_seeds - {35}) / 49
-    assert intersection_rate == pytest.approx(12 / 49)
-    assert intersection_rate == pytest.approx(0.24490, abs=5e-6)
+    assert intersection_rate == pytest.approx(
+        golden_p18["comparator"]["intersection_rate"]
+    )
+    # ... and the two rates agree with each other by construction: the
+    # intersection rate is the comparator's own win seeds minus seed 35.
+    assert intersection_rate < comparator["core"]["impostor_win_rate"]
 
-    # The memo's §3 floor cells: (witnessed, flags, conversion) measured.
-    expected_gauges: dict[str, tuple[float, float, float]] = {
-        "p18-imp-ea4bc955": (0.15228, 0.93548, 0.36667),
-        "p18-imp-bfd145cb": (0.14778, 0.90000, 0.35099),
-        "p18-imp-6d327dcb": (0.22280, 0.96914, 0.44444),
-        "p18-imp-7f73929d": (0.22000, 0.82840, 0.38926),
-    }
-    expected_edges: dict[str, float] = {
-        "p18-imp-ea4bc955": 0.26,
-        "p18-imp-bfd145cb": 0.30,
-        "p18-imp-6d327dcb": 0.12,
-        "p18-imp-7f73929d": 0.18367,
-    }
+    # The memo's §3 cells (measured gauges, floors, verdicts, edges) are
+    # golden-pinned; the loop still re-derives every one from the rows.
+    expected_candidates: dict[str, dict[str, Any]] = golden_p18["candidates"]
+    assert set(expected_candidates) == set(_P18_CANDIDATES)
 
     for entrant in _P18_CANDIDATES:
         row = rows[entrant]
-        n_games = 49 if entrant == "p18-imp-7f73929d" else 50
+        expected = expected_candidates[entrant]
+        n_games = expected["games_total"]
         assert row["stamp_verified_games"] == n_games
         assert row["stamp_equals_committed_sha256"] is True
         assert row["validity_gate"]["passed"] is True
@@ -508,31 +497,39 @@ def test_18_27_axis_1_reads_fail_on_every_p18_candidate() -> None:
         gauges = {
             gauge["name"]: gauge for gauge in row["watchability"]["supply_gauges"]
         }
-        witnessed, flags, conversion = (
-            gauges["witnessed_event_rate"],
-            gauges["flags_per_meeting"],
-            gauges["testimony_backed_conversion"],
+        assert set(gauges) == set(expected["gauges"])
+        for name, cell in expected["gauges"].items():
+            assert gauges[name]["passed"] is cell["passed"]
+            assert gauges[name]["floor"] == pytest.approx(cell["floor"])
+            assert gauges[name]["measured"] == pytest.approx(cell["measured"])
+
+        # The FAIL shape, as logic: witnessed passes its floor (and §2.2.i
+        # excludes it from discriminating anyway); flags and conversion fail.
+        assert gauges["witnessed_event_rate"]["passed"] is True
+        assert gauges["flags_per_meeting"]["passed"] is False
+        assert gauges["testimony_backed_conversion"]["passed"] is False
+        # The ratified baseline-6 fractions and the 16.11 population-relative
+        # derivation stay arithmetic, never golden.
+        assert gauges["witnessed_event_rate"]["floor"] == pytest.approx(
+            _B6_WITNESSED_FLOOR
         )
-        exp_witnessed, exp_flags, exp_conversion = expected_gauges[entrant]
-        assert witnessed["floor"] == pytest.approx(_B6_WITNESSED_FLOOR)
-        assert witnessed["measured"] == pytest.approx(exp_witnessed, abs=1e-4)
-        assert witnessed["passed"] is True  # PASS on the floor; §2.2.i excludes
-        assert flags["floor"] == pytest.approx(_B6_FLAGS_FLOOR)
-        assert flags["measured"] == pytest.approx(exp_flags, abs=1e-4)
-        assert flags["passed"] is False
-        assert conversion["measured"] == pytest.approx(exp_conversion, abs=1e-4)
-        assert conversion["passed"] is False
-        # The 16.11 population-relative derivation on the baseline-6 pins.
-        assert conversion["floor"] == pytest.approx(
-            min(1.0, _B6_CONVERSION_PIN * (_B6_FLAGS_FLOOR / flags["measured"]))
+        assert gauges["flags_per_meeting"]["floor"] == pytest.approx(_B6_FLAGS_FLOOR)
+        assert gauges["testimony_backed_conversion"]["floor"] == pytest.approx(
+            min(
+                1.0,
+                _B6_CONVERSION_PIN
+                * (_B6_FLAGS_FLOOR / gauges["flags_per_meeting"]["measured"]),
+            )
         )
 
         assert row["watchability"]["referee_passed"] is False
         comparator_rate = (
-            intersection_rate if entrant == "p18-imp-7f73929d" else 13 / 50
+            intersection_rate
+            if entrant == "p18-imp-7f73929d"
+            else comparator["core"]["impostor_win_rate"]
         )
         edge = row["core"]["impostor_win_rate"] - comparator_rate
-        assert edge == pytest.approx(expected_edges[entrant], abs=5e-6)
+        assert edge == pytest.approx(expected["win_edge"])
         assert edge > 0  # the win edge holds on every arm...
         # ...and the §1.3 conjunction still fails on every arm.
         assert not (row["watchability"]["referee_passed"] and edge > 0)
@@ -565,8 +562,10 @@ def test_18_27_witnessed_unresolvable_on_all_nine_arms_and_bfd_on_conversion_alo
     bfd = rows["p18-imp-bfd145cb"]
     bfd_flags = bfd["split_half"]["flags_per_meeting"]
     assert bfd_flags["precondition"] == "UNRESOLVABLE"
-    assert bfd_flags["noise"] == pytest.approx(0.29291, abs=1e-4)
-    assert bfd_flags["noise"] > flags_ceiling == pytest.approx(0.27273, abs=1e-4)
+    assert bfd_flags["noise"] == pytest.approx(_GOLDEN["p18"]["bfd_flags_noise"])
+    # The ceiling is the 25%-of-floor arithmetic above, never a restated
+    # decimal — the 7% overshoot is the derived inequality itself.
+    assert bfd_flags["noise"] > flags_ceiling
     # The other three candidate arms' flags cells clear the precondition —
     # their FAILs count both gauges; bfd145cb's counts conversion alone.
     for entrant in _P18_CANDIDATES:
@@ -595,36 +594,25 @@ def test_18_27_f13_pooled_margins_negative_and_noise_barred() -> None:
 
     rows = _p18_rows()
 
-    def f13_cell(entrant: str, gauge: str) -> tuple[float, float]:
-        if entrant == "p18-imp-7f73929d":
-            gauges = {
-                g["name"]: g for g in rows[entrant]["watchability"]["supply_gauges"]
-            }
-            return (
-                gauges[gauge]["measured"],
-                rows[entrant]["split_half"][gauge]["noise"],
-            )
-        cell = rows[entrant]["f13_intersection_gauges"]["gauges"][gauge]
-        return cell["measured"], cell["split_half_noise"]
-
     champions = ("p18-imp-6d327dcb", "p18-imp-ea4bc955")
     runner_ups = ("p18-imp-bfd145cb", "p18-imp-7f73929d")
-    expected = {
-        "witnessed_event_rate": (-0.00650, 0.07001, 0.06026),
-        "flags_per_meeting": (-0.09189, 0.17958, 0.15652),
-        "testimony_backed_conversion": (-0.03483, 0.06578, 0.00942),
+    expected_f13: dict[str, dict[str, float]] = _GOLDEN["p18"]["f13"]
+    assert set(expected_f13) == {
+        "witnessed_event_rate",
+        "flags_per_meeting",
+        "testimony_backed_conversion",
     }
-    for gauge, (exp_margin, exp_champ_noise, exp_ru_noise) in expected.items():
-        champ_cells = [f13_cell(entrant, gauge) for entrant in champions]
-        ru_cells = [f13_cell(entrant, gauge) for entrant in runner_ups]
+    for gauge, expected in expected_f13.items():
+        champ_cells = [f13_cell(rows, entrant, gauge) for entrant in champions]
+        ru_cells = [f13_cell(rows, entrant, gauge) for entrant in runner_ups]
         margin = sum(measured for measured, _ in ru_cells) / 2 - (
             sum(measured for measured, _ in champ_cells) / 2
         )
         champ_noise = sum(noise for _, noise in champ_cells) / 2
         ru_noise = sum(noise for _, noise in ru_cells) / 2
-        assert margin == pytest.approx(exp_margin, abs=5e-5)
-        assert champ_noise == pytest.approx(exp_champ_noise, abs=5e-5)
-        assert ru_noise == pytest.approx(exp_ru_noise, abs=5e-5)
+        assert margin == pytest.approx(expected["margin"])
+        assert champ_noise == pytest.approx(expected["champion_noise"])
+        assert ru_noise == pytest.approx(expected["runner_up_noise"])
         assert margin < 0
         # §11.2 either-side rule: smaller than EITHER side's noise -> barred.
         assert abs(margin) < champ_noise  # every gauge barred by this side
@@ -632,12 +620,19 @@ def test_18_27_f13_pooled_margins_negative_and_noise_barred() -> None:
             assert abs(margin) < ru_noise  # witnessed/flags barred by both
 
     # The residual within-lineage cell (run-02 held constant): conversion only.
-    bfd_conv, bfd_noise = f13_cell("p18-imp-bfd145cb", "testimony_backed_conversion")
-    ea4_conv, ea4_noise = f13_cell("p18-imp-ea4bc955", "testimony_backed_conversion")
+    bfd_conv, bfd_noise = f13_cell(
+        rows, "p18-imp-bfd145cb", "testimony_backed_conversion"
+    )
+    ea4_conv, ea4_noise = f13_cell(
+        rows, "p18-imp-ea4bc955", "testimony_backed_conversion"
+    )
     within_lineage = bfd_conv - ea4_conv
-    assert within_lineage == pytest.approx(-0.02231, abs=5e-5)
-    assert abs(within_lineage) > bfd_noise == pytest.approx(0.01504, abs=5e-5)
-    assert abs(within_lineage) < ea4_noise == pytest.approx(0.09459, abs=5e-5)
+    expected_lineage = _GOLDEN["p18"]["f13_within_lineage_conversion"]
+    assert within_lineage == pytest.approx(expected_lineage["delta"])
+    assert bfd_noise == pytest.approx(expected_lineage["bfd_noise"])
+    assert ea4_noise == pytest.approx(expected_lineage["ea4_noise"])
+    assert abs(within_lineage) > bfd_noise
+    assert abs(within_lineage) < ea4_noise
 
 
 def test_18_27_axis_2_champion_arm_rulings_read_zero_emergent() -> None:
@@ -662,88 +657,27 @@ def test_18_27_axis_2_champion_arm_rulings_read_zero_emergent() -> None:
     comparator = rows[_P18_COMPARATOR]
     assert champion["committed_weights_sha256"] == _P18_CHAMPION_SHA
 
-    def rate_cells(row: dict[str, Any]) -> dict[str, tuple[int, int]]:
-        instruments = row["instruments"]
-        deception = instruments["deception"]
-        nested = instruments["registered_nested_cells"]
-        kill_craft = instruments["kill_craft"]
-        departure = instruments["kill_craft_co_present_departure"]
-        off_menu = instruments["off_menu"]
-        return {
-            "false_vouch_saw_player": (
-                deception["false_vouch_saw_player_observations"],
-                deception["vouch_observations_impostor"],
-            ),
-            "false_vouch_corroboration": (
-                deception["false_vouch_corroborations"],
-                deception["corroboration_claims_impostor"],
-            ),
-            "false_vouch_fabricated": (
-                deception["false_vouch_fabricated"],
-                deception["false_vouch_subject_events"],
-            ),
-            "frame_attempts": (
-                deception["frame_attempt_meetings"],
-                deception["meetings_total"],
-            ),
-            "frame_conversions": (
-                nested["frame_conversions"]["numerator"],
-                nested["frame_conversions"]["denominator"],
-            ),
-            "teammate_accusations": (
-                nested["teammate_accusations"]["numerator"],
-                nested["teammate_accusations"]["denominator"],
-            ),
-            "alibi_survival": (
-                nested["alibi_survival"]["survived"],
-                nested["alibi_survival"]["total_impostor_alibis"],
-            ),
-            "effective_deflection": (
-                nested["effective_deflection"]["effective_deflections"],
-                nested["effective_deflection"]["active_survivals"],
-            ),
-            "crew_witnessed_kills": (
-                kill_craft["crew_witnessed_kills"],
-                kill_craft["kills_total"],
-            ),
-            "co_present_departure": (
-                departure["co_present_ge1_kills"],
-                departure["kills_total"],
-            ),
-            "off_menu": (
-                off_menu["off_menu_total"],
-                off_menu["impostor_decisions"],
-            ),
-        }
-
     champion_cells = rate_cells(champion)
     comparator_cells = rate_cells(comparator)
     z_values: dict[str, float | None] = {
-        name: _pooled_z(*champion_cells[name], *comparator_cells[name])
+        name: pooled_z(*champion_cells[name], *comparator_cells[name])
         for name in champion_cells
     }
-    # The memo §7/§15 statistics, pinned exactly (inputs are the cells above).
-    expected_z: dict[str, float | None] = {
-        "false_vouch_saw_player": 0.761,
-        "false_vouch_corroboration": 1.549,
-        "false_vouch_fabricated": -1.560,
-        "frame_attempts": 1.393,
-        "frame_conversions": 0.987,
-        "teammate_accusations": None,  # pooled rate 0 — no delta exists
-        "alibi_survival": 0.202,
-        "effective_deflection": 0.639,
-        "crew_witnessed_kills": 3.370,
-        "co_present_departure": 4.321,
-        "off_menu": None,  # 0/2015 vs 0/2299 — vacuous, no delta exists
-    }
+    # The memo §7/§15 statistics, golden-pinned (inputs are the registered
+    # cells; the formula is the ONE shared derivation in
+    # scripts/regen_test_goldens.py). The two None cells stay None: the
+    # teammate-accusation pooled rate is 0 and off_menu is 0-vs-0 vacuous —
+    # no delta exists, and a golden null pins exactly that.
+    expected_z: dict[str, float | None] = _GOLDEN["p18"]["axis2"]["pooled_z"]
+    assert set(z_values) == set(expected_z)
     for name, expected_value in expected_z.items():
         if expected_value is None:
             assert z_values[name] is None
         else:
-            assert z_values[name] == pytest.approx(expected_value, abs=5e-4)
+            assert z_values[name] == pytest.approx(expected_value)
 
     # The correlation cell (ruling 10): Fisher z fails clause (a).
-    fisher = _fisher_z(
+    fisher = fisher_z(
         champion["instruments"]["kill_craft"][
             "witnessed_point_biserial_within_one_hop"
         ],
@@ -753,11 +687,13 @@ def test_18_27_axis_2_champion_arm_rulings_read_zero_emergent() -> None:
         ],
         comparator["instruments"]["kill_craft"]["kills_total"],
     )
-    assert fisher == pytest.approx(-0.648, abs=5e-4)
+    assert fisher == pytest.approx(_GOLDEN["p18"]["axis2"]["fisher_z"])
+    assert abs(fisher) < 1.96
 
     clause_a_pass = {
         name for name, z in z_values.items() if z is not None and abs(z) >= 1.96
     }
+    assert clause_a_pass == set(_GOLDEN["p18"]["axis2"]["clause_a_pass"])
     assert clause_a_pass == {"crew_witnessed_kills", "co_present_departure"}
 
     # Clause (b) for the two passing cells: 3/3 positive per-split deltas.

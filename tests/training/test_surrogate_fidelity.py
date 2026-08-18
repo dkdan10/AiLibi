@@ -32,6 +32,11 @@ from training.surrogate.fidelity import (
     run_surrogate_fidelity,
 )
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — the fidelity harnesses).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"

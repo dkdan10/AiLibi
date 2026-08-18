@@ -77,7 +77,7 @@ from meetings.transcript import (
     independent_voices,
     reconstruct_stated_paths,
 )
-from tests.meetings.test_manager import (
+from tests.meetings._manager_helpers import (
     _make_responder,
     _participant,
     _run_meeting,

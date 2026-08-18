@@ -40,6 +40,11 @@ from training.bakeoff.harness import (
 )
 from training.bakeoff.utility_es import OPTION_FEATURE_NAMES, utility_genome_length
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _COMMITTED_CHAMPION_DIR = Path("training/artifacts/impostor/utility-es")
 _SEED_1000_REPLAY = CORPUS_DIR / "replay-seed-1000.jsonl"
 

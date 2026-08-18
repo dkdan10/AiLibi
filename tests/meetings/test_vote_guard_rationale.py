@@ -76,11 +76,11 @@ from meetings.manager import (
     coerce_teammate_ballot_to_skip,
 )
 from meetings.schemas import VoteBallot
-from tests.meetings.test_manager import (
-    _extract_marker,  # noqa: PLC2701
-    _participant,  # noqa: PLC2701
-    _run_meeting,  # noqa: PLC2701
-    _turn_json,  # noqa: PLC2701
+from tests.meetings._manager_helpers import (
+    _extract_marker,
+    _participant,
+    _run_meeting,
+    _turn_json,
 )
 
 # The leak class, verbatim from the audit's description: a rationale written to

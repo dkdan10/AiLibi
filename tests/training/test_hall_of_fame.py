@@ -63,6 +63,11 @@ from training.coevo.hall_of_fame import (
 )
 from training.crew.options import OwnedTaskOptionBasis, crew_genome_length
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 # ``scripts/`` is a bare-module namespace (no ``__init__.py``): the loadable-
 # freeze pin (Task 18.31) needs the CONSUMING entry point
 # ``run_tournament._load_candidate_policy``, so put ``scripts/`` on sys.path the

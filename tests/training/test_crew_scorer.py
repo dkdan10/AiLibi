@@ -114,6 +114,11 @@ from training.determinism import FramePolicy
 from training.env import TacticalRolloutEnv
 from training.rewards import compute_shaped_reward
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — the crew stack).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _STAR_MAP = PublicMapView(
     map_id="test_map",
     room_ids=("ADMIN", "CAFETERIA", "ELECTRICAL", "MEDBAY"),

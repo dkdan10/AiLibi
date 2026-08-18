@@ -92,6 +92,11 @@ from training.crew.scorer import (
 )
 from training.determinism import PolicyFrame
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — the crew stack).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 # The 4-room star mirrored from test_crew_scorer._STAR_MAP, with the extra task
 # locations the routing-leg / gating geometry needs: ``scan_medbay`` (MEDBAY) and
 # ``wires_cafeteria`` (CAFETERIA). Distances: every leaf is one hop from the

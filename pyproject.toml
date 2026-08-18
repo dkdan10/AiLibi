@@ -62,6 +62,21 @@ exclude = "^(experiments/lab/ml_spike/|experiments/lab/torch_probe/|experiments/
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# Task 19.27 (audits/audit-phase-19-triage.md §7 items 19 + 28): the suite is
+# two tiers. A bare `uv run pytest` (and therefore scripts/check.sh) runs the
+# DEFAULT tier — everything not marked `campaign`. The campaign tier is opt-in
+# via `-m campaign` (a CLI -m overrides this addopts -m; last one wins) and has
+# a standing automated home in .github/workflows/campaign-tier.yml's weekly
+# schedule, so it is exercised by automation, not by promise. The always-on set the
+# tier map keeps un-marked (training/README.md §2) is pinned by
+# tests/training/test_suite_tiers.py. --strict-markers makes a typo'd marker a
+# collection error instead of a silently always-on test.
+addopts = "--strict-markers -m 'not campaign'"
+markers = [
+    "campaign: campaign-tier tests over the frozen ML campaign machinery (training/README.md §2 FREEZE column). Excluded from the default gate; run weekly by CI's campaign-tier job, on demand with `uv run pytest -m campaign`, and at phase close. NOTE: the default -m filter also applies to explicit node ids — running a marked file directly needs `-m campaign` too.",
+    "slow: registered for tiering annotation (Task 19.27); carries no default filter — a slow test still runs in the default gate. Reserved so a future cut can select on it without re-registering.",
+    "perf: registered for tiering annotation (Task 19.27); carries no default filter. Reserved for performance-measurement tests a future cut may separate.",
+]
 
 [dependency-groups]
 # The gate toolchain: everything `scripts/check.sh` runs and nothing the

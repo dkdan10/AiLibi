@@ -76,6 +76,11 @@ from training.crew.scorer import (
 )
 from training.rewards import compute_shaped_reward
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 # The committed cheap linear scorers (the shared artifact/weights layout): the
 # 19-genome utility scorer (impostor encoder ``impostor-option-features-v1``) and
 # the 27-genome owned-task crew scorer (crew encoder ``crew-option-features-v2``).

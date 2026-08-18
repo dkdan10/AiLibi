@@ -115,6 +115,11 @@ from training.conviction.model import ConvictionStalenessCap, ConvictionUseCount
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import CrewOptionScorer, CrewTrackPolicy, build_crew_scorer
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 # ``scripts/`` is a bare-module namespace: the 18.31 loadable-freeze pin needs
 # the CONSUMING entry point ``run_tournament._load_candidate_policy``, so put
 # ``scripts/`` on sys.path the way tests/scripts/conftest.py does.

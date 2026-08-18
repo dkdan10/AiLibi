@@ -54,14 +54,12 @@ from meetings.schemas import (
     ObservationId,
     VoteBallot,
 )
-from tests.meetings.test_ballot_observation_citation import (
-    _obs_vote_responder,  # noqa: PLC2701
-    _participants,  # noqa: PLC2701
-)
-from tests.meetings.test_manager import (
-    _make_responder,  # noqa: PLC2701
-    _participant,  # noqa: PLC2701
-    _run_meeting,  # noqa: PLC2701
+from tests.meetings._manager_helpers import (
+    _make_responder,
+    _obs_vote_responder,
+    _participant,
+    _participants,
+    _run_meeting,
 )
 
 

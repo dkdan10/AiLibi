@@ -64,6 +64,11 @@ from training.scenarios import (
     scenario_by_name,
 )
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _GAME_MAP = load_canonical_map()
 
 
