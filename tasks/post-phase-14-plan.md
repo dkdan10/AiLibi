@@ -105,15 +105,23 @@ baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
  audits/                           record that passes the referee + win-edge bar
  audit-phase-18-close.md)
         │
-        │   Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18): a deep
-        │   review of the existing code (dead spots, dead code, refactor
-        │   opportunities) + an updated presentation of the frontend and the data
-        │   displays. NOT a feature phase. Heterogeneous-model lobbies are NOT in
-        │   Phase 19 — a model-vs-model comparison feature comes only AFTER the
-        │   review/refresh work, as its own later decision. The human seat is OUT
-        │   (not deferred-to-19; out).
+        │   Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18; chartered
+        │   2026-08-03, tasks/phase-19.md; CLOSED 2026-08-18 with NOTHING RECORDED,
+        │   Task 19.28 — audits/audit-phase-19-close.md): a deep review of the
+        │   existing code (dead spots, dead code, refactor opportunities) + an
+        │   updated presentation of the frontend and the data displays. NOT a
+        │   feature phase. Heterogeneous-model lobbies are NOT in Phase 19 — a
+        │   model-vs-model comparison feature comes only AFTER the review/refresh
+        │   work, as its own later decision. The human seat is OUT (not
+        │   deferred-to-19; out). All 28 contracts merged (the 27 dispatched ones
+        │   re-verified at the close, plus the close itself); the ladder tip
+        │   stood untouched at baseline 6.
         ▼
-      (presentation, re-scoped as a later decision)
+      (the post-19 decision, routed at the 19.28 close per locked decision 6:
+       the evidence-honesty substrate phase vs the presentation phase — put to
+       the owner with the committed 19.14 proof-vs-inference cells as evidence,
+       Option A (the substrate phase) recommended;
+       audits/audit-phase-19-close.md §4)
 ```
 
 ## 3. Phase-by-phase summary
@@ -184,13 +192,28 @@ baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
   general-base starvation finding; the Red-Queen cycling signature recorded for Phase 19). The
   deferral ledger routes through the close audit §6; the Phase-19 review inputs (dead-spot
   candidates, instrument residuals) through its §7.
-- **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18).** Not a feature phase: (a) a
+- **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18; `tasks/phase-19.md`, opened
+  2026-08-03, CLOSED 2026-08-18 with NOTHING RECORDED: all 28 contracts merged — the 27
+  dispatched ones re-verified at close HEAD, plus the close itself — the ladder tip stands at
+  baseline 6, and the whole gate — both test tiers, the
+  evidence completeness verifier, and byte identity — re-ran green at the close;
+  `audits/audit-phase-19-close.md`).** Not a feature phase: (a) a
   deep review of the code that already exists — dead spots, dead code, refactor opportunities; (b)
   an updated presentation of the frontend and the data displays. The human seat is OUT (not
   deferred-to-19; out). Heterogeneous-model lobbies are NOT in Phase 19 either — a feature comparing
   how models perform relative to one another comes only AFTER the review/refresh work, as its own
   later decision. The former presentation scope (leaderboards, highlight reels, dataset packaging,
-  the retrospective) re-enters only through that later decision.
+  the retrospective) re-enters only through that later decision. What the phase shipped: the
+  front-door/in-code truth sweeps with generated-fact checks, the spectator coherence pass
+  (unspoiled mode, the evidence taxonomy, the curated default, the static demo), the frontend test
+  baseline, the deduction metrics + injustice fixtures (the post-19 decision's committed
+  instrument), the ML tier map/retirements/report-honesty close, the coevo prune to the pinned
+  evidence branch with `verify-ml-evidence --complete`, the parameterized replay walker, and the
+  two-tier test structure. The close routed the post-19 decision — the evidence-honesty substrate
+  phase vs the presentation phase — to the owner with Option A (the substrate phase) recommended,
+  argued from the committed 19.14 proof-vs-inference cells (direct-proof conviction accuracy 1.000
+  everywhere vs non-direct 0.303/0.393 carrying every innocent ejection;
+  `audits/audit-phase-19-close.md` §4).
 
 ## 4. Standing rules (carried from the Phase-15 preamble and the planning audits)
 

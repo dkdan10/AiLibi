@@ -92,7 +92,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record | (b) | in git | 4.8 MB / 97 files |
+| `audits/` — the audit record | (b) | in git | 4.8 MB / 98 files |
 | `docs/media/` — the README capture + screenshot | (a) | in git | 1.7 MB / 3 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |

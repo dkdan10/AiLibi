@@ -31,6 +31,10 @@ this file; the roadmap gets its tick.
 - audits/audit-phase-19-close.md (new)
 - tasks/phase-19.md; (the STATUS banner + any close-recorded surgery notes)
 - tasks/post-phase-14-plan.md; (the roadmap tick)
+- docs/artifacts.md; (close-recorded surgery, 2026-08-18: the audits/ registry-count row ONLY — landing the close audit moves the fail-loud in-tree family inventory by one, so the close bumps the one counted cell; ratified by the merge of the close PR, the 15.18 convention)
+- README.md; (close-recorded surgery, 2026-08-18: the two living project-status/roadmap sentences that said Phase 19 "is under way" ONLY — flipping the banner without them would reintroduce the exact front-door drift class 19.1 removed; same ratification)
+- DESIGN.md; (close-recorded surgery, 2026-08-18: the §9 supersession-banner line that said Phase 19 is under way ONLY — that line is 19.1's demotion-era supersession prose, not historical content; same ratification)
+- docs/reading-guide.md; (close-recorded surgery, 2026-08-18: the two `tasks/phase-19.md` line anchors the banner expansion shifted, refreshed to the moved lines ONLY — the standing coordination-commit convention applied inside the drift-causing PR; same ratification)
 
 **Files NOT in scope:**
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
@@ -69,7 +73,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - Identify the existing local patterns for the files in scope and follow them.
 
 ## Constraints and non-goals
-Do not modify DESIGN.md.
 Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
