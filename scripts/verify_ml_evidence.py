@@ -74,6 +74,18 @@ from typing import Final, Literal
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 _SCRIPTS_DIR: Final = Path(__file__).resolve().parent
+
+# A command whose banner says "no artifact is written" must not write bytecode
+# either. On a fresh writable checkout with no warm caches, CPython creates
+# ``__pycache__/*.pyc`` beside every module imported below — ``paired_stats``,
+# ``_verify_samples``, and the ``training.*`` packages the recompute leg imports
+# lazily — INSIDE the checkout being verified, which is a mutation the read-only
+# contract forbids and which the read-only test could not see, because it
+# snapshots the synthetic tree while the imports land in the real one (Codex
+# review, PR #348). This must precede the bootstrap imports: it only governs
+# imports that follow it.
+sys.dont_write_bytecode = True
+
 # Make both the top-level packages (``training``) and the sibling script modules
 # (``paired_stats``, ``_verify_samples`` — top-level names per
 # ``mypy_path = "scripts"``) importable under
@@ -584,6 +596,24 @@ def git_tracked_sidecars(repo_root: Path) -> list[str] | None:
     return [name for name in completed.stdout.decode().split("\0") if name]
 
 
+def git_tracked_under(repo_root: Path, pathspec: tuple[str, ...]) -> list[str] | None:
+    """Every tracked path under ``pathspec``, or ``None`` when there is no index.
+
+    The committed inventory of an in-tree registry family. ``None`` is reported
+    as its own ABSENT row rather than skipped, for the same reason
+    :func:`git_tracked_sidecars` does it: with no inventory the row can only
+    confirm the anchors it was handed, and anchors cannot notice a deletion
+    beside them.
+    """
+
+    if not pathspec:
+        return []
+    completed = _git(repo_root, "ls-files", "-z", "--", *pathspec)
+    if completed is None or completed.returncode != 0:
+        return None
+    return [name for name in completed.stdout.decode().split("\0") if name]
+
+
 def _git_blob(repo_root: Path, revision: str, path: str) -> bytes | None:
     """A blob out of a LOCAL git object, or ``None`` when it is not here.
 
@@ -628,6 +658,48 @@ def _normalize_label(cell: str) -> str:
 _FRACTION: Final = re.compile(r"(?<![\d.])(\d+)\s*/\s*(\d+)(?![\d.])")
 
 
+#: The two shapes the committed reports use to print a value BESIDE its
+#: fraction: `**76.7%** (46/60)` (surrogate §3) and `90/96 = 0.9375`
+#: (conviction §4). Reading only the fraction meant the adjacent figure could be
+#: edited to contradict it while every recomputation row still read OK, and the
+#: report a human opens visibly stated a different result (Codex review, PR
+#: #348).
+#:
+#: Matched as ADJACENCY rather than by scanning the cell for numbers, which is
+#: the important part: report cells also carry confidence intervals —
+#: `0.05263 (23/437) [0.0353, 0.0777]` in the finalist report — and a bare scan
+#: reads those bounds as figures contradicting the fraction. A verifier that
+#: false-fails on a correct report is worse than a narrow one, because it
+#: teaches its reader to ignore it.
+_VALUE_THEN_FRACTION: Final = re.compile(
+    r"(\d+(?:\.\d+)?)\s*%\**\s*\(\s*(\d+)\s*/\s*(\d+)\s*\)"
+)
+_FRACTION_THEN_VALUE: Final = re.compile(
+    r"(\d+)\s*/\s*(\d+)\s*\**\s*=\s*\**\s*(\d*\.\d+)"
+)
+
+
+def _displayed_drift(cell: str) -> list[str]:
+    """Published values in ``cell`` that the fraction beside them does not give.
+
+    Compared at the precision the report itself chose, because that is the claim
+    it makes: `76.7%` asserts 46/60 to one decimal place, not to full precision.
+    """
+
+    drift: list[str] = []
+    for shown, numerator, denominator, scale, suffix in (
+        *((s, n, d, 100.0, "%") for s, n, d in _VALUE_THEN_FRACTION.findall(cell)),
+        *((s, n, d, 1.0, "") for n, d, s in _FRACTION_THEN_VALUE.findall(cell)),
+    ):
+        if not int(denominator):
+            continue
+        places = len(shown.partition(".")[2])
+        value = int(numerator) / int(denominator)
+        if round(value * scale, places) != float(shown):
+            drift.append(f"shows {shown}{suffix} beside {numerator}/{denominator}")
+    return drift
+
+
 def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, int]:
     """The ``n/d`` a report's table states for ``label`` — the committed verdict.
 
@@ -646,6 +718,7 @@ def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, in
     """
 
     found: dict[tuple[int, int], int] = {}
+    contradictions: list[str] = []
     for cells in _table_rows(_read_text(repo_root, rel)):
         if len(cells) < 2 or _normalize_label(cells[0]) != label.lower():
             continue
@@ -653,6 +726,13 @@ def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, in
         for numerator, denominator in matches:
             pair = (int(numerator), int(denominator))
             found[pair] = found.get(pair, 0) + 1
+        contradictions.extend(_displayed_drift(cells[1]))
+    if contradictions:
+        raise EvidenceError(
+            f"{rel}: the row labelled {label!r} states a value that its own "
+            f"fraction does not produce ({'; '.join(contradictions)}) — the "
+            "published figure and the fraction beside it must agree"
+        )
     if not found:
         raise EvidenceError(
             f"{rel}: no table row labelled {label!r} states an 'n/d' fraction — "
@@ -665,6 +745,54 @@ def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, in
             f"({stated}); the report disagrees with itself"
         )
     return next(iter(found))
+
+
+#: The finalist erratum's multiplicity conclusion: `**α = 0.05 / 4 = 0.0125**`
+#: and the arms it names as surviving that bar.
+_ALPHA_STATEMENT: Final = re.compile(r"α\s*=\s*([\d.]+)\s*/\s*(\d+)\s*=\s*([\d.]+)")
+_ENTRANT: Final = re.compile(r"`(p18-[A-Za-z0-9_-]+)`")
+#: Word-bounded on purpose: the same report says "survive item 1 untouched"
+#: sixty lines further down, and a bare substring search closes the survivor
+#: window on whichever comes first.
+_SURVIVE_CLAUSE: Final = re.compile(r"survive it\b")
+
+
+def bonferroni_from_report(repo_root: Path) -> tuple[float, int, float, list[str]]:
+    """The family-wise bar and surviving arms the finalist report publishes.
+
+    Read rather than transcribed, for the same reason the fractions are: the
+    erratum IS the committed record of this conclusion, so an edit to it must
+    turn the command red instead of being quietly out-voted by a recomputation
+    that never looks at it.
+
+    The survivor list is taken from the window BETWEEN the alpha statement and
+    the phrase that closes it, so an unrelated "only" elsewhere in a 2,600-line
+    report cannot widen the span and drag in arms the sentence never named.
+    """
+
+    text = _read_text(repo_root, FINALIST_REPORT)
+    alpha = _ALPHA_STATEMENT.search(text)
+    if alpha is None:
+        raise EvidenceError(
+            f"{FINALIST_REPORT}: no 'α = <alpha> / <family> = <bar>' statement — "
+            "the multiplicity conclusion this check compares against is gone"
+        )
+    tail = text[alpha.end() :]
+    closing = _SURVIVE_CLAUSE.search(tail)
+    if closing is None:
+        raise EvidenceError(
+            f"{FINALIST_REPORT}: the family-wise bar is stated but no "
+            "'survive it' clause names which arms clear it"
+        )
+    window = tail[: closing.start()]
+    only = window.rfind("only")
+    survivors = sorted(set(_ENTRANT.findall(window[only:] if only >= 0 else window)))
+    if not survivors:
+        raise EvidenceError(
+            f"{FINALIST_REPORT}: the 'survive it' clause names no arm; "
+            "the report's own list of surviving arms is unreadable"
+        )
+    return float(alpha.group(1)), int(alpha.group(2)), float(alpha.group(3)), survivors
 
 
 # --------------------------------------------------------------------------- #
@@ -1274,8 +1402,10 @@ def run_recompute(ctx: Context) -> LegResult:
         load_composed_verdict,
         run_composed_fidelity,
     )
+    from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
     from training.conviction.dataset import build_conviction_table
     from training.conviction.fidelity import (
+        CONVICTION_CONVERSION_DECISION_THRESHOLD,
         decide_conviction_go,
         load_conviction_verdict,
         run_conviction_fidelity,
@@ -1478,8 +1608,36 @@ def run_recompute(ctx: Context) -> LegResult:
         )
     )
 
-    # ---- the shas the verdicts are keyed to. ----
+    # ---- the manifest that pins the whole composed configuration. ----
+    # Checking only the two weight hashes left every OPERATING PARAMETER in this
+    # file unverified: `decision_threshold`, `skip_confidence_threshold`,
+    # `replay_set_dir`, `corpus_set` and the two verdicts could each drift while
+    # the recomputation above quietly went on using the imported constants and
+    # the committed corpus — so the command could certify a configuration that
+    # contradicts the computation it had just performed (Codex review, PR #348).
+    # Every field is re-derivable, so none of this is transcribed: the thresholds
+    # come from the constants the instruments actually apply, the verdicts from
+    # the re-derived decisions, and the corpus from the set this leg loaded.
     manifest = json.loads(_read_text(ctx.repo_root, f"{COMPOSED_DIR}/manifest.json"))
+    rows.append(
+        _verdict_identity_row(
+            "composed manifest.json reproduces",
+            rederived={
+                "surrogate_weights_sha256": surrogate_sha,
+                "conviction_weights_sha256": conviction_sha,
+                "composed_verdict": str(composed_rederived.verdict),
+                "conviction_verdict": str(conviction_rederived.verdict),
+                "corpus_set": CORPUS_SET.rsplit("/", 1)[-1],
+                "replay_set_dir": CORPUS_SET,
+                "decision_threshold": CONVICTION_CONVERSION_DECISION_THRESHOLD,
+                "skip_confidence_threshold": DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+            },
+            committed={key: value for key, value in manifest.items()},
+            repo_root=ctx.repo_root,
+            path_fields=("replay_set_dir",),
+            source=f"{COMPOSED_DIR}/manifest.json",
+        )
+    )
     for label, measured_sha, committed_sha, source in (
         (
             "surrogate weights sha256",
@@ -1736,9 +1894,32 @@ def run_paired(ctx: Context) -> LegResult:
             )
         )
 
-    # The multiplicity line the erratum draws its conclusion from, recomputed.
+    # The multiplicity line the erratum draws its conclusion from, recomputed AND
+    # compared. Leaving it at INFO ("reported, not pinned") meant the erratum's
+    # bar or its named survivors could be edited to contradict the very p values
+    # verified row-by-row above, and this command would still exit 0 — the
+    # published conclusion is part of the committed record, not commentary
+    # (Codex review, PR #348).
     threshold = paired_stats.FAMILY_ALPHA / len(stats)
     clears = sorted(row.entrant for row in stats if row.p_exact < threshold)
+    stated_alpha, stated_family, stated_bar, stated_clears = bonferroni_from_report(
+        ctx.repo_root
+    )
+    bar_drift: list[str] = []
+    if stated_alpha != paired_stats.FAMILY_ALPHA:
+        bar_drift.append(
+            f"alpha: report {stated_alpha} != {paired_stats.FAMILY_ALPHA} "
+            "(scripts/paired_stats.FAMILY_ALPHA)"
+        )
+    if stated_family != len(stats):
+        bar_drift.append(f"family size: report {stated_family} != {len(stats)} arms")
+    if abs(stated_bar - threshold) > FLOAT_TOLERANCE:
+        bar_drift.append(f"bar: report {stated_bar} != {threshold:.4f}")
+    if stated_clears != clears:
+        bar_drift.append(
+            f"survivors: report {', '.join(stated_clears) or '(none)'} != "
+            f"recomputed {', '.join(clears) or '(none)'}"
+        )
     rows.append(
         CheckRow(
             name="Bonferroni family bar",
@@ -1746,9 +1927,13 @@ def run_paired(ctx: Context) -> LegResult:
                 f"alpha {paired_stats.FAMILY_ALPHA}/{len(stats)} = {threshold:.4f}; "
                 f"clears: {', '.join(clears) if clears else '(none)'}"
             ),
-            committed="reported, not pinned — the per-arm p values above are",
-            source="scripts/paired_stats.py (FAMILY_ALPHA)",
-            status="INFO",
+            committed=(
+                f"alpha {stated_alpha}/{stated_family} = {stated_bar}; "
+                f"survives: {', '.join(stated_clears)}"
+            ),
+            source=f"{FINALIST_REPORT} (multiplicity erratum)",
+            status="OK" if not bar_drift else "FAIL",
+            detail="\n".join(bar_drift),
         )
     )
     return LegResult(leg="paired", rows=tuple(rows))
@@ -2015,6 +2200,11 @@ def run_availability(ctx: Context) -> LegResult:
         label = f"{key} [{class_cell}]"
         if recorded == "IN-TREE":
             probes = _IN_TREE_PROBES.get(key, ())
+            # These probes are ANCHORS, and several rows anchor on directories
+            # (`tests/fixtures`, `audits`, `docs/media`), so `.exists()` is the
+            # right test here. What anchors CANNOT do is notice a file deleted
+            # beside them — that is the aggregate inventory row below, which
+            # checks files with `.is_file()`.
             missing_paths = [p for p in probes if not (ctx.repo_root / p).exists()]
             rows.append(
                 _availability_row(
@@ -2097,6 +2287,65 @@ def run_availability(ctx: Context) -> LegResult:
                     detail="regenerated by the documented command, not preserved",
                 )
             )
+
+    # ---- the in-tree families, file by file rather than by anchor. ----
+    # The per-family rows above confirm the ANCHORS the probe table names, which
+    # is a handful of paths per family. Every other byte in those families —
+    # `training/artifacts/impostor/bc-dagger/config.json` is the review's own
+    # example — could be deleted with the family directory still standing, and
+    # no leg here reads it, so every row stayed OK and `--complete` certified a
+    # checkout missing a promised class-(a) byte (Codex review, PR #348). Git is
+    # the committed inventory of what each family holds; the round-1 fix
+    # established this idiom for the sidecars, and this is the same idiom applied
+    # to the registry's own in-tree rows. Without an index the row reports ABSENT
+    # (which `--complete` fails) rather than certifying an inventory it could not
+    # read.
+    in_tree_probes = tuple(
+        dict.fromkeys(
+            probe
+            for row_key, _cls, row_where, _size in doc_rows
+            if _WHERE_TO_CLASS[row_where] == "IN-TREE"
+            for probe in _IN_TREE_PROBES.get(row_key, ())
+        )
+    )
+    tracked_family_files = git_tracked_under(ctx.repo_root, in_tree_probes)
+    if tracked_family_files is None:
+        rows.append(
+            CheckRow(
+                name="in-tree family inventory",
+                measured="INVENTORY UNVERIFIABLE",
+                committed="`git ls-files` over the registry's in-tree rows",
+                source=f"{ARTIFACTS_DOC} (registry) + `git ls-files`",
+                status="ABSENT",
+                detail=(
+                    "no git index in this checkout, so the committed file list "
+                    "for each in-tree family cannot be read; the anchor rows "
+                    "above cannot notice a file deleted beside them"
+                ),
+            )
+        )
+    else:
+        vanished = [
+            path
+            for path in tracked_family_files
+            if not (ctx.repo_root / path).is_file()
+        ]
+        rows.append(
+            CheckRow(
+                name="in-tree family inventory",
+                measured=(
+                    f"{len(tracked_family_files) - len(vanished)}"
+                    f"/{len(tracked_family_files)} tracked files present"
+                ),
+                committed=(
+                    f"{len(tracked_family_files)} tracked under "
+                    f"{len(in_tree_probes)} registry path(s)"
+                ),
+                source=f"{ARTIFACTS_DOC} (registry) + `git ls-files`",
+                status="OK" if not vanished else "FAIL",
+                detail="absent: " + ", ".join(vanished[:20]) if vanished else "",
+            )
+        )
 
     # ---- named evidence with no registry row: recorded off-tree, or lost. ----
     for name, recorded_class, anchor_file, anchor_text in _OFF_TREE_ANCHORS:
@@ -2277,13 +2526,35 @@ def main(argv: list[str] | None = None) -> int:
         "--repo-root",
         type=Path,
         default=_REPO_ROOT,
-        help="the checkout to verify (defaults to this one)",
+        help=(
+            "the checkout to verify — must be this script's own checkout. To "
+            "verify a different one, run THAT checkout's copy of this script"
+        ),
     )
     args = parser.parse_args(argv)
     fast: bool = args.fast
     complete: bool = args.complete
     only: list[str] | None = args.only
     repo_root: Path = args.repo_root
+
+    # The verifier CODE always comes from this script's own checkout: the
+    # bootstrap above pins `sys.path`, and the recompute leg imports `training.*`
+    # (and the corpus leg `_verify_samples`) through it. Verifying a DIFFERENT
+    # checkout's evidence with this checkout's engine and ML code is a
+    # cross-revision run, and issuing a certificate for it is exactly the false
+    # certificate this command exists to prevent (Codex review, PR #348). The
+    # honest way to verify another checkout is to run its own copy — which needs
+    # no flag, and picks up that revision's verifier rather than this one.
+    if repo_root.resolve() != _REPO_ROOT:
+        print(
+            f"--repo-root {repo_root} is not this script's checkout "
+            f"({_REPO_ROOT}). This command's verifier code is imported from its "
+            "own checkout, so it cannot certify another one's evidence; run "
+            "that checkout's copy instead:\n"
+            f"    uv run python {repo_root}/scripts/verify_ml_evidence.py",
+            file=sys.stderr,
+        )
+        return 2
 
     if complete and only:
         print(

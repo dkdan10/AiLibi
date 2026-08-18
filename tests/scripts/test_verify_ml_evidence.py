@@ -25,6 +25,8 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -101,6 +103,69 @@ def _context(root: Path, *, fast: bool = False, complete: bool = False) -> vme.C
     )
 
 
+def _availability_tree(root: Path) -> None:
+    """Every probe anchor ``run_availability`` reads, as symlinks.
+
+    Deliberately does NOT create `docs/artifacts.md` or the slate manifest: the
+    loss path is defined by the absence of the latter, and tests that rewrite the
+    ruling need their own copy of the former.
+    """
+
+    for probe in (
+        "replays/samples/4p1i",
+        "replays/ml_corpus/4p1i",
+        "tests/fixtures",
+        "data/personas.json",
+        "training/artifacts/impostor",
+        "training/artifacts/crew",
+        "training/artifacts/anchor_study",
+        vme.SURROGATE_DIR,
+        vme.CONVICTION_DIR,
+        vme.COMPOSED_DIR,
+        "audits",
+        "docs/media",
+        "design/phase-12",
+        "experiments/lab",
+        "experiments/model_probe",
+        "agents/tactical/learned/weights.json",
+        "agents/tactical/learned/weights.json.sha256",
+        "agents/tactical/learned/crew_weights.json",
+        "agents/tactical/learned/crew_weights.json.sha256",
+        "replays/samples/9p2i",
+        "replays/ml_corpus/9p2i",
+    ):
+        _link(root, probe)
+    # coevo/ is linked whole (the availability probe needs the directory and
+    # PATHS.md); the manifest and PATHS.md come with it.
+    (root / vme.COEVO_DEST).parent.mkdir(parents=True, exist_ok=True)
+    (root / vme.COEVO_DEST).symlink_to(_REPO_ROOT / vme.COEVO_DEST)
+    # training/reports is built file by file rather than linked whole: linking
+    # the real directory would drag `_finalist_eval_raw/MANIFEST.md` in with it
+    # and quietly undo the condition the loss test puts under test.
+    (root / "training/reports").mkdir(parents=True, exist_ok=True)
+    for name in ("results-finalist-eval.jsonl", "report-finalist-eval.md"):
+        (root / "training/reports" / name).symlink_to(
+            _REPO_ROOT / "training/reports" / name
+        )
+
+
+def _index(root: Path, *paths: str) -> None:
+    """Make ``root`` a git repo whose index holds exactly ``paths``.
+
+    ``git ls-files`` reads the INDEX, so no commit is needed — and staging only
+    the named paths lets a test state the committed inventory it is verifying
+    against instead of inheriting whatever the scratch tree happens to contain.
+    """
+
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+    }
+    subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+    subprocess.run(["git", "-C", str(root), "add", "--", *paths], check=True, env=env)
+
+
 def _row(rows: Sequence[vme.CheckRow], name: str) -> vme.CheckRow:
     matches = [row for row in rows if row.name == name]
     assert len(matches) == 1, f"expected exactly one {name!r} row, got {len(matches)}"
@@ -166,7 +231,10 @@ def test_paired_leg_reproduces_the_committed_erratum() -> None:
     """Every arm's paired statistics reproduce the 19.20 erratum table."""
 
     result = vme.run_paired(_context(_REPO_ROOT))
-    assert [row.status for row in result.rows if row.status != "INFO"] == ["OK"] * 4
+    # Four per-arm rows plus the Bonferroni row, which is compared against the
+    # erratum's published conclusion rather than merely reported.
+    assert [row.status for row in result.rows if row.status != "INFO"] == ["OK"] * 5
+    assert _row(result.rows, "Bonferroni family bar").status == "OK"
     assert {row.name for row in result.rows} >= {
         f"paired McNemar + Wilson: {entrant}"
         for entrant in vme.erratum_paired_rows(_REPO_ROOT)
@@ -856,42 +924,7 @@ def test_complete_accepts_a_manifestless_recorded_loss_end_to_end(
     """
 
     root = tmp_path / "repo"
-    for probe in (
-        "replays/samples/4p1i",
-        "replays/ml_corpus/4p1i",
-        "tests/fixtures",
-        "data/personas.json",
-        "training/artifacts/impostor",
-        "training/artifacts/crew",
-        "training/artifacts/anchor_study",
-        vme.SURROGATE_DIR,
-        vme.CONVICTION_DIR,
-        vme.COMPOSED_DIR,
-        "audits",
-        "docs/media",
-        "design/phase-12",
-        "experiments/lab",
-        "experiments/model_probe",
-        "agents/tactical/learned/weights.json",
-        "agents/tactical/learned/weights.json.sha256",
-        "agents/tactical/learned/crew_weights.json",
-        "agents/tactical/learned/crew_weights.json.sha256",
-        "replays/samples/9p2i",
-        "replays/ml_corpus/9p2i",
-    ):
-        _link(root, probe)
-    # coevo/ is linked whole (the availability probe needs the directory and
-    # PATHS.md); the manifest and PATHS.md come with it.
-    (root / vme.COEVO_DEST).parent.mkdir(parents=True, exist_ok=True)
-    (root / vme.COEVO_DEST).symlink_to(_REPO_ROOT / vme.COEVO_DEST)
-    # training/reports is built file by file rather than linked whole: linking
-    # the real directory would drag `_finalist_eval_raw/MANIFEST.md` in with it
-    # and quietly undo the very condition under test.
-    (root / "training/reports").mkdir(parents=True, exist_ok=True)
-    for name in ("results-finalist-eval.jsonl", "report-finalist-eval.md"):
-        (root / "training/reports" / name).symlink_to(
-            _REPO_ROOT / "training/reports" / name
-        )
+    _availability_tree(root)
     doc = _copy(root, vme.ARTIFACTS_DOC)
     doc.write_text(
         doc.read_text().replace(
@@ -919,17 +952,25 @@ def test_complete_accepts_a_manifestless_recorded_loss_end_to_end(
     assert slate_registry.name not in failed
     assert slate_ruling.name not in failed
 
-    # Exactly two rows fail, and neither is about the lost slate's evidence.
-    # Asserted by name so the scratch tree's shape stays visible rather than
-    # hidden behind a loose assertion:
+    # Exactly three rows fail, and none of them is about the lost slate's
+    # evidence. Asserted by name so the scratch tree's shape stays visible rather
+    # than hidden behind a loose assertion:
     #
     #  * `coevo/` — those bytes are PROMISED (not lost) and this tree has not
     #    restored them, so ABSENT failing --complete is the correct behaviour;
     #  * the slate MANIFEST's own registry row — this tree pairs a LOST ruling
     #    with the registry as it stands TODAY, which still lists that file as a
     #    class-(b) in-git artifact. A real ratified loss would drop that row
-    #    (and its probe here) in the same change that flipped the ruling.
-    assert failed == {"coevo/ [(c)]", f"{vme.SLATE_MANIFEST} [(b)]"}
+    #    (and its probe here) in the same change that flipped the ruling;
+    #  * the in-tree family inventory — a symlink scratch tree has no git index,
+    #    so the committed file list cannot be read. ABSENT rather than a silent
+    #    pass is the point of that row, and `--complete` failing on it is the
+    #    same refusal-to-certify the sidecar inventory already makes.
+    assert failed == {
+        "coevo/ [(c)]",
+        f"{vme.SLATE_MANIFEST} [(b)]",
+        "in-tree family inventory",
+    }
 
 
 def test_a_declared_set_with_no_replays_fails(tmp_path: Path) -> None:
@@ -1008,3 +1049,241 @@ def test_a_duplicated_manifest_row_is_refused(tmp_path: Path) -> None:
     )
     with pytest.raises(vme.EvidenceError, match="duplicate digest row"):
         vme.evidence_rows(root, slate_lost=True)
+
+
+def test_a_report_value_contradicting_its_fraction_raises(tmp_path: Path) -> None:
+    """The published figure beside a fraction is part of the committed verdict.
+
+    Reading only the ``n/d`` meant the adjacent value could be edited to say
+    something the fraction does not produce, and every recomputation row still
+    read OK while the report a human opens visibly stated a different result.
+    Both committed shapes are covered, each with its unperturbed control first.
+    """
+
+    decimal_root = tmp_path / "decimal"
+    report = _copy(decimal_root, vme.CONVICTION_REPORT)
+    assert vme.fraction_from_report(
+        decimal_root, vme.CONVICTION_REPORT, "conversion accuracy"
+    ) == (90, 96)
+    report.write_text(report.read_text().replace("90/96 = 0.9375", "90/96 = 0.5000"))
+    with pytest.raises(vme.EvidenceError, match="its own fraction does not produce"):
+        vme.fraction_from_report(
+            decimal_root, vme.CONVICTION_REPORT, "conversion accuracy"
+        )
+
+    percent_root = tmp_path / "percent"
+    surrogate = _copy(percent_root, vme.SURROGATE_REPORT)
+    label = "top-1 (ejected target ranked first)"
+    assert vme.fraction_from_report(percent_root, vme.SURROGATE_REPORT, label) == (
+        46,
+        60,
+    )
+    surrogate.write_text(
+        surrogate.read_text().replace("**76.7%** (46/60)", "**99.9%** (46/60)")
+    )
+    with pytest.raises(vme.EvidenceError, match="its own fraction does not produce"):
+        vme.fraction_from_report(percent_root, vme.SURROGATE_REPORT, label)
+
+    # A verifier that false-fails on a correct report teaches its reader to
+    # ignore it, so the published value is matched by ADJACENCY to the fraction
+    # rather than by scanning the cell for numbers: report cells also carry
+    # confidence intervals, and a bare scan reads those bounds as contradictions.
+    for benign in (
+        "0.05263 (23/437) [0.0353, 0.0777]",  # the finalist report's shape
+        "12/50 (24.0%) [0.1345, 0.3821]",
+        "0/0 undef",
+        "**76.7%** (46/60)",
+        "90/96 = 0.9375",
+    ):
+        assert vme._displayed_drift(benign) == [], benign
+
+
+def test_a_family_file_no_anchor_names_is_still_required(tmp_path: Path) -> None:
+    """A tracked byte inside an in-tree family cannot vanish unnoticed.
+
+    The per-family rows check ANCHORS, so a file no probe names and no other leg
+    opens could be deleted with the family directory still standing and every row
+    stayed OK. The review's own example is used verbatim, and the test asserts
+    the DISCRIMINATION: the same tree passes with the file present.
+    """
+
+    root = tmp_path / "repo"
+    _availability_tree(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.SLATE_MANIFEST)
+    family = "training/artifacts/impostor"
+    unanchored = f"{family}/bc-dagger/config.json"
+    # Stage a file the probe table never names, so the inventory is exactly the
+    # thing under test rather than whatever else the scratch tree holds.
+    (root / family).unlink()
+    _link(root, unanchored, f"{family}/map-elites/config.json")
+    _index(root, unanchored, f"{family}/map-elites/config.json")
+
+    present = _row(
+        vme.run_availability(_context(root)).rows, "in-tree family inventory"
+    )
+    assert present.status == "OK", present.detail
+    assert present.measured.startswith("2/2")
+
+    (root / unanchored).unlink()
+    gone = _row(vme.run_availability(_context(root)).rows, "in-tree family inventory")
+    assert gone.status == "FAIL"
+    assert unanchored in gone.detail
+    # The family's own anchor row still reads OK — which is precisely why the
+    # inventory row has to exist.
+    anchor = next(
+        row
+        for row in vme.run_availability(_context(root)).rows
+        if row.name.startswith(f"{family}/")
+    )
+    assert anchor.status == "OK"
+
+
+def test_a_tree_without_a_git_index_reports_the_inventory_absent(
+    tmp_path: Path,
+) -> None:
+    """No index is a reportable state, never a silent pass."""
+
+    root = tmp_path / "repo"
+    _availability_tree(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.SLATE_MANIFEST)
+    row = _row(vme.run_availability(_context(root)).rows, "in-tree family inventory")
+    assert row.status == "ABSENT"
+    assert "no git index" in row.detail
+    rows = vme.run_availability(_context(root, complete=True)).rows
+    assert "in-tree family inventory" in {
+        failing.name for failing in vme._failed(rows, complete=True)
+    }
+
+
+def test_a_drifted_bonferroni_conclusion_fails(tmp_path: Path) -> None:
+    """The erratum's published multiplicity conclusion is compared, not quoted.
+
+    Left at INFO, the bar or its named survivors could be edited to contradict
+    the very p-values this leg verifies row by row and the command still exited
+    0. Both halves of the statement are perturbed.
+    """
+
+    survivors_root = tmp_path / "survivors"
+    _manifests(survivors_root)
+    _link(survivors_root, vme.ARTIFACTS_DOC, vme.FINALIST_RESULTS)
+    report = _copy(survivors_root, vme.FINALIST_REPORT)
+    assert vme.bonferroni_from_report(survivors_root) == (
+        0.05,
+        4,
+        0.0125,
+        ["p18-imp-bfd145cb", "p18-imp-ea4bc955"],
+    )
+    report.write_text(
+        report.read_text().replace(
+            "`p18-imp-bfd145cb` (p = 0.0041) survive it",
+            "`p18-imp-7f73929d` (p = 0.0352) survive it",
+        )
+    )
+    row = _row(vme.run_paired(_context(survivors_root)).rows, "Bonferroni family bar")
+    assert row.status == "FAIL"
+    assert "survivors" in row.detail
+
+    bar_root = tmp_path / "bar"
+    _manifests(bar_root)
+    _link(bar_root, vme.ARTIFACTS_DOC, vme.FINALIST_RESULTS)
+    bar_report = _copy(bar_root, vme.FINALIST_REPORT)
+    bar_report.write_text(
+        bar_report.read_text().replace(
+            "**α = 0.05 / 4 = 0.0125**", "**α = 0.05 / 2 = 0.0250**"
+        )
+    )
+    bar_row = _row(vme.run_paired(_context(bar_root)).rows, "Bonferroni family bar")
+    assert bar_row.status == "FAIL"
+    assert "family size" in bar_row.detail and "bar:" in bar_row.detail
+
+
+def test_a_drifted_composed_manifest_field_is_compared(tmp_path: Path) -> None:
+    """Every manifest field is compared, not only the two weight hashes.
+
+    `manifest.json` pins the operating parameters the recomputation applies, so a
+    drifted `decision_threshold` or `corpus_set` would have let the command
+    certify a configuration contradicting the computation it just performed. The
+    re-derived side is exercised end to end by
+    ``test_recompute_reproduces_every_committed_verdict``; this test pins the
+    comparison's discrimination without paying for the 30s leg twice.
+    """
+
+    committed = json.loads(
+        (_REPO_ROOT / f"{vme.COMPOSED_DIR}/manifest.json").read_text()
+    )
+    source = f"{vme.COMPOSED_DIR}/manifest.json"
+    clean = vme._verdict_identity_row(
+        "composed manifest.json reproduces",
+        rederived=dict(committed),
+        committed=committed,
+        repo_root=_REPO_ROOT,
+        path_fields=("replay_set_dir",),
+        source=source,
+    )
+    assert clean.status == "OK"
+    assert clean.measured.startswith(f"{len(committed)}/{len(committed)}")
+
+    # Every field the previous revision ignored, one at a time.
+    for field in (
+        "decision_threshold",
+        "skip_confidence_threshold",
+        "composed_verdict",
+        "conviction_verdict",
+        "corpus_set",
+        "replay_set_dir",
+    ):
+        drifted = dict(committed)
+        drifted[field] = (
+            "replays/ml_corpus/4p1i" if field == "replay_set_dir" else "DRIFTED"
+        )
+        row = vme._verdict_identity_row(
+            "composed manifest.json reproduces",
+            rederived=drifted,
+            committed=committed,
+            repo_root=_REPO_ROOT,
+            path_fields=("replay_set_dir",),
+            source=source,
+        )
+        assert row.status == "FAIL", field
+        assert field in row.detail
+
+
+def test_the_command_writes_no_bytecode() -> None:
+    """The read-only contract covers `__pycache__`, not just artifacts.
+
+    On a fresh writable checkout CPython would otherwise write `*.pyc` beside
+    every module the command imports — inside the tree being verified. The
+    ordering assertion is the substantive one: the flag only governs imports that
+    follow it, so setting it after the bootstrap block would be a no-op for
+    exactly the modules that matter.
+    """
+
+    assert sys.dont_write_bytecode is True
+    lines = (_REPO_ROOT / "scripts/verify_ml_evidence.py").read_text().splitlines()
+    flag = next(
+        index for index, line in enumerate(lines) if "dont_write_bytecode" in line
+    )
+    first_bootstrap_import = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith(("import paired_stats", "from _verify_samples"))
+    )
+    assert flag < first_bootstrap_import
+
+
+def test_a_foreign_repo_root_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A checkout this command cannot import from is one it cannot certify.
+
+    `--repo-root` advertised "the checkout to verify", but the verifier code —
+    `training.*`, `_verify_samples`, `paired_stats` — always resolves through the
+    script's own `sys.path`. Recomputing one revision's evidence with another
+    revision's engine is precisely the false certificate this command exists to
+    prevent, so the combination is refused and the message names the honest way.
+    """
+
+    assert vme.main(["--repo-root", str(tmp_path)]) == 2
+    stderr = capsys.readouterr().err
+    assert "is not this script's checkout" in stderr
+    assert "scripts/verify_ml_evidence.py" in stderr
