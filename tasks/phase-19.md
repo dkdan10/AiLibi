@@ -1,14 +1,28 @@
 # Phase 19 — Review-and-refresh: truth, the spectator, and the ML close
 
-STATUS: OPEN (chartered 2026-08-03; the owner's merge of this document ratifies the plan —
-the 15.18 convention). Phase 19 is REVIEW-AND-REFRESH by owner charter
-(`tasks/post-phase-14-plan.md`): a deep review of the code that exists plus an updated
-presentation of the frontend and the data displays — NOT a feature phase. The planning
-spine is `audits/audit-phase-19-triage.md` (§7 work-list, §8 claim-verification table);
-the phase shape, the owner's decision-menu answers, and every divergence from the triage
-are recorded in `audits/audit-phase-19-planning.md`. The gate baseline at chartering:
-4531 passed / 20 skipped / 3 xfailed at `67166b3`, code byte-identical to the audited
-`8873e99`. The ladder tip stands at baseline 6 and does not move this phase.
+STATUS: CLOSED 2026-08-18 with NOTHING RECORDED (Task 19.28;
+`audits/audit-phase-19-close.md`) — the ladder tip STANDS at baseline 6 (the 18.12
+adopting record), exactly where the charter left it. All 27 dispatched contracts merged
+(2026-08-03 → 2026-08-18) and were re-verified at close HEAD `7be97c7`: the whole gate
+green by the verifiers' actual paths (default tier 4,621 passed + the 19.27 campaign tier
+317 passed; `verify-ml-evidence --complete` 54 checks 0 FAIL; both canonical sets
+byte-clean), one close-found defect recorded and routed rather than fixed (F1 — the
+default pytest gate and the restored-evidence state are mutually exclusive), and every
+contract verified-or-deviation-recorded in the close ledger, none silent. The post-19
+menu (locked decision 6 below) was put to the owner with the committed 19.14
+proof-vs-inference cells as the evidence — direct-proof conviction accuracy 1.000 on
+every committed set (310/310 pooled) against non-direct 0.303/0.393 carrying 79/79 of
+the innocent ejections — with Option A (the evidence-honesty substrate phase)
+recommended; the ruling records per `audits/audit-phase-19-close.md` §4.4. Phase 19 was
+REVIEW-AND-REFRESH by owner charter (`tasks/post-phase-14-plan.md`, chartered 2026-08-03;
+the owner's merge of this document ratified the plan — the 15.18 convention): a deep
+review of the code that exists plus an updated presentation of the frontend and the data
+displays — NOT a feature phase. The planning spine is `audits/audit-phase-19-triage.md`
+(§7 work-list, §8 claim-verification table); the phase shape, the owner's decision-menu
+answers, and every divergence from the triage are recorded in
+`audits/audit-phase-19-planning.md`. The gate baseline at chartering: 4531 passed / 20
+skipped / 3 xfailed at `67166b3`, code byte-identical to the audited `8873e99`; at the
+close the two tiers together run 4,938 (+407, with the default gate −27.0 % in runtime).
 
 ## Locked decisions (owner-ratified 2026-08-03)
 
