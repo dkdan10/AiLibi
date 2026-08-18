@@ -7,14 +7,13 @@ instrument before and after, forever. The charter's baseline-2 9p2i table is thi
 module's reproduction gate (see :func:`compute_information_funnel` and the pins in
 ``tests/eval/test_funnel.py``).
 
-The reconstruction MIRRORS ``api/replay_loader.py::_walk`` (the loader is API-tier
-and carries serving concerns, so the seed/advance/apply/hash-verify loop is
-mirrored directly against :mod:`orchestrator.seeder` + :mod:`engine.tick` +
-:func:`orchestrator.game.apply_meeting_result`, NOT imported). Every recorded
-state hash is verified during the walk — the per-tick ``state_hash`` and each
-meeting row's ``state_hash_before`` / ``state_hash_after`` — so a corrupted or
-drifted set fails loud (:class:`FunnelReconstructionError`) rather than silently
-mis-measuring.
+The reconstruction runs on :func:`eval.replay_walk.walk_replay` under the named
+``funnel-instrument`` profile (Task 19.25 consolidated the formerly mirrored
+seed/advance/apply/hash-verify loop; the loader stays API-tier and separate).
+Every recorded state hash is verified during the walk — the per-tick
+``state_hash`` and each meeting row's ``state_hash_before`` /
+``state_hash_after`` — so a corrupted or drifted set fails loud
+(:class:`FunnelReconstructionError`) rather than silently mis-measuring.
 
 Three stages, each a fold over the game's BODY-REPORT meetings (emergency meetings
 carry no body and are excluded):
@@ -126,29 +125,34 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict
 
 from agents.perception import ingest_packet
-from engine.actions import Action
 from engine.entities import PlayerId, Role, RoomId
 from engine.events import (
-    EngineEvent,
     KilledEvent,
-    MeetingTriggeredEvent,
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from observation.service import ObservationService
+from eval.replay_walk import (
+    MeetingApplied,
+    MeetingOpened,
+    ReplayWalkConfig,
+    TickAdvanced,
+    TickOpened,
+    WalkViolation,
+    walk_replay,
+)
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.manager import derive_reported_testimony, extract_belief_evidence
 from meetings.render_contract import SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
-    MeetingResult,
     MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
@@ -163,21 +167,8 @@ from meetings.transcript import (
     grounded_vouch_subjects,
     reconstruct_stated_paths,
 )
-from orchestrator.game import (
-    TacticalAgent,
-    apply_meeting_result,
-    build_default_agent_factory,
-)
-from orchestrator.replay import (
-    LLMCallRecord,
-    MeetingReplayEntry,
-    ReplayEntry,
-    _state_hash,
-    read_all_entries,
-)
-from orchestrator.seeder import seed_initial_state
-
-_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+from orchestrator.game import TacticalAgent, build_default_agent_factory
+from orchestrator.replay import LLMCallRecord
 
 # The candidate-set band the "votes landing outside the pooled-knowledge set"
 # transmission leak is measured over (charter §2 Stage 3: "when that set was <=3").
@@ -197,6 +188,63 @@ class FunnelReconstructionError(RuntimeError):
     corrupted replay set fails loud rather than silently mis-measuring (AGENTS.md
     "no silent fallbacks").
     """
+
+
+def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    """The ``funnel-instrument`` profile's violation hook (both walks share it)."""
+
+    game_id = violation.game_id
+    if violation.kind == "tick_hash_mismatch":
+        raise FunnelReconstructionError(
+            f"{game_id}: tick {violation.tick} reconstructed {violation.actual!r} "
+            f"!= recorded "
+            f"{violation.expected!r} (roster mismatch or engine non-determinism)"
+        )
+    if violation.kind == "missing_meeting_row":
+        # DELIBERATE divergence from the loader here: the loader SERVES a
+        # partial replay (a run that crashed mid-meeting) by truncating the
+        # timeline, but a measurement instrument must never silently
+        # under-count — a MEETING tick with no (or a tick-drifted) meeting
+        # row would drop every later body-report meeting from the folds
+        # while the CLI exits 0. Fail loud instead.
+        raise FunnelReconstructionError(
+            f"{game_id}: tick {violation.tick} entered MEETING but the replay "
+            "carries no meeting row for that tick (partial recording or "
+            "drifted meeting tick) — refusing to silently under-measure"
+        )
+    if violation.kind == "meeting_pre_hash_mismatch":
+        # The meeting row's OWN pre-hash must also match the reconstruction —
+        # the tick row's hash does not cover it: a tampered/drifted
+        # ``state_hash_before`` on the meeting row alone would otherwise pass
+        # silently ("every recorded state hash is verified during the walk").
+        raise FunnelReconstructionError(
+            f"{game_id}: meeting at tick {violation.tick} recorded "
+            f"state_hash_before {violation.expected!r} != "
+            f"reconstructed pre-meeting state {violation.actual!r}"
+        )
+    if violation.kind == "meeting_post_hash_mismatch":
+        raise FunnelReconstructionError(
+            f"{game_id}: meeting at tick {violation.tick} reconstructed "
+            f"{violation.actual!r} "
+            f"!= recorded {violation.expected!r}"
+        )
+    raise FunnelReconstructionError(  # pragma: no cover - profile never enables it
+        f"{game_id}: unexpected walk violation {violation.kind!r}"
+    )
+
+
+# The named Task 19.25 profile (see eval/replay_walk.py's drift record), shared
+# by BOTH funnel walks: every recorded hash verified (per-tick + meeting
+# before/after), missing meeting row fail-loud. The vj walk's trigger-event and
+# living-vs-voters checks are consumer semantics in its own fold.
+_WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
+    profile="funnel-instrument",
+    on_violation=_raise_walk_violation,
+    verify_tick_hashes=True,
+    missing_meeting_row="violation",
+    verify_meeting_pre_hashes=True,
+    verify_meeting_post_hashes=True,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -271,10 +319,6 @@ class _GameWalk:
     moved: Mapping[int, Mapping[PlayerId, Mapping[PlayerId, tuple[RoomId, RoomId]]]]
 
 
-def _deserialize_actions(raw_actions: Sequence[Mapping[str, object]]) -> list[Action]:
-    return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
-
-
 def _frame_of(state: WorldState) -> _Frame:
     players = state.players
     return _Frame(
@@ -296,29 +340,15 @@ def _walk_game(
 ) -> _GameWalk:
     """Re-seed + replay one game, collecting the funnel's reconstruction inputs.
 
-    Mirrors ``api/replay_loader.py::_walk`` / ``eval.validity._reconstruct_game``:
-    re-seed, feed the recorded actions through :func:`engine.tick.advance_tick`,
-    verify every ``state_hash``, and on a MEETING tick rebuild the
-    :class:`~meetings.schemas.MeetingResult` from the recorded entry and apply it
-    via :func:`orchestrator.game.apply_meeting_result` (verifying
-    ``state_hash_after``). Collects per-tick post-advance frames, impostor vent
-    sightings, and the body-report meetings with their kill provenance.
+    The engine walk is :func:`eval.replay_walk.walk_replay` under the named
+    ``funnel-instrument`` profile (Task 19.25; the walker's docstring is the
+    drift record): every recorded hash verified — per-tick ``state_hash`` plus
+    each meeting's ``state_hash_before`` / ``state_hash_after`` — and a MEETING
+    tick with no meeting row FAILS LOUD (the deliberate divergence from the
+    serving loader: an instrument must never silently under-count). Collects
+    per-tick post-advance frames, impostor vent sightings, and the body-report
+    meetings with their kill provenance.
     """
-
-    game_id = f"headless-seed-{seed}"
-    entries = read_all_entries(replay_path)
-    tick_entries = [e for e in entries if isinstance(e, ReplayEntry)]
-    meeting_by_tick: dict[int, MeetingReplayEntry] = {
-        e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)
-    }
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
 
     frames: dict[int, _Frame] = {}
     kill_by_victim: dict[
@@ -332,154 +362,95 @@ def _walk_game(
     # The observation pipeline is re-run per living crew observer per tick so the
     # killer-at-scene fold reads exactly what the same-room-only firewall surfaces
     # (Task 12.3 / api/replay_loader.py::_walk collect_visibility). The audit log is
-    # routed to a throwaway temp file; ``last_events`` is threaded EXACTLY as the
-    # loader threads it — the previous tick's events (or, across a meeting, the
-    # pre-meeting play events plus the meeting's post-events) — so witnessed vent /
-    # kill / move placements land on the right frame and no stale movement leaks
-    # onto a post-meeting tick.
+    # routed to a throwaway temp file; ``last_events`` is threaded by the walker
+    # EXACTLY as the loader threads it — the previous tick's events (or, across a
+    # meeting, the pre-meeting play events plus the meeting's post-events) — so
+    # witnessed vent / kill / move placements land on the right frame and no stale
+    # movement leaks onto a post-meeting tick.
     audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-funnel-")
     service = ObservationService(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
     )
-    last_events: tuple[EngineEvent, ...] = ()
 
     try:
-        for entry in tick_entries:
-            packet_tick = state.tick
-            tick_sight: dict[PlayerId, dict[PlayerId, RoomId]] = {}
-            tick_moved: dict[PlayerId, dict[PlayerId, tuple[RoomId, RoomId]]] = {}
-            for pid, player in state.players.items():
-                if not player.alive or roles.get(pid) != "CREWMATE":
-                    continue
-                packet = service.build_packet(
-                    world_state=state, agent_id=pid, engine_events=last_events
-                )
-                tick_sight[pid] = {vp.id: vp.room for vp in packet.visible_players}
-                tick_moved[pid] = {
-                    mv.id: (mv.from_room, mv.to_room) for mv in packet.moved_players
-                }
-            sight[packet_tick] = tick_sight
-            moved[packet_tick] = tick_moved
-
-            actions = _deserialize_actions(entry.actions)
-            state, events = advance_tick(state, actions, game_map=game_map)
-            actual = _state_hash(state)
-            if actual != entry.state_hash:
-                raise FunnelReconstructionError(
-                    f"{game_id}: tick {entry.tick} reconstructed {actual!r} != recorded "
-                    f"{entry.state_hash!r} (roster mismatch or engine non-determinism)"
-                )
-            frames[entry.tick] = _frame_of(state)
-            for event in events:
-                if isinstance(event, KilledEvent):
-                    kill_by_victim[event.target] = (
-                        event.tick,
-                        event.room,
-                        event.actor,
-                        frozenset(event.witnesses),
+        for walk_event in walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_WALK_CONFIG,
+        ):
+            if isinstance(walk_event, TickOpened):
+                state = walk_event.state
+                packet_tick = state.tick
+                tick_sight: dict[PlayerId, dict[PlayerId, RoomId]] = {}
+                tick_moved: dict[PlayerId, dict[PlayerId, tuple[RoomId, RoomId]]] = {}
+                for pid, player in state.players.items():
+                    if not player.alive or roles.get(pid) != "CREWMATE":
+                        continue
+                    packet = service.build_packet(
+                        world_state=state,
+                        agent_id=pid,
+                        engine_events=walk_event.last_events,
                     )
-                elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
-                    if roles.get(event.actor) == "IMPOSTOR":
-                        vent_sightings.append(
-                            _VentSighting(
-                                tick=event.tick,
-                                actor=event.actor,
-                                witnesses=frozenset(event.source_witnesses)
-                                | frozenset(event.destination_witnesses),
+                    tick_sight[pid] = {vp.id: vp.room for vp in packet.visible_players}
+                    tick_moved[pid] = {
+                        mv.id: (mv.from_room, mv.to_room) for mv in packet.moved_players
+                    }
+                sight[packet_tick] = tick_sight
+                moved[packet_tick] = tick_moved
+            elif isinstance(walk_event, TickAdvanced):
+                frames[walk_event.entry.tick] = _frame_of(walk_event.state)
+                for event in walk_event.events:
+                    if isinstance(event, KilledEvent):
+                        kill_by_victim[event.target] = (
+                            event.tick,
+                            event.room,
+                            event.actor,
+                            frozenset(event.witnesses),
+                        )
+                    elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
+                        if roles.get(event.actor) == "IMPOSTOR":
+                            vent_sightings.append(
+                                _VentSighting(
+                                    tick=event.tick,
+                                    actor=event.actor,
+                                    witnesses=frozenset(event.source_witnesses)
+                                    | frozenset(event.destination_witnesses),
+                                )
+                            )
+            elif isinstance(walk_event, MeetingOpened):
+                meeting_entry = walk_event.entry
+                body_id = walk_event.body_id
+                state = walk_event.state
+                if body_id is not None and body_id in state.bodies:
+                    body = state.bodies[body_id]
+                    victim = body.player_id
+                    kill = kill_by_victim.get(victim)
+                    if kill is not None:
+                        kill_tick, kill_room, killer, kill_witnesses = kill
+                        report_meetings.append(
+                            _ReportMeeting(
+                                seed=seed,
+                                meeting_id=meeting_entry.meeting_id,
+                                tick=meeting_entry.tick,
+                                reporter=meeting_entry.triggered_by,
+                                outcome=meeting_entry.outcome,
+                                ejected=meeting_entry.ejected_player_id,
+                                victim=victim,
+                                killer=killer,
+                                kill_tick=kill_tick,
+                                kill_room=kill_room,
+                                kill_witnesses=kill_witnesses,
+                                living_at_meeting=frozenset(
+                                    pid for pid, p in state.players.items() if p.alive
+                                ),
+                                turns=tuple(meeting_entry.transcript.turns),
+                                ballots=tuple(meeting_entry.ballots),
                             )
                         )
-
-            if state.phase == "GAME_OVER":
-                break
-            if state.phase != "MEETING":
-                last_events = tuple(events)
-                continue
-
-            meeting_entry = meeting_by_tick.get(entry.tick)
-            if meeting_entry is None:
-                # DELIBERATE divergence from the loader here: the loader SERVES a
-                # partial replay (a run that crashed mid-meeting) by truncating the
-                # timeline, but a measurement instrument must never silently
-                # under-count — a MEETING tick with no (or a tick-drifted) meeting
-                # row would drop every later body-report meeting from the folds
-                # while the CLI exits 0. Fail loud instead.
-                raise FunnelReconstructionError(
-                    f"{game_id}: tick {entry.tick} entered MEETING but the replay "
-                    "carries no meeting row for that tick (partial recording or "
-                    "drifted meeting tick) — refusing to silently under-measure"
-                )
-
-            body_id = next(
-                (
-                    event.body_id
-                    for event in events
-                    if isinstance(event, MeetingTriggeredEvent)
-                ),
-                None,
-            )
-            if body_id is not None and body_id in state.bodies:
-                body = state.bodies[body_id]
-                victim = body.player_id
-                kill = kill_by_victim.get(victim)
-                if kill is not None:
-                    kill_tick, kill_room, killer, kill_witnesses = kill
-                    report_meetings.append(
-                        _ReportMeeting(
-                            seed=seed,
-                            meeting_id=meeting_entry.meeting_id,
-                            tick=entry.tick,
-                            reporter=meeting_entry.triggered_by,
-                            outcome=meeting_entry.outcome,
-                            ejected=meeting_entry.ejected_player_id,
-                            victim=victim,
-                            killer=killer,
-                            kill_tick=kill_tick,
-                            kill_room=kill_room,
-                            kill_witnesses=kill_witnesses,
-                            living_at_meeting=frozenset(
-                                pid for pid, p in state.players.items() if p.alive
-                            ),
-                            turns=tuple(meeting_entry.transcript.turns),
-                            ballots=tuple(meeting_entry.ballots),
-                        )
-                    )
-
-            # The meeting row's OWN pre-hash must also match the reconstruction
-            # (``actual`` is the just-verified post-advance hash — the state a
-            # meeting resolves against). The tick row's hash does not cover it:
-            # a tampered/drifted ``state_hash_before`` on the meeting row alone
-            # would otherwise pass silently ("every recorded state hash is
-            # verified during the walk").
-            if meeting_entry.state_hash_before != actual:
-                raise FunnelReconstructionError(
-                    f"{game_id}: meeting at tick {entry.tick} recorded "
-                    f"state_hash_before {meeting_entry.state_hash_before!r} != "
-                    f"reconstructed pre-meeting state {actual!r}"
-                )
-
-            result = MeetingResult(
-                meeting_id=meeting_entry.meeting_id,
-                triggered_by=meeting_entry.triggered_by,
-                trigger_tick=meeting_entry.tick,
-                outcome=meeting_entry.outcome,
-                ejected_player_id=meeting_entry.ejected_player_id,
-                ballots=meeting_entry.ballots,
-                contradictions=meeting_entry.contradictions,
-                transcript=meeting_entry.transcript,
-            )
-            pre_meeting_events = tuple(events)
-            state, post_events = apply_meeting_result(
-                state, result, game_map=game_map, triggering_body_id=body_id
-            )
-            after = _state_hash(state)
-            if after != meeting_entry.state_hash_after:
-                raise FunnelReconstructionError(
-                    f"{game_id}: meeting at tick {entry.tick} reconstructed {after!r} "
-                    f"!= recorded {meeting_entry.state_hash_after!r}"
-                )
-            last_events = pre_meeting_events + tuple(post_events)
-            if state.phase == "GAME_OVER":
-                break
     finally:
         audit_dir.cleanup()
 
@@ -1147,8 +1118,9 @@ def _walk_game_vj(
 ) -> _VJGameWalk:
     """Re-seed + replay one game with the per-agent memory layer reconstructed.
 
-    Mirrors :func:`_walk_game`'s engine walk (same hash verification, same
-    fail-loud on a MEETING tick without a meeting row) and adds the live
+    Shares :func:`_walk_game`'s engine walk — :func:`eval.replay_walk.walk_replay`
+    under the same ``funnel-instrument`` profile (same hash verification, same
+    fail-loud on a MEETING tick without a meeting row) — and adds the live
     game's memory feeding: real :class:`~orchestrator.game.TacticalAgent`
     instances (the default factory, exactly what the recorded games ran)
     ingest every living player's pre-advance packet each tick, and each
@@ -1156,26 +1128,16 @@ def _walk_game_vj(
     ``extract_belief_evidence`` + ``derive_reported_testimony`` fan-out as
     ``orchestrator.game._absorb_meeting_beliefs`` — sorted iteration, living
     players in the post-meeting state. Collects EVERY meeting (emergency
-    included) with its meeting-open accessor snapshots.
+    included) with its meeting-open accessor snapshots. Two vj-only checks are
+    consumer semantics layered in this fold, not walker options: a MEETING
+    transition without a :class:`~engine.events.MeetingTriggeredEvent`, and a
+    reconstructed living set differing from the recorded ballot voters.
     """
 
     game_id = f"headless-seed-{seed}"
-    entries = read_all_entries(replay_path)
-    tick_entries = [e for e in entries if isinstance(e, ReplayEntry)]
-    meeting_by_tick: dict[int, MeetingReplayEntry] = {
-        e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)
-    }
-
-    state = seed_initial_state(
-        seed=seed,
-        game_map=game_map,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-    )
     factory = build_default_agent_factory()
     agents: dict[PlayerId, TacticalAgent] = {}
-    for pid in sorted(state.players):
+    for pid in sorted(roles):
         agent = factory(pid, roles[pid])
         if not isinstance(agent, TacticalAgent):  # pragma: no cover - factory pin
             raise TypeError(
@@ -1193,165 +1155,134 @@ def _walk_game_vj(
     service = ObservationService(
         game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
     )
-    last_events: tuple[EngineEvent, ...] = ()
+    trigger_kind: MeetingTriggerKind | None = None
 
     try:
-        for entry in tick_entries:
-            # Pre-advance packets for EVERY living player (the 15.3 walk builds
-            # crew-only packets; the memory layer needs impostor memories too —
-            # impostor speakers vouch and vote like anyone else), ingested into
-            # each agent's own memory exactly as ``TacticalAgent.decide`` does.
-            for pid in sorted(state.players):
-                if not state.players[pid].alive:
-                    continue
-                packet = service.build_packet(
-                    world_state=state, agent_id=pid, engine_events=last_events
-                )
-                ingest_packet(
-                    packet=packet,
-                    memory=agents[pid].memory.episodic,
-                    beliefs=agents[pid].memory.beliefs,
-                )
+        for walk_event in walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_WALK_CONFIG,
+        ):
+            if isinstance(walk_event, TickOpened):
+                # Pre-advance packets for EVERY living player (the 15.3 walk
+                # builds crew-only packets; the memory layer needs impostor
+                # memories too — impostor speakers vouch and vote like anyone
+                # else), ingested into each agent's own memory exactly as
+                # ``TacticalAgent.decide`` does.
+                state = walk_event.state
+                for pid in sorted(state.players):
+                    if not state.players[pid].alive:
+                        continue
+                    packet = service.build_packet(
+                        world_state=state,
+                        agent_id=pid,
+                        engine_events=walk_event.last_events,
+                    )
+                    ingest_packet(
+                        packet=packet,
+                        memory=agents[pid].memory.episodic,
+                        beliefs=agents[pid].memory.beliefs,
+                    )
+            elif isinstance(walk_event, MeetingOpened):
+                meeting_entry = walk_event.entry
+                state = walk_event.state
+                if walk_event.trigger is None:
+                    raise FunnelReconstructionError(
+                        f"{game_id}: tick {meeting_entry.tick} entered MEETING "
+                        "without a "
+                        "MeetingTriggeredEvent (engine invariant violation)"
+                    )
+                trigger_kind = walk_event.trigger.trigger
 
-            actions = _deserialize_actions(entry.actions)
-            state, events = advance_tick(state, actions, game_map=game_map)
-            actual = _state_hash(state)
-            if actual != entry.state_hash:
-                raise FunnelReconstructionError(
-                    f"{game_id}: tick {entry.tick} reconstructed {actual!r} != "
-                    f"recorded {entry.state_hash!r} (roster mismatch or engine "
-                    "non-determinism)"
+                living = frozenset(
+                    pid for pid, player in state.players.items() if player.alive
                 )
+                voters = frozenset(b.voter for b in meeting_entry.ballots)
+                if living != voters:
+                    # Every living participant casts exactly one ballot (defaults
+                    # included) — a mismatch means the reconstruction diverged
+                    # from the recorded meeting and every snapshot below would
+                    # lie.
+                    raise FunnelReconstructionError(
+                        f"{game_id}: meeting at tick {meeting_entry.tick} "
+                        f"reconstructed "
+                        f"living set {sorted(living)} != recorded ballot voters "
+                        f"{sorted(voters)}"
+                    )
 
-            if state.phase == "GAME_OVER":
-                break
-            if state.phase != "MEETING":
-                last_events = tuple(events)
-                continue
+                # Meeting-open snapshots off the PRODUCTION accessors, sorted
+                # like ``_build_participants``. ``env={}`` resolves every
+                # accessor lever OFF deterministically (see the region banner).
+                graph_by_voter: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}
+                sightings_by_speaker: dict[PlayerId, tuple[SightingRecord, ...]] = {}
+                obs_ids_by_voter: dict[PlayerId, frozenset[str]] = {}
+                fellows_by_voter: dict[PlayerId, tuple[PlayerId, ...]] = {}
+                for pid in sorted(living):
+                    agent = agents[pid]
+                    graph_by_voter[pid] = agent.suspicion_graph_for_meeting(env={})
+                    sightings_by_speaker[pid] = agent.sighting_records_for_meeting()
+                    obs_ids_by_voter[pid] = frozenset(
+                        agent.observation_ids_for_meeting()
+                    )
+                    fellows_by_voter[pid] = (
+                        tuple(x for x in impostor_ids if x != pid)
+                        if roles[pid] == "IMPOSTOR"
+                        else ()
+                    )
 
-            meeting_entry = meeting_by_tick.get(entry.tick)
-            if meeting_entry is None:
-                # Same deliberate divergence from the serving loader as the 15.3
-                # walk: an instrument must never silently under-count.
-                raise FunnelReconstructionError(
-                    f"{game_id}: tick {entry.tick} entered MEETING but the replay "
-                    "carries no meeting row for that tick (partial recording or "
-                    "drifted meeting tick) — refusing to silently under-measure"
+                meetings.append(
+                    _VJMeeting(
+                        seed=seed,
+                        meeting_id=meeting_entry.meeting_id,
+                        tick=meeting_entry.tick,
+                        trigger_kind=trigger_kind,
+                        triggered_by=meeting_entry.triggered_by,
+                        outcome=meeting_entry.outcome,
+                        ejected=meeting_entry.ejected_player_id,
+                        living=living,
+                        transcript=meeting_entry.transcript,
+                        ballots=tuple(meeting_entry.ballots),
+                        contradictions=tuple(meeting_entry.contradictions),
+                        llm_calls=tuple(meeting_entry.llm_calls),
+                        suspicion_graph_by_voter=graph_by_voter,
+                        sighting_records_by_speaker=sightings_by_speaker,
+                        observation_ids_by_voter=obs_ids_by_voter,
+                        fellow_impostor_ids_by_voter=fellows_by_voter,
+                    )
                 )
-            if meeting_entry.state_hash_before != actual:
-                raise FunnelReconstructionError(
-                    f"{game_id}: meeting at tick {entry.tick} recorded "
-                    f"state_hash_before {meeting_entry.state_hash_before!r} != "
-                    f"reconstructed pre-meeting state {actual!r}"
+            elif isinstance(walk_event, MeetingApplied):
+                # The post-meeting persistent belief fold, mirroring
+                # ``orchestrator.game._absorb_meeting_beliefs``: one evidence
+                # reduction + one absorb per player still alive in the
+                # post-meeting state, sorted; the reported-testimony content
+                # fold rides the same loop. Decay (§6.3 Rule 5) runs inside the
+                # absorb, so an evidence-free meeting still decays — exactly as
+                # live. ``trigger_kind`` was set on this meeting's MeetingOpened
+                # (the walker always pairs them).
+                if trigger_kind is None:  # pragma: no cover - walker pairing
+                    raise FunnelReconstructionError(
+                        f"{game_id}: MeetingApplied at tick "
+                        f"{walk_event.entry.tick} arrived without a preceding "
+                        "MeetingOpened trigger"
+                    )
+                state = walk_event.state
+                evidence = extract_belief_evidence(
+                    walk_event.result, trigger_kind=trigger_kind
                 )
-
-            trigger_event: MeetingTriggeredEvent | None = None
-            for event in events:
-                if isinstance(event, MeetingTriggeredEvent):
-                    trigger_event = event
-            if trigger_event is None:
-                raise FunnelReconstructionError(
-                    f"{game_id}: tick {entry.tick} entered MEETING without a "
-                    "MeetingTriggeredEvent (engine invariant violation)"
-                )
-            trigger_kind: MeetingTriggerKind = trigger_event.trigger
-            body_id = trigger_event.body_id if trigger_kind == "report" else None
-
-            living = frozenset(
-                pid for pid, player in state.players.items() if player.alive
-            )
-            voters = frozenset(b.voter for b in meeting_entry.ballots)
-            if living != voters:
-                # Every living participant casts exactly one ballot (defaults
-                # included) — a mismatch means the reconstruction diverged from
-                # the recorded meeting and every snapshot below would lie.
-                raise FunnelReconstructionError(
-                    f"{game_id}: meeting at tick {entry.tick} reconstructed "
-                    f"living set {sorted(living)} != recorded ballot voters "
-                    f"{sorted(voters)}"
-                )
-
-            # Meeting-open snapshots off the PRODUCTION accessors, sorted like
-            # ``_build_participants``. ``env={}`` resolves every accessor lever
-            # OFF deterministically (see the region banner).
-            graph_by_voter: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}
-            sightings_by_speaker: dict[PlayerId, tuple[SightingRecord, ...]] = {}
-            obs_ids_by_voter: dict[PlayerId, frozenset[str]] = {}
-            fellows_by_voter: dict[PlayerId, tuple[PlayerId, ...]] = {}
-            for pid in sorted(living):
-                agent = agents[pid]
-                graph_by_voter[pid] = agent.suspicion_graph_for_meeting(env={})
-                sightings_by_speaker[pid] = agent.sighting_records_for_meeting()
-                obs_ids_by_voter[pid] = frozenset(agent.observation_ids_for_meeting())
-                fellows_by_voter[pid] = (
-                    tuple(x for x in impostor_ids if x != pid)
-                    if roles[pid] == "IMPOSTOR"
-                    else ()
-                )
-
-            meetings.append(
-                _VJMeeting(
-                    seed=seed,
-                    meeting_id=meeting_entry.meeting_id,
-                    tick=entry.tick,
-                    trigger_kind=trigger_kind,
-                    triggered_by=meeting_entry.triggered_by,
-                    outcome=meeting_entry.outcome,
-                    ejected=meeting_entry.ejected_player_id,
-                    living=living,
-                    transcript=meeting_entry.transcript,
-                    ballots=tuple(meeting_entry.ballots),
-                    contradictions=tuple(meeting_entry.contradictions),
-                    llm_calls=tuple(meeting_entry.llm_calls),
-                    suspicion_graph_by_voter=graph_by_voter,
-                    sighting_records_by_speaker=sightings_by_speaker,
-                    observation_ids_by_voter=obs_ids_by_voter,
-                    fellow_impostor_ids_by_voter=fellows_by_voter,
-                )
-            )
-
-            result = MeetingResult(
-                meeting_id=meeting_entry.meeting_id,
-                triggered_by=meeting_entry.triggered_by,
-                trigger_tick=meeting_entry.tick,
-                outcome=meeting_entry.outcome,
-                ejected_player_id=meeting_entry.ejected_player_id,
-                ballots=meeting_entry.ballots,
-                contradictions=meeting_entry.contradictions,
-                transcript=meeting_entry.transcript,
-            )
-            pre_meeting_events = tuple(events)
-            state, post_events = apply_meeting_result(
-                state, result, game_map=game_map, triggering_body_id=body_id
-            )
-            after = _state_hash(state)
-            if after != meeting_entry.state_hash_after:
-                raise FunnelReconstructionError(
-                    f"{game_id}: meeting at tick {entry.tick} reconstructed "
-                    f"{after!r} != recorded {meeting_entry.state_hash_after!r}"
-                )
-
-            # The post-meeting persistent belief fold, mirroring
-            # ``orchestrator.game._absorb_meeting_beliefs``: one evidence
-            # reduction + one absorb per player still alive in the post-meeting
-            # state, sorted; the reported-testimony content fold rides the same
-            # loop. Decay (§6.3 Rule 5) runs inside the absorb, so an
-            # evidence-free meeting still decays — exactly as live.
-            evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
-            statements = derive_reported_testimony(result)
-            for pid in sorted(state.players):
-                if not state.players[pid].alive:
-                    continue
-                agents[pid].absorb_meeting_evidence(
-                    accused=evidence.accused,
-                    corroborated=evidence.corroborated,
-                    contradicted=evidence.contradicted,
-                )
-                agents[pid].absorb_reported_testimony(statements=statements)
-
-            last_events = pre_meeting_events + tuple(post_events)
-            if state.phase == "GAME_OVER":
-                break
+                statements = derive_reported_testimony(walk_event.result)
+                for pid in sorted(state.players):
+                    if not state.players[pid].alive:
+                        continue
+                    agents[pid].absorb_meeting_evidence(
+                        accused=evidence.accused,
+                        corroborated=evidence.corroborated,
+                        contradicted=evidence.contradicted,
+                    )
+                    agents[pid].absorb_reported_testimony(statements=statements)
     finally:
         audit_dir.cleanup()
 
