@@ -3,8 +3,8 @@
 The suite is two tiers: a bare ``uv run pytest`` (the default gate,
 ``scripts/check.sh``) runs everything not marked ``campaign``; the campaign
 tier is opt-in (``-m campaign``) with a standing automated home in
-``.github/workflows/ci.yml``'s weekly scheduled job. This module pins the
-structure so it cannot rot silently:
+``.github/workflows/campaign-tier.yml``'s weekly schedule. This module pins
+the structure so it cannot rot silently:
 
 * the three Task-19.27 markers are REGISTERED and the default ``-m`` filter
   plus ``--strict-markers`` are in ``addopts`` — a deregistration would
@@ -14,7 +14,11 @@ structure so it cannot rot silently:
   the prompt byte-golden, the prompt-regression close gate — the tier map's
   un-marked list, training/README.md §2) carry NO campaign mark;
 * the campaign families the tier map's FREEZE column drives behind the
-  marker ARE marked, module-level, in every file.
+  marker ARE marked, module-level, in every file;
+* the one MIXED-tier file keeps its split: ``training/conviction/fidelity.py``
+  is a FREEZE row with no dedicated test file, so its harness-mechanics tests
+  carry function-level campaign marks inside the KEEP-row conviction-model
+  module while the model's committed-evidence pins stay default-tier.
 
 The checks read file bytes rather than importing the test modules — importing
 a test module as a library is exactly the pattern Task 19.27 removed.
@@ -63,6 +67,29 @@ _MODULE_MARK_RE: Final[re.Pattern[str]] = re.compile(
     r"^pytestmark = pytest\.mark\.campaign$", re.MULTILINE
 )
 
+#: The one MIXED-tier file. `training/conviction/fidelity.py` is a FREEZE row
+#: of the tier map ("The fidelity harnesses") but has no dedicated test file:
+#: its harness-mechanics tests live inside the KEEP-row conviction-model
+#: module. Those six carry a FUNCTION-level campaign mark; the module carries
+#: no module-level mark, so the KEEP row's committed-evidence pins (census,
+#: artifact round-trip, and the GO-verdict reproduction whose Spearman
+#: 0.5782 / recall 45/47 the KEEP row itself cites) keep executing on every
+#: default-gate run.
+_MIXED_TIER_FILE: Final[str] = "tests/training/test_conviction_model.py"
+_MIXED_TIER_CAMPAIGN_TESTS: Final[tuple[str, ...]] = (
+    "test_walk_gate_refuses_raw_mismatches",
+    "test_fidelity_requires_a_committed_split",
+    "test_fit_corpus_entry_requires_a_committed_split",
+    "test_fidelity_rejects_a_leaky_or_partial_split",
+    "test_spearman_is_tie_aware_and_fails_loud_on_degenerate_input",
+    "test_verdict_consequence_mapping_is_pre_committed",
+)
+_MIXED_TIER_ALWAYS_ON_TESTS: Final[tuple[str, ...]] = (
+    "test_corpus_census_pins",
+    "test_committed_artifact_round_trips_and_matches_refit",
+    "test_committed_verdict_reproduces_from_the_frozen_weights",
+)
+
 
 def _pytest_ini_options() -> dict[str, object]:
     pyproject = tomllib.loads(
@@ -98,6 +125,42 @@ def test_the_contract_always_on_families_carry_no_campaign_mark() -> None:
                 f"{family}: {relative} is contract-pinned ALWAYS-ON "
                 "(triage §7 item 19) and may not move behind the campaign marker"
             )
+
+
+def test_the_conviction_fidelity_split_is_pinned_in_the_mixed_file() -> None:
+    """The mixed file's per-test split (Codex review on PR #349).
+
+    The FREEZE-row fidelity-harness mechanics run in the campaign tier; the
+    KEEP-row model, dataset, and committed-evidence tests stay default. A
+    module-level mark appearing here would silently drag the KEEP row's
+    measured basis out of the default gate, and an unmarked harness test
+    would silently return frozen machinery to every per-change run.
+    """
+
+    path = _REPO_ROOT / _MIXED_TIER_FILE
+    assert path.is_file(), f"missing mixed-tier file {_MIXED_TIER_FILE}"
+    text = path.read_text(encoding="utf-8")
+    assert not _MODULE_MARK_RE.search(text), (
+        f"{_MIXED_TIER_FILE} is a MIXED-tier file and may not carry a "
+        "module-level campaign mark — that would hide the KEEP-row pins"
+    )
+    for name in _MIXED_TIER_CAMPAIGN_TESTS:
+        assert re.search(
+            rf"^@pytest\.mark\.campaign\ndef {name}\(", text, re.MULTILINE
+        ), (
+            f"{_MIXED_TIER_FILE}::{name} exercises the FROZEN fidelity "
+            "harness and must carry a function-level campaign mark"
+        )
+    for name in _MIXED_TIER_ALWAYS_ON_TESTS:
+        assert re.search(rf"^def {name}\(", text, re.MULTILINE), (
+            f"{_MIXED_TIER_FILE}::{name} (a KEEP-row committed-evidence pin) is missing"
+        )
+        assert not re.search(
+            rf"^@pytest\.mark\.campaign\ndef {name}\(", text, re.MULTILINE
+        ), (
+            f"{_MIXED_TIER_FILE}::{name} is the KEEP row's committed "
+            "evidence and must stay in the default gate"
+        )
 
 
 def test_every_freeze_family_file_is_campaign_marked_module_level() -> None:

@@ -5,17 +5,6 @@ on:
   push:
     branches:
       - main
-  # The campaign tier's standing automated home (Task 19.27): the opt-in
-  # `-m campaign` families (training/README.md §2 FREEZE column) run weekly on
-  # a schedule rather than per-push, so the frozen campaign machinery still
-  # has a gate that catches rot introduced from ANYWHERE in the repo — a
-  # training-path filter alone could not see an engine or schema change that
-  # breaks a frozen family. Schedules fire on the default branch only, which
-  # is exactly the branch the frozen families guard. workflow_dispatch gives
-  # the same job an on-demand trigger for pre-close or post-incident runs.
-  schedule:
-    - cron: "17 6 * * 1" # weekly, Monday 06:17 UTC
-  workflow_dispatch:
 
 # Least privilege for the whole workflow: every job here only reads the
 # repository. Nothing publishes, comments, or writes back, so no job needs a
@@ -27,9 +16,6 @@ jobs:
   project-checks:
     name: Project checks
     runs-on: ubuntu-latest
-    # The three per-change jobs keep their pull_request/push triggers; the
-    # schedule and dispatch events added for the campaign tier are not theirs.
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
 
     env:
       # The frontend-checks job below is the ONE frontend build per run. Without
@@ -64,7 +50,6 @@ jobs:
   frontend-checks:
     name: Frontend checks
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
     defaults:
       run:
         working-directory: frontend
@@ -105,7 +90,6 @@ jobs:
   frontend-e2e:
     name: Frontend e2e (Playwright)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
 
     steps:
       - name: Check out repository
@@ -176,40 +160,3 @@ jobs:
             frontend/e2e/.artifacts
           retention-days: 7
           if-no-files-found: ignore
-
-  # The campaign tier (Task 19.27; audits/audit-phase-19-triage.md §7 item 19,
-  # the tiering half). `uv run pytest` everywhere else runs the default tier —
-  # pyproject's `addopts = -m "not campaign"` keeps the frozen campaign-only
-  # families (training/README.md §2 FREEZE column) out of every per-change
-  # gate — so this scheduled job is the standing automated home that keeps
-  # `-m campaign` from becoming an orphan anyone has to remember to run. The
-  # phase close (Task 19.28) runs both tiers explicitly on top of this.
-  campaign-tier:
-    name: Campaign-tier tests (weekly)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-
-    env:
-      # Python-only job: the frontend legs have their own per-change jobs and
-      # nothing in the campaign families touches them.
-      AILIBI_SKIP_FRONTEND: "1"
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: "3.11"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
-
-      - name: Set up project environment
-        run: bash scripts/setup_env.sh
-
-      # The CLI -m overrides pyproject's default `-m "not campaign"` (last
-      # -m wins), so this is the whole opt-in surface: one flag.
-      - name: Run the campaign tier
-        run: uv run pytest -m campaign

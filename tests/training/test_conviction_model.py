@@ -547,6 +547,17 @@ def test_staleness_machinery_follows_the_143x_rule() -> None:
 
 # ---------------------------------------------------------------------------
 # The walk gate + the fidelity harness
+#
+# Task 19.27: this section's tests carry the campaign marker individually —
+# `training/conviction/fidelity.py` is a FREEZE-column row of the tier map
+# (training/README.md §2, "The fidelity harnesses"), so its HARNESS-MECHANICS
+# tests run in the weekly campaign tier, exactly like the surrogate twin
+# (tests/training/test_surrogate_fidelity.py). The rest of this module is the
+# KEEP-row conviction model and stays in the default gate — including the
+# committed-corpus census/artifact/verdict pins below, which ARE the KEEP
+# row's measured basis (Spearman 0.5782, recall 45/47) and so must keep
+# executing on every gate run. The mixed-file split is pinned by
+# tests/training/test_suite_tiers.py.
 # ---------------------------------------------------------------------------
 
 
@@ -568,6 +579,7 @@ def _parity(raw_mismatches: int, trust_mismatches: int = 0) -> BeliefRenderParit
     )
 
 
+@pytest.mark.campaign
 def test_walk_gate_refuses_raw_mismatches() -> None:
     """The 17.10 discipline, mechanical: 0 raw mismatches or no fit.
 
@@ -583,6 +595,7 @@ def test_walk_gate_refuses_raw_mismatches() -> None:
         require_clean_walk(_parity(0, trust_mismatches=2))
 
 
+@pytest.mark.campaign
 def test_fidelity_requires_a_committed_split(
     nine_conviction: ConvictionTable,
 ) -> None:
@@ -594,6 +607,7 @@ def test_fidelity_requires_a_committed_split(
         run_conviction_fidelity(nine_conviction)
 
 
+@pytest.mark.campaign
 def test_fit_corpus_entry_requires_a_committed_split() -> None:
     """The corpus fit entry walks the 17.10 gate, then refuses a split-less set."""
 
@@ -613,6 +627,7 @@ def _with_splits(
     )
 
 
+@pytest.mark.campaign
 def test_fidelity_rejects_a_leaky_or_partial_split(
     four_conviction: ConvictionTable,
 ) -> None:
@@ -648,6 +663,7 @@ def test_fidelity_rejects_a_leaky_or_partial_split(
         )
 
 
+@pytest.mark.campaign
 def test_spearman_is_tie_aware_and_fails_loud_on_degenerate_input() -> None:
     perfect = spearman_rank_correlation(
         np.asarray([1.0, 2.0, 3.0]), np.asarray([10.0, 20.0, 30.0])
@@ -701,6 +717,7 @@ def _synthetic_report(
     )
 
 
+@pytest.mark.campaign
 def test_verdict_consequence_mapping_is_pre_committed() -> None:
     """GO ⇒ ships/gating/training-signal; NO-GO (either axis) ⇒
     absent/advisory/diagnostic-only — the machine-readable mapping 18.16

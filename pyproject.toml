@@ -66,8 +66,8 @@ pythonpath = ["."]
 # two tiers. A bare `uv run pytest` (and therefore scripts/check.sh) runs the
 # DEFAULT tier — everything not marked `campaign`. The campaign tier is opt-in
 # via `-m campaign` (a CLI -m overrides this addopts -m; last one wins) and has
-# a standing automated home in .github/workflows/ci.yml's weekly scheduled
-# job, so it is exercised by automation, not by promise. The always-on set the
+# a standing automated home in .github/workflows/campaign-tier.yml's weekly
+# schedule, so it is exercised by automation, not by promise. The always-on set the
 # tier map keeps un-marked (training/README.md §2) is pinned by
 # tests/training/test_suite_tiers.py. --strict-markers makes a typo'd marker a
 # collection error instead of a silently always-on test.
