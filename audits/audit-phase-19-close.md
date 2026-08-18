@@ -1,4 +1,4 @@
-# Phase-19 close — CLOSED: review-and-refresh complete, all 27 contracts merged and re-verified at HEAD; nothing recorded, the ladder tip stands at baseline 6; the post-19 decision routed to the owner (Task 19.28)
+# Phase-19 close — CLOSED: review-and-refresh complete, the 27 dispatched contracts merged and re-verified at HEAD (the close itself is the 28th); nothing recorded, the ladder tip stands at baseline 6; the post-19 decision routed to the owner (Task 19.28)
 
 **Date:** 2026-08-18.
 **Task:** 19.28 — the phase close (owner). Phase 19 was REVIEW-AND-REFRESH by owner charter
@@ -246,8 +246,8 @@ weak-flag cells complete the pool: samples 4p1i 1/12 (innocent), corpus 4p1i 0/2
 weak-flag-only convictions 5/5 innocent across all four sets**.
 
 Read together: the game's convictions are near-perfectly grounded where the substrate hands the
-crew role-proving evidence, and barely better than a coin flip — with all the injustice — where
-agents must actually infer. The inference channel is the broken one, and it is broken by
+crew role-proving evidence, and WORSE than a coin flip — with all the injustice — where agents
+must actually infer (every defined non-direct cell sits below 0.5). The inference channel is the broken one, and it is broken by
 measured substrate/prompt honesty mechanisms, not by model capability alone: the four committed
 19.11 fixtures exhibit them executably (the provenance-impossible sighting, 9p2i seed 23 M1; the
 content-vs-own-memory miss, seed 12 M0; the one-tick interval artifact, 4p1i seeds 41/49; the
@@ -378,7 +378,9 @@ convention).
 - **The phase's evidence chain:** 27 merged `task 19.*` titles (#323–#349, waves per the phase
   doc's DAG), the planning PR #322 (`8813702`, 2026-08-03 — the charter ratification), and 6
   coordination commits (anchor refreshes between merge batches: `94d8809`, `9e34656`, `f87d4a0`,
-  `300221e`, `c25b1b5`, `f730e4d`). 33 commits to `main` total this phase.
+  `300221e`, `c25b1b5`, `f730e4d`). 34 commits to `main` total this phase: the planning merge
+  plus 33 execution commits after it (27 task merges + 6 coordination —
+  `git rev-list --count 8813702..7be97c7` = 33, the range exclusive of the planning commit).
 - **The frontier computes complete on this close's merge:** with the merged `task 19*` titles
   from the unshallowed log, `compute_frontier` reads **AT HEAD: dispatchable `['19.28']`,
   blocked `[]`, merged 27**; **WITH 19.28 MERGED: dispatchable `[]`, blocked `[]`, merged 28.**
