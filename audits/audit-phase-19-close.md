@@ -99,7 +99,7 @@ doc-only commits, which touch no verified byte beyond the §5 registry-count bum
 
 | task (PR) | headline re-verification — the decisive fresh command(s), quoted | verdict |
 |---|---|---|
-| 19.1 (#333) | `check_doc_facts.py` green in 0.33 s + its 35-test perturbation suite; README carries the three reproducibility scopes ("designed for, not yet confirmed" on cross-platform), baseline 6 as the tip everywhere, the 0.938 conversion-label relabel beside 0.8646, manifest-quoted provenance (2026-07-20; 34%/30%), Node/npm prerequisite; DESIGN.md demotion banner → `docs/architecture.md` (1,057 words); `.env.example` documents exactly the one live toggle vs `_TOGGLEABLE_LEVER_RESOLVERS` | VERIFIED |
+| 19.1 (#333) | `check_doc_facts.py` green in 0.33 s + its 35-test perturbation suite; README carries the three reproducibility scopes ("designed for, not yet confirmed" on cross-platform), baseline 6 as the tip everywhere, the 0.938 conversion-label relabel beside 0.8646, manifest-quoted provenance (2026-07-20; 34%/30%), Node/npm prerequisite; DESIGN.md demotion banner → `docs/architecture.md` (8,543 bytes / 146 lines ≈ 1.1k words, ≤2 pages — word counts are splitter-dependent: 1,057 by this session's `wc -w`, 1,089 by ASCII-whitespace split); `.env.example` documents exactly the one live toggle vs `_TOGGLEABLE_LEVER_RESOLVERS` | VERIFIED |
 | 19.2 (#328) | `grep 'DEAD in production'` → zero hits across the four swept files; every remaining "default-OFF" historical-tense except the genuinely live `impostor_roll_call`; AST compare at merge `ac16204`^..`ac16204` with docstrings stripped → all four files identical (zero behavior bytes moved) | VERIFIED |
 | 19.3 (#329) | The AS241 sampler's distribution-quality pins green (40k-draw moments/tails/KS vs an independent `math.erfc` reference); fresh double-run digest-identical to the pinned golden `e72e24fe…`; the cross-platform claim NOT advertised in es.py or README (Darwin-arm64 run pending, owner-assisted) | VERIFIED |
 | 19.4 (#325) | `training/rewards.py` states "the Ng et al. 1999 FORM — NOT policy-invariant here" naming the missing hypothesis; the non-invariance test asserts shaping 0.0 vs 2.0 on equal-env-reward trajectories; seed-0 exact-`==` pins prove no computed number moved (impostor 19.0, crew 12.925465838509316) | VERIFIED |
@@ -136,11 +136,17 @@ it verbatim ("its deletion is the one step this task could not execute …
 `docs/artifacts.md` repeats it — but the contract sanctioned no couldn't-delete outcome, so the
 ledger records it as a deviation rather than absorbing it. The consequence is duplication only,
 never integrity: the pinned orphan commit `476a1f85…` independently carries and hashes every
-staged byte (§1), so the staging ref is redundant by construction. **The routed remedy is the
-manifest's own one-command owner step, at the owner's convenience (it is the owner's credential
-the deletion needs):** `git push origin --delete evidence/raw-slate-staging`. This close's
-dispatch environment holds the same class of credential that was already refused, so the close
-records rather than retries.
+staged byte (§1), so the staging ref is redundant by construction. Per AGENTS.md's
+detect-and-fall-back rule for GitHub operations, this close ATTEMPTED every path its
+environment offers before attributing the step to the owner, and all three are refused or
+absent, each named: (a) `git push origin --delete evidence/raw-slate-staging` — denied by this
+dispatch environment's action-permission layer (remote ref deletion is policy-blocked here, a
+distinct refusal class from 19.22's HTTP 403); (b) the `gh` CLI — no authenticated mutation
+path in this environment (its GitHub API surface is proxy-limited to a pinned read/review set;
+the frontier CLI's own `gh pr list` observed HTTP 403, §5); (c) the GitHub MCP integration —
+exposes branch creation but no ref-deletion capability. **The routed remedy remains the
+manifest's own one-command owner step, at the owner's convenience:**
+`git push origin --delete evidence/raw-slate-staging`.
 
 **On 19.23's deviation:** the failing test IS §1's F1 — the contract's own new test file
 (`tests/scripts/test_verify_ml_evidence.py:141`) symlinks the real `training/artifacts/coevo/`
@@ -204,8 +210,8 @@ here.
 phase — then presentation.** The 19.14 numbers do the arguing (§4.1): today "deduction" is
 proof-lookup — conviction accuracy is a perfect 1.000 wherever ejectee-specific proof exists and
 0.303–0.393 where it does not, every innocent ejection in every committed set happens in that
-non-direct cell, and the rare weak-flag-only convictions are 100% wrongful (4/4 innocent
-pooled). The substrate phase attacks exactly that cell, and this phase already committed its
+non-direct cell, and the rare weak-flag-only convictions are 100% wrongful (5/5 innocent pooled
+over all four sets: 1 samples 9p2i + 3 corpus 9p2i + 1 samples 4p1i + 0 corpus 4p1i). The substrate phase attacks exactly that cell, and this phase already committed its
 measurement (19.14's cells), its executable exhibits (19.11's four injustice fixtures), and its
 display (the proof-vs-inference panel) — the before/after instrument costs $0 and is already at
 HEAD. Presentation multiplies quality; the quality gap is now measured and located, and the
@@ -233,7 +239,9 @@ instance** (share 1.0, advisory-flagged at these n); turn→ballot consistency *
 (an agent's spoken accusation and its ballot agree less than half the time); impostor
 whereabouts-response coverage **0.490 / 0.500** pooled vs crew ≈ 0.996; engine-redirected
 ballots 1.3 % / 1.8 %; scaffold leakage in rendered rationales: model-omniscient ballot rate
-**42/245 = 0.171 / 110/684 = 0.161**, partner-naming 0.118 on both 9p2i sets.
+**42/245 = 0.171 / 110/684 = 0.161**, partner-naming 0.118 on both 9p2i sets. The 4p1i sets'
+weak-flag cells complete the pool: samples 4p1i 1/12 (innocent), corpus 4p1i 0/20 — **pooled
+weak-flag-only convictions 5/5 innocent across all four sets**.
 
 Read together: the game's convictions are near-perfectly grounded where the substrate hands the
 crew role-proving evidence, and barely better than a coin flip — with all the injustice — where
@@ -304,16 +312,20 @@ convention).
 - **The close verifies; it does not fix.** F1 (§1) and F2 (§2) are recorded and routed — F1 to
   the next phase's inputs, F2 to the manifest's own one-command owner step; no test, script, or
   doc outside this contract's files was touched, with the ONE mechanical exception below.
-- **The one out-of-listed-scope edit: `docs/artifacts.md`'s `audits/` registry row, 97 → 98
-  files.** Landing `audits/audit-phase-19-close.md` (this file — in scope, mandated) trips the
-  in-tree family inventory check exactly as 19.23 built it to fail on registry drift
-  (*"audits/: docs/artifacts.md promises 97 files, the index tracks 98"* — the verifier and 3 of
-  its tests go red on any audits/ addition that skips the bump). The count is re-derived from
-  the index (98 files; the 4.8 MB size figure is unchanged at its own precision), the full
-  evidence cycle re-ran green after the bump (fetch *"OK: 2953/2953"*; `--complete` *"54 | OK 49
-  | FAIL 0 | ABSENT 0 | INFO 5"*), and the edit is one token in one generated-registry row — the
-  mechanical consequence of the close's own mandated artifact, not a fix to phase work. Recorded
-  here rather than silently.
+- **The one added-scope edit: `docs/artifacts.md`'s `audits/` registry row, 97 → 98 files.**
+  Landing `audits/audit-phase-19-close.md` (this file — in scope, mandated) trips the in-tree
+  family inventory check exactly as 19.23 built it to fail on registry drift (*"audits/:
+  docs/artifacts.md promises 97 files, the index tracks 98"* — the verifier and 3 of its tests
+  go red on any audits/ addition that skips the bump). The count is re-derived from the index
+  (98 files; the 4.8 MB size figure is unchanged at its own precision), the full evidence cycle
+  re-ran green after the bump (fetch *"OK: 2953/2953"*; `--complete` *"54 | OK 49 | FAIL 0 |
+  ABSENT 0 | INFO 5"*), and the edit is one token in one generated-registry row — the mechanical
+  consequence of the close's own mandated artifact, not a fix to phase work. **So the diff stays
+  within contracted scope rather than carrying a recorded exception, the 19.28 contract's own
+  files-in-scope list gains the row as a dated close-recorded surgery note in this same PR**
+  (`tasks/phase-19.md` is 19.28-scoped for exactly such notes; its generated prompt regenerates
+  in lockstep) — the owner's merge ratifies the amended scope, the 15.18 convention (the review
+  round's P1, absorbed).
 - **The gate-ordering decision (F1's consequence):** the default gate's green is quoted from the
   clean state (`fetch_evidence.sh --clean` → `check.sh`), the evidence legs from the restored
   state — the two states the verifiers themselves define. Both invocations and both states are
@@ -395,11 +407,13 @@ git ls-remote --tags origin                                         # §6 read-o
 ```
 
 ```python
-# §6 — the phase-complete frontier, cross-checked with a git-log title index (the 18-close method)
+# §6 — the phase-complete frontier, cross-checked with a git-log title index (the 18-close method).
+# The log is PINNED to close HEAD so the snippet reproduces after this close merges — an
+# unbounded log would already contain 19.28's own merge title and collapse the before/after.
 import subprocess, sys; sys.path.insert(0, "scripts")
 import compute_next_task as cnt
 from _task_parser import parse_all_tasks
-titles = [t for t in subprocess.run(["git", "log", "--format=%s", "--grep=^task 19"],
+titles = [t for t in subprocess.run(["git", "log", "7be97c7", "--format=%s", "--grep=^task 19"],
           capture_output=True, text=True, check=True).stdout.splitlines()
           if t.lower().startswith("task 19")]
 errors: list[str] = []; tasks = parse_all_tasks(errors); assert not errors

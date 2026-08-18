@@ -1959,6 +1959,7 @@ this file; the roadmap gets its tick.
 - audits/audit-phase-19-close.md (new)
 - tasks/phase-19.md; (the STATUS banner + any close-recorded surgery notes)
 - tasks/post-phase-14-plan.md; (the roadmap tick)
+- docs/artifacts.md; (close-recorded surgery, 2026-08-18: the audits/ registry-count row ONLY — landing the close audit moves the fail-loud in-tree family inventory by one, so the close bumps the one counted cell; ratified by the merge of the close PR, the 15.18 convention)
 
 **Files NOT in scope:**
 - everything else (the close verifies; it does not fix — late findings route to the next phase's inputs)
