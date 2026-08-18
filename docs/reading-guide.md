@@ -267,7 +267,7 @@ names a committed usage you can check.
   owner's *merge* is the ratification; measurements commit their
   pre-registration first and their reproduction snippets beside the numbers
   (`audits/audit-phase-17-close.md:453`; `audits/audit-phase-18-baseline-6.md:3`;
-  `tasks/phase-19.md:3-4`).
+  `tasks/phase-19.md:22-23`).
 - **the two-owner gate** — a phase's ruling and its close are two separate owner
   merges, and the close PR carries no new evidence, so the second merge ratifies
   a reading rather than a surprise (`tasks/phase-18.md:2299-2301`; "the phase's
@@ -276,7 +276,7 @@ names a committed usage you can check.
 - **errata discipline** — living documentation (README, design notes) is
   rewritten; *records* — campaign reports and audits — never are. They get
   additive, dated errata, and later prose quotes only errata-approved figures
-  (`tasks/phase-19.md:87-89`; `training/reports/report-finalist-eval.md` §18;
+  (`tasks/phase-19.md:106-108`; `training/reports/report-finalist-eval.md` §18;
   `audits/audit-phase-18-close.md:1113`).
 
 **Citation shorthand.** `§N.M` is a section of the cited document; `F<n>` a

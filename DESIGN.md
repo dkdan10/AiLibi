@@ -806,7 +806,8 @@ This is realistic for a solo developer over ~10–14 weeks if they ship steadily
 
 > **Superseded —** the week-numbered phases 0–6 below are long past. MVP (phases 0–5) closed, the
 > executed Phase 6 ran as a repair phase, and the live roadmap has continued since as per-phase
-> contracts under `tasks/phase-N.md` — through Phase 19, which is the phase now under way. The
+> contracts under `tasks/phase-N.md` — through Phase 19, closed 2026-08-18
+> (`audits/audit-phase-19-close.md`). The
 > "human player" phase sketched at §9's tail has never been built.
 
 ### Phase 0 — Scaffolding (week 1)

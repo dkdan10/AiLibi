@@ -326,6 +326,17 @@ convention).
   (`tasks/phase-19.md` is 19.28-scoped for exactly such notes; its generated prompt regenerates
   in lockstep) — the owner's merge ratifies the amended scope, the 15.18 convention (the review
   round's P1, absorbed).
+- **The second review round's front-door refreshes (three more dated surgery notes, same
+  mechanism):** flipping the banner made the two README project-status/roadmap sentences and
+  DESIGN.md's §9 supersession-banner line stale ("Phase 19 … is under way"), and the banner
+  expansion shifted the two `tasks/phase-19.md` line anchors `docs/reading-guide.md` cites (3-4 →
+  22-23; 87-89 → 106-108; a repo-wide grep found no other line-anchored citation). Leaving any
+  of them would reintroduce at the close the exact front-door drift class 19.1 removed, so all
+  three files join the contract's files-in-scope as dated close-recorded surgery notes (README's
+  two sentences, the one DESIGN.md supersession line — demotion-era prose, not historical
+  content — and the guide's two anchors, nothing else), the 19.28 prompt regenerated in
+  lockstep, and the owner's merge ratifies. `check_doc_facts.py` re-ran green over the edited
+  README.
 - **The gate-ordering decision (F1's consequence):** the default gate's green is quoted from the
   clean state (`fetch_evidence.sh --clean` → `check.sh`), the evidence legs from the restored
   state — the two states the verifiers themselves define. Both invocations and both states are
@@ -386,7 +397,13 @@ convention).
 ## 7. Method + reproduction (all $0 against committed bytes; network only where named)
 
 ```
-git fetch --unshallow origin                                        # the AGENTS.md rule, before any history claim
+# Full history before any history claim (the AGENTS.md rule). --unshallow errors on a
+# complete clone, so it is guarded; a complete clone just fetches normally.
+if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+  git fetch --unshallow origin
+else
+  git fetch origin
+fi
 bash scripts/check.sh                                               # §1 default gate (clean state; F1 defines the state)
 uv run pytest -m campaign                                           # §1 opt-in tier — 317 passed
 bash scripts/fetch_evidence.sh                                      # §1 OK: 2953/2953 files match 476a1f85…
