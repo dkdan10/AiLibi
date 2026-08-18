@@ -1097,6 +1097,13 @@ def test_a_report_value_contradicting_its_fraction_raises(tmp_path: Path) -> Non
     ):
         assert vme._displayed_drift(benign) == [], benign
 
+    # ...but "no drift" must mean VALIDATED, not unexamined. `n/d (pct%)` is the
+    # mirror of `pct% (n/d)`, and listing it as benign while no pattern read it
+    # documented a gap as intentional: the fraction parsed, so the row stayed OK
+    # while the percentage beside it could say anything.
+    for contradicting in ("12/50 (99.0%)", "46/60 (99.9%)", "90/96 = 0.5000"):
+        assert vme._displayed_drift(contradicting) != [], contradicting
+
 
 def test_a_family_file_no_anchor_names_is_still_required(tmp_path: Path) -> None:
     """A tracked byte inside an in-tree family cannot vanish unnoticed.
@@ -1118,15 +1125,21 @@ def test_a_family_file_no_anchor_names_is_still_required(tmp_path: Path) -> None
     _link(root, unanchored, f"{family}/map-elites/config.json")
     _index(root, unanchored, f"{family}/map-elites/config.json")
 
+    # This tree cannot satisfy the registry's per-row COUNTS — it stages two
+    # files against rows promising hundreds — so the row fails either way here.
+    # The signal under test is therefore the specific disk problem naming this
+    # file, which must appear only once the file is gone. (Count parity itself is
+    # pinned by `test_a_committed_deletion_fails_the_inventory` and, at HEAD, by
+    # `test_every_counted_registry_row_matches_the_index`.)
     present = _row(
         vme.run_availability(_context(root)).rows, "in-tree family inventory"
     )
-    assert present.status == "OK", present.detail
-    assert present.measured.startswith("2/2")
+    assert "absent from disk" not in present.detail, present.detail
 
     (root / unanchored).unlink()
     gone = _row(vme.run_availability(_context(root)).rows, "in-tree family inventory")
     assert gone.status == "FAIL"
+    assert "absent from disk" in gone.detail
     assert unanchored in gone.detail
     # The family's own anchor row still reads OK — which is precisely why the
     # inventory row has to exist.
@@ -1287,3 +1300,134 @@ def test_a_foreign_repo_root_is_refused(
     stderr = capsys.readouterr().err
     assert "is not this script's checkout" in stderr
     assert "scripts/verify_ml_evidence.py" in stderr
+
+
+def test_a_survivor_named_after_the_closing_phrase_is_counted(tmp_path: Path) -> None:
+    """The erratum's conclusion is read whole, not up to its first clause.
+
+    A window ending at the first "survive it" silently dropped any arm the report
+    named afterwards, so a conclusion claiming a third survivor still compared
+    equal to the recomputed two.
+    """
+
+    root = tmp_path / "repo"
+    report = _copy(root, vme.FINALIST_REPORT)
+    assert vme.bonferroni_from_report(root) == (
+        0.05,
+        4,
+        0.0125,
+        ["p18-imp-bfd145cb", "p18-imp-ea4bc955"],
+    )
+    report.write_text(
+        report.read_text().replace(
+            "(p = 0.0041) survive it.",
+            "(p = 0.0041) survive it; `p18-imp-7f73929d` also survives.",
+        )
+    )
+    _alpha, _family, _bar, survivors = vme.bonferroni_from_report(root)
+    assert survivors == [
+        "p18-imp-7f73929d",
+        "p18-imp-bfd145cb",
+        "p18-imp-ea4bc955",
+    ]
+
+    # And the arm the same paragraph says FAILS is still not read as a survivor:
+    # a refuting clause names its arm too.
+    assert "p18-imp-7f73929d" not in vme.bonferroni_from_report(_REPO_ROOT)[3]
+
+
+def test_a_committed_deletion_fails_the_inventory(tmp_path: Path) -> None:
+    """The index cannot be its own expectation — that is round 1's finding again.
+
+    A working-tree deletion leaves the path tracked and missing from disk. A
+    COMMITTED deletion removes it from the index too, so both sides of a
+    self-derived count shrink together and the row still reads OK while
+    `docs/artifacts.md` goes on promising the file. Only the document's stated
+    count notices, which is why the two are compared.
+    """
+
+    (tmp_path / "a.json").write_text("{}")
+    (tmp_path / "b.json").write_text("{}")
+
+    assert vme.inventory_problems(tmp_path, [("fam/", ["a.json", "b.json"], 2)]) == []
+
+    committed_deletion = vme.inventory_problems(tmp_path, [("fam/", ["a.json"], 2)])
+    assert len(committed_deletion) == 1
+    assert "promises 2 files" in committed_deletion[0]
+    assert "tracks 1" in committed_deletion[0]
+
+    (tmp_path / "b.json").unlink()
+    working_tree_deletion = vme.inventory_problems(
+        tmp_path, [("fam/", ["a.json", "b.json"], 2)]
+    )
+    assert any("absent from disk" in problem for problem in working_tree_deletion)
+    # A row the registry states no count for is still checked against the disk.
+    assert vme.inventory_problems(tmp_path, [("fam/", ["a.json", "b.json"], None)])
+
+
+def test_every_counted_registry_row_matches_the_index() -> None:
+    """The scope table and `docs/artifacts.md` agree at HEAD, row by row.
+
+    This is what makes the scope table safe to hand-write: a mis-scoped entry
+    disagrees with the count the document states and turns the command red,
+    rather than quietly inventorying the wrong set of bytes.
+    """
+
+    row = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert row.status == "OK", row.detail
+    counted = int(row.committed.split(" row(s)", 1)[0])
+    assert counted >= 10, row.committed
+    # Every in-tree registry row has a scope; a row nothing enumerates raises.
+    for key, _cls, where, _size in vme.registry_rows(_REPO_ROOT):
+        if vme._WHERE_TO_CLASS[where] == "IN-TREE":
+            assert vme.in_tree_inventory(_REPO_ROOT, key) is not None
+
+
+def test_a_registry_row_with_no_inventory_scope_raises() -> None:
+    """A row whose bytes nothing enumerates cannot be reported as complete."""
+
+    with pytest.raises(vme.EvidenceError, match="no inventory scope"):
+        vme.in_tree_inventory(_REPO_ROOT, "some/row/the/table/does/not/cover")
+
+
+def test_a_manifest_the_product_rejects_cannot_be_certified(tmp_path: Path) -> None:
+    """Both sides go through `ComposedManifest`, so its invariants apply.
+
+    A dict comparison this file assembled would happily match two sides that
+    both said `conviction_verdict: NO-GO` — a composition `build_composed_manifest`
+    refuses to construct and `ComposedManifest` does not permit.
+    """
+
+    from training.composed_runner import (
+        COMPOSED_MANIFEST_FILENAME,
+        load_composed_manifest,
+    )
+
+    committed = json.loads(
+        (_REPO_ROOT / f"{vme.COMPOSED_DIR}/manifest.json").read_text()
+    )
+    assert load_composed_manifest(_REPO_ROOT / vme.COMPOSED_DIR).conviction_verdict
+
+    for field, value in (
+        ("conviction_verdict", "NO-GO"),  # the product permits only GO
+        ("composed_verdict", "MAYBE"),  # outside the verdict vocabulary
+    ):
+        root = tmp_path / field
+        root.mkdir()
+        drifted = dict(committed)
+        drifted[field] = value
+        (root / COMPOSED_MANIFEST_FILENAME).write_text(json.dumps(drifted))
+        with pytest.raises(Exception):
+            load_composed_manifest(root)
+
+    # An ADDED field is refused too (`extra="forbid"`), so a manifest that grew a
+    # key cannot slip past a field-for-field comparison.
+    root = tmp_path / "extra"
+    root.mkdir()
+    (root / COMPOSED_MANIFEST_FILENAME).write_text(
+        json.dumps({**committed, "unreviewed_knob": 1})
+    )
+    with pytest.raises(Exception):
+        load_composed_manifest(root)

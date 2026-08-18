@@ -677,6 +677,14 @@ _VALUE_THEN_FRACTION: Final = re.compile(
 _FRACTION_THEN_VALUE: Final = re.compile(
     r"(\d+)\s*/\s*(\d+)\s*\**\s*=\s*\**\s*(\d*\.\d+)"
 )
+#: `12/50 (24.0%)` — the mirror of :data:`_VALUE_THEN_FRACTION`. Omitting it left
+#: a shape that reads as validated and was not: the fraction still parsed, so the
+#: recomputation row stayed OK while the percentage beside it said anything at
+#: all — and the round-4 test asserted this very form as "benign", which
+#: documented the gap as intentional (Codex review, PR #348).
+_FRACTION_THEN_PERCENT: Final = re.compile(
+    r"(\d+)\s*/\s*(\d+)\s*\**\s*\(\s*(\d+(?:\.\d+)?)\s*%"
+)
 
 
 def _displayed_drift(cell: str) -> list[str]:
@@ -689,6 +697,7 @@ def _displayed_drift(cell: str) -> list[str]:
     drift: list[str] = []
     for shown, numerator, denominator, scale, suffix in (
         *((s, n, d, 100.0, "%") for s, n, d in _VALUE_THEN_FRACTION.findall(cell)),
+        *((s, n, d, 100.0, "%") for n, d, s in _FRACTION_THEN_PERCENT.findall(cell)),
         *((s, n, d, 1.0, "") for n, d, s in _FRACTION_THEN_VALUE.findall(cell)),
     ):
         if not int(denominator):
@@ -751,10 +760,21 @@ def fraction_from_report(repo_root: Path, rel: str, label: str) -> tuple[int, in
 #: and the arms it names as surviving that bar.
 _ALPHA_STATEMENT: Final = re.compile(r"α\s*=\s*([\d.]+)\s*/\s*(\d+)\s*=\s*([\d.]+)")
 _ENTRANT: Final = re.compile(r"`(p18-[A-Za-z0-9_-]+)`")
-#: Word-bounded on purpose: the same report says "survive item 1 untouched"
-#: sixty lines further down, and a bare substring search closes the survivor
-#: window on whichever comes first.
-_SURVIVE_CLAUSE: Final = re.compile(r"survive it\b")
+#: The erratum's conclusion is read as a whole PARAGRAPH split into clauses,
+#: not as a window ending at the first "survive it". Stopping at that phrase
+#: silently dropped any survivor the report named after it — "A and B survive
+#: it; C also survives" would have been read as two survivors and passed
+#: (Codex review, PR #348). Paragraph scoping is also what keeps "survive item
+#: 1 untouched", sixty lines further down, out of the match.
+_PARAGRAPH_END: Final = re.compile(r"\n[ \t]*\n")
+#: Clause boundaries: `;` and a sentence-ending `.`. The lookbehind excludes the
+#: decimal points inside the p-values each arm is quoted with.
+_CLAUSE_SPLIT: Final = re.compile(r";|(?<=[A-Za-z)*])\.(?=\s|$)")
+_SURVIVES: Final = re.compile(r"surviv|\bclears?\b", re.IGNORECASE)
+#: A clause that REFUTES survival names its arm too, so it must not be read as a
+#: claim: "`p18-imp-7f73929d` fails the multiplicity correction" is the arm that
+#: does NOT survive.
+_REFUTES: Final = re.compile(r"fail|\bnot\b|\bno longer\b", re.IGNORECASE)
 
 
 def bonferroni_from_report(repo_root: Path) -> tuple[float, int, float, list[str]]:
@@ -777,19 +797,21 @@ def bonferroni_from_report(repo_root: Path) -> tuple[float, int, float, list[str
             f"{FINALIST_REPORT}: no 'α = <alpha> / <family> = <bar>' statement — "
             "the multiplicity conclusion this check compares against is gone"
         )
-    tail = text[alpha.end() :]
-    closing = _SURVIVE_CLAUSE.search(tail)
-    if closing is None:
+    paragraph = _PARAGRAPH_END.split(text[alpha.end() :], 1)[0]
+    claims = [
+        clause
+        for clause in _CLAUSE_SPLIT.split(paragraph)
+        if _SURVIVES.search(clause) and not _REFUTES.search(clause)
+    ]
+    if not claims:
         raise EvidenceError(
-            f"{FINALIST_REPORT}: the family-wise bar is stated but no "
-            "'survive it' clause names which arms clear it"
+            f"{FINALIST_REPORT}: the family-wise bar is stated but the paragraph "
+            "carrying it asserts no surviving arm"
         )
-    window = tail[: closing.start()]
-    only = window.rfind("only")
-    survivors = sorted(set(_ENTRANT.findall(window[only:] if only >= 0 else window)))
+    survivors = sorted({arm for clause in claims for arm in _ENTRANT.findall(clause)})
     if not survivors:
         raise EvidenceError(
-            f"{FINALIST_REPORT}: the 'survive it' clause names no arm; "
+            f"{FINALIST_REPORT}: the survivor clause names no arm; "
             "the report's own list of surviving arms is unreadable"
         )
     return float(alpha.group(1)), int(alpha.group(2)), float(alpha.group(3)), survivors
@@ -1398,14 +1420,14 @@ def run_recompute(ctx: Context) -> LegResult:
     """
 
     from training.composed_runner import (
+        build_composed_manifest,
         decide_composed_go,
+        load_composed_manifest,
         load_composed_verdict,
         run_composed_fidelity,
     )
-    from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
     from training.conviction.dataset import build_conviction_table
     from training.conviction.fidelity import (
-        CONVICTION_CONVERSION_DECISION_THRESHOLD,
         decide_conviction_go,
         load_conviction_verdict,
         run_conviction_fidelity,
@@ -1615,24 +1637,28 @@ def run_recompute(ctx: Context) -> LegResult:
     # the recomputation above quietly went on using the imported constants and
     # the committed corpus — so the command could certify a configuration that
     # contradicts the computation it had just performed (Codex review, PR #348).
-    # Every field is re-derivable, so none of this is transcribed: the thresholds
-    # come from the constants the instruments actually apply, the verdicts from
-    # the re-derived decisions, and the corpus from the set this leg loaded.
-    manifest = json.loads(_read_text(ctx.repo_root, f"{COMPOSED_DIR}/manifest.json"))
+    # Both sides go through the product's OWN typed surface rather than a dict
+    # this file assembles. Hand-building the expected mapping meant the verifier
+    # could certify a manifest the product refuses to construct: `ComposedManifest`
+    # pins `conviction_verdict` to `Literal["GO"]` and forbids extra fields, and
+    # `build_composed_manifest()` rejects a non-GO conviction component outright,
+    # none of which an untyped dict comparison applies (Codex review, PR #348).
+    # Building through it also means nothing here is transcribed at all — the
+    # thresholds and the corpus come from the constructor's own constants.
+    committed_manifest = load_composed_manifest(composed_dir)
+    try:
+        rederived_manifest = build_composed_manifest(
+            composed_rederived, conviction_verdict=conviction_rederived
+        )
+    except ValueError as error:  # the product refuses this composition
+        raise EvidenceError(
+            f"{COMPOSED_DIR}/manifest.json cannot be re-derived: {error}"
+        ) from error
     rows.append(
         _verdict_identity_row(
             "composed manifest.json reproduces",
-            rederived={
-                "surrogate_weights_sha256": surrogate_sha,
-                "conviction_weights_sha256": conviction_sha,
-                "composed_verdict": str(composed_rederived.verdict),
-                "conviction_verdict": str(conviction_rederived.verdict),
-                "corpus_set": CORPUS_SET.rsplit("/", 1)[-1],
-                "replay_set_dir": CORPUS_SET,
-                "decision_threshold": CONVICTION_CONVERSION_DECISION_THRESHOLD,
-                "skip_confidence_threshold": DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
-            },
-            committed={key: value for key, value in manifest.items()},
+            rederived=rederived_manifest.model_dump(),
+            committed=committed_manifest.model_dump(),
             repo_root=ctx.repo_root,
             path_fields=("replay_set_dir",),
             source=f"{COMPOSED_DIR}/manifest.json",
@@ -1642,13 +1668,13 @@ def run_recompute(ctx: Context) -> LegResult:
         (
             "surrogate weights sha256",
             surrogate_sha,
-            str(manifest["surrogate_weights_sha256"]),
+            committed_manifest.surrogate_weights_sha256,
             f"{COMPOSED_DIR}/manifest.json",
         ),
         (
             "conviction weights sha256",
             conviction_sha,
-            str(manifest["conviction_weights_sha256"]),
+            committed_manifest.conviction_weights_sha256,
             f"{COMPOSED_DIR}/manifest.json",
         ),
     ):
@@ -2005,6 +2031,113 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
     "replays/*.jsonl": (),
 }
 
+#: The git pathspec whose tracked files each IN-TREE registry row promises, and
+#: the paths a more specific row owns instead. Read from `docs/artifacts.md`'s
+#: own descriptions rather than reused from :data:`_IN_TREE_PROBES`: the probes
+#: are existence ANCHORS, and taking them as inventory scope was
+#: under-inclusive — their union missed `replays/ml_corpus/README.md`, one of the
+#: 209 files that row promises — and could not express the two rows that nest
+#: (Codex review, PR #348).
+#:
+#: The two nestings do NOT behave alike, which is why neither is inferred:
+#: `training/reports/`'s 21 files INCLUDE `_finalist_eval_raw/MANIFEST.md` even
+#: though that file also has its own row, while `training/artifacts/coevo/`'s 90
+#: EXCLUDE `EVIDENCE-MANIFEST.md`, which likewise has its own.
+#:
+#: This table cannot be silently wrong. The registry states a file count for
+#: almost every row, and the parity check compares it against the index, so a
+#: mis-scoped entry turns the command red instead of mis-reporting.
+_IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
+    "replays/samples/": (("replays/samples",), ()),
+    "replays/ml_corpus/": (("replays/ml_corpus",), ()),
+    "agents/tactical/learned/{weights,crew_weights}.json": (
+        (
+            "agents/tactical/learned/weights.json",
+            "agents/tactical/learned/weights.json.sha256",
+            "agents/tactical/learned/crew_weights.json",
+            "agents/tactical/learned/crew_weights.json.sha256",
+        ),
+        (),
+    ),
+    "tests/fixtures/": (("tests/fixtures",), ()),
+    "data/personas.json": (("data/personas.json",), ()),
+    "training/artifacts/impostor/": (
+        (
+            "training/artifacts/impostor",
+            "training/artifacts/crew",
+            "training/artifacts/anchor_study",
+        ),
+        (),
+    ),
+    "training/artifacts/surrogate/": (
+        (SURROGATE_DIR, CONVICTION_DIR, COMPOSED_DIR),
+        (),
+    ),
+    "training/artifacts/coevo/": ((COEVO_DEST,), (EVIDENCE_MANIFEST,)),
+    "training/artifacts/coevo/EVIDENCE-MANIFEST.md": ((EVIDENCE_MANIFEST,), ()),
+    "training/reports/": (("training/reports",), ()),
+    "training/reports/_finalist_eval_raw/MANIFEST.md": ((SLATE_MANIFEST,), ()),
+    "audits/": (("audits",), ()),
+    "docs/media/": (("docs/media",), ()),
+    "design/phase-12/": (("design/phase-12",), ()),
+    "experiments/lab/": (("experiments/lab", "experiments/model_probe"), ()),
+}
+
+#: The registry's own per-row file count, e.g. `1.5 MB / 105 files`. The word
+#: matters: the slate row reads "1,569 digests", which is a digest count and not
+#: an inventory of files on this checkout.
+_STATED_FILES: Final = re.compile(r"([\d,]+) files")
+
+
+def inventory_problems(
+    repo_root: Path, inventories: Sequence[tuple[str, list[str], int | None]]
+) -> list[str]:
+    """Every disagreement between the registry, the git index, and the disk.
+
+    Two independent questions, because one of them cannot answer the other:
+
+    * is every tracked file actually on disk? — catches a working-tree deletion;
+    * does the index hold as many files as `docs/artifacts.md` PROMISES? —
+      catches a COMMITTED deletion, which removes the path from the index too,
+      so a check that used the index count as its own expectation watched both
+      sides shrink together and still read OK (Codex review, PR #348). This is
+      round 1's finding in a second place: an inventory derived from the thing
+      it is checking cannot notice a deletion.
+    """
+
+    problems: list[str] = []
+    for key, tracked, stated_count in inventories:
+        gone = [path for path in tracked if not (repo_root / path).is_file()]
+        if gone:
+            problems.append(
+                f"{key}: {len(gone)} tracked file(s) absent from disk "
+                f"({', '.join(gone[:5])})"
+            )
+        if stated_count is not None and stated_count != len(tracked):
+            problems.append(
+                f"{key}: {ARTIFACTS_DOC} promises {stated_count} files, "
+                f"the index tracks {len(tracked)}"
+            )
+    return problems
+
+
+def in_tree_inventory(repo_root: Path, key: str) -> list[str] | None:
+    """The tracked files an in-tree registry row promises, or ``None`` without git."""
+
+    scope = _IN_TREE_INVENTORY.get(key)
+    if scope is None:
+        raise EvidenceError(
+            f"{ARTIFACTS_DOC}: in-tree registry row {key!r} has no inventory "
+            "scope in this command; a row whose bytes nothing enumerates cannot "
+            "be reported as complete"
+        )
+    pathspec, owned_elsewhere = scope
+    tracked = git_tracked_under(repo_root, pathspec)
+    if tracked is None:
+        return None
+    return [path for path in tracked if path not in owned_elsewhere]
+
+
 #: The two class-(c) rows, keyed the same way, with the evidence-commit prefix
 #: whose manifest rows they cover.
 _EVIDENCE_PREFIXES: Final[dict[str, str]] = {
@@ -2300,21 +2433,30 @@ def run_availability(ctx: Context) -> LegResult:
     # to the registry's own in-tree rows. Without an index the row reports ABSENT
     # (which `--complete` fails) rather than certifying an inventory it could not
     # read.
-    in_tree_probes = tuple(
-        dict.fromkeys(
-            probe
-            for row_key, _cls, row_where, _size in doc_rows
-            if _WHERE_TO_CLASS[row_where] == "IN-TREE"
-            for probe in _IN_TREE_PROBES.get(row_key, ())
+    inventories: list[tuple[str, list[str], int | None]] = []
+    unverifiable = False
+    for row_key, _cls, row_where, row_size in doc_rows:
+        if _WHERE_TO_CLASS[row_where] != "IN-TREE":
+            continue
+        tracked = in_tree_inventory(ctx.repo_root, row_key)
+        if tracked is None:
+            unverifiable = True
+            break
+        stated_files = _STATED_FILES.search(row_size)
+        inventories.append(
+            (
+                row_key,
+                tracked,
+                int(stated_files.group(1).replace(",", "")) if stated_files else None,
+            )
         )
-    )
-    tracked_family_files = git_tracked_under(ctx.repo_root, in_tree_probes)
-    if tracked_family_files is None:
+
+    if unverifiable:
         rows.append(
             CheckRow(
                 name="in-tree family inventory",
                 measured="INVENTORY UNVERIFIABLE",
-                committed="`git ls-files` over the registry's in-tree rows",
+                committed=f"{ARTIFACTS_DOC}'s per-row file counts",
                 source=f"{ARTIFACTS_DOC} (registry) + `git ls-files`",
                 status="ABSENT",
                 detail=(
@@ -2325,28 +2467,28 @@ def run_availability(ctx: Context) -> LegResult:
             )
         )
     else:
-        vanished = [
-            path
-            for path in tracked_family_files
-            if not (ctx.repo_root / path).is_file()
-        ]
+        # Double entry, and the reason it has to be. Using the index count as
+        # its own expectation reproduced round 1's finding exactly: a COMMITTED
+        # deletion drops the path from `git ls-files` too, so both sides shrank
+        # together and the row still read OK while the registry went on
+        # promising the file (Codex review, PR #348). The document's stated
+        # count is the independent side — it does not move when the index does.
+        problems = inventory_problems(ctx.repo_root, inventories)
+        tracked_total = sum(len(tracked) for _key, tracked, _stated in inventories)
+        pinned = sum(1 for _key, _tracked, stated in inventories if stated is not None)
         rows.append(
             CheckRow(
                 name="in-tree family inventory",
                 measured=(
-                    f"{len(tracked_family_files) - len(vanished)}"
-                    f"/{len(tracked_family_files)} tracked files present"
+                    f"{tracked_total} tracked file(s) present across "
+                    f"{len(inventories)} row(s)"
                 ),
-                committed=(
-                    f"{len(tracked_family_files)} tracked under "
-                    f"{len(in_tree_probes)} registry path(s)"
-                ),
+                committed=f"{pinned} row(s) state a file count; all compared",
                 source=f"{ARTIFACTS_DOC} (registry) + `git ls-files`",
-                status="OK" if not vanished else "FAIL",
-                detail="absent: " + ", ".join(vanished[:20]) if vanished else "",
+                status="OK" if not problems else "FAIL",
+                detail="\n".join(problems),
             )
         )
-
     # ---- named evidence with no registry row: recorded off-tree, or lost. ----
     for name, recorded_class, anchor_file, anchor_text in _OFF_TREE_ANCHORS:
         anchored = anchor_text in _read_text(ctx.repo_root, anchor_file)
