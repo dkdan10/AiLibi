@@ -135,10 +135,25 @@ def _availability_tree(root: Path) -> None:
         "replays/ml_corpus/9p2i",
     ):
         _link(root, probe)
-    # coevo/ is linked whole (the availability probe needs the directory and
-    # PATHS.md); the manifest and PATHS.md come with it.
-    (root / vme.COEVO_DEST).parent.mkdir(parents=True, exist_ok=True)
-    (root / vme.COEVO_DEST).symlink_to(_REPO_ROOT / vme.COEVO_DEST)
+    # coevo/ is rebuilt from its TRACKED entries only — never linked whole.
+    # The real directory's state is environment-dependent: after
+    # `bash scripts/fetch_evidence.sh` the gitignored evidence payload sits
+    # restored in place, and a wholesale symlink would drag that state into the
+    # scratch tree, flipping the `coevo/ [(c)]` availability row this tree pins
+    # as un-restored (the phase-19 close audit's F1). Linking exactly the
+    # committed inventory keeps the tree's meaning fixed on any checkout; the
+    # manifest and PATHS.md are tracked, so the probe's anchors still resolve.
+    coevo_tracked = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "ls-files", "--", vme.COEVO_DEST],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert coevo_tracked, f"no tracked files under {vme.COEVO_DEST}"
+    for rel in coevo_tracked:
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(_REPO_ROOT / rel)
     # training/reports is built file by file rather than linked whole: linking
     # the real directory would drag `_finalist_eval_raw/MANIFEST.md` in with it
     # and quietly undo the condition the loss test puts under test.
