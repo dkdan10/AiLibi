@@ -416,7 +416,13 @@ def test_perturbed_replay_fails_the_corpus_leg(tmp_path: Path) -> None:
 
     root = tmp_path / "repo"
     _manifests(root)
-    _link(root, f"{vme.SURROGATE_DIR}/fit-corpus.json", vme.CORPUS_SET)
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
+        vme.CORPUS_SET,
+    )
     perturbed_set = root / "replays/samples/perturbed"
     perturbed_set.mkdir(parents=True)
     _link(root, f"{_SAMPLE_SET}/roster.json")
@@ -445,7 +451,12 @@ def test_perturbed_corpus_fails_the_identity_fingerprint(tmp_path: Path) -> None
 
     root = tmp_path / "repo"
     _manifests(root)
-    _link(root, f"{vme.SURROGATE_DIR}/fit-corpus.json")
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
+    )
     (root / "replays/samples").mkdir(parents=True)
     # The corpus is mirrored by symlink, then gains ONE more game: the
     # fingerprint folds every replay's digest, so an added recording moves it
@@ -461,7 +472,10 @@ def test_perturbed_corpus_fails_the_identity_fingerprint(tmp_path: Path) -> None
     result = vme.run_corpus(_context(root, fast=True))
     row = _row(result.rows, "fit-corpus identity fingerprint")
     assert row.status == "FAIL"
-    assert "no longer fingerprints" in row.detail
+    # The record is compared field by field, so the failure names WHICH field
+    # drifted — an added replay moves the corpus digest and nothing else.
+    assert "corpus_sha256" in row.detail
+    assert "weights_sha256" not in row.detail
 
 
 def test_registry_row_with_no_probe_fails_the_availability_leg(
@@ -786,6 +800,8 @@ def test_the_command_writes_nothing_outside_a_temp_dir(tmp_path: Path) -> None:
         vme.FINALIST_REPORT,
         vme.FINALIST_RESULTS,
         f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
         vme.CORPUS_SET,
         _SAMPLE_SET,
     )
@@ -983,7 +999,13 @@ def test_a_declared_set_with_no_replays_fails(tmp_path: Path) -> None:
 
     root = tmp_path / "repo"
     _manifests(root)
-    _link(root, f"{vme.SURROGATE_DIR}/fit-corpus.json", vme.CORPUS_SET)
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
+        vme.CORPUS_SET,
+    )
     emptied = root / _SAMPLE_SET
     emptied.mkdir(parents=True)
     (emptied / "MANIFEST.md").symlink_to(_REPO_ROOT / _SAMPLE_SET / "MANIFEST.md")
@@ -1180,16 +1202,14 @@ def test_a_drifted_bonferroni_conclusion_fails(tmp_path: Path) -> None:
     _manifests(survivors_root)
     _link(survivors_root, vme.ARTIFACTS_DOC, vme.FINALIST_RESULTS)
     report = _copy(survivors_root, vme.FINALIST_REPORT)
-    assert vme.bonferroni_from_report(survivors_root) == (
-        0.05,
-        4,
-        0.0125,
-        ["p18-imp-bfd145cb", "p18-imp-ea4bc955"],
-    )
+    baseline = vme.bonferroni_from_report(survivors_root)
+    assert (baseline.alpha, baseline.family, baseline.bar) == (0.05, 4, 0.0125)
+    assert baseline.survivors == ("p18-imp-bfd145cb", "p18-imp-ea4bc955")
+    assert baseline.refuted == ("p18-imp-7f73929d",)
     report.write_text(
         report.read_text().replace(
             "`p18-imp-bfd145cb` (p = 0.0041) survive it",
-            "`p18-imp-7f73929d` (p = 0.0352) survive it",
+            "`p18-imp-6d327dcb` (p = 0.3075) survive it",
         )
     )
     row = _row(vme.run_paired(_context(survivors_root)).rows, "Bonferroni family bar")
@@ -1312,28 +1332,25 @@ def test_a_survivor_named_after_the_closing_phrase_is_counted(tmp_path: Path) ->
 
     root = tmp_path / "repo"
     report = _copy(root, vme.FINALIST_REPORT)
-    assert vme.bonferroni_from_report(root) == (
-        0.05,
-        4,
-        0.0125,
-        ["p18-imp-bfd145cb", "p18-imp-ea4bc955"],
+    assert vme.bonferroni_from_report(root).survivors == (
+        "p18-imp-bfd145cb",
+        "p18-imp-ea4bc955",
     )
     report.write_text(
         report.read_text().replace(
             "(p = 0.0041) survive it.",
-            "(p = 0.0041) survive it; `p18-imp-7f73929d` also survives.",
+            "(p = 0.0041) survive it; `p18-imp-6d327dcb` also survives.",
         )
     )
-    _alpha, _family, _bar, survivors = vme.bonferroni_from_report(root)
-    assert survivors == [
-        "p18-imp-7f73929d",
+    assert vme.bonferroni_from_report(root).survivors == (
+        "p18-imp-6d327dcb",
         "p18-imp-bfd145cb",
         "p18-imp-ea4bc955",
-    ]
+    )
 
     # And the arm the same paragraph says FAILS is still not read as a survivor:
-    # a refuting clause names its arm too.
-    assert "p18-imp-7f73929d" not in vme.bonferroni_from_report(_REPO_ROOT)[3]
+    # a refuting clause names its arm too, and is classified separately.
+    assert "p18-imp-7f73929d" not in vme.bonferroni_from_report(_REPO_ROOT).survivors
 
 
 def test_a_committed_deletion_fails_the_inventory(tmp_path: Path) -> None:
@@ -1431,3 +1448,105 @@ def test_a_manifest_the_product_rejects_cannot_be_certified(tmp_path: Path) -> N
     )
     with pytest.raises(Exception):
         load_composed_manifest(root)
+
+
+def test_a_clause_this_command_cannot_classify_raises(tmp_path: Path) -> None:
+    """An ambiguous conclusion is refused, not guessed at.
+
+    A whole-clause filter dropped any clause carrying a refutation marker — so
+    "`A` fails while `B` also clears" discarded the asserted survivor `B`, and
+    because the earlier clause still named the expected pair, the row read OK
+    while the report claimed an extra survivor. Chasing that with finer-grained
+    heuristics is unbounded; the rule is inverted instead. This is deliberately
+    stricter than the prose allows: a legitimate rewording now fails loudly,
+    which is fixable, rather than being mis-read, which is not.
+    """
+
+    root = tmp_path / "mixed"
+    report = _copy(root, vme.FINALIST_REPORT)
+    report.write_text(
+        report.read_text().replace(
+            "**fails the multiplicity correction**;",
+            "**fails the multiplicity correction** while `p18-imp-6d327dcb` "
+            "also clears;",
+        )
+    )
+    with pytest.raises(vme.EvidenceError, match="cannot tell what it claims"):
+        vme.bonferroni_from_report(root)
+
+    # An arm named with NO verdict at all is equally unreadable.
+    bare_root = tmp_path / "bare"
+    bare = _copy(bare_root, vme.FINALIST_REPORT)
+    bare.write_text(
+        bare.read_text().replace(
+            "`p18-imp-7f73929d` (p = 0.0352) **fails the multiplicity correction**;",
+            "`p18-imp-7f73929d` (p = 0.0352) was also measured;",
+        )
+    )
+    with pytest.raises(vme.EvidenceError, match="cannot tell what it claims"):
+        vme.bonferroni_from_report(bare_root)
+
+
+def test_a_report_refuting_an_arm_the_p_values_clear_fails(tmp_path: Path) -> None:
+    """The refuted half of the conclusion is a claim about the p-values too."""
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.FINALIST_RESULTS)
+    report = _copy(root, vme.FINALIST_REPORT)
+    # Swap the two halves: say the arm that clears (0.0041 < 0.0125) fails, and
+    # the arm that fails (0.0352) survives.
+    report.write_text(
+        report.read_text()
+        .replace(
+            "`p18-imp-7f73929d` (p = 0.0352) **fails the multiplicity correction**",
+            "`p18-imp-bfd145cb` (p = 0.0041) **fails the multiplicity correction**",
+        )
+        .replace(
+            "and `p18-imp-bfd145cb` (p = 0.0041) survive it",
+            "and `p18-imp-7f73929d` (p = 0.0352) survive it",
+        )
+    )
+    row = _row(vme.run_paired(_context(root)).rows, "Bonferroni family bar")
+    assert row.status == "FAIL"
+    assert "survivors" in row.detail
+    assert "refuted" in row.detail
+    assert "p18-imp-bfd145cb" in row.detail
+
+
+def test_a_fit_corpus_record_keyed_to_other_weights_fails(tmp_path: Path) -> None:
+    """The fit-corpus record is checked WHOLE, through the product's loader.
+
+    `load_surrogate_runner_factory` cross-checks `weights_sha256` unconditionally
+    — the Task 18.14 substrate fence — and refuses the artifact when it drifts.
+    Reading a raw mapping and checking only `corpus_sha256` meant this command
+    could certify an artifact the product will not load.
+    """
+
+    from training.surrogate.runner import load_fit_corpus_record
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.CORPUS_SET, _SAMPLE_SET)
+    for name in ("ballot-predictor.json", "ballot-predictor.json.sha256"):
+        _link(root, f"{vme.SURROGATE_DIR}/{name}")
+    record = _copy(root, f"{vme.SURROGATE_DIR}/fit-corpus.json")
+    committed = json.loads(record.read_text())
+    assert load_fit_corpus_record(root / vme.SURROGATE_DIR).corpus_sha256
+
+    # The corpus digest is untouched; only the weights key moves.
+    record.write_text(
+        json.dumps({**committed, "weights_sha256": "0" * 64}, indent=2) + "\n"
+    )
+    row = _row(vme.run_corpus(_context(root)).rows, "fit-corpus identity fingerprint")
+    assert row.status == "FAIL"
+    assert "weights_sha256" in row.detail
+    assert "substrate fence" in row.detail
+
+    # And the corpus-set name is checked as well.
+    record.write_text(json.dumps({**committed, "corpus_set": "4p1i"}, indent=2) + "\n")
+    drifted_set = _row(
+        vme.run_corpus(_context(root)).rows, "fit-corpus identity fingerprint"
+    )
+    assert drifted_set.status == "FAIL"
+    assert "corpus_set" in drifted_set.detail

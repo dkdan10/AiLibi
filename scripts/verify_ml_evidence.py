@@ -60,7 +60,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import re
 import subprocess
@@ -777,17 +776,45 @@ _SURVIVES: Final = re.compile(r"surviv|\bclears?\b", re.IGNORECASE)
 _REFUTES: Final = re.compile(r"fail|\bnot\b|\bno longer\b", re.IGNORECASE)
 
 
-def bonferroni_from_report(repo_root: Path) -> tuple[float, int, float, list[str]]:
-    """The family-wise bar and surviving arms the finalist report publishes.
+@dataclass(frozen=True)
+class BonferroniClaim:
+    """The multiplicity conclusion the finalist report publishes, arm by arm.
+
+    ``refuted`` is carried alongside ``survivors`` because the paragraph states
+    both, and checking only one half let the other drift: an arm the report says
+    FAILS the correction is a claim about the p-values too, and it is now
+    compared against them.
+    """
+
+    alpha: float
+    family: int
+    bar: float
+    survivors: tuple[str, ...]
+    refuted: tuple[str, ...]
+
+
+def bonferroni_from_report(repo_root: Path) -> BonferroniClaim:
+    """The family-wise bar and the verdict the report gives each arm it names.
 
     Read rather than transcribed, for the same reason the fractions are: the
     erratum IS the committed record of this conclusion, so an edit to it must
     turn the command red instead of being quietly out-voted by a recomputation
     that never looks at it.
 
-    The survivor list is taken from the window BETWEEN the alpha statement and
-    the phrase that closes it, so an unrelated "only" elsewhere in a 2,600-line
-    report cannot widen the span and drag in arms the sentence never named.
+    **Every arm is classified, and an ambiguous clause RAISES rather than being
+    guessed at.** Three rounds of review found three different rephrasings that
+    a lenient parser mis-read — a phrase boundary that swallowed later
+    survivors, and then a clause carrying both a refuted arm and a surviving one,
+    which a whole-clause filter dropped entirely while the earlier clause still
+    produced the expected pair (Codex review, PR #348). Chasing that with
+    finer-grained heuristics is unbounded, so the rule is inverted: a clause
+    naming arms must carry a survival marker or a refutation marker, exactly one.
+    Anything else is a conclusion this command cannot read, and it says so.
+
+    That is deliberately stricter than the prose allows. A legitimate rewording
+    can now fail this check — which is the correct direction for a verifier: a
+    loud refusal is fixable by whoever edits the report, a silent mis-read is
+    not, and it is a mis-read that would certify a contradictory conclusion.
     """
 
     text = _read_text(repo_root, FINALIST_REPORT)
@@ -798,23 +825,46 @@ def bonferroni_from_report(repo_root: Path) -> tuple[float, int, float, list[str
             "the multiplicity conclusion this check compares against is gone"
         )
     paragraph = _PARAGRAPH_END.split(text[alpha.end() :], 1)[0]
-    claims = [
-        clause
-        for clause in _CLAUSE_SPLIT.split(paragraph)
-        if _SURVIVES.search(clause) and not _REFUTES.search(clause)
-    ]
-    if not claims:
+    survivors: set[str] = set()
+    refuted: set[str] = set()
+    for clause in _CLAUSE_SPLIT.split(paragraph):
+        arms = _ENTRANT.findall(clause)
+        if not arms:
+            continue
+        claims_survival = _SURVIVES.search(clause) is not None
+        claims_failure = _REFUTES.search(clause) is not None
+        if claims_survival == claims_failure:
+            both = (
+                "both a survival and a refutation marker"
+                if claims_survival
+                else ("neither a survival nor a refutation marker")
+            )
+            raise EvidenceError(
+                f"{FINALIST_REPORT}: the multiplicity conclusion names "
+                f"{', '.join(arms)} in a clause carrying {both}, so this command "
+                f"cannot tell what it claims: {clause.strip()!r}. Refusing to "
+                "guess — a silently mis-read conclusion is worse than an "
+                "unreadable one"
+            )
+        (survivors if claims_survival else refuted).update(arms)
+    contradiction = sorted(survivors & refuted)
+    if contradiction:
         raise EvidenceError(
-            f"{FINALIST_REPORT}: the family-wise bar is stated but the paragraph "
-            "carrying it asserts no surviving arm"
+            f"{FINALIST_REPORT}: {', '.join(contradiction)} is named as both "
+            "surviving and failing the multiplicity correction"
         )
-    survivors = sorted({arm for clause in claims for arm in _ENTRANT.findall(clause)})
     if not survivors:
         raise EvidenceError(
-            f"{FINALIST_REPORT}: the survivor clause names no arm; "
-            "the report's own list of surviving arms is unreadable"
+            f"{FINALIST_REPORT}: the family-wise bar is stated but no clause "
+            "names an arm that clears it"
         )
-    return float(alpha.group(1)), int(alpha.group(2)), float(alpha.group(3)), survivors
+    return BonferroniClaim(
+        alpha=float(alpha.group(1)),
+        family=int(alpha.group(2)),
+        bar=float(alpha.group(3)),
+        survivors=tuple(sorted(survivors)),
+        refuted=tuple(sorted(refuted)),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -1327,28 +1377,53 @@ def run_corpus(ctx: Context) -> LegResult:
     # every replay byte plus the split and the provenance, so it moves when ANY
     # recorded game, the by-game split, or the manifest moves. Always full — it
     # only hashes, so --fast has nothing to save here.
-    from training.surrogate.runner import fit_corpus_fingerprint
+    # Read through the product's typed loader, and check the WHOLE record. A raw
+    # mapping read only `corpus_sha256`, so `weights_sha256` could name different
+    # weights entirely and this row still read OK — while
+    # `load_surrogate_runner_factory` cross-checks exactly that field
+    # UNCONDITIONALLY as the Task 18.14 substrate fence, and refuses to load the
+    # artifact. Certifying an artifact the product will not use is the same
+    # defect the composed manifest had (Codex review, PR #348).
+    from training.surrogate.ballots import load_ballot_predictor_artifact
+    from training.surrogate.runner import fit_corpus_fingerprint, load_fit_corpus_record
 
-    fit_corpus = json.loads(
-        _read_text(ctx.repo_root, f"{SURROGATE_DIR}/fit-corpus.json")
+    fit_corpus = load_fit_corpus_record(ctx.repo_root / SURROGATE_DIR)
+    _predictor, weights_sha = load_ballot_predictor_artifact(
+        ctx.repo_root / SURROGATE_DIR
     )
-    committed_sha = str(fit_corpus["corpus_sha256"])
     measured_sha = fit_corpus_fingerprint(ctx.repo_root / CORPUS_SET)
+    stated_set = CORPUS_SET.rsplit("/", 1)[-1]
+    provenance_drift = [
+        problem
+        for problem in (
+            f"corpus_sha256: {CORPUS_SET} fingerprints to "
+            f"{measured_sha[:16]}…, the record says {fit_corpus.corpus_sha256[:16]}…"
+            if measured_sha != fit_corpus.corpus_sha256
+            else "",
+            f"weights_sha256: the record is keyed on "
+            f"{fit_corpus.weights_sha256[:16]}… but the committed weights hash "
+            f"to {weights_sha[:16]}… — the substrate fence "
+            "`load_surrogate_runner_factory` applies would refuse this artifact"
+            if fit_corpus.weights_sha256 != weights_sha
+            else "",
+            f"corpus_set: the record names {fit_corpus.corpus_set!r}, this leg "
+            f"fingerprinted {stated_set!r}"
+            if fit_corpus.corpus_set != stated_set
+            else "",
+        )
+        if problem
+    ]
     rows.append(
         CheckRow(
             name="fit-corpus identity fingerprint",
-            measured=f"sha256 {measured_sha[:16]}…",
-            committed=f"sha256 {committed_sha[:16]}…",
-            source=f"{SURROGATE_DIR}/fit-corpus.json (corpus_sha256)",
-            status="OK" if measured_sha == committed_sha else "FAIL",
-            detail=(
-                ""
-                if measured_sha == committed_sha
-                else (
-                    f"{CORPUS_SET} no longer fingerprints to the corpus the "
-                    "committed surrogate weights were fitted on"
-                )
+            measured=f"sha256 {measured_sha[:16]}… on {stated_set}",
+            committed=(
+                f"sha256 {fit_corpus.corpus_sha256[:16]}… keyed to weights "
+                f"{fit_corpus.weights_sha256[:16]}…"
             ),
+            source=f"{SURROGATE_DIR}/fit-corpus.json (SurrogateFitCorpus)",
+            status="OK" if not provenance_drift else "FAIL",
+            detail="\n".join(provenance_drift),
         )
     )
     return LegResult(leg="corpus", rows=tuple(rows), notes=tuple(notes))
@@ -1928,23 +2003,29 @@ def run_paired(ctx: Context) -> LegResult:
     # (Codex review, PR #348).
     threshold = paired_stats.FAMILY_ALPHA / len(stats)
     clears = sorted(row.entrant for row in stats if row.p_exact < threshold)
-    stated_alpha, stated_family, stated_bar, stated_clears = bonferroni_from_report(
-        ctx.repo_root
-    )
+    claim = bonferroni_from_report(ctx.repo_root)
     bar_drift: list[str] = []
-    if stated_alpha != paired_stats.FAMILY_ALPHA:
+    if claim.alpha != paired_stats.FAMILY_ALPHA:
         bar_drift.append(
-            f"alpha: report {stated_alpha} != {paired_stats.FAMILY_ALPHA} "
+            f"alpha: report {claim.alpha} != {paired_stats.FAMILY_ALPHA} "
             "(scripts/paired_stats.FAMILY_ALPHA)"
         )
-    if stated_family != len(stats):
-        bar_drift.append(f"family size: report {stated_family} != {len(stats)} arms")
-    if abs(stated_bar - threshold) > FLOAT_TOLERANCE:
-        bar_drift.append(f"bar: report {stated_bar} != {threshold:.4f}")
-    if stated_clears != clears:
+    if claim.family != len(stats):
+        bar_drift.append(f"family size: report {claim.family} != {len(stats)} arms")
+    if abs(claim.bar - threshold) > FLOAT_TOLERANCE:
+        bar_drift.append(f"bar: report {claim.bar} != {threshold:.4f}")
+    if list(claim.survivors) != clears:
         bar_drift.append(
-            f"survivors: report {', '.join(stated_clears) or '(none)'} != "
+            f"survivors: report {', '.join(claim.survivors) or '(none)'} != "
             f"recomputed {', '.join(clears) or '(none)'}"
+        )
+    # The other half of the paragraph's claim: an arm it says FAILS the
+    # correction must not be one the p-values clear.
+    wrongly_refuted = [arm for arm in claim.refuted if arm in clears]
+    if wrongly_refuted:
+        bar_drift.append(
+            f"refuted: report says {', '.join(wrongly_refuted)} fails the "
+            f"correction, but p < {threshold:.4f} clears it"
         )
     rows.append(
         CheckRow(
@@ -1954,8 +2035,9 @@ def run_paired(ctx: Context) -> LegResult:
                 f"clears: {', '.join(clears) if clears else '(none)'}"
             ),
             committed=(
-                f"alpha {stated_alpha}/{stated_family} = {stated_bar}; "
-                f"survives: {', '.join(stated_clears)}"
+                f"alpha {claim.alpha}/{claim.family} = {claim.bar}; "
+                f"survives: {', '.join(claim.survivors)}; "
+                f"fails: {', '.join(claim.refuted) or '(none named)'}"
             ),
             source=f"{FINALIST_REPORT} (multiplicity erratum)",
             status="OK" if not bar_drift else "FAIL",
