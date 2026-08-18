@@ -113,8 +113,9 @@ baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
         │   feature phase. Heterogeneous-model lobbies are NOT in Phase 19 — a
         │   model-vs-model comparison feature comes only AFTER the review/refresh
         │   work, as its own later decision. The human seat is OUT (not
-        │   deferred-to-19; out). All 27 contracts merged and re-verified at the
-        │   close; the ladder tip stood untouched at baseline 6.
+        │   deferred-to-19; out). All 28 contracts merged (the 27 dispatched ones
+        │   re-verified at the close, plus the close itself); the ladder tip
+        │   stood untouched at baseline 6.
         ▼
       (the post-19 decision, routed at the 19.28 close per locked decision 6:
        the evidence-honesty substrate phase vs the presentation phase — put to
@@ -192,8 +193,9 @@ baseline 7 (NOT RECORDED,       co-adapted movers on the graduated meetings
   deferral ledger routes through the close audit §6; the Phase-19 review inputs (dead-spot
   candidates, instrument residuals) through its §7.
 - **Phase 19 — REVIEW-AND-REFRESH (re-chartered, owner 2026-07-18; `tasks/phase-19.md`, opened
-  2026-08-03, CLOSED 2026-08-18 with NOTHING RECORDED: all 27 contracts merged and re-verified at
-  close HEAD, the ladder tip stands at baseline 6, and the whole gate — both test tiers, the
+  2026-08-03, CLOSED 2026-08-18 with NOTHING RECORDED: all 28 contracts merged — the 27
+  dispatched ones re-verified at close HEAD, plus the close itself — the ladder tip stands at
+  baseline 6, and the whole gate — both test tiers, the
   evidence completeness verifier, and byte identity — re-ran green at the close;
   `audits/audit-phase-19-close.md`).** Not a feature phase: (a) a
   deep review of the code that already exists — dead spots, dead code, refactor opportunities; (b)

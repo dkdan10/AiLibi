@@ -232,9 +232,11 @@ The ejectee-proof partition (the headline cross-tab; Wilson 95% intervals as com
 
 Pooled across all four committed sets: **310/310 = 1.000 with proof; 46/125 = 0.368 without;
 79/79 of innocent ejections in the non-direct cell.** The meeting-flag partition (its own
-denominators, never mixed — the C5 discipline): flagged-meeting accuracy 68/70 = 0.971 (samples)
-/ 213/216 = 0.986 (corpus) vs unflagged 10/31 = 0.323 / 35/86 = 0.407. The supporting cells,
-same reports: weak-flag-only convictions 1/90 (samples) and 3/275 (corpus), **innocent in every
+denominators, never mixed — the C5 discipline), quoted 9p2i-only: flagged-meeting accuracy
+68/70 = 0.971 (samples 9p2i) / 213/216 = 0.986 (corpus 9p2i) vs unflagged 10/31 = 0.323 /
+35/86 = 0.407 (same two sets; the committed 4p1i cells — flagged 9/10 and 20/20, unflagged 1/2
+advisory and 0/0 no-cell — tell the same story at advisory-grade n). The supporting cells,
+the two 9p2i reports: weak-flag-only convictions 1/90 (samples) and 3/275 (corpus), **innocent in every
 instance** (share 1.0, advisory-flagged at these n); turn→ballot consistency **0.447 / 0.459**
 (an agent's spoken accusation and its ballot agree less than half the time); impostor
 whereabouts-response coverage **0.490 / 0.500** pooled vs crew ≈ 0.996; engine-redirected
@@ -404,9 +406,9 @@ if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
 else
   git fetch origin
 fi
-bash scripts/check.sh                                               # §1 default gate (clean state; F1 defines the state)
-uv run pytest -m campaign                                           # §1 opt-in tier — 317 passed
+bash scripts/check.sh                                               # §1 default gate — CLEAN state (F1 defines the state)
 bash scripts/fetch_evidence.sh                                      # §1 OK: 2953/2953 files match 476a1f85…
+uv run pytest -m campaign                                           # §1 opt-in tier — 317 passed, run in the RESTORED state §1 records
 uv run python scripts/verify_ml_evidence.py --complete              # §1 checks: 54 | OK 49 | FAIL 0 | ABSENT 0 | INFO 5
 bash scripts/verify_samples.sh                                      # §1 both canonical sets clean (bare env)
 uv run python scripts/check_doc_facts.py                            # §1 front-door facts green
