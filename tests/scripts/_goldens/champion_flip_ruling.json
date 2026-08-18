@@ -1,0 +1,188 @@
+{
+  "_generated_by": "scripts/regen_test_goldens.py \u2014 do not hand-edit. Measured transcriptions of the committed evidence bytes; regenerate (and REVIEW the diff \u2014 committing it is a re-baselining act) after any evidence re-record.",
+  "fsm_comparator_win_rate": 0.3,
+  "finalists": {
+    "utility-es": {
+      "impostor_win_rate": 0.52,
+      "win_edge_vs_fsm": 0.22000000000000003,
+      "referee_passed": false,
+      "mean_score": 41.47,
+      "gauges": {
+        "witnessed_event_rate": {
+          "passed": true,
+          "floor": 0.034482758620689655,
+          "measured": 0.2077922077922078
+        },
+        "flags_per_meeting": {
+          "passed": false,
+          "floor": 0.5027932960893855,
+          "measured": 0.425531914893617
+        },
+        "testimony_backed_conversion": {
+          "passed": false,
+          "floor": 0.560148975791434,
+          "measured": 0.3584905660377358
+        }
+      }
+    },
+    "policy-es": {
+      "impostor_win_rate": 0.02,
+      "win_edge_vs_fsm": -0.27999999999999997,
+      "referee_passed": true,
+      "mean_score": 48.2,
+      "gauges": {
+        "witnessed_event_rate": {
+          "passed": true,
+          "floor": 0.034482758620689655,
+          "measured": 0.11940298507462686
+        },
+        "flags_per_meeting": {
+          "passed": true,
+          "floor": 0.5027932960893855,
+          "measured": 1.7747747747747749
+        },
+        "testimony_backed_conversion": {
+          "passed": true,
+          "floor": 0.13430507897796556,
+          "measured": 0.941747572815534
+        }
+      }
+    }
+  },
+  "p18": {
+    "comparator": {
+      "win_rate": 0.26,
+      "win_seed_count": 13,
+      "intersection_rate": 0.24489795918367346
+    },
+    "candidates": {
+      "p18-imp-ea4bc955": {
+        "games_total": 50,
+        "win_edge": 0.26,
+        "gauges": {
+          "witnessed_event_rate": {
+            "passed": true,
+            "floor": 0.03389830508474576,
+            "measured": 0.15228426395939088
+          },
+          "flags_per_meeting": {
+            "passed": false,
+            "floor": 1.0909090909090908,
+            "measured": 0.9354838709677419
+          },
+          "testimony_backed_conversion": {
+            "passed": false,
+            "floor": 0.6688179974184031,
+            "measured": 0.36666666666666664
+          }
+        }
+      },
+      "p18-imp-bfd145cb": {
+        "games_total": 50,
+        "win_edge": 0.30000000000000004,
+        "gauges": {
+          "witnessed_event_rate": {
+            "passed": true,
+            "floor": 0.03389830508474576,
+            "measured": 0.1477832512315271
+          },
+          "flags_per_meeting": {
+            "passed": false,
+            "floor": 1.0909090909090908,
+            "measured": 0.9
+          },
+          "testimony_backed_conversion": {
+            "passed": false,
+            "floor": 0.695187165775401,
+            "measured": 0.3509933774834437
+          }
+        }
+      },
+      "p18-imp-6d327dcb": {
+        "games_total": 50,
+        "win_edge": 0.12,
+        "gauges": {
+          "witnessed_event_rate": {
+            "passed": true,
+            "floor": 0.03389830508474576,
+            "measured": 0.22279792746113988
+          },
+          "flags_per_meeting": {
+            "passed": false,
+            "floor": 1.0909090909090908,
+            "measured": 0.9691358024691358
+          },
+          "testimony_backed_conversion": {
+            "passed": false,
+            "floor": 0.6455941959876017,
+            "measured": 0.4444444444444444
+          }
+        }
+      },
+      "p18-imp-7f73929d": {
+        "games_total": 49,
+        "win_edge": 0.18367346938775508,
+        "gauges": {
+          "witnessed_event_rate": {
+            "passed": true,
+            "floor": 0.03389830508474576,
+            "measured": 0.22
+          },
+          "flags_per_meeting": {
+            "passed": false,
+            "floor": 1.0909090909090908,
+            "measured": 0.8284023668639053
+          },
+          "testimony_backed_conversion": {
+            "passed": false,
+            "floor": 0.7552711993888463,
+            "measured": 0.38926174496644295
+          }
+        }
+      }
+    },
+    "bfd_flags_noise": 0.2929119073697387,
+    "f13": {
+      "witnessed_event_rate": {
+        "margin": -0.0065047293345032176,
+        "champion_noise": 0.07001309286414319,
+        "runner_up_noise": 0.06025891590291853
+      },
+      "flags_per_meeting": {
+        "margin": -0.09188948128672647,
+        "champion_noise": 0.17957981715893107,
+        "runner_up_noise": 0.15651682843425418
+      },
+      "testimony_backed_conversion": {
+        "margin": -0.03483226323594357,
+        "champion_noise": 0.06577901430842606,
+        "runner_up_noise": 0.009420970905524684
+      }
+    },
+    "f13_within_lineage_conversion": {
+      "delta": -0.022306553128470907,
+      "bfd_noise": 0.015037593984962405,
+      "ea4_noise": 0.09459459459459457
+    },
+    "axis2": {
+      "pooled_z": {
+        "false_vouch_saw_player": 0.7610221257592609,
+        "false_vouch_corroboration": 1.5491933384829668,
+        "false_vouch_fabricated": -1.5599860315140082,
+        "frame_attempts": 1.3929955060700654,
+        "frame_conversions": 0.986676866993867,
+        "teammate_accusations": null,
+        "alibi_survival": 0.20225995873897182,
+        "effective_deflection": 0.6385405627456343,
+        "crew_witnessed_kills": 3.3701068525639797,
+        "co_present_departure": 4.321056106977518,
+        "off_menu": null
+      },
+      "fisher_z": -0.6483976401626089,
+      "clause_a_pass": [
+        "co_present_departure",
+        "crew_witnessed_kills"
+      ]
+    }
+  }
+}

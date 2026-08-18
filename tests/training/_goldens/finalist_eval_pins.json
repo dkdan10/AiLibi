@@ -1,0 +1,308 @@
+{
+  "_generated_by": "scripts/regen_test_goldens.py \u2014 do not hand-edit. Measured transcriptions of the committed evidence bytes; regenerate (and REVIEW the diff \u2014 committing it is a re-baselining act) after any evidence re-record.",
+  "slate": [
+    {
+      "entrant": "p18-imp-ea4bc955",
+      "side": "impostor",
+      "weights_sha256": "ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f",
+      "artifact_path": "training/artifacts/coevo/intermediates/run-02-utility-lambda4/gen-2/ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f",
+      "policy_id": "coevo-run-02-utility-lambda4-intermediate-gen-2",
+      "method": "alternating-freeze-es",
+      "encoder_version": "impostor-option-features-v1",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 26,
+      "impostor_win_rate": 0.52,
+      "meeting_rate": 1.0,
+      "mean_score": 48.9,
+      "median_score": 50.15,
+      "referee_passed": false,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 3059,
+      "co_present_ge1_kills": 20
+    },
+    {
+      "entrant": "p18-imp-bfd145cb",
+      "side": "impostor",
+      "weights_sha256": "bfd145cb4883fa7fd0f009811cdc6e660b4f4a62105534f384afbb45b2c12ee8",
+      "artifact_path": "training/artifacts/coevo/runnerups/run-02-utility-lambda4/gen-9/bfd145cb4883fa7fd0f009811cdc6e660b4f4a62105534f384afbb45b2c12ee8",
+      "policy_id": "coevo-run-02-utility-lambda4-runnerup-gen-9",
+      "method": "alternating-freeze-es",
+      "encoder_version": "impostor-option-features-v1",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 28,
+      "impostor_win_rate": 0.56,
+      "meeting_rate": 1.0,
+      "mean_score": 47.24,
+      "median_score": 48.0,
+      "referee_passed": false,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 0,
+      "co_present_ge1_kills": 21
+    },
+    {
+      "entrant": "p18-imp-6d327dcb",
+      "side": "impostor",
+      "weights_sha256": "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+      "artifact_path": "training/artifacts/coevo/run-01-utility-champion/impostor/gen-3/6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0",
+      "policy_id": "coevo-run-01-utility-champion-alternating-freeze-champion-gen3",
+      "method": "alternating-freeze-es",
+      "encoder_version": "impostor-option-features-v1",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 19,
+      "impostor_win_rate": 0.38,
+      "meeting_rate": 1.0,
+      "mean_score": 51.15,
+      "median_score": 63.95,
+      "referee_passed": false,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 1882,
+      "co_present_ge1_kills": 36
+    },
+    {
+      "entrant": "p18-imp-7f73929d",
+      "side": "impostor",
+      "weights_sha256": "7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e",
+      "artifact_path": "training/artifacts/coevo/runnerups/run-03-utility-bcanchor/gen-8/7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e",
+      "policy_id": "coevo-run-03-utility-bcanchor-runnerup-gen-8",
+      "method": "alternating-freeze-es",
+      "encoder_version": "impostor-option-features-v1",
+      "anchor_policy": "filtered-bc-anchor",
+      "games_total": 49,
+      "stamp_games": 49,
+      "missing_seeds": [
+        35
+      ],
+      "impostor_wins": 21,
+      "impostor_win_rate": 0.42857142857142855,
+      "meeting_rate": 1.0,
+      "mean_score": 52.49,
+      "median_score": 53.7,
+      "referee_passed": false,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 6888,
+      "co_present_ge1_kills": 35
+    },
+    {
+      "entrant": "p18-fsm-comparator",
+      "side": "comparator",
+      "weights_sha256": null,
+      "artifact_path": null,
+      "policy_id": "fsm-default",
+      "method": "scripted-fsm",
+      "encoder_version": "none",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 13,
+      "impostor_win_rate": 0.26,
+      "meeting_rate": 1.0,
+      "mean_score": 54.96,
+      "median_score": 53.55,
+      "referee_passed": true,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 7230,
+      "co_present_ge1_kills": 0
+    },
+    {
+      "entrant": "p18-crew-c1-gen9",
+      "side": "crew",
+      "weights_sha256": "0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df",
+      "artifact_path": "training/artifacts/coevo/run-c1-crew-owned-tasks/crew/gen-9/0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df",
+      "policy_id": "coevo-run-c1-crew-owned-tasks-crew-alternating-freeze-champion-gen9-0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df",
+      "method": "alternating-freeze-es",
+      "encoder_version": "crew-option-features-v2",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 24,
+      "impostor_win_rate": 0.48,
+      "meeting_rate": 1.0,
+      "mean_score": 47.99,
+      "median_score": 49.2,
+      "referee_passed": false,
+      "validity_passed": true,
+      "validity_failures": [],
+      "stalemate_replays": null,
+      "retry_wall_seconds": 0,
+      "co_present_ge1_kills": 21
+    },
+    {
+      "entrant": "p18-crew-c1-gen0",
+      "side": "crew",
+      "weights_sha256": "bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c",
+      "artifact_path": "training/artifacts/coevo/realpath-crew/controls/crew-owned-tasks-es-gen0",
+      "policy_id": "crew-owned-tasks-es",
+      "method": "crew-utility-scorer-es",
+      "encoder_version": "crew-option-features-v2",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 49,
+      "missing_seeds": [],
+      "impostor_wins": 24,
+      "impostor_win_rate": 0.48,
+      "meeting_rate": 1.0,
+      "mean_score": 0.0,
+      "median_score": 0.0,
+      "referee_passed": false,
+      "validity_passed": false,
+      "validity_failures": [
+        "all_games_reach_game_over",
+        "cost_and_provenance_exact"
+      ],
+      "stalemate_replays": [
+        "replay-seed-20.jsonl"
+      ],
+      "retry_wall_seconds": 3035,
+      "co_present_ge1_kills": 25
+    },
+    {
+      "entrant": "p18-crew-c2-gen9",
+      "side": "crew",
+      "weights_sha256": "515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635",
+      "artifact_path": "training/artifacts/coevo/run-c2-crew-general/crew/gen-9/515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635",
+      "policy_id": "coevo-run-c2-crew-general-crew-alternating-freeze-champion-gen9-515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635",
+      "method": "alternating-freeze-es",
+      "encoder_version": "crew-option-features-v1",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 48,
+      "missing_seeds": [],
+      "impostor_wins": 41,
+      "impostor_win_rate": 0.82,
+      "meeting_rate": 0.6,
+      "mean_score": 0.0,
+      "median_score": 0.0,
+      "referee_passed": false,
+      "validity_passed": false,
+      "validity_failures": [
+        "all_games_reach_game_over",
+        "cost_and_provenance_exact"
+      ],
+      "stalemate_replays": [
+        "replay-seed-19.jsonl",
+        "replay-seed-20.jsonl"
+      ],
+      "retry_wall_seconds": 371,
+      "co_present_ge1_kills": 25
+    },
+    {
+      "entrant": "p18-crew-c2-gen0",
+      "side": "crew",
+      "weights_sha256": "888046d082daf62853c9d10d25dde04e20691c042dcd6a6609492d554ed569bf",
+      "artifact_path": "training/artifacts/coevo/realpath-crew/controls/crew-utility-es-gen0",
+      "policy_id": "crew-utility-es",
+      "method": "crew-utility-scorer-es",
+      "encoder_version": "crew-option-features-v1",
+      "anchor_policy": "fsm-default",
+      "games_total": 50,
+      "stamp_games": 50,
+      "missing_seeds": [],
+      "impostor_wins": 49,
+      "impostor_win_rate": 0.98,
+      "meeting_rate": 0.0,
+      "mean_score": 0.1,
+      "median_score": 0.1,
+      "referee_passed": false,
+      "validity_passed": false,
+      "validity_failures": [
+        "cost_and_provenance_exact",
+        "meeting_rate_and_resolution"
+      ],
+      "stalemate_replays": [],
+      "retry_wall_seconds": 0,
+      "co_present_ge1_kills": 19
+    }
+  ],
+  "f13_intersection": {
+    "excluded_seed": 35,
+    "measured": {
+      "p18-imp-ea4bc955": {
+        "witnessed_event_rate": 0.15625,
+        "flags_per_meeting": 0.9536423841059603,
+        "testimony_backed_conversion": 0.3716216216216216
+      },
+      "p18-imp-bfd145cb": {
+        "witnessed_event_rate": 0.1507537688442211,
+        "flags_per_meeting": 0.8974358974358975,
+        "testimony_backed_conversion": 0.3493150684931507
+      },
+      "p18-imp-6d327dcb": {
+        "witnessed_event_rate": 0.2275132275132275,
+        "flags_per_meeting": 0.9559748427672956,
+        "testimony_backed_conversion": 0.43661971830985913
+      }
+    }
+  },
+  "nested_frame_conversions": {
+    "p18-imp-ea4bc955": {
+      "numerator": 10,
+      "denominator": 151
+    },
+    "p18-fsm-comparator": {
+      "numerator": 6,
+      "denominator": 148
+    }
+  },
+  "comparator_intersection": {
+    "crew_witnessed_kills": 8,
+    "kills_total": 170,
+    "co_present_ge1_kills": 0,
+    "impostor_decisions": 2219,
+    "off_menu_total": 0,
+    "frame_attempts": {
+      "numerator": 146,
+      "denominator": 154
+    },
+    "frame_conversions": {
+      "numerator": 5,
+      "denominator": 146
+    }
+  },
+  "c1_rider": {
+    "excluded_seed": 20,
+    "gen9_crew_witnessed_kills": 30,
+    "gen9_kills_total": 191,
+    "gen0_crew_witnessed_kills": 33,
+    "gen0_kills_total": 200,
+    "corpus_rate": 0.023762376237623763
+  },
+  "c1_paired": {
+    "excluded_seed": 20,
+    "both_win": 20,
+    "gen9_only_win": 6,
+    "gen0_only_win": 5,
+    "neither_win": 18,
+    "gen9_wins_49": 26,
+    "gen0_wins_49": 25
+  },
+  "leg_clocks": {
+    "campaign_last_event_at": "2026-07-31T18:00:06Z",
+    "c2_gen0_wall_seconds": 27,
+    "post_pr_retry_attempts": 4,
+    "in_leg_original_retry_wall_seconds": 3907
+  },
+  "c2_gen9": {
+    "tick_budget_reached": 2
+  }
+}

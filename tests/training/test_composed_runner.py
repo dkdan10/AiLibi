@@ -121,6 +121,11 @@ from training.surrogate.runner import (
     load_surrogate_runner_factory,
 )
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — the composed runner).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _CONVICTION_ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "conviction"

@@ -140,27 +140,32 @@ _CREW_WIN_REASONS: Final[frozenset[str]] = frozenset(
     {"CREWMATE_EJECT", "CREWMATE_TASKS"}
 )
 
+#: The committed golden (Task 19.27): the slate table and every companion
+#: measured cell this module used to carry as hand-transcribed literals,
+#: regenerated from the evidence bytes by ``scripts/regen_test_goldens.py``
+#: (whose ``--check`` mode pins byte-identical regeneration). Every test
+#: below still RE-DERIVES its cells from the rows and compares against the
+#: golden, so an evidence re-record fails loud until the golden is
+#: regenerated and its diff reviewed. The independent ANCHORS stay code:
+#: the §8.1 pre-registration order, the prior-record blob digest, the floor
+#: fractions, the substrate/roster pre-registration, the shape frozensets,
+#: and every convention string. Loaded file-relative — the evidence inputs
+#: stay repo-root-relative — so a cwd change cannot split the conventions.
+_GOLDEN: Final[dict[str, Any]] = json.loads(
+    (Path(__file__).parent / "_goldens" / "finalist_eval_pins.json").read_text(
+        encoding="utf-8"
+    )
+)
+
 #: The F13 quartet re-measured on ONE seed set: the three FULL impostor arms
 #: cut down to 7f73929d's native 49 seeds, so the four arms are compared on
-#: identical games. Measured values only — every floor is re-derived.
+#: identical games. Measured values only — every floor is re-derived. The
+#: excluded seed is a pre-registration anchor (code); the measured cells are
+#: golden transcriptions.
 _F13_EXCLUDED_SEED: Final[int] = 35
-_F13_INTERSECTION_MEASURED: Final[dict[str, dict[str, float]]] = {
-    "p18-imp-ea4bc955": {
-        "witnessed_event_rate": 0.15625,
-        "flags_per_meeting": 0.9536423841059603,
-        "testimony_backed_conversion": 0.3716216216216216,
-    },
-    "p18-imp-bfd145cb": {
-        "witnessed_event_rate": 0.1507537688442211,
-        "flags_per_meeting": 0.8974358974358975,
-        "testimony_backed_conversion": 0.3493150684931507,
-    },
-    "p18-imp-6d327dcb": {
-        "witnessed_event_rate": 0.2275132275132275,
-        "flags_per_meeting": 0.9559748427672956,
-        "testimony_backed_conversion": 0.43661971830985913,
-    },
-}
+_F13_INTERSECTION_MEASURED: Final[dict[str, dict[str, float]]] = _GOLDEN[
+    "f13_intersection"
+]["measured"]
 
 #: The shape of ``registered_nested_cells`` — the six registered rulings whose
 #: nested sources the flattened rows dropped, re-persisted verbatim.
@@ -179,10 +184,10 @@ _ENTROPY_KEYS: Final[frozenset[str]] = frozenset(
     {"mean_conditional_entropy", "agents", "decisions"}
 )
 
-#: Spot pins on the two slate-critical arms' frame-conversion cell.
+#: Spot pins on the two slate-critical arms' frame-conversion cell (golden).
 _NESTED_FRAME_CONVERSIONS: Final[dict[str, tuple[int, int]]] = {
-    "p18-imp-ea4bc955": (10, 151),
-    "p18-fsm-comparator": (6, 148),
+    entrant: (cell["numerator"], cell["denominator"])
+    for entrant, cell in _GOLDEN["nested_frame_conversions"].items()
 }
 
 #: The §6.b split-reproducibility views: seed mod 5 partitioned 012/3/4.
@@ -209,29 +214,31 @@ _MOD5_RATIO_CELLS: Final[frozenset[str]] = frozenset(
     }
 )
 
-#: The campaign's last recorded event — 7f73929d's post-PR retry leg.
-_CAMPAIGN_LAST_EVENT_AT: Final[str] = "2026-07-31T18:00:06Z"
+#: The campaign's last recorded event — 7f73929d's post-PR retry leg (golden).
+_CAMPAIGN_LAST_EVENT_AT: Final[str] = _GOLDEN["leg_clocks"]["campaign_last_event_at"]
 #: c2-gen0's wall clock is REAL, not a missing measurement: every game ended
-#: before a meeting convened, so almost no LLM call was ever made.
-_C2_GEN0_WALL_SECONDS: Final[int] = 27
+#: before a meeting convened, so almost no LLM call was ever made (golden).
+_C2_GEN0_WALL_SECONDS: Final[int] = _GOLDEN["leg_clocks"]["c2_gen0_wall_seconds"]
 
-#: The comparator's cells re-cut onto the F13 49-seed intersection.
+#: The comparator's cells re-cut onto the F13 49-seed intersection (golden;
+#: the ratio sub-cells ride the golden's own frame_attempts/frame_conversions).
 _COMPARATOR_INTERSECTION_COUNTS: Final[dict[str, int]] = {
-    "crew_witnessed_kills": 8,
-    "kills_total": 170,
-    "co_present_ge1_kills": 0,
-    "impostor_decisions": 2219,
-    "off_menu_total": 0,
+    name: _GOLDEN["comparator_intersection"][name]
+    for name in (
+        "crew_witnessed_kills",
+        "kills_total",
+        "co_present_ge1_kills",
+        "impostor_decisions",
+        "off_menu_total",
+    )
 }
 
 #: The c1 pair's paired per-seed crew-win table (McNemar-style discordant
-#: counts) over the 49 seeds both sides finalized.
-_C1_PAIRED_EXCLUDED_SEED: Final[int] = 20
+#: counts) over the 49 seeds both sides finalized (golden).
+_C1_PAIRED_EXCLUDED_SEED: Final[int] = _GOLDEN["c1_paired"]["excluded_seed"]
 _C1_PAIRED_49: Final[dict[str, int]] = {
-    "both_win": 20,
-    "gen9_only_win": 6,
-    "gen0_only_win": 5,
-    "neither_win": 18,
+    cell: _GOLDEN["c1_paired"][cell]
+    for cell in ("both_win", "gen9_only_win", "gen0_only_win", "neither_win")
 }
 
 #: The §8.1 arm listing, in the report's own order — quoted from the
@@ -294,287 +301,44 @@ class Arm:
     co_present_ge1_kills: int
 
 
+#: One golden slate row -> the typed Arm (JSON lists/nulls back to the tuple/
+#: frozenset/None field types whose absent-vs-empty semantics the tests pin).
+def _arm_from_golden(obj: dict[str, Any]) -> Arm:
+    stalemates: list[str] | None = obj["stalemate_replays"]
+    return Arm(
+        entrant=obj["entrant"],
+        side=obj["side"],
+        weights_sha256=obj["weights_sha256"],
+        artifact_path=obj["artifact_path"],
+        policy_id=obj["policy_id"],
+        method=obj["method"],
+        encoder_version=obj["encoder_version"],
+        anchor_policy=obj["anchor_policy"],
+        games_total=obj["games_total"],
+        stamp_games=obj["stamp_games"],
+        missing_seeds=tuple(obj["missing_seeds"]),
+        impostor_wins=obj["impostor_wins"],
+        impostor_win_rate=obj["impostor_win_rate"],
+        meeting_rate=obj["meeting_rate"],
+        mean_score=obj["mean_score"],
+        median_score=obj["median_score"],
+        referee_passed=obj["referee_passed"],
+        validity_passed=obj["validity_passed"],
+        validity_failures=frozenset(obj["validity_failures"]),
+        stalemate_replays=None if stalemates is None else tuple(stalemates),
+        retry_wall_seconds=obj["retry_wall_seconds"],
+        co_present_ge1_kills=obj["co_present_ge1_kills"],
+    )
+
+
 #: The pre-registered slate, in committed row order (== the §8.1 order). Every
 #: test below derives its expectations from this table, and none of them names
-#: an arm's numbers anywhere else, so an arm is ONE entry.
-_SLATE: Final[tuple[Arm, ...]] = (
-    Arm(
-        entrant="p18-imp-ea4bc955",
-        side=_IMPOSTOR,
-        weights_sha256=(
-            "ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/intermediates/run-02-utility-lambda4/gen-2/"
-            "ea4bc955dfe0beb8f82663d659e6c990083cebb26a1dab9600c6b68b7783d79f"
-        ),
-        policy_id="coevo-run-02-utility-lambda4-intermediate-gen-2",
-        method="alternating-freeze-es",
-        encoder_version="impostor-option-features-v1",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=26,
-        impostor_win_rate=0.52,
-        meeting_rate=1.0,
-        mean_score=48.9,
-        median_score=50.15,
-        referee_passed=False,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=20,
-        retry_wall_seconds=3059,
-    ),
-    Arm(
-        entrant="p18-imp-bfd145cb",
-        side=_IMPOSTOR,
-        weights_sha256=(
-            "bfd145cb4883fa7fd0f009811cdc6e660b4f4a62105534f384afbb45b2c12ee8"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/runnerups/run-02-utility-lambda4/gen-9/"
-            "bfd145cb4883fa7fd0f009811cdc6e660b4f4a62105534f384afbb45b2c12ee8"
-        ),
-        policy_id="coevo-run-02-utility-lambda4-runnerup-gen-9",
-        method="alternating-freeze-es",
-        encoder_version="impostor-option-features-v1",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=28,
-        impostor_win_rate=0.56,
-        meeting_rate=1.0,
-        mean_score=47.24,
-        median_score=48.0,
-        referee_passed=False,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=21,
-        retry_wall_seconds=0,
-    ),
-    Arm(
-        entrant="p18-imp-6d327dcb",
-        side=_IMPOSTOR,
-        weights_sha256=(
-            "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/run-01-utility-champion/impostor/gen-3/"
-            "6d327dcbde940a5ee1bb4f9e22ff91fbbc4d74c0ddb33797043fdff69fef71d0"
-        ),
-        policy_id="coevo-run-01-utility-champion-alternating-freeze-champion-gen3",
-        method="alternating-freeze-es",
-        encoder_version="impostor-option-features-v1",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=19,
-        impostor_win_rate=0.38,
-        meeting_rate=1.0,
-        mean_score=51.15,
-        median_score=63.95,
-        referee_passed=False,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=36,
-        retry_wall_seconds=1882,
-    ),
-    Arm(
-        entrant="p18-imp-7f73929d",
-        side=_IMPOSTOR,
-        weights_sha256=(
-            "7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/runnerups/run-03-utility-bcanchor/gen-8/"
-            "7f73929d5b91f4afe67adc1b2ac7ca42bdd3ab1f49ed0393342ab21c7db0985e"
-        ),
-        policy_id="coevo-run-03-utility-bcanchor-runnerup-gen-8",
-        method="alternating-freeze-es",
-        encoder_version="impostor-option-features-v1",
-        # The slate's ONLY filtered-BC-anchored arm (§8.1, the F13 test arm).
-        anchor_policy="filtered-bc-anchor",
-        games_total=49,
-        stamp_games=49,
-        missing_seeds=(35,),
-        impostor_wins=21,
-        impostor_win_rate=21 / 49,
-        meeting_rate=1.0,
-        mean_score=52.49,
-        median_score=53.7,
-        referee_passed=False,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=35,
-        retry_wall_seconds=6888,
-    ),
-    Arm(
-        entrant="p18-fsm-comparator",
-        side=_COMPARATOR,
-        weights_sha256=None,
-        artifact_path=None,
-        policy_id="fsm-default",
-        method="scripted-fsm",
-        encoder_version="none",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=13,
-        impostor_win_rate=0.26,
-        meeting_rate=1.0,
-        mean_score=54.96,
-        median_score=53.55,
-        # The slate's ONLY referee PASS.
-        referee_passed=True,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=0,
-        retry_wall_seconds=7230,
-    ),
-    Arm(
-        entrant="p18-crew-c1-gen9",
-        side=_CREW,
-        weights_sha256=(
-            "0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/run-c1-crew-owned-tasks/crew/gen-9/"
-            "0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df"
-        ),
-        policy_id=(
-            "coevo-run-c1-crew-owned-tasks-crew-alternating-freeze-champion-gen9-"
-            "0bf179b719a67c1b40f97377ba49bad6512d08932e0d944e4d024691f60e71df"
-        ),
-        method="alternating-freeze-es",
-        encoder_version="crew-option-features-v2",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=24,
-        impostor_win_rate=0.48,
-        meeting_rate=1.0,
-        mean_score=47.99,
-        median_score=49.2,
-        referee_passed=False,
-        validity_passed=True,
-        validity_failures=frozenset(),
-        stalemate_replays=None,
-        co_present_ge1_kills=21,
-        retry_wall_seconds=0,
-    ),
-    Arm(
-        entrant="p18-crew-c1-gen0",
-        side=_CREW,
-        weights_sha256=(
-            "bd6fdd0a030a01cc57f2ef8c95abf66f46d8cbc5ac270e04ae74a6cab587f19c"
-        ),
-        # The c1 CONTROL dir, named for the control and NOT sha-named — the
-        # dir-name-sha identity stays an impostor-arm pin.
-        artifact_path=(
-            "training/artifacts/coevo/realpath-crew/controls/crew-owned-tasks-es-gen0"
-        ),
-        policy_id="crew-owned-tasks-es",
-        method="crew-utility-scorer-es",
-        encoder_version="crew-option-features-v2",
-        anchor_policy="fsm-default",
-        games_total=50,
-        # One seed stalled out with no ``game_over`` row, so 49 games' bytes
-        # could prove either identity — and the referee scored NOTHING.
-        stamp_games=49,
-        missing_seeds=(),
-        impostor_wins=24,
-        impostor_win_rate=0.48,
-        meeting_rate=1.0,
-        mean_score=0.0,
-        median_score=0.0,
-        referee_passed=False,
-        validity_passed=False,
-        validity_failures=frozenset(
-            {"all_games_reach_game_over", "cost_and_provenance_exact"}
-        ),
-        stalemate_replays=("replay-seed-20.jsonl",),
-        co_present_ge1_kills=25,
-        retry_wall_seconds=3035,
-    ),
-    Arm(
-        entrant="p18-crew-c2-gen9",
-        side=_CREW,
-        weights_sha256=(
-            "515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635"
-        ),
-        artifact_path=(
-            "training/artifacts/coevo/run-c2-crew-general/crew/gen-9/"
-            "515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635"
-        ),
-        policy_id=(
-            "coevo-run-c2-crew-general-crew-alternating-freeze-champion-gen9-"
-            "515fc066f7aafc5d3603ab531adb9fe78cd496192c7565e9d8b4d3ff7b09a635"
-        ),
-        method="alternating-freeze-es",
-        encoder_version="crew-option-features-v1",
-        anchor_policy="fsm-default",
-        games_total=50,
-        # Two seeds stalled out with no ``game_over`` row, so only 48 games'
-        # bytes could prove either identity.
-        stamp_games=48,
-        missing_seeds=(),
-        impostor_wins=41,
-        impostor_win_rate=0.82,
-        meeting_rate=0.6,
-        mean_score=0.0,
-        median_score=0.0,
-        referee_passed=False,
-        validity_passed=False,
-        validity_failures=frozenset(
-            {"all_games_reach_game_over", "cost_and_provenance_exact"}
-        ),
-        stalemate_replays=("replay-seed-19.jsonl", "replay-seed-20.jsonl"),
-        co_present_ge1_kills=25,
-        retry_wall_seconds=371,
-    ),
-    Arm(
-        entrant="p18-crew-c2-gen0",
-        side=_CREW,
-        weights_sha256=(
-            "888046d082daf62853c9d10d25dde04e20691c042dcd6a6609492d554ed569bf"
-        ),
-        # A gen-0 CONTROL artifact dir is named for the control, not for its
-        # digest — the dir-name-sha identity is an impostor-arm pin only.
-        artifact_path=(
-            "training/artifacts/coevo/realpath-crew/controls/crew-utility-es-gen0"
-        ),
-        policy_id="crew-utility-es",
-        method="crew-utility-scorer-es",
-        encoder_version="crew-option-features-v1",
-        anchor_policy="fsm-default",
-        games_total=50,
-        stamp_games=50,
-        missing_seeds=(),
-        impostor_wins=49,
-        impostor_win_rate=0.98,
-        # Zero meetings ever convened: the meeting economy never opened.
-        meeting_rate=0.0,
-        mean_score=0.1,
-        median_score=0.1,
-        referee_passed=False,
-        validity_passed=False,
-        validity_failures=frozenset(
-            {"meeting_rate_and_resolution", "cost_and_provenance_exact"}
-        ),
-        stalemate_replays=(),
-        co_present_ge1_kills=19,
-        retry_wall_seconds=0,
-    ),
+#: an arm's numbers anywhere else, so an arm is ONE entry. The entries are the
+#: GOLDEN's measured transcriptions (Task 19.27); the order pin against the
+#: §8.1 pre-registration quote stays a test below, so the golden describing
+#: the file can never stand in for the file matching the plan.
+_SLATE: Final[tuple[Arm, ...]] = tuple(
+    _arm_from_golden(obj) for obj in _GOLDEN["slate"]
 )
 
 #: The frozen impostor opponent every crew diagnostic was recorded against
@@ -902,13 +666,18 @@ def test_the_f13_arm_is_the_49_seed_arm_and_declares_the_missing_seed() -> None:
     )
     row = rows[arm.entrant]
 
-    assert arm.missing_seeds == (35,)
-    assert row["recording"]["seeds"] == sorted(set(range(50)) - {35})
-    assert row["core"]["games_total"] == 49
-    assert row["stamp_verified_games"] == 49
-    assert row["watchability"]["games_total"] == 49
-    assert row["validity_gate"]["games_total"] == 49
-    assert row["core"]["impostor_win_rate"] == pytest.approx(21 / 49)
+    assert arm.missing_seeds == (_F13_EXCLUDED_SEED,)
+    assert row["recording"]["seeds"] == sorted(
+        set(_CANONICAL_SEEDS) - {_F13_EXCLUDED_SEED}
+    )
+    assert arm.games_total == len(_CANONICAL_SEEDS) - len(arm.missing_seeds) == 49
+    assert row["core"]["games_total"] == arm.games_total
+    assert row["stamp_verified_games"] == arm.games_total
+    assert row["watchability"]["games_total"] == arm.games_total
+    assert row["validity_gate"]["games_total"] == arm.games_total
+    assert row["core"]["impostor_win_rate"] == pytest.approx(
+        arm.impostor_wins / arm.games_total
+    )
 
 
 # -- the comparator: the opponent slot was EMPTY, and it is proved ------------
@@ -971,11 +740,16 @@ def test_the_comparator_is_the_slates_only_referee_pass() -> None:
     assert passing == {"p18-fsm-comparator"}
 
     comparator = rows["p18-fsm-comparator"]
+    comparator_arm = next(arm for arm in _SLATE if arm.side == _COMPARATOR)
     assert comparator["watchability"]["referee_passed"] is True
     assert comparator["watchability"]["supply_floors_passed"] is True
     assert comparator["watchability"]["integrity_ok"] is True
-    assert comparator["watchability"]["mean_score"] == pytest.approx(54.96, abs=0.01)
-    assert comparator["watchability"]["median_score"] == pytest.approx(53.55, abs=0.01)
+    assert comparator["watchability"]["mean_score"] == pytest.approx(
+        comparator_arm.mean_score, abs=0.01
+    )
+    assert comparator["watchability"]["median_score"] == pytest.approx(
+        comparator_arm.median_score, abs=0.01
+    )
 
     gauges = _gauges(comparator)
     witnessed = gauges["witnessed_event_rate"]
@@ -1190,31 +964,34 @@ def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() ->
     assert carriers == ["p18-crew-c1-gen9"]
     cell = row["instruments"]["kill_craft_rider_intersection"]
 
-    # The excluded seed IS c1-gen0's declared stalemate, not a bare 20.
+    # The excluded seed IS c1-gen0's declared stalemate, not a bare literal:
+    # derived from the slate arm's own declared stalemate file, and pinned
+    # equal on the paired-table constant and the golden rider cell alike.
+    gen0_arm = next(arm for arm in _SLATE if arm.entrant == "p18-crew-c1-gen0")
     stalemates = rows["p18-crew-c1-gen0"]["stalemate_games_no_game_over"]
-    assert stalemates == ["replay-seed-20.jsonl"]
-    assert cell["excluded_seed"] == 20
+    assert stalemates == list(gen0_arm.stalemate_replays or ())
+    assert len(stalemates) == 1
+    assert cell["excluded_seed"] == _C1_PAIRED_EXCLUDED_SEED
     assert f"replay-seed-{cell['excluded_seed']}.jsonl" in stalemates
 
-    assert cell["gen9_crew_witnessed_kills"] == 30
-    assert cell["gen9_kills_total"] == 191
-    assert cell["gen0_crew_witnessed_kills"] == 33
-    assert cell["gen0_kills_total"] == 200
+    rider = _GOLDEN["c1_rider"]
+    assert cell["excluded_seed"] == rider["excluded_seed"]
+    assert cell["gen9_crew_witnessed_kills"] == rider["gen9_crew_witnessed_kills"]
+    assert cell["gen9_kills_total"] == rider["gen9_kills_total"]
+    assert cell["gen0_crew_witnessed_kills"] == rider["gen0_crew_witnessed_kills"]
+    assert cell["gen0_kills_total"] == rider["gen0_kills_total"]
 
     gen9_rate = cell["gen9_crew_witnessed_kills"] / cell["gen9_kills_total"]
     gen0_rate = cell["gen0_crew_witnessed_kills"] / cell["gen0_kills_total"]
     assert cell["gen9_rate"] == pytest.approx(gen9_rate)
-    assert cell["gen9_rate"] == pytest.approx(30 / 191)
     assert cell["gen0_rate"] == pytest.approx(gen0_rate)
-    assert cell["gen0_rate"] == pytest.approx(33 / 200)
 
     assert cell["margin_gen9_minus_gen0"] == pytest.approx(gen9_rate - gen0_rate)
-    assert cell["margin_gen9_minus_gen0"] == pytest.approx(30 / 191 - 33 / 200)
     # The trained crew reads BELOW its own gen-0 control on this gauge; 18.27
     # rules on that, this only pins the sign against the numbers.
     assert cell["margin_gen9_minus_gen0"] < 0
 
-    assert cell["corpus_rate"] == pytest.approx(12 / 505)
+    assert cell["corpus_rate"] == pytest.approx(rider["corpus_rate"])
 
     # Coherence with the parent instruments each side was cut from.
     gen9_parent = row["instruments"]["kill_craft"]
@@ -1436,7 +1213,7 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
         "leg_start_at",
         "sum_wall_seconds",
     }
-    assert retry["attempts"] == 4
+    assert retry["attempts"] == _GOLDEN["leg_clocks"]["post_pr_retry_attempts"]
     assert retry["sum_wall_seconds"] > 0
     assert retry["first_at"] <= retry["last_event_at"]
 
@@ -1455,7 +1232,10 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     # difference is the in-leg-original attempts. Pinned as the exact
     # subtraction, so a future block that conflated the two — reporting one
     # clock twice — fails instead of looking merely plausible.
-    assert seventh_leg["retry_wall_seconds"] - retry["sum_wall_seconds"] == 3907
+    assert (
+        seventh_leg["retry_wall_seconds"] - retry["sum_wall_seconds"]
+        == _GOLDEN["leg_clocks"]["in_leg_original_retry_wall_seconds"]
+    )
     assert seventh_leg["retry_wall_seconds"] > retry["sum_wall_seconds"]
 
     # An observed identity worth surfacing if it ever breaks: the arm's
@@ -1615,8 +1395,13 @@ def test_the_comparator_carries_the_49_seed_cut_for_the_f13_axis() -> None:
 
     for name, count in _COMPARATOR_INTERSECTION_COUNTS.items():
         assert block[name] == count
-    assert block["frame_attempts"] == {"numerator": 146, "denominator": 154}
-    assert block["frame_conversions"] == {"numerator": 5, "denominator": 146}
+    assert (
+        block["frame_attempts"] == _GOLDEN["comparator_intersection"]["frame_attempts"]
+    )
+    assert (
+        block["frame_conversions"]
+        == _GOLDEN["comparator_intersection"]["frame_conversions"]
+    )
 
     # THE ANCHOR: the scripted mover never departs a kill co-present — on the
     # full 50 and on the cut alike, so the split survives the seed set.
@@ -1870,8 +1655,16 @@ def test_the_c1_paired_crew_win_table_is_the_49_seed_discordant_cut() -> None:
     # The cross-row reconciliation, against each arm's own 49-seed total.
     gen9_wins_49 = _crew_wins_excluding(gen9, _C1_PAIRED_EXCLUDED_SEED)
     gen0_wins_49 = _crew_wins_excluding(gen0, _C1_PAIRED_EXCLUDED_SEED)
-    assert table["both_win"] + table["gen9_only_win"] == gen9_wins_49 == 26
-    assert table["both_win"] + table["gen0_only_win"] == gen0_wins_49 == 25
+    assert (
+        table["both_win"] + table["gen9_only_win"]
+        == gen9_wins_49
+        == _GOLDEN["c1_paired"]["gen9_wins_49"]
+    )
+    assert (
+        table["both_win"] + table["gen0_only_win"]
+        == gen0_wins_49
+        == _GOLDEN["c1_paired"]["gen0_wins_49"]
+    )
 
     # ... and the reason both survive the cut unchanged: neither arm won the
     # excluded seed as crew, so removing it moved neither total.
@@ -1987,15 +1780,22 @@ def test_the_c2_diagnostics_report_the_stall_and_the_dead_meeting_economy() -> N
     rows = _rows()
 
     gen9 = rows["p18-crew-c2-gen9"]
+    gen9_arm = next(arm for arm in _SLATE if arm.entrant == "p18-crew-c2-gen9")
     assert gen9["validity_gate"]["passed"] is False
-    assert gen9["stalemate_games_no_game_over"] == [
-        "replay-seed-19.jsonl",
-        "replay-seed-20.jsonl",
-    ]
-    assert gen9["core"]["meeting_rate"] == pytest.approx(0.60)
-    assert gen9["core"]["tick_budget_reached"] == 2
-    assert gen9["crew_stamp_verified_games"] == 48
-    assert gen9["opponent_stamp_verified_games"] == 48
+    assert gen9["stalemate_games_no_game_over"] == list(
+        gen9_arm.stalemate_replays or ()
+    )
+    assert len(gen9_arm.stalemate_replays or ()) == 2
+    assert gen9["core"]["meeting_rate"] == pytest.approx(gen9_arm.meeting_rate)
+    assert (
+        gen9["core"]["tick_budget_reached"] == _GOLDEN["c2_gen9"]["tick_budget_reached"]
+    )
+    # 48 of 50: the two stalled seeds proved no identity on EITHER side.
+    assert gen9["crew_stamp_verified_games"] == gen9_arm.stamp_games
+    assert gen9["opponent_stamp_verified_games"] == gen9_arm.stamp_games
+    assert gen9_arm.stamp_games == gen9_arm.games_total - len(
+        gen9_arm.stalemate_replays or ()
+    )
     assert gen9["watchability"]["integrity_ok"] is False
     assert gen9["watchability"]["mean_score"] == pytest.approx(0.0)
 

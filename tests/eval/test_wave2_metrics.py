@@ -25,7 +25,6 @@ unconditionally ON) re-record exactly (123/46/40, effective 16 = 7 named +
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -42,6 +41,7 @@ from eval.meeting_quality import (
     ConversionPerMeetingReport,
     EffectiveDeflectionReport,
     IndistinguishabilityReport,
+    TournamentEvalReport,
     compute_conversion_per_meeting,
     compute_effective_deflection,
     compute_indistinguishability,
@@ -60,15 +60,11 @@ from meetings.schemas import (
 )
 from orchestrator.replay import LLMCallRecord
 
-# scripts/ is a top-level module dir (no __init__.py), like tests/scripts and
-# tests/eval/test_gate_spec_metrics: the committed-byte pins call the ONE
-# operator assembly, never a test-local replica.
-_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
-
-from build_sample_report import build_report  # noqa: E402
-
+# The committed-byte pins below consume the session-scoped
+# ``committed_9p2i_report`` fixture (tests/conftest.py, Task 19.27) — the ONE
+# operator assembly (``scripts/build_sample_report.build_report``), walked
+# once per suite run instead of once per pin. Before the fixture this module
+# alone re-walked the committed set five times.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMMITTED_9P2I_DIR = _REPO_ROOT / "replays" / "samples" / "9p2i"
 
@@ -247,13 +243,14 @@ class TestConversionPerMeeting:
                 conversion_per_meeting=1.5,
             )
 
-    def test_committed_w2_reads_64_of_179(self) -> None:
+    def test_committed_w2_reads_64_of_179(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         # baseline-6 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record
         # with the Wave-0 substrate all unconditionally ON, the vent-widening cut:
         # the gate ejects 78 impostors across 165 resolved meetings — the
         # per-meeting conversion KPI over the new bytes.
-        report = build_report(_COMMITTED_9P2I_DIR)
-        result = compute_conversion_per_meeting(report.report.games)
+        result = compute_conversion_per_meeting(committed_9p2i_report.report.games)
         assert result.impostor_ejections == 78
         assert result.resolved_meetings == 165
         assert result.conversion_per_meeting == pytest.approx(78 / 165)
@@ -388,7 +385,9 @@ class TestEffectiveDeflection:
                 skip_saved_active_survivals=2,  # 2 + 2 != 5
             )
 
-    def test_committed_w2_reproduces_the_audit_subcount(self) -> None:
+    def test_committed_w2_reproduces_the_audit_subcount(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         # baseline-6 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record,
         # the Wave-0 substrate all unconditionally ON, the vent-widening cut:
         # 148 accused / 70 survived / 67 active; effective 23 = 8 named + 15 third
@@ -396,8 +395,7 @@ class TestEffectiveDeflection:
         # split leans SKIP-saved (44) OVER active-deflection (23) — with the
         # transcript contradiction channel collapsed, fewer of the impostor's
         # survivals come from landing plurality on a named or third-party target.
-        report = build_report(_COMMITTED_9P2I_DIR)
-        result = compute_effective_deflection(report.report.games)
+        result = compute_effective_deflection(committed_9p2i_report.report.games)
         assert result.accused_impostor_events == 148
         assert result.accused_impostor_survivals == 70
         assert result.active_survivals == 67
@@ -458,7 +456,9 @@ class TestIndistinguishability:
                 top_idler_wait_share=None,
             )
 
-    def test_committed_w2_tasks_fingerprint_closed(self) -> None:
+    def test_committed_w2_tasks_fingerprint_closed(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         # baseline-6 Qwen/Qwen3.6-27B (qwen3_6_27b.v3, all four templates) re-record,
         # the Wave-0 substrate all unconditionally ON, the vent-widening cut:
         # the toolkit keeps the D-D-1 fingerprint closed. Impostor do_task 415 vs
@@ -466,8 +466,9 @@ class TestIndistinguishability:
         # the crew carry the dead-crewmate task burden yet idle MORE between
         # consoles, so impostors no longer idle their way to a fingerprint (the
         # closed property holds even more strongly than W1).
-        report = build_report(_COMMITTED_9P2I_DIR)
-        tally = tally_actions_by_role(_COMMITTED_9P2I_DIR, report.report.games)
+        tally = tally_actions_by_role(
+            _COMMITTED_9P2I_DIR, committed_9p2i_report.report.games
+        )
         result = compute_indistinguishability(tally)
         assert result.impostor_do_task == 415
         assert result.crewmate_do_task == 3703
@@ -479,9 +480,10 @@ class TestIndistinguishability:
         # impostors now idle LESS than the task-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
 
-    def test_ingest_is_deterministic(self) -> None:
-        report = build_report(_COMMITTED_9P2I_DIR)
-        games = report.report.games
+    def test_ingest_is_deterministic(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
+        games = committed_9p2i_report.report.games
         first = tally_actions_by_role(_COMMITTED_9P2I_DIR, games)
         second = tally_actions_by_role(_COMMITTED_9P2I_DIR, games)
         assert first == second
@@ -571,7 +573,9 @@ class TestSingleWitnessInformChannel:
             {CHANNEL_BODY_PROXIMITY}
         )
 
-    def test_committed_w2_credits_single_witness_inform(self) -> None:
+    def test_committed_w2_credits_single_witness_inform(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
         # carry it LIVE. Re-extracted on the baseline-4 Qwen/Qwen3.6-27B
         # (qwen3_6_27b.v1, all four templates, the 6-lever Wave-0 substrate all
@@ -580,8 +584,7 @@ class TestSingleWitnessInformChannel:
         # the parser's header anchor survives the qwen3_6_27b restyle — but on the
         # baseline-4 substrate, with transcript contradiction flags collapsed, no
         # ejection re-derives into the single-witness inform band.)
-        report = build_report(_COMMITTED_9P2I_DIR)
-        result = compute_multi_signal_conversion(report.report.games)
+        result = compute_multi_signal_conversion(committed_9p2i_report.report.games)
         assert result.conversions_with_single_witness_inform == 0
 
 

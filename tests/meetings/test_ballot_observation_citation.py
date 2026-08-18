@@ -27,11 +27,8 @@ backward-compat pin mirrors ``tests.meetings.test_schemas_pooling``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 
-from pydantic import BaseModel
 
 from agents.perception import EVENT_SAW_PLAYER, ingest_packet
 from agents.tactical.crewmate_policy import CrewmatePolicy
@@ -39,7 +36,6 @@ from engine.world import load_canonical_map
 from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
-    MeetingParticipant,
     _default_vote,  # noqa: PLC2701
 )
 from meetings.schemas import ObservationId, VoteBallot
@@ -51,11 +47,10 @@ from orchestrator.game import (
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
-from tests.meetings.test_manager import (
-    _extract_marker,  # noqa: PLC2701
-    _participant,  # noqa: PLC2701
-    _run_meeting,  # noqa: PLC2701
-    _turn_json,  # noqa: PLC2701
+from tests.meetings._manager_helpers import (
+    _obs_vote_responder,
+    _participants,
+    _run_meeting,
 )
 
 # The committed 9p/2i meeting-heavy set (Tasks 7.8, 8.12): seed 0 carries
@@ -140,52 +135,6 @@ def _witnessed_kill_id(agent: TacticalAgent) -> ObservationId:
         and event.payload.get("action") == "kill"
         and event.observation_id is not None
     )
-
-
-def _participants(
-    observation_ids_by_id: dict[str, tuple[ObservationId, ...]],
-) -> tuple[MeetingParticipant, ...]:
-    """Four living crewmates; each voter's own valid-id set threaded on."""
-
-    return tuple(
-        replace(
-            _participant(agent_id),
-            observation_ids=observation_ids_by_id.get(agent_id, ()),
-        )
-        for agent_id in ("p-1", "p-2", "p-3", "p-4")
-    )
-
-
-def _obs_vote_responder(
-    *,
-    observation_ids_by_voter: dict[str, ObservationId | None],
-    targets: dict[str, str] | None = None,
-) -> Callable[[str, type[BaseModel] | None], str]:
-    """A responder that drives every turn to an ``unsure`` opening and emits a
-    vote per voter carrying the scripted ``primary_reason_observation_id``.
-
-    Mirrors ``tests.meetings.test_manager._make_responder`` but reaches the new
-    citation field (the shared ``_vote_json`` helper predates it)."""
-
-    resolved_targets = targets or {}
-
-    def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
-        if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
-            return _turn_json(speaker=_extract_marker(prompt, "agent_id="))
-        if "PHASE=VOTE" in prompt:
-            voter = _extract_marker(prompt, "voter=")
-            return VoteBallot(
-                voter=voter,
-                target=resolved_targets.get(voter, "SKIP"),
-                confidence=0.8,
-                primary_reason_id=None,
-                primary_reason_observation_id=observation_ids_by_voter.get(voter),
-                considered_alternatives=(),
-                rationale_text=f"stub-vote-{voter}",
-            ).model_dump_json()
-        raise AssertionError(f"unrecognised prompt: {prompt!r}")
-
-    return _responder
 
 
 class TestBallotObservationIdSchema:

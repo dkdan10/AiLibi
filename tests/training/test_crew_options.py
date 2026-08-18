@@ -84,6 +84,11 @@ from training.crew.options import (
 )
 from training.env import build_action_mask
 
+# Task 19.27: campaign tier (training/README.md §2 FREEZE — the crew stack).
+# Excluded from the default gate; runs weekly in CI's campaign-tier job and
+# at phase close via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 # The committed 9p2i corpus preset (replays/ml_corpus/9p2i/MANIFEST.md).
