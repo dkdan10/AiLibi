@@ -80,17 +80,24 @@ def _manifests(root: Path) -> None:
 
 
 def _context(root: Path, *, fast: bool = False, complete: bool = False) -> vme.Context:
+    """A Context wired exactly as ``main`` wires it.
+
+    ``slate_lost`` is threaded through deliberately: ``main`` reads the ruling
+    BEFORE the manifests, so Task 19.21's recovery-only slate manifest may be
+    absent on the loss path. A helper that quietly took the default would be
+    testing a wiring production does not have.
+    """
+
+    ruling = (
+        vme.read_slate_ruling(root) if (root / vme.ARTIFACTS_DOC).is_file() else None
+    )
     return vme.Context(
         repo_root=root,
         fast=fast,
         complete=complete,
-        evidence=vme.evidence_rows(root),
+        evidence=vme.evidence_rows(root, slate_lost=ruling is not None and ruling.lost),
         pinned_sha=vme.read_pinned_sha(root),
-        slate_ruling=(
-            vme.read_slate_ruling(root)
-            if (root / vme.ARTIFACTS_DOC).is_file()
-            else None
-        ),
+        slate_ruling=ruling,
     )
 
 
@@ -827,3 +834,177 @@ def test_a_registry_class_contradicting_its_storage_raises(tmp_path: Path) -> No
     )
     with pytest.raises(vme.EvidenceError, match="contradicts its storage policy"):
         vme.registry_rows(root)
+
+
+# --------------------------------------------------------------------------- #
+# 6. the third review round (Codex, PR #348)                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_complete_accepts_a_manifestless_recorded_loss_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """The WHOLE availability leg accepts a loss with no slate manifest.
+
+    Three review rounds each found a different branch that still failed the
+    ratified-loss close: the promised-set aggregate, then context construction,
+    then the registry's count-parity check. Each previous fix was correct and
+    each was too narrow, because each was tested at the branch it named. This
+    test drives the leg end to end over the real registry document with the
+    ruling rewritten to LOST and NO slate manifest present — the actual shape of
+    Task 19.21's loss path — and asserts nothing in it fails `--complete`.
+    """
+
+    root = tmp_path / "repo"
+    for probe in (
+        "replays/samples/4p1i",
+        "replays/ml_corpus/4p1i",
+        "tests/fixtures",
+        "data/personas.json",
+        "training/artifacts/impostor",
+        "training/artifacts/crew",
+        "training/artifacts/anchor_study",
+        vme.SURROGATE_DIR,
+        vme.CONVICTION_DIR,
+        vme.COMPOSED_DIR,
+        "audits",
+        "docs/media",
+        "design/phase-12",
+        "experiments/lab",
+        "experiments/model_probe",
+        "agents/tactical/learned/weights.json",
+        "agents/tactical/learned/weights.json.sha256",
+        "agents/tactical/learned/crew_weights.json",
+        "agents/tactical/learned/crew_weights.json.sha256",
+        "replays/samples/9p2i",
+        "replays/ml_corpus/9p2i",
+    ):
+        _link(root, probe)
+    # coevo/ is linked whole (the availability probe needs the directory and
+    # PATHS.md); the manifest and PATHS.md come with it.
+    (root / vme.COEVO_DEST).parent.mkdir(parents=True, exist_ok=True)
+    (root / vme.COEVO_DEST).symlink_to(_REPO_ROOT / vme.COEVO_DEST)
+    # training/reports is built file by file rather than linked whole: linking
+    # the real directory would drag `_finalist_eval_raw/MANIFEST.md` in with it
+    # and quietly undo the very condition under test.
+    (root / "training/reports").mkdir(parents=True, exist_ok=True)
+    for name in ("results-finalist-eval.jsonl", "report-finalist-eval.md"):
+        (root / "training/reports" / name).symlink_to(
+            _REPO_ROOT / "training/reports" / name
+        )
+    doc = _copy(root, vme.ARTIFACTS_DOC)
+    doc.write_text(
+        doc.read_text().replace(
+            "**Ruling 2026-08-15: RECOVERED**", "**Ruling 2026-08-15: LOST**"
+        )
+    )
+    # The loss path's defining shape: Task 19.21 writes this only on recovery.
+    assert not (root / vme.SLATE_MANIFEST).exists()
+
+    ctx = _context(root, complete=True)
+    assert ctx.lost_prefixes == frozenset({vme._SLATE_PREFIX})
+    rows = vme.run_availability(ctx).rows
+
+    slate_registry = next(
+        row for row in rows if row.name.startswith("finalist-eval-raw/")
+    )
+    assert slate_registry.status == "INFO", slate_registry.detail
+    assert "LOST" in slate_registry.measured
+    slate_ruling = _row(rows, "Phase-18 finalist raw slate (Task 19.21 outcome)")
+    assert slate_ruling.status == "INFO"
+
+    # NOTHING about the lost slate's EVIDENCE fails the close gate — the whole
+    # leg, not the single branch each review round happened to name.
+    failed = {row.name for row in vme._failed(rows, complete=True)}
+    assert slate_registry.name not in failed
+    assert slate_ruling.name not in failed
+
+    # Exactly two rows fail, and neither is about the lost slate's evidence.
+    # Asserted by name so the scratch tree's shape stays visible rather than
+    # hidden behind a loose assertion:
+    #
+    #  * `coevo/` — those bytes are PROMISED (not lost) and this tree has not
+    #    restored them, so ABSENT failing --complete is the correct behaviour;
+    #  * the slate MANIFEST's own registry row — this tree pairs a LOST ruling
+    #    with the registry as it stands TODAY, which still lists that file as a
+    #    class-(b) in-git artifact. A real ratified loss would drop that row
+    #    (and its probe here) in the same change that flipped the ruling.
+    assert failed == {"coevo/ [(c)]", f"{vme.SLATE_MANIFEST} [(b)]"}
+
+
+def test_a_declared_set_with_no_replays_fails(tmp_path: Path) -> None:
+    """Deleting every replay in a committed set must not make the set vanish.
+
+    Discovery keyed on "has a replay file" meant an emptied set dropped out of
+    the walk, so the manifest's own missing-seed check never ran and even
+    `--complete` certified a checkout missing a whole baseline set.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, f"{vme.SURROGATE_DIR}/fit-corpus.json", vme.CORPUS_SET)
+    emptied = root / _SAMPLE_SET
+    emptied.mkdir(parents=True)
+    (emptied / "MANIFEST.md").symlink_to(_REPO_ROOT / _SAMPLE_SET / "MANIFEST.md")
+
+    # --fast must not turn an empty set into a vacuous pass either.
+    row = _row(
+        vme.run_corpus(_context(root, fast=True)).rows,
+        f"corpus reconstruction: {_SAMPLE_SET}",
+    )
+    assert row.status == "FAIL"
+    assert "NO REPLAYS ON DISK" in row.measured
+    assert "is missing" in row.detail
+
+
+def test_a_retained_entry_replaced_by_a_directory_fails(tmp_path: Path) -> None:
+    """`.exists()` accepts a directory; the §3 inventory promises files."""
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    # Every retained path present as the REAL committed file except one, which
+    # is a directory at the same pathname.
+    retained = vme.retained_in_tree_paths(root)
+    for rel in retained:
+        dest = root / vme.COEVO_DEST / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.symlink_to(_REPO_ROOT / vme.COEVO_DEST / rel)
+    swapped = retained[0]
+    (root / vme.COEVO_DEST / swapped).unlink()
+    (root / vme.COEVO_DEST / swapped).mkdir()
+
+    row = _row(vme.run_sidecars(_context(root)).rows, "retained in-tree evidence")
+    assert row.status == "FAIL"
+    assert swapped in row.detail
+
+
+def test_an_unknown_ruling_outcome_raises(tmp_path: Path) -> None:
+    """Task 19.21 has two outcomes; a typo must not read as RECOVERED."""
+
+    root = tmp_path / "repo"
+    doc = _copy(root, vme.ARTIFACTS_DOC)
+    doc.write_text(
+        doc.read_text().replace(
+            "**Ruling 2026-08-15: RECOVERED**", "**Ruling 2026-08-15: UNKNOWN**"
+        )
+    )
+    with pytest.raises(vme.EvidenceError, match="which is none of"):
+        vme.read_slate_ruling(root)
+
+
+def test_a_duplicated_manifest_row_is_refused(tmp_path: Path) -> None:
+    """A repeated row displaces an archived path without moving any count."""
+
+    root = tmp_path / "repo"
+    (root / vme.COEVO_DEST).mkdir(parents=True)
+    (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
+    (root / vme.EVIDENCE_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
+        "```sha256\n"
+        f"{'0' * 64}  coevo/kept.json\n"
+        f"{'1' * 64}  coevo/kept.json\n"
+        "```\n"
+    )
+    with pytest.raises(vme.EvidenceError, match="duplicate digest row"):
+        vme.evidence_rows(root, slate_lost=True)

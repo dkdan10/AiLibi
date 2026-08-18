@@ -145,6 +145,8 @@ WALK_SKIP_DIRS: Final[frozenset[str]] = frozenset(
 
 _SIDECAR_SUFFIX: Final = ".sha256"
 _REPLAY_GLOB: Final = "replay-seed-*.jsonl"
+#: The per-set provenance record: what DECLARES a replay set to exist.
+_SET_MANIFEST: Final = "MANIFEST.md"
 
 #: The evidence commit's two top-level prefixes, as the manifests spell them.
 _COEVO_PREFIX: Final = "coevo/"
@@ -384,19 +386,41 @@ def evidence_rows(
     """
 
     rows: list[EvidenceRow] = []
+    # A duplicated digest row keeps the total unchanged while one archived path
+    # silently stops being promised — the payload loop just hashes the survivor
+    # twice and reports everything restored (Codex review, PR #348). Both the
+    # manifest spelling and the destination it maps to must be unique.
+    seen_manifest: dict[str, str] = {}
+    seen_repo: dict[str, str] = {}
+
+    def _claim(manifest: str, manifest_path: str, repo_path: str | None) -> None:
+        if manifest_path in seen_manifest:
+            raise EvidenceError(
+                f"{manifest}: duplicate digest row for {manifest_path!r} — a "
+                "repeated row displaces an archived path without moving any count"
+            )
+        seen_manifest[manifest_path] = manifest
+        if repo_path is not None:
+            if repo_path in seen_repo:
+                raise EvidenceError(
+                    f"{manifest}: {manifest_path!r} maps to {repo_path!r}, which "
+                    f"{seen_repo[repo_path]!r} already claims — two rows cannot "
+                    "promise one destination"
+                )
+            seen_repo[repo_path] = manifest_path
+
     for digest, raw in read_digest_block(repo_root, EVIDENCE_MANIFEST):
         if raw == "README.md":
             # The branch's own README: hashed here, deliberately not restored.
+            _claim(EVIDENCE_MANIFEST, raw, None)
             rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=None))
         elif raw.startswith(_COEVO_PREFIX):
+            coevo_path = _confined(
+                COEVO_DEST, raw[len(_COEVO_PREFIX) :], EVIDENCE_MANIFEST, raw
+            )
+            _claim(EVIDENCE_MANIFEST, raw, coevo_path)
             rows.append(
-                EvidenceRow(
-                    digest=digest,
-                    manifest_path=raw,
-                    repo_path=_confined(
-                        COEVO_DEST, raw[len(_COEVO_PREFIX) :], EVIDENCE_MANIFEST, raw
-                    ),
-                )
+                EvidenceRow(digest=digest, manifest_path=raw, repo_path=coevo_path)
             )
         else:
             raise EvidenceError(
@@ -418,11 +442,13 @@ def evidence_rows(
                     f"{SLATE_MANIFEST}: digest row {raw!r} is not a './' path — "
                     "the restore map does not cover it"
                 )
+            slate_path = _confined(SLATE_DEST, raw[2:], SLATE_MANIFEST, raw)
+            _claim(SLATE_MANIFEST, f"{_SLATE_PREFIX}{raw[2:]}", slate_path)
             rows.append(
                 EvidenceRow(
                     digest=digest,
                     manifest_path=f"{_SLATE_PREFIX}{raw[2:]}",
-                    repo_path=_confined(SLATE_DEST, raw[2:], SLATE_MANIFEST, raw),
+                    repo_path=slate_path,
                 )
             )
     elif not slate_lost:
@@ -471,7 +497,17 @@ def read_slate_ruling(repo_root: Path) -> Ruling | None:
     match = _RULING_RE.search(_read_text(repo_root, ARTIFACTS_DOC))
     if match is None:
         return None
-    return Ruling(date=match.group(1), outcome=match.group(2))
+    outcome = match.group(2)
+    # Task 19.21 has exactly two outcomes. Treating an unrecognised one as
+    # "not a loss" silently promoted a typo to RECOVERED and let it pass
+    # --complete (Codex review, PR #348); the vocabulary is closed instead.
+    if outcome not in _KNOWN_RULINGS:
+        raise EvidenceError(
+            f"{ARTIFACTS_DOC}: the Task 19.21 ruling records outcome "
+            f"{outcome!r}, which is none of {sorted(_KNOWN_RULINGS)} — an "
+            "unrecognised outcome is not a close state this command may read"
+        )
+    return Ruling(date=match.group(1), outcome=outcome)
 
 
 def retained_in_tree_paths(repo_root: Path) -> list[str]:
@@ -806,8 +842,11 @@ def run_sidecars(ctx: Context) -> LegResult:
 
     # --- the RETAINED in-tree evidence the prune's own enumeration names. ---
     retained = retained_in_tree_paths(ctx.repo_root)
+    # `.is_file()`, not `.exists()`: a directory created at a retained byte's
+    # pathname satisfies `exists()` and would report the inventory complete
+    # (Codex review, PR #348). §3 enumerates files, so anything else is missing.
     retained_missing = [
-        rel for rel in retained if not (ctx.repo_root / COEVO_DEST / rel).exists()
+        rel for rel in retained if not (ctx.repo_root / COEVO_DEST / rel).is_file()
     ]
     rows.append(
         CheckRow(
@@ -1011,7 +1050,16 @@ def replay_sets(repo_root: Path) -> list[Path]:
         if not root.is_dir():
             raise EvidenceError(f"{root_rel} is missing — the corpus cannot be walked")
         for child in sorted(root.iterdir()):
-            if child.is_dir() and any(child.glob(_REPLAY_GLOB)):
+            # A set is DECLARED by its MANIFEST.md, not by the replays still on
+            # disk. Requiring a replay file meant a set whose games were all
+            # deleted vanished from the walk entirely — so the manifest's own
+            # missing-seed check never ran and `--complete` certified a checkout
+            # missing a whole committed set (Codex review, PR #348). A declared
+            # set with nothing left in it is now handed to the verifier, which
+            # reports every absent seed.
+            if child.is_dir() and (
+                (child / _SET_MANIFEST).is_file() or any(child.glob(_REPLAY_GLOB))
+            ):
                 sets.append(child)
     if not sets:
         raise EvidenceError(
@@ -1084,7 +1132,10 @@ def run_corpus(ctx: Context) -> LegResult:
     for set_dir in replay_sets(ctx.repo_root):
         rel = _relative(set_dir, ctx.repo_root)
         total = len(list(set_dir.glob(_REPLAY_GLOB)))
-        if ctx.fast:
+        # Nothing to sample: a set that declares seeds but holds no replays is
+        # walked in FULL in every mode, so --fast cannot turn an empty set into
+        # a vacuous pass.
+        if ctx.fast and total:
             seeds = sampled_seeds(set_dir, FAST_SAMPLE_PER_SET)
             with tempfile.TemporaryDirectory(prefix="verify-ml-evidence-") as tmp:
                 dest = Path(tmp)
@@ -1099,6 +1150,11 @@ def run_corpus(ctx: Context) -> LegResult:
             failures = verify_samples(set_dir)
             measured = f"{total - len(failures)}/{total} reconstructed"
             committed = f"{total} committed replays"
+            if not total:
+                measured = (
+                    f"NO REPLAYS ON DISK; {len(failures)} declared seed(s) absent"
+                )
+                committed = f"{rel}/{_SET_MANIFEST} declares this set"
         rows.append(
             CheckRow(
                 name=f"corpus reconstruction: {rel}",
@@ -1808,6 +1864,9 @@ _OFF_TREE_ANCHORS: Final[tuple[tuple[str, AvailabilityClass, str, str], ...]] = 
 #: manifest-recorded loss ``--complete`` accepts as a valid close state.
 _RULING_RE: Final = re.compile(r"\*\*Ruling (\d{4}-\d{2}-\d{2}): ([A-Z-]+)\*\*")
 _LOSS_RULINGS: Final[frozenset[str]] = frozenset({"LOST", "NON-REPRODUCIBLE"})
+#: The recovery outcome, and with it the CLOSED vocabulary Task 19.21 allows.
+_RECOVERY_RULINGS: Final[frozenset[str]] = frozenset({"RECOVERED"})
+_KNOWN_RULINGS: Final[frozenset[str]] = _LOSS_RULINGS | _RECOVERY_RULINGS
 
 
 #: The registry table's header row, which is how it is located: the table is
@@ -1982,19 +2041,26 @@ def run_availability(ctx: Context) -> LegResult:
                     f"{ARTIFACTS_DOC} states {stated.group(1)} files; the "
                     f"manifest carries {total}"
                 )
-            if count_note:
-                status: Status = "FAIL"
-                measured: str = "MANIFEST/REGISTRY DISAGREE"
-            elif prefix in ctx.lost_prefixes:
-                # A ruling records these bytes as gone, so their absence is the
-                # recorded outcome rather than an unmet promise.
+            # The RECORDED LOSS is decided FIRST. On the loss path Task 19.21
+            # writes no slate manifest at all, so `total` is 0 while the registry
+            # still states the count those bytes HAD — a parity check between a
+            # live count and a historical one, which failed the close on exactly
+            # the state this command is required to accept. Third round on this
+            # path (Codex review, PR #348); an end-to-end `--complete` test over
+            # a manifestless-loss tree now covers the whole pipeline rather than
+            # the one branch each round happened to name.
+            if prefix in ctx.lost_prefixes:
                 ruling = ctx.slate_ruling
-                status = "INFO"
-                measured = (
+                status: Status = "INFO"
+                measured: str = (
                     f"LOST (recorded {ruling.date})"
                     if ruling is not None
                     else "LOST (recorded)"
                 )
+                count_note = ""
+            elif count_note:
+                status = "FAIL"
+                measured = "MANIFEST/REGISTRY DISAGREE"
             elif present == total:
                 status = "OK"
                 measured = "EVIDENCE-BRANCH-RESTORED"
