@@ -7,8 +7,13 @@ adopting record), exactly where the charter left it. All 27 dispatched contracts
 green by the verifiers' actual paths (default tier 4,621 passed + the 19.27 campaign tier
 317 passed; `verify-ml-evidence --complete` 54 checks 0 FAIL; both canonical sets
 byte-clean), one close-found defect recorded and routed rather than fixed (F1 — the
-default pytest gate and the restored-evidence state are mutually exclusive), and every
-contract verified-or-deviation-recorded in the close ledger, none silent. The post-19
+default gate and the restored-evidence state are mutually exclusive, at two legs: mypy
+walks the restored slate's untyped helper scripts and one pytest scratch-tree case
+inherits the restored payload through a symlink), and every
+contract verified-or-deviation-recorded in the close ledger, none silent (25 VERIFIED;
+two recorded deviations — 19.22's staging ref still un-retired at origin behind a
+GitHub-refused deletion, the one-command owner step quoted, and 19.23's own new test
+file carrying the F1 coupling). The post-19
 menu (locked decision 6 below) was put to the owner with the committed 19.14
 proof-vs-inference cells as the evidence — direct-proof conviction accuracy 1.000 on
 every committed set (310/310 pooled) against non-direct 0.303/0.393 carrying 79/79 of

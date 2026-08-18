@@ -67,13 +67,20 @@ bytes". This close had just performed the contract-mandated
 the symlink, the row read EVIDENCE-BRANCH-RESTORED instead of ABSENT, and the exact-three-rows
 assertion failed. After `bash scripts/fetch_evidence.sh --clean` (*"Removed 2952 restored
 file(s). Tracked bytes are untouched."*) the same test passes and the full default gate is green
-(the table row above). **The defect is real and is exactly the class the close re-run exists to
-catch: the default gate and the documented restored-evidence state are mutually exclusive** — a
-developer who runs the documented restore and then the documented gate gets a spurious red. It
-is a test-isolation defect (the scratch tree inherits untracked state from the real tree), not
-an evidence defect: every evidence check itself passed in both states. Routed to the next
-phase's inputs as a review item; nothing was fixed in this PR (files NOT in scope: everything
-else).
+(the table row above). **The close then found the same defect's second facet on a later rerun
+with the evidence restored: `uv run mypy .` fails too** — mypy, unlike ruff, has no gitignore
+awareness, so it walks the restored slate's untracked helper scripts
+(`training/reports/_finalist_eval_raw/score-arm.py`, `assemble-row.py`, `make-owner-brief.py`)
+and reports *"Found 15 errors in 3 files (checked 358 source files)"* against the clean state's
+*"354 source files"* — the operator-machine slate scripts were never held to the repo's strict
+bar and the restore's `.gitignore` fence stops `git add`, not `mypy .`. **The defect is real and
+is exactly the class the close re-run exists to catch: the default gate and the documented
+restored-evidence state are mutually exclusive, at two legs (mypy and the scratch-tree pytest
+case)** — a developer who runs the documented restore and then the documented gate gets a
+spurious red. It is an isolation defect (the gate's walkers inherit untracked state the restore
+put there by design), not an evidence defect: every evidence check itself passed in both
+states. Routed to the next phase's inputs as a review item; nothing was fixed in this PR (files
+NOT in scope: everything else).
 
 ---
 
@@ -86,9 +93,61 @@ re-quoted 27 times. Verification was performed by a nine-way fan-out, three cont
 verifier, each running the named pins/greps/targeted-pytest invocations directly against the
 bytes at HEAD; the decisive command outputs are preserved in the PR's verification record.
 
-LEDGER-PLACEHOLDER-TABLE
+**Tally: 25 VERIFIED, 2 DEVIATION-RECORDED (19.22, 19.23 — both expanded below; neither
+silent).** The fan-out ran on the close branch's tree (close HEAD `7be97c7` plus this PR's own
+doc-only commits, which touch no verified byte beyond the §5 registry-count bump).
 
-LEDGER-PLACEHOLDER-DEVIATIONS
+| task (PR) | headline re-verification — the decisive fresh command(s), quoted | verdict |
+|---|---|---|
+| 19.1 (#333) | `check_doc_facts.py` green in 0.33 s + its 35-test perturbation suite; README carries the three reproducibility scopes ("designed for, not yet confirmed" on cross-platform), baseline 6 as the tip everywhere, the 0.938 conversion-label relabel beside 0.8646, manifest-quoted provenance (2026-07-20; 34%/30%), Node/npm prerequisite; DESIGN.md demotion banner → `docs/architecture.md` (1,057 words); `.env.example` documents exactly the one live toggle vs `_TOGGLEABLE_LEVER_RESOLVERS` | VERIFIED |
+| 19.2 (#328) | `grep 'DEAD in production'` → zero hits across the four swept files; every remaining "default-OFF" historical-tense except the genuinely live `impostor_roll_call`; AST compare at merge `ac16204`^..`ac16204` with docstrings stripped → all four files identical (zero behavior bytes moved) | VERIFIED |
+| 19.3 (#329) | The AS241 sampler's distribution-quality pins green (40k-draw moments/tails/KS vs an independent `math.erfc` reference); fresh double-run digest-identical to the pinned golden `e72e24fe…`; the cross-platform claim NOT advertised in es.py or README (Darwin-arm64 run pending, owner-assisted) | VERIFIED |
+| 19.4 (#325) | `training/rewards.py` states "the Ng et al. 1999 FORM — NOT policy-invariant here" naming the missing hypothesis; the non-invariance test asserts shaping 0.0 vs 2.0 on equal-env-reward trajectories; seed-0 exact-`==` pins prove no computed number moved (impostor 19.0, crew 12.925465838509316) | VERIFIED |
+| 19.5 (#327) | 139 targeted tests green; `survival_rate` None-iff-undefined with validator; the 87-inversion recount pinned marker-free over committed bytes (9p2i 87/87, 4p1i 1/1); `supplied_channel_conversion` in all four committed reports; `build_sample_report.py --check` consistent on both sample sets | VERIFIED |
+| 19.6 (#323) | Unknown-model Anthropic pricing raises (`pytest.raises` pin; the flipped former fallback test); `uv lock --check` exit 0 with httpx declared; `--color-ink-600` exists in the generated CSS; the loader's bare-env notice pinned both ways | VERIFIED |
+| 19.7 (#330) | ci.yml `permissions: contents: read` + every action SHA-pinned; exactly one frontend build per CI run; `uv run --no-dev --exact` smoke imports the six entry modules with 18 dev packages uninstalled (pytest/mypy/ruff/hypothesis absent by `find_spec`); MIT LICENSE + CONTRIBUTING posture + SECURITY trust boundary present | VERIFIED |
+| 19.8 (#326) | The nine capability disclosures at `replays/ml_corpus/README.md:104` with committed-bytes citations, numbers independently recomputed this session from the JSONL (roll-call split re-derived, not copied); mirror notes in both samples MANIFESTs | VERIFIED |
+| 19.9 (#324) | `DEFAULT_SET = "9p2i"` pinned (`tests/api/test_sets.py`, 32 passed); the re-score committed with set-fingerprint `multi:29735b32fcb9` agreeing across producer/loader/committed stamp over the 3-sha mixed-provenance manifest (probe-pinned); `FEATURED_GAMES` carries the named seeds with editorial labels | VERIFIED |
+| 19.10 (#335) | Meeting-pause/finale/unspoiled behavior fixture-pinned; outcome reveal a store state independent of perspective, default off, gating every outcome surface incl. URL state; stale 4p1i-default claims swept in `replay_loader.py`/`schemas.py`; both generated type artifacts drift-check green | VERIFIED |
+| 19.11 (#339) | 47 taxonomy+mechanism tests green; exact per-category counts pinned on all four sets (9p2i 96/64/26; corpus 313/204/90) with fail-loud unknown-kind; no `p-X ↔ p-X` proof rendering; the four evidence-honesty mechanisms as separate committed fixtures at the contract's exact seed/meeting anchors; `teammate_coerced` chip omniscient-only under both reveal states | VERIFIED |
+| 19.12 (#341) | `npm run test` 173 passed (6 files); `npm run lint` zero findings with the four legacy findings ledgered in `eslint.config.js`; the error-field three-way split with stale-response race tests; the Playwright journey green headless against auto-started dev servers (chromium pinned/preinstalled) | VERIFIED |
+| 19.13 (#343) | 22 demo-bundle tests green incl. the Playwright case serving the BUILT bundle with network interception asserting **zero `/api` requests** through play → pause → ballots → finale; repo-wide stale default-claim grep clean; README opens with the committed capture + three reproducible-claim commands | VERIFIED |
+| 19.14 (#342) | 85 deduction-metric tests green; the 13 redirected ejects and both roll-call estimators recomputed from committed bytes as pins; BOTH partitions in the committed report bytes with separate denominators (meeting-flag 70→68/2, 95→10/21, 10/31; ejectee-proof 68/101, 10/33) matching the triage recount; the `api/routes/eval.py` stale-default sweep quoted in place | VERIFIED |
+| 19.15 (#331) | 28 vote-guard-rationale tests green; the coerced rationale is marker + upstream markers + the neutral note (whole string pinned; phrasing scan proves no teammate/kill vocabulary); "**Dormant for committed bytes.**" in the docstring — committed surfaces unaffected | VERIFIED |
+| 19.16 (#336) | The guide's demo path matches `FEATURED_GAMES` seed-for-seed with verbatim blurbs; its quoted numbers re-verified against their committed sources (citation-compliance pins, the triage cross-tab); the outsider path README → guide → demo → the three named audits intact | VERIFIED |
+| 19.17 (#344) | 56 ticker/cost-chip tests green: the four fog cases pinned in as-agent view (unwitnessed never attributes; body-discovery surfacing), unspoiled mode leaks no outcome, chips cumulative-to-current-frame reaching the game total only at the last frame | VERIFIED |
+| 19.18 (#334) | The three rendered-prose scrape sites re-confirmed in the bytes before trusting their FROZEN labels; 70 files carry the tier-map freeze label; `training/README.md` §2 names the disputed surrogate boundary (RANKING kept 46/60; standalone DECISION arm retired on the 0-eject/96-skip census); the reopening checklist documents both routes + the four pre-campaign checks | VERIFIED |
+| 19.19 (#338) | Every deletion's consumer grep on the record (PR #338 + per-deletion commits); `training/realpath.py`/`llm/cache.py`/probe recorder gone, `training/realpath_schema.py` + its 122 relocated tests green; both skipped candidates recorded with blockers (SectionLabel revived by 19.9/19.10 — live at HEAD with 8 references; the surrogate no-op recorded in `runner.py:48-58`) | VERIFIED |
+| 19.20 (#332) | Fresh `scripts/paired_stats.py` run reproduces every §18 cell (ea4bc955 17/4 p=0.0072; bfd145cb 20/5 p=0.0041; shipped 6d327dcb 15/9 p=0.3075 n.s.; 7f73929d 12/3 p=0.0352 failing Bonferroni α=0.0125); 47 pin tests green; all five in-scope reports carry additive dated errata | VERIFIED |
+| 19.21 (#337) | The RECOVERED outcome recorded as a dated erratum (finalist §19, 2026-08-15); 1,569 manifest digests counted fresh and the restored slate hashes 1,569/1,569 OK; the staging ref pushed at the pinned `c27ab7b5`; no re-recording (the ~57-busy-hour price named and declined). The staging ref's DELETION was 19.22's box — see below | VERIFIED |
+| 19.22 (#346) | The 90 retained paths each marked with a pinning test (empirically finding a third consumer file, recorded); the evidence commit is ONE orphan (`rev-list --count` 1, no parent header) at the manifest's pin, 2953/2953 sha-clean; weight/sidecar pairs 245/245 paired; `fetch_evidence.sh --verify` OK — **but the staging ref is NOT retired at origin (F2)** | **DEVIATION-RECORDED (F2)** |
+| 19.23 (#348) | One command green in one invocation on BOTH states: un-restored → 54 checks, ABSENT its own reported class (260 sidecars), exit 0; restored → `--complete` 54 checks 0 FAIL, 2952/2952 + 260/260 hash-verified; accept-recorded-LOST implemented and asserted — **but its own new test file carries the restored-state coupling (= F1)** | **DEVIATION-RECORDED (F1)** |
+| 19.24 (#345) | The `data as T` cast now gated by `assertViewModelVersion` with `VIEW_MODEL_VERSION="1"` in generated lockstep; `eval/leak_scan.py` pytest-free with BOTH production consumers importing it, pinned by the hermetic subprocess partition probe; the `moved_players` Hypothesis sweep + planted-leak proofs green (19 + 6 + 3 targeted tests) | VERIFIED |
+| 19.25 (#347) | 21 walker tests green (one negative fixture per profile); all four committed reports `--check` byte-consistent through the walker; the seven consumer modules each on their own `ReplayWalkConfig` profile; 162 consumer-suite tests green | VERIFIED |
+| 19.26 (#340) | 98 parity tests green pinning ALL 707 committed meetings / 3,934 ballots across the four sets plus synthetic edges; the two-implementation zero-disagreement run on the record (PR #340); consolidation DONE — `MeetingManager._tally` is a thin delegation to `meetings.voting.tally_ballots` (2026-08-16) | VERIFIED |
+| 19.27 (#349) | The 6 meta-tests green (tier split + no-test-module imports); `regen_test_goldens.py --check` byte-identical on both goldens; markers registered with `--strict-markers -m 'not campaign'`; the weekly `campaign-tier.yml` home (`17 6 * * 1`); the re-walk delta on the record (6→2 rebuilds, 1,735→1,335 walks) | VERIFIED |
+
+**F2 — the un-retired staging ref (19.22's one unmet DoD box; recorded openly, routed to the
+owner).** `git ls-remote origin 'evidence/*'` still returns
+`c27ab7b5… refs/heads/evidence/raw-slate-staging` at this close, three days after the 19.21
+recovery. The shortfall is NOT silent — `training/artifacts/coevo/EVIDENCE-MANIFEST.md` records
+it verbatim ("its deletion is the one step this task could not execute …
+`git push origin --delete evidence/raw-slate-staging` was refused by GitHub with HTTP 403") and
+`docs/artifacts.md` repeats it — but the contract sanctioned no couldn't-delete outcome, so the
+ledger records it as a deviation rather than absorbing it. The consequence is duplication only,
+never integrity: the pinned orphan commit `476a1f85…` independently carries and hashes every
+staged byte (§1), so the staging ref is redundant by construction. **The routed remedy is the
+manifest's own one-command owner step, at the owner's convenience (it is the owner's credential
+the deletion needs):** `git push origin --delete evidence/raw-slate-staging`. This close's
+dispatch environment holds the same class of credential that was already refused, so the close
+records rather than retries.
+
+**On 19.23's deviation:** the failing test IS §1's F1 — the contract's own new test file
+(`tests/scripts/test_verify_ml_evidence.py:141`) symlinks the real `training/artifacts/coevo/`
+into its scratch tree, so the close-mandated restore leaks in and the exact-failure-set
+assertion breaks; green on an un-restored checkout (57/57 at this close after `--clean`). Every
+headline item of the 19.23 contract itself verified green on both evidence states. One finding,
+recorded once, owned by the close (F1) and routed forward.
 
 ---
 
@@ -242,9 +301,19 @@ convention).
 
 ## 5. Decisions
 
-- **The close verifies; it does not fix.** F1 (§1) is recorded and routed to the next phase's
-  inputs; no test, script, or doc outside this contract's three files was touched. The same rule
-  kept the ledger's deviations (§2) as findings rather than fixes.
+- **The close verifies; it does not fix.** F1 (§1) and F2 (§2) are recorded and routed — F1 to
+  the next phase's inputs, F2 to the manifest's own one-command owner step; no test, script, or
+  doc outside this contract's files was touched, with the ONE mechanical exception below.
+- **The one out-of-listed-scope edit: `docs/artifacts.md`'s `audits/` registry row, 97 → 98
+  files.** Landing `audits/audit-phase-19-close.md` (this file — in scope, mandated) trips the
+  in-tree family inventory check exactly as 19.23 built it to fail on registry drift
+  (*"audits/: docs/artifacts.md promises 97 files, the index tracks 98"* — the verifier and 3 of
+  its tests go red on any audits/ addition that skips the bump). The count is re-derived from
+  the index (98 files; the 4.8 MB size figure is unchanged at its own precision), the full
+  evidence cycle re-ran green after the bump (fetch *"OK: 2953/2953"*; `--complete` *"54 | OK 49
+  | FAIL 0 | ABSENT 0 | INFO 5"*), and the edit is one token in one generated-registry row — the
+  mechanical consequence of the close's own mandated artifact, not a fix to phase work. Recorded
+  here rather than silently.
 - **The gate-ordering decision (F1's consequence):** the default gate's green is quoted from the
   clean state (`fetch_evidence.sh --clean` → `check.sh`), the evidence legs from the restored
   state — the two states the verifiers themselves define. Both invocations and both states are
@@ -297,7 +366,8 @@ convention).
   exists and none is required (§5).
 - **The banner and the roadmap record the close in this PR:** `tasks/phase-19.md` STATUS →
   CLOSED (this close), and `tasks/post-phase-14-plan.md`'s Phase-19 spine node + §3 bullet gain
-  the close tick — the roadmap tick this close owns.
+  the close tick — the roadmap tick this close owns. The PR also carries the one-token
+  `docs/artifacts.md` registry bump (§5).
 
 ---
 
@@ -311,7 +381,8 @@ bash scripts/fetch_evidence.sh                                      # §1 OK: 29
 uv run python scripts/verify_ml_evidence.py --complete              # §1 checks: 54 | OK 49 | FAIL 0 | ABSENT 0 | INFO 5
 bash scripts/verify_samples.sh                                      # §1 both canonical sets clean (bare env)
 uv run python scripts/check_doc_facts.py                            # §1 front-door facts green
-uv run pytest tests/scripts/test_verify_ml_evidence.py -q           # §1 F1: fails restored / passes after --clean
+uv run pytest tests/scripts/test_verify_ml_evidence.py -q           # §1 F1: fails restored / 57 passed after --clean
+uv run mypy .                                                       # §1 F1's second facet: 15 errors restored / clean green
 bash scripts/fetch_evidence.sh --clean                              # §1 removes the 2,952 restored files
 git count-objects -vH ; git ls-files -z | du -ch --files0-from=-    # §3 clone-weight fresh reads
 python3 - <<'EOF'                                                   # §4.1 the committed 19.14 cells, read verbatim
