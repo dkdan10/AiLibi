@@ -208,6 +208,12 @@ export const SPECTATOR_COPY = Object.freeze({
     noReportLead: "A 404 means no",
     noReportMiddle: "exists in the configured eval directory yet — run a tournament with",
     noReportTail: "to produce one.",
+    // The same panel in the hosted demo, where there is no eval directory to
+    // point anyone at. `scripts/build_demo_bundle.py` pins the fragment "needs a
+    // tournament report" against the built bundle's emitted JS, so rewording
+    // this line means updating that marker too.
+    noReportBundle:
+      "This demo ships the featured games only. The eval dashboard needs a tournament report, and that report is far larger than a demo should carry — the repository has it, along with the command that rebuilds it.",
 
     balanceTitle: "Balance outcome",
     balanceDescription:

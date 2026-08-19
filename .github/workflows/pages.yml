@@ -1,0 +1,138 @@
+# Publishes the static demo bundle — the project's public face — to GitHub
+# Pages on every push to `main`. `docs/deployment.md` is the authority on why
+# this artifact is publishable when the live API is not (pre-rendered answers
+# for the curated games; no server, no query surface), and names this workflow
+# as the sanctioned public route.
+#
+# A SEPARATE workflow file rather than a job in ci.yml, for the reason
+# campaign-tier.yml records: a trigger set shared with ci.yml would emit SKIPPED
+# instances of the per-change jobs on every firing, and GitHub treats a skipped
+# job as satisfying a required check of the same name.
+#
+# `push` on main plus manual dispatch, and deliberately NO `pull_request`
+# trigger: a PR trigger would hand a fork's head commit a deployment of the
+# project's public face. Because Pages rebuilds on push, a future re-record
+# refreshes the demo with no extra work.
+name: Pages demo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Least privilege, as in ci.yml: the build job only reads the repository. The
+# Pages credentials are granted to the deploy job alone, below.
+permissions:
+  contents: read
+
+# One deployment at a time, and queued rather than cancelled: each run publishes
+# a WHOLE site, so cancelling a run mid-flight can leave the live site
+# half-swapped between two builds.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the demo bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      # Actions are pinned to full commit SHAs (the tag they resolved from is in
+      # the trailing comment), matching ci.yml's convention. Re-resolve the tag
+      # and update both the SHA and the comment together when bumping.
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # BOTH toolchains, so no AILIBI_SKIP_FRONTEND here: the bundle is a Vite
+      # build plus an engine re-walk of the featured games out of the committed
+      # recordings.
+      - name: Set up project environment
+        run: bash scripts/setup_env.sh
+
+      # The builder's own tests, ahead of the build they guard — cheapest signal
+      # first, as in ci.yml. The build then adds its compiled-in assertions over
+      # the emitted bundle (the static data seam, and the Tournament tab's
+      # bundle-only empty state), so nothing reaches the upload unproven.
+      - name: Test the bundle builder
+        run: uv run pytest tests/scripts/test_build_demo_bundle.py -q
+
+      - name: Build the demo bundle
+        run: uv run python scripts/build_demo_bundle.py
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: frontend/dist/demo-bundle
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+
+    # The ONLY job holding the Pages credentials, which is why both Pages
+    # actions live here rather than beside the build. The build needs no Pages
+    # scope at all: the bundle's asset base is relative, so there is no base URL
+    # to resolve at build time, and a job that does not need a credential should
+    # not hold one.
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # Fails loudly when Pages is not enabled with "GitHub Actions" as its
+      # source — the one-time owner step docs/deployment.md documents — so the
+      # error names the missing setup rather than surfacing as a deploy failure.
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      # A deployment reported as created is not yet a deployment anyone can
+      # read, so this asks the URL the run actually published. It retries only
+      # to absorb that propagation delay: nothing but a 200 ends it green, and a
+      # workflow that deployed a broken site fails here rather than going
+      # unnoticed until a visitor finds it.
+      - name: Verify the deployment answers
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          if [ -z "$PAGE_URL" ]; then
+            echo "::error::the deploy step returned no page_url"
+            exit 1
+          fi
+          code=""
+          for attempt in 1 2 3 4 5 6; do
+            # `|| code=000` handles a transport failure (curl exits non-zero and
+            # the step's `bash -e` would otherwise abort mid-retry).
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' "$PAGE_URL")" || code="000"
+            echo "attempt ${attempt}: GET ${PAGE_URL} -> ${code}"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::${PAGE_URL} did not answer 200 (last status ${code})"
+          exit 1

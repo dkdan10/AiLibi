@@ -352,9 +352,52 @@ def test_a_non_static_build_is_rejected(tmp_path: Path) -> None:
     bdb._assert_static_mode_compiled_in(tmp_path)
 
 
+def test_a_build_without_the_bundle_empty_state_is_rejected(tmp_path: Path) -> None:
+    """The Tournament tab's bundle copy has to still be in the emitted JS.
+
+    That card is the whole tab for a visitor — the bundle bakes no report on
+    purpose — and it renders from a branch only the static build selects, so
+    deleting the copy breaks nothing a local run, a unit test or `tsc` would
+    notice. It has to break the build, so this is the leg that proves it does:
+    the same emitted JS with and without the sentence.
+    """
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    (tmp_path / "assets" / "index.js").write_text(
+        'const c={noReportTitle:"No tournament report."}', encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="bundle empty state"):
+        bdb._assert_empty_state_compiled_in(tmp_path)
+
+    (tmp_path / "assets" / "index.js").write_text(
+        'const c={noReportBundle:"The eval dashboard needs a tournament report."}',
+        encoding="utf-8",
+    )
+    bdb._assert_empty_state_compiled_in(tmp_path)
+
+
+def test_the_empty_state_marker_is_a_substring_of_the_shipped_copy() -> None:
+    """The marker tracks the real string, not a remembered one.
+
+    A marker that had drifted from `copy.ts` would fail every build (or, worse,
+    match some unrelated chunk), so the two are pinned against each other here
+    rather than trusted to stay in step.
+    """
+
+    copy_ts = (_REPO_ROOT / "frontend" / "src" / "lib" / "copy.ts").read_text(
+        encoding="utf-8"
+    )
+    value = re.search(r'noReportBundle:\s*"([^"]*)"', copy_ts)
+    assert value is not None, "noReportBundle is gone from the copy tree"
+    assert bdb._EMPTY_STATE_MARKER in value.group(1)
+
+
 def test_an_empty_build_dir_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="no .*index.html"):
         bdb._assert_static_mode_compiled_in(tmp_path)
+    with pytest.raises(FileNotFoundError, match="no .*index.html"):
+        bdb._assert_empty_state_compiled_in(tmp_path)
 
 
 # ── the --out guard ──────────────────────────────────────────────────────────
@@ -519,6 +562,11 @@ def test_the_note_names_its_source_and_claims_nothing_more(tmp_path: Path) -> No
     lesson was that the sentence promised a fact about bytes this script cannot
     establish, so it is gone: the source is named, and the reader — who can
     actually answer it for their own directory — is handed the question.
+
+    HOW it is named is the second half. The note ships inside the artifact this
+    project publishes, so it names a repository-relative path when it can and no
+    filesystem path at all when it cannot — never the builder's own absolute
+    path, which is a home directory to a stranger and a dead end to everyone.
     """
 
     alt = tmp_path / "private-recordings"
@@ -533,16 +581,78 @@ def test_the_note_names_its_source_and_claims_nothing_more(tmp_path: Path) -> No
     bdb.write_bundle_readme(out, summary)
     note = (out / "README.md").read_text(encoding="utf-8")
 
-    # The source is named exactly, and no assurance rides along with it.
-    assert str(alt.resolve()) in note
+    # Recordings from outside the checkout: the note says so and names no path.
+    # The absolute one the builder resolved is what must NOT be there.
+    assert "outside the repository" in note
+    assert str(alt.resolve()) not in note
     assert "does not judge whether they are public" in note
     assert "already public" not in note
 
     # …and the SAME wording ships when the canonical samples are used: there is
-    # no branch left that could reintroduce a conditional claim.
+    # no branch left that could reintroduce a conditional claim. Only the path's
+    # rendering differs — repository-relative, because it can be.
     canonical_out = tmp_path / "canonical"
     canonical = bdb.bake_data(canonical_out, games=_ONE_9P2I, samples_dir=_SAMPLES)
     bdb.write_bundle_readme(canonical_out, canonical)
     canonical_note = (canonical_out / "README.md").read_text(encoding="utf-8")
     assert "does not judge whether they are public" in canonical_note
-    assert str(_SAMPLES.resolve()) in canonical_note
+    assert "`replays/samples` in the repository" in canonical_note
+    assert str(_SAMPLES.resolve()) not in canonical_note
+
+
+def test_authored_text_with_no_host_path_passes(tmp_path: Path) -> None:
+    """The real note and the real marker clear the check they ship behind."""
+
+    summary = bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    bdb.write_bundle_readme(tmp_path, summary)
+    bdb.write_bundle_marker(tmp_path)
+    bdb.assert_no_host_paths(tmp_path)
+
+
+def test_a_host_path_in_authored_text_fails_the_build(tmp_path: Path) -> None:
+    """The check bites — on either authored file, and not on the bundle's URL.
+
+    `_source_phrase` fixes the ONE line that carried an absolute path; this check
+    is what makes the class unrepeatable, so it has to be shown failing rather
+    than merely present. The perturbation is the exact defect the review found:
+    a home directory interpolated into the bundle's note.
+    """
+
+    summary = bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    bdb.write_bundle_readme(tmp_path, summary)
+    bdb.write_bundle_marker(tmp_path)
+    note = tmp_path / "README.md"
+    clean = note.read_text(encoding="utf-8")
+
+    note.write_text(
+        clean.replace(
+            "`replays/samples` in the repository.",
+            "`/Users/someone/projects/AiLibi/replays/samples`.",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="/Users/someone/projects/AiLibi"):
+        bdb.assert_no_host_paths(tmp_path)
+
+    # The ownership marker is authored prose too, and is checked the same way.
+    note.write_text(clean, encoding="utf-8")
+    marker = tmp_path / bdb._BUNDLE_MARKER
+    marker.write_text(
+        marker.read_text(encoding="utf-8") + "Built in /home/ci/work/bundle.\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="/home/ci/work/bundle"):
+        bdb.assert_no_host_paths(tmp_path)
+
+
+def test_the_repository_url_is_not_read_as_a_host_path() -> None:
+    """A check that flagged the note's own GitHub link would be unusable.
+
+    The clean-note leg above passes with that link already in place, so this pins
+    the discrimination directly: an https URL is not a filesystem path, and a
+    relative path is not one either.
+    """
+
+    assert bdb._HOST_PATH_IN_TEXT.search("https://github.com/dkdan10/AiLibi") is None
+    assert bdb._HOST_PATH_IN_TEXT.search("`replays/samples/` is public") is None
+    assert bdb._HOST_PATH_IN_TEXT.search("run `/Users/dan/x/y`") is not None

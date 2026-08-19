@@ -28,8 +28,10 @@ never drift from the editorial list — plus the picker metadata and the rubric 
 those games need. Deliberately absent: ``tournament-eval-report.json`` (the 9p2i
 one is 29 MB — that is the corpus, not a demo), the per-tick endpoint and the cost
 summary (no caller), and every set the featured list does not name. The dashboard
-tab in a bundle therefore renders its existing first-class "No tournament report"
-panel. That is the honest state, not a bug.
+tab in a bundle therefore renders a "No tournament report" card written for this
+artifact — what the demo ships, and where the eval report lives, in app-authored
+words rather than a repeat of the failed request. That is the honest state, not a
+bug, and :func:`_assert_empty_state_compiled_in` keeps it in the shipped bytes.
 
 **Offline and $0.** Everything is derived from committed bytes through the SAME
 :class:`api.replay_loader.ReplayLoader` the live API uses — no model, no network,
@@ -118,6 +120,29 @@ _ENV_DEFAULT_SET = "VITE_AILIBI_STATIC_DEFAULT_SET"
 # by interpolation, so the joined form never appears as one literal.
 _STATIC_MODE_MARKER = "./data"
 
+# A fragment of the Tournament tab's BUNDLE-ONLY empty state
+# (``noReportBundle`` in ``frontend/src/lib/copy.ts``). The bundle deliberately
+# bakes no tournament report, so that card is the whole tab for a visitor — and
+# it renders from a branch only a static build selects, so no local run, unit
+# test or type check would notice the copy being deleted. Requiring it in the
+# emitted JS makes that a BUILD failure instead of a shipped bundle with nothing
+# to say on the tab. Kept short and ASCII so rewording the sentence AROUND it
+# does not falsely fail, and so the minifier's escaping cannot matter.
+#
+# What it proves, exactly: the sentence is in the bytes being shipped. It is not
+# a dead-code-elimination probe the way :data:`_STATIC_MODE_MARKER` is — the
+# copy tree is one frozen object literal, so every string in it survives both
+# builds — and it does not prove the panel is reachable. Deletion is the failure
+# this guards, because deletion is the one nothing else here would catch.
+_EMPTY_STATE_MARKER = "needs a tournament report"
+
+# An absolute filesystem path — POSIX (``/Users/…``) or Windows (``C:\…``) — in
+# text this script authors. The lookbehind is what keeps URLs out: every slash
+# in ``https://github.com/dkdan10/AiLibi`` is preceded by ``:`` or ``/`` or a
+# word character, and a repository-relative ``replays/samples/`` has no leading
+# slash at all.
+_HOST_PATH_IN_TEXT = re.compile(r"(?<![\w:/])(?:/[^\s/`]+){2,}|(?<!\w)[A-Za-z]:\\")
+
 # The file that says "this script owns this directory". Written at the end of
 # every successful build and REQUIRED by :func:`assert_safe_out_dir` before an
 # occupied ``--out`` may be emptied. A structural heuristic is not enough here:
@@ -125,6 +150,11 @@ _STATIC_MODE_MARKER = "./data"
 # let ``--out ~/my-site`` through — and the build empties what it is given.
 # Ownership has to be something only this tool writes.
 _BUNDLE_MARKER = ".ailibi-demo-bundle"
+
+# The files whose PROSE this script writes, as opposed to the ones Vite emits or
+# the bake mirrors. Only these are ours to keep free of the builder's own
+# filesystem layout (:func:`assert_no_host_paths`).
+_AUTHORED_TEXT_FILES = ("README.md", _BUNDLE_MARKER)
 
 
 @dataclass(frozen=True)
@@ -505,6 +535,19 @@ def build_frontend(out_dir: Path, *, default_set: str) -> None:
         check=True,
     )
     _assert_static_mode_compiled_in(out_dir)
+    _assert_empty_state_compiled_in(out_dir)
+
+
+def _emitted_scripts(out_dir: Path) -> list[str]:
+    """The text of every emitted JS chunk, failing loud when there is no build."""
+
+    index = out_dir / "index.html"
+    if not index.is_file():
+        raise FileNotFoundError(f"no frontend build in {out_dir}: {index} is missing")
+    scripts = sorted(out_dir.glob("assets/*.js"))
+    if not scripts:
+        raise FileNotFoundError(f"no frontend build in {out_dir}: no assets/*.js")
+    return [script.read_text(encoding="utf-8", errors="replace") for script in scripts]
 
 
 def _assert_static_mode_compiled_in(out_dir: Path) -> None:
@@ -516,21 +559,51 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
     there. The marker only survives dead-code elimination in a static build.
     """
 
-    index = out_dir / "index.html"
-    if not index.is_file():
-        raise FileNotFoundError(f"no frontend build in {out_dir}: {index} is missing")
-    scripts = sorted(out_dir.glob("assets/*.js"))
-    if not scripts:
-        raise FileNotFoundError(f"no frontend build in {out_dir}: no assets/*.js")
-    if not any(
-        _STATIC_MODE_MARKER in script.read_text(encoding="utf-8", errors="replace")
-        for script in scripts
-    ):
+    if not any(_STATIC_MODE_MARKER in source for source in _emitted_scripts(out_dir)):
         raise RuntimeError(
             f"the built bundle in {out_dir} carries no {_STATIC_MODE_MARKER!r} data "
             f"root — it was NOT built with {_ENV_STATIC_DATA}=1 and would call the "
             "live API"
         )
+
+
+def _assert_empty_state_compiled_in(out_dir: Path) -> None:
+    """Fail loud unless the emitted JS still carries the bundle's empty state.
+
+    The bundle bakes no tournament report on purpose, so that empty state is the
+    whole Tournament tab for a visitor — and it is the one piece of copy written
+    FOR this artifact, reached only through a branch the static build selects.
+    Nothing else in the project renders it, so nothing else would notice it going
+    missing; requiring it in the shipped bytes does.
+
+    See :data:`_EMPTY_STATE_MARKER` for the limit of what that proves.
+    """
+
+    if not any(_EMPTY_STATE_MARKER in source for source in _emitted_scripts(out_dir)):
+        raise RuntimeError(
+            f"the built bundle in {out_dir} carries no {_EMPTY_STATE_MARKER!r} — the "
+            "Tournament tab's bundle empty state was deleted or reworded. Restore "
+            "it in frontend/src/lib/copy.ts, or update this marker to the new "
+            "wording."
+        )
+
+
+def _source_phrase(samples_dir: Path) -> str:
+    """How the note names WHERE the baked bytes came from.
+
+    A repository-relative path when the recordings live inside the checkout, and
+    no path at all when they do not. The absolute path this script resolves is a
+    fact about the builder's laptop: it is a home directory shipped to every
+    reader of the one file this project publishes, and it points at a directory
+    none of them can open. Neither rendering weakens the sentence that follows —
+    the note still refuses to say whether those bytes are public.
+    """
+
+    resolved = samples_dir.resolve()
+    if resolved.is_relative_to(_REPO_ROOT):
+        relative = resolved.relative_to(_REPO_ROOT).as_posix()
+        return f"baked from `{relative}` in the repository."
+    return "baked from a recordings directory outside the repository."
 
 
 def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
@@ -560,6 +633,11 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     gone. The note now states the SOURCE and stops — a thing the builder knows
     for certain — and hands the publication question to the operator, who can
     answer it for their own directory. No claim, no check, no fifth defect.
+
+    What the note names the source AS is :func:`_source_phrase`'s call: a
+    repository-relative path, or none at all. That is a rendering decision, not a
+    retreat from the doctrine above — the source is still named as precisely as
+    it can be named to a reader who does not have the builder's filesystem.
     """
 
     lines = [
@@ -577,7 +655,7 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "hidden information for these particular games.",
         "",
         "**Before publishing, check where that came from.** These games were",
-        f"baked from `{summary.samples_dir}`. This script bakes whatever",
+        f"{_source_phrase(summary.samples_dir)} This script bakes whatever",
         "recordings it is pointed at and does not judge whether they are public,",
         "so that is yours to establish. The repository's own committed",
         "`replays/samples/` is public; a local re-record sitting at that same path",
@@ -602,6 +680,38 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "",
     ]
     (out_dir / "README.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def assert_no_host_paths(out_dir: Path) -> None:
+    """Fail the build when a file this script authored names an absolute path.
+
+    The bundle is the artifact this project publishes, so its own prose is read
+    by strangers — and an absolute path in it is the builder's home directory,
+    handed out for free and useless to the reader besides. :func:`_source_phrase`
+    fixes the one line that used to carry one; this check is what stops the class
+    coming back through any future line these files grow, which is the difference
+    between a fix and a habit.
+
+    Scoped to :data:`_AUTHORED_TEXT_FILES` deliberately. The baked JSON mirrors
+    recorded bytes and the Vite assets are a toolchain's output; neither is this
+    script's prose to police, and widening the sweep would turn a sharp check
+    into one that reports somebody else's business.
+    """
+
+    for name in _AUTHORED_TEXT_FILES:
+        path = out_dir / name
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"{path} is missing — this check runs after the bundle's own text "
+                "files are written, and one of them is not there"
+            )
+        found = _HOST_PATH_IN_TEXT.search(path.read_text(encoding="utf-8"))
+        if found is not None:
+            raise RuntimeError(
+                f"{path} names the absolute path {found.group(0)!r}. Text this "
+                "script writes ships to strangers: name a repository-relative "
+                "path, or no path at all."
+            )
 
 
 def discard_partial_output(out_dir: Path, *, remove_dir: bool) -> None:
@@ -702,6 +812,7 @@ def main() -> int:
         write_bundle_marker(out_dir)
         summary = bake_data(out_dir, games=games, samples_dir=args.samples_dir)
         write_bundle_readme(out_dir, summary)
+        assert_no_host_paths(out_dir)
     except BaseException:
         discard_partial_output(out_dir, remove_dir=created_out_dir)
         print(
