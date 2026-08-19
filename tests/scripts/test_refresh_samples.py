@@ -1203,6 +1203,37 @@ def test_fake_refresh_refuses_a_symlink_into_replays(tmp_path: Path) -> None:
         shutil.rmtree(decoy)
 
 
+def test_fake_refresh_refuses_a_symlink_revealed_by_normalization(
+    tmp_path: Path,
+) -> None:
+    # The two evasions COMPOSED, which each one alone does not catch: a `..`
+    # behind a component that does not exist yet, collapsing onto a symlink that
+    # points into replays/. Resolving once and normalizing once leaves the
+    # symlink unresolved, so the guard has to run both steps to a fixed point.
+    # Again aimed at a throwaway subdir, so a regression costs nothing.
+    decoy = _REPO_ROOT / "replays" / "samples" / ".test-composed-decoy"
+    link = tmp_path / "samples-link"
+    target = f"{tmp_path}/not-there/../samples-link/new-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=target,
+        AILIBI_MANIFEST=f"{target}/MANIFEST.md",
+    )
+    decoy.mkdir()
+    link.symlink_to(decoy)
+    try:
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert str(decoy) in out  # resolved all the way through the symlink
+        assert list(decoy.iterdir()) == []
+        assert not (tmp_path / "not-there").exists()
+    finally:
+        shutil.rmtree(decoy)
+
+
 def test_fake_refresh_bash_trace_names_the_worker_pool(tmp_path: Path) -> None:
     # Coverage proof that survives a reworded progress string: the xtrace of a
     # real run must show the four pool functions actually invoked.

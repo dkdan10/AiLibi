@@ -189,20 +189,36 @@ normalize_path_segments() {
   printf '%s' "${out:-/}"
 }
 
-# Echo the PHYSICAL absolute path of $1: every existing ancestor is resolved
-# through `cd` + `pwd -P` (so symlinks collapse to their targets), the
-# not-yet-created trailing components are appended, and the whole result is
-# normalized so a `..` behind a missing component cannot survive. Used by the fake
-# provider's target guard, which must compare paths that do not exist yet and must
-# not be defeatable by a symlink or a `..` in the operator's env.
+# Echo the PHYSICAL absolute path of $1, which need not exist yet. Each pass
+# resolves the longest existing prefix through `cd` + `pwd -P` (collapsing
+# symlinks), appends the not-yet-created tail, and normalizes `.`/`..` out of it.
+# Normalizing can expose a prefix the previous pass could not see — `missing/../
+# link/new` only reveals `link` once `missing/..` is collapsed — so the two steps
+# run to a fixed point. Used by the fake provider's target guard, which must not
+# be defeatable by a symlink, a `..`, or the two combined. Fails loud rather than
+# returning a path it could not resolve.
 resolve_physical_path() {
-  local target="$1" suffix=""
+  local target="$1" suffix="" previous="" physical passes=0
   [[ "$target" != /* ]] && target="$PWD/$target"
-  while [[ ! -d "$target" ]]; do
-    suffix="/$(basename "$target")$suffix"
-    target="$(dirname "$target")"
+  while [[ "$target" != "$previous" ]]; do
+    previous="$target"
+    suffix=""
+    while [[ ! -d "$target" ]]; do
+      suffix="/$(basename "$target")$suffix"
+      target="$(dirname "$target")"
+    done
+    if ! physical="$(cd "$target" 2>/dev/null && pwd -P)"; then
+      echo "Error: cannot resolve '$1' ('$target' is unreadable or loops)." >&2
+      return 1
+    fi
+    target="$(normalize_path_segments "$physical$suffix")"
+    passes=$((passes + 1))
+    if [[ "$passes" -ge 32 ]]; then
+      echo "Error: cannot resolve '$1' (symlink chain too deep)." >&2
+      return 1
+    fi
   done
-  normalize_path_segments "$(cd "$target" && pwd -P)$suffix"
+  printf '%s' "$target"
 }
 
 while [[ $# -gt 0 ]]; do
