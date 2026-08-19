@@ -2,14 +2,22 @@
 
 ``import-linter`` walks the import graph of every root package in
 ``.importlinter`` and proves the transitive claim — ``agents/`` reaches
-``engine/`` by no route, however long. The AST source scan below is the second
-layer, and it covers what the graph cannot: the external packages grimp never
-sees (``numpy``, ``torch``), and the packages deliberately left out of the graph
-(``tests``, ``experiments``, ``audits``, ``design``) — banned not only under
-``agents/`` but under every root ``agents/`` can legally reach, since a bridge
-planted in ``observation/`` would otherwise route to the engine unseen. A
-covering assertion pins the pair, so a new top-level package must join one list
-or the other to land.
+``engine/`` by no route, however long. That holds only while every route stays
+inside the graph, so the AST source scan below covers the two ways out: the
+external packages grimp never sees (``numpy``, ``torch``, banned under
+``agents/`` by the pure-Python inference doctrine) and the packages left out of
+the graph on purpose (``tests``, ``experiments``, ``audits``, ``design``), where
+a traversal stops dead and whatever follows is unseen.
+
+The scan is stated as a CLOSURE, not a list of places to look. ``agents``,
+``llm``, ``meetings`` and ``observation`` are the firewall's interior; no file
+in any of them may import an ungraphed package, nor any configured root outside
+the interior — otherwise a bridge planted one hop out
+(``agents -> observation -> orchestrator._bridge -> tests._helpers -> engine``)
+walks to the engine with neither layer seeing it. Naming the interior makes the
+gate safe by default: a package added to ``root_packages`` later lands outside
+and is banned until someone moves it in. A covering assertion pins the pair, so
+a new top-level package must join one list or the other to land.
 
 Every planted-failure leg writes into a throwaway copy of the source tree under
 ``tmp_path`` and runs the linter there. Nothing here writes inside the checkout:
@@ -62,6 +70,22 @@ def _configured_root_packages() -> tuple[str, ...]:
     parser = configparser.ConfigParser()
     parser.read(_IMPORT_LINTER_CONFIG, encoding="utf-8")
     return tuple(parser["importlinter"]["root_packages"].split())
+
+
+def _modules_agents_may_not_import() -> frozenset[str]:
+    """What the committed ``forbidden`` contracts put out of ``agents/``'s reach."""
+
+    parser = configparser.ConfigParser()
+    parser.read(_IMPORT_LINTER_CONFIG, encoding="utf-8")
+    forbidden: set[str] = set()
+    for section in parser.sections():
+        options = parser[section]
+        if options.get("type") != "forbidden":
+            continue
+        if "agents" not in options.get("source_modules", "").split():
+            continue
+        forbidden.update(options.get("forbidden_modules", "").split())
+    return frozenset(forbidden)
 
 
 def _tracked_python_paths() -> tuple[str, ...]:
@@ -336,30 +360,73 @@ def test_import_linter_reports_a_planted_agents_to_engine_route(
 # The top-level packages that hold tracked Python and stay OUT of the import
 # graph on purpose: ``tests`` and ``experiments`` import the inner packages
 # freely, and ``audits`` and ``design`` hold one-off generators. grimp builds no
-# nodes for them, so a chain that passes through one is invisible to every
-# contract — ``tests._helpers.world_state`` imports ``engine``, which makes
+# nodes for them, so a chain through one is invisible to every contract —
+# ``tests._helpers.world_state`` imports ``engine``, which makes
 # ``agents -> observation -> tests._helpers -> engine`` a real route no linter
 # can follow. This scan is what forbids it.
 _UNGRAPHED_PACKAGES = frozenset({"tests", "experiments", "audits", "design"})
 
-# Top-level names that must not be imported anywhere under ``agents/``.
-#
-# numpy/torch: production inference under ``agents/`` is pure Python, because
-# BLAS reductions are not bit-stable across machines and thread counts — numpy
-# stays confined to ``training/`` and the Encoder-v2 inference path is stdlib
-# ``math`` + lists. They are external packages, so no import-linter contract can
-# see them (``include_external_packages`` is unset); this scan is their only gate.
-#
-# ``orchestrator``, ``api``, ``eval`` and ``scripts`` all import ``engine``
-# directly, so any one of them is a route around the firewall. They are
-# import-linter roots, so their chains are caught there too — this is the
-# grimp-independent second reading of the same ban. It is an AST scan rather
-# than a substring one so a docstring that legitimately NAMES a banned import
-# (the encoder module documents this very ban) never false-positives.
-_FORBIDDEN_AGENT_IMPORTS = (
-    frozenset({"numpy", "torch", "orchestrator", "api", "eval", "scripts"})
-    | _UNGRAPHED_PACKAGES
-)
+# The INTERIOR of the firewall: the roots ``agents/`` may import. Naming the
+# interior rather than the exterior is what makes this gate safe by default — a
+# package added to ``root_packages`` later lands outside it and is banned from
+# every interior package by :func:`_exterior_bans` until someone deliberately
+# moves it in. The reverse spelling (a list of scanned packages) would let a new
+# root join the graph and skip the scan.
+_FIREWALL_INTERIOR = frozenset({"agents", "llm", "meetings", "observation"})
+
+# Production inference under ``agents/`` is pure Python: BLAS reductions are not
+# bit-stable across machines and thread counts, so numpy stays confined to
+# ``training/`` and the Encoder-v2 inference path is stdlib ``math`` + lists.
+# Both are external packages, invisible to any contract
+# (``include_external_packages`` is unset), so this scan is their only gate.
+_PURE_PYTHON_INFERENCE_BAN = frozenset({"numpy", "torch"})
+
+
+def _exterior_bans_for(
+    root_packages: Iterable[str],
+    interior: Collection[str],
+    agent_forbidden: Collection[str],
+    ungraphed: Collection[str],
+) -> frozenset[str]:
+    """Top-level names no interior package may import.
+
+    Two kinds, and between them they make the interior CLOSED under imports —
+    which is the property the transitive claim actually needs:
+
+    * the ungraphed packages, because the traversal stops dead at one and
+      whatever it reaches afterwards is unseen; and
+    * the configured roots outside the interior that no whole-root contract
+      already forbids ``agents/``. Importing one of those from, say,
+      ``observation/`` extends the interior into a package nothing here sweeps,
+      and a bridge planted there to an ungraphed package would be invisible to
+      both layers.
+
+    ``engine`` and ``training`` are deliberately absent: both ARE whole-root
+    contracts, so grimp catches any chain that passes through them, and
+    ``observation/`` imports ``engine`` by design.
+    """
+
+    whole_roots = {module for module in agent_forbidden if "." not in module}
+    outside = set(root_packages) - set(interior) - whole_roots
+    return frozenset(set(ungraphed) | outside)
+
+
+def _exterior_bans() -> frozenset[str]:
+    """:func:`_exterior_bans_for` over the committed configuration."""
+
+    return _exterior_bans_for(
+        _configured_root_packages(),
+        _FIREWALL_INTERIOR,
+        _modules_agents_may_not_import(),
+        _UNGRAPHED_PACKAGES,
+    )
+
+
+# ``agents/`` carries the interior's ban plus its own pure-Python doctrine. The
+# scan is AST rather than substring so a docstring that legitimately NAMES a
+# banned import (the encoder module documents this very ban) never
+# false-positives.
+_FORBIDDEN_AGENT_IMPORTS = _PURE_PYTHON_INFERENCE_BAN | _exterior_bans()
 
 # The productized learned champion is production inference, so it inherits the
 # ban above and adds the two packages import-linter already forbids agents/ —
@@ -438,108 +505,85 @@ def test_the_agents_source_scan_rejects_every_banned_import(
     assert (str(planted), [banned]) in offenders
 
 
-def _modules_agents_may_not_import() -> frozenset[str]:
-    """What the committed ``forbidden`` contracts put out of ``agents/``'s reach."""
-
-    parser = configparser.ConfigParser()
-    parser.read(_IMPORT_LINTER_CONFIG, encoding="utf-8")
-    forbidden: set[str] = set()
-    for section in parser.sections():
-        options = parser[section]
-        if options.get("type") != "forbidden":
-            continue
-        if "agents" not in options.get("source_modules", "").split():
-            continue
-        forbidden.update(options.get("forbidden_modules", "").split())
-    return frozenset(forbidden)
-
-
-def _reachable_roots(
-    root_packages: Iterable[str],
-    agent_forbidden: Collection[str],
-    banned: Collection[str],
-) -> tuple[str, ...]:
-    """The roots ``agents/`` may legally import, itself included.
-
-    A contract forbidding a submodule (``meetings.manager``) does not put its
-    root out of reach — ``agents/`` still imports ``meetings.schemas`` — so only
-    whole-root entries drop a package from the scan.
-    """
-
-    whole_roots = {module for module in agent_forbidden if "." not in module}
-    return tuple(
-        package
-        for package in root_packages
-        if package not in whole_roots and package not in banned
-    )
-
-
-def _agent_reachable_roots() -> tuple[str, ...]:
-    """:func:`_reachable_roots` over the committed configuration.
-
-    DERIVED, never listed: the covering assertion below promises that adding a
-    package to ``root_packages`` is enough to bring it under the firewall, and a
-    hand-written tuple here would quietly break that promise for the next root.
-    """
-
-    return _reachable_roots(
-        _configured_root_packages(),
-        _modules_agents_may_not_import(),
-        _FORBIDDEN_AGENT_IMPORTS,
-    )
-
-
-def _ungraphed_importers(tree_root: Path) -> list[tuple[str, list[str]]]:
-    """Every agent-reachable file importing a package outside the import graph."""
+def _closure_breakers(tree_root: Path) -> list[tuple[str, list[str]]]:
+    """Every interior file importing something that would open the interior."""
 
     offenders: list[tuple[str, list[str]]] = []
-    for package in _agent_reachable_roots():
+    for package in sorted(_FIREWALL_INTERIOR):
         offenders.extend(
             _banned_importers(
-                _package_source_files(tree_root, package), _UNGRAPHED_PACKAGES
+                _package_source_files(tree_root, package), _exterior_bans()
             )
         )
     return offenders
 
 
-def test_the_reachable_scan_set_follows_the_committed_configuration() -> None:
-    """A root added to ``.importlinter`` joins the scan; a banned one does not."""
+def test_the_firewall_interior_is_configured_and_agent_legal() -> None:
+    """Every interior package is a linter root that ``agents/`` may import."""
 
-    reachable = _reachable_roots(
-        (*_configured_root_packages(), "_firewall_new_root"),
-        _modules_agents_may_not_import(),
-        _FORBIDDEN_AGENT_IMPORTS,
+    configured = set(_configured_root_packages())
+    assert _FIREWALL_INTERIOR <= configured, (
+        "an interior package that is not a root_packages entry is outside the "
+        f"import graph: {sorted(_FIREWALL_INTERIOR - configured)}"
     )
-    assert "_firewall_new_root" in reachable
-    # Whole-root contracts and the ban set both take a package out of reach...
-    assert "engine" not in reachable
-    assert "training" not in reachable
-    assert "orchestrator" not in reachable
-    # ...but a submodule contract does not: agents/ still imports meetings.schemas.
+    whole_roots = {
+        module for module in _modules_agents_may_not_import() if "." not in module
+    }
+    assert not (_FIREWALL_INTERIOR & whole_roots)
+    # A SUBMODULE contract does not evict its root: agents/ may not import
+    # meetings.manager, but it does import meetings.schemas.
     assert "meetings.manager" in _modules_agents_may_not_import()
-    assert "meetings" in reachable
+    assert "meetings" in _FIREWALL_INTERIOR
 
 
-def test_agent_reachable_roots_import_no_ungraphed_package() -> None:
-    offenders = _ungraphed_importers(_REPO_ROOT)
+def test_a_new_configured_root_lands_outside_the_interior() -> None:
+    """Safe by default: a root added later is banned until it is moved in."""
+
+    bans = _exterior_bans_for(
+        (*_configured_root_packages(), "_firewall_new_root"),
+        _FIREWALL_INTERIOR,
+        _modules_agents_may_not_import(),
+        _UNGRAPHED_PACKAGES,
+    )
+    assert "_firewall_new_root" in bans
+    # Whole-root contracts stay out of the ban set: grimp walks those chains,
+    # and observation/ imports engine by design.
+    assert "engine" not in bans
+    assert "training" not in bans
+
+
+def test_the_interior_is_closed_under_imports() -> None:
+    offenders = _closure_breakers(_REPO_ROOT)
     assert not offenders, (
-        "no package agents/ can reach may import "
-        f"{sorted(_UNGRAPHED_PACKAGES)} — that is a route to engine no "
-        f"import-linter contract can follow; offenders: {offenders}"
+        f"no package agents/ can reach may import {sorted(_exterior_bans())} — "
+        "each one either leaves grimp's graph or extends the interior into a "
+        f"package this scan does not sweep; offenders: {offenders}"
     )
 
 
-@pytest.mark.parametrize("package", _agent_reachable_roots())
-def test_the_reachable_root_scan_rejects_a_planted_bridge(
+@pytest.mark.parametrize("package", sorted(_FIREWALL_INTERIOR))
+def test_the_closure_scan_rejects_a_bridge_in_every_interior_package(
     package: str, firewall_tree: FirewallTree
 ) -> None:
-    """A gate that cannot fail is not a gate — one bridge per reachable root."""
+    """A gate that cannot fail is not a gate — one bridge per interior package."""
 
     planted = firewall_tree.plant(
         f"{package}/_firewall_ungraphed_bridge.py",
         "import tests._helpers.world_state\n",
     )
-    assert (str(planted), ["tests"]) in _ungraphed_importers(firewall_tree.root)
+    assert (str(planted), ["tests"]) in _closure_breakers(firewall_tree.root)
+
+
+@pytest.mark.parametrize("banned", sorted(_exterior_bans()))
+def test_the_closure_scan_rejects_every_exterior_import(
+    banned: str, firewall_tree: FirewallTree
+) -> None:
+    """...and one per banned name, planted in a non-``agents`` interior package."""
+
+    planted = firewall_tree.plant(
+        f"observation/_firewall_exterior_{banned}.py", f"import {banned}\n"
+    )
+    assert (str(planted), [banned]) in _closure_breakers(firewall_tree.root)
 
 
 def test_a_bridge_through_an_ungraphed_package_is_the_source_scans_job(
@@ -549,9 +593,9 @@ def test_a_bridge_through_an_ungraphed_package_is_the_source_scans_job(
 
     ``agents -> observation._bridge -> tests._helpers -> engine`` reaches the
     engine, but ``tests`` is not a root package, so the graph traversal stops
-    there and the linter reports the tree clean. The scan above is the only gate
-    that sees this route; if it were ever relaxed, this leg would still pass and
-    the firewall would be open — which is why it asserts BOTH halves.
+    there and the linter reports the tree clean. The closure scan is the only
+    gate that sees this route; if it were ever relaxed, this leg would still
+    pass and the firewall would be open — which is why it asserts BOTH halves.
     """
 
     firewall_tree.plant(
@@ -567,9 +611,43 @@ def test_a_bridge_through_an_ungraphed_package_is_the_source_scans_job(
     assert result.returncode == 0, result.stdout
     assert re.search(r"Contracts: \d+ kept, 0 broken", result.stdout), result.stdout
 
-    offenders = _ungraphed_importers(firewall_tree.root)
-    assert [path for path, names in offenders if names == ["tests"]] == [
+    assert [path for path, names in _closure_breakers(firewall_tree.root)] == [
         str(firewall_tree.root / "observation" / "_firewall_ungraphed_bridge.py")
+    ]
+
+
+def test_a_two_hop_route_out_of_the_interior_is_caught_at_the_first_hop(
+    firewall_tree: FirewallTree,
+) -> None:
+    """``agents -> observation -> orchestrator._bridge -> tests._helpers -> engine``.
+
+    Every hop is legal to the linter — ``orchestrator`` is graphed but the
+    bridge planted in it reaches the engine only through ungraphed ``tests``, so
+    the traversal stops short and the tree reports clean. Scanning ``agents/``
+    alone would miss it too. The closure catches it at the
+    ``observation -> orchestrator`` hop: that is the difference between an
+    interior that is closed and one that is merely deep.
+    """
+
+    firewall_tree.plant(
+        "orchestrator/_firewall_ungraphed_bridge.py",
+        "import tests._helpers.world_state\n",
+    )
+    firewall_tree.plant(
+        "observation/_firewall_orchestrator_hop.py",
+        "import orchestrator._firewall_ungraphed_bridge\n",
+    )
+    firewall_tree.plant(
+        "agents/_firewall_bridge_consumer.py",
+        "import observation._firewall_orchestrator_hop\n",
+    )
+
+    result = firewall_tree.lint()
+    assert result.returncode == 0, result.stdout
+    assert re.search(r"Contracts: \d+ kept, 0 broken", result.stdout), result.stdout
+
+    assert [path for path, names in _closure_breakers(firewall_tree.root)] == [
+        str(firewall_tree.root / "observation" / "_firewall_orchestrator_hop.py")
     ]
 
 
@@ -619,8 +697,10 @@ def test_every_top_level_python_package_is_covered_by_one_layer() -> None:
     """No top-level package escapes both the linter roots and the ban set.
 
     A new one must join ``.importlinter``'s ``root_packages`` (so its chains are
-    walked) or :data:`_FORBIDDEN_AGENT_IMPORTS` (so ``agents/`` cannot reach it)
-    before it can land.
+    walked) or :data:`_FORBIDDEN_AGENT_IMPORTS` (so no interior package can
+    reach it) before it can land. Joining ``root_packages`` puts it in BOTH:
+    :func:`_exterior_bans` derives the ban from the configured roots, so the
+    package is walked by grimp and banned from the interior at once.
     """
 
     uncovered = _uncovered_top_level_packages(
