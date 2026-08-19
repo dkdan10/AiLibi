@@ -347,6 +347,16 @@ describe("no component reaches past the client", () => {
     ).toEqual([]);
   });
 
+  it("would flag the client's own call but for the allow-list", () => {
+    // Aims the scan at real committed source rather than a fixture: it proves
+    // the walk reaches `client.ts`, that `codeOnly` does not blank a real call
+    // out of a real file, and that the allow-list is the ONLY thing exempting
+    // it — so an empty result above cannot be an empty scan.
+    const client = SOURCES.find(([path]) => path === FETCH_OWNER)?.[1] ?? "";
+
+    expect(rawFetchLines("api/not-the-client.ts", client)).toHaveLength(1);
+  });
+
   it("reads code, not prose — and still sees a call after one", () => {
     const planted = [
       "// gate the BODIES fetch (the verbatim text rides the gate)",
