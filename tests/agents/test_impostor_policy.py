@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ from agents.perception import (
     PROVENANCE_OBSERVED,
 )
 from agents.tactical.impostor_policy import ImpostorPolicy
+from eval.evidence_honesty import ImpostorTargetingCells, compute_evidence_honesty
 from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
@@ -1752,3 +1754,111 @@ class TestImpostorSabotage:
 
         with pytest.raises(ValueError, match="task counts"):
             ImpostorPolicy._crew_near_task_win((malformed,))
+
+
+class TestRankedTargetsAccessor:
+    """The read-only ranking accessor an offline instrument reads.
+
+    ``ranked_targets`` exposes the ordering ``decide`` acts on without a second
+    implementation of the scoring; these tests pin that the two agree, so the
+    accessor cannot drift into measuring a different policy.
+    """
+
+    def test_ranking_matches_the_target_decide_acts_on(self) -> None:
+        policy = ImpostorPolicy(agent_id="p-4")
+        memory = MemoryStore()
+        for event in (
+            _saw_player_event(tick=9, player_id="p-1", room="ELECTRICAL"),
+            _saw_player_event(tick=9, player_id="p-6", room="ADMIN"),
+            _self_state_event(tick=9, room="ADMIN"),
+            _cooldown_event(tick=9, cooldown=0),
+        ):
+            memory.append(event)
+
+        ranking = policy.ranked_targets(memory)
+
+        assert [target.player_id for target in ranking] == ["p-1", "p-6"]
+        assert ranking[0].score == 1.0 and ranking[0].co_present == 0
+        # The id tie-break puts the remote p-1 first, so the co-located p-6 is
+        # walked away from rather than killed -- the C-3 defect, read off the
+        # accessor and confirmed against the intent decide actually emits.
+        assert isinstance(policy.decide(memory, _public_map()), MoveIntent)
+
+    def test_ranking_drops_a_fellow_and_a_confirmed_corpse(self) -> None:
+        policy = ImpostorPolicy(agent_id="p-4")
+        memory = MemoryStore()
+        for event in (
+            _saw_player_event(tick=9, player_id="p-1", room="ADMIN"),
+            _saw_player_event(tick=9, player_id="p-6", room="ADMIN"),
+            _saw_body_event(
+                tick=9, body_id="body-p-1-8", room="ADMIN", victim_id="p-1"
+            ),
+            _self_state_event(tick=9, room="ADMIN", fellow_impostor_ids=("p-6",)),
+            _cooldown_event(tick=9, cooldown=0),
+        ):
+            memory.append(event)
+
+        assert policy.ranked_targets(memory) == ()
+
+    def test_ranking_is_empty_without_the_rows_decide_requires(self) -> None:
+        policy = ImpostorPolicy(agent_id="p-4")
+        assert policy.ranked_targets(MemoryStore()) == ()
+
+        no_cooldown = MemoryStore()
+        no_cooldown.append(_self_state_event(tick=3, room="ADMIN"))
+        assert policy.ranked_targets(no_cooldown) == ()
+
+
+class TestCommittedCorpusTargetingPins:
+    """The I-11 co-intervention cells over the committed bytes.
+
+    These pin what Task 20.32's mover repair is priced against: how much of the
+    policy's own legal, zero-witness kill opportunity it declines, and how much
+    of its decision budget it spends ranking a player already out of the game.
+    They live here -- beside the policy the repair edits -- so the repair updates
+    one pin set, and they are computed by ``eval.evidence_honesty`` so the before
+    and the after come from one definition.
+
+    Every cell reproduces the 2026-08-19 review exactly: free kills declined
+    190/415 with the 168 / 15 / 7 miss-reason split (B/verdicts.md C-3), and
+    ghost-top decisions 303/2461, 555/6663, 0/632, 0/579 with the 222 ejected /
+    81 unseen split on samples/9p2i (A/verdicts.md G-12) -- over 10,335
+    reconstructed decisions and zero mismatches against the recorded actions.
+    """
+
+    @staticmethod
+    def _targeting(name: str) -> ImpostorTargetingCells:
+        root = Path(__file__).resolve().parents[2] / "replays"
+        return compute_evidence_honesty(root / name).impostor_targeting
+
+    @pytest.mark.slow
+    def test_free_zero_witness_kills_declined_pins(self) -> None:
+        cells = self._targeting("samples/9p2i")
+        declined = cells.free_kills_declined
+
+        assert (declined.numerator, declined.denominator) == (190, 415)
+        assert cells.decline_reason_ranking == 168
+        assert cells.decline_reason_fellow_defer == 15
+        assert cells.decline_reason_cover == 7
+        # No unattributed miss: every declined free kill lands in a named branch.
+        assert cells.decline_reason_other == 0
+        assert cells.in_vent_decisions == 130
+
+    @pytest.mark.slow
+    def test_ghost_top_decisions_pin_on_every_set(self) -> None:
+        names = ("samples/9p2i", "ml_corpus/9p2i", "samples/4p1i", "ml_corpus/4p1i")
+        cells = {name: self._targeting(name) for name in names}
+
+        ghost = [
+            (cells[name].ghost_top.numerator, cells[name].ghost_top.denominator)
+            for name in names
+        ]
+        assert ghost == [(303, 2461), (555, 6663), (0, 632), (0, 579)]
+        assert sum(denominator for _, denominator in ghost) == 10_335
+        assert all(entry.reconstruction_mismatches == 0 for entry in cells.values())
+        # The two sub-populations, stated separately: an ejected target the FSM's
+        # dead-set never learns about, and one whose death it never witnessed.
+        assert cells["samples/9p2i"].ghost_top_ejected == 222
+        assert cells["samples/9p2i"].ghost_top_unseen_death == 81
+        # 4p1i is clean on both sets: the defect is a 9p2i-roster phenomenon.
+        assert cells["samples/4p1i"].ghost_top_ejected == 0
