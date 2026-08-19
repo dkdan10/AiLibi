@@ -90,8 +90,9 @@ pre-rendered ANSWERS, not a query surface. It ships:
   page, so a panel that printed the error printed a raw
   `<!DOCTYPE HTML PUBLIC …>` document at the visitor. The copy is
   `noReportBundle` in `frontend/src/lib/copy.ts`, and
-  `scripts/build_demo_bundle.py` fails the build when it is missing from the
-  emitted JS.
+  `scripts/build_demo_bundle.py` fails the build unless the emitted JS both
+  carries it and has dropped the local-checkout arm — so no bundle ships with
+  that card deleted, or with the arm that tells a visitor to run a tournament.
 
 It carries the same **post-game GM view** of those specific games that the local
 spectator shows — roles, kill attribution, vent usage — because that is what the

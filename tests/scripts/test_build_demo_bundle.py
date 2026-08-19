@@ -353,28 +353,62 @@ def test_a_non_static_build_is_rejected(tmp_path: Path) -> None:
 
 
 def test_a_build_without_the_bundle_empty_state_is_rejected(tmp_path: Path) -> None:
-    """The Tournament tab's bundle copy has to still be in the emitted JS.
+    """The bundle's empty state must be present AND be the arm that compiled.
 
-    That card is the whole tab for a visitor — the bundle bakes no report on
-    purpose — and it renders from a branch only the static build selects, so
-    deleting the copy breaks nothing a local run, a unit test or `tsc` would
-    notice. It has to break the build, so this is the leg that proves it does:
-    the same emitted JS with and without the sentence.
+    That card is the whole Tournament tab for a visitor — the bundle bakes no
+    report on purpose — and it renders from a branch only the static build
+    selects, so both failures are invisible to a local run, a unit test and
+    `tsc`. Each gets its own planted build: copy deleted, and the local-checkout
+    arm surviving into the bundle (which would tell a visitor to run a
+    tournament in a checkout they do not have).
     """
 
     (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
-    (tmp_path / "assets" / "index.js").write_text(
+    emitted = tmp_path / "assets" / "index.js"
+
+    # The demo's own sentence is gone.
+    emitted.write_text(
         'const c={noReportTitle:"No tournament report."}', encoding="utf-8"
     )
     with pytest.raises(RuntimeError, match="bundle empty state"):
         bdb._assert_empty_state_compiled_in(tmp_path)
 
-    (tmp_path / "assets" / "index.js").write_text(
+    # Both arms emitted — the gate stopped selecting, so the local guidance
+    # survived dead-code elimination alongside the demo's copy.
+    emitted.write_text(
+        'const c={noReportBundle:"The eval dashboard needs a tournament report."};'
+        'const j="scripts/run_tournament.py"',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="LOCAL-checkout arm"):
+        bdb._assert_empty_state_compiled_in(tmp_path)
+
+    # The static arm alone: present sentence, absent local guidance.
+    emitted.write_text(
         'const c={noReportBundle:"The eval dashboard needs a tournament report."}',
         encoding="utf-8",
     )
     bdb._assert_empty_state_compiled_in(tmp_path)
+
+
+def test_the_local_guidance_marker_is_unique_to_the_arm_it_probes() -> None:
+    """The absent-side marker only works if one arm is its only source.
+
+    It is asserted ABSENT from the bundle, so a second occurrence anywhere that
+    ships in both builds would fail every build for the wrong reason. Pinning it
+    to the single JSX literal it probes is what keeps that a deliberate change
+    rather than a mystery.
+    """
+
+    src = _REPO_ROOT / "frontend" / "src"
+    hits = [
+        path
+        for path in src.rglob("*.ts*")
+        if not path.name.endswith(".test.ts")
+        and bdb._LOCAL_GUIDANCE_MARKER in path.read_text(encoding="utf-8")
+    ]
+    assert hits == [src / "components" / "TournamentDashboard.tsx"], hits
 
 
 def test_the_empty_state_marker_is_a_substring_of_the_shipped_copy() -> None:
@@ -668,6 +702,15 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
     assert bdb._HOST_PATH_IN_TEXT.search("`replays/samples/` is public") is None
     assert bdb._HOST_PATH_IN_TEXT.search("and/or, on 2026/08/19") is None
 
-    assert bdb._HOST_PATH_IN_TEXT.search("run `/Users/dan/x/y`") is not None
-    assert bdb._HOST_PATH_IN_TEXT.search("built in /root") is not None
-    assert bdb._HOST_PATH_IN_TEXT.search("built in C:\\Users\\dan") is not None
+    # Every absolute shape, at any depth and in any script — the gate claims
+    # "no absolute path", so an ASCII-only or two-deep reading of it is a hole.
+    for named in (
+        "run `/Users/dan/x/y`",
+        "built in /root",
+        "built in /équipe/private",
+        "built in /+srv/private",
+        "built in C:\\Users\\dan",
+        "built in C:/Users/dan",
+        r"built in \\corp-server\private\replays",
+    ):
+        assert bdb._HOST_PATH_IN_TEXT.search(named) is not None, named

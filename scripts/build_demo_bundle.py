@@ -31,7 +31,8 @@ summary (no caller), and every set the featured list does not name. The dashboar
 tab in a bundle therefore renders a "No tournament report" card written for this
 artifact — what the demo ships, and where the eval report lives, in app-authored
 words rather than a repeat of the failed request. That is the honest state, not a
-bug, and :func:`_assert_empty_state_compiled_in` keeps it in the shipped bytes.
+bug, and :func:`_assert_empty_state_compiled_in` proves it is the arm that
+compiled in.
 
 **Offline and $0.** Everything is derived from committed bytes through the SAME
 :class:`api.replay_loader.ReplayLoader` the live API uses — no model, no network,
@@ -120,37 +121,54 @@ _ENV_DEFAULT_SET = "VITE_AILIBI_STATIC_DEFAULT_SET"
 # by interpolation, so the joined form never appears as one literal.
 _STATIC_MODE_MARKER = "./data"
 
-# A fragment of the Tournament tab's BUNDLE-ONLY empty state
-# (``noReportBundle`` in ``frontend/src/lib/copy.ts``). The bundle deliberately
-# bakes no tournament report, so that card is the whole tab for a visitor — and
-# it renders from a branch only a static build selects, so no local run, unit
-# test or type check would notice the copy being deleted. Requiring it in the
-# emitted JS makes that a BUILD failure instead of a shipped bundle with nothing
-# to say on the tab. Kept short and ASCII so rewording the sentence AROUND it
-# does not falsely fail, and so the minifier's escaping cannot matter.
+# The Tournament tab's empty state, checked from BOTH sides.
 #
-# What it proves, exactly: the sentence is in the bytes being shipped. It is not
-# a dead-code-elimination probe the way :data:`_STATIC_MODE_MARKER` is — the
-# copy tree is one frozen object literal, so every string in it survives both
-# builds — and it does not prove the panel is reachable. Deletion is the failure
-# this guards, because deletion is the one nothing else here would catch.
+# The bundle bakes no tournament report on purpose, so that card is the whole
+# tab for a visitor, and it renders from a branch only a static build selects —
+# which is why no local run, unit test or type check would notice it breaking.
+#
+# PRESENT: a fragment of the bundle's own copy (``noReportBundle`` in
+# ``frontend/src/lib/copy.ts``). This catches DELETION. On its own it proves
+# only that the sentence is in the shipped bytes: the copy tree is one frozen
+# object literal, so every string in it survives both builds regardless of which
+# arm renders.
+#
+# ABSENT: a path literal that appears ONLY inside the local-checkout arm's JSX
+# (`<code>scripts/run_tournament.py</code>`). That arm is markup, not copy, so
+# unlike the strings it really is dropped by dead-code elimination — and only
+# when the static arm is the one that compiled in. Requiring it to be gone is
+# therefore the half that proves the SELECTED branch, and it fails the build if
+# the static arm is deleted, inverted, or its gate stops resolving to `true`.
+# A future surface that legitimately mentions that script in copy shipped by
+# both builds would fail here; the error says so, and the fix is to pick another
+# literal unique to the arm.
+#
+# Both are kept short and ASCII: rewording around them must not falsely fail,
+# and the minifier's escaping must not matter.
 _EMPTY_STATE_MARKER = "needs a tournament report"
+_LOCAL_GUIDANCE_MARKER = "scripts/run_tournament.py"
 
-# An absolute filesystem path — POSIX (``/Users/…``) or Windows (``C:\…``) — in
-# text this script authors. The lookbehind is what keeps URLs out: every slash
-# in ``https://github.com/dkdan10/AiLibi`` is preceded by ``:`` or ``/`` or a
-# word character, and a repository-relative ``replays/samples/`` has no leading
-# slash at all.
+# An absolute filesystem path in text this script authors: POSIX (``/root``,
+# ``/Users/…``), a Windows drive (``C:\…``), or a Windows UNC share
+# (``\\server\share``). The lookbehind is what keeps URLs out — every slash in
+# ``https://github.com/dkdan10/AiLibi`` is preceded by ``:``, ``/`` or a word
+# character — while a repository-relative ``replays/samples/`` and an ``and/or``
+# have no leading slash at all.
 #
-# ONE component is enough to match. A depth floor would read as the safer,
-# quieter rule and is the opposite: ``/root`` is a whole home directory, and it
-# is exactly what ``Path.home()`` resolves to for a build running as root. The
-# rule is host-INDEPENDENT for the same reason — matching this machine's home
-# would make the gate mean something different on a laptop than in CI, and a
-# build gate that moves with its host is not a gate. Any absolute path is
-# refused; this note has no business naming one.
+# Deliberately shaped by what it must NOT miss rather than by what looks tidy:
+#
+# * ONE component is enough. A depth floor reads as the quieter rule and is the
+#   opposite — ``/root`` is a whole home directory, and exactly what
+#   ``Path.home()`` resolves to for a build running as root.
+# * a component is any run of non-space characters, not an ASCII-name charset,
+#   so ``/équipe/private`` and ``/+srv/private`` are paths here too.
+# * the rule is host-INDEPENDENT. Matching this machine's home would make the
+#   gate mean something different on a laptop than in CI, and a build gate that
+#   moves with its host is not a gate.
 _HOST_PATH_IN_TEXT = re.compile(
-    r"(?<![\w:/])(?:/[A-Za-z0-9._-][^\s/`]*)+|(?<!\w)[A-Za-z]:\\"
+    r"(?<![\w:/])(?:/[^\s/`]+)+"  # POSIX: /root, /Users/dan/replays
+    r"|(?<!\w)[A-Za-z]:[\\/]"  # Windows drive: C:\… or C:/…
+    r"|\\\\[^\s\\`]+"  # Windows UNC: \\server\share
 )
 
 # The file that says "this script owns this directory". Written at the end of
@@ -578,23 +596,31 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
 
 
 def _assert_empty_state_compiled_in(out_dir: Path) -> None:
-    """Fail loud unless the emitted JS still carries the bundle's empty state.
+    """Fail loud unless the Tournament tab's BUNDLE empty state is what compiled.
 
-    The bundle bakes no tournament report on purpose, so that empty state is the
-    whole Tournament tab for a visitor — and it is the one piece of copy written
-    FOR this artifact, reached only through a branch the static build selects.
-    Nothing else in the project renders it, so nothing else would notice it going
-    missing; requiring it in the shipped bytes does.
-
-    See :data:`_EMPTY_STATE_MARKER` for the limit of what that proves.
+    Two questions, and one marker cannot answer both: is the demo's copy still
+    there, and is it the arm that renders? So the bundle's own sentence must be
+    PRESENT (it is deletable without breaking anything else) and the
+    local-checkout arm's path literal must be ABSENT (it survives only when that
+    arm compiled in). See :data:`_EMPTY_STATE_MARKER` for why each side is the
+    one it is.
     """
 
-    if not any(_EMPTY_STATE_MARKER in source for source in _emitted_scripts(out_dir)):
+    sources = _emitted_scripts(out_dir)
+    if not any(_EMPTY_STATE_MARKER in source for source in sources):
         raise RuntimeError(
             f"the built bundle in {out_dir} carries no {_EMPTY_STATE_MARKER!r} — the "
             "Tournament tab's bundle empty state was deleted or reworded. Restore "
             "it in frontend/src/lib/copy.ts, or update this marker to the new "
             "wording."
+        )
+    if any(_LOCAL_GUIDANCE_MARKER in source for source in sources):
+        raise RuntimeError(
+            f"the built bundle in {out_dir} still carries {_LOCAL_GUIDANCE_MARKER!r}, "
+            "which only the LOCAL-checkout arm of the Tournament tab's empty state "
+            "emits — so the bundle would tell a visitor to run a tournament they "
+            "have no checkout for. The static arm is not the one that compiled in: "
+            "check its gate in frontend/src/components/TournamentDashboard.tsx."
         )
 
 
