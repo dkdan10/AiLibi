@@ -128,8 +128,19 @@ The four choices, and what the rejected alternatives would have produced
 The review's one-sentence rule underdetermines the count, so each choice is
 fixed above and its alternative is named here with the cell it produces. All
 figures are over the four committed sets (626 body meetings, 354 ejections at
-them); the pins live in ``tests/eval/test_solvability.py`` and the recount
-command is ``uv run python scripts/measure_baseline.py --solvability``.
+them). ``scripts/measure_baseline.py --solvability`` reports ONE set per
+invocation (its ``[set_dir]`` argument, or the two canonical sample sets when
+omitted — the shape every fold flag in that script shares), so the pooled
+figures are the sum over the four invocations::
+
+    for d in replays/samples/9p2i replays/samples/4p1i \
+             replays/ml_corpus/9p2i replays/ml_corpus/4p1i; do
+      uv run python scripts/measure_baseline.py --solvability "$d"
+    done
+
+The pooled totals are pinned, not summed by eye:
+``tests/eval/test_solvability.py::test_pooled_denominators_and_headline_cells``
+adds the four reports and asserts every number quoted here.
 
 * **Kill anchor** — the reported body's own kill (chosen) vs the last recorded
   kill at or before the trigger tick (the review's wording). Containment is
@@ -293,6 +304,10 @@ def candidate_set_for_body_meeting(
     player perceived it, in ``kill_state``, in a room other than ``body_room``.
     The module docstring is the full rule; the short form is: crew eyes only,
     both endpoints alive, vents clear nobody, and nobody clears itself.
+
+    ``roles`` must cover every id in ``living_at_meeting`` and the victim must
+    not be among them; either breach raises, because both would quietly enlarge
+    the candidate set rather than fail.
     """
 
     if victim in living_at_meeting:
@@ -303,7 +318,15 @@ def candidate_set_for_body_meeting(
 
     cleared: set[PlayerId] = set()
     for observer in sorted(living_at_meeting):
-        if roles.get(observer) != "CREWMATE":
+        role = roles.get(observer)
+        if role is None:
+            # An incomplete role map would silently demote a crewmate to
+            # non-observer, dropping its sightings and enlarging every set.
+            raise SolvabilityReconstructionError(
+                f"no role for living player {observer!r} — an incomplete role "
+                "map would silently drop that player's sightings"
+            )
+        if role != "CREWMATE":
             continue
         observer_state = kill_state.players.get(observer)
         if observer_state is None or not observer_state.alive:

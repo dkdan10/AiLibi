@@ -250,6 +250,32 @@ def test_a_victim_alive_at_its_own_meeting_is_a_reconstruction_breach() -> None:
         _candidates(state, {"p-suspect", "p-victim"})
 
 
+def test_an_incomplete_role_map_is_a_reconstruction_breach() -> None:
+    """A missing role would silently demote a crewmate out of the witness pool.
+
+    The perturbation is the point: with ``p-witness`` present in ``roles`` the
+    sighting clears ``p-suspect``; drop that one entry and, without this guard,
+    the candidate set would quietly grow instead of failing.
+    """
+
+    state = _kill_state(
+        _player("p-suspect", _ELSEWHERE),
+        _player("p-witness", _ELSEWHERE),
+        _player("p-victim", _BODY_ROOM),
+    )
+    assert _candidates(state, {"p-suspect", "p-witness"}) == frozenset()
+
+    with pytest.raises(SolvabilityReconstructionError, match="no role for"):
+        candidate_set_for_body_meeting(
+            kill_state=state,
+            game_map=load_canonical_map(),
+            roles={"p-suspect": "CREWMATE", "p-victim": "CREWMATE"},
+            body_room=_BODY_ROOM,
+            victim="p-victim",
+            living_at_meeting=frozenset({"p-suspect", "p-witness"}),
+        )
+
+
 def test_a_replay_set_with_no_recordings_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(SolvabilityReconstructionError, match="no replay-seed"):
         compute_solvability_report(tmp_path)
