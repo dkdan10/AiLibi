@@ -7,7 +7,8 @@
 //   • `EventTimeline`  — one lane per agent with kill/meeting/vent/sabotage
 //     markers,
 //   • `ReplayControls` — the transport proper: scrub · play/pause · speed · step
-//     ±N · jump prev/next event · jump prev/next meeting · next key moment.
+//     ±N · jump prev/next event · jump prev/next meeting · next key moment, plus
+//     the disclosure that shows or hides the two surfaces above it.
 //
 // The advantage graph and timeline share a hover CROSSHAIR via `hoverTick` in the
 // store (the engine tick under the cursor), so the two surfaces line up. All
@@ -446,7 +447,18 @@ export function EventTimeline() {
 }
 
 // ── Transport — the control surface (DESIGN.md §4) ───────────────────────────
-export function ReplayControls() {
+//
+// `timelineOpen` / `onToggleTimeline` are the dock's disclosure: the shell owns
+// whether the advantage graph and the event timeline are showing (it seeds that
+// from the viewport height), and the transport carries the control that flips it,
+// because the transport is the row that is always on screen.
+export function ReplayControls({
+  timelineOpen,
+  onToggleTimeline,
+}: {
+  timelineOpen: boolean;
+  onToggleTimeline: () => void;
+}) {
   const autoFollow = useReplayStore((s) => s.autoFollow);
   const setAutoFollow = useReplayStore((s) => s.setAutoFollow);
   const {
@@ -677,6 +689,20 @@ export function ReplayControls() {
           );
         })}
       </div>
+
+      {/* The dock's disclosure. The NAME stays fixed and `aria-expanded` carries
+          the state, so a screen reader hears "Timeline, collapsed" rather than a
+          control that renames itself under the user; the chevron is the sighted
+          half of the same signal. */}
+      <button
+        type="button"
+        aria-expanded={timelineOpen}
+        onClick={onToggleTimeline}
+        title="Show or hide the advantage graph and the event timeline"
+        className={BUTTON}
+      >
+        <span aria-hidden>{timelineOpen ? "▾" : "▸"}</span> Timeline
+      </button>
 
       {/* Auto-follow toggle (interruptible meeting follow). */}
       <button

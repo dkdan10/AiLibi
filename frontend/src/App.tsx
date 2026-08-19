@@ -1,50 +1,35 @@
-// The app shell (Task 12.4; design/phase-12/stage-1-design.md §2.1, §2.3, §4).
-// Two levels of PRE-DECLARED mount points so every Wave-B surface plugs in
-// WITHOUT ever editing this file (the parallel-dispatch guarantee):
+// The app shell: the top-level view container, and the Replay Workspace layout
+// that composes every spectator surface.
 //
-//   (a) a top-level view container — `view` lives in the store and is URL-synced
-//       (no router) — for Replays + Highlights (→ 12.9), Tournament (→ 12.10),
-//       and the Replay Workspace.
-//   (b) within the workspace, named slots per §2.3. Each slot mounts an existing
-//       component at its STABLE path; the Wave-B PR that owns a surface rewrites
-//       that component (its own scope) and the shell picks it up automatically.
+// Two levels of mount points. (a) A top-level view container — `view` lives in
+// the store and is URL-synced (no router) — for Replays + Highlights,
+// Tournament, and the Replay Workspace. (b) Within the workspace, named slots;
+// each slot mounts a component at its STABLE path, so a surface can be rewritten
+// entirely inside its own file. That is the guarantee — a surface is editable
+// without this file — and NOT that this file never changes: everything
+// CROSS-slot lives here and lands here, from the lazy route boundaries and the
+// keyboard transport to the measured `--transport-h`, the meeting pause bar, the
+// finale card and the dock's collapsible timeline half.
 //
-// SLOT ↔ SURFACE CHECKLIST (every 12.5–12.10 + transport/advantage/timeline has
-// a mount; none requires an App.tsx edit):
-//   • Replays route          → <ReplayPicker/>        (12.9 — browser)
-//   • Highlights route        → <ReplayPicker/>        (12.9 — view-aware reel)
-//   • Tournament route        → <TournamentDashboard/> (12.10)
-//   • Workspace · perspective → <PerspectiveBanner/>   (12.4 shell; 12.5 switcher
-//                                                        lands inside its stage)
-//   • Workspace · roster      → <RosterRail/>          (12.4 shell, hand-coded)
-//   • Workspace · stage(map)  → <MapView/>             (12.5)
-//   • Workspace · stage(meet) → <MeetingView/>         (12.7 — map↔meeting morph)
-//   • Workspace · mind        → <ThoughtStream/>       (12.8)
-//   • Workspace · belief      → <BeliefMatrix/>        (12.6 — overlay/full toggle)
-//   • Workspace · advantage   → <AdvantageGraph/>      (12.4)
-//   • Workspace · timeline    → <EventTimeline/>       (12.4)
-//   • Workspace · transport   → <ReplayControls/>      (12.4)
+// SLOT ↔ SURFACE:
+//   • Replays / Highlights route → <ReplayPicker/>        (view-aware reel)
+//   • Tournament route           → <TournamentDashboard/>
+//   • Workspace · perspective    → <PerspectiveBanner/>   (the switcher lands
+//                                                          inside the map stage)
+//   • Workspace · roster         → <RosterRail/>
+//   • Workspace · stage(map)     → <MapView/>
+//   • Workspace · stage(meet)    → <MeetingView/>         (map↔meeting morph)
+//   • Workspace · mind           → <ThoughtStream/>
+//   • Workspace · belief         → <BeliefMatrix/>        (overlay/full toggle)
+//   • Workspace · advantage      → <AdvantageGraph/>
+//   • Workspace · timeline       → <EventTimeline/>
+//   • Workspace · transport      → <ReplayControls/>
+//   • Workspace · stage tail     → <CostChips/> + <EventTicker/>
 //
 // `currentTick` stays the array index (the frozen store contract every mounted
 // surface reads); the index↔engine-tick mapping lives once in `lib/playback`.
 //
-// Task 12.11 (design §8, §9, slice 9) owned the shell-level polish and was, in
-// Phase 12, the one task that legitimately edited App.tsx. It added: lazy route
-// boundaries for the Pixi map / Dashboard / browser (the code-split that kills
-// the 859 kB chunk); a responsive layout where the rails collapse to drawers
-// while the map + transport stay the irreducible core; keyboard-operable
-// transport shortcuts; the first-run GuidedTour mount; and a measured
-// `--transport-h` so the fixed overlays reserve exactly the transport's height
-// (no magic numbers, no bleed).
-//
-// Phase 19 re-opens the file deliberately (tasks/phase-19.md lists App.tsx under
-// 19.10 → 19.17): Task 19.10 adds the playback-coherence surfaces — the header's
-// outcome gate, the roster's pre/post-vote labeling, the meeting pause bar in
-// the transport region, and the finale card overlay. Task 19.17 then MOUNTS the
-// two additive surfaces at the tail of that chain — <CostChips/> in the stage's
-// pill row and <EventTicker/> under it. Mounting only: both are self-contained
-// sections in the ordinary document flow, so they claim no z-index, no
-// `--transport-h`, and nothing 19.10's pause/finale flow depends on.
+// Layout + a11y: design/phase-12/stage-1-design.md §2.1, §2.3, §4, §8.
 
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -1057,6 +1042,37 @@ function useTransportHeight(): RefObject<HTMLDivElement | null> {
   return ref;
 }
 
+// The viewport-height threshold at which the dock's timeline half is worth its
+// space, read from its ONE home in index.css so the sheet and this default
+// cannot drift. Missing property (a stylesheet that failed to load) → today's
+// full dock.
+function expandedHeightQuery(): MediaQueryList | null {
+  const minHeight = getComputedStyle(document.documentElement)
+    .getPropertyValue("--transport-expanded-min-height")
+    .trim();
+  return minHeight === "" ? null : window.matchMedia(`(min-height: ${minHeight})`);
+}
+
+/** True while the viewport is tall enough to afford the dock's timeline half. */
+function useRoomyViewport(): boolean {
+  const [roomy, setRoomy] = useState(() => expandedHeightQuery()?.matches ?? true);
+  useEffect(() => {
+    const query = expandedHeightQuery();
+    if (query === null) {
+      return;
+    }
+    const onChange = (): void => {
+      setRoomy(query.matches);
+    };
+    setRoomy(query.matches);
+    query.addEventListener("change", onChange);
+    return () => {
+      query.removeEventListener("change", onChange);
+    };
+  }, []);
+  return roomy;
+}
+
 // The Replay Workspace (§2.3). The fixed overlays (MeetingView modal, Belief /
 // ThoughtStream rails, and — since Task 19.10 — the FinaleCard) self-position and
 // reserve `--transport-h` at the bottom so the transport region stays reachable;
@@ -1067,6 +1083,16 @@ function useTransportHeight(): RefObject<HTMLDivElement | null> {
 // meeting z-50.
 function Workspace() {
   const transportRef = useTransportHeight();
+  // The dock's timeline half is a DISCLOSURE, because the dock earns its space on
+  // a desktop and takes the whole product on a laptop: at 1000×640 the fixed dock
+  // covered the map entirely. It opens by default only on a viewport tall enough
+  // to hold both, and an explicit toggle wins over that default for the rest of
+  // the session. Closing it shrinks the measured `--transport-h`, so the map's
+  // padding, the meeting modal and the mind rail all reflow with no constant to
+  // keep in step.
+  const roomyViewport = useRoomyViewport();
+  const [timelineOverride, setTimelineOverride] = useState<boolean | null>(null);
+  const timelineOpen = timelineOverride ?? roomyViewport;
   return (
     <>
       <section
@@ -1115,9 +1141,10 @@ function Workspace() {
 
       <KeyboardTransport />
 
-      {/* Bottom transport region: advantage graph · event timeline · transport.
-          Fixed above the overlays (z-70 > the meeting modal) so playback stays
-          reachable; its measured height feeds `--transport-h`. */}
+      {/* Bottom transport region: advantage graph · event timeline · transport,
+          the first two behind the transport's own disclosure. Fixed above the
+          overlays (z-70 > the meeting modal) so playback stays reachable; its
+          measured height feeds `--transport-h` in either state. */}
       <div
         ref={transportRef}
         data-transport-region
@@ -1130,11 +1157,20 @@ function Workspace() {
               keyboard-accelerator carve-out. It renders null off a meeting frame,
               so it costs the transport nothing the rest of the time. */}
           <MeetingPauseBar />
-          <AdvantageGraph />
-          <div className="max-h-40 overflow-y-auto pr-1">
-            <EventTimeline />
-          </div>
-          <ReplayControls />
+          {timelineOpen && (
+            <>
+              <AdvantageGraph />
+              <div className="max-h-40 overflow-y-auto pr-1">
+                <EventTimeline />
+              </div>
+            </>
+          )}
+          <ReplayControls
+            timelineOpen={timelineOpen}
+            onToggleTimeline={() => {
+              setTimelineOverride(!timelineOpen);
+            }}
+          />
         </div>
       </div>
     </>

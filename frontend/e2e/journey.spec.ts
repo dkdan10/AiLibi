@@ -1,10 +1,11 @@
-// THE spectator journey (Task 19.12) — one spec file, four tests, one browser.
+// THE spectator journey (Task 19.12) — one spec file, one browser.
 //
 // It drives the REAL app against the REAL API serving the REAL committed sample
 // set: featured replay → play → meeting pause → inspect ballots → finale
-// (unspoiled → reveal), plus three pins on behaviors that already work and must
-// keep working — the keyboard transport, the As-agent fog firewall, and reduced
-// motion.
+// (unspoiled → reveal), plus pins on behaviors that already work and must keep
+// working — the keyboard transport, the As-agent fog firewall, reduced motion,
+// the single focus-trap owner when overlays stack, and the transport dock
+// leaving the map on screen at laptop viewport heights.
 //
 // WHAT THIS FILE IS FOR. The unit suites cover the pure derivations and the
 // store's async guards; neither can see the thing that actually breaks in a
@@ -90,6 +91,182 @@ async function resetFocus(page: Page): Promise<void> {
 /** The transport's frame index, read off the scrubber (the store's `currentTick`). */
 function frameIndex(page: Page) {
   return page.getByLabel("Seek tick");
+}
+
+/**
+ * The guided tour's dialog.
+ *
+ * Picked by a control the tour OWNS rather than by its title: the meeting, the
+ * Belief × Truth matrix and the tour all render `role="dialog"`, and the tour's
+ * `aria-labelledby` heading changes on every step while its close button does
+ * not.
+ */
+function tourDialog(page: Page) {
+  return page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("button", { name: "Close the guided tour" }) });
+}
+
+/**
+ * Open the guided tour OVER whatever overlay is already on screen, through the
+ * app's own re-open channel (`GuidedTour.tsx`).
+ *
+ * Not through the header's Tour button, because the stacked case is exactly the
+ * case where that button cannot be clicked: the shell unmounts the header while
+ * a meeting is open, and the Belief × Truth overlay's full-viewport scrim covers
+ * it. This dispatches the same event `openGuidedTour()` does.
+ */
+async function openGuidedTourOverOverlay(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("ailibi:open-guided-tour"));
+  });
+  await expect(tourDialog(page)).toBeVisible();
+}
+
+/**
+ * Press `key` `presses` times and report, after each press, the focused
+ * control's label and whether focus is still inside the tour.
+ *
+ * Read from `document.activeElement` rather than asserted on a locator, because
+ * the defect this pins is about WHICH element focus lands on across a whole
+ * ring — including the transient landings inside the scrim-covered overlay
+ * behind, which a per-locator focus assertion cannot see.
+ */
+async function walkFocusRing(
+  page: Page,
+  key: "Tab" | "Shift+Tab",
+  presses: number,
+): Promise<{ label: string; insideTour: boolean }[]> {
+  const visited: { label: string; insideTour: boolean }[] = [];
+  for (let index = 0; index < presses; index += 1) {
+    await page.keyboard.press(key);
+    visited.push(
+      await page.evaluate(() => {
+        const close = document.querySelector('[aria-label="Close the guided tour"]');
+        const dialog = close === null ? null : close.closest('[role="dialog"]');
+        const active = document.activeElement;
+        return {
+          label: active === null ? "" : (active.textContent ?? "").trim(),
+          insideTour: dialog !== null && active !== null && dialog.contains(active),
+        };
+      }),
+    );
+  }
+  return visited;
+}
+
+/**
+ * With the tour stacked over `behind`, assert that ONE trap owns Tab: the whole
+ * ring of tour controls is reachable in both directions and focus never lands in
+ * the overlay underneath.
+ *
+ * Two traps both listening on `window` produce `Tab -> Skip` forever (the lower
+ * trap pulls focus into itself, the tour's pulls it back to its own first
+ * control), so "Back is reachable" is the symptom and the WHOLE ring is the
+ * check.
+ */
+async function expectTourOwnsTab(page: Page, behind: ReturnType<Page["getByRole"]>) {
+  const tour = tourDialog(page);
+
+  // Step forward once first: on the opening step "Back" is disabled and so is
+  // correctly outside the ring, which would hide the very control the defect
+  // makes unreachable.
+  await tour.getByRole("button", { name: "Next" }).click();
+  // A step change hands focus back to the card, so the ring below starts from a
+  // known place rather than from wherever the click left it.
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.activeElement?.getAttribute("role") ?? ""),
+    )
+    .toBe("dialog");
+
+  const controls = (await tour.getByRole("button").allInnerTexts()).map((text) =>
+    text.trim(),
+  );
+  expect(controls).toHaveLength(3);
+  expect(controls).toContain("Back");
+
+  const forward = await walkFocusRing(page, "Tab", controls.length * 2);
+  expect(forward.map((visit) => visit.label)).toEqual([...controls, ...controls]);
+  expect(forward.map((visit) => visit.insideTour)).toEqual(forward.map(() => true));
+
+  // Focus ended on the last control; walking back visits the same ring in
+  // reverse, wrapping at the first.
+  const backwardLabels: string[] = [];
+  let cursor = controls.length - 1;
+  for (let index = 0; index < controls.length * 2; index += 1) {
+    cursor = (cursor - 1 + controls.length) % controls.length;
+    backwardLabels.push(controls[cursor]!);
+  }
+  const backward = await walkFocusRing(page, "Shift+Tab", controls.length * 2);
+  expect(backward.map((visit) => visit.label)).toEqual(backwardLabels);
+  expect(backward.map((visit) => visit.insideTour)).toEqual(backward.map(() => true));
+
+  // Escape still belongs to the tour alone — the overlay behind yields it and
+  // stays open.
+  await page.keyboard.press("Escape");
+  await expect(tour).toBeHidden();
+  await expect(behind).toBeVisible();
+}
+
+/** The dock's disclosure control (the transport row's Timeline toggle). */
+function timelineDisclosure(page: Page) {
+  return page.getByRole("button", { name: "Timeline", exact: true });
+}
+
+/**
+ * The map's and the dock's boxes, plus the height the dock publishes.
+ *
+ * `.map-canvas-fill` is the map's stable handle (`src/index.css`); the Pixi
+ * canvas inside it is CSS-scaled to the stage width, so the wrapper IS the
+ * on-screen map.
+ */
+async function mapAndDockGeometry(page: Page) {
+  return page.evaluate(() => {
+    const map = document.querySelector(".map-canvas-fill");
+    const dock = document.querySelector("[data-transport-region]");
+    if (map === null || dock === null) {
+      throw new Error("the map wrapper or the transport region is not mounted");
+    }
+    const mapBox = map.getBoundingClientRect();
+    const dockBox = dock.getBoundingClientRect();
+    return {
+      mapTop: Math.round(mapBox.top),
+      mapBottom: Math.round(mapBox.bottom),
+      dockTop: Math.round(dockBox.top),
+      // The ResizeObserver measures the CONTENT box, which for this borderless-
+      // inside container is `clientHeight`.
+      dockContentHeight: dock.clientHeight,
+      viewportHeight: window.innerHeight,
+      transportH: Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--transport-h"),
+      ),
+    };
+  });
+}
+
+/** Scroll the map to the top of the viewport — its best case against the dock. */
+async function scrollMapToTop(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document
+      .querySelector(".map-canvas-fill")
+      ?.scrollIntoView({ block: "start", behavior: "instant" });
+  });
+}
+
+/**
+ * Geometry once the dock's `ResizeObserver` has republished its height — and the
+ * assertion that it republished the REAL one, which is what makes collapsing the
+ * dock reflow the overlays that reserve `--transport-h`.
+ */
+async function settledGeometry(page: Page) {
+  await expect
+    .poll(async () => {
+      const geometry = await mapAndDockGeometry(page);
+      return Math.abs(geometry.transportH - geometry.dockContentHeight);
+    })
+    .toBeLessThanOrEqual(1);
+  return mapAndDockGeometry(page);
 }
 
 /** The Task-19.17 tail surfaces: the running beat feed and the spend chips. */
@@ -297,6 +474,90 @@ test.describe("spectator journey", () => {
     await page.keyboard.press("End");
     const lastIndex = await frameIndex(page).getAttribute("max");
     await expect(frameIndex(page)).toHaveValue(lastIndex ?? "");
+  });
+
+  test("the guided tour owns Tab when it stacks over another overlay", async ({
+    page,
+  }) => {
+    await openFeaturedReplay(page);
+
+    // ── stack 1: over the Belief × Truth matrix ──────────────────────────────
+    // Its launcher is the one a spectator reaches by pointer; the tour then has
+    // to come from its own re-open channel, because the matrix's scrim covers
+    // the header the Tour button lives in.
+    await page.getByRole("button", { name: "Open the Belief × Truth matrix" }).click();
+    const matrix = page.getByRole("dialog", { name: "Belief × Truth matrix" });
+    await expect(matrix).toBeVisible();
+    await openGuidedTourOverOverlay(page);
+    await expectTourOwnsTab(page, matrix);
+    await page.keyboard.press("Escape");
+    await expect(matrix).toBeHidden();
+
+    // ── stack 2: over an open meeting ────────────────────────────────────────
+    await resetFocus(page);
+    await page.keyboard.press("]");
+    const meeting = page.getByRole("dialog", { name: /Meeting at tick \d+/ });
+    await expect(meeting).toBeVisible();
+    await openGuidedTourOverOverlay(page);
+    await expectTourOwnsTab(page, meeting);
+  });
+
+  test("the transport dock leaves the map on screen at laptop heights", async ({
+    page,
+  }) => {
+    await openFeaturedReplay(page);
+
+    // The review's clean case (1440×900 and up, which the config's 1440×960
+    // viewport is) keeps today's full dock.
+    const disclosure = timelineDisclosure(page);
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+
+    // ── 1280×800: the map lands whole, unscrolled, above the dock ────────────
+    // The review measured the dock eating the bottom of the map here. Asserted at
+    // the scroll position a visitor ARRIVES at, which is the position the review
+    // measured and the one the README recording shows.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    // `settledGeometry` also pins `--transport-h` to the dock's real height in
+    // the collapsed state.
+    const laptop = await settledGeometry(page);
+    expect(laptop.mapTop).toBeGreaterThanOrEqual(0);
+    expect(laptop.mapBottom).toBeLessThanOrEqual(laptop.viewportHeight);
+    expect(laptop.mapBottom).toBeLessThanOrEqual(laptop.dockTop);
+
+    // ── 1000×640: the recording viewport, at the map's best scroll ───────────
+    // 640 px cannot hold the whole page, so the honest question is whether ANY
+    // scroll position shows the whole map. With the un-collapsed dock the answer
+    // was no — it was taller than the room it left above itself.
+    await page.setViewportSize({ width: 1000, height: 640 });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await scrollMapToTop(page);
+    const recording = await settledGeometry(page);
+    expect(recording.mapTop).toBeGreaterThanOrEqual(0);
+    expect(recording.mapBottom).toBeLessThanOrEqual(recording.dockTop);
+
+    // ── `--transport-h` still measures the real dock in BOTH states ──────────
+    // Which is the whole mechanism: the overlays reserve the measured height, so
+    // collapsing the dock un-clips the mind rail and the meeting modal with no
+    // constant to keep in step.
+    const collapsed = await settledGeometry(page);
+    expect(collapsed.transportH).toBeGreaterThan(0);
+
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    const expanded = await settledGeometry(page);
+    expect(expanded.transportH).toBeGreaterThan(collapsed.transportH);
+
+    // A deliberate toggle wins over the height default for the rest of the
+    // session — closing it here keeps it closed on a viewport that would have
+    // opened it.
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   });
 
   test("As-agent fog hides every omniscient-only fact", async ({ page }) => {

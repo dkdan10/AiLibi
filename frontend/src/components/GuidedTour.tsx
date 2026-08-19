@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { getRubric, getSets, listReplays } from "../api/client";
+import { OVERLAY_RANK, useFocusTrap } from "../hooks/useFocusTrap";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 
@@ -313,59 +314,33 @@ export function GuidedTour() {
   const lastStep = STEPS.length - 1;
   const stepRef = useRef<HTMLDivElement>(null);
 
-  // Focus the dialog when it opens / steps.
-  useEffect(() => {
-    if (open) {
-      stepRef.current?.focus();
-    }
-  }, [open, step]);
+  // Tab stays inside the card, and the tour is the TOP-MOST overlay: when it
+  // opens over a meeting or over the Belief × Truth matrix, its rank makes it
+  // the one trap that answers a Tab, so the ring below runs Skip → Back → Next
+  // instead of two traps tearing focus between them.
+  useFocusTrap(stepRef, open, OVERLAY_RANK.guidedTour);
 
-  // Escape closes; Tab is TRAPPED inside the dialog. `aria-modal` alone doesn't
-  // constrain focus, so without this a keyboard user could tab past Skip/Back/Next
-  // into the nav / replay browser / workspace controls sitting behind the tour and
-  // trigger background actions — cycle focus within the dialog instead.
+  // A step change swaps the card's content and can DISABLE the control that has
+  // focus (Back, on the way back to the first step), so move focus to the card
+  // and let the ring restart from the top. Focus on OPEN and its restore on
+  // close belong to `useFocusTrap`.
+  useEffect(() => {
+    stepRef.current?.focus();
+  }, [step]);
+
+  // Escape closes the tour. It owns the key while open — the meeting/belief
+  // overlays gate their own Escape on `guidedTourOpen` — so one Escape closes
+  // only the tour, not a meeting hydrated behind it.
   useEffect(() => {
     if (!open) {
       return;
     }
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        // The tour owns Escape while open; the meeting/belief overlays yield to
-        // it (they gate their own Escape on `guidedTourOpen`), so one Escape
-        // closes only the tour, not a meeting hydrated behind it.
-        event.preventDefault();
-        finish();
+      if (event.key !== "Escape") {
         return;
       }
-      if (event.key !== "Tab") {
-        return;
-      }
-      const dialog = stepRef.current;
-      if (dialog === null) {
-        return;
-      }
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      const active = document.activeElement;
-      if (event.shiftKey) {
-        if (active === first || active === dialog || !dialog.contains(active)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (active === last || !dialog.contains(active)) {
-        event.preventDefault();
-        first.focus();
-      }
+      event.preventDefault();
+      finish();
     };
     window.addEventListener("keydown", onKey);
     return () => {
