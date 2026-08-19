@@ -18,6 +18,8 @@ which is what ``killer_in_set_last_kill_anchor`` carries.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -250,9 +252,134 @@ def test_a_victim_alive_at_its_own_meeting_is_a_reconstruction_breach() -> None:
         _candidates(state, {"p-suspect", "p-victim"})
 
 
+def test_an_incomplete_role_map_is_a_reconstruction_breach() -> None:
+    """A missing role would silently demote a crewmate out of the witness pool.
+
+    The perturbation is the point: with ``p-witness`` present in ``roles`` the
+    sighting clears ``p-suspect``; drop that one entry and, without this guard,
+    the candidate set would quietly grow instead of failing.
+    """
+
+    state = _kill_state(
+        _player("p-suspect", _ELSEWHERE),
+        _player("p-witness", _ELSEWHERE),
+        _player("p-victim", _BODY_ROOM),
+    )
+    assert _candidates(state, {"p-suspect", "p-witness"}) == frozenset()
+
+    with pytest.raises(SolvabilityReconstructionError, match="no role for"):
+        candidate_set_for_body_meeting(
+            kill_state=state,
+            game_map=load_canonical_map(),
+            roles={"p-suspect": "CREWMATE", "p-victim": "CREWMATE"},
+            body_room=_BODY_ROOM,
+            victim="p-victim",
+            living_at_meeting=frozenset({"p-suspect", "p-witness"}),
+        )
+
+
+def test_a_living_player_absent_from_the_kill_state_is_a_breach() -> None:
+    """Nobody joins mid-game, so a missing kill-tick entry is disagreeing input."""
+
+    state = _kill_state(
+        _player("p-suspect", _ELSEWHERE),
+        _player("p-victim", _BODY_ROOM),
+    )
+
+    with pytest.raises(SolvabilityReconstructionError, match="absent from the kill"):
+        _candidates(state, {"p-suspect", "p-witness"})
+
+
+def test_a_role_disagreeing_with_the_kill_state_is_a_breach() -> None:
+    """Sight comes from the world state's role; the crew filter from ``roles``.
+
+    An observer mapped CREWMATE but stored IMPOSTOR would enter the honest pool
+    carrying adjacent-room vision and clear players no crewmate could see.
+    """
+
+    state = _kill_state(
+        _player("p-suspect", _ELSEWHERE),
+        _player("p-witness", _ELSEWHERE, role="IMPOSTOR"),
+        _player("p-victim", _BODY_ROOM),
+    )
+
+    with pytest.raises(SolvabilityReconstructionError, match="disagrees with the kill"):
+        _candidates(state, {"p-suspect", "p-witness"})
+
+
 def test_a_replay_set_with_no_recordings_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(SolvabilityReconstructionError, match="no replay-seed"):
         compute_solvability_report(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# The walk profile's integrity checks bite, through this module's error type.   #
+# --------------------------------------------------------------------------- #
+
+
+def _corrupted_set(tmp_path: Path, mutate: Callable[[list[str]], list[str]]) -> Path:
+    """A one-game replay set copied from samples/4p1i, with ``mutate`` applied."""
+
+    (tmp_path / "roster.json").write_text(
+        (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    lines = (
+        (_SAMPLES_4P1I / "replay-seed-0.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    (tmp_path / "replay-seed-0.jsonl").write_text(
+        "\n".join(mutate(lines)) + "\n", encoding="utf-8"
+    )
+    return tmp_path
+
+
+def test_the_profile_verifies_tick_hashes(tmp_path: Path) -> None:
+    def flip_first_tick_hash(lines: list[str]) -> list[str]:
+        first = json.loads(lines[0])
+        assert first["kind"] == "tick"
+        recorded = first["state_hash"]
+        first["state_hash"] = ("0" if recorded[0] != "0" else "f") + recorded[1:]
+        return [json.dumps(first), *lines[1:]]
+
+    with pytest.raises(SolvabilityReconstructionError, match="tick 0 reconstructed"):
+        compute_solvability_report(_corrupted_set(tmp_path, flip_first_tick_hash))
+
+
+def test_the_profile_rejects_a_truncated_recording(tmp_path: Path) -> None:
+    """An EOF-truncated recording would silently shrink the body-meeting count."""
+
+    with pytest.raises(SolvabilityReconstructionError, match="without reaching"):
+        compute_solvability_report(_corrupted_set(tmp_path, lambda lines: lines[:1]))
+
+
+def test_a_relabelled_tick_row_is_rejected(tmp_path: Path) -> None:
+    """Tick LABELS are outside the hash chain, so the fold binds them itself.
+
+    Swapping two labels leaves row order, actions and every ``state_hash``
+    intact — the whole profile passes — but files each pre-state under the
+    other's tick, which is the state kills and meetings then resolve against.
+    """
+
+    def swap_the_first_two_tick_labels(lines: list[str]) -> list[str]:
+        first, second = json.loads(lines[0]), json.loads(lines[1])
+        assert first["kind"] == second["kind"] == "tick"
+        first["tick"], second["tick"] = second["tick"], first["tick"]
+        return [json.dumps(first), json.dumps(second), *lines[2:]]
+
+    with pytest.raises(SolvabilityReconstructionError, match="reconstructs tick"):
+        compute_solvability_report(
+            _corrupted_set(tmp_path, swap_the_first_two_tick_labels)
+        )
+
+
+def test_the_profile_rejects_a_doubled_meeting_row(tmp_path: Path) -> None:
+    def double_the_first_meeting(lines: list[str]) -> list[str]:
+        index = next(
+            i for i, line in enumerate(lines) if json.loads(line)["kind"] == "meeting"
+        )
+        return [*lines[: index + 1], lines[index], *lines[index + 1 :]]
+
+    with pytest.raises(SolvabilityReconstructionError, match="duplicate meeting rows"):
+        compute_solvability_report(_corrupted_set(tmp_path, double_the_first_meeting))
 
 
 # --------------------------------------------------------------------------- #

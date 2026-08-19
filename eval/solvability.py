@@ -128,8 +128,19 @@ The four choices, and what the rejected alternatives would have produced
 The review's one-sentence rule underdetermines the count, so each choice is
 fixed above and its alternative is named here with the cell it produces. All
 figures are over the four committed sets (626 body meetings, 354 ejections at
-them); the pins live in ``tests/eval/test_solvability.py`` and the recount
-command is ``uv run python scripts/measure_baseline.py --solvability``.
+them). ``scripts/measure_baseline.py --solvability`` reports ONE set per
+invocation (its ``[set_dir]`` argument, or the two canonical sample sets when
+omitted — the shape every fold flag in that script shares), so the pooled
+figures are the sum over the four invocations::
+
+    for d in replays/samples/9p2i replays/samples/4p1i \
+             replays/ml_corpus/9p2i replays/ml_corpus/4p1i; do
+      uv run python scripts/measure_baseline.py --solvability "$d"
+    done
+
+The pooled totals are pinned, not summed by eye:
+``tests/eval/test_solvability.py::test_pooled_denominators_and_headline_cells``
+adds the four reports and asserts every number quoted here.
 
 * **Kill anchor** — the reported body's own kill (chosen) vs the last recorded
   kill at or before the trigger tick (the review's wording). Containment is
@@ -293,6 +304,13 @@ def candidate_set_for_body_meeting(
     player perceived it, in ``kill_state``, in a room other than ``body_room``.
     The module docstring is the full rule; the short form is: crew eyes only,
     both endpoints alive, vents clear nobody, and nobody clears itself.
+
+    ``roles`` and ``kill_state.players`` must cover every id in
+    ``living_at_meeting`` and agree on each one's role, and the victim must not
+    be among them; each breach raises, because every one of them would quietly
+    change the candidate set instead of failing. The role agreement matters
+    because the crew filter here reads ``roles`` while sight is resolved from
+    the world state's own role.
     """
 
     if victim in living_at_meeting:
@@ -303,10 +321,35 @@ def candidate_set_for_body_meeting(
 
     cleared: set[PlayerId] = set()
     for observer in sorted(living_at_meeting):
-        if roles.get(observer) != "CREWMATE":
-            continue
+        role = roles.get(observer)
+        if role is None:
+            # An incomplete role map would silently demote a crewmate to
+            # non-observer, dropping its sightings and enlarging every set.
+            raise SolvabilityReconstructionError(
+                f"no role for living player {observer!r} — an incomplete role "
+                "map would silently drop that player's sightings"
+            )
         observer_state = kill_state.players.get(observer)
-        if observer_state is None or not observer_state.alive:
+        if observer_state is None:
+            # Nobody joins mid-game: alive at the meeting implies present in the
+            # kill tick's roster. A missing entry means the meeting and the kill
+            # state come from different games, which would leave that player an
+            # uncleared candidate forever.
+            raise SolvabilityReconstructionError(
+                f"living player {observer!r} is absent from the kill tick's "
+                "roster — the meeting and the kill state disagree"
+            )
+        if observer_state.role != role:
+            # The crew filter reads ``roles`` while ``compute_visibility_for_player``
+            # resolves sight from the world state's own role. A disagreement would
+            # admit an impostor's wider vision into the honest crew pool.
+            raise SolvabilityReconstructionError(
+                f"role for {observer!r} disagrees with the kill state: {role!r} "
+                f"vs {observer_state.role!r}"
+            )
+        if role != "CREWMATE":
+            continue
+        if not observer_state.alive:
             continue
         visible = compute_visibility_for_player(
             observer_id=observer,
@@ -475,7 +518,17 @@ def _walk_game(
         config=_WALK_CONFIG,
     ):
         if isinstance(walk_event, TickAdvanced):
-            pre_state_by_tick[walk_event.entry.tick] = walk_event.pre_state
+            # The recorded tick LABEL is not covered by the hash chain: relabelling
+            # rows while leaving order, actions and hashes intact passes every
+            # profile check, and would file a pre-state under a tick that kills
+            # and meetings then resolve against. Bind the two before folding.
+            if walk_event.entry.tick != walk_event.pre_state.tick:
+                raise SolvabilityReconstructionError(
+                    f"{game_id}: row labelled tick {walk_event.entry.tick} "
+                    f"reconstructs tick {walk_event.pre_state.tick} — a relabelled "
+                    "row would mis-anchor every meeting that reads it"
+                )
+            pre_state_by_tick[walk_event.pre_state.tick] = walk_event.pre_state
             for event in walk_event.events:
                 if isinstance(event, KilledEvent):
                     fact = _KillFact(
