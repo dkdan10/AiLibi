@@ -4,10 +4,17 @@ The five instruments below — the assembled eval report, the information funnel
 the kill-craft, deception and solvability folds — are the suite's most expensive
 fixtures: each re-seeds every game in a set, replays every recorded action
 through the engine and verifies every state hash. Each is also a pure
-deterministic function of frozen committed bytes returning a frozen value
-object, so one result serves every reader without coupling them, and computing
-one twice is repeated work and nothing else. Every test-side walk over a
-committed set goes through this module.
+deterministic function of frozen committed bytes, so computing one twice is
+repeated work and nothing else. Every test-side walk over a committed set goes
+through this module.
+
+One instance is shared by every reader on a worker, and two mechanisms — not a
+promise — keep that from coupling them: the reports are ``frozen=True``, so no
+field can be rebound, and every collection they expose is annotated
+``Mapping``/``Sequence``, which has no ``__setitem__``, so ``uv run mypy .``
+rejects an in-place mutation where it is written.
+``tests/_helpers/test_committed_single_home.py`` walks the five report graphs
+and fails if either property is ever dropped.
 
 ``functools.cache`` rather than a session fixture: the sharing has to reach
 plain helper functions and class bodies that cannot request a fixture, and under

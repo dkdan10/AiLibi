@@ -10,9 +10,13 @@ tautological.
 
 The scanner is a pure function of source text so it can be aimed at planted
 modules: the tests below prove it flags a committed walk (as a bare name, via
-``self``, and through a module alias) and that it leaves a ``tmp_path`` walk
-alone. A corrupted copy of a committed set proves the other half — that the cache
-is keyed by directory and so cannot answer for bytes it never walked.
+``self``, through a module alias, and through a path factored across two
+constants) and that it leaves a ``tmp_path`` walk alone. A corrupted copy of a
+committed set proves the second property — the cache is keyed by directory and
+cannot answer for bytes it never walked — and a walk of the five report graphs
+proves the third: sharing one instance cannot couple its readers, because every
+report is frozen and every collection on it is typed ``Mapping``/``Sequence``,
+which ``mypy --strict`` will not let a caller mutate.
 """
 
 from __future__ import annotations
@@ -22,9 +26,10 @@ import json
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Any, Final, get_args, get_origin
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from tests._helpers.committed import SAMPLES_4P1I, kill_craft_report, repo_root
 
@@ -79,26 +84,65 @@ class WalkCall:
     line: int
 
 
-def _names_bound_to_committed_bytes(tree: ast.Module) -> frozenset[str]:
-    """Names assigned a path under ``replays/`` anywhere in ``tree``.
+def _referenced_names(node: ast.expr) -> frozenset[str]:
+    """Every plain name and attribute name appearing anywhere under ``node``."""
 
-    Covers module constants (``_SAMPLES_9P2I = ...``) and class attributes
-    (``_SET_DIR = ...``) alike; both are ``ast.Name`` assignment targets.
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            names.add(child.id)
+        elif isinstance(child, ast.Attribute):
+            names.add(child.attr)
+    return frozenset(names)
+
+
+def _constant_assignments(
+    node: ast.AST,
+) -> Iterator[tuple[tuple[ast.expr, ...], ast.expr]]:
+    """Every module-level or class-level assignment under ``node``.
+
+    Function bodies are skipped deliberately. Set directories in this repo are
+    module constants or class attributes; a local inside a helper that copies
+    committed bytes into ``tmp_path`` is NOT a committed set, and taint that
+    escaped the function would flag exactly the fail-loud pins that build the
+    corrupted copy.
     """
 
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+            continue
+        if isinstance(child, ast.Assign):
+            yield tuple(child.targets), child.value
+        elif isinstance(child, ast.AnnAssign) and child.value is not None:
+            yield (child.target,), child.value
+        yield from _constant_assignments(child)
+
+
+def _names_bound_to_committed_bytes(tree: ast.Module) -> frozenset[str]:
+    """Constants that end up holding a path under ``replays/``.
+
+    Covers module constants (``_SAMPLES_9P2I = ...``) and class attributes
+    (``_SET_DIR = ...``) alike; both are ``ast.Name`` assignment targets. The
+    search runs to a fixed point so a path factored in steps —
+    ``_BASE = repo_root / "replays" / "samples"`` then ``_SET = _BASE / "9p2i"``
+    — taints every name along the chain, not only the one that spells
+    ``replays``.
+    """
+
+    assignments = list(_constant_assignments(tree))
     bound: set[str] = set()
-    for node in ast.walk(tree):
-        targets: tuple[ast.expr, ...]
-        value: ast.expr | None
-        if isinstance(node, ast.Assign):
-            targets, value = tuple(node.targets), node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets, value = (node.target,), node.value
-        else:
-            continue
-        if value is None or "replays" not in ast.unparse(value):
-            continue
-        bound.update(t.id for t in targets if isinstance(t, ast.Name))
+    growing = True
+    while growing:
+        growing = False
+        for targets, value in assignments:
+            if "replays" not in ast.unparse(value) and not (
+                _referenced_names(value) & bound
+            ):
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in bound:
+                    bound.add(target.id)
+                    growing = True
     return frozenset(bound)
 
 
@@ -157,13 +201,40 @@ def _is_committed(argument: ast.expr, committed_names: frozenset[str]) -> bool:
 
     if "replays" in ast.unparse(argument):
         return True
-    referenced: set[str] = set()
-    for node in ast.walk(argument):
-        if isinstance(node, ast.Name):
-            referenced.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            referenced.add(node.attr)
-    return bool(referenced & committed_names)
+    return bool(_referenced_names(argument) & committed_names)
+
+
+#: Container types whose contents a reader can rebind in place. A cached report
+#: that exposed one would make the shared instance a channel between tests.
+_MUTABLE_CONTAINERS: Final[tuple[type, ...]] = (dict, list, set)
+
+
+def _annotation_parts(annotation: Any) -> Iterator[Any]:
+    """``annotation`` and every type argument nested inside it."""
+
+    yield annotation
+    for argument in get_args(annotation):
+        yield from _annotation_parts(argument)
+
+
+def _shared_value_offenders(
+    model: type[BaseModel], seen: set[type[BaseModel]]
+) -> list[str]:
+    """Reasons ``model`` is unsafe to share: not frozen, or mutably typed."""
+
+    if model in seen:
+        return []
+    seen.add(model)
+    offenders: list[str] = []
+    if not model.model_config.get("frozen", False):
+        offenders.append(f"{model.__name__} is not frozen")
+    for name, field in model.model_fields.items():
+        for part in _annotation_parts(field.annotation):
+            if (get_origin(part) or part) in _MUTABLE_CONTAINERS:
+                offenders.append(f"{model.__name__}.{name}: {part}")
+            if isinstance(part, type) and issubclass(part, BaseModel):
+                offenders.extend(_shared_value_offenders(part, seen))
+    return offenders
 
 
 def committed_walk_calls(source: str) -> tuple[WalkCall, ...]:
@@ -286,6 +357,21 @@ def test_the_scanner_flags_a_class_attribute_and_a_module_alias() -> None:
     )
 
 
+def test_the_scanner_follows_a_path_factored_in_steps() -> None:
+    """Only the first assignment spells ``replays``; both names are committed."""
+
+    planted = (
+        "from pathlib import Path\n"
+        "_BASE = Path(__file__).resolve().parents[2] / 'replays' / 'samples'\n"
+        "_SET = _BASE / '9p2i'\n"
+        "def test_planted() -> None:\n"
+        "    compute_information_funnel(_SET)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("compute_information_funnel", "test_planted", 5),
+    )
+
+
 def test_the_scanner_flags_a_set_constant_imported_from_the_helper() -> None:
     planted = (
         "from tests._helpers.committed import SAMPLES_9P2I, kill_craft_report\n"
@@ -295,6 +381,26 @@ def test_the_scanner_flags_a_set_constant_imported_from_the_helper() -> None:
     assert committed_walk_calls(planted) == (
         WalkCall("compute_solvability_report", "test_planted", 3),
     )
+
+
+def test_the_scanner_does_not_taint_across_a_function_boundary() -> None:
+    """A helper that copies committed bytes into ``tmp_path`` builds a TEMP set.
+
+    Its locals must not make the caller's ``tmp_path`` argument read as
+    committed — that would flag every fail-loud pin in the suite.
+    """
+
+    planted = (
+        "from pathlib import Path\n"
+        "_SET = Path('x') / 'replays' / 'samples' / '4p1i'\n"
+        "def _corrupted(tmp_path):\n"
+        "    lines = (_SET / 'replay-seed-0.jsonl').read_text().splitlines()\n"
+        "    (tmp_path / 'replay-seed-0.jsonl').write_text(lines[0])\n"
+        "    return tmp_path\n"
+        "def test_fail_loud(tmp_path) -> None:\n"
+        "    compute_solvability_report(_corrupted(tmp_path))\n"
+    )
+    assert committed_walk_calls(planted) == ()
 
 
 def test_the_scanner_leaves_temp_directory_walks_alone() -> None:
@@ -315,3 +421,55 @@ def test_the_scanner_ignores_a_call_that_is_not_a_walker() -> None:
         "    check_report(_SET)\n"
     )
     assert committed_walk_calls(planted) == ()
+
+
+def test_the_cached_reports_carry_no_mutable_collection() -> None:
+    """Sharing ONE instance is safe only while no reader can mutate it.
+
+    ``frozen=True`` stops attribute rebinding; it does not stop
+    ``report.histogram[key] = value``. What stops that is the annotation: every
+    collection on these reports is a ``Mapping``/``Sequence``, which has no
+    ``__setitem__``, so ``uv run mypy .`` — a leg of ``scripts/check.sh``, run
+    over ``tests/`` too — rejects the mutation where it is written. This walks
+    the five report graphs and fails the moment a field is re-declared as a bare
+    ``dict``/``list``/``set``, which is what would turn the process-wide cache
+    into a channel between tests.
+    """
+
+    from eval.deception_instruments import DeceptionInstrumentsReport
+    from eval.funnel import InformationFunnelReport
+    from eval.kill_craft import KillCraftReport
+    from eval.meeting_quality import TournamentEvalReport
+    from eval.solvability import SolvabilityReport
+
+    offenders: list[str] = []
+    for model in (
+        DeceptionInstrumentsReport,
+        InformationFunnelReport,
+        KillCraftReport,
+        SolvabilityReport,
+        TournamentEvalReport,
+    ):
+        offenders.extend(_shared_value_offenders(model, set()))
+    assert offenders == [], (
+        "These cached-report fields can be mutated in place, so one test could "
+        "poison every later reader on the same worker:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_immutability_gate_bites_on_a_planted_mutable_field() -> None:
+    class Planted(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
+        histogram: dict[int, int]
+
+    assert _shared_value_offenders(Planted, set()) == [
+        "Planted.histogram: dict[int, int]"
+    ]
+
+
+def test_the_immutability_gate_bites_on_a_planted_unfrozen_model() -> None:
+    class Thawed(BaseModel):
+        count: int
+
+    assert _shared_value_offenders(Thawed, set()) == ["Thawed is not frozen"]
