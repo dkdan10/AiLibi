@@ -244,6 +244,21 @@ class _ScoredTarget:
     score: float
 
 
+@dataclass(frozen=True)
+class RankedTarget:
+    """One entry of the kill/stalk ranking, exposed read-only for measurement.
+
+    The same four fields the FSM's own snapshot carries, in the same order the
+    FSM sorts them, as a public type an offline instrument can name without
+    reaching into policy internals.
+    """
+
+    player_id: PlayerId
+    room: RoomId
+    co_present: int
+    score: float
+
+
 class ImpostorPolicy:
     """Deterministic impostor FSM (DESIGN.md §4.4).
 
@@ -257,6 +272,46 @@ class ImpostorPolicy:
     @property
     def agent_id(self) -> PlayerId:
         return self._agent_id
+
+    def ranked_targets(self, memory: MemoryStore) -> tuple[RankedTarget, ...]:
+        """The kill/stalk ranking this policy would use now, in its own order.
+
+        A pure read of ``memory``: no intent is emitted, nothing is written, and
+        :meth:`decide` is untouched by its existence. It exists so an offline
+        instrument can read WHICH target the FSM put first without re-deriving the
+        scoring — the ranking is the thing measured, and a second implementation
+        of it would measure a different policy.
+        """
+
+        events = memory.recent(since_tick=0)
+        if not events:
+            return ()
+        self_state = self._latest_self_state(events)
+        if self_state is None:
+            return ()
+        latest_tick = events[-1].tick
+        cooldown = self._latest_cooldown(
+            tuple(event for event in events if event.tick == latest_tick)
+        )
+        if cooldown is None:
+            return ()
+        return tuple(
+            RankedTarget(
+                player_id=target.player_id,
+                room=target.room,
+                co_present=target.co_present,
+                score=target.score,
+            )
+            for target in self._scored_targets(
+                events,
+                cooldown=cooldown,
+                current_tick=latest_tick,
+                confirmed_dead=self._confirmed_dead_from_bodies(events),
+                fellow_impostor_ids=self._fellow_impostor_ids_from_self_state(
+                    self_state
+                ),
+            )
+        )
 
     def decide(
         self,
@@ -1253,4 +1308,4 @@ class ImpostorPolicy:
             return self._wait()
 
 
-__all__ = ["ImpostorPolicy"]
+__all__ = ["ImpostorPolicy", "RankedTarget"]

@@ -190,3 +190,71 @@ def test_solvability_missing_dir_is_usage_error(tmp_path: Path) -> None:
 
 def test_solvability_empty_dir_is_usage_error(tmp_path: Path) -> None:
     assert measure_baseline.main(["--solvability", str(tmp_path)]) == 2
+
+
+# ---------------------------------------------------------------------------
+# --honesty: the evidence-honesty instrument set (the pre-registration's
+# "before", recomputed from committed bytes).
+# ---------------------------------------------------------------------------
+
+
+def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
+    assert measure_baseline.main(["--honesty", str(_NINE)]) == 0
+    out = capsys.readouterr().out
+    assert "50 games, 165 meetings" in out
+    assert "+1 agent clock proved on 4408 discriminating sightings" in out
+    assert "I-2 false crew self-placement: 0.2102  (152/723)" in out
+    assert "I-3 sole-flag precision (per victim): 0.0952  (2/21)" in out
+    assert "I-4 grounded sighting side (+-0): 0.5345  (31/58)" in out
+    assert "I-5 fabricated completion lines: 0.0415  (19/458)" in out
+    assert "I-6 adjacent-room STRONG share: 0.6552  (38/58)" in out
+    assert "I-7 movement-origin flags: 0.0921  (7/76)" in out
+    assert "I-8 marker contamination (turns): 0.0546  (53/971)" in out
+    assert "I-9 singular-persona prompts: 1.0  (1956/1956)" in out
+    assert "I-10 meetings with a venting participant: 0.097  (16/165)" in out
+    assert "I-11 free zero-witness kills declined: 0.4578  (190/415)" in out
+    assert "ghost-top decisions: 0.1231  (303/2461)" in out
+    assert "0 mismatches over 2461 decisions" in out
+    assert "render budget: mean rendered lines/snapshot 41.74" in out
+
+
+def test_honesty_one_impostor_set_reports_not_applicable(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert measure_baseline.main(["--honesty", str(_FOUR)]) == 0
+    out = capsys.readouterr().out
+    # A zero here would read as "clean"; with one impostor the singular persona
+    # is simply true, so the cell says so instead.
+    assert "I-9 singular-persona prompts: NOT-APPLICABLE" in out
+    assert "(234/234)" in out
+    assert "(rare count — read the interval)" in out
+
+
+def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
+    assert measure_baseline.main(["--honesty", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload) == 2
+    nine, four = payload
+    assert nine["replay_set_dir"].endswith("9p2i")
+    assert nine["games_total"] == 50
+    assert nine["clock_alignment_checked"] == 4408
+    assert nine["false_whereabouts"]["crew_false"]["numerator"] == 152
+    assert nine["marker_contamination"]["prompts_with_marker"] == {
+        "numerator": 246,
+        "denominator": 1956,
+        "rate": pytest.approx(246 / 1956),
+        "wilson_low": pytest.approx(0.11180156109543679),
+        "wilson_high": pytest.approx(0.14119929366751957),
+        "advisory": False,
+    }
+    assert nine["impostor_targeting"]["reconstruction_mismatches"] == 0
+    assert four["singular_persona"]["applicable"] is False
+    assert four["meeting_physicality"]["meetings"] == 39
+
+
+def test_honesty_missing_dir_is_usage_error(tmp_path: Path) -> None:
+    assert measure_baseline.main(["--honesty", str(tmp_path / "nope")]) == 2
+
+
+def test_honesty_empty_dir_is_usage_error(tmp_path: Path) -> None:
+    assert measure_baseline.main(["--honesty", str(tmp_path)]) == 2

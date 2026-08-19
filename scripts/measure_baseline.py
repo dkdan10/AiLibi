@@ -31,6 +31,7 @@ Usage::
     uv run python scripts/measure_baseline.py --funnel --json   # Task-15.3 funnel
     uv run python scripts/measure_baseline.py --vj --json       # Task-16.10 V&J
     uv run python scripts/measure_baseline.py --solvability     # the 20.14 ceiling
+    uv run python scripts/measure_baseline.py --honesty         # the 20.15 cells
 
 ``--json`` emits a JSON array of :class:`BaselineMeasurementReport` (schema below),
 the machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume.
@@ -47,7 +48,11 @@ consumes. ``--solvability`` selects the solvability ceiling — a JSON array of
 :class:`eval.solvability.SolvabilityReport` (schema in that module's docstring):
 per body-triggered meeting, how much of the killer's identity the crew's own
 pooled sightings could have resolved, and how often an ejection landed on a
-player that pooling had already cleared.
+player that pooling had already cleared. ``--honesty`` selects the evidence-honesty
+instrument set — a JSON array of :class:`eval.evidence_honesty.EvidenceHonestyReport`
+(schema in that module's docstring): the Phase-20 pre-registration's instrument rows
+I-2…I-11 recomputed from committed bytes, so every bar's "before" can be re-run
+rather than quoted.
 
 JSON report schema (one object per measured set) — STABLE::
 
@@ -91,6 +96,14 @@ if str(_REPO_ROOT) not in sys.path:
 from eval.accusation_calibration import compute_accusation_calibration  # noqa: E402
 from eval.balance_eval import _balance_report_from_tournament  # noqa: E402
 from eval.deduction_metrics import WilsonRateCell  # noqa: E402
+
+# Task-20.15 evidence-honesty fold region (disjoint from every region below): the
+# pre-registration's instrument rows I-2…I-11 over committed bytes, emitted under
+# ``--honesty``.
+from eval.evidence_honesty import (  # noqa: E402
+    EvidenceHonestyReport,
+    compute_evidence_honesty,
+)
 
 # Task-15.3 information-funnel fold region (disjoint from the 15.1 core folds and
 # the 15.2 watchability folds): the oracle / possession / transmission diagnostics,
@@ -513,6 +526,128 @@ def _emit_solvability_json(reports: Sequence[SolvabilityReport]) -> str:
     return json.dumps([report.model_dump() for report in reports], indent=2)
 
 
+# --------------------------------------------------------------------------- #
+# Task-20.15 --honesty fold region (disjoint from every region above): the      #
+# evidence-honesty instrument set — the pre-registration's rows I-2…I-11        #
+# recomputed from committed bytes, so every bar's "before" can be re-run.       #
+# --------------------------------------------------------------------------- #
+
+
+def _render_honesty_human(report: EvidenceHonestyReport) -> str:
+    whereabouts = report.false_whereabouts
+    sole = report.sole_flag_precision
+    grounded = report.grounded_sighting
+    fabricated = report.fabricated_completions
+    adjacent = report.adjacent_room_flags
+    movement = report.movement_origin_flags
+    markers = report.marker_contamination
+    persona = report.singular_persona
+    physicality = report.meeting_physicality
+    targeting = report.impostor_targeting
+    budget = report.render_budget
+    persona_line = (
+        _solvability_line(
+            "I-9 singular-persona prompts", persona.prompts_with_singular_persona
+        )
+        if persona.applicable
+        else (
+            "  I-9 singular-persona prompts: NOT-APPLICABLE (one impostor — the "
+            f"singular persona is true)  ({persona.prompts_with_singular_persona.numerator}"
+            f"/{persona.prompts_with_singular_persona.denominator})"
+        )
+    )
+    mean_lines = budget.rendered_lines_mean
+    return "\n".join(
+        [
+            f"Evidence-honesty instruments over {report.replay_set_dir} "
+            f"({report.games_total} games, {physicality.meetings} meetings; "
+            f"+1 agent clock proved on {report.clock_alignment_checked} "
+            "discriminating sightings):",
+            _solvability_line("I-2 false crew self-placement", whereabouts.crew_false),
+            _solvability_line(
+                "  ... agent-frame reading", whereabouts.crew_false_agent_frame
+            ),
+            _solvability_line("  ... impostor claims", whereabouts.impostor_false),
+            _solvability_line(
+                "  ... copyable from a rendered self-location line",
+                whereabouts.copyable_self_location,
+            ),
+            _solvability_line(
+                "I-3 sole-flag precision (per victim)", sole.per_victim_precision
+            ),
+            _solvability_line(
+                "  ... per meeting: crewmates ejected",
+                sole.per_meeting_crewmate_ejections,
+            )
+            + f"  [{sole.per_meeting_sole_flag_meetings} sole-flag meetings]",
+            _solvability_line("  ... class impostor share", sole.class_impostor_share),
+            _solvability_line(
+                "  ... living-voter base rate", sole.living_voter_base_rate
+            ),
+            _solvability_line(
+                "I-4 grounded sighting side (+-0)", grounded.grounded_at_tick
+            ),
+            _solvability_line("  ... (+-1)", grounded.grounded_within_1),
+            _solvability_line("  ... (+-2)", grounded.grounded_within_2)
+            + f"  [{grounded.unresolvable_sides} of {grounded.strong_sides}"
+            " sides unresolvable]",
+            _solvability_line("I-5 fabricated completion lines", fabricated.fabricated)
+            + f"  [+1 render offset {fabricated.render_offset_matches}"
+            f"/{fabricated.render_offset_checked}; {fabricated.games_hit} games hit]",
+            _solvability_line("I-6 adjacent-room STRONG share", adjacent.adjacent)
+            + f"  [distance 2: {adjacent.distance_two}; >=3:"
+            f" {adjacent.distance_three_or_more}; single-tick window:"
+            f" {adjacent.single_tick_window}]",
+            _solvability_line(
+                "  ... and within one tick", adjacent.adjacent_within_one
+            ),
+            _solvability_line("I-7 movement-origin flags", movement.spoke_origin)
+            + f"  [move-backed {movement.backed_by_move_line}; destination"
+            f" {movement.spoke_destination}; STRONG {movement.origin_strong};"
+            f" memory-truthful {movement.memory_truthful_spoken_false}]",
+            _solvability_line(
+                "I-8 marker contamination (turns)", markers.turns_with_marker
+            ),
+            _solvability_line("  ... (prompts)", markers.prompts_with_marker)
+            + f"  [{markers.meetings_with_marker} meetings,"
+            f" {markers.games_with_marker} games]",
+            persona_line,
+            _solvability_line(
+                "I-10 meetings with a venting participant",
+                physicality.venting_participants,
+            ),
+            _solvability_line(
+                "  ... reporter killed within 3 ticks",
+                physicality.reporter_killed_within_three,
+            )
+            + f"  [{physicality.body_triggered_meetings} body-triggered]",
+            _solvability_line(
+                "I-11 free zero-witness kills declined", targeting.free_kills_declined
+            )
+            + f"  [ranking {targeting.decline_reason_ranking};"
+            f" fellow-defer {targeting.decline_reason_fellow_defer};"
+            f" cover {targeting.decline_reason_cover};"
+            f" other {targeting.decline_reason_other}]",
+            _solvability_line("  ... ghost-top decisions", targeting.ghost_top)
+            + f"  [{targeting.ghost_top_ejected} ejected /"
+            f" {targeting.ghost_top_unseen_death} unseen death;"
+            f" {targeting.reconstruction_mismatches} mismatches over"
+            f" {targeting.decisions_reconstructed} decisions]",
+            "  render budget: mean rendered lines/snapshot "
+            f"{mean_lines if mean_lines is None else round(mean_lines, 2)}"
+            f" over {budget.snapshots} snapshots;"
+            f" reported-testimony rows {budget.testimony_rows_total}"
+            f" {dict(budget.testimony_rows_by_candidate_bucket)}",
+        ]
+    )
+
+
+def _emit_honesty_json(reports: Sequence[EvidenceHonestyReport]) -> str:
+    import json
+
+    return json.dumps([report.model_dump() for report in reports], indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -582,6 +717,18 @@ def main(argv: list[str] | None = None) -> int:
             "the core R-gate folds"
         ),
     )
+    parser.add_argument(
+        "--honesty",
+        action="store_true",
+        help=(
+            "emit the evidence-honesty instrument set (the Phase-20 "
+            "pre-registration's rows I-2…I-11: false self-placement, sole-flag "
+            "precision, grounded sighting sides, fabricated completions, "
+            "adjacent-room and movement-origin flags, marker contamination, "
+            "singular persona, meeting physicality, impostor targeting) instead "
+            "of the core R-gate folds"
+        ),
+    )
     args = parser.parse_args(argv)
     explicit_dir: Path | None = args.replay_set_dir
     emit_json: bool = args.json
@@ -639,6 +786,14 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "\n\n".join(_render_solvability_human(r) for r in solvability_reports)
             )
+        return 0
+
+    if args.honesty:
+        honesty_reports = [compute_evidence_honesty(d) for d in targets]
+        if emit_json:
+            print(_emit_honesty_json(honesty_reports))
+        else:
+            print("\n\n".join(_render_honesty_human(r) for r in honesty_reports))
         return 0
 
     reports = [measure_baseline(sample_dir) for sample_dir in targets]

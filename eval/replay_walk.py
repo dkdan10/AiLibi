@@ -101,6 +101,8 @@ selfcheck)
 (eval/kill_craft)                                                        game_over row
 ``solvability``            ON     ON    violation     ON    off    ON    terminal + trailing rows +
 (eval/solvability)                                                       game_over row
+``evidence-honesty``       ON     ON    violation     ON    off    ON    terminal + trailing rows +
+(eval/evidence_honesty)                                                  game_over row
 ``funnel-instrument``      ON     off   violation     ON    off    ON    none
 (eval/funnel, both walks)
 ``leak-scan-factory``      off    off   violation     off   off    off   none
@@ -119,6 +121,11 @@ What each profile deliberately relaxes, and why:
   ``state_hash_before`` (the pre-hash equals the just-verified tick hash on
   every recording these walks accept), and none of the referee-grade
   completeness checks.
+* ``evidence-honesty`` — the ``solvability`` check set for the same reason, with
+  one addition of its own: the fold rebuilds every living agent's memory through
+  the real perception path and replays the impostor FSM against the recorded
+  action stream, so a truncated or drifted recording would both under-count the
+  transcript denominators AND silently re-price the policy cells.
 * ``funnel-instrument`` — the same hash discipline PLUS ``state_hash_before``,
   and a missing meeting row is a loud :class:`~eval.funnel.FunnelReconstructionError`:
   funnel's comment declares the divergence from the loader deliberate — a
