@@ -1,38 +1,50 @@
 // The map body layer, pinned against the bytes the API actually serves.
 //
-// The defect this file exists to prevent: the map used to build its Omniscient
-// body layer by ACCUMULATING kill events and never removing anything, while the
-// orchestrator deletes the corpse that triggered a body-report meeting and the
-// served `TickView.bodies` reflects that deletion exactly. Over the 50 committed
-// `replays/samples/9p2i` games that painted a corpse the engine had already
-// consumed on 1,182 of 1,769 frames — two thirds of the demo's central surface,
-// in 50 of 50 games — and nothing could catch it, because the derivation lived
-// inside a `.tsx` that pulls Pixi at module scope and this runner cannot import.
+// THE INVARIANT. On every frame the Omniscient layer draws exactly the bodies
+// the engine still has on the floor — the served `TickView.bodies` — each with
+// `killedBy` read off its served row and `isDiscovered` from the
+// forward-accumulated `report_body` set. `retiredAccumulateRule` below is the
+// NEGATIVE CONTROL: a derivation that accumulates `kill` events instead of
+// reading the served rows. Both run the same census on both committed sample
+// sets, and the control has to fail it (0 phantom frames vs 1,182 of 1,769 on
+// `9p2i`) — a zero-phantom assertion nothing can fail would be prose, since the
+// shipped rule satisfies it by construction.
 //
-// So the derivation now lives in `./bodies.ts` and this suite walks it over a
-// committed dump of the served payloads. Both legs run on every set: the shipped
-// rule (0 phantom frames) and `retiredAccumulateRule` below — the deleted
-// MapView function, kept here verbatim as the perturbation leg. Without it the
-// zero-phantom assertion is true by construction and proves nothing; with it the
-// walk demonstrably tells a right derivation from a wrong one.
+// Hand-built frames follow for the cases the corpus does not exercise: a
+// reported body that survives its own meeting, a body nobody reports, a served
+// attribution that disagrees with the kill event, and the As-agent firewall.
 //
-// THE FIXTURE. `bodies.fixture.json` is a dump of the served `TickView.bodies` +
-// the `kill` / `report_body` events for every frame of both committed sample
-// sets. It has to be committed rather than derived here: the replay JSONL rows
-// are ACTION-only, so `tick.bodies` exists only after the Python loader's engine
-// re-walk, and re-deriving engine state in the frontend is the exact mistake
-// this task undoes. It is stable because `replays/` bytes never move.
-// Regenerate it from the repo root with:
+// THE FIXTURE. `bodies.fixture.json` dumps the served `TickView.bodies` + the
+// `kill` / `report_body` events for every frame of both sets. It is committed
+// rather than derived here because the replay JSONL rows are ACTION-only:
+// `tick.bodies` exists only after the Python loader's engine re-walk, and
+// re-deriving engine state in the frontend is precisely what `./bodies.ts`
+// exists to stop. `corpusSha256` binds each set to the replay bytes it came
+// from; `corpusDigest` recomputes it from `replays/samples/<set>` on every run,
+// so a re-recorded corpus fails this suite until the fixture is regenerated
+// instead of leaving it green over a detached snapshot. Regenerate from the
+// repo root with:
 //
 //   uv run python - <<'PY'
+//   import hashlib
 //   import json
 //   from pathlib import Path
 //
 //   from api.replay_loader import ReplayLoader
 //
+//
+//   def corpus_sha256(replay_dir: Path) -> str:
+//       outer = hashlib.sha256()
+//       for path in sorted(replay_dir.glob("*.jsonl"), key=lambda p: p.name):
+//           inner = hashlib.sha256(path.read_bytes()).hexdigest()
+//           outer.update(f"{path.name}\n{inner}\n".encode())
+//       return outer.hexdigest()
+//
+//
 //   sets = []
 //   for name in ("9p2i", "4p1i"):
-//       loader = ReplayLoader(Path("replays/samples") / name)
+//       replay_dir = Path("replays/samples") / name
+//       loader = ReplayLoader(replay_dir)
 //       games = []
 //       for meta in loader.list_replays():
 //           frames = []
@@ -56,7 +68,9 @@
 //                   frame["events"] = events
 //               frames.append(frame)
 //           games.append({"game_id": meta.game_id, "frames": frames})
-//       sets.append({"name": name, "games": games})
+//       sets.append(
+//           {"name": name, "corpus_sha256": corpus_sha256(replay_dir), "games": games}
+//       )
 //   Path("frontend/src/lib/bodies.fixture.json").write_text(
 //       json.dumps({"sets": sets}, separators=(",", ":")) + "\n"
 //   )
@@ -67,8 +81,9 @@
 // import would push a 170 KB inferred literal type through `tsc --noEmit` for no
 // benefit. The reader below is explicitly typed so the strict flags stay honest.
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -88,7 +103,28 @@ import {
 // load — the same import wall that hid the defect above.
 const BODY_CAP = 3;
 
-const FIXTURE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bodies.fixture.json");
+const LIB_DIR = dirname(fileURLToPath(import.meta.url));
+const FIXTURE_PATH = resolve(LIB_DIR, "bodies.fixture.json");
+// `frontend/src/lib` → the repo root, where the replay corpus lives.
+const SAMPLES_DIR = resolve(LIB_DIR, "../../../replays/samples");
+
+/**
+ * A digest of one sample set's committed replay bytes: sha256 over
+ * `<filename>\n<sha256 of that file>\n` for every `*.jsonl`, name-sorted. The
+ * generator in this file's header computes it the same way, so a corpus that
+ * moves and a fixture that does not can no longer both be green.
+ */
+function corpusDigest(setName: string): string {
+  const dir = join(SAMPLES_DIR, setName);
+  const outer = createHash("sha256");
+  for (const name of readdirSync(dir)
+    .filter((entry) => entry.endsWith(".jsonl"))
+    .sort()) {
+    const inner = createHash("sha256").update(readFileSync(join(dir, name))).digest("hex");
+    outer.update(`${name}\n${inner}\n`);
+  }
+  return outer.digest("hex");
+}
 
 // ── the fixture reader ───────────────────────────────────────────────────────
 
@@ -104,6 +140,8 @@ interface FixtureGame {
 
 interface FixtureSet {
   readonly name: string;
+  /** `corpusDigest(name)` at the moment the dump was generated. */
+  readonly corpusSha256: string;
   readonly games: readonly FixtureGame[];
 }
 
@@ -184,6 +222,7 @@ function readFixture(): readonly FixtureSet[] {
     const name = asString(setRow["name"], `sets[${s}].name`);
     return {
       name,
+      corpusSha256: asString(setRow["corpus_sha256"], `${name}.corpus_sha256`),
       games: asArray(setRow["games"], `${name}.games`).map((rawGame, g) => {
         const gameRow = asRecord(rawGame, `${name}.games[${g}]`);
         const gameId = asString(gameRow["game_id"], `${name}.games[${g}].game_id`);
@@ -394,6 +433,17 @@ function victimsAt(games: readonly FixtureGame[], gameId: string, tick: number) 
 // ── the census, both legs, both committed sets ───────────────────────────────
 
 describe("the Omniscient body layer over the committed served payloads", () => {
+  it.each(["9p2i", "4p1i"])("%s: the dump still matches the committed corpus", (name) => {
+    // Without this the suite would keep passing over a detached snapshot after a
+    // re-record replaced `replays/samples/`, covering bytes nobody serves. The
+    // digest folds in every replay's filename AND bytes, so an added, removed or
+    // rewritten replay all fail here until the fixture is regenerated.
+    expect(corpusDigest(name)).toBe(set(name).corpusSha256);
+    expect(set(name).games).toHaveLength(
+      readdirSync(join(SAMPLES_DIR, name)).filter((entry) => entry.endsWith(".jsonl")).length,
+    );
+  });
+
   it("9p2i: reads engine truth on every frame", () => {
     expect(census(set("9p2i").games, bodyStatesByTick)).toEqual({
       games: 50,
