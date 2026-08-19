@@ -444,6 +444,13 @@ def _reconstruct_game(
 
 
 def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    if violation.kind == "trailing_replay_rows":
+        raise ValueError(
+            f"validity-gate reconstruction rejected {violation.game_id!r}: the "
+            f"replay carries rows after the terminal GAME_OVER at tick "
+            f"{violation.terminal_tick}. The walk stops at the terminal state, so "
+            "those rows would ride along inside 'verified' bytes unvalidated."
+        )
     raise ValueError(
         f"validity-gate reconstruction diverged for {violation.game_id!r} at tick "
         f"{violation.tick}: recorded {violation.expected!r}, reconstructed "
@@ -455,13 +462,16 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record): verify
 # per-tick hashes + each meeting's state_hash_after; TRUNCATE on a partial
 # meeting — the gate deliberately serves what a recording contains, matching
-# the loader (the completeness checks own game-over/duplicate-row policing).
+# the loader (the completeness checks own game-over/duplicate-row policing) —
+# and REJECT rows recorded after the terminal GAME_OVER, which the walk never
+# reaches and therefore never hash-verifies.
 _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="validity-gate",
     on_violation=_raise_walk_violation,
     verify_tick_hashes=True,
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
+    reject_trailing_rows=True,
 )
 
 

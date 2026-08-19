@@ -183,6 +183,35 @@ def test_reconstruction_fails_loud_on_a_truncated_tick_stream() -> None:
             )
 
 
+def test_reconstruction_fails_loud_when_the_recording_names_no_winner() -> None:
+    """The same disagreement from the other side: the walk reached GAME_OVER
+    but the recording carries no ``game_over`` winner, so the two do not agree
+    about the terminal and the episode is not scoreable as a full game."""
+
+    game_map = load_canonical_map()
+    with tempfile.TemporaryDirectory(prefix="ailibi-no-winner-") as tmp:
+        env = _env(output_dir=Path(tmp))
+        env.rollout(4)
+        replay_path = Path(tmp) / "replay-seed-4.jsonl"
+
+        lines = [
+            line
+            for line in replay_path.read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("kind") != "game_over"
+        ]
+        replay_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with pytest.raises(RolloutReconstructionError, match="no game_over winner"):
+            reconstruct_episode(
+                replay_path,
+                game_map=game_map,
+                seed=4,
+                num_players=_NUM_PLAYERS,
+                num_impostors=_NUM_IMPOSTORS,
+                tasks_per_crewmate=_TASKS,
+            )
+
+
 # --------------------------------------------------------------------------- #
 # Boundary semantics: the full-game episode                                    #
 # --------------------------------------------------------------------------- #

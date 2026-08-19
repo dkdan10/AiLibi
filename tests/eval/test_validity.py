@@ -851,6 +851,27 @@ def test_run_validity_gate_rejects_a_truncated_replay(tmp_path: Path) -> None:
     assert check.facts["games_reached_game_over"] == 0
 
 
+def test_run_validity_gate_rejects_rows_after_the_terminal(tmp_path: Path) -> None:
+    # The mirror corruption: the walk STOPS at GAME_OVER, so a row appended
+    # after the terminal is never hash-verified and would ride along inside
+    # "verified" bytes. The gate fails closed on it.
+    mini = _mini_set(tmp_path, seeds=(12,))
+    path = mini / "replay-seed-12.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    last_tick = json.loads(
+        next(line for line in reversed(lines) if json.loads(line)["kind"] == "tick")
+    )
+    last_tick["tick"] += 1
+    lines.append(json.dumps(last_tick, sort_keys=True, separators=(",", ":")))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = run_validity_gate(mini)
+    assert not report.passed
+    assert "all_games_reach_game_over" in report.failing_checks()
+    check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
+    assert any("after the terminal GAME_OVER" in v for v in check.violations)
+
+
 def test_run_validity_gate_passes_the_untruncated_fixture(tmp_path: Path) -> None:
     # The same one-game set, unedited: the truncation rejection above is not the
     # fixture merely being unacceptable to the gate.

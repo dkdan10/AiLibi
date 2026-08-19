@@ -25,12 +25,13 @@ Episode horizon: a meeting runner is ALWAYS installed by the env, so
 unreachable. ``full_game`` is the one episode boundary: such an episode is
 ``truncated`` only when the game never reached ``GAME_OVER`` — the tick budget
 capped it, and a capped game writes no ``game_over`` row. Truncation is never
-SILENT, and the mechanism that enforces that is named: a replay recording a
-``game_over`` winner the reconstruction never reaches raises
-:class:`RolloutReconstructionError` rather than returning a ``TICK_BUDGET``
-episode, and :func:`EpisodeRollout.complete` (``winner is not None and not
-truncated``) is the single gate the reward channel reads, so no fitness term
-ever scores a truncated episode as a full game.
+SILENT, and the mechanism that enforces that is named: the recording and the
+reconstruction must agree about the terminal, so a ``game_over`` winner the walk
+never reaches, a reconstructed terminal the recording never names, and a
+winner mismatch each raise :class:`RolloutReconstructionError` rather than
+returning a ``TICK_BUDGET`` episode; and :func:`EpisodeRollout.complete`
+(``winner is not None and not truncated``) is the single gate the reward channel
+reads, so no fitness term ever scores a truncated episode as a full game.
 
 Provenance: introduced by Task 15.8; Task 19.19 retired the ``first_meeting``
 boundary, leaving ``full_game`` alone.
@@ -654,23 +655,31 @@ def reconstruct_episode(
         truncated = True
 
     # The recorded game_over row is the producer's claim; the reconstruction is
-    # authoritative. A recorded terminal the walk never reaches means trailing
-    # tick rows are missing — dropping them shortens the walk without breaking
-    # the state-hash chain, so nothing upstream catches it. A legitimate
-    # tick-budget cap writes no game_over row at all
-    # (orchestrator.game.HeadlessGame), so neither clause can fire on one.
-    if game_end is not None and game_end.winner is not None:
-        if truncated:
+    # authoritative, and the two must agree about the terminal. A recorded
+    # terminal the walk never reaches means tick rows are missing — dropping
+    # them shortens the walk without breaking the state-hash chain, so nothing
+    # upstream catches it. A reconstructed terminal with no recorded winner is
+    # the same corruption seen from the other side. Only the tick-budget cap
+    # legitimately produces neither, because it writes no game_over row at all
+    # (orchestrator.game.HeadlessGame).
+    if truncated:
+        if game_end is not None and game_end.winner is not None:
             raise RolloutReconstructionError(
                 f"seed {seed}: replay records game_over winner "
                 f"{game_end.winner!r} but the reconstructed walk never reached "
                 "GAME_OVER (truncated tick stream)"
             )
-        if game_end.winner != winner:
-            raise RolloutReconstructionError(
-                f"seed {seed}: reconstructed winner {winner!r} != recorded "
-                f"game_over winner {game_end.winner!r}"
-            )
+    elif game_end is None or game_end.winner is None:
+        raise RolloutReconstructionError(
+            f"seed {seed}: the reconstructed walk reached GAME_OVER with winner "
+            f"{winner!r} but the replay records no game_over winner (partial or "
+            "corrupted recording)"
+        )
+    elif game_end.winner != winner:
+        raise RolloutReconstructionError(
+            f"seed {seed}: reconstructed winner {winner!r} != recorded "
+            f"game_over winner {game_end.winner!r}"
+        )
 
     descriptors = _build_descriptors(
         events=events,
