@@ -985,9 +985,11 @@ def test_render_budget_pins(reports: dict[Path, EvidenceHonestyReport]) -> None:
         "5-6": 11772,
         ">=7": 3753,
     }
-    # The 4p1i sets never carry reported testimony (the 13.5.2 channel needs a
-    # richer table), which is why the bucket census is reported per bucket.
+    # Measured, not assumed: no recorded 4p1i prompt carries a reported-testimony
+    # row at all, which is why the census is reported per candidate-count bucket
+    # rather than as one blended number across rosters.
     assert reports[_SAMPLES_4P1I].render_budget.testimony_rows_total == 0
+    assert reports[_CORPUS_4P1I].render_budget.testimony_rows_total == 0
 
 
 @pytest.mark.slow
