@@ -50,7 +50,7 @@ const LIB_DIR = dirname(fileURLToPath(import.meta.url));
  */
 const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: string }[] =
   [
-    { file: "TournamentDashboard.tsx", rendered: "Tournament dashboard" },
+    { file: "TournamentDashboard.tsx", rendered: "TournamentDashboardView" },
     { file: "MeetingView.tsx", rendered: "Resolution" },
     { file: "BallotCard.tsx", rendered: "no rationale recorded" },
     { file: "ReplayPicker.tsx", rendered: "Clear filters" },
@@ -192,6 +192,19 @@ describe("SPECTATOR_COPY", () => {
     expect(leaves.length).toBeGreaterThan(20);
   });
 
+  it("has no duplicate wording hiding under two keys", () => {
+    const seen = new Map<string, string>();
+    for (const leaf of leaves) {
+      // Short fragments legitimately repeat (a shared column header, the two
+      // halves of a sentence split around a <code>); only full sentences are
+      // worth flagging as an accidental second home for the same words.
+      if (leaf.text.length < 40) continue;
+      const first = seen.get(leaf.text);
+      expect(first, `${leaf.path} duplicates ${first ?? ""}`).toBeUndefined();
+      seen.set(leaf.text, leaf.path);
+    }
+  });
+
   it.each(leaves.map((leaf) => [leaf.path, leaf.text]))(
     "%s carries no dialect",
     (_path, text) => {
@@ -291,6 +304,48 @@ describe("the in-scope surfaces on disk", () => {
     );
     const planted = `${stripComments(source)}\nconst leak = "See DESIGN.md §11.3.";\n`;
     expect(dialectHits(planted)).toContain("design-doc citation");
+  });
+});
+
+// ── the ownership invariant, on the surface that claims it ───────────────────
+//
+// `TournamentDashboard.tsx`'s header says the copy tree owns every prose string
+// it renders. "No dialect" does not prove that — a perfectly plain literal typed
+// straight into the JSX passes the leg above while breaking the claim. So the
+// claim gets its own check: on that file, the props that CARRY copy must all be
+// expressions, never quoted literals.
+//
+// Only that one file. The other seven keep prose inline by design (the contract
+// scopes `TurnCard.tsx` to a single string, and the transport's button titles
+// are not this task's), and none of them claims otherwise in its header.
+
+const COPY_BEARING_PROP = /\b(?:label|title|hint|description|heading|unit|aria-label)\s*=\s*"/;
+
+describe("the dashboard's copy-ownership claim", () => {
+  it("catches a copy-bearing prop written as a literal (the planted case)", () => {
+    expect(COPY_BEARING_PROP.test('<StatTile label="Crew wins" value={x} />')).toBe(true);
+    expect(COPY_BEARING_PROP.test('<MetricSection title="Balance outcome">')).toBe(true);
+    expect(COPY_BEARING_PROP.test('<main aria-label="Tournament dashboard">')).toBe(true);
+  });
+
+  it("passes the same props written as copy-tree expressions", () => {
+    expect(
+      COPY_BEARING_PROP.test("<StatTile label={DASHBOARD_COPY.balanceCrewWins} />"),
+    ).toBe(false);
+    expect(
+      COPY_BEARING_PROP.test("<StatTile hint={fmt(DASHBOARD_COPY.x, { n })} />"),
+    ).toBe(false);
+  });
+
+  it("finds none in TournamentDashboard.tsx", () => {
+    const source = stripComments(
+      readFileSync(resolve(LIB_DIR, "../components/TournamentDashboard.tsx"), "utf8"),
+    );
+    const offenders = source
+      .split("\n")
+      .map((line, index) => ({ line: line.trim(), number: index + 1 }))
+      .filter((entry) => COPY_BEARING_PROP.test(entry.line));
+    expect(offenders).toEqual([]);
   });
 });
 

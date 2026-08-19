@@ -192,6 +192,7 @@ export function showsBallotCorrectness(
 export const SPECTATOR_COPY = Object.freeze({
   /** The Tournament tab. Every prose string on that surface is here. */
   dashboard: Object.freeze({
+    ariaLabel: "Tournament dashboard",
     intro:
       "The latest tournament eval report: balance outcome, vote correctness, the conversion and gate surface, the proof-vs-inference deduction instrument, and the interestingness distribution.",
     refresh: "Refresh",
@@ -242,18 +243,18 @@ export const SPECTATOR_COPY = Object.freeze({
     conversionAccused: "Accused → eject",
     conversionAccusedHint: "{converted} / {meetings} accused-impostor meetings",
     conversionCorrectSkips: "Correct skips",
-    conversionCorrectSkipsHint: "skips where no accusation met the confidence bar",
+    conversionCorrectSkipsHint: "skips with nobody still ejectable above the suspicion line",
     conversionMissedSkips: "Missed skips",
     conversionMissedSkipsHint:
       "impostor voters {impostorVoters} · invalid targets {invalidTargets} · crew declined {crewDeclined}",
     conversionMissedSkipsCaveat: "read the split, not the total",
     conversionMissedSkipsCaveatTitle:
-      "Read the split, not the total: most missed skips are impostors voting their own side, or targets the parser had to normalize away. What is left is a crew voter who declined an accusation that met the confidence bar — see its own tile.",
+      "Read the split, not the total: most missed skips are impostors voting their own side, or targets the parser had to normalize away. What is left is a crew voter who was shown someone above the suspicion line and skipped anyway — see its own tile.",
     conversionInversions: "Threshold inversions",
-    conversionInversionsHint: "crew voters who declined a met bar",
+    conversionInversionsHint: "crew voters who skipped above the line",
     conversionInversionsCaveat: "discretionary — nonzero intended",
     conversionInversionsCaveatTitle:
-      "A crew voter whose strongest ballot met the confidence bar and who skipped anyway. The vote gate is advice, not an order, so declining is allowed play: a nonzero count is expected on recorded sets, not a bug.",
+      "A crew voter whose own suspicion of a still-ejectable player was shown to them above the line, who skipped anyway. The vote gate is advice, not an order, so declining is allowed play: a nonzero count is expected on recorded sets, not a bug.",
     conversionInversionsNone: "no declines recorded",
 
     gateTitle: "Gate metrics",
@@ -267,9 +268,9 @@ export const SPECTATOR_COPY = Object.freeze({
       "Counts the three checkable tells the engine records against a true impostor — a witnessed vent, a sighting the map contradicts, a lie about where they were — and asks whether that impostor was then ejected.",
     gateGenuine: "Genuine-class conversion (historical)",
     gateGenuineHint: "{converted} / {supplied} alibi-anchored flags",
-    gateGenuineCaveat: "historical — too little data to read",
+    gateGenuineCaveat: "historical — a handful of cases",
     gateGenuineCaveatTitle:
-      "The older alibi-anchored form of the tile beside it. Checkable alibi lies almost stopped being produced, so this cell reads no-data rather than a regression, and it is reported for continuity only.",
+      "The older alibi-anchored form of the tile beside it. Checkable alibi lies became rare, so this rate rests on a handful of cases and moves by a large step when one of them changes. Reported for continuity; the tile beside it is the one to read.",
     gateLostOpenings: "Lost opening accusations",
     gateLostOpeningsHint: "chain died on turn 0",
     gateCapDefaults: "Cap-defaulted turns",
@@ -306,6 +307,8 @@ export const SPECTATOR_COPY = Object.freeze({
     deductionProofShare: "Proof-present share",
     deductionProofShareHint:
       "{present} / {total} ejections had proof naming the ejected player on the record",
+    deductionInterval: "95% CI {low}–{high}",
+    deductionIntervalMissing: "no data",
     deductionRareCaveat: "rare — read the interval",
     deductionRareCaveatTitle:
       "Rare cell: the numerator is {numerator}. The point rate is statistically fragile at this scale — read the interval ({interval}), not the percentage.",
@@ -366,6 +369,14 @@ export const SPECTATOR_COPY = Object.freeze({
     interestingnessBucketLink:
       "Open {count} {bucket}-interestingness game{plural} (score {range}) in the Highlights reel",
     interestingnessScorePrefix: "score",
+    // The histogram's three buckets. Their labels ARE the deep-link units, so
+    // they render in the bar, in its link text and in the footer.
+    bucketLabelLow: "Low",
+    bucketLabelMed: "Med",
+    bucketLabelHigh: "High",
+    bucketRangeLow: "0–33",
+    bucketRangeMed: "33–67",
+    bucketRangeHigh: "67–100",
 
     costTitle: "Cost dashboard",
     costDescription:

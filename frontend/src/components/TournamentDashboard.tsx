@@ -79,14 +79,14 @@ function scoreBucketOf(score: number): ScoreBucket {
 
 const BUCKET_ORDER: readonly ScoreBucket[] = ["low", "med", "high"];
 const BUCKET_LABEL: Record<ScoreBucket, string> = {
-  low: "Low",
-  med: "Med",
-  high: "High",
+  low: DASHBOARD_COPY.bucketLabelLow,
+  med: DASHBOARD_COPY.bucketLabelMed,
+  high: DASHBOARD_COPY.bucketLabelHigh,
 };
 const BUCKET_RANGE: Record<ScoreBucket, string> = {
-  low: "0–33",
-  med: "33–67",
-  high: "67–100",
+  low: DASHBOARD_COPY.bucketRangeLow,
+  med: DASHBOARD_COPY.bucketRangeMed,
+  high: DASHBOARD_COPY.bucketRangeHigh,
 };
 
 // Deep-link to the Highlights reel built from the SHARED query keys 12.9 reads —
@@ -455,8 +455,13 @@ function formatCellRate(cell: WilsonRateCell): string {
 }
 
 function formatCellInterval(cell: WilsonRateCell): string {
-  if (cell.wilson_low === null || cell.wilson_high === null) return "no data";
-  return `95% CI ${formatPct(cell.wilson_low)}–${formatPct(cell.wilson_high)}`;
+  if (cell.wilson_low === null || cell.wilson_high === null) {
+    return DASHBOARD_COPY.deductionIntervalMissing;
+  }
+  return fmt(DASHBOARD_COPY.deductionInterval, {
+    low: formatPct(cell.wilson_low),
+    high: formatPct(cell.wilson_high),
+  });
 }
 
 // The rare-cell badge. `advisory` is the eval module's own flag (numerator ≤ 7),
@@ -1002,7 +1007,7 @@ export function TournamentDashboardView({
   rubric: RubricState;
 }) {
   return (
-    <main aria-label="Tournament dashboard" className="flex flex-col gap-4">
+    <main aria-label={DASHBOARD_COPY.ariaLabel} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-ink-500">{DASHBOARD_COPY.intro}</p>
         <button
