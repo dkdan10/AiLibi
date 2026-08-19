@@ -235,12 +235,15 @@ class TestBareEnvironmentFallbackIsLoud:
 class TestNoticeIsProviderGated:
     """The notice fires under a real provider and nowhere else.
 
-    The fake provider builds its answer by introspecting the response schema
-    and never reads the prompt's wording, so which prompt family rendered
-    cannot change what it returns — the notice's whole claim is about model
-    behaviour, and under the fake there is none to warn about. That is also
-    every CI run and every first run of the front-door commands, which is why
-    the gate is worth having. The gate must agree with the selector it mirrors:
+    The notice's claim is that the rendered prompt family is two model
+    generations behind the baseline one; the fake provider runs no model, so
+    under it the sentence has nothing to be about. (Its placeholder strings ARE
+    prompt-seeded, so the family does move the fake's bytes — but only where a
+    set was deliberately selected, and the notice fires solely where the
+    DEFAULT was taken, which is the configuration the committed goldens
+    reproduce.) That path is also every CI run and every first run of the
+    front-door commands, which is why the gate is worth having. The gate must
+    agree with the selector it mirrors:
     :data:`_PROVIDER_GRID` pins loader silence against
     :func:`llm.provider.build_default_client`'s own branch choice, value for
     value.
