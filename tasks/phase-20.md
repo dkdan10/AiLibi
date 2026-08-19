@@ -1854,7 +1854,7 @@ this change narrows.
 ### Task 20.12 — The front door: README for outsiders, the authorship statement, history, glossary, the audits index
 **Branch:** `phase-20-front-door-rewrite`
 **Depends on:** 20.5, 20.7, 20.8, 20.9, 20.6 — the first-run stderr notice is silenced before the README labels the three commands as a clean one-minute proof; the hosted demo and the owner's About checklist exist before the front door links a live demo above the fold; the leak scanner learns to check entitlement and the import contracts learn to cover the whole tree before the README restates the firewall claim in verifiable shape; and the vote-correctness doc-fact check lands in the fact checker before this task extends that same file.
-**Section refs:** C/A1, C/A2, C/A5, C/B2, C/B8, C/B12 and the front-door plan F1–F6 (audits/review-2026-08-19/C/collated-portfolio.md §A, §B, §F); audits/review-2026-08-19/C/x2-narrative-and-positioning.md §3, §5, §6a, §6b; audits/review-2026-08-19/C/x1-front-door-reproduction.md §1, §2, §3.1, §3.2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-1 row 1.6 and §7 (the endorsed outline plus its three edits — demo link and byline above the commands, every volatile number baseline-stamped, honesty claims in verifiable shape); C-88 (audits/review-2026-08-19/B/collated-findings.md C-88). Anchors re-verified at HEAD `b809b19c`: README.md is 3,833 words / 248 lines; :82-107 is the "Project status" section at 845 words = 22 % of the file; :84 is one 135-word sentence with 11 opening parentheses; :86 says "the paragraph below it carries phases 15–19"; :88-105 is the phase table, last row 14; :107 is one 506-word paragraph with 35 opening parentheses; :149 spends 234 words on lever provenance inside "Watch a replay"; :47 carries "300+ merged agent-authored PRs — the live count is on GitHub, deliberately not re-pinned here" and one of three "MVP complete" declarations (:47, :84, :95); :74 carries "import-linter enforced"; :162-165 is the fake-provider tournament example; :211 and :230 carry the clone caveat; file-wide there are 81 em-dashes and 137 opening parentheses, and the six reading-guide terms occur undefined at baseline 19, adopting record 3, ladder tip 4, graduat* 5, NO-FLIP plus "no mover flip" 2, canary denominator 2. docs/reading-guide.md is 3,239 words / 378 lines: :37-51 the numbers table, :216-291 the eleven-term glossary, :303 the only disclosure that the second audit is "by a different model". The C-88 mechanism at HEAD is llm/fake_provider.py:183 (`f"fake-{field_name}-{seed}"`, so a `target` field mints `fake-target-<digest>`) meeting meetings/manager.py:200-207 and meetings/voting.py:90-92 (`INVALID_VOTE_TARGET_MARKER`, invalid target normalized to SKIP) — the review's `:127-135` anchor was the sibling union leg, corrected here. The committed counter-example is populated: replays/samples/9p2i/tournament-eval-report.json reads 101 ejections, `vote_correctness_rate` 0.9230769, `ejection_accuracy` 0.7722772. Fact-checker anchors: scripts/check_doc_facts.py:87-89 (`_README`, `_ENV_EXAMPLE`, `_LADDER_TIP_AUDIT`), :160-170 (`check_facts`), tests/scripts/test_check_doc_facts.py:30-52 (`_COPIED` and the `doc_tree` fixture). Derivable counts at HEAD: `agent_prompts/*.md` = 321, `replays/samples/{4p1i,9p2i}/*.jsonl` = 50 + 50, `git rev-list --count HEAD` = 877, commit authors dkdan10 355 / Claude 310 / Daniel Keinan 211, 674 `Co-Authored-By` trailers.
+**Section refs:** C/A1, C/A2, C/A5, C/B2, C/B8, C/B12 and the front-door plan F1–F6 (audits/review-2026-08-19/C/collated-portfolio.md §A, §B, §F); audits/review-2026-08-19/C/x2-narrative-and-positioning.md §3, §5, §6a, §6b; audits/review-2026-08-19/C/x1-front-door-reproduction.md §1, §2, §3.1, §3.2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-1 row 1.6 and §7 (the endorsed outline plus its three edits — demo link and byline above the commands, every volatile number baseline-stamped, honesty claims in verifiable shape); C-88 (audits/review-2026-08-19/B/collated-findings.md C-88). Anchors re-verified at HEAD `b809b19c`: README.md is 3,833 words / 248 lines; :82-107 is the "Project status" section at 845 words = 22 % of the file; :84 is one 135-word sentence with 11 opening parentheses; :86 says "the paragraph below it carries phases 15–19"; :88-105 is the phase table, last row 14; :107 is one 506-word paragraph with 35 opening parentheses; :149 spends 234 words on lever provenance inside "Watch a replay"; :47 carries "300+ merged agent-authored PRs — the live count is on GitHub, deliberately not re-pinned here" and one of three "MVP complete" declarations (:47, :84, :95); :74 carries "import-linter enforced"; :162-165 is the fake-provider tournament example; :211 and :230 carry the clone caveat; file-wide there are 81 em-dashes and 137 opening parentheses, and the six reading-guide terms occur undefined at baseline 19, adopting record 3, ladder tip 4, graduat* 5, NO-FLIP plus "no mover flip" 2, canary denominator 2. docs/reading-guide.md is 3,239 words / 378 lines: :37-51 the numbers table, :216-291 the eleven-term glossary, :303 the only disclosure that the second audit is "by a different model". The C-88 mechanism at HEAD is llm/fake_provider.py:183 (`f"fake-{field_name}-{seed}"`, so a `target` field mints `fake-target-<digest>`) meeting meetings/manager.py:200-207 and meetings/voting.py:90-92 (`INVALID_VOTE_TARGET_MARKER`, invalid target normalized to SKIP) — the review's `:127-135` anchor was the sibling union leg, corrected here. The committed counter-example is populated: replays/samples/9p2i/tournament-eval-report.json reads 101 ejections, `vote_correctness_rate` 0.9230769, `ejection_accuracy` 0.7722772. Fact-checker anchors re-verified at origin/main `37fe367a` (20.5 and 20.6 both extended this file after the re-verification above): scripts/check_doc_facts.py:110-112 (`_README`, `_ENV_EXAMPLE`, `_LADDER_TIP_AUDIT`), :213-223 (`check_facts`, fanning out to `check_sample_provenance`, `check_ladder_tip`, `check_lever_registry`, `check_vote_correctness_sentinel`), tests/scripts/test_check_doc_facts.py:31-75 (`_COPIED` at :31-44 and the `doc_tree` fixture at :62-75). Derivable counts at origin/main `37fe367a`: `agent_prompts/*.md` = 363, `replays/samples/{4p1i,9p2i}/*.jsonl` = 50 + 50, `git rev-list --count HEAD` = 902, commit authors dkdan10 373 / Claude 310 / Daniel Keinan 218, `Co-Authored-By` trailers on 327 commits.
 **Complexity:** Medium
 **Record impact:** none
 **Measurement:** `uv run python scripts/check_doc_facts.py` exits 0 and names the new checks; `uv run pytest tests/scripts/test_check_doc_facts.py -q` green with every new check perturbation-proved; `wc -w README.md` ≤ ~1,800 (from 3,833) and `wc -w docs/reading-guide.md` ≤ ~900 (from 3,239), both quoted in the PR with the em-dash and opening-parenthesis counts before and after; a grep for the six dialect terms in README.md returns only occurrences inside a `docs/glossary.md` link.
@@ -1890,7 +1890,7 @@ cross-tab and its three-audits tour, and sheds the glossary (§B3).
 
 The third defect is the one only the human can fix. The README names no person. LICENSE
 says Daniel Keinan; git shows three human identities plus "Claude" as first-class author on
-310 of 877 commits with `Co-Authored-By` trailers on 674 of them; every merged PR shows one
+310 of 902 commits with `Co-Authored-By` trailers on 327 of them; every merged PR shows one
 human author on GitHub. The docs say "the owner", "the human", "the operator" and never
 introduce them (audits/review-2026-08-19/C/x2-narrative-and-positioning.md §5: the
 mechanics of authorship are unusually legible here and the narrative of authorship is
@@ -2004,7 +2004,7 @@ in first person, mark it for the owner, and change no other document's instituti
 register.
 
 Step 5 — the new checks live beside the existing three. `check_facts` at
-scripts/check_doc_facts.py:160-170 is the fan-out; add each new check as its own function
+scripts/check_doc_facts.py:213-223 is the fan-out; add each new check as its own function
 accumulating into the same error list so one run names every drift. The dialect-term check
 wants a module-level tuple of terms with the glossary heading each must resolve to, so
 adding a term later is a one-line change. The audits-index check should walk
@@ -2012,7 +2012,7 @@ adding a term later is a one-line change. The audits-index check should walk
 un-indexed file and an indexed file that no longer exists are both failures. The
 link-resolution check needs no network: parse the relative markdown targets, strip any
 fragment, and stat the path. Extend `_COPIED` and the `doc_tree` fixture at
-tests/scripts/test_check_doc_facts.py:30-52 with exactly the files the new checks read, and
+tests/scripts/test_check_doc_facts.py:31-75 with exactly the files the new checks read, and
 give every new check a mutated-copy test — a check that cannot fail is not a gate.
 
 Step 6 — forward anchors are comments, never links. The results-table ML paragraph, the
@@ -2556,16 +2556,16 @@ report rather than widening scope (craft rule 6).
 ### Task 20.16 — Spectator action fidelity: PRETEND_TASK, EMERGENCY, REPAIR, BLOCKED in the DTO; every fetch through the client
 **Branch:** `phase-20-dto-action-fidelity`
 **Depends on:** 20.1, 20.2, 20.4, 20.7 — the map's body layer and its pure-derivation split land first, so the glyph work here sits on the restructured component instead of racing it; the dashboard's product-copy pass lands first, so rewriting its data fetch is a mechanical change against settled copy; the loader's corrupt-file resilience fix lands first because both changes edit the loader and the same loader test module; and the static bundle's Tournament empty-state card lands first, so routing the dashboard through the typed client preserves exactly the missing-report behaviour the bundle relies on.
-**Section refs:** audits/review-2026-08-19/A/collated-findings.md §G-38; audits/review-2026-08-19/A/s2-movement-positions.md §"BUG — B3" and §2.3; audits/review-2026-08-19/B/collated-findings.md §C-8; audits/review-2026-08-19/B/frontend-a.md §F2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 1.10 and the sequencing-hazard note beneath the wave table; audits/review-2026-08-19/D/cross-track-map.md §G-38, §C-8. Anchors re-verified at HEAD: api/replay_loader.py:2208-2228 (`_current_action`, keyed on `last_action` alone), :1487 (its only call site), :1420-1433 (`_tick_view`), :1150-1151 (the walk that already holds the tick's deserialized `actions`); api/schemas.py:249-251 (the inline seven-value `Literal`), :49 (`VIEW_MODEL_VERSION = "1"`), :622 (the `EvidenceCategory` TypeAlias pattern to mirror); engine/tick.py:215-220 (`_with_actor_last_action` — only an ACCEPTED action updates the label), :271-306 (`_apply_do_task` rejects an actor that owns no instance of the map task, at :290-293), :382 (a killed victim's `last_action` is cleared), :593-604 (rejections become `ActionRejectedEvent`; a `MEETING` phase change returns early and silently DROPS every later action in the list); engine/events.py:146-151 (`MeetingTriggeredEvent.actor`), :28-33 (`ActionRejectedEvent.actor` / `.action`); observation/service.py:435-436 + :438-455 (the fake-task lever keys the crew's `action="task"` off exactly that rejection event); scripts/gen_frontend_types.py:94 (the `AgentAction` alias tuple); frontend/src/types/api.ts:22, :25, :116; frontend/src/assets/map/glyphs.ts:66-77 (`ACTION_GLYPH` is an exhaustive `Record` over the alias); frontend/src/components/MapView.tsx:495-498 (`selfActionGlyph`), :672 (omniscient tokens), :686 (the fog view's SELF token); frontend/src/api/client.ts:117-133 (`assertViewModelVersion`), :135-159 (`getJson`, module-private), :319-321 (`getRubric`); frontend/src/components/TournamentDashboard.tsx:1025-1060; frontend/src/components/BeliefMatrix.tsx:33-48; tests/api/test_replay_loader.py:131.
+**Section refs:** audits/review-2026-08-19/A/collated-findings.md §G-38; audits/review-2026-08-19/A/s2-movement-positions.md §"BUG — B3" and §2.3; audits/review-2026-08-19/B/collated-findings.md §C-8; audits/review-2026-08-19/B/frontend-a.md §F2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 1.10 and the sequencing-hazard note beneath the wave table; audits/review-2026-08-19/D/cross-track-map.md §G-38, §C-8. Anchors re-verified at HEAD: api/replay_loader.py:2269-2289 (`_current_action`, keyed on `last_action` alone), :1542 (its only call site), :1475-1488 (`_tick_view`), :1205-1206 (the walk that already holds the tick's deserialized `actions`); api/schemas.py:249-251 (the inline seven-value `Literal`), :49 (`VIEW_MODEL_VERSION = "1"`), :622 (the `EvidenceCategory` TypeAlias pattern to mirror); engine/tick.py:215-220 (`_with_actor_last_action` — only an ACCEPTED action updates the label), :271-306 (`_apply_do_task` rejects an actor that owns no instance of the map task, at :290-293), :382 (a killed victim's `last_action` is cleared), :593-604 (rejections become `ActionRejectedEvent`; a `MEETING` phase change returns early and silently DROPS every later action in the list); engine/events.py:146-151 (`MeetingTriggeredEvent.actor`), :28-33 (`ActionRejectedEvent.actor` / `.action`); observation/service.py:435-436 + :438-455 (the fake-task lever keys the crew's `action="task"` off exactly that rejection event); scripts/gen_frontend_types.py:94 (the `AgentAction` alias tuple); frontend/src/types/api.ts:22, :25, :116; frontend/src/assets/map/glyphs.ts:66-77 (`ACTION_GLYPH` is an exhaustive `Record` over the alias); frontend/src/components/MapView.tsx:452-455 (`selfActionGlyph`), :633 (omniscient tokens), :647 (the fog view's SELF token); frontend/src/api/client.ts:117-133 (`assertViewModelVersion`), :135-159 (`getJson`, module-private), :319-321 (`getRubric`); frontend/src/components/TournamentDashboard.tsx:1119-1154; frontend/src/components/BeliefMatrix.tsx:33-48; tests/api/test_replay_loader.py:136.
 **Complexity:** Medium
 **Record impact:** none — the projection is read-side only: no recorded `actions` row, no engine transition and no `state_hash` moves, so nothing here is re-recorded and no committed replay changes.
-**Measurement:** `uv run pytest tests/api/test_replay_loader.py tests/api/test_view_model.py -q` green with the action-class census pinned over `replays/samples/9p2i` (415 impostor `do_task` intents leave the stale-label classes: IDLE 0 / MOVING 0 / TASK 0, with at most 5 of them landing on BLOCKED; 19 EMERGENCY; 114 REPAIR); `uv run python scripts/gen_frontend_types.py --check` clean; `cd frontend && npm run tsc:check && npm run test` green; and `grep -rn 'fetch(' frontend/src --include='*.tsx' --include='*.ts' | grep -v src/api/client | grep -v '.test.'` prints nothing (it prints exactly 2 lines at HEAD).
+**Measurement:** `uv run pytest tests/api/test_replay_loader.py tests/api/test_view_model.py -q` green with the action-class census pinned over `replays/samples/9p2i` (415 impostor `do_task` intents leave the stale-label classes: IDLE 0 / MOVING 0 / TASK 0, with at most 5 of them landing on BLOCKED; 14 EMERGENCY; 83 REPAIR); `uv run python scripts/gen_frontend_types.py --check` clean; `cd frontend && npm run tsc:check && npm run test` green; and `grep -rn 'fetch(' frontend/src --include='*.tsx' --include='*.ts' | grep -v src/api/client | grep -v '.test.'` prints nothing (it prints exactly 2 lines at HEAD).
 
 The spectator's `current_action` reports the last action the engine ACCEPTED, not the action
 the agent took, and four whole classes of behaviour are therefore rendered as a lie.
 `engine/tick.py:215-220` only stamps `last_action` from inside a successful handler, so a
 rejected or dropped intent leaves the previous tick's label standing; `_current_action` at
-api/replay_loader.py:2208 then reads that stale label and collapses `emergency` into REPORT
+api/replay_loader.py:2269 then reads that stale label and collapses `emergency` into REPORT
 and `repair_sabotage` into TASK on top. The A-track census
 (audits/review-2026-08-19/A/s2-movement-positions.md §"BUG — B3") measured the damage over
 the 300 committed games: 1,747 impostor fake `do_task` intents render IDLE 800 / MOVING 844
@@ -2584,7 +2584,7 @@ omniscient spectator dump shows the same agent aimlessly MOVING. The replay view
 whole job since Phase 12 is to make the deception legible, is blind at exactly the moments
 the deception is succeeding. Every byte needed to fix this is already recorded: the per-tick
 `actions` array carries every submitted intent including the rejected ones, and the walk at
-api/replay_loader.py:1150-1151 already has it in hand and throws it away. This is a
+api/replay_loader.py:1205-1206 already has it in hand and throws it away. This is a
 projection bug, not a data gap.
 
 The fix is additive and mechanical: name the DTO field's value set
@@ -2599,7 +2599,7 @@ Changing the DTO bumps `VIEW_MODEL_VERSION`, and that is what forces the second 
 task into the same PR. `VIEW_MODEL_VERSION` has never been bumped, so C-8 has been latent:
 `frontend/src/api/client.ts:117-133` is the one runtime check standing between a
 version-skewed server and silently-wrong UI, and two components skip it with a bare `fetch`
-— `TournamentDashboard.tsx:1028` re-implements `getRubric` by hand for one of only two
+— `TournamentDashboard.tsx:1122` re-implements `getRubric` by hand for one of only two
 stamped payloads, and `BeliefMatrix.tsx:42` does the same for an endpoint the client has no
 getter for (audits/review-2026-08-19/B/frontend-a.md §F2; the grep returns exactly those two
 lines at HEAD). On the first bump, a stale build talking to a fresh server fails loud in the
@@ -2619,7 +2619,7 @@ this reason.
 - frontend/src/components/BeliefMatrix.tsx; (same)
 - frontend/src/api/client.ts; (a shared getJson with the version guard if missing)
 - frontend/src/api/client.test.ts
-- tests/api/test_replay_loader.py; (the four action classes pinned over the committed samples/9p2i replays: 415 impostor fake tasks → PRETEND_TASK, of the 1,747 corpus-wide; emergency → EMERGENCY; meeting-frozen move → BLOCKED)
+- tests/api/test_replay_loader.py; (the four action classes pinned over the committed samples/9p2i replays: 410 of the 415 impostor fake tasks → PRETEND_TASK and the other 5 → BLOCKED, of the 1,747 corpus-wide; emergency → EMERGENCY; meeting-frozen move → BLOCKED)
 - tests/api/test_view_model.py; (the version bump pin)
 - frontend/src/assets/map/glyphs.ts; (ACTION_GLYPH gains the four classes; the alias rename lands here)
 - scripts/gen_frontend_types.py; (the _ENUM_ALIASES entry for the widened action enum)
@@ -2649,8 +2649,10 @@ this reason.
 - [ ] The census is pinned in `tests/api/test_replay_loader.py` over the committed
   `replays/samples/9p2i` set: all 415 impostor `do_task` intents leave the stale-label
   classes (IDLE 0 / MOVING 0 / TASK 0 for that intent), at most 5 of them read BLOCKED (the
-  intents sharing a tick with an earlier meeting trigger) and the rest read PRETEND_TASK; 19
-  agent-ticks read EMERGENCY and 114 read REPAIR; and no agent-tick anywhere in the walk
+  intents sharing a tick with an earlier meeting trigger) and the other 410 read
+  PRETEND_TASK; 14 agent-ticks read EMERGENCY and 83 read REPAIR (the 19 `emergency` and 114
+  `repair_sabotage` INTENTS less the 5 dropped after an earlier meeting trigger and the 31
+  rejected, which read BLOCKED); and no agent-tick anywhere in the walk
   carries a label inherited from a previous tick. The PR quotes the produced census table.
 - [ ] The gate bites: a unit test builds a tick in which an impostor submits `do_task` and
   asserts PRETEND_TASK, and asserts that the pre-fix derivation (the actor's `last_action`
@@ -2691,13 +2693,13 @@ this reason.
 
 **Implementation hint:**
 
-Step 1 — read the outcome, not the state. The walk at api/replay_loader.py:1150-1151 already
+Step 1 — read the outcome, not the state. The walk at api/replay_loader.py:1205-1206 already
 holds both halves: `actions` (the deserialized recorded intents for this tick) and `events`
 (what `advance_tick` did with them). Thread `actions` through `_tick_view` as a keyword
 argument alongside the events it already receives, and build one small per-tick lookup
 before projecting the agents — actor to submitted action, plus the set of actors carrying an
-`ActionRejectedEvent`, plus the drop cut-off. The synthesized Start frame at :1131 passes an
-empty sequence and every agent stays IDLE, which is what tests/api/test_replay_loader.py:131
+`ActionRejectedEvent`, plus the drop cut-off. The synthesized Start frame at :1186 passes an
+empty sequence and every agent stays IDLE, which is what tests/api/test_replay_loader.py:136
 already pins.
 
 Step 2 — the drop rule is exact, not heuristic. `advance_tick` returns the moment a handler
@@ -2718,8 +2720,8 @@ side alone. Role is on `state.players[pid].role`, already used two lines away by
 
 Step 4 — no new leak. `AgentTickStateView` is the omniscient spectator DTO and
 `ReplayView.players[].role` is already served, so PRETEND_TASK exposes nothing new; the
-firewall question is only whether an As-agent perspective can reach it. MapView.tsx:686
-reads `current_action` for the SELECTED agent's own token and MapView.tsx:693-701 reads
+firewall question is only whether an As-agent perspective can reach it. MapView.tsx:647
+reads `current_action` for the SELECTED agent's own token and MapView.tsx:654-662 reads
 `visibility.visible_players[].action` for everyone else, so the answer today is no — keep it
 that way and assert it in the test rather than in prose.
 
