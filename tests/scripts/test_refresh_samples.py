@@ -828,7 +828,10 @@ def test_dry_run_explicit_fake_provider_resolves_fake() -> None:
     assert proc.returncode == 0
     assert "[dry-run] provider: fake" in proc.stdout
     assert "would require no API key" in proc.stdout
-    assert f"would refuse a sample dir inside {_REPO_ROOT}/replays" in proc.stdout
+    assert (
+        f"would refuse a sample dir or manifest inside {_REPO_ROOT}/replays"
+        in proc.stdout
+    )
 
 
 def test_dry_run_inherited_fake_provider_resolves_fake() -> None:
@@ -1054,22 +1057,33 @@ def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
 
 
 @contextlib.contextmanager
-def _restored_afterwards(directory: Path) -> Iterator[None]:
-    """Snapshot ``directory``'s files and put them back on the way out.
+def _replays_tree_restored() -> Iterator[None]:
+    """Put every directory a refused run could have written back as it was.
 
-    The refusal cases below aim a REAL recording run at a committed set, which
-    is the only way to prove the guard refuses it. Their assertions report a
-    regression; this restores the bytes so a regressed guard cannot also leave
-    the working tree dirty.
+    The refusal cases below aim a REAL recording run at the committed tree,
+    which is the only way to prove the guard refuses it. Their assertions report
+    a regression; this restores the bytes so a regressed guard cannot also leave
+    committed replays corrupted. Covers every directory those cases name — the
+    ``replays/`` root and both committed sets — because a run that got past the
+    guard writes its replay, roster descriptor, manifest and eval report into
+    whichever one it was pointed at.
     """
 
-    before = {path: path.read_bytes() for path in directory.iterdir() if path.is_file()}
+    replays = _REPO_ROOT / "replays"
+    guarded = [replays, replays / "samples" / "4p1i", replays / "samples" / "9p2i"]
+    before = {
+        path: path.read_bytes()
+        for directory in guarded
+        for path in directory.iterdir()
+        if path.is_file()
+    }
     try:
         yield
     finally:
-        for path in directory.iterdir():
-            if path.is_file() and path not in before:
-                path.unlink()
+        for directory in guarded:
+            for path in directory.iterdir():
+                if path.is_file() and path not in before:
+                    path.unlink()
         for path, data in before.items():
             if not path.is_file() or path.read_bytes() != data:
                 path.write_bytes(data)
@@ -1084,12 +1098,15 @@ def _restored_afterwards(directory: Path) -> Iterator[None]:
         # A `..` that leaves the tree textually and re-enters it physically: the
         # case a string-prefix form of the guard would wave through.
         "scripts/../replays/samples/4p1i",
+        # The same trick behind a component that does not exist yet, which the
+        # kernel cannot resolve but `mkdir -p` would create on the way in.
+        "not-a-real-dir/../replays/samples/new-set",
     ],
 )
 def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
     # The guard that makes an explicit `fake` safe: committed sets are REAL
     # recordings, so fake bytes may never land in the repo's replays/ tree. The
-    # refusal fires before mkdir/staging and names the dir and the rule.
+    # refusal fires before mkdir/staging and names the path and the rule.
     target = f"{_REPO_ROOT}/{relative_target}"
     env = _clean_env()
     env.update(
@@ -1097,11 +1114,11 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         AILIBI_SAMPLE_DIR=target,
         AILIBI_MANIFEST=f"{target}/MANIFEST.md",
     )
-    with _restored_afterwards(_COMMITTED_4P1I):
+    with _replays_tree_restored():
         proc = _run("--seeds", "0", env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
-        assert "may not record into the repository's replays/ tree" in out
+        assert "may not write into the repository's replays/ tree" in out
         assert f"{_REPO_ROOT}/replays" in out  # the rule's root, physically resolved
         assert "nothing was staged" in out
         # It aborted at the provider gate: the later pre-spend gates never ran,
@@ -1109,6 +1126,30 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         assert "Substrate slate OK" not in out
         samples_root = _REPO_ROOT / "replays" / "samples"
         assert list(samples_root.glob(".ailibi-refresh-stage-*")) == []
+    # The `..` cases must not have created their leading component on the way in.
+    assert not (_REPO_ROOT / "not-a-real-dir").exists()
+
+
+def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
+    # AILIBI_MANIFEST is configurable independently of AILIBI_SAMPLE_DIR, so a
+    # scratch sample dir alone does not make a fake run safe: the manifest writer
+    # would rewrite a committed MANIFEST's rows from the scratch replays. Both
+    # outputs are guarded, and the error names which one offended.
+    set_dir = tmp_path / "scratch-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(_COMMITTED_4P1I / "MANIFEST.md"),
+    )
+    with _replays_tree_restored():
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert "(from AILIBI_MANIFEST)" in out
+        assert "nothing was staged" in out
+        assert not set_dir.exists()  # refused before the target dir was created
 
 
 def test_fake_refresh_refuses_a_symlink_into_replays(tmp_path: Path) -> None:
@@ -1131,7 +1172,7 @@ def test_fake_refresh_refuses_a_symlink_into_replays(tmp_path: Path) -> None:
         proc = _run("--seeds", "0", env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
-        assert "may not record into the repository's replays/ tree" in out
+        assert "may not write into the repository's replays/ tree" in out
         assert list(decoy.iterdir()) == []
     finally:
         shutil.rmtree(decoy)
@@ -1221,14 +1262,59 @@ def _update_manifest_row(sample_dir: Path, manifest: Path, seed: int) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+# Two real processes calling the real ``update_manifest`` with their critical
+# sections deliberately overlapped: each reads the manifest, then waits at a
+# barrier until BOTH have read and merged, and only then writes. The `late` role
+# writes last by a wide margin, so the outcome is fixed rather than raced. This
+# is what the refresh script's mutex prevents, expressed without it.
+_RACE_DRIVER = """
+import sys
+import time
+from pathlib import Path
+
+scripts_dir, role, manifest, sample_dir, seed, barrier_dir = sys.argv[1:]
+sys.path.insert(0, scripts_dir)
+import _manifest_writer as mw
+
+barrier = Path(barrier_dir)
+render_merged = mw.render_manifest
+
+
+def gated_render(rows):
+    # Reached after update_manifest has read the manifest and merged this seed,
+    # and evaluated before _atomic_write_text runs -- exactly the seam the lock
+    # covers in the recorder.
+    text = render_merged(rows)
+    (barrier / (role + ".read")).write_text("1", encoding="utf-8")
+    deadline = time.monotonic() + 60
+    while len(list(barrier.glob("*.read"))) < 2:
+        if time.monotonic() > deadline:
+            raise SystemExit("barrier timeout in role " + role)
+        time.sleep(0.01)
+    if role == "late":
+        time.sleep(0.5)
+    return text
+
+
+mw.render_manifest = gated_render
+mw.update_manifest(
+    Path(manifest),
+    Path(sample_dir),
+    [int(seed)],
+    git_sha="deadbeef",
+    refreshed_at="2026-08-19",
+    model_override="fake-meeting",
+)
+"""
+
+
 def test_unserialized_manifest_updates_lose_a_row(tmp_path: Path) -> None:
-    # The perturbation proving the concurrency gate above bites: drop the
-    # serialization and the same two updates lose a row. `update` parses the whole
-    # manifest, merges one seed and rewrites the file, so a worker whose READ
-    # happened before another worker's WRITE erases that other worker's row while
-    # keeping the rows both of them read. Deterministic by construction -- the
-    # stale read is replayed by restoring the bytes the second worker would have
-    # read, never by racing the two calls.
+    # The perturbation proving the concurrency gate above bites. `update_manifest`
+    # parses the whole manifest, merges one seed and atomically replaces the file,
+    # so two processes whose read-merge-write windows overlap keep only the later
+    # writer's row. Run for real, in two processes, with the overlap forced by a
+    # barrier at the read/write seam and a fixed write order -- so the outcome is
+    # deterministic while the race itself is genuine.
     sample_dir = tmp_path / "rows"
     sample_dir.mkdir()
     for seed in (0, 12, 22):
@@ -1240,19 +1326,47 @@ def test_unserialized_manifest_updates_lose_a_row(tmp_path: Path) -> None:
 
     # A row already in the manifest when both workers read it.
     _update_manifest_row(sample_dir, manifest, 0)
-    shared = manifest.read_text(encoding="utf-8")
+    serialized_start = manifest.read_text(encoding="utf-8")
 
     # Serialized (what the lock guarantees): both new rows land.
     _update_manifest_row(sample_dir, manifest, 12)
     _update_manifest_row(sample_dir, manifest, 22)
     assert [int(cells[0]) for cells in _manifest_data_rows(manifest)] == [0, 12, 22]
 
-    # Unserialized: worker B read before worker A wrote.
-    manifest.write_text(shared, encoding="utf-8")
-    _update_manifest_row(sample_dir, manifest, 12)  # A: reads {0}, writes {0,12}
-    manifest.write_text(shared, encoding="utf-8")  # B's read predates A's write
-    _update_manifest_row(sample_dir, manifest, 22)  # B: merges into {0}, writes {0,22}
-    # The row both workers read survives; the row only A wrote is gone.
+    # Unserialized: the same two updates, run concurrently with overlapping
+    # critical sections.
+    manifest.write_text(serialized_start, encoding="utf-8")
+    driver = tmp_path / "race_driver.py"
+    driver.write_text(_RACE_DRIVER, encoding="utf-8")
+    barrier = tmp_path / "barrier"
+    barrier.mkdir()
+    processes = [
+        subprocess.Popen(
+            [
+                "uv",
+                "run",
+                "python",
+                str(driver),
+                str(_REPO_ROOT / "scripts"),
+                role,
+                str(manifest),
+                str(sample_dir),
+                str(seed),
+                str(barrier),
+            ],
+            cwd=_REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for role, seed in (("early", 12), ("late", 22))
+    ]
+    for process in processes:
+        _, stderr = process.communicate(timeout=300)
+        assert process.returncode == 0, stderr
+
+    # Both readers saw {0}; the later writer's file is what survives, so the row
+    # the earlier writer added is gone while the row both of them read remains.
     assert [int(cells[0]) for cells in _manifest_data_rows(manifest)] == [0, 22]
 
 

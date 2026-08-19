@@ -170,11 +170,31 @@ if model not in names:
 PY
 }
 
+# Collapse `.` and `..` segments in an absolute path, textually. Used only on the
+# not-yet-created tail below, where the kernel cannot resolve them but `mkdir -p`
+# will: it creates each missing component in turn, so `a/../b` ends up at `b`.
+# Iterates with parameter expansion rather than word splitting, so a segment
+# containing a glob character is never expanded.
+normalize_path_segments() {
+  local rest="${1#/}" out="" segment
+  while [[ -n "$rest" ]]; do
+    segment="${rest%%/*}"
+    if [[ "$segment" == "$rest" ]]; then rest=""; else rest="${rest#*/}"; fi
+    case "$segment" in
+      '' | .) ;;
+      ..) out="${out%/*}" ;;
+      *) out="$out/$segment" ;;
+    esac
+  done
+  printf '%s' "${out:-/}"
+}
+
 # Echo the PHYSICAL absolute path of $1: every existing ancestor is resolved
-# through `cd` + `pwd -P` (so symlinks and `..` segments collapse), and the
-# not-yet-created trailing components are appended verbatim. Used by the fake
-# provider's target guard, which must compare directories that do not exist yet
-# and must not be defeatable by a symlink or a `..` in the operator's env.
+# through `cd` + `pwd -P` (so symlinks collapse to their targets), the
+# not-yet-created trailing components are appended, and the whole result is
+# normalized so a `..` behind a missing component cannot survive. Used by the fake
+# provider's target guard, which must compare paths that do not exist yet and must
+# not be defeatable by a symlink or a `..` in the operator's env.
 resolve_physical_path() {
   local target="$1" suffix=""
   [[ "$target" != /* ]] && target="$PWD/$target"
@@ -182,7 +202,7 @@ resolve_physical_path() {
     suffix="/$(basename "$target")$suffix"
     target="$(dirname "$target")"
   done
-  printf '%s%s' "$(cd "$target" && pwd -P)" "$suffix"
+  normalize_path_segments "$(cd "$target" && pwd -P)$suffix"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -384,7 +404,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] model-set coupling: would require the effective featherless meeting model (AILIBI_LLM_MEETING_MODEL, else the script default) to be 'Qwen/Qwen3.6-27B' — the qwen3_6_27b set's locked owner model (Task 16.13)"
     echo "[dry-run] model registry: would require 'Qwen/Qwen3.6-27B' registered in llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's entry — the client fails loud on an unregistered id)"
   elif [[ "$PROVIDER" == "fake" ]]; then
-    echo "[dry-run] preflight: would require no API key (hermetic \$0 provider) and would refuse a sample dir inside $REPO_ROOT/replays"
+    echo "[dry-run] preflight: would require no API key (hermetic \$0 provider) and would refuse a sample dir or manifest inside $REPO_ROOT/replays"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
@@ -505,25 +525,30 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   fi
   echo "Model registry OK: $REQUIRED_SET_OWNER_MODEL is registered in the production client."
 elif [[ "$PROVIDER" == "fake" ]]; then
-  # The fake provider is hermetic and $0, so there is no key to preflight — the
-  # thing that must be checked instead is the TARGET. Fake bytes in a committed
-  # set would be indistinguishable from a real recording at a glance and would
-  # poison every metric derived from it, so refuse any sample dir inside the
-  # repo's replays/ tree. Compare PHYSICAL paths (the dir need not exist yet), so
-  # a symlink or a `..` cannot smuggle the target back under replays/. Runs
-  # before mkdir/staging, so a refused run leaves nothing behind.
+  # The fake provider is hermetic and $0, so there is no key to preflight — what
+  # must be checked instead is where it WRITES. Fake bytes in a committed set are
+  # indistinguishable from a real recording at a glance and would poison every
+  # metric derived from it, so refuse when EITHER output lands in the repo's
+  # replays/ tree. Both are checked because they are independently configurable:
+  # a scratch AILIBI_SAMPLE_DIR with AILIBI_MANIFEST left pointing at a committed
+  # MANIFEST.md would otherwise rewrite that manifest's rows from fake replays.
+  # Compare PHYSICAL paths (neither need exist yet), so a symlink or a `..`
+  # cannot smuggle a target back under replays/. Runs before mkdir/staging, so a
+  # refused run leaves nothing behind.
   _replays_root="$(cd "$REPO_ROOT/replays" && pwd -P)"
-  _sample_dir_phys="$(resolve_physical_path "$SAMPLE_DIR")"
-  if [[ "$_sample_dir_phys" == "$_replays_root" || "$_sample_dir_phys" == "$_replays_root"/* ]]; then
-    echo "Error: a fake-provider refresh may not record into the repository's replays/ tree." >&2
-    echo "       Target:   $_sample_dir_phys" >&2
-    echo "       Rule:     the committed sample sets are REAL recordings; the fake provider" >&2
-    echo "                 records hermetic \$0 bytes, so it is confined to a scratch dir" >&2
-    echo "                 outside $_replays_root." >&2
-    echo "       Set AILIBI_SAMPLE_DIR (and AILIBI_MANIFEST) to a scratch dir; nothing was staged." >&2
-    exit 1
-  fi
-  echo "Fake-provider target OK: $_sample_dir_phys is outside $_replays_root (hermetic \$0 recording, no API key)."
+  for _target_var in SAMPLE_DIR MANIFEST; do
+    _target_phys="$(resolve_physical_path "${!_target_var}")"
+    if [[ "$_target_phys" == "$_replays_root" || "$_target_phys" == "$_replays_root"/* ]]; then
+      echo "Error: a fake-provider refresh may not write into the repository's replays/ tree." >&2
+      echo "       Offending path: $_target_phys (from AILIBI_${_target_var})" >&2
+      echo "       Rule:     the committed sample sets are REAL recordings; the fake provider" >&2
+      echo "                 records hermetic \$0 bytes, so both its sample dir and its manifest" >&2
+      echo "                 must lie outside $_replays_root." >&2
+      echo "       Point AILIBI_SAMPLE_DIR and AILIBI_MANIFEST at a scratch dir; nothing was staged." >&2
+      exit 1
+    fi
+  done
+  echo "Fake-provider targets OK: sample dir + manifest are outside $_replays_root (hermetic \$0 recording, no API key)."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
