@@ -503,6 +503,39 @@ def test_report_models_are_frozen() -> None:
 
 
 # ---------------------------------------------------------------------------
+# The two-mirror tripwire
+# ---------------------------------------------------------------------------
+
+
+def test_tournament_report_field_set_is_pinned_to_its_two_mirrors() -> None:
+    """A new field on TournamentReport must land on both mirrors in one change.
+
+    ``api/routes/eval.py::_TournamentReportEvalView`` forbids extras, so an
+    unmirrored field 500s ``/eval/tournament-report`` on the redaction
+    round-trip; ``tests/api/test_leak.py::EXPECTED_EVAL_REPORT_FIELDS`` snapshots
+    the recursive served field set. Neither failure points at this model, which
+    is why the field set is pinned here.
+    """
+
+    assert set(TournamentReport.model_fields) == {
+        "format_version",
+        "games",
+        "seeds_used",
+        "kill_gifted_wins",
+        "instances_dropped_total",
+        "mean_instances_complete_at_win",
+    }, (
+        "TournamentReport's field set changed. A field added here must be "
+        "mirrored on api/routes/eval.py::_TournamentReportEvalView (extra="
+        "'forbid' — an unmirrored field breaks /eval/tournament-report) and on "
+        "tests/api/test_leak.py::EXPECTED_EVAL_REPORT_FIELDS (the recursive "
+        "served-field snapshot), in the same change. Instrument blocks that need "
+        "neither — such as eval.solvability.SolvabilityReport — belong in their "
+        "own module instead."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Leaf-type reuse (no redefinition / no drift)
 # ---------------------------------------------------------------------------
 
