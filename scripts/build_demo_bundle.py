@@ -141,7 +141,17 @@ _EMPTY_STATE_MARKER = "needs a tournament report"
 # in ``https://github.com/dkdan10/AiLibi`` is preceded by ``:`` or ``/`` or a
 # word character, and a repository-relative ``replays/samples/`` has no leading
 # slash at all.
-_HOST_PATH_IN_TEXT = re.compile(r"(?<![\w:/])(?:/[^\s/`]+){2,}|(?<!\w)[A-Za-z]:\\")
+#
+# ONE component is enough to match. A depth floor would read as the safer,
+# quieter rule and is the opposite: ``/root`` is a whole home directory, and it
+# is exactly what ``Path.home()`` resolves to for a build running as root. The
+# rule is host-INDEPENDENT for the same reason — matching this machine's home
+# would make the gate mean something different on a laptop than in CI, and a
+# build gate that moves with its host is not a gate. Any absolute path is
+# refused; this note has no business naming one.
+_HOST_PATH_IN_TEXT = re.compile(
+    r"(?<![\w:/])(?:/[A-Za-z0-9._-][^\s/`]*)+|(?<!\w)[A-Za-z]:\\"
+)
 
 # The file that says "this script owns this directory". Written at the end of
 # every successful build and REQUIRED by :func:`assert_safe_out_dir` before an

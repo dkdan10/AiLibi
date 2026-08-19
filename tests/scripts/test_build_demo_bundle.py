@@ -634,6 +634,16 @@ def test_a_host_path_in_authored_text_fails_the_build(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="/Users/someone/projects/AiLibi"):
         bdb.assert_no_host_paths(tmp_path)
 
+    # A ONE-component absolute path is caught too. `/root` is the whole point:
+    # it is a complete home directory, and the one `Path.home()` resolves to for
+    # a build running as root — a depth floor would wave it straight through.
+    note.write_text(
+        clean.replace("`replays/samples` in the repository.", "`/root`."),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="/root"):
+        bdb.assert_no_host_paths(tmp_path)
+
     # The ownership marker is authored prose too, and is checked the same way.
     note.write_text(clean, encoding="utf-8")
     marker = tmp_path / bdb._BUNDLE_MARKER
@@ -649,10 +659,15 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
     """A check that flagged the note's own GitHub link would be unusable.
 
     The clean-note leg above passes with that link already in place, so this pins
-    the discrimination directly: an https URL is not a filesystem path, and a
-    relative path is not one either.
+    the discrimination directly: an https URL is not a filesystem path, a
+    relative path is not one either, and a slash between two words is not one at
+    all. What IS one is refused at any depth.
     """
 
     assert bdb._HOST_PATH_IN_TEXT.search("https://github.com/dkdan10/AiLibi") is None
     assert bdb._HOST_PATH_IN_TEXT.search("`replays/samples/` is public") is None
+    assert bdb._HOST_PATH_IN_TEXT.search("and/or, on 2026/08/19") is None
+
     assert bdb._HOST_PATH_IN_TEXT.search("run `/Users/dan/x/y`") is not None
+    assert bdb._HOST_PATH_IN_TEXT.search("built in /root") is not None
+    assert bdb._HOST_PATH_IN_TEXT.search("built in C:\\Users\\dan") is not None
