@@ -137,3 +137,41 @@ class TestDependencyGraphValidation:
             errors,
         )
         assert errors == []
+
+
+class TestRecordImpactFields:
+    """Phase >= 20 contracts must state Record impact and Measurement."""
+
+    @staticmethod
+    def _task_with_body(task_id: str, body: str) -> _task_parser.TaskDoc:
+        base = _task(task_id)
+        return _task_parser.TaskDoc(
+            **{**base.__dict__, "body": body},
+        )
+
+    def test_phase_20_task_missing_fields_is_an_error(self) -> None:
+        errors: list[str] = []
+        validate_task_docs.validate_record_impact_fields(
+            [self._task_with_body("20.1", "**Branch:** `x`\n**Complexity:** Small\n")],
+            errors,
+        )
+        assert any("Record impact" in error for error in errors)
+        assert any("Measurement" in error for error in errors)
+
+    def test_phase_20_task_with_fields_is_clean(self) -> None:
+        errors: list[str] = []
+        body = (
+            "**Branch:** `x`\n**Record impact:** none\n"
+            "**Measurement:** `uv run pytest tests/x -q` green\n"
+        )
+        validate_task_docs.validate_record_impact_fields(
+            [self._task_with_body("20.1", body)], errors
+        )
+        assert errors == []
+
+    def test_pre_phase_20_task_is_not_validated(self) -> None:
+        errors: list[str] = []
+        validate_task_docs.validate_record_impact_fields(
+            [self._task_with_body("19.1", "**Branch:** `x`\n")], errors
+        )
+        assert errors == []

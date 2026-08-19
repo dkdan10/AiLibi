@@ -1,0 +1,166 @@
+# Agent Prompt — 20.40 What was learned, and the review that found it: docs/lessons.md + the curated review publication
+
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-20.md.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task 20.40 — What was learned, and the review that found it: docs/lessons.md + the curated review publication, anchored to C/B11 with the rulings C/D7 and C/D9 (audits/review-2026-08-19/C/collated-portfolio.md:293-298 — the "What I learned" page, 2–3 screens, raised by four independent persona reads; :379-388 — the process-ceremony ruling, "P2's sharper point … belongs in the 'what I learned' page as an owned lesson, not hidden"; :394-399 — the apparatus-to-result ruling, owned in prose rather than by deleting the record; :564-565 — the sequencing item that puts this page last, "the one thing only the human can write"); audits/review-2026-08-19/C/p2-ml-research-lead.md:82 (the line owned verbatim — "strong on measurement, weak on knowing when to stop building measurement"); audits/review-2026-08-19/D/FINAL-synthesis.md:296 (wave-3 row 3.4 — the themes this page must cover), :297 (wave-3 row 3.5 — publish the review, hook = the retractions, "sequenced here so every finding links to its fix PR"), :360-366 (ruling R6 — yes, in wave 3, curated, titled by the retractions; "not 171 findings dumped"; publishing open self-criticism before any of it is fixed "reads as chaos, not rigor"), :388-391 (ruling R11 — B's P0 is correctness/security/data-loss, A's P0 is believability of the core loop; "Put that sentence in `docs/lessons.md`"), :393-398 (ruling R12 — keep and index the audits tree, trim in-code narration, evict the README's 846 words), :31-56 (§0, the judgment in five sentences), :160 (§2 row 15 — in-code provenance HOLDS, 43 of 44 cited paths resolve), :169-186 (§3 — where the project is stronger than it claims); audits/review-2026-08-19/D/synth-ambition.md:249-262 (FM-5 — the essay's hook, the four retracted headline claims named, and "corrected severities in both directions (C-1, C-31, C-32 up; others down)"), :109-111 (the quotable ratio); audits/review-2026-08-19/D/synth-pragmatic.md:202 (F3 — the same page reached independently by the pragmatic lane); audits/review-2026-08-19/B/repo-health-architecture.md:314-329 (the measured bucket table — 95,824 lines of process narration against 57,776 lines of core product Python, 1.66:1, against 3,358 lines of durable engineering docs), :231 and :296 (43 of 44 cited `audits/`/`tasks/` paths resolve — "maintained, not rotted"); the five retractions in the verdict files that own them — audits/review-2026-08-19/A/verdicts.md:12-22 (G-1 — 44.3% victim-caused / 21.5% witness-caused, the 23 one-tick corridor transits that made 58/79 read as 73.4%, and two of the claim's own exemplars falling in the opposite bucket), :111-131 (G-6 REFUTED — `discovered_by=None` is precisely what makes a body visible; zero real misses corpus-wide; 189/798 measured against the claimed 230/798), :137-147 (G-7 — the agent clock runs +1 against the engine clock on 18,936/18,936 discriminating sightings, so the headline is a two-clock artefact; corrected median 3 and 171/963 = 17.8% landing exactly on the kill tick), :222-228 (G-4's `saw_vent` half REFUTED — 739 of 748 spoken vent claims = 98.8% grounded in the speaker's own recorded field of view, all nine exceptions naming real impostors, seven of them witnessed kills); audits/review-2026-08-19/B/verdicts.md:340-375 (C-33's load-bearing risk REFUTED by experiment — five always-on parity gates, a 1e-9 one-sided perturbation producing 446 mismatches, severity corrected down to P2), :67 (C-32 severity corrected P2 → P1 — the other direction), :415-441 (C-42 — mechanism exact, severity overstated, corrected to P2); audits/review-2026-08-19/B/collated-findings.md:63 (C-32 — the import contracts cover 89 of 383 Python files); anchors re-verified at HEAD `b809b19c` — .importlinter:10, :18, :26, :34 (exactly four contracts), tasks/phase-19.md:7 (the default tier ran 4,621 tests at the Phase-19 close), README.md:47 (the workflow paragraph and its enforcement claim), :53-66 (`## How this is being built` and the two linked workflow artifacts), :194 (the README's only mention of the metric — the identifier `vote_correctness` appears nowhere in README.md, which is the ground the synthesis's own [D-VERIFIED] correction overstated), engine/visibility.py:93 (`body.discovered_by is None and body.room in visible_room_set` — the line that makes G-6's refutation true), docs/reading-guide.md:196-201 (the standing disclosure that the flag doctrine convicts innocents), CONTRIBUTING.md:4 ("pull requests are not the workflow"), AGENTS.md:76-107 (the seven craft rules added by the planning PR; rule 4, no internal dialect on user-facing surfaces, binds this page); the review tree as committed by the planning PR — 49 markdown files (A 19, B 18, C 7, D 5), 16,849 lines, ~249,000 words, 1.7 MB; audits/audit-phase-20-planning.md §5 (the divergences from the review's roadmap) and §7 (the backlog, out and recorded).. Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/phase-20.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+**Branch:** `phase-20-lessons-and-review`
+**Depends on:** 20.38, 20.39 — the corrected-bytes results page lands first, because the lessons page and the review index both state what the record actually moved and neither may re-derive a figure the results page owns; and the hero media lands on the same front page before this task edits it, so the two front-door edits are ordered rather than racing for the same screen.
+**Section refs:** C/B11 with the rulings C/D7 and C/D9 (audits/review-2026-08-19/C/collated-portfolio.md:293-298 — the "What I learned" page, 2–3 screens, raised by four independent persona reads; :379-388 — the process-ceremony ruling, "P2's sharper point … belongs in the 'what I learned' page as an owned lesson, not hidden"; :394-399 — the apparatus-to-result ruling, owned in prose rather than by deleting the record; :564-565 — the sequencing item that puts this page last, "the one thing only the human can write"); audits/review-2026-08-19/C/p2-ml-research-lead.md:82 (the line owned verbatim — "strong on measurement, weak on knowing when to stop building measurement"); audits/review-2026-08-19/D/FINAL-synthesis.md:296 (wave-3 row 3.4 — the themes this page must cover), :297 (wave-3 row 3.5 — publish the review, hook = the retractions, "sequenced here so every finding links to its fix PR"), :360-366 (ruling R6 — yes, in wave 3, curated, titled by the retractions; "not 171 findings dumped"; publishing open self-criticism before any of it is fixed "reads as chaos, not rigor"), :388-391 (ruling R11 — B's P0 is correctness/security/data-loss, A's P0 is believability of the core loop; "Put that sentence in `docs/lessons.md`"), :393-398 (ruling R12 — keep and index the audits tree, trim in-code narration, evict the README's 846 words), :31-56 (§0, the judgment in five sentences), :160 (§2 row 15 — in-code provenance HOLDS, 43 of 44 cited paths resolve), :169-186 (§3 — where the project is stronger than it claims); audits/review-2026-08-19/D/synth-ambition.md:249-262 (FM-5 — the essay's hook, the four retracted headline claims named, and "corrected severities in both directions (C-1, C-31, C-32 up; others down)"), :109-111 (the quotable ratio); audits/review-2026-08-19/D/synth-pragmatic.md:202 (F3 — the same page reached independently by the pragmatic lane); audits/review-2026-08-19/B/repo-health-architecture.md:314-329 (the measured bucket table — 95,824 lines of process narration against 57,776 lines of core product Python, 1.66:1, against 3,358 lines of durable engineering docs), :231 and :296 (43 of 44 cited `audits/`/`tasks/` paths resolve — "maintained, not rotted"); the five retractions in the verdict files that own them — audits/review-2026-08-19/A/verdicts.md:12-22 (G-1 — 44.3% victim-caused / 21.5% witness-caused, the 23 one-tick corridor transits that made 58/79 read as 73.4%, and two of the claim's own exemplars falling in the opposite bucket), :111-131 (G-6 REFUTED — `discovered_by=None` is precisely what makes a body visible; zero real misses corpus-wide; 189/798 measured against the claimed 230/798), :137-147 (G-7 — the agent clock runs +1 against the engine clock on 18,936/18,936 discriminating sightings, so the headline is a two-clock artefact; corrected median 3 and 171/963 = 17.8% landing exactly on the kill tick), :222-228 (G-4's `saw_vent` half REFUTED — 739 of 748 spoken vent claims = 98.8% grounded in the speaker's own recorded field of view, all nine exceptions naming real impostors, seven of them witnessed kills); audits/review-2026-08-19/B/verdicts.md:340-375 (C-33's load-bearing risk REFUTED by experiment — five always-on parity gates, a 1e-9 one-sided perturbation producing 446 mismatches, severity corrected down to P2), :67 (C-32 severity corrected P2 → P1 — the other direction), :415-441 (C-42 — mechanism exact, severity overstated, corrected to P2); audits/review-2026-08-19/B/collated-findings.md:63 (C-32 — the import contracts cover 89 of 383 Python files); anchors re-verified at HEAD `b809b19c` — .importlinter:10, :18, :26, :34 (exactly four contracts), tasks/phase-19.md:7 (the default tier ran 4,621 tests at the Phase-19 close), README.md:47 (the workflow paragraph and its enforcement claim), :53-66 (`## How this is being built` and the two linked workflow artifacts), :194 (the README's only mention of the metric — the identifier `vote_correctness` appears nowhere in README.md, which is the ground the synthesis's own [D-VERIFIED] correction overstated), engine/visibility.py:93 (`body.discovered_by is None and body.room in visible_room_set` — the line that makes G-6's refutation true), docs/reading-guide.md:196-201 (the standing disclosure that the flag doctrine convicts innocents), CONTRIBUTING.md:4 ("pull requests are not the workflow"), AGENTS.md:76-107 (the seven craft rules added by the planning PR; rule 4, no internal dialect on user-facing surfaces, binds this page); the review tree as committed by the planning PR — 49 markdown files (A 19, B 18, C 7, D 5), 16,849 lines, ~249,000 words, 1.7 MB; audits/audit-phase-20-planning.md §5 (the divergences from the review's roadmap) and §7 (the backlog, out and recorded).
+**Complexity:** Small
+**Record impact:** post-record (the record is quoted and linked; no recorded byte, MANIFEST, pin, lever or instrument moves — this task ships two prose documents and one index)
+**Measurement:** `uv run pytest tests/scripts/test_check_doc_facts.py -q` green with the new link-check bites — every relative link in docs/lessons.md and in audits/review-2026-08-19/README.md resolves, every mapped PR number resolves to a merge commit reachable from HEAD, and the perturbation cases (a broken relative link, a mapped task id with no matching contract, a PR number nothing on main carries) each fail naming the drifted row; `wc -w docs/lessons.md` between 800 and 1,500; `uv run python scripts/check_doc_facts.py` exits 0.
+
+This is the page every hiring-manager persona said they would ask about on the call, and the only
+one nobody but the author can write (audits/review-2026-08-19/C/collated-portfolio.md:293-298,
+:564-565). The material already exists and is scattered across the training program summary, the
+reading guide, the triage and nineteen close audits; what does not exist is the assembly, in the
+first person, of what directing coding agents against written contracts actually taught. The
+sharpest input is not a win but a critique: the research-lead read closed with "strong on
+measurement, weak on knowing when to stop building measurement"
+(audits/review-2026-08-19/C/p2-ml-research-lead.md:82), no other reader rebutted it, and the code
+track handed over the measurement that makes it concrete — 95,824 lines of process narration
+against 57,776 lines of core product Python, a 1.66:1 ratio, against 3,358 lines of durable
+engineering documentation (audits/review-2026-08-19/B/repo-health-architecture.md:314-329). The
+ruling on process-as-theatre was explicit: the fix is framing, not removing the process, and the
+line belongs on this page as an owned lesson rather than answered with more tooling
+(:379-388, :394-399). Quoting a critic verbatim on your own front door is a stronger claim to
+judgment than any number in the results table.
+
+The lesson that organizes the page is the review's own headline, and the synthesis says where to
+put it: B's P0 means correctness, security or data loss; A's P0 means the core loop stops being
+believable; every gameplay P0 is a product defect sitting on top of correct code
+(audits/review-2026-08-19/D/FINAL-synthesis.md:388-391, with the same sentence opening §0 at
+:31-56). That is what explains how a default test tier of 4,621 (tasks/phase-19.md:7) and four
+import contracts (.importlinter:10, :18, :26, :34) stayed green while a fifth of crew testimony
+was invented. The page must be specific about what those gates structurally could not see: an
+invariant asserted in a docstring and falsified two phases later by a map-config flip; a leak
+scanner that checked packet shape and string content but never entitlement, so the mutation the
+design calls the most important test survived all four suites; import contracts covering 89 of 383
+Python files (audits/review-2026-08-19/B/collated-findings.md:63). The honest counterweight belongs
+in the same breath — the prompt byte-golden ships the perturbation that proves it can fail, and 43
+of 44 provenance paths cited from Python still resolve on disk
+(audits/review-2026-08-19/B/repo-health-architecture.md:231, :296) — because the lesson is not
+"tests are useless" but "a gate only sees the axis it was pointed at."
+
+The second half of the task publishes the review, and the ruling is precise about the shape: yes,
+in wave 3, curated, titled by the retractions, sequenced after the fixes so every finding links to
+the PR that closed it, and explicitly not a dump of 171 findings
+(audits/review-2026-08-19/D/FINAL-synthesis.md:360-366). The tree the planning PR committed is 49
+markdown files and roughly 249,000 words; nobody reads that, so the index IS the artifact. Its lede
+is the adversarial layer: three blind reviews of an AI-built codebase that disproved four of their
+own headline claims — the surviving-corpse finding refuted by `discovered_by=None` being the flag
+that makes a body visible, with zero real misses corpus-wide; the time-of-death headline dissolved
+into a two-clock artefact once the +1 agent-memory convention was applied; the fabricated-vent half
+measured 98.8% grounded; the flagship attribution corrected from 73.4% to 44.3% victim-caused with
+21.5% running the opposite way — plus severities corrected in both directions, one code finding up
+from P2 to P1 and the 888-line fork's load-bearing risk experimentally refuted and marked down
+(audits/review-2026-08-19/D/synth-ambition.md:249-262; the verdict files named in Section refs).
+That framing is also the evidence-backed answer to the process-theatre critique: the process
+catches things, including itself.
+
+Two disciplines separate this task from an essay. First, the audience split. docs/lessons.md is a
+user-facing surface and craft rule 4 (AGENTS.md:76-107) binds it: no task ids, no register ids, no
+threshold arithmetic, no term the glossary has not defined — the mechanisms get described in plain
+English and the numbers do the arguing. The review index is an audit-tree document where the
+finding ids are the subject matter, so there they are used freely and each one links the file that
+owns it. Second, nothing on either page is composed. Every figure is quoted from a committed
+source with its path, every mapped row names a task and a PR that exist, and the mapping is
+harvested mechanically from the phase document's contracts and from the merge subjects on main
+rather than typed from memory — the third column is a link that must resolve, which is exactly the
+property that makes "the process caught it and here is the fix" a checkable claim rather than a
+boast.
+
+**Files in scope:**
+- docs/lessons.md; (new — first person, 800–1,500 words, opening with an owner-confirm marker comment; the themes, the owned critique verbatim, and no internal dialect)
+- audits/review-2026-08-19/README.md; (new — the curated index: what each of the four tracks is and how it was run, the retractions first, the acted-on map from finding id to task to merged PR, and the not-acted-on classes with where each is recorded)
+- README.md; (the new "What I learned" section only — six to ten one-sentence bullets linking docs/lessons.md, plus the one line pointing at the review index; no other section moves)
+- scripts/check_doc_facts.py; (the link-check over the new pages)
+- tests/scripts/test_check_doc_facts.py
+
+**Files NOT in scope:**
+- audits/review-2026-08-19/A/, audits/review-2026-08-19/B/, audits/review-2026-08-19/C/, audits/review-2026-08-19/D/ (records — the index describes, orders and corrects by pointing; a correction found while indexing is recorded in the index's own errata line and routed to the close, never written into a report)
+- audits/audit-phase-20-baseline-7.md, audits/audit-phase-20-preregistration.md, audits/audit-phase-20-planning.md (records — quoted and linked, never edited)
+- docs/reading-guide.md, docs/history.md, docs/glossary.md, docs/ml-program.md, docs/architecture.md (owned by the earlier front-door tasks; this page links them and adds no competing narrative)
+- every Python package, test fixture, prompt template and replay byte (this task ships prose and an index; nothing executable changes)
+
+**Definition of done:**
+- [ ] `docs/lessons.md` exists, is between 800 and 1,500 words, is written in the first person, and opens with an HTML comment marking the wording as the owner's to confirm; the PR states plainly that the voice is a draft for the owner to edit.
+- [ ] The page covers, each in its own short section: directing coding agents at scale (the contract, the byte-mirrored generated prompt, the fresh-checkout dispatch, the re-anchoring coordination commit, and why outside pull requests are refused — CONTRIBUTING.md:4); what the automated gates could and could not catch, naming the three mechanism classes (a docstring invariant falsified by a later config flip, a gate that validated shape instead of entitlement, and import contracts covering 89 of 383 Python files) against the 4,621-test default tier and the four contracts; documentation drift treated as a first-class bug, with the structural fix that followed; pre-registration and the negative result, including that a missed bar is reported rather than re-priced; and the owned critique.
+- [ ] The research-lead line appears verbatim — "strong on measurement, weak on knowing when to stop building measurement" — attributed to the review's research-lead read, immediately followed by the measured ratio (95,824 lines of process narration against 57,776 of core product Python, against 3,358 lines of durable docs) and by the author's own answer to it.
+- [ ] The ruling sentence the synthesis asked for is on the page in the author's words: the code was right and the game was wrong — the two tracks used different definitions of a severe defect, and nearly every gameplay defect was a faithful implementation of a rule nobody would have written after watching it run.
+- [ ] Craft rule 4 holds on `docs/lessons.md`: a grep of the file for task ids, review register ids, lever env keys, baseline numbering and threshold arithmetic returns nothing, and any surviving term links `docs/glossary.md`; the PR quotes the grep.
+- [ ] `README.md` gains a "What I learned" section of six to ten single-sentence bullets, each a claim rather than a topic, linking `docs/lessons.md`, plus one sentence linking the review index; the diff touches no other README section.
+- [ ] `audits/review-2026-08-19/README.md` opens with the retractions: a table whose rows are at minimum the four gameplay headline claims the review disproved and the code finding whose load-bearing risk it refuted by experiment, each row naming the original claim, what the re-derivation measured, and the verdict file with the line range that owns it; a second short block records severity corrections in both directions with one example each way.
+- [ ] The index states what each track was and how it was run — the four track directories with their file counts, the number of adversarial verdicts each produced, and the fact that the tracks were blind to one another — plus the tree's size, so a reader knows what they are not being asked to read.
+- [ ] The index carries the acted-on map: one row per finding id this phase acted on, with a one-line claim, the Phase-20 task that closed it, and a link to the merged PR; the ids are harvested from the phase document's contracts rather than typed by hand, and the PR numbers from the merge subjects reachable on main.
+- [ ] The index carries the not-acted-on classes with the reason and the record that holds it — the balance wave, the refuted items, the decomposition and history-rewrite refusals, and the remaining triaged findings — each pointing at `audits/audit-phase-20-planning.md` §5 or §7 rather than re-arguing the ruling.
+- [ ] The index records the one place the review's own correction over-reached, as its dated errata line: the synthesis's verified correction stated that `README.md` mentions the vote-correctness metric nowhere, and the identifier indeed appears nowhere in the file, but the metric is described by name at README.md:194 — the finding's leg is still refuted, on the narrower ground that no structural claim about the metric ever reached the front door.
+- [ ] A link-check pins both new documents: every relative link resolves to a file in the tree, every mapped task id matches a contract in `tasks/phase-20.md`, and every mapped PR number appears as a `(#N)` merge-subject suffix reachable from HEAD; the check ships perturbation cases for each of those three legs, and each failure message names the offending row.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import check_doc_facts"`
+- `uv run python -c "import eval.leak_scan"`
+- `uv run python -c "import eval.evidence_honesty"`
+- `uv run python -c "import eval.solvability"`
+- `uv run python -c "import tests._helpers.committed"`
+- `uv run python -c "import eval.validity"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import agents.strategic.prompts.loader"`
+- `uv run python -c "import agents.memory.store"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import meetings.manager"`
+- `uv run python -c "import api.schemas"`
+
+## Pre-flight checklist
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+- Re-verify every file:line anchor the contract cites at HEAD before editing; if an anchor has moved, record the true location under `## Decisions` — never edit from a stale line number.
+- Grep every consumer of each symbol, path, or constant you will change (the blast radius); if a hit lies outside the files in scope, stop and ask rather than widening scope silently.
+
+## Craft rules (AGENTS.md "Craft rules" — non-negotiable for every file you touch)
+- Lead with intent: a docstring or comment states what the code does and why, now; provenance (task ids, audit paths) is at most one trailing line. Do not narrate history in source.
+- A gate must be able to fail: every new test or check that guards an invariant ships with a planted or perturbed case proving it bites, and checks the semantics it claims, not only the shape.
+- Retire means delete: when a lever graduates or a branch dies, delete the resolver, the parameter, the branch and the tests that pin them; keep only the stamp key and one history line.
+- No internal dialect on user-facing surfaces: UI copy, rendered game prompts, spoken text and README carry no task or audit ids, no threshold arithmetic, and no undefined jargon.
+- Claims are verifiable-shaped: a doc claim names the mechanism that enforces it; a number is recomputed from committed bytes and its command goes in the PR.
+
+## Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify AGENT_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
+Do not implement work outside this task.
+
+## Verification checklist
+- Run every command listed in the Definition of done.
+- If the contract carries a `**Measurement:**` field, run that command and paste its output into the PR's `## Summary`; a Measurement that cannot be run is reported under `## Questions`, never asserted.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `phase-20-lessons-and-review` with a title like `task 20.40: what was learned, and the review that found it: docs/lessons.md + the curated review publication`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing C/B11 with the rulings C/D7 and C/D9 (audits/review-2026-08-19/C/collated-portfolio.md:293-298 — the "What I learned" page, 2–3 screens, raised by four independent persona reads; :379-388 — the process-ceremony ruling, "P2's sharper point … belongs in the 'what I learned' page as an owned lesson, not hidden"; :394-399 — the apparatus-to-result ruling, owned in prose rather than by deleting the record; :564-565 — the sequencing item that puts this page last, "the one thing only the human can write"); audits/review-2026-08-19/C/p2-ml-research-lead.md:82 (the line owned verbatim — "strong on measurement, weak on knowing when to stop building measurement"); audits/review-2026-08-19/D/FINAL-synthesis.md:296 (wave-3 row 3.4 — the themes this page must cover), :297 (wave-3 row 3.5 — publish the review, hook = the retractions, "sequenced here so every finding links to its fix PR"), :360-366 (ruling R6 — yes, in wave 3, curated, titled by the retractions; "not 171 findings dumped"; publishing open self-criticism before any of it is fixed "reads as chaos, not rigor"), :388-391 (ruling R11 — B's P0 is correctness/security/data-loss, A's P0 is believability of the core loop; "Put that sentence in `docs/lessons.md`"), :393-398 (ruling R12 — keep and index the audits tree, trim in-code narration, evict the README's 846 words), :31-56 (§0, the judgment in five sentences), :160 (§2 row 15 — in-code provenance HOLDS, 43 of 44 cited paths resolve), :169-186 (§3 — where the project is stronger than it claims); audits/review-2026-08-19/D/synth-ambition.md:249-262 (FM-5 — the essay's hook, the four retracted headline claims named, and "corrected severities in both directions (C-1, C-31, C-32 up; others down)"), :109-111 (the quotable ratio); audits/review-2026-08-19/D/synth-pragmatic.md:202 (F3 — the same page reached independently by the pragmatic lane); audits/review-2026-08-19/B/repo-health-architecture.md:314-329 (the measured bucket table — 95,824 lines of process narration against 57,776 lines of core product Python, 1.66:1, against 3,358 lines of durable engineering docs), :231 and :296 (43 of 44 cited `audits/`/`tasks/` paths resolve — "maintained, not rotted"); the five retractions in the verdict files that own them — audits/review-2026-08-19/A/verdicts.md:12-22 (G-1 — 44.3% victim-caused / 21.5% witness-caused, the 23 one-tick corridor transits that made 58/79 read as 73.4%, and two of the claim's own exemplars falling in the opposite bucket), :111-131 (G-6 REFUTED — `discovered_by=None` is precisely what makes a body visible; zero real misses corpus-wide; 189/798 measured against the claimed 230/798), :137-147 (G-7 — the agent clock runs +1 against the engine clock on 18,936/18,936 discriminating sightings, so the headline is a two-clock artefact; corrected median 3 and 171/963 = 17.8% landing exactly on the kill tick), :222-228 (G-4's `saw_vent` half REFUTED — 739 of 748 spoken vent claims = 98.8% grounded in the speaker's own recorded field of view, all nine exceptions naming real impostors, seven of them witnessed kills); audits/review-2026-08-19/B/verdicts.md:340-375 (C-33's load-bearing risk REFUTED by experiment — five always-on parity gates, a 1e-9 one-sided perturbation producing 446 mismatches, severity corrected down to P2), :67 (C-32 severity corrected P2 → P1 — the other direction), :415-441 (C-42 — mechanism exact, severity overstated, corrected to P2); audits/review-2026-08-19/B/collated-findings.md:63 (C-32 — the import contracts cover 89 of 383 Python files); anchors re-verified at HEAD `b809b19c` — .importlinter:10, :18, :26, :34 (exactly four contracts), tasks/phase-19.md:7 (the default tier ran 4,621 tests at the Phase-19 close), README.md:47 (the workflow paragraph and its enforcement claim), :53-66 (`## How this is being built` and the two linked workflow artifacts), :194 (the README's only mention of the metric — the identifier `vote_correctness` appears nowhere in README.md, which is the ground the synthesis's own [D-VERIFIED] correction overstated), engine/visibility.py:93 (`body.discovered_by is None and body.room in visible_room_set` — the line that makes G-6's refutation true), docs/reading-guide.md:196-201 (the standing disclosure that the flag doctrine convicts innocents), CONTRIBUTING.md:4 ("pull requests are not the workflow"), AGENTS.md:76-107 (the seven craft rules added by the planning PR; rule 4, no internal dialect on user-facing surfaces, binds this page); the review tree as committed by the planning PR — 49 markdown files (A 19, B 18, C 7, D 5), 16,849 lines, ~249,000 words, 1.7 MB; audits/audit-phase-20-planning.md §5 (the divergences from the review's roadmap) and §7 (the backlog, out and recorded).), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

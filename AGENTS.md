@@ -73,6 +73,42 @@ registry in `orchestrator/replay.py` (`_RETIRED_ALWAYS_ON_LEVERS` /
 `_TOGGLEABLE_LEVER_RESOLVERS`) is the source of truth for which levers are
 still live.
 
+## Craft rules (added at the Phase-20 planning PR)
+
+Seven rules the 2026-08-19 three-track review (`audits/review-2026-08-19/`,
+summarized in `audits/audit-phase-20-planning.md`) found this codebase violating
+at scale. They bind every PR from Phase 20 on; the generated task prompts repeat
+them.
+
+1. **Lead with intent, not history.** A docstring or comment states what the
+   code does and why, now. Provenance (task ids, audit paths, PR numbers) is at
+   most one trailing line. Source files are not changelogs — the review counted
+   2,691 lines of pure history narration in non-test Python.
+2. **A gate must be able to fail.** Every new test or check that guards an
+   invariant ships with a planted or perturbed case proving it bites, and it
+   checks the semantics it claims (entitlement, not just shape). A gate nobody
+   can fail is prose.
+3. **Retire means delete.** When a lever graduates or a branch dies, delete the
+   resolver, its parameter, the dead `if`, and the tests that pin the parameter.
+   Keep only the stamp key (provenance) and one history line. The prose sweep
+   above is still required; it is the smaller half.
+4. **No internal dialect on user-facing surfaces.** UI copy, rendered game
+   prompts, spoken `free_text`, README and docs carry no task/audit ids, no
+   threshold arithmetic, and no undefined jargon; a term that must survive is
+   defined in `docs/glossary.md`.
+5. **Claims are verifiable-shaped.** A documentation claim names the mechanism
+   that enforces it ("never breached in CI: import-linter contract +
+   planted-leak test + recursive leak sweep"), never a bare superlative; a
+   number is recomputed from committed bytes and the command goes in the PR.
+6. **Blast radius before scope.** Grep every consumer of a symbol, path, or
+   constant before changing it; if a hit lies outside the task's files in
+   scope, stop and ask rather than widening scope silently.
+7. **Every behaviour change carries its record impact.** Phase contracts state
+   `**Record impact:**` (none / lever-gated until the adopting record / the
+   record itself / post-record) and `**Measurement:**` (the command that proves
+   the DoD). Anything that changes rendered prompt bytes or detector output is
+   lever-gated default-OFF until its adopting record, and graduates under rule 3.
+
 ## Environment setup
 
 - In a fresh local, container, or agent runner environment, run

@@ -14,6 +14,7 @@ from _task_parser import (
     COMPLEXITY_VALUES,
     PROMPTS_DIR,
     TaskDoc,
+    extract_field,
     parse_all_tasks,
     relative,
 )
@@ -23,6 +24,14 @@ from _task_parser import (
 # include the corresponding scaffolding fields.
 _REQUIRES_HINT = {"Medium", "Integration"}
 _REQUIRES_INTEGRATION_RISK = {"Integration"}
+
+# From Phase 20 on, every contract states its record impact (does the change
+# move rendered/detector bytes, and so wait on the adopting record?) and the
+# measurement that proves its DoD — AGENTS.md "Craft rules" rule 7. Earlier
+# phases are history and are not re-validated.
+_RECORD_IMPACT_PHASE_FLOOR = 20
+_RECORD_IMPACT_FIELD = "Record impact"
+_MEASUREMENT_FIELD = "Measurement"
 
 
 def main() -> int:
@@ -34,6 +43,7 @@ def main() -> int:
         return 1
 
     validate_complexity(tasks, errors)
+    validate_record_impact_fields(tasks, errors)
     validate_public_types_unique(tasks, errors)
     validate_dependency_graph(tasks, errors)
     validate_hint_symbol_resolution(tasks)
@@ -82,6 +92,29 @@ def validate_complexity(tasks: list[TaskDoc], errors: list[str]) -> None:
                 f"{relative(task.phase_path)}: Task {task.task_id} is "
                 "Integration-tier but is missing **Integration risk:**."
             )
+
+
+def _phase_number(task: TaskDoc) -> int:
+    return int(task.task_id.split(".", maxsplit=1)[0])
+
+
+def validate_record_impact_fields(tasks: list[TaskDoc], errors: list[str]) -> None:
+    """Phase >= 20 contracts carry **Record impact:** and **Measurement:**.
+
+    Both are inline fields (``**Field:** value`` on one line) and must be
+    non-empty; they render into the prompt as part of the contract block.
+    """
+
+    for task in tasks:
+        if _phase_number(task) < _RECORD_IMPACT_PHASE_FLOOR:
+            continue
+        for field_name in (_RECORD_IMPACT_FIELD, _MEASUREMENT_FIELD):
+            if not extract_field(task.body, field_name):
+                errors.append(
+                    f"{relative(task.phase_path)}: Task {task.task_id} is missing "
+                    f"**{field_name}:** (required from Phase "
+                    f"{_RECORD_IMPACT_PHASE_FLOOR} on)."
+                )
 
 
 def validate_public_types_unique(tasks: list[TaskDoc], errors: list[str]) -> None:

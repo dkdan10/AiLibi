@@ -1,0 +1,98 @@
+# AiLibi as a portfolio project — read by a frontend / product-minded engineer who judges by the demo
+
+Reviewer persona: senior frontend/product engineer, ~20 minutes budgeted, judges by "can I see it, does it work, is it legible". Read-only. Everything below is labeled [VERIFIED] (I ran/read/measured it) or [JUDGMENT].
+
+What I actually did [VERIFIED]: read README.md, docs/reading-guide.md, docs/deployment.md, docs/media/README.md, frontend/CLAUDE.md, frontend/src (App, MapView, MeetingView, ReplayPicker, GuidedTour, ReplayControls, MindInspector, BeliefMatrix, TournamentDashboard), frontend/e2e/*.spec.ts, .github/workflows/ci.yml, scripts/build_demo_bundle.py; ran `npm run test` (6 files, 173 passed, 0.4 s), `npm run build` (green, largest chunk MapView 378 kB / 113 kB gz), `uv run python scripts/build_demo_bundle.py --out <scratch>` (5.2 s warm; 8.8 MB, 7 featured games, 204 JSON files); served the bundle on loopback and drove it in the Browser pane (DOM reads + JS; screenshots only worked for the first two frames because the pane is shared with other reviewers, so I measured layout via `getBoundingClientRect` at 1440×900, 1280×800 and 1000×640); viewed docs/media/spectator-meeting.png directly and extracted 20 frames of spectator-journey.gif with Pillow into a contact sheet; queried the GitHub repo metadata with `gh api`.
+
+---
+
+## 1. What this project IS (two sentences, after the read)
+
+AiLibi is a deterministic Among-Us-style simulation where scripted movers roam a station and LLM agents (Qwen3.6-27B on Featherless, or a fake provider) argue and vote in meetings, with a polished cream-and-ink React/PixiJS spectator that lets you replay any recorded game and open any agent's mind (its beliefs, the exact prompt, the response, its memory). It is equally a public lab notebook for building software by dispatching AI coding agents against written task contracts — 350 merged PRs, CI-enforced architecture, and a large audit corpus in a private idiom — with the second story visibly outweighing the first in the README.
+
+## 2. First impressions, minute by minute
+
+- **0:00–0:30 — title + tagline.** "An Among-Us-style social-deduction simulator being built almost entirely by AI coding agents under a strict review protocol — and a working example of how to keep architecture coherent across many agent-authored pull requests." I understand it, but note the tagline leads with *how it was built*, not *what it does*. For a demo-first person the hook is buried one clause deep. [JUDGMENT]
+- **0:30–1:30 — the GIF.** 640 px wide, 15 s. I see the picker with four hand-written blurbs (good), then… a page whose lower 55% is a timeline dock and transport, a meeting modal opening, and an "End of replay — Crew win" card. **I never see the map or an agent move.** [VERIFIED — all 20 sampled frames of spectator-journey.gif; at the 1000×640 recording viewport the fixed bottom dock (advantage graph + 9-row event timeline + transport) covers the PixiJS canvas entirely: canvas top 311 px vs dock top 308 px, page height 1078 px.] The caption promises "the map, an autoplay that stops itself at a meeting" — the autoplay is there, the map isn't. As the one asset "most readers will ever see" (docs/media/README.md's own words) it under-sells the product badly.
+- **1:30–2:30 — the meeting PNG.** This is the money shot and it's genuinely good: accusation chain p-1→p-4, p-5→p-7, p-7→p-1 with orange edges; turn cards with quoted speech and "saw p-3 in MEDBAY · t5" chips; ballots with a confidence bar and the sentence voted on; a Mind inspector rail. Distinctive typography (Fredoka + Space Mono), no generic SaaS look. Here I decided this is a real product, not a notebook. [VERIFIED by viewing docs/media/spectator-meeting.png]
+- **2:30–3:30 — "Reproduce the three claims above."** Three bash blocks before I've been told what the thing is. I appreciate the honesty (the recorder-refuses-to-overwrite caveat), but as a product reader I skimmed past. `bash scripts/run_spectator.sh` and the one-line bundle build are the useful bits. [JUDGMENT]
+- **3:30–4:30 — "What this is" / "How this is being built" / "Three load-bearing decisions".** Clear, well written, right length. "Two-tier agent reasoning" and "Memory is structured first" are the two paragraphs I'd quote to a colleague. The observation-firewall claim (agents/ cannot import engine/, import-linter enforced) is the credibility anchor.
+- **4:30–6:00 — "Project status".** This is where I stopped reading linearly. One 135-word paragraph followed by a **506-word single paragraph** [VERIFIED wc] containing "no mover flip", "fails the baseline-6 conviction-economy referee", "the 18.12 meeting-layer adopting record stands as the ladder tip", "closed 2026-08-18 with nothing recorded", "restoring it as the canonical canary denominator", "the evidence-gated default flip ruled FAIL (`utility-es` keeps a +0.16 win edge…)". None of this is decodable without the glossary two files away. I skipped to "Watch a replay".
+- **6:00–7:00 — "Watch a replay".** Useful first paragraph, then a 234-word paragraph re-explaining baseline 6 / CREW-ONLY / `impostor_roll_call` / "13 graduated levers" between me and the sentence that says what to click. [VERIFIED wc]
+- **7:00–12:00 — I built and ran the bundle.** One command, ~5 s on a warm env, 8.8 MB directory, `python -m http.server` and it plays. First-run guided tour (5 steps, good copy: "two truths at once", "Identity colour is identity only; it never encodes guilt"). Pressed Play, the transport paused itself at tick 7 with a full meeting: 8 turns, quotes like "I found poor p-2 cold as a cucumber in the Cafeteria", structured "saw / was in / completed" rows, ballots "skip ×6 · p-7 ×2 → Skipped". Clicked an agent → Mind inspector → Prompt tab shows the literal `<persona>…<memory>…<transcript>…<rules>` prompt with token counts and the model id. This is the strongest five minutes of the whole project. [VERIFIED in-browser]
+- **12:00–14:00 — Tournament tab in the bundle.** "No tournament report." followed by a raw dump of the http.server 404 HTML (`<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"…`) inside the panel, plus "DESIGN.md §11.3" in the header copy. docs/deployment.md calls this a "first-class 'no report' state" — it isn't quite. [VERIFIED]
+- **14:00–16:00 — GitHub metadata.** No repository description, no homepage URL, no topics, GitHub Pages not enabled, 0 stars, 0 forks. [VERIFIED `gh api repos/dkdan10/AiLibi`] There is no hosted demo anywhere; the front door is a shell command.
+- **16:00–20:00 — reading-guide.md.** "The outsider's five minutes" is 378 lines / 23 KB with an 11-term glossary of the audit idiom. Its numbers table is excellent; its §3 "what the corpus does NOT demonstrate" is the most credible page in the repo. But it is not five minutes.
+
+## 3. Strongest 3 / weakest 3 — for a demo-first frontend/product audience
+
+**Strongest**
+1. **The meeting view + Mind inspector.** [VERIFIED] Reactive accusation chain, per-turn structured observations, ballots with confidence and rationale, and the *actual prompt and response* one click away, with token counts and model id. This is a better LLM-agent debugging surface than most commercial agent tools ship. Firewall-safe visual grammar (identity ≠ guilt, outcomes role-neutral, impostor = badge not hue) is a design decision I'd hire for.
+2. **The static demo bundle.** [VERIFIED] `build_demo_bundle.py` → one 8.8 MB directory, no server, relative asset base, e2e-tested against the built artifact with `/api` blocked at the network layer (frontend/e2e/bundle.spec.ts), Playwright runs in CI. The engineering to make the demo shippable is done — it just isn't shipped.
+3. **The design intentionality is documented.** frontend/CLAUDE.md is a real design brief (art direction, "Not Inter, not Roboto", binding color rules, reduced-motion), tokens.ts is the source of truth with a test, Storybook stories exist for the seven surfaces, chunks are split so Pixi loads only behind the map route (vite.config.ts). The UI does not read as templated.
+
+**Weakest**
+1. **No hosted demo, and the hero GIF doesn't show the map.** [VERIFIED] For this audience the URL *is* the project. The bundle is exactly the artifact GitHub Pages wants (static, relative base, no API); its absence means every reader must clone (256 MiB blobless) and install uv + node before seeing anything. Meanwhile the GIF — the only thing a scroller sees — is a picker, a timeline dock, a modal, and a finale card; zero agent movement.
+2. **The README is written for the author's future self, not the visitor.** [VERIFIED] 3,833 words; the status/roadmap section is one 506-word paragraph of internal idiom (ladder tip, adopting record, NO-FLIP, canary denominator, graduated levers, "the 18.12 record", "Task 19.3", "the §1.3 bar"). A product-minded reader hits this at minute 4–5 and bounces. Density is not the problem — untranslated private vocabulary is.
+3. **Internal jargon leaks into the UI where it least belongs.** [VERIFIED] The Tournament Dashboard's user-facing tooltips read like PR descriptions: "(Task 19.14; audits/audit-phase-19-triage.md §7 item 15)", "The 19.5 recount found every committed inversion marker-free", "Since Task 13.13 the vote gate is non-directive", "DESIGN.md §11.3". The replay viewer itself is mostly clean, but the Resolution card still shows "§4.6" and the picker's set switch says "4p1i / 9p2i" with no expansion. Small in the viewer, heavy in the dashboard.
+
+## 4. Specific lines that helped / hurt
+
+**Helped**
+- README: "*15 seconds, no cuts: open the hand-picked featured game → play → the transport **stops itself** when a meeting starts…*" — the caption is better than the GIF. Keep the caption, fix the capture.
+- README "Three load-bearing decisions" §2: "Without this split, cost and latency make the system unviable." — one sentence, real engineering judgment.
+- README: "The firewall is scoped to the *agent* surface — the spectator surfaces … are privileged by design and intentionally expose role + kill attribution." — pre-empts the obvious objection.
+- GuidedTour step 2: "Identity colour is identity only; it never encodes guilt." and step 4: "Before an agent's first meeting you'll see an honest 'no deliberation yet' — never invented data." — product voice, exactly right.
+- ReplayPicker featured blurbs: "The emergency button, pressed with no body ever found: the table has to argue from absence alone." — this is how the whole README should sound.
+- reading-guide.md §3: "**General social deduction: NOT demonstrated.** This is the qualification the project's credibility rests on volunteering." — I trusted every number after that line.
+- docs/deployment.md one-liner: "There is exactly one sanctioned way to put AiLibi in front of someone who is not the local operator: build the static demo bundle and serve that." — clear, and it makes the missing Pages deploy more glaring.
+- frontend/CLAUDE.md "AVOID: … generic SaaS-landing aesthetics; centered 'hero' layouts; the AI-slop 'high-probability center.'" — tells me the look was chosen, not defaulted.
+
+**Hurt**
+- README Project status: "…so the scripted FSM stays the default mover, the learned champion stays opt-in, and baseline 6 (the 18.12 meeting-layer adopting record) stands as the ladder tip" — five undefined terms in one clause, on the front page.
+- README: "Phase 19 … closed 2026-08-18 with nothing recorded" — to an outsider "nothing recorded" reads as "nothing happened", not "no new baseline".
+- README "Watch a replay": "the meeting layer graduated **CREW-ONLY** — the roll-call round, the endpoint-band whereabouts exemption, the vent-placement contradiction variant (flag-minting plus the absent-set widening), and the absence prior all made unconditional beside the nine levers already retired, while the impostor-answer arm (`impostor_roll_call`) did not ship, so the record was made in a bare environment with that toggle OFF" — this sits between the reader and "pick a roster set and any replay". Move it to the manifest.
+- README: "300+ merged agent-authored PRs — the live count is on GitHub, deliberately not re-pinned here" — the hedge about pinning is process talk; just say 350 or link the PR list.
+- README Setup: the 200-word "**`--filter=blob:none` is the fast path, and here is the honest caveat**" paragraph — the honesty is admirable but the position (in Setup) means the first thing a cloner learns is that the repo is heavy and history rewrite "is not scheduled".
+- TournamentDashboard.tsx:518 (user-visible description): "How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT (Task 19.14; audits/audit-phase-19-triage.md §7 item 15)…" — a tooltip citing an audit file path.
+- Bundle Tournament tab (in-app): "API request to ./data/9p2i/eval/tournament-report.json failed (status 404): <!DOCTYPE HTML PUBLIC …" — raw server HTML in the UI.
+- Bundle README.md (shipped inside the artifact): "These games were baked from /Users/danielkeinan/projects/AiLibi/replays/samples" — the author's absolute home path ships in the public artifact.
+- ReplayPicker header in the bundle: "Every recorded replay in the served set." while the served set has 4 of 50 games — literally untrue in bundle mode.
+- Repo metadata: description `null`, homepage `null`, topics `[]` — a recruiter's search will never find it.
+
+## 5. What I could verify vs. took on faith
+
+**Verified myself (offline, minutes):** frontend unit tests pass (173); frontend build green; demo bundle builds and plays with no API; the tour, transport auto-pause at meetings, meeting transcript/ballots, Mind inspector prompt/response/memory, Belief × Truth matrix, outcome-hidden reveal all work in the built artifact; layout math at three viewports (map fully hidden behind the fixed dock at 1000×640, ~40 px clipped at 1280×800, clean at 1440×900); GIF content frame-by-frame; PNG content; CI runs project checks + frontend lint/tsc/vitest/build + Playwright e2e and the last main runs are green; 350 merged PRs; GitHub has no description/homepage/topics/Pages.
+
+**Taken on faith (would need the Python side or a real provider):** the observation-firewall "zero violations" claim; byte-identical determinism (I did not run the run-twice demo — another track owns it); every metric in the reading-guide table (34%/30% impostor win rates, 520/520 citations, 87% vent-sighting cross-tab); that the featured games are as dramatic as the blurbs say (I watched one meeting of seed 2, and it was); that the audits say what the reading guide says they say.
+
+## 6. Would I advance / take the meeting / star?
+
+- **Take the meeting: yes.** The meeting view + Mind inspector alone shows product taste, front-end craft (state, code-splitting, a11y labels on everything, keyboard transport, tests, e2e against the artifact) and unusual honesty. [JUDGMENT]
+- **Star the repo: not on the current front door.** I would have to build it to see it, and the README's middle third would make me doubt I was the audience. With a hosted link I would star it and send it to two people. [JUDGMENT]
+- **Advance the candidate (hiring-manager hat): yes, with one interview question** — "show me you can write the 200-word version of this README for someone who has never seen it." The repo proves rigor; it does not yet prove the ability to edit for an audience.
+
+**The single change that most raises all three:** deploy `frontend/dist/demo-bundle` to GitHub Pages (a ~15-line workflow — the artifact already has a relative base and an e2e spec against it), put the URL as the repo homepage and in the first line of the README, and re-record the GIF at ≥1440×900 so the map with moving tokens is actually in frame. Everything else is polish.
+
+## 7. MUST / GOOD / NICE — for the demo-first audience
+
+**MUST address (blocks landing with this audience)**
+1. **Host the demo bundle** (GitHub Pages or any static host) and link it from line 1 of the README and the GitHub "homepage" field. [VERIFIED it is static, relative-base, 8.8 MB, e2e-tested; VERIFIED has_pages=false, homepage=null]
+2. **Re-record spectator-journey.gif at a viewport where the map is visible** (≥1440×900, or scroll the map into frame; today the fixed dock covers the canvas at 1000×640). Show at least one token moving, one kill, one meeting pause. [VERIFIED frame sheet]
+3. **Rewrite the README "Project status" and "Watch a replay" sections for outsiders**: a 5–8 line status ("Phases 0–19 closed; the spectator, the eval harness and 100 committed games are the deliverable; the ML program tried to replace the scripted mover and — twice — measured that it shouldn't; details in the audits"), and move the baseline-6 / graduated-lever / CREW-ONLY provenance into `replays/samples/*/MANIFEST.md` or the reading guide. Define or drop: ladder tip, adopting record, NO-FLIP, canary denominator, graduated lever, "the §1.3 bar", "nothing recorded". [VERIFIED 506-word paragraph]
+4. **Fill in GitHub metadata**: description ("Deterministic Among-Us-style testbed for LLM agents, with a replay spectator — built by AI coding agents against written task contracts"), homepage (the demo URL), topics (llm-agents, multi-agent, social-deduction, react, pixijs, fastapi, determinism, ai-coding-agents). [VERIFIED all null/empty]
+
+**GOOD to address (materially strengthens)**
+5. Fix the bundle's Tournament tab empty state so it never dumps raw 404 HTML; in static mode say "The demo bundle ships the featured games only; the eval dashboard needs a tournament report — see the repo." [VERIFIED]
+6. Strip audit/task citations from user-facing dashboard tooltips (TournamentDashboard.tsx descriptions/titles; MeetingView "§4.6"); keep the substance, drop the "Task 19.14; audits/…§7 item 15" pointers or move them to a "why" disclosure. [VERIFIED]
+7. Lead the README with product, then process: swap the order so "What this is" (two sentences) and the demo link come before "Reproduce the three claims"; keep the reproduce block, but after the pitch. [JUDGMENT]
+8. Add a 60-second "what you're looking at" to the reading guide's demo section — the tour copy is already this good; reuse it — and cut the guide's own promise from "five minutes" to what it is, or split a genuine 5-minute page from the 23 KB reference. [JUDGMENT]
+9. Expand "4p1i / 9p2i" once in the picker ("4 players · 1 impostor") and make the picker header truthful in bundle mode ("The featured games baked into this demo"). [VERIFIED copy]
+10. Make the map survive smaller viewports: below ~800 px tall either collapse the event timeline by default or make the dock non-fixed, so the first thing a laptop user sees is the map. [VERIFIED clipping at 1280×800, hidden at 1000×640]
+
+**NICE**
+11. Don't ship the builder's absolute path in the bundle README (`/Users/danielkeinan/…`); print a repo-relative path. [VERIFIED]
+12. A short "for hiring managers / what the human did vs. what the agents did" paragraph with 3 links: one task contract, its generated prompt, and the merged PR — the README has the first two; add the PR. [JUDGMENT]
+13. Component-level render tests (testing-library) for MeetingView/MindInspector to complement the pure-logic vitest suite (today: playback, store, client, tokens, EventTicker, CostChips). [VERIFIED test inventory]
+14. A 20-second MP4/WebM alongside the GIF for the README (GitHub renders video), so the map animation isn't palette-crushed at 640 px. [JUDGMENT]
+15. Optionally bake the 9p2i tournament report into a second, larger "full corpus" bundle so the Dashboard has something to show in the hosted demo — deployment.md's "bake more into the bundle, not the bind" already points here. [JUDGMENT]
