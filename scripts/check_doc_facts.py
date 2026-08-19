@@ -630,11 +630,14 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
             or isinstance(denominator, bool)
             or numerator < 0
             or denominator < 0
+            or numerator > denominator
         ):
             errors.append(
-                f"{relative_path}: the vote_correctness block does not carry "
-                "non-negative integer counts (read "
-                f"{numerator!r} of {denominator!r}), so the rate cannot be "
+                f"{relative_path}: the vote_correctness block does not carry a "
+                "well-formed count pair — evidence-backed must be a "
+                "non-negative integer no larger than impostor_ejections "
+                f"(read {numerator!r} of {denominator!r}), the same invariant "
+                "VoteCorrectnessReport enforces, so the rate cannot be "
                 "re-derived."
             )
             continue
@@ -711,6 +714,37 @@ def check_stamp(
         )
 
 
+def provenance_lead_in(module: str) -> str | None:
+    """The paragraph directly above the module's per-set rate stamps.
+
+    The stamps are a contiguous run of lines naming the recorded sets; the
+    lead-in is the paragraph immediately preceding them, and it is the only
+    place the substrate claims count. Binding the claims to it is what stops a
+    correct model or baseline token elsewhere in the file from alibiing a wrong
+    attribution. ``None`` when no stamp line is found (format drift the caller
+    reports).
+    """
+
+    lines = module.splitlines()
+    first_stamp = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if any(set_dir in line for set_dir in _RECORDED_SETS)
+        ),
+        None,
+    )
+    if first_stamp is None:
+        return None
+    end = first_stamp
+    while end > 0 and not lines[end - 1].strip():
+        end -= 1
+    start = end
+    while start > 0 and lines[start - 1].strip():
+        start -= 1
+    return "\n".join(lines[start:end])
+
+
 def check_vote_correctness_provenance(
     repo_root: Path, module: str, errors: list[str]
 ) -> None:
@@ -718,13 +752,19 @@ def check_vote_correctness_provenance(
 
     A rate means nothing without the recording it came from. Three columns of
     every recorded set's ``MANIFEST.md`` own that recording — ``model``,
-    ``prompt_versions`` and the substrate ``flags`` — and all three must agree
-    across the sets: one provenance line cannot describe two substrates, so a
-    split fails here rather than silently describing whichever set happened to
-    be read first. The model and the prompt-set token (``<family>.<version>``)
-    are short enough to be named in the module and are required there; the
-    flags stamp is thirteen keys wide, so it is held to agreement only —
-    naming it in prose would be a second copy to rot.
+    ``prompt_versions`` and the substrate ``flags`` — and EVERY set must supply
+    all three and agree on them: a set that establishes nothing (a manifest
+    with no dotted prompt entry, say) must not be carried by its siblings, and
+    one provenance line cannot describe two substrates. The baseline comes from
+    the ladder-tip audit.
+
+    The baseline, the model and the prompt-set token (``<family>.<version>``)
+    are short enough to be named in the module and are required there — inside
+    the provenance lead-in that introduces the stamps
+    (:func:`provenance_lead_in`), never merely somewhere in the file, so a
+    correct token in an unrelated comment cannot alibi a wrong lead-in. The
+    flags stamp is thirteen keys wide, so it is held to agreement only: naming
+    it in prose would be a second copy to rot.
     """
 
     models: set[str] = set()
@@ -742,34 +782,61 @@ def check_vote_correctness_provenance(
                 "drifted, so the recorded substrate cannot be re-derived."
             )
             continue
-        models.update(row.model.strip() for row in rows)
+        set_models = {row.model.strip() for row in rows if row.model.strip()}
+        set_prompt_tokens: set[str] = set()
+        set_flag_stamps: set[str] = set()
         for row in rows:
             # Entries are ``template.family.version``; the no-meetings sentinel
             # and empty cells have no dotted shape and are skipped.
             for entry in row.prompt_versions.split(","):
                 segments = entry.strip().split(".")
                 if len(segments) >= 3:
-                    prompt_tokens.add(f"{segments[-2]}.{segments[-1]}")
+                    set_prompt_tokens.add(f"{segments[-2]}.{segments[-1]}")
             # Order-insensitive: the stamp is the SET of flags a row was
             # recorded under, not the order the writer happened to render.
-            flag_stamps.add(
+            set_flag_stamps.add(
                 ", ".join(
                     sorted(
                         flag.strip() for flag in row.flags.split(",") if flag.strip()
                     )
                 )
             )
+        for label, supplied in (
+            ("recording model", set_models),
+            ("prompt set", set_prompt_tokens),
+            ("substrate flags", set_flag_stamps),
+        ):
+            if not supplied:
+                errors.append(
+                    f"{relative_path}: records no {label} on any row, so this "
+                    "set establishes nothing about the substrate the "
+                    f"{_VOTE_CORRECTNESS_MODULE} stamps are attributed to — a "
+                    "sibling manifest must not vouch for it."
+                )
+        models |= set_models
+        prompt_tokens |= set_prompt_tokens
+        flag_stamps |= set_flag_stamps
+
+    lead_in = provenance_lead_in(module)
+    if lead_in is None:
+        errors.append(
+            f"{_VOTE_CORRECTNESS_MODULE}: the vote-correctness stamps carry no "
+            "provenance lead-in (the paragraph directly above them) — the "
+            "substrate claims have no home to check."
+        )
+        lead_in = ""
 
     tip = recorded_ladder_tip(repo_root, errors)
-    if tip is not None and f"baseline-{tip}" not in module:
+    if tip is not None and f"baseline-{tip}" not in lead_in:
         errors.append(
-            f"{_VOTE_CORRECTNESS_MODULE}: the vote-correctness stamps do not "
-            f"name 'baseline-{tip}', the baseline {_LADDER_TIP_AUDIT} records "
-            "the substrate ladder standing at — a rate attributed to the wrong "
-            "baseline is a wrong claim even when its arithmetic checks out."
+            f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance lead-in does "
+            f"not name 'baseline-{tip}', the baseline {_LADDER_TIP_AUDIT} "
+            "records the substrate ladder standing at — a rate attributed to "
+            "the wrong baseline is a wrong claim even when its arithmetic "
+            "checks out."
         )
 
-    for label, tokens, name_in_module in (
+    for label, tokens, name_in_lead_in in (
         ("recording model", models, True),
         ("prompt set", prompt_tokens, True),
         ("substrate flags", flag_stamps, False),
@@ -782,15 +849,15 @@ def check_vote_correctness_provenance(
                 "one substrate."
             )
             continue
-        if not name_in_module:
+        if not name_in_lead_in:
             continue
         for token in tokens:
-            if token not in module:
+            if token not in lead_in:
                 errors.append(
-                    f"{_VOTE_CORRECTNESS_MODULE}: the vote-correctness stamps do "
-                    f"not name the {label} {token!r} they were recorded on — "
-                    f"{_SET_MANIFEST_PATH.format(set_dir=_RECORDED_SETS[0])} and "
-                    "its siblings record it on every row."
+                    f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance lead-in "
+                    f"does not name the {label} {token!r} they were recorded "
+                    f"on — {_SET_MANIFEST_PATH.format(set_dir=_RECORDED_SETS[0])} "
+                    "and its siblings record it on every row."
                 )
 
 

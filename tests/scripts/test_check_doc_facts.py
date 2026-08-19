@@ -14,6 +14,7 @@ checked against the levers this build actually ships.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -600,6 +601,64 @@ def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
     assert len(errors) == 1
     assert "replays/samples/4p1i" in errors[0]
     assert "0/0 = n/a" in errors[0]
+
+
+def test_provenance_token_elsewhere_does_not_alibi_the_lead_in(
+    doc_tree: Path,
+) -> None:
+    # The substrate claims are bound to the paragraph directly above the
+    # stamps: a correct model token surviving in an unrelated comment must not
+    # satisfy a lead-in that names the wrong one.
+    _substitute(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        "model ``Qwen/Qwen3.6-27B``",
+        "model ``Qwen/Qwen3.5-9B``",
+    )
+    _write(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        _read(doc_tree, _VOTE_CORRECTNESS)
+        + "\n# An unrelated note mentioning Qwen/Qwen3.6-27B.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "provenance lead-in" in errors[0]
+    assert "recording model 'Qwen/Qwen3.6-27B'" in errors[0]
+
+
+def test_set_supplying_no_prompt_provenance_fails_loud(doc_tree: Path) -> None:
+    # A sibling manifest must not vouch for a set that records nothing: a
+    # manifest whose prompt cells carry no dotted entry establishes no prompt
+    # set, and the claim covers all four sets.
+    text = _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I)
+    lines = [
+        re.sub(r"\| [^|]*qwen3_6_27b[^|]*\|", "| no-meetings |", line)
+        if "qwen3_6_27b" in line
+        else line
+        for line in text.splitlines(keepends=True)
+    ]
+    _write(doc_tree, _ML_CORPUS_MANIFEST_9P2I, "".join(lines))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _ML_CORPUS_MANIFEST_9P2I in errors[0]
+    assert "records no prompt set on any row" in errors[0]
+
+
+def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None:
+    # More evidence-backed ejections than impostor ejections is the impossible
+    # state VoteCorrectnessReport rejects; a corrupted report must fail here
+    # rather than be documented as a valid measurement.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"evidence_backed_impostor_ejections": 72,',
+        '"evidence_backed_impostor_ejections": 79,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert "no larger than impostor_ejections" in errors[0]
 
 
 def test_eval_report_without_vote_correctness_block_fails_loud(
