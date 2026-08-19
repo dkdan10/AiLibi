@@ -29,6 +29,7 @@ from eval.kill_craft import (
     KillCraftReport,
     compute_kill_craft_report,
 )
+from tests._helpers.committed import kill_craft_report
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_9P2I = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
@@ -39,23 +40,23 @@ _LOG2_9 = math.log2(9)
 
 
 # --------------------------------------------------------------------------- #
-# Module-scoped fixtures — each report computed ONCE.                           #
+# The three committed walks, served from the shared per-worker cache.         #
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def corpus_report() -> KillCraftReport:
-    return compute_kill_craft_report(_CORPUS_9P2I)
+    return kill_craft_report(_CORPUS_9P2I)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def samples_9p2i_report() -> KillCraftReport:
-    return compute_kill_craft_report(_SAMPLES_9P2I)
+    return kill_craft_report(_SAMPLES_9P2I)
 
 
-@pytest.fixture(scope="module")
-def samples_4p1i_report() -> KillCraftReport:
-    return compute_kill_craft_report(_SAMPLES_4P1I)
+@pytest.fixture(scope="session")
+def samples_4p1i_report(committed_kill_craft_4p1i: KillCraftReport) -> KillCraftReport:
+    return committed_kill_craft_4p1i
 
 
 # --------------------------------------------------------------------------- #

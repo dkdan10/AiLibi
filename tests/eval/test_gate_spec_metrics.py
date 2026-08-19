@@ -77,7 +77,6 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from build_sample_report import (  # noqa: E402
-    build_report,
     corrected_baseline_from_report,
     serialize_corrected_baseline,
 )
@@ -967,7 +966,9 @@ class TestCommittedW2GateSpecPins:
         assert gauges.accused_impostor_meetings == 134
         assert gauges.over_gate_listener_rows == 506
 
-    def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
+    def test_corrected_w2_baseline_matches_a_rederivation(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,
         # produced by the operator command
         #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
@@ -980,9 +981,10 @@ class TestCommittedW2GateSpecPins:
         # chain — detector, predicate, metrics — is deterministic end to end.
         # corrected_w0/w1_baseline.json are the frozen prior-era A/B anchors,
         # decoupled from the W2 bytes by the re-record (rows pinned below).
-        report = build_report(_COMMITTED_9P2I_DIR)
         rederived = serialize_corrected_baseline(
-            corrected_baseline_from_report(report, sample_dir=_COMMITTED_9P2I_DIR)
+            corrected_baseline_from_report(
+                committed_9p2i_report, sample_dir=_COMMITTED_9P2I_DIR
+            )
         )
         assert rederived == _W2_BASELINE_FIXTURE.read_text(encoding="utf-8")
 

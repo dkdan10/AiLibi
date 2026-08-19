@@ -44,6 +44,12 @@ jobs:
       - name: Set up project environment
         run: bash scripts/setup_env.sh
 
+      # check.sh is the one home for the gate's commands, this job included: the
+      # pytest leg fans out over pytest-xdist workers (`-n auto`, one per vCPU —
+      # 4 on a standard hosted ubuntu-latest runner; the run's pytest header
+      # prints the count it actually created). Set AILIBI_PYTEST_SERIAL=1 in this
+      # job's env to fall back to a single process when a failure looks
+      # scheduling-dependent or a worker crash swallows the traceback.
       - name: Run checks
         run: bash scripts/check.sh
 

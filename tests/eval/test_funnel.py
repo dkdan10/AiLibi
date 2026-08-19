@@ -36,7 +36,6 @@ from eval.funnel import (
     _reporter_ejected,
     _VentSighting,
     _walk_game,
-    compute_information_funnel,
 )
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
@@ -48,6 +47,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
+from tests._helpers.committed import funnel_9p2i, funnel_report
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -577,9 +577,9 @@ def test_walk_raises_on_missing_meeting_row(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def nine_funnel() -> InformationFunnelReport:
-    return compute_information_funnel(_NINE)
+    return funnel_9p2i()
 
 
 def test_funnel_reproduces_report_meeting_count(
@@ -646,7 +646,7 @@ def test_funnel_reproduces_transmission_stage(
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:
-    report = compute_information_funnel(_FOUR)
+    report = funnel_report(_FOUR)
     assert report.num_players == 4
     assert report.num_impostors == 1
     assert report.games_total == 50

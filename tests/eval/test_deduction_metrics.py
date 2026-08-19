@@ -30,9 +30,10 @@ What is pinned, and why each pin exists:
    macro-average) because the source figure and Task 19.8's recount are the same
    bytes read two ways.
 5. **The witnessed-supply adoption**, against the kill-craft pins at
-   ``tests/eval/test_kill_craft.py:66-135`` — asserted as literals AND once
-   through a live ``compute_kill_craft_report`` walk, so the adoption path
-   itself is exercised rather than assumed.
+   ``tests/eval/test_kill_craft.py`` — asserted as literals AND once against a
+   live kill-craft walk of the committed 4p1i bytes (the shared
+   ``committed_kill_craft_4p1i`` fixture), so the adoption path itself is
+   exercised rather than assumed.
 6. **The definitions** — SKIP tolerance, fail-loud classification, the
    None-not-0.0 sentinel, and the validators that forbid a cell from carrying
    counts other than its own block's.
@@ -65,7 +66,7 @@ from eval.deduction_metrics import (
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
 )
-from eval.kill_craft import compute_kill_craft_report
+from eval.kill_craft import KillCraftReport
 from eval.meeting_quality import TournamentEvalReport, compute_ballot_target_redirects
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -1357,6 +1358,7 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 
 def test_adoption_path_runs_against_a_live_kill_craft_walk(
     samples_4p1i: TournamentEvalReport,
+    committed_kill_craft_4p1i: KillCraftReport,
 ) -> None:
     """The adoption is exercised, not assumed: one live fold on the smallest set.
 
@@ -1366,7 +1368,7 @@ def test_adoption_path_runs_against_a_live_kill_craft_walk(
     committed block exactly.
     """
 
-    kill_craft = compute_kill_craft_report(_SAMPLES_4P1I)
+    kill_craft = committed_kill_craft_4p1i
     adopted = witnessed_supply_from_kill_craft(kill_craft)
     assert adopted.kills_total == kill_craft.kills_total
     assert adopted.crew_witnessed_kills == kill_craft.crew_witnessed_kills

@@ -10,8 +10,9 @@ Two layers, mirroring tests/eval/test_funnel_pooling.py:
   each private fold and the Wilson / advisory helpers in isolation.
 
 The corpus 9p2i walk (150 memory-augmented game walks) is the expensive fixture;
-it is module-scoped so the walk runs once. The corpus 4p1i walk is cheap (tiny
-4-player games) and kept as the one-impostor degenerate anchor.
+it runs once per worker, through the shared cache in tests/_helpers/committed.py.
+The corpus 4p1i walk is cheap (tiny 4-player games) and kept as the one-impostor
+degenerate anchor.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from meetings.schemas import (
     SightingRecord,
 )
 from meetings.transcript import MeetingTriggerKind
+from tests._helpers.committed import deception_instruments_report
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_NINE = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
@@ -57,24 +59,24 @@ _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def corpus_nine() -> DeceptionInstrumentsReport:
-    return compute_deception_instruments(_CORPUS_NINE)
+    return deception_instruments_report(_CORPUS_NINE)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def corpus_four() -> DeceptionInstrumentsReport:
-    return compute_deception_instruments(_CORPUS_FOUR)
+    return deception_instruments_report(_CORPUS_FOUR)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def sample_nine() -> DeceptionInstrumentsReport:
-    return compute_deception_instruments(_NINE)
+    return deception_instruments_report(_NINE)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def sample_four() -> DeceptionInstrumentsReport:
-    return compute_deception_instruments(_FOUR)
+    return deception_instruments_report(_FOUR)
 
 
 def _check_cell(
