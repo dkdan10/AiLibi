@@ -1,32 +1,21 @@
-// Tournament Dashboard view (Task 12.10; design/phase-12/stage-1-design.md §3.6,
-// slice 8; DESIGN.md §11.3). The "Tournament" top-level view the App.tsx route
-// mounts (`<TournamentDashboard/>`), refreshed onto the Playful cream/ink system.
+// The Tournament view: the merged `TournamentEvalReport` rendered as balance
+// outcome, vote correctness, the conversion + gate surface, the
+// proof-vs-inference deduction instrument, calibration, alibi fabrication, an
+// interestingness histogram (from `/eval/rubric`, whose buckets deep-link into
+// the Highlights reel through the SHARED `view` · `set` · `scoreBucket` filter
+// keys) and the cost roll-up.
 //
-// It renders the merged `TournamentEvalReport`: the balance outcome, the four
-// Phase 5 metrics (vote correctness, accusation calibration, alibi fabrication,
-// cost), and — newly surfaced — the typed `conversion` + `gate_metrics` blocks.
-// An interestingness histogram (from `/eval/rubric`) deep-links each score bucket
-// into the Highlights reel via the SHARED filter keys 12.9 reads
-// (`view=highlights` · `set` · `scoreBucket`), never an invented param.
+// BINDING HONESTY RULE ("no false precision"): an under-powered or
+// narrowly-scoped number is never shown bare — its caveat renders ATTACHED to
+// the tile it qualifies, not in a distant footnote. The "Proof vs inference"
+// panel is the same rule at panel scale: the meeting-flag and ejectee-proof
+// cuts of the same bytes have DIFFERENT denominators, so they render as two
+// labelled partitions and are never mixed into one row.
 //
-// Binding honesty rule ("no false precision", design/phase-12/claude-design-brief
-// .md): every under-powered / sentinel number renders its caveat ATTACHED — the
-// small-n vote-correctness flag (on the ejection count that powers it), the
-// low-power / populated-bins calibration badges, and the conversion / gate
-// sentinels each carry their qualifier in place, never as a bare metric. Task
-// 19.5 re-anchored what those sentinels SAY: the vote-correctness rate is a
-// bug-sentinel structurally pinned to 1.0 (not overall vote quality), threshold
-// inversions are sanctioned crew discretion at the advisory line (NOT a gate
-// bug), and the gate canary is supplied-channel conversion — the alibi-anchored
-// genuine-class cell is a starved historical column.
-//
-// Task 19.14 adds the "Proof vs inference" panel over the typed `deduction`
-// block: direct-proof vs non-direct ejection accuracy side by side, under BOTH
-// of the cross-tab's partitions, each in its own labelled group with its own
-// denominators. That separation is the honesty requirement, not decoration —
-// the meeting-flag and ejectee-proof cuts of the same bytes give different
-// splits, and a tile that divided one's numerator by the other's denominator
-// would be the exact error the phase's planning rounds caught in prose.
+// COPY LIVES IN `lib/copy.ts`. Every prose string on this surface is a value
+// there, checked against the dialect matcher by `lib/copy.test.ts` — this is
+// the tab the review found citing design-doc sections and task numbers at a
+// visitor. Tile values, report-derived hints and layout stay here.
 //
 // Split (mirrors the sibling chrome slices): `TournamentDashboard` is the
 // connected component (store + rubric fetch); `TournamentDashboardView` is the
@@ -36,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { apiUrl } from "../api/client";
+import { DASHBOARD_COPY, missedSkipsHint } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
 import type {
@@ -185,7 +175,7 @@ function BalanceSummary({
   return (
     <MetricSection
       title="Balance outcome"
-      description="Crew / impostor / tick-budget split across the tournament's recorded games (DESIGN.md §11.3)."
+      description={DASHBOARD_COPY.balanceDescription}
     >
       <TileGrid>
         <StatTile
@@ -211,7 +201,7 @@ function BalanceSummary({
 }
 
 // ---------------------------------------------------------------------------
-// Vote correctness — a BUG-SENTINEL rate, with its structural + small-n caveats
+// Vote correctness — a bug check on the recorded evidence, not a quality score
 // ---------------------------------------------------------------------------
 
 function VoteCorrectness({
@@ -223,14 +213,14 @@ function VoteCorrectness({
   // metric). StatTile takes ONE caveat node per tile, so they are placed where
   // they belong rather than stacked: the small-n flag rides on "Impostor
   // ejections" — that tile IS the denominator, so the n lives there — while the
-  // rate tile ALWAYS carries the sentinel note, because vote_correctness_rate is
-  // structurally pinned to 1.0 by the live §4.6 pipeline (eval/vote_correctness
-  // .py) and so measures the engine's own trigger, not voting quality.
+  // rate tile carries the scope note that says what the rate is for.
+  //
+  // The rate is NOT structurally 1.0, whatever this file used to tell a reader:
+  // the committed 9p2i report records 72 evidence-backed of 78 impostor
+  // ejections (0.923). So the copy says what a value below 1 means and stops
+  // short of naming a cause.
   const smallN = report.vote_correctness_small_n ? (
-    <MetricCaveat
-      tone="warn"
-      title="Under-powered: too few impostor ejections (n < 10) to trust this rate as a gate."
-    >
+    <MetricCaveat tone="warn" title={DASHBOARD_COPY.voteCorrectnessSmallNTitle}>
       small-n
     </MetricCaveat>
   ) : undefined;
@@ -238,7 +228,7 @@ function VoteCorrectness({
   return (
     <MetricSection
       title="Vote correctness"
-      description="The evidence-backed share of impostor ejections (a naming contradiction or kill-witness chain behind each one) — a bug-sentinel, not overall vote correctness: crewmate ejections sit outside its denominator, and the live §4.6 pipeline pins it to 1.0 by construction. 'n/a' when no impostors were ejected."
+      description={DASHBOARD_COPY.voteCorrectnessDescription}
     >
       <TileGrid>
         <StatTile
@@ -248,9 +238,9 @@ function VoteCorrectness({
           caveat={
             <MetricCaveat
               tone="note"
-              title="Structurally 1.0 on recorded sets: the §4.6 gate only crosses when the detector already flagged the ejected player, so this measures the engine's own trigger, not voting quality. Below 1.0 means a detector/recording bug to chase — the precision lead is ejection accuracy in the Conversion section."
+              title={DASHBOARD_COPY.voteCorrectnessRateCaveatTitle}
             >
-              sentinel — not a KPI
+              {DASHBOARD_COPY.voteCorrectnessRateCaveat}
             </MetricCaveat>
           }
         />
@@ -286,17 +276,15 @@ function VoteCorrectness({
 // ---------------------------------------------------------------------------
 
 function ConversionSection({ report }: { report: TournamentEvalReport["conversion"] }) {
-  // `missed_skip_ballots` is a SENTINEL, not a down-is-good metric — it
-  // partitions into impostor-voter (sanctioned adversarial play) + invalid-target
-  // (normalized hallucinations) + threshold-inversions (crew discretion at the
-  // advisory line: since Task 13.13 de-imperatived the §4.6 verdict, declining a
-  // met threshold is sanctioned, so a nonzero count is INTENDED — not a gate
-  // bug). The caveat carries that "read the partition, not the total" note in
-  // place.
+  // `missed_skip_ballots` is not a down-is-good metric — it partitions into
+  // impostor voters (adversarial play, working as intended), invalid targets
+  // (normalized hallucinations) and threshold inversions (a crew voter
+  // declining a met bar, which the non-directive vote gate allows). The caveat
+  // carries that "read the partition, not the total" note in place.
   return (
     <MetricSection
       title="Conversion"
-      description="Did accusations convert into impostor ejections, and were the SKIPs correct? (Task 9.6 / 10.x; typed on the wire by 12.2.)"
+      description={DASHBOARD_COPY.conversionDescription}
     >
       <TileGrid>
         <StatTile
@@ -317,13 +305,14 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
         <StatTile
           label="Missed skips"
           value={formatInt(report.missed_skip_ballots)}
-          hint={`imp-voter ${formatInt(report.missed_skip_impostor_voters)} · invalid ${formatInt(report.missed_skip_invalid_target)} · inversion ${formatInt(report.threshold_inversions)}`}
+          hint={missedSkipsHint(
+            formatInt(report.missed_skip_impostor_voters),
+            formatInt(report.missed_skip_invalid_target),
+            formatInt(report.threshold_inversions),
+          )}
           caveat={
-            <MetricCaveat
-              tone="note"
-              title="A sentinel, not a down-is-good metric: most missed skips are sanctioned impostor-voter play or normalized invalid targets; the remainder (threshold inversions) is crew discretion at the advisory line — see its tile. Read the partition, not the total."
-            >
-              sentinel — read the split
+            <MetricCaveat tone="note" title={DASHBOARD_COPY.missedSkipsCaveatTitle}>
+              {DASHBOARD_COPY.missedSkipsCaveat}
             </MetricCaveat>
           }
         />
@@ -335,7 +324,7 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
             report.threshold_inversions > 0 ? (
               <MetricCaveat
                 tone="note"
-                title="A crew voter whose rendered §4.6 max met the 0.60 reference yet SKIPped. Since Task 13.13 the vote gate is non-directive (the verdict is evidence, not a command), so declining is sanctioned discretion — a nonzero count is intended on recorded sets, not a gate bug. The 19.5 recount found every committed inversion marker-free and concentrated at the line; a marker-bearing ballot in this bucket would be the actual bug."
+                title={DASHBOARD_COPY.thresholdInversionCaveatTitle}
               >
                 discretionary — nonzero intended
               </MetricCaveat>
@@ -363,7 +352,7 @@ function GateMetricsSection({
   return (
     <MetricSection
       title="Gate metrics"
-      description="The Phase-10 gate surface (Task 10.4), re-anchored by 19.5: the canary cell is supplied-channel conversion (the Task-17.6 successor); the alibi-anchored genuine-class cell is historical — starved on this substrate and never a canary."
+      description={DASHBOARD_COPY.gateMetricsDescription}
     >
       <TileGrid>
         <StatTile
@@ -422,13 +411,12 @@ function GateMetricsSection({
 }
 
 // ---------------------------------------------------------------------------
-// Proof vs inference — the Task 19.14 deduction instrument
+// Proof vs inference — the deduction instrument
 // ---------------------------------------------------------------------------
 
-// `n/a` when the denominator is 0 (the None-not-0.0 sentinel the eval package
+// `n/a` when the denominator is 0 (the None-not-0.0 convention the eval package
 // uses); otherwise the rate with its Wilson 95% interval, because the honest
-// reading of a rare cell IS the interval (audits/audit-phase-19-triage.md §7
-// item 15).
+// reading of a rare cell IS the interval.
 function formatCellRate(cell: WilsonRateCell): string {
   return formatPct(cell.rate);
 }
@@ -515,7 +503,7 @@ function DeductionSection({
   return (
     <MetricSection
       title="Proof vs inference"
-      description="How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT (Task 19.14; audits/audit-phase-19-triage.md §7 item 15). The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed. Presence is co-occurrence, not causation: the split says what evidence was on the record, never that a vote followed it."
+      description={DASHBOARD_COPY.deductionDescription}
     >
       <div className="flex flex-col gap-4">
         <PartitionGroup
@@ -700,7 +688,7 @@ function AlibiFabrication({
   return (
     <MetricSection
       title="Alibi fabrication"
-      description="Share of impostor-authored alibis that survived §5.4 contradiction detection (a conservative lower bound). High = impostors getting away with fabricated cover; low = the detector catching it. 'n/a' when no impostor alibis were filed."
+      description={DASHBOARD_COPY.alibiDescription}
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile
@@ -835,7 +823,7 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
   return (
     <MetricSection
       title="Cost dashboard"
-      description="Tournament LLM spend roll-up (DESIGN.md §10.4). Per-(template, version) totals OVERLAP — the full game cost is attributed once per template a game ran — so they do not sum to the tournament total."
+      description={DASHBOARD_COPY.costDescription}
     >
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Total cost" value={formatUsd(dashboard.total_cost_usd)} />
@@ -931,12 +919,7 @@ export function TournamentDashboardView({
   return (
     <main aria-label="Tournament dashboard" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-500">
-          The latest tournament eval report (DESIGN.md §11.3): balance outcome plus
-          the Phase 5 metrics, the typed conversion / gate surface, the
-          proof-vs-inference deduction instrument, and the interestingness
-          distribution.
-        </p>
+        <p className="text-sm text-ink-500">{DASHBOARD_COPY.intro}</p>
         <button
           type="button"
           onClick={onRefresh}

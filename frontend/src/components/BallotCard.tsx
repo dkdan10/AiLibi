@@ -1,24 +1,28 @@
-// One vote ballot, rebuilt in the Playful cream/ink style (Task 12.7;
-// design/phase-12/stage-1-design.md §3.4, slice 5; the 05-meeting render):
-// voter → target (a chip or the neutral literal "SKIP"), a role-neutral
-// confidence bar (0.0–1.0), the cleaned rationale, the rewrite-marker chips the
-// meeting layer prepended (`rewrite_reasons`), and — Omniscient only — the vote's
-// correctness.
+// One vote ballot: voter → target (a chip or the neutral literal "SKIP"), a
+// role-neutral confidence bar (0.0–1.0), the cleaned rationale, the
+// rewrite-marker chips the meeting layer prepended (`rewrite_reasons`), and the
+// vote's correctness mark.
 //
 // FIREWALL: the confidence bar is INK (role-neutral) — never trust/suspicion, so
-// it cannot be read as alignment. Correctness reveals the target's role, so it is
-// Omniscient-only and rendered by SHAPE + LABEL (✓ / ✗ + "correct" / "incorrect")
-// in ink — never red-vs-green. Under As-agent fog it is suppressed entirely.
+// it cannot be read as alignment. The correctness mark reveals the target's role
+// and, said per ballot, names the impostors before the game does — so it renders
+// only when the perspective is Omniscient AND the spectator has revealed
+// outcomes (`showsBallotCorrectness` in `lib/copy.ts`), by SHAPE + LABEL (✓ / ✗ +
+// "correct" / "incorrect") in ink, never red-vs-green.
+// Superseded: the mark used to be gated on perspective alone, on the reasoning
+// that reveal governs outcome and perspective governs what a frame may know.
 //
-// FIREWALL (Task 19.11): one rewrite-reason chip is role-disclosing and is gated
-// the same way — see `isRoleDisclosingRewriteReason`.
+// FIREWALL: one rewrite-reason chip is role-disclosing and IS gated on
+// perspective alone — see `isRoleDisclosingRewriteReason` below. Reveal must
+// never widen what fog hides, and it does not.
 
+import { showsBallotCorrectness } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
 
 // Rewrite reasons whose mere PRESENCE discloses ground-truth roles, so the chip
 // is Omniscient-only (`api.replay_loader._BALLOT_PREFIX_MARKERS` is the label
-// registry; the guard itself is `meetings.manager` Task 7.12 / 19.15).
+// registry; the guard itself lives in `meetings.manager`).
 //
 // `teammate_coerced` fires ONLY when the voter targeted a fellow impostor, so
 // the chip announces two roles at once — the voter's and the coerced target's —
@@ -29,10 +33,10 @@ import type { BallotView, PlayerView } from "../types/api";
 //
 // Gated on PERSPECTIVE alone, deliberately never on `revealOutcome`: reveal
 // governs OUTCOME information, perspective governs what the current frame may
-// know (Task 19.10's own semantics, `store/replayStore.ts`). A spectator who
-// revealed the ending is still standing behind one agent's eyes, and the
-// impostor pairing is not part of the ending. Suppressed SILENTLY — a
-// "1 chip hidden" placeholder would leak exactly the fact being withheld.
+// know (`store/replayStore.ts`). A spectator who revealed the ending is still
+// standing behind one agent's eyes, and the impostor pairing is not part of the
+// ending — so reveal must never WIDEN what fog hides here. Suppressed SILENTLY:
+// a "1 chip hidden" placeholder would leak exactly the fact being withheld.
 //
 // MODULE-PRIVATE AND FROZEN, exposed only through the pure predicate below.
 // `ReadonlySet` would be a compile-time view over a runtime-mutable `Set`: an
@@ -62,8 +66,8 @@ export function isRoleDisclosingRewriteReason(reason: string): boolean {
  * Exported as a pure function (not inlined in the render) so the gate is
  * directly assertable: the stories pin the three rendered states — Omniscient,
  * As-agent fog with the outcome reveal OFF, As-agent fog with it ON — and the
- * rule itself is a unit Task 19.12's Vitest baseline can call with no DOM. Note
- * it takes NO reveal argument: reveal cannot widen this, by construction.
+ * rule itself is a unit any test can call with no DOM. Note it takes NO reveal
+ * argument: reveal cannot widen this, by construction.
  */
 export function visibleRewriteReasons(
   reasons: readonly string[],
@@ -79,12 +83,11 @@ export function visibleRewriteReasons(
  *
  * Hiding the chip is not enough. When the teammate guard coerces a ballot it
  * also REPLACES the model's rationale with one fixed sentinel sentence
- * (`meetings.manager.TEAMMATE_COERCED_VOTE_RATIONALE`, Task 19.15) — and that
- * guard is its only writer, so the sentence appears on coerced ballots and
- * nowhere else. It is the rationale BODY, not a marker, so the loader's marker
- * strip leaves it in `rationale_text_clean` and the card would print it as the
- * voter's stated reason: the same impostor pairing disclosed in prose instead
- * of in a chip.
+ * (`meetings.manager.TEAMMATE_COERCED_VOTE_RATIONALE`) — and that guard is its
+ * only writer, so the sentence appears on coerced ballots and nowhere else. It
+ * is the rationale BODY, not a marker, so the loader's marker strip leaves it in
+ * `rationale_text_clean` and the card would print it as the voter's stated
+ * reason: the same impostor pairing disclosed in prose instead of in a chip.
  *
  * So a fogged ballot carrying a role-disclosing reason shows NO rationale at
  * all, and falls through to the card's ordinary empty-rationale state — the
@@ -100,9 +103,13 @@ export function visibleRationale(ballot: BallotView, omniscient: boolean): strin
 interface BallotCardProps {
   ballot: BallotView;
   players: PlayerView[];
-  // Omniscient gates the role-revealing correctness marker and the
-  // role-disclosing rewrite chips (firewall).
+  // Omniscient gates the role-disclosing rewrite chips (firewall) and is half of
+  // the correctness-mark gate.
   omniscient: boolean;
+  // The spectator's outcome reveal — the other half of the correctness-mark
+  // gate. Required, not optional: an omitted spoiler gate must be a compile
+  // error, never a silent default to "show everything".
+  revealOutcome: boolean;
 }
 
 function playerColor(agentId: string, players: PlayerView[]): string {
@@ -128,7 +135,12 @@ function PlayerPill({
   );
 }
 
-export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
+export function BallotCard({
+  ballot,
+  players,
+  omniscient,
+  revealOutcome,
+}: BallotCardProps) {
   const isSkip = ballot.target === "SKIP";
   const confidence = Math.max(0, Math.min(1, ballot.confidence));
   const pct = Math.round(confidence * 100);
@@ -142,12 +154,15 @@ export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
   const rationale = visibleRationale(ballot, omniscient);
   const rewriteReasons = visibleRewriteReasons(ballot.rewrite_reasons, omniscient);
 
-  // Correctness (Omniscient only): a non-SKIP vote is "correct" iff its target
-  // was actually an impostor. SKIP has no correctness.
+  // Correctness: a non-SKIP vote is "correct" iff its target was actually an
+  // impostor. SKIP has no correctness. Per ballot the mark names the impostors
+  // before the game does, so it needs the reveal as well as the perspective —
+  // see `showsBallotCorrectness`.
   const targetRole = isSkip
     ? null
     : (players.find((p) => p.agent_id === ballot.target)?.role ?? null);
   const correct = targetRole === null ? null : targetRole === "IMPOSTOR";
+  const showCorrectness = showsBallotCorrectness(omniscient, revealOutcome);
 
   return (
     <article className="rounded-lg border border-ink-100 bg-paper-1 p-3 shadow-data">
@@ -163,7 +178,7 @@ export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
         ) : (
           <PlayerPill agentId={ballot.target} players={players} />
         )}
-        {omniscient && correct !== null && (
+        {showCorrectness && correct !== null && (
           <span
             className="ml-auto inline-flex items-center gap-1 rounded-md border border-ink-300 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-ink-700"
             title={

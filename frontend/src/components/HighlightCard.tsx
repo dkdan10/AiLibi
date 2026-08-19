@@ -7,8 +7,9 @@
 //
 // It shows: a 0–100 interestingness SCORE badge (decoupled from who won), the
 // WIN-SHAPE tag, a DRAMA line (meetings · accused / ejected impostors ·
-// survived-accused), and a 4-spoke mini SUB-SCORE bar (R1 decisive / R2 deception
-// / R3 arcs / R7 legible).
+// survived-accused), and a 4-spoke mini SUB-SCORE bar whose spokes are named by
+// the one legend table in `lib/copy.ts` — the same table the picker header
+// prints, so a bar and its legend cannot drift apart.
 //
 // Firewall (BINDING): the card keys on drama / score, NEVER on who won. The score
 // badge + sub-scores are role-neutral ink — they never reuse the suspicion (amber)
@@ -29,6 +30,7 @@
 
 import { scoreBucketOf, type ScoreBucket } from "./ReplayFilters";
 
+import { RUBRIC_SPOKES, rubricSpokeTitle } from "../lib/copy";
 import type { RubricGameView, Winner } from "../types/api";
 
 /** One card's data: a rubric row (when scored) joined to its replay metadata. */
@@ -50,13 +52,6 @@ const SCORE_BUCKET_LABEL: Record<ScoreBucket, string> = {
   med: "Med",
   high: "High",
 };
-
-const SUB_SCORES = [
-  { key: "R1", label: "decisive", field: "r1_decisive" },
-  { key: "R2", label: "deception", field: "r2_deception" },
-  { key: "R3", label: "arcs", field: "r3_arcs" },
-  { key: "R7", label: "legible", field: "r7_legible" },
-] as const;
 
 function winnerLabel(winner: Winner | null): string {
   if (winner === "CREWMATES") return "Crew win";
@@ -170,31 +165,43 @@ function DramaLine({ rubric, reveal }: { rubric: RubricGameView; reveal: boolean
 
 // The 4-spoke mini sub-score bar. Each sub-score is 0–1; bars are neutral ink so
 // they never collide with a semantic channel.
+//
+// Each spoke prints its WORD, not only its key: a bare "R1" meant nothing to a
+// first-time viewer, and the meaning used to exist only in a hover title (which
+// a touch device never shows) and in a legend the Replays tab did not carry.
 function SubScoreBar({ rubric }: { rubric: RubricGameView }) {
   return (
-    <div className="flex items-stretch gap-2" aria-label="Rubric sub-scores">
-      {SUB_SCORES.map((meta) => {
-        const value = rubric[meta.field];
+    // Three shared rows (bar · label · value) rather than four independent
+    // columns: the labels are words now, and a word that wraps in one column
+    // would otherwise push only that column's number a line down. `subgrid`
+    // makes the row heights common, so the numbers stay on one line at every
+    // card width.
+    <div
+      className="grid auto-cols-fr grid-flow-col grid-rows-[auto_auto_auto] gap-x-2 gap-y-1"
+      aria-label="Rubric sub-scores"
+    >
+      {RUBRIC_SPOKES.map((spoke) => {
+        const value = rubric[spoke.field];
         const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
         return (
           <div
-            key={meta.key}
-            className="flex flex-1 flex-col items-center gap-1"
-            title={`${meta.key} ${meta.label}: ${value.toFixed(2)} (0–1)`}
+            key={spoke.key}
+            className="row-span-3 grid grid-rows-subgrid justify-items-center"
+            title={rubricSpokeTitle(spoke, value)}
           >
             <div className="relative flex h-10 w-full items-end overflow-hidden rounded-sm bg-paper-3 shadow-data">
-              {/* Baseline reference at the 0.5 midpoint (Task 12.13): without it a
-                  bare bar gives no sense of where a value sits on its 0–1 scale. */}
+              {/* Baseline reference at the 0.5 midpoint: without it a bare bar
+                  gives no sense of where a value sits on its 0–1 scale. */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-ink-300"
               />
               <div className="relative w-full bg-ink-700" style={{ height: `${pct}%` }} />
             </div>
-            <span className="font-mono text-[9px] font-semibold text-ink-700">
-              {meta.key}
+            <span className="text-center font-mono text-[9px] font-semibold leading-tight text-ink-700">
+              {spoke.key} {spoke.word}
             </span>
-            {/* The concrete value, not just a height (Task 12.13). */}
+            {/* The concrete value, not just a height. */}
             <span className="font-mono text-[9px] text-ink-500">{value.toFixed(2)}</span>
           </div>
         );
