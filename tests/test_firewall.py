@@ -105,21 +105,31 @@ def _tracked_python_paths() -> tuple[str, ...]:
     return tuple(path for path in result.stdout.split("\0") if path)
 
 
-def _top_level_packages(paths: Iterable[str]) -> set[str]:
-    """The first path segment of every path that lives inside a directory."""
+def _top_level_names(paths: Iterable[str]) -> set[str]:
+    """The top-level importable name each path contributes.
 
-    parts = (PurePosixPath(path).parts for path in paths)
-    return {part[0] for part in parts if len(part) > 1}
+    A file inside a directory contributes the directory (``agents/x.py`` ->
+    ``agents``); a file at the repository root contributes its own module name
+    (``bridge.py`` -> ``bridge``), because that is what ``import bridge`` would
+    resolve to. A root-level module belongs to no linter root, so it has to be
+    accounted for exactly like a package or it slips past both layers.
+    """
+
+    names: set[str] = set()
+    for path in paths:
+        pure = PurePosixPath(path)
+        names.add(pure.parts[0] if len(pure.parts) > 1 else pure.stem)
+    return names
 
 
-def _uncovered_top_level_packages(
+def _uncovered_top_level_names(
     paths: Iterable[str],
     root_packages: Collection[str],
     banned: Collection[str],
 ) -> list[str]:
-    """Top-level packages neither layer of the firewall can see."""
+    """Top-level names neither layer of the firewall can see."""
 
-    return sorted(_top_level_packages(paths) - set(root_packages) - set(banned))
+    return sorted(_top_level_names(paths) - set(root_packages) - set(banned))
 
 
 # --------------------------------------------------------------------------- #
@@ -693,8 +703,8 @@ def test_the_learned_package_scan_rejects_a_planted_import(
 # --------------------------------------------------------------------------- #
 
 
-def test_every_top_level_python_package_is_covered_by_one_layer() -> None:
-    """No top-level package escapes both the linter roots and the ban set.
+def test_every_top_level_python_name_is_covered_by_one_layer() -> None:
+    """No importable top-level name escapes both the roots and the ban set.
 
     A new one must join ``.importlinter``'s ``root_packages`` (so its chains are
     walked) or :data:`_FORBIDDEN_AGENT_IMPORTS` (so no interior package can
@@ -703,24 +713,34 @@ def test_every_top_level_python_package_is_covered_by_one_layer() -> None:
     package is walked by grimp and banned from the interior at once.
     """
 
-    uncovered = _uncovered_top_level_packages(
+    uncovered = _uncovered_top_level_names(
         _tracked_python_paths(), _configured_root_packages(), _FORBIDDEN_AGENT_IMPORTS
     )
     assert not uncovered, (
-        "these top-level packages hold tracked Python and are covered by "
+        "these top-level names hold tracked Python and are covered by "
         f"neither firewall layer: {uncovered}"
     )
 
 
-def test_the_covering_check_rejects_an_unlisted_new_package() -> None:
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("_firewall_new_package/module.py", "_firewall_new_package"),
+        # A module at the repository root belongs to no linter root at all, so
+        # it needs accounting for exactly like a package.
+        ("_firewall_root_bridge.py", "_firewall_root_bridge"),
+    ],
+    ids=["package", "root-module"],
+)
+def test_the_covering_check_rejects_unlisted_python(path: str, expected: str) -> None:
     """A gate that cannot fail is not a gate."""
 
-    uncovered = _uncovered_top_level_packages(
-        (*_tracked_python_paths(), "_firewall_new_package/module.py"),
+    uncovered = _uncovered_top_level_names(
+        (*_tracked_python_paths(), path),
         _configured_root_packages(),
         _FORBIDDEN_AGENT_IMPORTS,
     )
-    assert uncovered == ["_firewall_new_package"]
+    assert uncovered == [expected]
 
 
 # --------------------------------------------------------------------------- #

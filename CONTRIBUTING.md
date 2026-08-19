@@ -64,9 +64,15 @@ frontend lint, typecheck, unit-test and build legs.
 CI runs those same checks and one more the script deliberately leaves out: a
 Playwright browser journey over the real app and the real API
 (`.github/workflows/ci.yml`). It needs a browser and both dev servers running,
-which is minutes of setup for a gate that is otherwise dependency-free — run it
-on demand with `cd frontend && npm run e2e`. So a green `check.sh` predicts CI
-except for that one job.
+which is minutes of setup for a gate that is otherwise dependency-free. So a
+green `check.sh` predicts CI except for that one job. To run it on demand:
+
+```bash
+cd frontend
+npx playwright install chromium   # once per Playwright version; setup_env.sh
+                                  # installs the npm packages, not the browser
+npm run e2e
+```
 
 Neither the script nor CI's per-change jobs run the campaign tier: the frozen
 ML-campaign test families, selected with `uv run pytest -m campaign`. Those run
