@@ -240,9 +240,12 @@ def resolve_sabotage(
 ) -> SabotageStartedEvent:
     actor = _get_live_player(state, action.actor)
     # No physical presence while vented (DESIGN.md §3.4). Sabotage is remote — it
-    # has no room requirement and that is unchanged — but the question is whether
-    # an actor absent from every other agent's perception may act at all, and
-    # `resolve_repair_sabotage`, sabotage's equally remote mirror, answers no.
+    # has no room requirement and that is unchanged — but reach is not the
+    # question; the question is whether an actor absent from every other agent's
+    # perception may act at all. `resolve_repair_sabotage` already answers no: it
+    # is location-bound (the actor must stand in a repair room) yet still carries
+    # a vent guard ahead of that check, because a vented actor's room CAN be a
+    # repair room and the room check alone would let it through.
     if actor.in_vent:
         raise ActionRejectedError("cannot sabotage while in vent")
     if actor.role != "IMPOSTOR":
