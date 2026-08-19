@@ -1,16 +1,19 @@
 // The spectator surface's user-facing copy, plus the pure helpers that keep it
 // honest.
 //
-// Four things live here, and they live here together on purpose:
+// Five things live here, and they live here together on purpose:
 //
 //   • `dialectHits` — the matcher for internal dialect (design-doc citations,
-//     bare section numbers, task ids, audit paths, and the two undefined words
-//     "sentinel" / "KPI"). It is the gate `copy.test.ts` runs over every value
-//     below AND over the component sources with comments stripped.
-//   • `SPECTATOR_COPY` — the rewritten prose itself. A copy string in a `.tsx`
-//     is only checkable through a renderer; a value here is readable by the
-//     node-env test project directly, so "no dialect reaches a viewer" is a
-//     unit test rather than a review habit.
+//     bare section numbers, task ids, audit paths, and the project words that
+//     mean nothing to a visitor: "sentinel", "KPI", "canary", "substrate").
+//     It is the gate `copy.test.ts` runs over every value below AND over the
+//     component sources with comments stripped.
+//   • `SPECTATOR_COPY` — the prose itself. A copy string in a `.tsx` is only
+//     checkable through a renderer; a value here is readable by the node-env
+//     test project directly, so "no dialect reaches a viewer" is a unit test
+//     rather than a review habit.
+//   • `fmt` — the one interpolation helper, so a hint that carries a count
+//     still keeps its WORDS here as a template rather than in the component.
 //   • `expandSetName` / `setOptionLabel` — set ids ("9p2i") expanded into words
 //     once per surface, with the raw id as the fallback for ids `/sets` grows
 //     later.
@@ -39,7 +42,7 @@ const DIALECT_PATTERNS: readonly DialectPattern[] = Object.freeze([
   { name: "section reference", pattern: /§\s*\d/ },
   { name: "task reference", pattern: /\btask\s+\d+\.\d+/i },
   { name: "audit path", pattern: /\baudits\//i },
-  { name: "undefined jargon", pattern: /\b(?:sentinel|kpi)\b/i },
+  { name: "undefined jargon", pattern: /\b(?:sentinel|kpi|canary|substrate)\b/i },
 ]);
 
 /**
@@ -50,6 +53,41 @@ const DIALECT_PATTERNS: readonly DialectPattern[] = Object.freeze([
  */
 export function dialectHits(text: string): readonly string[] {
   return DIALECT_PATTERNS.filter((d) => d.pattern.test(text)).map((d) => d.name);
+}
+
+// ── interpolation ────────────────────────────────────────────────────────────
+
+const PLACEHOLDER = /\{(\w+)\}/g;
+
+/** The `{name}` placeholders in a copy template, as a union of their names. */
+export type Placeholders<S extends string> =
+  S extends `${string}{${infer Name}}${infer Rest}` ? Name | Placeholders<Rest> : never;
+
+/**
+ * Fill `{name}` placeholders in a copy template.
+ *
+ * The point is where the WORDS live: a hint built with a template literal in a
+ * component is invisible to the copy walk, while `fmt(COPY.x, {…})` keeps the
+ * sentence here and passes only the formatted numbers in.
+ *
+ * The signature is what makes that safe. `SPECTATOR_COPY` is `as const`, so a
+ * template's placeholder names are part of its TYPE: passing the wrong key is a
+ * compile error, not a hint that renders `{typo}` — or, with the runtime guard
+ * below, a blank panel — at a viewer. The throw is the backstop for a template
+ * that reaches here already widened to `string`.
+ */
+export function fmt<S extends string>(
+  template: S,
+  values: Readonly<Record<Placeholders<S>, string>>,
+): string {
+  const lookup = values as Readonly<Record<string, string | undefined>>;
+  return template.replace(PLACEHOLDER, (_match, name: string) => {
+    const value = lookup[name];
+    if (value === undefined) {
+      throw new Error(`copy template has no value for {${name}}: ${template}`);
+    }
+    return value;
+  });
 }
 
 // ── set ids → words ──────────────────────────────────────────────────────────
@@ -144,43 +182,208 @@ export function showsBallotCorrectness(
  *
  * One tree rather than a scatter of exported consts so the test can walk it:
  * anything added inside is checked for dialect automatically, with no list to
- * keep in sync.
+ * keep in sync. Templates keep their `{placeholders}` and are filled by `fmt`,
+ * so a counted hint is checked here too.
+ *
+ * `as const` is load-bearing, not decoration: it keeps each template's literal
+ * type, which is what lets `fmt` reject a wrong placeholder name at compile
+ * time.
  */
 export const SPECTATOR_COPY = Object.freeze({
-  /** The Tournament tab. */
+  /** The Tournament tab. Every prose string on that surface is here. */
   dashboard: Object.freeze({
     intro:
       "The latest tournament eval report: balance outcome, vote correctness, the conversion and gate surface, the proof-vs-inference deduction instrument, and the interestingness distribution.",
+    refresh: "Refresh",
+    refreshBusy: "Loading…",
+    loadingReport: "Loading tournament report…",
+    noReportTitle: "No tournament report.",
+    noReportLead: "A 404 means no",
+    noReportMiddle: "exists in the configured eval directory yet — run a tournament with",
+    noReportTail: "to produce one.",
+
+    balanceTitle: "Balance outcome",
     balanceDescription:
       "Crew / impostor / tick-budget split across the tournament's recorded games.",
+    balanceGames: "Games recorded",
+    balanceSeedsAttempted: "{n} seeds attempted",
+    balanceSeeds: "{n} seeds",
+    balanceCrewWins: "Crew wins",
+    balanceImpostorWins: "Impostor wins",
+    balanceTickBudget: "Tick budget",
+    balanceTickBudgetHint: "non-decisive",
+    balanceCrewWinRate: "Crew win rate",
+    balanceCrewWinRateHint: "of decisive games",
 
+    voteCorrectnessTitle: "Vote correctness",
     voteCorrectnessDescription:
       "The share of impostor ejections that carry hard evidence on the record — a contradiction naming the ejected player, or a kill-witness chain. It is a bug check rather than a quality score: crewmate ejections sit outside its denominator, so it never says how well the table voted. 'n/a' when no impostors were ejected.",
+    voteCorrectnessRate: "Evidence-backed share",
+    voteCorrectnessRateHint: "{backed} / {total} evidence-backed",
     voteCorrectnessRateCaveat: "bug check, not a score",
     voteCorrectnessRateCaveatTitle:
       "Below 100% means an impostor was ejected with none of that evidence recorded against them — a game worth opening to find out why. For how often the table ejected the right player, read ejection accuracy in the Conversion section.",
+    voteCorrectnessSmallN: "small-n",
     voteCorrectnessSmallNTitle:
       "Under-powered: fewer than 10 impostor ejections, too few to trust this rate as a gate.",
+    voteCorrectnessTotalEjections: "Total ejections",
+    voteCorrectnessImpostorEjections: "Impostor ejections",
+    voteCorrectnessCrewmateEjections: "Crewmate ejections",
+    voteCorrectnessIgnored: "Contradictions ignored",
+    voteCorrectnessIgnoredCaveat: "skipped w/ a flag",
+    voteCorrectnessIgnoredCaveatTitle:
+      "Meetings that carried at least one structured contradiction yet ejected no one — the deduction signal was there and went unused.",
 
+    conversionTitle: "Conversion",
     conversionDescription:
       "Did accusations convert into impostor ejections, and were the skipped votes the right call?",
-    missedSkipsCaveat: "read the split, not the total",
-    missedSkipsCaveatTitle:
+    conversionAccuracy: "Ejection accuracy",
+    conversionAccuracyHint: "{hit} / {total} ejections hit an impostor",
+    conversionAccused: "Accused → eject",
+    conversionAccusedHint: "{converted} / {meetings} accused-impostor meetings",
+    conversionCorrectSkips: "Correct skips",
+    conversionCorrectSkipsHint: "skips where no accusation met the confidence bar",
+    conversionMissedSkips: "Missed skips",
+    conversionMissedSkipsHint:
+      "impostor voters {impostorVoters} · invalid targets {invalidTargets} · crew declined {crewDeclined}",
+    conversionMissedSkipsCaveat: "read the split, not the total",
+    conversionMissedSkipsCaveatTitle:
       "Read the split, not the total: most missed skips are impostors voting their own side, or targets the parser had to normalize away. What is left is a crew voter who declined an accusation that met the confidence bar — see its own tile.",
-    thresholdInversionCaveatTitle:
+    conversionInversions: "Threshold inversions",
+    conversionInversionsHint: "crew voters who declined a met bar",
+    conversionInversionsCaveat: "discretionary — nonzero intended",
+    conversionInversionsCaveatTitle:
       "A crew voter whose strongest ballot met the confidence bar and who skipped anyway. The vote gate is advice, not an order, so declining is allowed play: a nonzero count is expected on recorded sets, not a bug.",
+    conversionInversionsNone: "no declines recorded",
 
-    gateMetricsDescription:
-      "Whether evidence the engine hands the crew turns into an ejection. The live signal is supplied-channel conversion; the alibi-anchored genuine-class cell beside it is a historical column, starved on this substrate, and is not read as a signal.",
+    gateTitle: "Gate metrics",
+    gateDescription:
+      "Whether hard evidence the engine hands the crew turns into an ejection. The live signal is the first tile: of the impostors the engine gave the crew a checkable tell about — a witnessed vent, a sighting the map contradicts, a whereabouts lie — how many the table actually voted out. The second tile is the older version of the same question, anchored on alibi lies; this build barely produces those, so it is kept as history and is not read as a signal.",
+    gateSupplied: "Supplied-channel conversion",
+    gateSuppliedHint:
+      "{converted} / {supplied} impostors with a checkable tell were ejected · vent {ventConverted}/{ventSupplied} · sighting {sightingConverted}/{sightingSupplied} · whereabouts {whereaboutsConverted}/{whereaboutsSupplied}",
+    gateSuppliedCaveat: "the live signal",
+    gateSuppliedCaveatTitle:
+      "Counts the three checkable tells the engine records against a true impostor — a witnessed vent, a sighting the map contradicts, a lie about where they were — and asks whether that impostor was then ejected.",
+    gateGenuine: "Genuine-class conversion (historical)",
+    gateGenuineHint: "{converted} / {supplied} alibi-anchored flags",
+    gateGenuineCaveat: "historical — too little data to read",
+    gateGenuineCaveatTitle:
+      "The older alibi-anchored form of the tile beside it. Checkable alibi lies almost stopped being produced, so this cell reads no-data rather than a regression, and it is reported for continuity only.",
+    gateLostOpenings: "Lost opening accusations",
+    gateLostOpeningsHint: "chain died on turn 0",
+    gateCapDefaults: "Cap-defaulted turns",
+    gateCapDefaultsHint: "deadline/token-cap truncations",
+    gateSurvivals: "Accused-impostor survivals",
+    gateSurvivalsHint: "met {met} · sheltered {sheltered} · unevidenced {unevidenced}",
+    gateSurvivalsCaveat: "met ≠ deception",
+    gateSurvivalsCaveatTitle:
+      "This split separates impostors who talked their way out from impostors the table simply failed to eject. A 'met' survival is the second kind — a voter was shown evidence past the bar and the table still did not eject — so only the 'sheltered' count is deception the impostor earned.",
 
+    deductionTitle: "Proof vs inference",
     deductionDescription:
-      "How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT. The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed. Presence is co-occurrence, not causation: the split says what evidence was on the record, never that a vote followed it.",
+      "How this set's ejection accuracy splits by whether the engine's own vent proof was PRESENT. The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed. Presence is co-occurrence, not causation: the split says what evidence was on the record, never that a vote followed it.",
+    deductionPartitionA: "Partition A · did the meeting carry proof",
+    deductionPartitionAUnit: "the unit is the MEETING ({meetings} meetings)",
+    deductionPartitionB: "Partition B · did the proof name the ejected player",
+    deductionPartitionBUnit: "the unit is the EJECTION ({ejections} ejections)",
+    deductionSupporting: "Supporting instrument",
+    deductionSupportingUnit: "each cell carries its own denominator",
+    deductionFlagged: "Flagged-meeting accuracy",
+    deductionFlaggedHint:
+      "{impostor} / {total} ejections in the {meetings} meetings that carried role proof",
+    deductionUnflagged: "Unflagged-meeting accuracy",
+    deductionUnflaggedHint:
+      "{impostor} / {total} ejections in the {meetings} meetings with no role proof at all",
+    deductionInnocents: "Innocents ejected",
+    deductionInnocentsHint: "flagged / unflagged meetings",
+    deductionDirect: "Direct-proof accuracy",
+    deductionDirectHint:
+      "{impostor} / {total} ejections where a vent sighting named the ejected player",
+    deductionNonDirect: "Non-direct accuracy",
+    deductionNonDirectHint:
+      "{impostor} / {total} ejections with NO proof naming the ejected player",
+    deductionProofShare: "Proof-present share",
+    deductionProofShareHint:
+      "{present} / {total} ejections had proof naming the ejected player on the record",
+    deductionRareCaveat: "rare — read the interval",
+    deductionRareCaveatTitle:
+      "Rare cell: the numerator is {numerator}. The point rate is statistically fragile at this scale — read the interval ({interval}), not the percentage.",
+    deductionNonCausationCaveat: "proof-present ≠ proof-driven",
+    deductionNonCausationCaveatTitle:
+      "Co-occurrence inside one meeting, not causation: the cell says no role-proof flag NAMED the ejected player, not that the vote ignored evidence. {interval}.",
+    deductionWeakFlag: "Weak-flag-only convictions",
+    deductionWeakFlagHint: "{innocent} of them ejected an innocent",
+    deductionConsistency: "Turn → ballot consistency",
+    deductionConsistencyHint: "{consistent} / {accusing} accusing voters voted their accusation",
+    deductionConsistencyCaveat: "follow-through, not correctness",
+    deductionConsistencyCaveatTitle:
+      "Follow-through, not virtue: an honest mid-meeting revision scores as an inconsistency, and a skip counts against the voter only when someone they accused was votable.",
+    deductionCoverage: "Roll-call coverage",
+    deductionCoverageHint:
+      "crew {crewWith}/{crewTotal} vs impostor {impostorWith}/{impostorTotal} turns (pooled)",
+    deductionCoverageCaveat: "pooled — macro differs",
+    deductionCoverageCaveatTitle:
+      "A behavioural tell that follows from what each role is asked to say — NOT a leak of hidden state. How you average matters: the per-meeting average reads {macro} for impostors against the pooled {pooled}.",
+    deductionRedirected: "Engine-redirected ballots",
+    deductionRedirectedHint: "{redirected} / {total} ballots · {ejected} still ejected",
+    deductionSupply: "Kill-scene evidence supply",
+    deductionSupplyHint: "crew-witnessed kills · {coPresent} with a crewmate co-present",
+    deductionSupplyMissing: "not supplied with this report",
+    deductionSupplyMissingCaveat: "not supplied",
+    deductionSupplyMissingCaveatTitle:
+      "The kill-craft fold needs a verified walk over the committed replay directory, so a live tournament report carries no supply cells. Rebuild the sample report to populate them.",
 
+    calibrationTitle: "Accusation calibration",
+    calibrationDescription:
+      "Per-confidence-bin actual-impostor rate. A well-calibrated population tracks the dashed y=x diagonal. Mid-meeting accusation claims and final vote ballots are shown separately (they are different acts).",
+    calibrationClaims: "Accusation claims",
+    calibrationBallots: "Vote ballots",
+
+    alibiTitle: "Alibi fabrication",
     alibiDescription:
       "Share of impostor-authored alibis that survived the contradiction detector (a conservative lower bound). High = impostors getting away with fabricated cover; low = the detector catching it. 'n/a' when no impostor alibis were filed.",
+    alibiSurvivalRate: "Survival rate",
+    alibiSurvivalRateHint: "{survived} / {total} survived",
+    alibiTotal: "Impostor alibis",
+    alibiSurvived: "Survived",
 
+    interestingnessTitle: "Interestingness",
+    interestingnessDescription:
+      "Distribution of the rubric's 0–100 score — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel.",
+    interestingnessStaleCaveat: "scores may be stale",
+    interestingnessStaleCaveatTitle:
+      "The rubric was scored against different bytes than the set now serves, so these scores may be stale. Re-score the set to refresh them.",
+    interestingnessLoading: "Loading the interestingness rubric…",
+    interestingnessAbsentTitle: "No interestingness rubric.",
+    interestingnessAbsentLead:
+      "The selected set ships no rubric — expected for 4p1i, the fast technical fixture (median 12 ticks, at most one meeting per game). Switch back to the default 9p2i set, which ships one, or run",
+    interestingnessAbsentTail: "over this set to populate the histogram.",
+    interestingnessError: "Couldn't load the rubric:",
+    interestingnessEmpty: "The rubric is present but scored no games for this set.",
+    interestingnessFooter:
+      "{games} games scored on {set} · click a bucket to open it in the Highlights reel →",
+    interestingnessBucketLink:
+      "Open {count} {bucket}-interestingness game{plural} (score {range}) in the Highlights reel",
+    interestingnessScorePrefix: "score",
+
+    costTitle: "Cost dashboard",
     costDescription:
       "Tournament LLM spend roll-up. Per-(template, version) totals OVERLAP — the full game cost is attributed once per template a game ran — so they do not sum to the tournament total.",
+    costTotal: "Total cost",
+    costMean: "Mean / game",
+    costMeanHint: "target ≈ $0.20/game",
+    costGames: "Games",
+    costTokens: "Tokens (in / out)",
+    costPerModel: "Per model",
+    costPerModelEmpty: "No model spend recorded.",
+    costPerPrompt: "Per prompt (template · version)",
+    costPerPromptEmpty: "No prompt-version breakdown.",
+    costColModel: "Model",
+    costColCost: "Cost",
+    costColTemplate: "Template",
+    costColVersion: "Version",
+    costColGames: "Games",
   }),
 
   /** The meeting dialog's Resolution card. */
@@ -215,25 +418,10 @@ export const SPECTATOR_COPY = Object.freeze({
 
   /** Shared with `RUBRIC_SPOKES` so the walk covers the spoke words too. */
   rubricSpokes: RUBRIC_SPOKES,
-});
+} as const);
 
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
 export const TRANSPORT_COPY = SPECTATOR_COPY.transport;
 export const TURN_COPY = SPECTATOR_COPY.turn;
-
-/**
- * The partition behind the "Missed skips" count, in words.
- *
- * A function because the three counts are formatted by the caller; the WORDS
- * are the part that belongs here ("imp-voter · invalid · inversion" said
- * nothing to a reader who had not read the eval package).
- */
-export function missedSkipsHint(
-  impostorVoters: string,
-  invalidTargets: string,
-  crewDeclined: string,
-): string {
-  return `impostor voters ${impostorVoters} · invalid targets ${invalidTargets} · crew declined ${crewDeclined}`;
-}

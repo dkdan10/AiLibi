@@ -32,7 +32,7 @@ import {
   TRANSPORT_COPY,
   dialectHits,
   expandSetName,
-  missedSkipsHint,
+  fmt,
   rubricLegendLine,
   rubricSpokeTitle,
   setOptionLabel,
@@ -41,10 +41,16 @@ import {
 
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 
-/** The surfaces this task owns. The disk leg must find every one of them clean. */
+/**
+ * The surfaces this task owns. The disk leg must find every one of them clean.
+ *
+ * `rendered` is a fragment each file still emits inline, asserted to survive the
+ * comment strip — a stripper that ate real code would otherwise "pass" every
+ * file by handing the matcher an empty string.
+ */
 const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: string }[] =
   [
-    { file: "TournamentDashboard.tsx", rendered: "Balance outcome" },
+    { file: "TournamentDashboard.tsx", rendered: "Tournament dashboard" },
     { file: "MeetingView.tsx", rendered: "Resolution" },
     { file: "BallotCard.tsx", rendered: "no rationale recorded" },
     { file: "ReplayPicker.tsx", rendered: "Clear filters" },
@@ -143,6 +149,8 @@ describe("dialectHits (the planted cases that prove it bites)", () => {
     ["audit path", "See audits/audit-phase-19-triage.md for the recount."],
     ["undefined jargon", "A sentinel, not a down-is-good metric."],
     ["undefined jargon", "It is a bug detector, not a KPI."],
+    ["undefined jargon", "The canary cell for this baseline."],
+    ["undefined jargon", "Starved on this substrate."],
   ])("flags a %s", (name, planted) => {
     expect(dialectHits(planted)).toContain(name);
   });
@@ -192,12 +200,47 @@ describe("SPECTATOR_COPY", () => {
   );
 
   it("keeps the derived strings clean too", () => {
-    expect(dialectHits(missedSkipsHint("91", "1", "87"))).toEqual([]);
     expect(dialectHits(rubricLegendLine())).toEqual([]);
     expect(dialectHits(setOptionLabel("9p2i"))).toEqual([]);
     for (const spoke of RUBRIC_SPOKES) {
       expect(dialectHits(rubricSpokeTitle(spoke, 0.62))).toEqual([]);
     }
+  });
+
+  // A template still carries its words here, so the walk above already checked
+  // it — but only FILLED does it read the way a viewer sees it. Filling every
+  // template with a stand-in also proves none of them is missing a closing
+  // brace, which would leave a literal `{` on screen.
+  it("leaves every template clean once it is filled", () => {
+    for (const leaf of leaves) {
+      const names = [...leaf.text.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? "");
+      if (names.length === 0) continue;
+      const values = Object.fromEntries(names.map((name) => [name, "7"]));
+      const filled = fmt(leaf.text, values);
+      expect(filled, leaf.path).not.toContain("{");
+      expect(dialectHits(filled), leaf.path).toEqual([]);
+    }
+  });
+});
+
+// ── the interpolation helper ─────────────────────────────────────────────────
+
+describe("fmt", () => {
+  it("fills every placeholder, including a repeated one", () => {
+    expect(fmt("{a} / {b} · {a}", { a: "3", b: "9" })).toBe("3 / 9 · 3");
+  });
+
+  it("leaves a template with no placeholders alone", () => {
+    expect(fmt("non-decisive", {})).toBe("non-decisive");
+  });
+
+  // The planted case for the runtime backstop: a value that never arrives must
+  // raise, not render `{n}` at a viewer. (At a call site the compiler catches it
+  // first — `SPECTATOR_COPY` is `as const`, so the placeholder names are part of
+  // the template's type — but a template widened to `string` reaches here.)
+  it("raises rather than rendering a placeholder it cannot fill", () => {
+    const widened: string = "{count} games scored";
+    expect(() => fmt(widened, {})).toThrow(/no value for \{count\}/);
   });
 });
 
@@ -368,8 +411,36 @@ describe("the copy's substance", () => {
   });
 
   it("spells out the missed-skip partition instead of abbreviating it", () => {
-    const hint = missedSkipsHint("91", "1", "87");
+    const hint = fmt(DASHBOARD_COPY.conversionMissedSkipsHint, {
+      impostorVoters: "91",
+      invalidTargets: "1",
+      crewDeclined: "87",
+    });
     expect(hint).toBe("impostor voters 91 · invalid targets 1 · crew declined 87");
     expect(hint).not.toMatch(/imp-voter|inversion/);
+  });
+
+  it("explains the gate cells instead of naming them", () => {
+    // The review's complaint was that "supplied-channel conversion" and its
+    // neighbour meant nothing to a visitor. The label survives; the description
+    // beside it now says what the cell counts, in words.
+    const description = DASHBOARD_COPY.gateDescription;
+    expect(description).toMatch(/witnessed vent/i);
+    expect(description).toMatch(/whereabouts lie/i);
+    expect(description).toMatch(/alibi lies/i);
+    expect(dialectHits(description)).toEqual([]);
+  });
+
+  it("writes the gate tooltips itself rather than echoing the report's notes", () => {
+    // `supplied_channel_conversion.note` / `.legacy_note` are maintainer notes
+    // full of task ids and audit paths; rendering them as tooltips put that
+    // dialect on screen through the back door.
+    for (const text of [
+      DASHBOARD_COPY.gateSuppliedCaveatTitle,
+      DASHBOARD_COPY.gateGenuineCaveatTitle,
+    ]) {
+      expect(dialectHits(text)).toEqual([]);
+      expect(text).not.toMatch(/successor|legacy_note|compute_/);
+    }
   });
 });
