@@ -599,7 +599,7 @@ def _render_honesty_human(report: EvidenceHonestyReport) -> str:
             f" {adjacent.distance_three_or_more}; single-tick window:"
             f" {adjacent.single_tick_window}]",
             _solvability_line(
-                "  ... and within one tick", adjacent.adjacent_within_one
+                "  ... adjacency alone, any tick gap", adjacent.adjacent_any_gap
             ),
             _solvability_line("I-7 movement-origin flags", movement.spoke_origin)
             + f"  [move-backed {movement.backed_by_move_line}; destination"
@@ -637,7 +637,7 @@ def _render_honesty_human(report: EvidenceHonestyReport) -> str:
             f"{mean_lines if mean_lines is None else round(mean_lines, 2)}"
             f" over {budget.snapshots} snapshots;"
             f" reported-testimony rows {budget.testimony_rows_total}"
-            f" {dict(budget.testimony_rows_by_candidate_bucket)}",
+            f" {dict(budget.testimony_rows_by_living_bucket)}",
         ]
     )
 

@@ -44,7 +44,7 @@ from eval.evidence_honesty import (
     MovementOriginFlagCells,
     SingularPersonaCells,
     SoleFlagPrecisionCells,
-    _candidate_bucket,
+    _living_bucket,
     _classify_decline,
     _event_index,
     _fold_completion_rows,
@@ -177,8 +177,8 @@ def test_singular_persona_phrase_is_read_from_the_committed_templates() -> None:
     assert _singular_persona_phrase() == "a hidden impostor"
 
 
-def test_candidate_buckets_partition_the_living_counts() -> None:
-    assert [_candidate_bucket(n) for n in (2, 4, 5, 6, 7, 9)] == [
+def test_living_buckets_partition_the_living_counts() -> None:
+    assert [_living_bucket(n) for n in (2, 4, 5, 6, 7, 9)] == [
         "<=4",
         "<=4",
         "5-6",
@@ -418,7 +418,7 @@ def test_geometry_reads_adjacency_from_the_map_and_the_tick_gap() -> None:
         distances=distances,
         tallies=adjacent,
     )
-    assert (adjacent.adjacent_flags, adjacent.adjacent_within_one) == (1, 1)
+    assert (adjacent.adjacent_flags, adjacent.adjacent_any_gap) == (1, 1)
     assert adjacent.single_tick_window == 1
 
     far = _Tallies()
@@ -434,13 +434,14 @@ def test_geometry_reads_adjacency_from_the_map_and_the_tick_gap() -> None:
         tallies=far,
     )
     assert far.adjacent_flags == 0
+    assert far.adjacent_any_gap == 0
     assert far.distance_two + far.distance_three_plus == 1
     assert far.single_tick_window == 0
 
 
-def test_geometry_tick_gap_demotes_a_distant_window() -> None:
+def test_geometry_tick_gap_gates_the_registered_i6_numerator() -> None:
     distances = _room_distances(load_canonical_map())
-    tallies = _Tallies()
+    inside = _Tallies()
     _fold_geometry(
         _resolved(
             alibi_room="ENGINEERING",
@@ -450,10 +451,46 @@ def test_geometry_tick_gap_demotes_a_distant_window() -> None:
             sighting_tick=12,
         ),
         distances=distances,
+        tallies=inside,
+    )
+    # Adjacent rooms and the sighting inside the window: gap 0, both cells fire.
+    assert (inside.adjacent_flags, inside.adjacent_any_gap) == (1, 1)
+
+    far_gap = _Tallies()
+    _fold_geometry(
+        _resolved(
+            alibi_room="ENGINEERING",
+            sighting_room="EAST_HALL",
+            from_tick=10,
+            to_tick=12,
+            sighting_tick=20,
+        ),
+        distances=distances,
+        tallies=far_gap,
+    )
+    # Adjacent rooms but eight ticks outside the window: one tick of walking no
+    # longer reconciles them, so the REGISTERED cell must not count it.
+    assert (far_gap.adjacent_flags, far_gap.adjacent_any_gap) == (0, 1)
+
+
+def test_a_spoken_room_is_canonicalised_before_it_is_compared() -> None:
+    distances = _room_distances(load_canonical_map())
+    tallies = _Tallies()
+    _fold_geometry(
+        _resolved(
+            alibi_room="engineering",
+            sighting_room="east_hall/west_hall",
+            from_tick=4,
+            to_tick=4,
+            sighting_tick=4,
+        ),
+        distances=distances,
         tallies=tallies,
     )
-    # Adjacent rooms, but the sighting sits inside the window: gap 0.
-    assert (tallies.adjacent_flags, tallies.adjacent_within_one) == (1, 1)
+    # Lower case and a compound label are what the detector itself accepted, so
+    # the geometry fold reads them through the same canonicaliser and takes the
+    # nearest member: ENGINEERING is one doorway from EAST_HALL.
+    assert (tallies.adjacent_flags, tallies.distance_two) == (1, 0)
 
 
 def test_flag_resolution_reads_the_two_ids_by_type_not_by_position() -> None:
@@ -488,7 +525,7 @@ def test_flag_resolution_reads_the_two_ids_by_type_not_by_position() -> None:
         assert resolved.sighting.room == "MEDBAY"
 
 
-def test_flag_resolution_declines_an_unresolvable_pair() -> None:
+def test_flag_resolution_returns_none_for_an_unresolvable_pair() -> None:
     transcript = MeetingTranscript(turns=(_turn(index=0, speaker="p-9"),))
     assert (
         _resolve_flag(
@@ -1008,15 +1045,15 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
         reports[d].clock_alignment_checked
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert checked == [5199, 14747, 455, 477]
-    assert sum(checked) == 20_878
+    assert checked == [4501, 12667, 409, 436]
+    assert sum(checked) == 18_013
     # The action-bearing subset, checked under the two-frame rule rather than
     # dropped: it is where the +1 offset and the action's own room can differ.
     stamped = [
         reports[d].clock_alignment_action_stamped
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert stamped == [791, 2409, 58, 61]
+    assert stamped == [93, 329, 12, 20]
     assert all(count > 0 for count in stamped)
 
 
@@ -1026,10 +1063,10 @@ def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> No
     assert budget.snapshots == 1956
     # Every rendered memory row, not only the citable ``[obs …]`` half: heard
     # testimony is rendered budget too and a compression lever spends against it.
-    assert budget.rendered_lines_total == 117_385
-    assert budget.rendered_lines_mean == pytest.approx(60.0128, abs=1e-4)
+    assert budget.rendered_lines_total == 99_959
+    assert budget.rendered_lines_mean == pytest.approx(51.1038, abs=1e-4)
     assert budget.testimony_rows_total == 18319
-    assert dict(budget.testimony_rows_by_candidate_bucket) == {
+    assert dict(budget.testimony_rows_by_living_bucket) == {
         "<=4": 2794,
         "5-6": 11772,
         ">=7": 3753,

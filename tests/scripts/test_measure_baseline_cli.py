@@ -202,7 +202,7 @@ def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     assert measure_baseline.main(["--honesty", str(_NINE)]) == 0
     out = capsys.readouterr().out
     assert "50 games, 165 meetings" in out
-    assert "+1 agent clock proved on 5199 discriminating sightings" in out
+    assert "+1 agent clock proved on 4501 discriminating sightings" in out
     assert "I-2 false crew self-placement: 0.2102  (152/723)" in out
     assert "I-3 sole-flag precision (per victim): 0.0952  (2/21)" in out
     assert "I-4 grounded sighting side (+-0): 0.5345  (31/58)" in out
@@ -215,7 +215,7 @@ def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     assert "I-11 free zero-witness kills declined: 0.4578  (190/415)" in out
     assert "ghost-top decisions: 0.1231  (303/2461)" in out
     assert "0 mismatches over 2461 decisions" in out
-    assert "render budget: mean rendered lines/snapshot 60.01" in out
+    assert "render budget: mean rendered lines/snapshot 51.1" in out
 
 
 def test_honesty_one_impostor_set_reports_not_applicable(
@@ -237,7 +237,7 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
     nine, four = payload
     assert nine["replay_set_dir"].endswith("9p2i")
     assert nine["games_total"] == 50
-    assert nine["clock_alignment_checked"] == 5199
+    assert nine["clock_alignment_checked"] == 4501
     assert nine["false_whereabouts"]["crew_false"]["numerator"] == 152
     assert nine["marker_contamination"]["prompts_with_marker"] == {
         "numerator": 246,

@@ -180,7 +180,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     WhereaboutsClaim,
 )
-from meetings.transcript import is_weak_contradiction
+from meetings.transcript import canonical_rooms, is_weak_contradiction
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
@@ -213,10 +213,13 @@ _COMPLETED_LINE: Final[re.Pattern[str]] = re.compile(
     r"You completed (?P<task>\S+) \(you were in (?P<room>[^)]+)\)\.$",
     re.MULTILINE,
 )
-# Any rendered memory row, for the render-budget cells: first-hand observations
-# carry an ``[obs …]`` handle and heard testimony carries a ``[tick N] [meeting]``
-# stamp, so the budget counts both rather than only the citable half.
-_RENDERED_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[", re.MULTILINE)
+# The two rendered MEMORY row shapes, and only those: a first-hand observation
+# carries an ``[obs …]`` handle, heard testimony a ``[tick N] [meeting] CLAIM``
+# stamp. The prompt templates also format transcript turns and contradiction flags
+# as ``- […]`` bullets, which are not memory and must not enter the budget.
+_RENDERED_ROW: Final[re.Pattern[str]] = re.compile(
+    r"^- (?:\[obs [^\]]+\] |\[tick \d+\] \[meeting\] CLAIM by )", re.MULTILINE
+)
 # The reported-testimony row shape (``agents.memory.store`` renders heard claims).
 _TESTIMONY_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[.*\[meeting\] CLAIM by ")
 
@@ -439,15 +442,19 @@ class AdjacentRoomFlagCells(_FrozenModel):
     more than one doorway.
 
     Adjacency comes from ``engine/maps/canonical_1.yaml``'s doorway list through
-    ``Map.room_neighbors`` — never a hard-coded room table. ``adjacent_within_one``
-    additionally requires the sighting tick to sit within one tick of the alibi
-    window's nearest endpoint, the tick-gap rule the map-aware arbitration lever
-    would apply; ``single_tick_window`` counts flags whose alibi window is one tick.
+    ``Map.room_neighbors`` — never a hard-coded room table. ``adjacent`` is the
+    REGISTERED cell and carries the tick-gap rule with it: the sighting must also
+    sit within one tick of the alibi window's nearest endpoint, which is what makes
+    the pair reconcilable by one tick of walking. ``adjacent_any_gap`` drops that
+    condition, and the two coincide on the committed bytes (148/234 either way) —
+    which is exactly why the bar has to name the stricter one before a lever can
+    separate them. ``single_tick_window`` counts flags whose alibi window is one
+    tick.
     """
 
     strong_flags: int
     adjacent: WilsonRateCell
-    adjacent_within_one: WilsonRateCell
+    adjacent_any_gap: WilsonRateCell
     distance_two: int
     distance_three_or_more: int
     single_tick_window: int
@@ -568,16 +575,19 @@ class RenderBudgetCells(_FrozenModel):
 
     ``rendered_lines_mean`` is the mean number of rendered episodic rows per prompt
     snapshot — the budget any render lever spends against.
-    ``testimony_rows_by_candidate_bucket`` counts reported-testimony rows kept,
-    bucketed by the meeting's living-candidate count, so a retention change reads
-    per bucket rather than as one blended number.
+    ``testimony_rows_by_living_bucket`` counts reported-testimony rows kept,
+    bucketed by the meeting's LIVING-player count, so a retention change reads per
+    bucket rather than as one blended number. The bucket key is the roster size,
+    NOT the number of candidate rows the token-budget selector saw — the selector's
+    own input is not recoverable from the recorded prompt, and a cell keyed on it
+    belongs to the render task that owns the selector.
     """
 
     snapshots: int
     rendered_lines_total: int
     rendered_lines_mean: float | None
     testimony_rows_total: int
-    testimony_rows_by_candidate_bucket: Mapping[str, int]
+    testimony_rows_by_living_bucket: Mapping[str, int]
 
 
 class EvidenceHonestyReport(_FrozenModel):
@@ -654,7 +664,7 @@ class _Tallies:
 
     strong_flags: int = 0
     adjacent_flags: int = 0
-    adjacent_within_one: int = 0
+    adjacent_any_gap: int = 0
     distance_two: int = 0
     distance_three_plus: int = 0
     single_tick_window: int = 0
@@ -822,7 +832,7 @@ def _report(
         adjacent_room_flags=AdjacentRoomFlagCells(
             strong_flags=tallies.strong_flags,
             adjacent=cell(tallies.adjacent_flags, tallies.strong_flags),
-            adjacent_within_one=cell(tallies.adjacent_within_one, tallies.strong_flags),
+            adjacent_any_gap=cell(tallies.adjacent_any_gap, tallies.strong_flags),
             distance_two=tallies.distance_two,
             distance_three_or_more=tallies.distance_three_plus,
             single_tick_window=tallies.single_tick_window,
@@ -880,7 +890,7 @@ def _report(
                 else None
             ),
             testimony_rows_total=tallies.testimony_rows,
-            testimony_rows_by_candidate_bucket=dict(
+            testimony_rows_by_living_bucket=dict(
                 sorted(tallies.testimony_by_bucket.items())
             ),
         ),
@@ -1320,16 +1330,24 @@ def _assert_clock_alignment(
                 continue
             engine_tick = event.tick - AGENT_CLOCK_OFFSET
             here = room_at.get(engine_tick, {}).get(subject)
-            there = room_at.get(event.tick, {}).get(subject)
-            if here is None or there is None or here == there:
+            if here is None:
+                continue
+            action_stamped = event.payload.get("action") is not None
+            # A row DISCRIMINATES when its own two candidate frames disagree: the
+            # state read is ``obs.tick - 1`` against ``obs.tick``, the action stamp
+            # is ``obs.tick - 1`` against ``obs.tick - 2``. Comparing an
+            # action-bearing row against the state-read pair would skip exactly the
+            # rows whose subject moved during the action but stood still after it.
+            other = room_at.get(
+                engine_tick - 1 if action_stamped else event.tick, {}
+            ).get(subject)
+            if other is None or here == other:
                 continue
             tallies.clock_checked += 1
             allowed = [here]
-            if event.payload.get("action") is not None:
+            if action_stamped:
                 tallies.clock_checked_action_stamped += 1
-                acted_in = room_at.get(engine_tick - 1, {}).get(subject)
-                if acted_in is not None:
-                    allowed.append(acted_in)
+                allowed.append(other)
             if room not in allowed:
                 raise EvidenceHonestyReconstructionError(
                     f"{game_id}: {observer} recorded seeing {subject} in {room} at "
@@ -1454,7 +1472,7 @@ def _fold_prompts(
             1 for line in prompt.splitlines() if _TESTIMONY_ROW.match(line) is not None
         )
         tallies.testimony_rows += testimony
-        tallies.testimony_by_bucket[_candidate_bucket(len(living))] += testimony
+        tallies.testimony_by_bucket[_living_bucket(len(living))] += testimony
         _fold_completion_rows(
             call=call,
             completions=completions,
@@ -1465,8 +1483,8 @@ def _fold_prompts(
     return found
 
 
-def _candidate_bucket(living: int) -> str:
-    """The living-candidate bucket label a testimony count is reported under."""
+def _living_bucket(living: int) -> str:
+    """The living-roster bucket label a testimony count is reported under."""
 
     if living <= 4:
         return "<=4"
@@ -1654,7 +1672,13 @@ def _fold_flags(
             continue
         resolved = _resolve_flag(flag, index=index)
         if resolved is None:
-            continue
+            raise EvidenceHonestyReconstructionError(
+                f"{game_id}: meeting at tick {entry.tick} carries an "
+                f"alibi_vs_sighting flag whose events {flag.event_a_id!r} / "
+                f"{flag.event_b_id!r} do not resolve to one spoken sighting and "
+                "one alibi — the flag would vanish from I-4, I-6 and I-7 while "
+                "still counting in the I-3 class census"
+            )
         if resolved.strong:
             tallies.strong_flags += 1
             _fold_geometry(resolved, distances=distances, tallies=tallies)
@@ -1749,22 +1773,33 @@ def _fold_geometry(
 
     if resolved.from_tick == resolved.to_tick:
         tallies.single_tick_window += 1
-    distance = distances.get(resolved.alibi_room, {}).get(resolved.sighting.room)
-    if distance is None:
+    # Canonical room SETS, the comparison the detector itself made: a spoken label
+    # may be lower-case or a compound ``A/B`` account, and a raw string compare
+    # would move this cell on formatting alone.
+    pairs = [
+        distances.get(alibi, {}).get(seen)
+        for alibi in canonical_rooms(resolved.alibi_room)
+        for seen in canonical_rooms(resolved.sighting.room)
+    ]
+    reachable = [d for d in pairs if d is not None]
+    if not reachable:
         return
+    distance = min(reachable)
     gap = max(
         0,
         resolved.from_tick - resolved.sighting.tick,
         resolved.sighting.tick - resolved.to_tick,
     )
     if distance == 1:
-        tallies.adjacent_flags += 1
+        tallies.adjacent_any_gap += 1
         if gap <= 1:
-            tallies.adjacent_within_one += 1
+            tallies.adjacent_flags += 1
     elif distance == 2:
         tallies.distance_two += 1
-    else:
+    elif distance >= 3:
         tallies.distance_three_plus += 1
+    # distance 0 means the two canonical room sets intersect, which the detector
+    # treats as CONSISTENT and never flags; it is counted in no geometry bucket.
 
 
 def _fold_grounding(
@@ -1782,12 +1817,14 @@ def _fold_grounding(
     if memory is None or engine_tick not in room_at:
         return
     tallies.resolvable_sides += 1
+    spoken = canonical_rooms(resolved.sighting.room)
     gaps = [
         abs(event.tick - resolved.sighting.tick)
         for event in memory.recent(since_tick=0)
         if event.type == EVENT_SAW_PLAYER
         and event.payload.get("player_id") == resolved.sighting.subject
-        and event.payload.get("room") == resolved.sighting.room
+        and isinstance(event.payload.get("room"), str)
+        and canonical_rooms(str(event.payload["room"])) & spoken
     ]
     if not gaps:
         return
@@ -1823,10 +1860,11 @@ def _fold_movement_origin(
     origin = move.payload.get("from_room")
     destination = move.payload.get("to_room")
     tallies.move_backed_flags += 1
-    if resolved.sighting.room == destination:
+    spoken = canonical_rooms(resolved.sighting.room)
+    if isinstance(destination, str) and canonical_rooms(destination) & spoken:
         tallies.destination_flags += 1
         return
-    if resolved.sighting.room != origin:
+    if not isinstance(origin, str) or not (canonical_rooms(origin) & spoken):
         return
     tallies.origin_flags += 1
     if resolved.strong:
