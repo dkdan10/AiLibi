@@ -306,9 +306,11 @@ def candidate_set_for_body_meeting(
     both endpoints alive, vents clear nobody, and nobody clears itself.
 
     ``roles`` and ``kill_state.players`` must cover every id in
-    ``living_at_meeting``, and the victim must not be among them; each breach
-    raises, because all three would quietly enlarge the candidate set instead
-    of failing.
+    ``living_at_meeting`` and agree on each one's role, and the victim must not
+    be among them; each breach raises, because every one of them would quietly
+    change the candidate set instead of failing. The role agreement matters
+    because the crew filter here reads ``roles`` while sight is resolved from
+    the world state's own role.
     """
 
     if victim in living_at_meeting:
@@ -327,8 +329,6 @@ def candidate_set_for_body_meeting(
                 f"no role for living player {observer!r} — an incomplete role "
                 "map would silently drop that player's sightings"
             )
-        if role != "CREWMATE":
-            continue
         observer_state = kill_state.players.get(observer)
         if observer_state is None:
             # Nobody joins mid-game: alive at the meeting implies present in the
@@ -339,6 +339,16 @@ def candidate_set_for_body_meeting(
                 f"living player {observer!r} is absent from the kill tick's "
                 "roster — the meeting and the kill state disagree"
             )
+        if observer_state.role != role:
+            # The crew filter reads ``roles`` while ``compute_visibility_for_player``
+            # resolves sight from the world state's own role. A disagreement would
+            # admit an impostor's wider vision into the honest crew pool.
+            raise SolvabilityReconstructionError(
+                f"role for {observer!r} disagrees with the kill state: {role!r} "
+                f"vs {observer_state.role!r}"
+            )
+        if role != "CREWMATE":
+            continue
         if not observer_state.alive:
             continue
         visible = compute_visibility_for_player(
@@ -508,7 +518,17 @@ def _walk_game(
         config=_WALK_CONFIG,
     ):
         if isinstance(walk_event, TickAdvanced):
-            pre_state_by_tick[walk_event.entry.tick] = walk_event.pre_state
+            # The recorded tick LABEL is not covered by the hash chain: relabelling
+            # rows while leaving order, actions and hashes intact passes every
+            # profile check, and would file a pre-state under a tick that kills
+            # and meetings then resolve against. Bind the two before folding.
+            if walk_event.entry.tick != walk_event.pre_state.tick:
+                raise SolvabilityReconstructionError(
+                    f"{game_id}: row labelled tick {walk_event.entry.tick} "
+                    f"reconstructs tick {walk_event.pre_state.tick} — a relabelled "
+                    "row would mis-anchor every meeting that reads it"
+                )
+            pre_state_by_tick[walk_event.pre_state.tick] = walk_event.pre_state
             for event in walk_event.events:
                 if isinstance(event, KilledEvent):
                     fact = _KillFact(

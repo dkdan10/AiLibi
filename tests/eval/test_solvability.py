@@ -290,6 +290,23 @@ def test_a_living_player_absent_from_the_kill_state_is_a_breach() -> None:
         _candidates(state, {"p-suspect", "p-witness"})
 
 
+def test_a_role_disagreeing_with_the_kill_state_is_a_breach() -> None:
+    """Sight comes from the world state's role; the crew filter from ``roles``.
+
+    An observer mapped CREWMATE but stored IMPOSTOR would enter the honest pool
+    carrying adjacent-room vision and clear players no crewmate could see.
+    """
+
+    state = _kill_state(
+        _player("p-suspect", _ELSEWHERE),
+        _player("p-witness", _ELSEWHERE, role="IMPOSTOR"),
+        _player("p-victim", _BODY_ROOM),
+    )
+
+    with pytest.raises(SolvabilityReconstructionError, match="disagrees with the kill"):
+        _candidates(state, {"p-suspect", "p-witness"})
+
+
 def test_a_replay_set_with_no_recordings_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(SolvabilityReconstructionError, match="no replay-seed"):
         compute_solvability_report(tmp_path)
@@ -332,6 +349,26 @@ def test_the_profile_rejects_a_truncated_recording(tmp_path: Path) -> None:
 
     with pytest.raises(SolvabilityReconstructionError, match="without reaching"):
         compute_solvability_report(_corrupted_set(tmp_path, lambda lines: lines[:1]))
+
+
+def test_a_relabelled_tick_row_is_rejected(tmp_path: Path) -> None:
+    """Tick LABELS are outside the hash chain, so the fold binds them itself.
+
+    Swapping two labels leaves row order, actions and every ``state_hash``
+    intact — the whole profile passes — but files each pre-state under the
+    other's tick, which is the state kills and meetings then resolve against.
+    """
+
+    def swap_the_first_two_tick_labels(lines: list[str]) -> list[str]:
+        first, second = json.loads(lines[0]), json.loads(lines[1])
+        assert first["kind"] == second["kind"] == "tick"
+        first["tick"], second["tick"] = second["tick"], first["tick"]
+        return [json.dumps(first), json.dumps(second), *lines[2:]]
+
+    with pytest.raises(SolvabilityReconstructionError, match="reconstructs tick"):
+        compute_solvability_report(
+            _corrupted_set(tmp_path, swap_the_first_two_tick_labels)
+        )
 
 
 def test_the_profile_rejects_a_doubled_meeting_row(tmp_path: Path) -> None:
