@@ -305,9 +305,10 @@ def candidate_set_for_body_meeting(
     The module docstring is the full rule; the short form is: crew eyes only,
     both endpoints alive, vents clear nobody, and nobody clears itself.
 
-    ``roles`` must cover every id in ``living_at_meeting`` and the victim must
-    not be among them; either breach raises, because both would quietly enlarge
-    the candidate set rather than fail.
+    ``roles`` and ``kill_state.players`` must cover every id in
+    ``living_at_meeting``, and the victim must not be among them; each breach
+    raises, because all three would quietly enlarge the candidate set instead
+    of failing.
     """
 
     if victim in living_at_meeting:
@@ -329,7 +330,16 @@ def candidate_set_for_body_meeting(
         if role != "CREWMATE":
             continue
         observer_state = kill_state.players.get(observer)
-        if observer_state is None or not observer_state.alive:
+        if observer_state is None:
+            # Nobody joins mid-game: alive at the meeting implies present in the
+            # kill tick's roster. A missing entry means the meeting and the kill
+            # state come from different games, which would leave that player an
+            # uncleared candidate forever.
+            raise SolvabilityReconstructionError(
+                f"living player {observer!r} is absent from the kill tick's "
+                "roster — the meeting and the kill state disagree"
+            )
+        if not observer_state.alive:
             continue
         visible = compute_visibility_for_player(
             observer_id=observer,
