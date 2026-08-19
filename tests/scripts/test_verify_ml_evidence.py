@@ -24,9 +24,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -1565,3 +1567,138 @@ def test_a_fit_corpus_record_keyed_to_other_weights_fails(tmp_path: Path) -> Non
     )
     assert drifted_set.status == "FAIL"
     assert "corpus_set" in drifted_set.detail
+
+
+# --------------------------------------------------------------------------- #
+# 7. the gate fence — the restore destinations sit outside `mypy .`            #
+# --------------------------------------------------------------------------- #
+
+_FETCH_SCRIPT = "scripts/fetch_evidence.sh"
+_DEST_ASSIGNMENT = re.compile(
+    r'^(?P<var>COEVO_DEST|SLATE_DEST)="\$REPO_ROOT/(?P<rel>[^"]+)"$', re.MULTILINE
+)
+
+
+def _restore_destinations() -> dict[str, str]:
+    """The repo-relative roots ``fetch_evidence.sh`` restores into, from the script.
+
+    Read out of the script's own assignments rather than restated here, so the mypy
+    fence below is pinned to what the restore actually writes.
+    """
+
+    text = (_REPO_ROOT / _FETCH_SCRIPT).read_text()
+    found = {m.group("var"): m.group("rel") for m in _DEST_ASSIGNMENT.finditer(text)}
+    assert set(found) == {"COEVO_DEST", "SLATE_DEST"}, (
+        f"{_FETCH_SCRIPT} no longer assigns both destinations as "
+        f'VAR="$REPO_ROOT/<rel>"; got {sorted(found)}'
+    )
+    return found
+
+
+def _mypy_exclude() -> str:
+    config = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
+    exclude = config["tool"]["mypy"]["exclude"]
+    assert isinstance(exclude, str)
+    return exclude
+
+
+def _exclude_alternatives(exclude: str) -> tuple[str, ...]:
+    """The top-level alternatives inside the exclude's ``^( … )`` group.
+
+    Split at parenthesis depth 0: one alternative carries a nested group of its own,
+    so a plain ``str.split("|")`` would tear it apart.
+    """
+
+    assert exclude.startswith("^(") and exclude.endswith(")"), exclude
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for char in exclude[2:-1]:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "|" and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    parts.append("".join(current))
+    return tuple(parts)
+
+
+def _tracked_python() -> list[str]:
+    return subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "ls-files", "--", "*.py"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+
+
+def test_mypy_exclude_fences_both_restore_destinations() -> None:
+    """``mypy .`` must not walk what ``scripts/fetch_evidence.sh`` restores.
+
+    The per-destination ``.gitignore`` the restore writes fences ``git add``, not a
+    type checker, so without this the documented restore and the documented gate
+    exclude each other: the restored slate's untracked operator helpers were never
+    held to the strict bar and reported 15 errors over 358 files against the clean
+    state's 354 (audits/audit-phase-19-close.md §1 F1).
+    """
+
+    destinations = _restore_destinations()
+    assert destinations["COEVO_DEST"] == vme.COEVO_DEST
+    assert destinations["SLATE_DEST"] == vme.SLATE_DEST
+
+    pattern = re.compile(_mypy_exclude())
+    for dest in destinations.values():
+        for probe in (f"{dest}/", f"{dest}/helper.py", f"{dest}/nested/deep/help.py"):
+            assert pattern.search(probe), f"mypy exclude does not fence {probe!r}"
+
+
+def test_the_destination_alternatives_swallow_no_tracked_python() -> None:
+    """The fence is exactly the two restore roots — it hides no committed module.
+
+    Checked per added alternative rather than over the whole regex: the pre-existing
+    ``experiments/lab/`` and ``design/`` alternatives legitimately cover tracked
+    files.
+    """
+
+    alternatives = _exclude_alternatives(_mypy_exclude())
+    tracked = _tracked_python()
+    assert tracked, "no tracked Python files found"
+    for dest in _restore_destinations().values():
+        alternative = f"{dest}/"
+        assert alternative in alternatives, (
+            f"mypy exclude no longer carries {alternative!r} as its own alternative"
+        )
+        added = re.compile(f"^({alternative})")
+        swallowed = [path for path in tracked if added.search(path)]
+        assert swallowed == [], (
+            f"{alternative!r} would hide tracked modules: {swallowed}"
+        )
+
+
+def test_the_fence_can_fail_when_a_destination_alternative_is_dropped() -> None:
+    """Narrow the exclude back to its pre-fence form and the destinations return.
+
+    Without this, the pin above would still pass on an exclude that fenced the
+    destinations only by accident — a coincidental prefix, or a broadened
+    ``training/`` alternative that also swallowed real code.
+    """
+
+    alternatives = _exclude_alternatives(_mypy_exclude())
+    destinations = set(_restore_destinations().values())
+    added = {f"{dest}/" for dest in destinations}
+    kept = [alternative for alternative in alternatives if alternative not in added]
+    assert len(kept) == len(alternatives) - len(added)
+    narrowed = re.compile("^(" + "|".join(kept) + ")")
+
+    for dest in destinations:
+        assert not narrowed.search(f"{dest}/helper.py"), (
+            f"{dest!r} is fenced by something other than its own alternative; "
+            "dropping that alternative would not expose it"
+        )
+    # The narrowing removed only the two alternatives under test.
+    assert narrowed.search("experiments/lab/ml_spike/core.py")
+    assert narrowed.search("design/phase-12/gen_map_reference.py")
