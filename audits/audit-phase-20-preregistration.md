@@ -68,6 +68,15 @@ Every target in §4 is ratified as written, not recomputed from whatever the pin
 say. §3.2 lists the four cells where the pin and the review disagree, keeps both numbers, and
 names the cause.
 
+**Precedence over anything that still quotes a superseded cell.** This memo is the only
+normative source for the cells, the bars and the rule; where a contract, a generated prompt or
+an audit still quotes a review-measured figure that §3.2 has replaced — at ratification that is
+`tasks/phase-20.md`'s Task-20.36 read paragraph, which still names `148/723 = 20.5%`,
+`36.5% grounded` and `53/529 = 10.0%` — the memo governs and the contract is re-anchored to
+`152/723 = 21.0%`, `124/234 = 53.0%` at tick and `19/458` at its pre-dispatch review, the same
+coordination pass this phase already runs before every dispatch. A stale quotation downstream
+is a re-anchor, never a second baseline.
+
 ## 2. The instruments
 
 Eleven of the thirteen rows changed status at 20.14 (I-12) and 20.15 (I-2…I-11); I-1 and I-13
@@ -78,10 +87,10 @@ any more.
 |---|---|---|---|
 | I-1 | Proof-vs-inference conviction cells (direct / non-direct; innocent ejections by cell) | `eval/deduction_metrics.py` (19.14) | `tests/eval/test_deduction_metrics.py`:178, :224, :256, :295-296, :309-310 |
 | I-2 | False crew self-placement rate (a spoken `whereabouts` whose room matches the speaker's true room at neither agent-tick N nor N−1) | `eval/evidence_honesty.py` (20.15) | `tests/eval/test_evidence_honesty.py::test_i2_false_crew_self_placement_pins` |
-| I-3 | Sole-`alibi_vs_sighting` convicting precision (ejections whose ejectee carried that one STRONG flag: right / wrong) and the class impostor share vs base rate | 20.15 | `tests/eval/test_evidence_honesty.py::test_i3_sole_flag_precision_pins` |
+| I-3 | Sole-`alibi_vs_sighting` convicting precision — ejections whose ejectee's STRONG flags were ALL of kind `alibi_vs_sighting`, however many (`sole_flag_precision.per_victim_precision`): right / wrong — and the class impostor share vs the living-voter base rate | 20.15 | `tests/eval/test_evidence_honesty.py::test_i3_sole_flag_precision_pins` |
 | I-4 | Grounded sighting side (share of resolvable spoken sighting sides the speaker's own record supports, at the tick and at ±1 / ±2) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i4_grounded_sighting_side_pins` |
 | I-5 | Fabricated completion lines (rendered "You completed X" with no completion event at any earlier tick) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i5_fabricated_completion_pins` |
-| I-6 | Adjacent-room STRONG share (STRONG `alibi_vs_sighting` whose two rooms are one doorway apart) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i6_adjacent_room_strong_share_pins` |
+| I-6 | Adjacent-room STRONG share — STRONG `alibi_vs_sighting` whose two rooms are one doorway apart AND whose sighting sits within ≤ 1 tick of the alibi window (`adjacent_room_flags.adjacent`; the un-gated `adjacent_any_gap` is reported beside it) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i6_adjacent_room_strong_share_pins` |
 | I-7 | Movement-origin flags (`alibi_vs_sighting` whose sighting is the origin half of a `move A→B` line in the speaker's memory) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i7_movement_origin_flag_pins` |
 | I-8 | Dev-marker contamination (turn `free_text` beginning with a bracketed marker; prompts containing one) | 20.15 | `tests/eval/test_evidence_honesty.py::test_i8_marker_contamination_pins` |
 | I-9 | Singular-persona prompts in a 2-impostor game | 20.15 | `tests/eval/test_evidence_honesty.py::test_i9_singular_persona_pins` |
@@ -90,15 +99,38 @@ any more.
 | I-12 | Solvability: killer-in-candidate-set containment; singleton rate and correctness; ejections landing on an already-cleared player | `eval/solvability.py` (20.14) | `tests/eval/test_solvability.py::test_pooled_denominators_and_headline_cells` and the four per-set tests |
 | I-13 | The four 19.11 injustice fixtures (provenance-impossible sighting 9p2i s23 M1; content-vs-own-memory miss s12 M0; one-tick interval artifact 4p1i s41/s49; equal-weight conflict s41) | `tests/api/fixtures/evidence_mechanisms.py` (19.11) | `tests/api/test_evidence_mechanisms.py`:173, :194, :220, :249 |
 
-**The definitions are the code's, verbatim.** `eval/evidence_honesty.py:226`
-(`CELL_DEFINITIONS`) holds one sentence per row I-2…I-11 — numerator, denominator, clock
-convention and an explicit non-coverage clause — and
+**The definitions are the code's, verbatim — with two named exceptions.**
+`eval/evidence_honesty.py:226` (`CELL_DEFINITIONS`) holds one sentence per row I-2…I-11 —
+numerator, denominator, clock convention and an explicit non-coverage clause — and
 `tests/eval/test_evidence_honesty.py:135` asserts each sentence is present verbatim in the
-module docstring AND in its own cell family's docstring. The memo does not restate them: it
-adopts them by reference, so the definition this memo ratifies is by construction the one the
-code computes. I-12's rule (which meetings enter, which kill anchors a meeting, who counts as
-an observer, what clears a player, and what the cell does NOT measure) is stated the same way
-in `eval/solvability.py`'s "The rule, stated before any cell is counted" block.
+module docstring AND in its own cell family's docstring. The memo adopts those sentences by
+reference, so the definition ratified here is by construction the one the code computes.
+I-12's rule (which meetings enter, which kill anchors a meeting, who counts as an observer,
+what clears a player, and what the cell does NOT measure) is stated the same way in
+`eval/solvability.py`'s "The rule, stated before any cell is counted" block.
+
+Two of those sentences are NARROWER than the cell the module actually registers, and the
+table above states the registered semantics in words so a bar can never be judged on the
+wrong population. **What this memo ratifies is the wording in the §2 table, and the cell it
+names.**
+
+* **I-3.** `CELL_DEFINITIONS["I-3"]` says "carried exactly one STRONG contradiction and it was
+  alibi_vs_sighting" — that sentence describes the companion cell
+  `sole_flag_precision.per_victim_single_flag_precision` (8/58 pooled). The registered cell,
+  and bar 4's population, is `per_victim_precision`: every STRONG flag on the ejectee is of
+  kind `alibi_vs_sighting`, however many there are (12/82 pooled — the population the review
+  measured as 12 right / 70 wrong). On baseline 6 the two readings differ; after a lever that
+  changes how many flags a victim carries they can differ more, which is why the bar names its
+  cell rather than inheriting a sentence.
+* **I-6.** `CELL_DEFINITIONS["I-6"]` says "one doorway apart" and adds "no clock conversion
+  applies". The registered numerator `adjacent_room_flags.adjacent` additionally requires the
+  sighting to sit within ≤ 1 tick of the alibi window; the un-gated count is the separate
+  `adjacent_any_gap`. The two coincide on baseline 6 (148 each) and can separate once a lever
+  moves the flags, so bar 7 is stated on `adjacent` with `adjacent_any_gap` reported beside it.
+
+Both are wording defects in 20.15's definition strings, not in the numbers the tests pin;
+correcting the two strings is a production-code edit and routes back as its own contract (this
+memo quotes instruments and never redefines a cell).
 
 ## 3. Baseline cells (baseline 6 — the committed bytes, unchanged since `b809b19c`)
 
@@ -193,7 +225,7 @@ with the per-set cells shown beside the pooled figure. Targets are as written; n
 moved with §3.2's re-anchors.
 
 1. **I-1 non-direct conviction accuracy 0.368 → ≥ 0.60 pooled, and no set below 0.50.**
-   Before, pooled 46/125 = 0.368 [0.2886, 0.4553]; per set 10/33 = 0.303, 35/89 = 0.393,
+   Before, pooled 46/125 = 0.3680 [0.2886, 0.4553]; per set 10/33 = 0.303, 35/89 = 0.393,
    1/3, 0/0 (the corpus-4p1i no-cell is exempt from the per-set clause — an empty denominator
    is the None sentinel, never 0.0).
 2. **I-1 innocent ejections 79 → < 35 pooled.** Before, per set 23 / 54 / 2 / 0, all of them
@@ -201,9 +233,11 @@ moved with §3.2's re-anchors.
 3. **I-2 false crew self-placement 21.0% → < 5% on samples/9p2i, and every set < 8%.**
    Before: 152/723 = 21.0%, 409/2038 = 20.1%, 10/78 = 12.8%, 16/79 = 20.3%.
 4. **I-3 sole-`alibi_vs_sighting` convicting precision 14.6% → ≥ 50% pooled, AND the class
-   impostor share above the living-voter base rate at the same meetings.** Before: 12/82 =
-   14.6% precision; class share 33/192 = 17.2% against a base rate of 255/1017 = 25.1% — the
-   channel is currently worse than chance.
+   impostor share above the living-voter base rate at the same meetings.** The population is
+   `sole_flag_precision.per_victim_precision` — every STRONG flag on the ejectee is of kind
+   `alibi_vs_sighting`, however many (§2, I-3) — not the stricter exactly-one-flag companion.
+   Before: 12/82 = 14.6% precision; class share 33/192 = 17.2% against a base rate of
+   255/1017 = 25.1% — the channel is currently worse than chance.
 5. **I-4 grounded sighting side → 100% of the surviving STRONG sighting sides, measured on
    the AT-TICK cell.** Before: 124/234 = 53.0% at tick (154/234 = 65.8% within ±1, reported
    beside it and never the bar). "Surviving" is the point: a lever that suppresses an
@@ -211,8 +245,11 @@ moved with §3.2's re-anchors.
    the numerator; both are passes.
 6. **I-5 fabricated completion lines → 0 on every set.** Before: 19/458, 40/1311, 15/61,
    14/58.
-7. **I-6 adjacent-room STRONG share 63.2% → ~0, operationalised as ≤ 5% pooled.** Before:
-   148/234 = 63.2% [0.5690, 0.6917].
+7. **I-6 adjacent-room STRONG share 63.2% → ~0, operationalised as ≤ 5% pooled.** The
+   numerator is `adjacent_room_flags.adjacent` — one doorway apart AND the sighting within
+   ≤ 1 tick of the alibi window (§2, I-6) — with the un-gated `adjacent_any_gap` reported
+   beside it, because a lever may move the two apart. Before: 148/234 = 0.6325
+   [0.5690, 0.6917], with `adjacent_any_gap` also 148 on the same denominator today.
 8. **I-13 the four 19.11 injustice fixtures: each stated pass/fail INDIVIDUALLY** — (a)
    provenance-impossible sighting, 9p2i seed 23 M1; (b) content-vs-own-memory miss, 9p2i seed
    12 M0; (c) one-tick interval artifact, 4p1i seeds 49 and 41; (d) equal-weight conflict,
@@ -338,9 +375,9 @@ the owner's.
 range. **The corpus 9p2i leg precedes either 4p1i leg** because that is where the power is: the
 non-direct cell (bar 1) is n=89 in the corpus against n=33 in the samples
 (`tests/eval/test_deduction_metrics.py`:256 and :224), and both 4p1i sets contribute n=3 and
-n=0. A delta on n=33 will not separate — the samples/9p2i Wilson interval at the baseline rate
-is [0.1738, 0.4734], nearly a third of the scale wide, while the corpus cell's is
-[0.2982, 0.4971]. If the window forces a choice, the two 4p1i legs are the ones that yield.
+n=0. A delta on n=33 will not separate — the samples cell 10/33 = 0.3030 [0.1738, 0.4734] is
+nearly a third of the scale wide, against the corpus cell 35/89 = 0.3933 [0.2982, 0.4971]. If
+the window forces a choice, the two 4p1i legs are the ones that yield.
 
 **The slate:** model `Qwen/Qwen3.6-27B` non-thinking via Featherless, prompt set `qwen3_6_27b`
 v4, lever slate all eight ON, `impostor_roll_call` OFF, `$0`. `impostor_roll_call` is the only
@@ -424,8 +461,10 @@ uv run python scripts/measure_baseline.py --solvability --json replays/ml_corpus
 `eval/solvability.py` and the committed `tournament-eval-report.json`; every quoted Wilson
 interval re-run through the production helper; §5's win split re-derived from the MANIFESTs;
 and §3.2's four deliberate pin-over-review differences asserted still to carry BOTH numbers.
-It prints `0 mismatches`, and it bites: change one digit of one cell and that cell is named.
-Task 20.22's PR pastes its output.
+It prints `0 mismatches` and **exits 0 only then** — a mismatch names the cell and exits 1, so
+a CI job or an operator cannot read drift as a pass. It bites: change one digit of one cell,
+or quote an interval in a shape it cannot re-run, and it says so. Task 20.22's PR pastes its
+output.
 
 ```bash
 uv run python - <<'EOF'
@@ -529,7 +568,10 @@ for label in CELLS:
     print(f"OK  {label}: " + "  ".join(str(c) for c in stated[label]))
 
 intervals = re.findall(r"(\d+)/(\d+) = (0\.\d{4}) \[(0\.\d{4}), (0\.\d{4})\]", FLAT)
-assert len(intervals) >= 9, f"only {len(intervals)} intervals parsed"
+assert len(intervals) >= 11, f"only {len(intervals)} intervals parsed"
+assert "[0." not in re.sub(
+    r"(\d+)/(\d+) = (0\.\d{4}) \[(0\.\d{4}), (0\.\d{4})\]", "", FLAT
+).split("## 12.")[0], "an interval is quoted in a shape this reader cannot re-run"
 for num, den, rate, low, high in intervals:
     want = tuple(round(value, 4) for value in _wilson_interval(int(num), int(den)))
     if want != (float(rate), float(low), float(high)):
@@ -561,6 +603,7 @@ for cell, review, pin in (
 print(f"\n{len(mismatches)} mismatches")
 for line in mismatches:
     print("  " + line)
+raise SystemExit(1 if mismatches else 0)
 EOF
 ```
 
