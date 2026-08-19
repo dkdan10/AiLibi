@@ -229,51 +229,78 @@ const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FETCH_OWNER = "api/client.ts";
 
 /**
- * `source` with the contents of comments and string literals blanked to spaces,
- * line breaks kept.
+ * `source` with every non-code character blanked to a space, line breaks kept —
+ * comment bodies, quoted text, and template TEXT, but not a template's `${…}`
+ * holes, which are code.
  *
  * A scan of raw text is not a scan of code: this file's own prose says "fetch"
- * a dozen times, and two components mention "the … fetch (…)" in a comment. This
- * is what makes the scan below about calls rather than about the word.
+ * a dozen times, two components mention "the … fetch (…)" in a comment, and a
+ * template could carry the word as content. This is what makes the scan below
+ * about calls rather than about the word.
  */
 function codeOnly(source: string): string {
+  // One nesting level: `"code"` is the file or a `${…}` hole, a quote character
+  // is a literal whose text is blanked. `braces` counts open `{` in a code
+  // frame, so the `}` that closes a hole is told apart from an object literal's.
+  interface Frame {
+    mode: "code" | "'" | '"' | "`";
+    braces: number;
+  }
+  const stack: Frame[] = [{ mode: "code", braces: 0 }];
+  const top = (): Frame => stack[stack.length - 1]!;
   const out: string[] = [];
-  let quote: string | null = null;
   let comment: "line" | "block" | null = null;
+
   for (let i = 0; i < source.length; i += 1) {
     const ch = source[i]!;
     const pair = source.slice(i, i + 2);
     const blank = ch === "\n" ? "\n" : " ";
-    if (comment === "line") {
-      if (ch === "\n") comment = null;
-      out.push(blank);
-    } else if (comment === "block") {
-      if (pair === "*/") {
+
+    if (comment !== null) {
+      if (comment === "block" && pair === "*/") {
         comment = null;
         out.push("  ");
         i += 1;
-      } else out.push(blank);
-    } else if (quote !== null) {
-      // Quoted text is not code — except a template literal, whose `${…}` holes
-      // are, so backticks suppress comment/quote parsing without blanking.
-      if (ch === "\\") {
-        out.push(quote === "`" ? "\\ " : "  ");
-        i += 1;
-      } else if (ch === quote) {
-        quote = null;
-        out.push(ch);
       } else {
-        out.push(quote === "`" ? ch : blank);
+        if (comment === "line" && ch === "\n") comment = null;
+        out.push(blank);
       }
-    } else if (pair === "//" || pair === "/*") {
-      comment = pair === "//" ? "line" : "block";
+      continue;
+    }
+
+    if (top().mode === "code") {
+      if (pair === "//" || pair === "/*") {
+        comment = pair === "//" ? "line" : "block";
+        out.push("  ");
+        i += 1;
+      } else if (ch === "'" || ch === '"' || ch === "`") {
+        stack.push({ mode: ch, braces: 0 });
+        out.push(ch);
+      } else if (ch === "{") {
+        top().braces += 1;
+        out.push(ch);
+      } else if (ch === "}" && top().braces === 0 && stack.length > 1) {
+        stack.pop(); // this `}` closes a `${…}` hole
+        out.push(" ");
+      } else {
+        if (ch === "}") top().braces -= 1;
+        out.push(ch);
+      }
+      continue;
+    }
+
+    if (ch === "\\") {
+      out.push("  "); // an escape and the character it escapes
+      i += 1;
+    } else if (top().mode === "`" && pair === "${") {
+      stack.push({ mode: "code", braces: 0 });
       out.push("  ");
       i += 1;
-    } else if (ch === "'" || ch === '"' || ch === "`") {
-      quote = ch;
+    } else if (ch === top().mode) {
+      stack.pop();
       out.push(ch);
     } else {
-      out.push(ch);
+      out.push(blank);
     }
   }
   return out.join("");
@@ -282,28 +309,31 @@ function codeOnly(source: string): string {
 /**
  * A call to the GLOBAL fetch: bare, or reached through one of the three names
  * that denote the global object. `window.fetch(…)` bypasses `getJson` exactly as
- * a bare call does, so the gate has to see it.
+ * a bare call does, so the gate has to see it — including when the formatter has
+ * put the qualifier and the method on separate lines.
  *
  * The lookbehind anchors the whole match, which is what keeps an unrelated
  * method out: `store.prefetch(…)` and `client.fetch(…)` are not the global.
  */
 const GLOBAL_FETCH_CALL =
-  /(?<![\w$.])(?:(?:window|globalThis|self)\.)?fetch\s*\(/;
+  /(?<![\w$.])(?:(?:window|globalThis|self)\s*\.\s*)?fetch\s*\(/g;
 
 /**
  * 1-based line numbers in `source` that call the global fetch directly.
  *
- * Pure — takes the path and the text, reads nothing — so the scan below can be
- * pointed at a planted fixture.
+ * Matched over the WHOLE stripped source, not line by line, so a call broken
+ * across lines is still one match; the line is derived from its offset. Pure —
+ * takes the path and the text, reads nothing — so the scan can be pointed at a
+ * planted fixture.
  */
 function rawFetchLines(relPath: string, source: string): number[] {
   if (relPath === FETCH_OWNER) {
     return [];
   }
-  return codeOnly(source)
-    .split("\n")
-    .map((line, index) => (GLOBAL_FETCH_CALL.test(line) ? index + 1 : 0))
-    .filter((line) => line > 0);
+  const code = codeOnly(source);
+  return [...code.matchAll(GLOBAL_FETCH_CALL)].map(
+    (match) => code.slice(0, match.index).split("\n").length,
+  );
 }
 
 /** Every `.ts` / `.tsx` under `src/`, test files excluded, as `[relPath, text]`. */
@@ -390,9 +420,22 @@ describe("no component reaches past the client", () => {
       "// gate the BODIES fetch (the verbatim text rides the gate)",
       "/* a block comment mentioning fetch (x) */",
       'const label = "call fetch(url) here";',
+      "const banner = `call fetch(url) here`;",
       "await fetch(apiUrl(`/replays/${id}`));",
     ].join("\n");
 
-    expect(rawFetchLines("components/Planted.tsx", planted)).toEqual([4]);
+    expect(rawFetchLines("components/Planted.tsx", planted)).toEqual([5]);
+  });
+
+  it("sees a call inside a template hole, and a qualifier split across lines", () => {
+    // A `${…}` hole is code even though the text around it is not…
+    expect(
+      rawFetchLines("components/Planted.tsx", "const s = `${await fetch(u)}`;"),
+    ).toEqual([1]);
+    // …and the formatter is free to break a chain, so matching line by line
+    // would have let `window\n  .fetch(url)` through.
+    expect(
+      rawFetchLines("components/Planted.tsx", "await window\n  .fetch(url);"),
+    ).toEqual([1]);
   });
 });
