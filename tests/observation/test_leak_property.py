@@ -28,6 +28,17 @@ and the single-impostor scripted fixtures cannot surface a crew-tuple misroute
 required to exercise it. Single-impostor coverage stays with the 4p/1i scripted
 fixtures in ``eval/leak_test.py``.
 
+The base sweep and the movement sweep also ask the ENTITLEMENT question: not "is
+this packet shaped right" but "was this observer allowed to SEE these players and
+these bodies", re-derived from ``WorldState`` by
+``eval.leak_scan.assert_visible_entities_match_engine_truth``. Four engine rules
+decide the answer, and the hand-built observer-class legs at the end of this
+module pin each one because a random sweep states them only implicitly: a
+CREWMATE sees its own room, an IMPOSTOR its room and the map neighbours, a VENTED
+observer keeps the room set its role and position would give it either way --
+venting hides you FROM others, it does not blind you -- and a DEAD observer is
+entitled to nothing at all.
+
 The action vocabulary mirrors the role-aware strategy from
 ``tests/engine/test_tick_properties.py`` but is generalized off that module's
 single-impostor roster so the sweep exercises kills, vents, and reports across
@@ -52,7 +63,14 @@ from hypothesis import strategies as st
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import PlayerId, PlayerState, SabotageState, TaskId, TaskState
+from engine.entities import (
+    BodyState,
+    PlayerId,
+    PlayerState,
+    SabotageState,
+    TaskId,
+    TaskState,
+)
 from engine.events import (
     ActionRejectedEvent,
     KilledEvent,
@@ -71,7 +89,9 @@ from eval.leak_scan import (
     _assert_no_role_bearing_values,
     _walk_json,
     assert_moved_players_are_witness_gated,
+    assert_visible_entities_match_engine_truth,
 )
+from observation.packet import BodyView, PlayerView
 from observation.service import ObservationService, impostor_pretend_task_id
 from tests.engine.test_tick_properties import _unique_actions_per_actor
 
@@ -287,6 +307,12 @@ def test_observation_packets_never_leak_hidden_information(
             packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
             _assert_no_recursive_hidden_fields(packet_dump)
             _assert_no_role_bearing_values(packet_dump)
+            # Entitlement: the recipient saw EXACTLY the players and bodies this
+            # tick's world state allows it -- re-derived from ``WorldState``, so a
+            # widened entity filter in ``engine.visibility`` trips here.
+            assert_visible_entities_match_engine_truth(
+                packet, state=state, game_map=game_map, engine_events=events
+            )
             # ``SelfView.in_vent`` firewall (Task 11.1, DESIGN.md §1.3, §3.4): the
             # self-position bool rides ONLY the privileged self channel. A vented
             # player is hidden from every other agent's ``visible_players``, so
@@ -689,17 +715,27 @@ def test_moved_players_are_departure_witness_gated(
     action_batches: list[list[Action]],
     tmp_path: Path,
 ) -> None:
-    """No packet ever carries a transition its recipient could not witness.
+    """No packet carries a transition, or an entity, its recipient could not witness.
 
     Per packet, on top of the imported leak scanners: every ``moved_players``
     entry is departure-witnessed (``from_room`` is in the observer's
     INDEPENDENTLY recomputed ``visible_rooms`` — never merely the arrival),
     traceable to a real ``MovedEvent`` of this tick on actor AND both rooms, not
-    a no-op, and sorted by actor id. Visibility is recomputed here through
-    ``engine.visibility.compute_visibility_for_player`` rather than read back off
-    the service, so the gate is checked against engine truth and not against the
-    code that implemented it — the same independence the task-annotation sweep
-    above uses.
+    a no-op, and sorted by actor id; and the packet's visible players and bodies
+    EQUAL what the world state entitles the recipient to. Visibility is
+    recomputed here through ``engine.visibility.compute_visibility_for_player``
+    rather than read back off the service, so the gate is checked against engine
+    truth and not against the code that implemented it — the same independence
+    the task-annotation sweep above uses.
+
+    NON-VACUITY (the counter). This is the one sweep whose vocabulary SEPARATES
+    players; the others leave everyone standing in the spawn room, where every
+    observer is entitled to every other and the entitlement equality proves
+    nothing about a dropped room filter. So the example counts packets whose
+    entitled-player set is a PROPER SUBSET of the living others, and requires at
+    least one whenever the living roster ever stood in more than one room with a
+    crewmate alive — a crewmate's room set is exactly its own room, so a split
+    roster necessarily hides someone from someone.
     """
 
     game_map = load_canonical_map()
@@ -710,12 +746,19 @@ def test_moved_players_are_departure_witness_gated(
         game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
     )
 
+    separated_packets = 0
+    roster_ever_split = False
     for batch in action_batches:
         if state.phase != "PLAY":
             break
         state, events = advance_tick(
             state, _unique_actions_per_actor(batch), game_map=game_map
         )
+        living = [player for player in state.players.values() if player.alive]
+        if len({player.room for player in living}) > 1 and any(
+            player.role == "CREWMATE" for player in living
+        ):
+            roster_ever_split = True
         for player_id, player in state.players.items():
             if not player.alive:
                 continue
@@ -735,10 +778,34 @@ def test_moved_players_are_departure_witness_gated(
                 engine_events=events,
                 visible_rooms=visibility.visible_rooms,
             )
+            assert_visible_entities_match_engine_truth(
+                packet, state=state, game_map=game_map, engine_events=events
+            )
+            living_others = {
+                other_id
+                for other_id, other in state.players.items()
+                if other_id != player_id and other.alive
+            }
+            entitled = {
+                other_id
+                for other_id, other in state.players.items()
+                if other_id != player_id
+                and other.alive
+                and not other.in_vent
+                and other.room in set(visibility.visible_rooms)
+            }
+            if entitled < living_others:
+                separated_packets += 1
         if state.phase != "PLAY":
             break
 
     service.close()
+
+    assert separated_packets > 0 or not roster_ever_split, (
+        "the living roster stood in more than one room, yet no scanned packet "
+        "had an entitled-player set smaller than the living others — the "
+        "entitlement equality ran vacuously over a co-located roster"
+    )
 
 
 def test_a_witnessed_transition_really_does_reach_a_packet(tmp_path: Path) -> None:
@@ -900,3 +967,168 @@ def test_the_tick_interior_choice_is_pinned_on_both_sides(tmp_path: Path) -> Non
     assert leaver.moved_players == (), (
         "the same-tick leaver started receiving the departure — the gate flipped"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The four observer classes.
+#
+# The sweeps above draw random rosters, so they state the entitlement rule only
+# implicitly and never guarantee a given class is reached. These legs build one
+# world by hand and pin what each class of observer may see: a CREWMATE its own
+# room, an IMPOSTOR its room plus map neighbours, a VENTED observer the room set
+# it would have had anyway, and a DEAD observer nothing. The vented case is the
+# one that reads like an accident and is not: ``compute_visibility_for_player``
+# never consults the observer's own ``in_vent``, because venting hides you FROM
+# others (``_visible_player_ids`` filters vented players out of everyone else's
+# packet) rather than blinding you.
+# --------------------------------------------------------------------------- #
+
+# room, in_vent, alive -- one world separating every class. p-1/p-2 are the
+# impostors (``_roster_initial_state`` assigns the first ``num_impostors`` ids).
+_OBSERVER_CLASS_PLACEMENTS: dict[PlayerId, tuple[str, bool, bool]] = {
+    "p-1": ("CAFETERIA", False, True),
+    "p-2": ("LABS", True, True),
+    "p-3": ("CAFETERIA", False, True),
+    "p-4": ("WEST_HALL", False, True),
+    "p-5": ("LABS", False, True),
+    "p-6": ("CAFETERIA", False, False),
+    "p-7": ("CAFETERIA", False, True),
+    "p-8": ("UPPER_HALL", False, True),
+    "p-9": ("MEDBAY", False, False),
+}
+
+
+def _observer_class_state(game_map: Map) -> WorldState:
+    """One world holding all four observer classes at once.
+
+    CAFETERIA neighbours EAST_HALL / UPPER_HALL / WEST_HALL but not MEDBAY, and
+    LABS neighbours only MEDBAY, so every expectation below is a strict subset
+    of the roster and a dropped room filter cannot pass by coincidence. Two
+    undiscovered bodies sit on opposite sides of that divide, and p-5 stands in
+    LABS beside the vented p-2 so the vent filter has a witness to hide from.
+    """
+
+    base = _roster_initial_state(seed=20, num_impostors=2, game_map=game_map)
+    players = {
+        player_id: dataclasses.replace(
+            base.players[player_id], room=room, in_vent=in_vent, alive=alive
+        )
+        for player_id, (room, in_vent, alive) in _OBSERVER_CLASS_PLACEMENTS.items()
+    }
+    bodies = {
+        "body-p-6-0": BodyState(
+            id="body-p-6-0",
+            player_id="p-6",
+            room="CAFETERIA",
+            position=(0.0, 0.0),
+            killed_by="p-1",
+            discovered_by=None,
+        ),
+        "body-p-9-0": BodyState(
+            id="body-p-9-0",
+            player_id="p-9",
+            room="MEDBAY",
+            position=(0.0, 0.0),
+            killed_by="p-2",
+            discovered_by=None,
+        ),
+    }
+    return dataclasses.replace(base, players=players, bodies=bodies)
+
+
+@pytest.mark.parametrize(
+    ("observer", "expected_players", "expected_bodies"),
+    [
+        # CREWMATE: its own room only.
+        ("p-3", ("p-1", "p-7"), ("body-p-6-0",)),
+        # IMPOSTOR: its room plus the map neighbours (WEST_HALL, UPPER_HALL).
+        ("p-1", ("p-3", "p-4", "p-7", "p-8"), ("body-p-6-0",)),
+        # VENTED (impostor in a LABS vent): still LABS + MEDBAY.
+        ("p-2", ("p-5",), ("body-p-9-0",)),
+        # The vented player's neighbour: p-2 shares LABS with p-5 and is
+        # invisible to it -- venting is one-directional.
+        ("p-5", (), ()),
+        # DEAD: nothing at all.
+        ("p-6", (), ()),
+    ],
+)
+def test_each_observer_class_sees_exactly_its_entitlement(
+    observer: PlayerId,
+    expected_players: tuple[PlayerId, ...],
+    expected_bodies: tuple[str, ...],
+    tmp_path: Path,
+) -> None:
+    """The real service packet for each observer class matches a hand-written
+    expectation, and the entitlement scanner accepts it."""
+
+    game_map = load_canonical_map()
+    state = _observer_class_state(game_map)
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+    try:
+        packet = service.build_packet(
+            world_state=state, agent_id=observer, engine_events=[]
+        )
+    finally:
+        service.close()
+
+    assert tuple(view.id for view in packet.visible_players) == expected_players
+    assert tuple(view.id for view in packet.visible_bodies) == expected_bodies
+    assert_visible_entities_match_engine_truth(
+        packet, state=state, game_map=game_map, engine_events=[]
+    )
+
+
+def test_a_dead_observer_is_entitled_to_nothing(tmp_path: Path) -> None:
+    """The DEAD leg's other half: the empty packet is not vacuous acceptance.
+
+    A dead observer's real packet carries no player and no body, so the leg
+    above would pass just as well against a scanner that checked nothing. Here
+    the same packet is poisoned with one entitled-looking entry at a time — a
+    living crewmate standing in the room the corpse is in, and the corpse
+    itself — and each must trip.
+    """
+
+    game_map = load_canonical_map()
+    state = _observer_class_state(game_map)
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+    try:
+        packet = service.build_packet(
+            world_state=state, agent_id="p-6", engine_events=[]
+        )
+    finally:
+        service.close()
+
+    assert packet.visible_players == ()
+    assert packet.visible_bodies == ()
+
+    with pytest.raises(AssertionError, match=r"p-6 visible_players .*'p-7'"):
+        assert_visible_entities_match_engine_truth(
+            packet.model_copy(
+                update={
+                    "visible_players": (
+                        PlayerView(id="p-7", room="CAFETERIA", action=None),
+                    )
+                }
+            ),
+            state=state,
+            game_map=game_map,
+            engine_events=[],
+        )
+
+    with pytest.raises(AssertionError, match=r"p-6 visible_bodies .*body-p-6-0"):
+        assert_visible_entities_match_engine_truth(
+            packet.model_copy(
+                update={
+                    "visible_bodies": (
+                        BodyView(id="body-p-6-0", room="CAFETERIA", victim_id="p-6"),
+                    )
+                }
+            ),
+            state=state,
+            game_map=game_map,
+            engine_events=[],
+        )

@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import tempfile
 from collections.abc import Collection, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, TypeAlias, cast
 
@@ -44,6 +45,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
+from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
 from eval.replay_walk import (
     MeetingOpened,
@@ -103,6 +105,42 @@ def _action_is_permitted_by_witness_event(
             if event.actor == actor_id:
                 return agent_id in event.witnesses
     return False
+
+
+def _witnessed_action_rooms(
+    *,
+    action: str | None,
+    actor_id: str,
+    agent_id: str,
+    engine_events: Sequence[EngineEvent],
+) -> frozenset[RoomId]:
+    """The rooms an observer may be TOLD about for a witnessed ``kill`` / ``vent``.
+
+    The room half of the witness allowance. ``observation/service.py`` stamps a
+    witnessed action with the room of the EVENT, not the actor's current room,
+    and a tick applies its actions in sequence — so an observer that witnessed a
+    kill and then walked away in the same tick legitimately carries a room it can
+    no longer see. Empty when the observer witnessed nothing, which is also the
+    "not permitted" answer.
+    """
+
+    if action is None:
+        return frozenset()
+    rooms: set[RoomId] = set()
+    for event in engine_events:
+        if action == "kill" and isinstance(event, KilledEvent):
+            if event.actor == actor_id and agent_id in event.witnesses:
+                rooms.add(event.room)
+        elif action == "vent" and isinstance(
+            event, (VentEnteredEvent, VentExitedEvent)
+        ):
+            if event.actor != actor_id:
+                continue
+            if agent_id in event.source_witnesses:
+                rooms.add(event.source_room)
+            if agent_id in event.destination_witnesses:
+                rooms.add(event.destination_room)
+    return frozenset(rooms)
 
 
 def _walk_json(
@@ -212,9 +250,10 @@ def assert_moved_players_are_witness_gated(
     Takes the room sets as arguments rather than recomputing them: the caller
     supplies them from ``engine.visibility.compute_visibility_for_player``, so
     the check is INDEPENDENT of the service's own gating (the point — a scanner
-    that reused the code under test would prove nothing). That is also why this
-    is not folded into :func:`assert_packet_is_leak_clean`, whose factory-mode
-    callers hold packets and events but no world state.
+    that reused the code under test would prove nothing).
+    :func:`assert_packet_is_leak_clean` calls this on every packet it scans,
+    reading the room set off the :class:`PacketContext` every caller now
+    carries — so the ML champion gate scans ``moved_players`` as well.
 
     WHICH ROOM SET GATES PROPERTY 1 — the tick-interior question (Codex P1 review
     on PR #345, reproduced before this text was written). A tick is atomic: the
@@ -428,6 +467,182 @@ def _assert_owned_tasks_match_engine_truth(
 
 
 # --------------------------------------------------------------------------- #
+# The entitlement oracle.
+#
+# Packet SHAPE, packet STRINGS and kill/vent witness PERMISSION are all a
+# scanner can ask of a packet alone, and none of them answers the question the
+# firewall is about: was this observer allowed to SEE these players and these
+# bodies? A body filter that lost its room clause — every undiscovered corpse
+# visible to everyone — leaves the packet perfectly well-shaped, so only world
+# truth can catch it. Hence :class:`PacketContext`, and an entitlement rule
+# re-derived from ``WorldState`` here.
+#
+# Independence is the whole design: the observer's ROOM SET comes from the
+# engine (bounded here by a map-adjacency check of our own, so a widened room
+# rule is caught), but the ENTITY filters are recomputed from ``WorldState``
+# rather than read off ``VisibilityResult`` — a scanner that compared against
+# ``visible_player_ids`` / ``visible_body_ids`` would inherit any mutation of
+# the private filters that produce them and catch nothing.
+#
+# Provenance: audits/review-2026-08-19/B/verdicts.md claim 2.
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class PacketContext:
+    """The tick a packet was built on: its engine events plus the world behind them.
+
+    Every packet producer already holds all three — the scripted runner, the
+    property sweeps and the factory reconstruction each build the context where
+    they build the packet — and the scanner needs all three to state
+    entitlement. ``engine_events`` are the events the packet was BUILT with
+    (the live loop hands agents the prior tick's events alongside the current
+    state), and ``world_state`` is the state it was built from.
+    """
+
+    engine_events: Sequence[EngineEvent]
+    world_state: WorldState
+    game_map: Map
+
+
+def assert_visible_entities_match_engine_truth(
+    packet: ObservationPacket,
+    *,
+    state: WorldState,
+    game_map: Map,
+    engine_events: Sequence[EngineEvent],
+) -> None:
+    """Cross-player engine-truth check: the observer saw EXACTLY what it may see.
+
+    Four properties, each derived from ``WorldState`` rather than from
+    ``engine.visibility``'s private entity filters:
+
+    1. **The room set is bounded.** The observer's engine-reported
+       ``visible_rooms`` contains its own room and nothing beyond that room's map
+       neighbours — an independent adjacency bound, so a widened room rule trips
+       here even though the room set itself is read from the engine.
+    2. **Players are an EQUALITY.** ``visible_players`` equals the alive,
+       non-vented, in-visible-room others, PLUS the named witness allowance
+       below — never a superset, so an extra player is a leak and a missing one
+       is a regression.
+    3. **Bodies are an equality with NO allowance.** ``visible_bodies`` equals
+       the undiscovered bodies standing in visible rooms.
+    4. **Rooms are entitled too.** Every ``PlayerView.room`` and
+       ``BodyView.room`` lies inside ``visible_rooms``, so a leak cannot ride an
+       entitled id carrying an unentitled location — except for an allowance
+       member, whose room must be a room it was WITNESSED in
+       (:func:`_witnessed_action_rooms`), because a tick applies its actions in
+       sequence and an observer can witness a kill and then walk away before the
+       packet is built.
+
+    THE WITNESS ALLOWANCE is real and named, not a silent superset:
+    ``observation/service.py::_visible_players`` adds any actor carrying an
+    observed ``kill`` or ``vent`` to the packet even when the actor is not in the
+    engine's ``visible_player_ids`` — a vented killer surfaces as
+    ``('p-3', 'ADMIN', 'kill')``. That is intended kill attribution, so each
+    member must independently pass
+    :func:`_action_is_permitted_by_witness_event` for THIS observer, and the
+    allowance is spelled out in the failure message so a future widening reads
+    as a decision. A dead observer is entitled to nothing at all: its sets are
+    empty by rule here, not by reading the engine's empty room tuple back.
+
+    Raises ``AssertionError`` naming the observer and the offending ids.
+    """
+
+    agent = packet.agent_id
+    observer = state.players.get(agent)
+    assert observer is not None, (
+        f"packet recipient {agent!r} is not a player in the world state it was "
+        f"scanned against"
+    )
+
+    visible_rooms = compute_visibility_for_player(
+        observer_id=agent, world_state=state, game_map=game_map
+    ).visible_rooms
+    room_set = set(visible_rooms)
+    entitled_players: set[str] = set()
+    entitled_bodies: set[str] = set()
+    if observer.alive:
+        adjacency_bound = {observer.room, *game_map.room_neighbors(observer.room)}
+        assert observer.room in room_set, (
+            f"{agent} visible_rooms {sorted(room_set)} omits its own room "
+            f"{observer.room!r}"
+        )
+        assert room_set <= adjacency_bound, (
+            f"{agent} visible_rooms {sorted(room_set)} reaches past "
+            f"{observer.room!r} and its map neighbours "
+            f"{sorted(adjacency_bound)}: {sorted(room_set - adjacency_bound)}"
+        )
+        entitled_players = {
+            player_id
+            for player_id, player in state.players.items()
+            if player_id != agent
+            and player.alive
+            and not player.in_vent
+            and player.room in room_set
+        }
+        entitled_bodies = {
+            body_id
+            for body_id, body in state.bodies.items()
+            if body.discovered_by is None and body.room in room_set
+        }
+
+    events = list(engine_events)
+    witness_allowance = {
+        view.id
+        for view in packet.visible_players
+        if view.action in {"kill", "vent"}
+        and _action_is_permitted_by_witness_event(
+            action=view.action,
+            actor_id=view.id,
+            agent_id=agent,
+            engine_events=events,
+        )
+    }
+    seen_players = {view.id for view in packet.visible_players}
+    permitted_players = entitled_players | witness_allowance
+    assert seen_players == permitted_players, (
+        f"{agent} visible_players {sorted(seen_players)} != entitled "
+        f"{sorted(entitled_players)} + witnessed kill/vent allowance "
+        f"{sorted(witness_allowance)} — unentitled "
+        f"{sorted(seen_players - permitted_players)}, missing "
+        f"{sorted(permitted_players - seen_players)}"
+    )
+
+    seen_bodies = {view.id for view in packet.visible_bodies}
+    assert seen_bodies == entitled_bodies, (
+        f"{agent} visible_bodies {sorted(seen_bodies)} != undiscovered bodies in "
+        f"{sorted(room_set)} {sorted(entitled_bodies)} — unentitled "
+        f"{sorted(seen_bodies - entitled_bodies)}, missing "
+        f"{sorted(entitled_bodies - seen_bodies)}"
+    )
+
+    for view in packet.visible_players:
+        if view.id in witness_allowance:
+            witnessed_rooms = _witnessed_action_rooms(
+                action=view.action,
+                actor_id=view.id,
+                agent_id=agent,
+                engine_events=events,
+            )
+            assert view.room in witnessed_rooms, (
+                f"{agent} packet places the witnessed {view.action!r} by "
+                f"{view.id!r} in {view.room!r}, which is not a room {agent} "
+                f"witnessed it in {sorted(witnessed_rooms)}"
+            )
+            continue
+        assert view.room in room_set, (
+            f"{agent} packet places {view.id!r} in {view.room!r}, outside its "
+            f"visible rooms {sorted(room_set)}"
+        )
+    for body_view in packet.visible_bodies:
+        assert body_view.room in room_set, (
+            f"{agent} packet places body {body_view.id!r} in "
+            f"{body_view.room!r}, outside its visible rooms {sorted(room_set)}"
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Agent-factory mode (Task 15.10).
 #
 # The scripted-fixture sweep in ``eval/leak_test.py`` walks 3 hand-authored games
@@ -455,9 +670,11 @@ _FACTORY_NUM_PLAYERS = 9
 _FACTORY_NUM_IMPOSTORS = 2
 _FACTORY_TASKS_PER_CREWMATE = 2
 
-# A factory-consumed packet paired with the engine events of the tick it was
-# built on (needed for the witness-permission check).
-PacketRecord: TypeAlias = tuple[ObservationPacket, list[EngineEvent]]
+# A factory-consumed packet paired with the tick it was built on — the engine
+# events for the witness gates, the world state and map for entitlement. Two
+# elements, not three: ``tests/eval/test_replay_walk.py`` unpacks these records
+# as ``for packet, _ in records``, so the context rides as the second slot.
+PacketRecord: TypeAlias = tuple[ObservationPacket, PacketContext]
 
 
 def _raise_factory_walk_violation(violation: WalkViolation) -> NoReturn:
@@ -493,7 +710,7 @@ def _reconstruct_factory_records(
     tasks_per_crewmate: int,
     audit_dir: Path,
 ) -> list[PacketRecord]:
-    """Re-seed + replay one factory game, yielding (packet, engine_events) records.
+    """Re-seed + replay one factory game, yielding (packet, context) records.
 
     :func:`eval.replay_walk.walk_replay` (the ``leak-scan-factory`` profile)
     threads ``last_events`` EXACTLY as ``HeadlessGame._run_loop`` does
@@ -504,8 +721,9 @@ def _reconstruct_factory_records(
     scanned stream is exactly the packets the encoder consumed: it includes the
     tick-0 opening packet and every post-meeting resume packet, and excludes
     the terminal GAME_OVER state (no agent decides there). Each packet is
-    paired with the events it was BUILT with, so the witness-permission check
-    reads the right events.
+    paired with the :class:`PacketContext` it was BUILT from — that tick's
+    pre-advance state, its map, and the prior tick's events — so the witness
+    gates read the right events and the entitlement oracle the right world.
     """
 
     records: list[PacketRecord] = []
@@ -540,7 +758,11 @@ def _reconstruct_factory_records(
             # Build packets from the PRE-advance state + prior events (the live
             # loop's exact contract), before this tick's actions apply.
             state = walk_event.state
-            events_for_packets = list(walk_event.last_events)
+            context = PacketContext(
+                engine_events=list(walk_event.last_events),
+                world_state=state,
+                game_map=game_map,
+            )
             for player_id in sorted(state.players):
                 if state.players[player_id].alive:
                     packet = service.build_packet(
@@ -548,7 +770,7 @@ def _reconstruct_factory_records(
                         agent_id=player_id,
                         engine_events=walk_event.last_events,
                     )
-                    records.append((packet, events_for_packets))
+                    records.append((packet, context))
     finally:
         service.close()
         audit_path.unlink(missing_ok=True)
@@ -563,12 +785,12 @@ def collect_factory_packet_records(
     num_impostors: int = _FACTORY_NUM_IMPOSTORS,
     tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
 ) -> list[PacketRecord]:
-    """Run ``agent_factory`` through full games; return (packet, events) records.
+    """Run ``agent_factory`` through full games; return (packet, context) records.
 
     Each game runs the REAL production loop (:class:`orchestrator.game.HeadlessGame`
     on the deterministic fake provider) to write a replay reflecting the factory's
     trajectory, then reconstructs that replay to recover the per-tick packets +
-    engine events.
+    the :class:`PacketContext` each was built from.
     """
 
     game_map = load_canonical_map()
@@ -607,22 +829,35 @@ def collect_factory_packet_records(
 
 
 def assert_packet_is_leak_clean(
-    packet: ObservationPacket, engine_events: Sequence[EngineEvent] = ()
+    packet: ObservationPacket, context: PacketContext
 ) -> None:
-    """Apply the full leak scan to one packet — the SAME checks the scripted sweep runs.
+    """Apply the full leak scan to one packet — every channel, on one call.
 
-    The recursive hidden-field scanner, the role-bearing value scanner, the
-    ``visible_players`` key-set + forbidden-action pin, the ``visible_bodies``
-    key-set pin, the crew ``fellow_impostor_ids`` firewall, AND — critically for
-    the factory extension — the witness-permission check: a ``PlayerView`` stamped
-    with a ``kill`` / ``vent`` action must be backed by a witness-permitted engine
-    event for THIS observer. Raises ``AssertionError`` on any leak.
+    Five families of check, in the order they run:
+
+    * **SHAPE** — the recursive hidden-field scanner, the ``visible_players`` /
+      ``visible_bodies`` key-set + forbidden-action pins, the crew
+      ``fellow_impostor_ids`` firewall, and the ``owned_task_ids`` discipline.
+    * **STRINGS** — no role-bearing substring outside ``self_state.role``.
+    * **WITNESS PERMISSION** — a ``PlayerView`` stamped ``kill`` / ``vent`` is
+      backed by an engine event that names THIS observer as a witness.
+    * **ENTITLEMENT** — the observer saw exactly the players and bodies the world
+      state entitles it to
+      (:func:`assert_visible_entities_match_engine_truth`): the presence check
+      that shape alone cannot express.
+    * **MOVEMENT GATING** — every ``moved_players`` entry is a transition whose
+      departure room the observer could see
+      (:func:`assert_moved_players_are_witness_gated`).
+
+    ``context`` is REQUIRED: a caller that could omit the tick would silently
+    reduce this to a shape scan, which is the gap the entitlement oracle exists
+    to close. Raises ``AssertionError`` on any leak.
     """
 
     packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
     _assert_no_recursive_hidden_fields(packet_dump)
     _assert_no_role_bearing_values(packet_dump)
-    events = list(engine_events)
+    events = list(context.engine_events)
     for visible_player in packet.visible_players:
         visible_player_dump = visible_player.model_dump(mode="json")
         assert set(visible_player_dump.keys()) == {"id", "room", "action"}
@@ -648,13 +883,31 @@ def assert_packet_is_leak_clean(
     # The owned-task byte-shape + role-blind consistency discipline (Task 15.22),
     # scanned on EVERY factory-mode packet.
     _assert_owned_task_discipline(packet)
+    assert_visible_entities_match_engine_truth(
+        packet,
+        state=context.world_state,
+        game_map=context.game_map,
+        engine_events=context.engine_events,
+    )
+    # ``departure_visible_rooms=None`` asserts the rule observation/service.py
+    # implements today (post-move rooms gate the departure); the stricter
+    # pre-move rule is the parameter a future flip would pass.
+    assert_moved_players_are_witness_gated(
+        packet,
+        engine_events=context.engine_events,
+        visible_rooms=compute_visibility_for_player(
+            observer_id=packet.agent_id,
+            world_state=context.world_state,
+            game_map=context.game_map,
+        ).visible_rooms,
+    )
 
 
 def assert_no_factory_packet_leaks(records: Sequence[PacketRecord]) -> None:
-    """Scan a reconstructed (packet, events) stream; raise on the first leak."""
+    """Scan a reconstructed (packet, context) stream; raise on the first leak."""
 
-    for packet, engine_events in records:
-        assert_packet_is_leak_clean(packet, engine_events)
+    for packet, context in records:
+        assert_packet_is_leak_clean(packet, context)
 
 
 def scan_factory_packets(

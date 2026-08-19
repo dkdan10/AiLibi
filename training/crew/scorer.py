@@ -1727,6 +1727,11 @@ def evaluate_crew_candidate(
             anchor_cross_entropy=MetricSpread.from_values(ce_values),
         )
 
+    # The champion leak gate. ``scan_factory_packets`` walks every packet the
+    # candidate's own agents consumed and checks shape, role strings, witness
+    # permission, movement gating and ENTITLEMENT — was each observer allowed to
+    # see those players and bodies. Its ``AssertionError`` REJECTS the candidate
+    # here; it never ends the run. Pinned by tests/training/test_leak_gate.py.
     leak_passed = True
     leak_packets: int | None = None
     leak_failure: str | None = None
