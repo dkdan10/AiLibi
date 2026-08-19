@@ -113,12 +113,26 @@ published. 42 contracts across four waves; the close (20.42) routes the next dec
 `audits/audit-phase-20-preregistration.md` (provisional in this PR; pinned and ratified at
 20.22). The primary bars, stated once here and verbatim there: pooled non-direct-cell
 conviction accuracy 0.368 → ≥ 0.60 (with per-set cells); corpus innocent ejections 79 → < 35;
-false crew self-placement 20.5% → < 5%; sole-`alibi_vs_sighting` convicting precision 14.6% →
+false crew self-placement 21.0% → < 5%; sole-`alibi_vs_sighting` convicting precision 14.6% →
 ≥ 50%; grounded sighting side → 100%; fabricated completion lines → 0; adjacent-room STRONG
 share 63.2% → ~0; pass/fail on each of the four 19.11 injustice fixtures; plus the secondary,
 observed-not-gated win split inside a pre-registered band, and the solvability y-axis
 (20.14). The decision rule (ADOPT vs FINDING), the co-intervention (20.32) and the record
 order (samples/9p2i → ml_corpus/9p2i → samples/4p1i → ml_corpus/4p1i) live in the memo.
+
+**The ratified memo is the document, not this paragraph.** Once 20.22 merges, the memo is the
+only place the bars, the definitions, the decision rule, the co-intervention declaration, the
+offline-counterfactual protocol and the record order are stated normatively: 20.34 computes
+its OFF/ON table against the memo's cells and 20.36 reads its verdict off the memo's §4 and
+§6 VERBATIM, neither of them re-deriving a target from this file. Two consequences follow.
+Every baseline cell in the memo is now quoted from a committed pin — `eval/solvability.py`
+(20.14), `eval/evidence_honesty.py` (20.15), `eval/deduction_metrics.py` (19.14) and the four
+19.11 injustice fixtures — so a stranger can re-run every "before" the phase is judged
+against; where a pin disagrees with the 2026-08-19 review's figure the memo keeps both, marks
+the pin authoritative and names the cause (§3.2), and the bar's TARGET does not move with it,
+which is why the false-crew-self-placement baseline above re-anchors from 20.5% to 21.0% while
+its `< 5%` target is unchanged. And no bar may be re-priced after that merge: a miss is
+reported as a miss, and any later change is a dated erratum in the memo's amendment log.
 
 ## The DAG
 
