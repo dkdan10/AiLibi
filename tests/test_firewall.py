@@ -42,15 +42,19 @@ from typing import TYPE_CHECKING
 import pytest
 from pydantic import TypeAdapter
 
+from engine import visibility as engine_visibility
 from engine.actions import Action
+from engine.entities import BodyId, BodyState, PlayerId, PlayerState, RoomId
 from engine.events import KilledEvent
 from engine.tick import advance_tick
-from engine.world import load_canonical_map
+from engine.world import Map, VisibilityMode, WorldState, load_canonical_map
+from eval.leak_scan import PacketContext, assert_packet_is_leak_clean
+from observation.packet import ObservationPacket
 from observation.service import ObservationService
 from tests._helpers.world_state import scripted_initial_world_state
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Iterator
+    from collections.abc import Collection, Iterable, Iterator, Mapping
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -812,3 +816,253 @@ def test_own_kill_rides_only_the_killers_self_channel(tmp_path: Path) -> None:
             assert "(IMPOSTOR) killed" not in dumped
     finally:
         service.close()
+
+
+# --------------------------------------------------------------------------- #
+# 5. The entitlement gate, and the proof it can fail.                          #
+# --------------------------------------------------------------------------- #
+#
+# ``eval.leak_scan`` re-derives what an observer may see from ``WorldState``
+# instead of reading ``engine.visibility``'s entity filters back. That claim is
+# only worth the runtime if a broken filter actually trips it, so each filter is
+# broken here — in memory, by monkeypatching the named symbol, never by writing
+# into the tree — and the scan must name the observer and the ids it was handed.
+# ``compute_visibility_for_player`` resolves those helpers as module globals, so
+# the patch reaches the SERVICE that builds the packets while the scanner's own
+# oracle stays clean; that asymmetry is the whole point of the design.
+
+_ENTITLEMENT_SCRIPT: tuple[tuple[dict[str, object], ...], ...] = (
+    # p-3 (the impostor) kills p-1 in CAFETERIA, leaving an undiscovered body.
+    ({"type": "kill", "actor": "p-3", "payload": {"target": "p-1"}},),
+    # p-3 and p-4 walk out; p-2 stays with the body.
+    (
+        {"type": "move", "actor": "p-3", "payload": {"to_room": "WEST_HALL"}},
+        {"type": "move", "actor": "p-4", "payload": {"to_room": "WEST_HALL"}},
+    ),
+    (
+        {"type": "move", "actor": "p-3", "payload": {"to_room": "ADMIN"}},
+        {"type": "move", "actor": "p-4", "payload": {"to_room": "ADMIN"}},
+    ),
+    # p-3 vents where p-4 can see it: this tick the vent is a witnessed action.
+    ({"type": "vent", "actor": "p-3", "payload": {"vent_id": "ADMIN_VENT"}},),
+    # The tick after: p-3 is still in the vent, but no event explains it, so a
+    # dropped vent filter has nowhere to hide.
+    ({"type": "wait", "actor": "p-4", "payload": {}},),
+)
+
+
+@dataclass(frozen=True)
+class _EntitlementScan:
+    failures: tuple[str, ...]
+    final_state: WorldState
+    records: tuple[tuple[ObservationPacket, PacketContext], ...]
+
+
+def _scan_entitlement_scenario(tmp_path: Path) -> _EntitlementScan:
+    """Play the script above and leak-scan every packet; collect the failures.
+
+    Failures are collected rather than raised so one run reports every observer
+    the mutation reached, and so the unmutated leg can assert the empty list.
+    """
+
+    game_map = load_canonical_map()
+    state = scripted_initial_world_state(seed=11)
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "entitlement_audit.jsonl"
+    )
+    failures: list[str] = []
+    records: list[tuple[ObservationPacket, PacketContext]] = []
+    try:
+        for raw_actions in _ENTITLEMENT_SCRIPT:
+            state, events = advance_tick(
+                state,
+                [_ACTION_ADAPTER.validate_python(raw) for raw in raw_actions],
+                game_map=game_map,
+            )
+            context = PacketContext(
+                engine_events=events, world_state=state, game_map=game_map
+            )
+            for player_id in sorted(state.players):
+                if not state.players[player_id].alive:
+                    continue
+                packet = service.build_packet(
+                    world_state=state, agent_id=player_id, engine_events=events
+                )
+                records.append((packet, context))
+                try:
+                    assert_packet_is_leak_clean(packet, context)
+                except AssertionError as error:
+                    failures.append(str(error))
+    finally:
+        service.close()
+    return _EntitlementScan(
+        failures=tuple(failures), final_state=state, records=tuple(records)
+    )
+
+
+def _m6_bodies_everywhere(
+    *,
+    bodies: Mapping[BodyId, BodyState],
+    visible_rooms: tuple[RoomId, ...],
+) -> tuple[BodyId, ...]:
+    """M6: ``_visible_body_ids`` without its room filter."""
+
+    return tuple(
+        sorted(
+            body_id for body_id, body in bodies.items() if body.discovered_by is None
+        )
+    )
+
+
+def _m1_every_alive_player(
+    *,
+    observer_id: PlayerId,
+    players: Mapping[PlayerId, PlayerState],
+    visible_rooms: tuple[RoomId, ...],
+) -> tuple[PlayerId, ...]:
+    """M1: ``_visible_player_ids`` returning every living player."""
+
+    return tuple(
+        sorted(
+            player_id
+            for player_id, player in players.items()
+            if player_id != observer_id and player.alive
+        )
+    )
+
+
+def _m10_no_vent_filter(
+    *,
+    observer_id: PlayerId,
+    players: Mapping[PlayerId, PlayerState],
+    visible_rooms: tuple[RoomId, ...],
+) -> tuple[PlayerId, ...]:
+    """M10: ``_visible_player_ids`` with the ``in_vent`` filter dropped."""
+
+    visible_room_set = set(visible_rooms)
+    return tuple(
+        sorted(
+            player_id
+            for player_id, player in players.items()
+            if player_id != observer_id
+            and player.alive
+            and player.room in visible_room_set
+        )
+    )
+
+
+def _widened_rooms(
+    *,
+    observer: PlayerState,
+    game_map: Map,
+    mode: VisibilityMode,
+) -> tuple[RoomId, ...]:
+    """A widened room rule: every room on the map is visible to everyone."""
+
+    return tuple(sorted(game_map.rooms))
+
+
+def test_the_unmutated_entitlement_scenario_is_clean(tmp_path: Path) -> None:
+    """The scenario the mutations below are planted into leaks nothing — and it
+    really does reach the states they need: a body nobody has reported, a player
+    inside a vent, and observers standing in rooms that cannot see either."""
+
+    scan = _scan_entitlement_scenario(tmp_path)
+    assert scan.failures == ()
+
+    final = scan.final_state
+    assert final.players["p-3"].in_vent
+    assert final.players["p-3"].room == "ADMIN"
+    assert final.players["p-4"].room == "ADMIN"
+    assert final.players["p-2"].room == "CAFETERIA"
+    assert [
+        body.room for body in final.bodies.values() if body.discovered_by is None
+    ] == ["CAFETERIA"]
+
+
+@pytest.mark.parametrize(
+    ("symbol", "replacement", "expected"),
+    [
+        (
+            "_visible_body_ids",
+            _m6_bodies_everywhere,
+            r"^p-4 visible_bodies \['body-p-1-0'\] != undiscovered bodies in "
+            r"\['ADMIN'\] \[\]",
+        ),
+        (
+            "_visible_player_ids",
+            _m1_every_alive_player,
+            r"^p-2 visible_players \['p-3', 'p-4'\] != entitled \[\].*"
+            r"unentitled \['p-3', 'p-4'\]",
+        ),
+        (
+            "_visible_player_ids",
+            _m10_no_vent_filter,
+            r"^p-4 visible_players \['p-3'\] != entitled \[\].*unentitled \['p-3'\]",
+        ),
+        (
+            "visible_rooms_for_player",
+            _widened_rooms,
+            r"^p-2 visible_rooms \[.*\] reaches past 'CAFETERIA' and its map "
+            r"neighbours",
+        ),
+    ],
+    ids=(
+        "m6-bodies-everywhere",
+        "m1-every-player",
+        "m10-no-vent-filter",
+        "widened-rooms",
+    ),
+)
+def test_the_entitlement_scan_catches_a_broken_visibility_filter(
+    symbol: str,
+    replacement: object,
+    expected: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each planted filter break must raise from the scanner, naming the observer
+    and the ids it was handed — none of the four is visible to a shape-only scan.
+
+    Provenance: audits/review-2026-08-19/B/verdicts.md claim 2.
+    """
+
+    monkeypatch.setattr(engine_visibility, symbol, replacement)
+    scan = _scan_entitlement_scenario(tmp_path)
+
+    assert scan.failures, f"the {symbol} mutation produced no leak-scan failure"
+    assert any(re.search(expected, failure) for failure in scan.failures), (
+        f"no failure matched {expected!r}; got {list(scan.failures)}"
+    )
+
+
+def test_the_entitlement_scan_catches_a_DROPPED_witnessed_action(
+    tmp_path: Path,
+) -> None:
+    """The equality cuts both ways: losing first-hand evidence is a failure too.
+
+    The witness allowance is derived from the tick's EVENTS, not from the
+    packet — read off ``visible_players`` it would shrink in step with any
+    omission and see nothing. Here p-4 watches p-3 vent and the resulting
+    ``PlayerView`` is deleted; the scan must report it MISSING.
+    """
+
+    scan = _scan_entitlement_scenario(tmp_path)
+    vented = [
+        (packet, context)
+        for packet, context in scan.records
+        if packet.agent_id == "p-4"
+        and any(view.action == "vent" for view in packet.visible_players)
+    ]
+    assert len(vented) == 1, "the scenario stopped producing a witnessed vent"
+    packet, context = vented[0]
+
+    stripped = packet.model_copy(
+        update={
+            "visible_players": tuple(
+                view for view in packet.visible_players if view.action != "vent"
+            )
+        }
+    )
+    with pytest.raises(AssertionError, match=r"missing \['p-3'\]"):
+        assert_packet_is_leak_clean(stripped, context)
