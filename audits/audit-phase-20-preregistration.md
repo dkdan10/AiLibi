@@ -224,10 +224,13 @@ Measured on the baseline-7 bytes by the same instruments, pooled over the four r
 with the per-set cells shown beside the pooled figure. Targets are as written; none of them
 moved with §3.2's re-anchors.
 
-1. **I-1 non-direct conviction accuracy 0.368 → ≥ 0.60 pooled, and no set below 0.50.**
-   Before, pooled 46/125 = 0.3680 [0.2886, 0.4553]; per set 10/33 = 0.303, 35/89 = 0.393,
-   1/3, 0/0 (the corpus-4p1i no-cell is exempt from the per-set clause — an empty denominator
-   is the None sentinel, never 0.0).
+1. **I-1 non-direct conviction accuracy 0.368 → ≥ 0.60 pooled, and no ADEQUATELY POWERED set
+   below 0.50.** Before, pooled 46/125 = 0.3680 [0.2886, 0.4553]; per set 10/33 = 0.3030
+   [0.1738, 0.4734], 35/89 = 0.3933 [0.2982, 0.4971], 1/3 = 0.3333 [0.0615, 0.7923], and no
+   cell at all on corpus/4p1i (an empty denominator is the None sentinel, never 0.0). The
+   per-set floor binds on a set whose non-direct denominator is **n ≥ 30** at the record;
+   a smaller cell is ADVISORY (§4.1) — reported with its interval, never able to decide the
+   verdict on its own. The pooled figure is the gate.
 2. **I-1 innocent ejections 79 → < 35 pooled.** Before, per set 23 / 54 / 2 / 0, all of them
    inside the non-direct cell (the direct-proof cell is 310/310 innocent-free).
 3. **I-2 false crew self-placement 21.0% → < 5% on samples/9p2i, and every set < 8%.**
@@ -255,6 +258,42 @@ moved with §3.2's re-anchors.
    12 M0; (c) one-tick interval artifact, 4p1i seeds 49 and 41; (d) equal-weight conflict,
    4p1i seed 41 M0. A fixture FLIPS when the meeting no longer exhibits its injustice under
    the adopted substrate. Four separate verdicts, never one aggregate.
+
+### 4.1 Rare-event cells — advisory framing and the powering arithmetic [PROPOSED — ratified at merge]
+
+The 18.4 §7 discipline carries over: **a cell whose denominator cannot separate a plausible
+effect is ADVISORY — reported with its Wilson interval and the powering arithmetic shown, and
+never able to decide the verdict.** An advisory cell cannot turn ADOPTED into FINDING, and it
+cannot rescue a pooled bar that was missed. §6 reads pooled figures plus the powered per-set
+clauses, nothing else.
+
+**The members at baseline 6**, and why: the I-1 non-direct cell on samples/4p1i (n=3) and on
+ml_corpus/4p1i (no cell); the I-3 per-victim cell on samples/4p1i (1/2) and ml_corpus/4p1i
+(0/0); the I-4 and I-6 sighting-side cells on the two 4p1i sets (2 and 1 STRONG sides).
+
+**The powering arithmetic for the n=3 cell** — every outcome it can take, with the interval
+the production helper returns:
+
+| outcome | rate and Wilson 95% |
+|---|---|
+| 0 of 3 | 0/3 = 0.0000 [0.0000, 0.5615] |
+| 1 of 3 (the baseline) | 1/3 = 0.3333 [0.0615, 0.7923] |
+| 2 of 3 | 2/3 = 0.6667 [0.2077, 0.9385] |
+| 3 of 3 | 3/3 = 1.0000 [0.4385, 1.0000] |
+
+Every one of the four intervals straddles the 0.50 per-set floor, so **no observation on n=3
+can place that cell on one side of the bar**; the cell moves in steps of 0.333, and a single
+ejection changes it by more than the whole 0.368 → 0.60 delta bar 1 asks for. Gating on it
+would let one game decide a 300-game record. Hence the n ≥ 30 clause in bar 1 — satisfied
+today by samples/9p2i (n=33) and ml_corpus/9p2i (n=89), and re-evaluated on the recorded
+denominators, not assumed from these.
+
+**Which per-set clauses are NOT advisory, and why.** Bar 3's "every set < 8%" is decidable at
+the 4p1i denominators: at n=78 the neighbouring outcomes 6/78 = 0.0769 [0.0357, 0.1578] and
+7/78 = 0.0897 [0.0442, 0.1738] fall cleanly on opposite sides of 8%, so the point estimate is
+not granularity-bound. Bar 6's "0 on every set" and bar 5's "100% of surviving sides" are
+bright lines that any denominator decides — including an empty one, which passes vacuously and
+is reported as such. Bars 4 and 7 are pooled and take no per-set clause.
 
 ## 5. Secondary cells (observed, reported, never gated)
 
@@ -299,6 +338,11 @@ direction and magnitude for that lever's own cell before the record was spent, a
 lever is independently stampable, which 20.33 guarantees by binding one resolver per lever
 into the substrate stamp. 20.34 fixes the final eligible list before the record; 20.36 may
 graduate that list even under a FINDING verdict for the rest.
+
+**Advisory cells never enter this rule.** The verdict reads each bar's pooled figure plus the
+per-set clauses §4 marks as powered (today: bar 1's n ≥ 30 sets and bar 3's four sets). A cell
+§4.1 marks advisory is reported beside the bar and takes no part in the arithmetic, in either
+direction — it cannot fail a bar and it cannot pass one.
 
 **No bar may be re-priced after this merge, and a miss is reported as a miss.** The record
 audit states each bar's before, after and verdict on one line; "adopt anyway" is the single
@@ -389,13 +433,22 @@ unconditionally True (`:531`).
 **LOCKED DECISION (owner, ratified by the merge of Task 20.22's PR — the 15.18 convention):**
 
 * **Instrument list = the thirteen §2 rows**, with the definitions adopted by reference from
-  `eval/evidence_honesty.py::CELL_DEFINITIONS` and `eval/solvability.py`'s stated rule. A new
+  `eval/evidence_honesty.py::CELL_DEFINITIONS` and `eval/solvability.py`'s stated rule —
+  **except for I-3 and I-6, where the §2 wording and the cell it names govern** and the
+  `CELL_DEFINITIONS` sentence does not: I-3 is `sole_flag_precision.per_victim_precision`
+  (every STRONG flag on the ejectee is `alibi_vs_sighting`, however many), NOT the
+  exactly-one-flag `per_victim_single_flag_precision`; I-6 is `adjacent_room_flags.adjacent`
+  (one doorway apart AND the sighting within ≤ 1 tick of the alibi window), NOT the un-gated
+  `adjacent_any_gap`. Both exceptions bind 20.34 and 20.36 as written here, because the two
+  readings coincide on baseline 6 and can separate once a lever moves the flags. A new
   instrument, or a changed definition, enters only through §11 and only before the record.
 * **Baseline cells = §3 exactly**, with §3.2's four pin-over-review replacements and their
   stated causes.
 * **Bars = §4 exactly**, eight of them, targets as written. Bar 4 is the per-victim kind-sole
   cell; bar 5 is the at-tick grounded cell; bar 7's "~0" is ≤ 5% pooled; bar 8 is four
-  individual verdicts.
+  individual verdicts. **The §4.1 rare-event discipline is part of the bars**: a per-set
+  clause binds only where §4.1 calls the cell powered, and an advisory cell is reported and
+  never gated, in either direction.
 * **Decision rule = §6 exactly**, including the partial-adoption eligibility test and the
   no-re-pricing clause.
 * **Secondary = §5 exactly**: observed and reported, never gated; the win-split band is ±15
@@ -462,9 +515,14 @@ uv run python scripts/measure_baseline.py --solvability --json replays/ml_corpus
 interval re-run through the production helper; §5's win split re-derived from the MANIFESTs;
 and §3.2's four deliberate pin-over-review differences asserted still to carry BOTH numbers.
 It prints `0 mismatches` and **exits 0 only then** — a mismatch names the cell and exits 1, so
-a CI job or an operator cannot read drift as a pass. It bites: change one digit of one cell,
-or quote an interval in a shape it cannot re-run, and it says so. Task 20.22's PR pastes its
-output.
+a CI job or an operator cannot read drift as a pass. The interval check closes the CLASS, not
+the instance: every bracketed pair in the memo must belong to a claim the reader re-runs, so a
+value in a spelling the parser skips is a failure rather than a silent omission. Three
+perturbations, all verified to bite: a changed cell digit (`7/76` → `8/76`) names the cell and
+exits 1; a changed interval (`[0.2886, 0.4553]` → `[1.0000, 1.0000]`) prints
+`interval 46/125: 0.3680 1.0000 1.0000 != (0.368, 0.2886, 0.4553)`; and an interval re-spelled
+out of the parsed shape trips "22 intervals quoted but only 21 are in a shape this reader can
+re-run". Task 20.22's PR pastes its output.
 
 ```bash
 uv run python - <<'EOF'
@@ -567,11 +625,17 @@ for label in CELLS:
             mismatches.append(f"{label} [{replay_set}]: {memo_cell} != {want}")
     print(f"OK  {label}: " + "  ".join(str(c) for c in stated[label]))
 
-intervals = re.findall(r"(\d+)/(\d+) = (0\.\d{4}) \[(0\.\d{4}), (0\.\d{4})\]", FLAT)
-assert len(intervals) >= 11, f"only {len(intervals)} intervals parsed"
-assert "[0." not in re.sub(
-    r"(\d+)/(\d+) = (0\.\d{4}) \[(0\.\d{4}), (0\.\d{4})\]", "", FLAT
-).split("## 12.")[0], "an interval is quoted in a shape this reader cannot re-run"
+CLAIM = re.compile(r"(\d+)/(\d+) = (\d\.\d{4}) \[(\d\.\d{4}), (\d\.\d{4})\]")
+BRACKET = re.compile(r"\[\d\.\d{4}, \d\.\d{4}\]")
+prose = FLAT.split("## 12.")[0]  # §12 quotes the helper's tuples, not intervals
+intervals = CLAIM.findall(prose)
+# Every bracketed pair in the memo must belong to a claim this reader re-runs:
+# equality closes the CLASS, so no new spelling can slip a value past the gate.
+assert len(BRACKET.findall(prose)) == len(intervals), (
+    f"{len(BRACKET.findall(prose))} intervals quoted but only {len(intervals)} are in a "
+    "shape this reader can re-run"
+)
+assert len(intervals) >= 22, f"only {len(intervals)} intervals parsed — a claim went missing"
 for num, den, rate, low, high in intervals:
     want = tuple(round(value, 4) for value in _wilson_interval(int(num), int(den)))
     if want != (float(rate), float(low), float(high)):
