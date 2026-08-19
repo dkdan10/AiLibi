@@ -285,7 +285,7 @@ def build_action_mask(
                 ),
             )
 
-    # KILL — impostor only; co-located non-teammate crew; cooldown 0.
+    # KILL — impostor only; not in vent; co-located non-teammate crew; cooldown 0.
     if role == "IMPOSTOR":
         for view in packet.visible_players:
             add(
@@ -293,7 +293,10 @@ def build_action_mask(
                     {"type": "kill", "actor": actor, "payload": {"target": view.id}}
                 ),
                 legal=(
-                    cooldown == 0 and view.room == own_room and view.id not in fellows
+                    (not in_vent)
+                    and cooldown == 0
+                    and view.room == own_room
+                    and view.id not in fellows
                 ),
             )
 
@@ -319,13 +322,13 @@ def build_action_mask(
                 legal=legal,
             )
 
-    # REPORT — a visible body in the actor's own room.
+    # REPORT — not in vent; a visible body in the actor's own room.
     for body in packet.visible_bodies:
         add(
             ReportBodyIntent.model_validate(
                 {"type": "report", "actor": actor, "payload": {"body_id": body.id}}
             ),
-            legal=body.room == own_room,
+            legal=(not in_vent) and body.room == own_room,
         )
 
     # EMERGENCY — not in vent; uses remaining; in the emergency-button room.
@@ -338,15 +341,16 @@ def build_action_mask(
         ),
     )
 
-    # SABOTAGE — impostor only; no sabotage already active; kind exists (no
-    # location or in-vent requirement).
+    # SABOTAGE — impostor only; not in vent; no sabotage already active; kind
+    # exists. Remote, so there is no room requirement, but a vented actor has no
+    # physical presence and cannot act at all (``engine.rules.resolve_sabotage``).
     if role == "IMPOSTOR":
         for kind in sabotage_kinds:
             add(
                 SabotageIntent.model_validate(
                     {"type": "sabotage", "actor": actor, "payload": {"kind": kind}}
                 ),
-                legal=not sabotage_active,
+                legal=(not in_vent) and not sabotage_active,
             )
 
     # REPAIR_SABOTAGE — role-blind; not in vent; an active sabotage of the SAME

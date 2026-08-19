@@ -57,6 +57,15 @@ def resolve_kill(
     state: WorldState, action: KillAction
 ) -> tuple[BodyState, KilledEvent]:
     actor = _get_live_player(state, action.actor)
+    # An actor inside a vent has no physical presence: `vent` and `wait` are the
+    # only actions legal from there (DESIGN.md §3.4), the same premise `move`,
+    # `do_task`, `emergency` and `repair_sabotage` already enforce. Like the
+    # friendly-fire guard below this is defense-in-depth — both shipped impostor
+    # policies branch on `in_vent` before any kill logic — but the engine is the
+    # single source of truth for the rules, so a mask-sampling or LLM-driven
+    # policy must not be able to kill from a state no one can perceive.
+    if actor.in_vent:
+        raise ActionRejectedError("cannot kill while in vent")
     target = _get_live_player(state, action.payload.target)
 
     if actor.role != "IMPOSTOR":
@@ -183,6 +192,10 @@ def resolve_report(
     state: WorldState, action: ReportBodyAction
 ) -> MeetingTriggeredEvent:
     actor = _get_live_player(state, action.actor)
+    # No physical presence while vented (DESIGN.md §3.4): a body is discovered by
+    # standing over it, which an actor inside a vent is not doing.
+    if actor.in_vent:
+        raise ActionRejectedError("cannot report a body while in vent")
     body = state.bodies.get(action.payload.body_id)
     if body is None:
         raise ActionRejectedError(f"unknown body id: {action.payload.body_id}")
@@ -226,6 +239,15 @@ def resolve_sabotage(
     state: WorldState, game_map: Map, action: SabotageAction
 ) -> SabotageStartedEvent:
     actor = _get_live_player(state, action.actor)
+    # No physical presence while vented (DESIGN.md §3.4). Sabotage is remote — it
+    # has no room requirement and that is unchanged — but reach is not the
+    # question; the question is whether an actor absent from every other agent's
+    # perception may act at all. `resolve_repair_sabotage` already answers no: it
+    # is location-bound (the actor must stand in a repair room) yet still carries
+    # a vent guard ahead of that check, because a vented actor's room CAN be a
+    # repair room and the room check alone would let it through.
+    if actor.in_vent:
+        raise ActionRejectedError("cannot sabotage while in vent")
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can sabotage")
     if state.sabotage is not None and state.sabotage.active:

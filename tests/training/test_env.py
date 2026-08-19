@@ -8,7 +8,9 @@ so only a tick-budget cap marks an episode truncated;
 the mask is property-tested against the REAL engine (every masked-legal action
 resolves, every unmasked action is engine-rejected, and the impostor's pretend
 ``do_task`` camouflage is carried in the SUBMISSION set but excluded from the
-engine-legal set); a frozen-policy episode is byte-deterministic; and the
+engine-legal set), with the in-vent ruling — ``vent`` and ``wait`` are the only
+actions legal from inside a vent — pinned on a hand-built state rather than left
+to a sampled rollout; a frozen-policy episode is byte-deterministic; and the
 interposition wrapper satisfies the full ``MeetingAwareAgent`` protocol.
 """
 
@@ -23,7 +25,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import PlayerId, SabotageState
+from engine.entities import BodyState, PlayerId, SabotageState
 from engine.events import ActionRejectedEvent, MeetingTriggeredEvent
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
@@ -32,8 +34,11 @@ from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
     EmergencyMeetingIntent,
+    KillIntent,
     RepairSabotageIntent,
+    ReportBodyIntent,
     SabotageIntent,
+    VentIntent,
 )
 from observation.packet import ObservationPacket
 from observation.service import ObservationService
@@ -435,6 +440,91 @@ def test_impostor_pretend_do_task_is_submission_only_in_the_task_room() -> None:
     vented = _mask_with_impostor_in(task_room, in_vent=True)
     assert pretend in vented.illegal
     assert not vented.is_submission_legal(pretend)
+
+
+def test_in_vent_impostor_cannot_kill_report_or_sabotage() -> None:
+    # The in-vent ruling, pinned on a hand-built state instead of hoping a
+    # sampled rollout vents beside a victim: kill, report and sabotage are masked
+    # ILLEGAL and the engine agrees on the same state; step the impostor out of
+    # the vent with nothing else changed and all three flip to masked LEGAL and
+    # engine-accepted, so the pairing is the vent and nothing else.
+    game_map = load_canonical_map()
+    public_map = public_map_from_engine_map(game_map)
+    sabotage_kinds = tuple(sorted(game_map.sabotages))
+    base = _base_state(game_map)
+    impostor = next(
+        pid for pid, player in base.players.items() if player.role == "IMPOSTOR"
+    )
+    victim, corpse = sorted(
+        pid for pid, player in base.players.items() if player.role == "CREWMATE"
+    )[:2]
+    vent_id, room = sorted(public_map.vent_rooms.items())[0]
+
+    players = dict(base.players)
+    players[impostor] = replace(players[impostor], room=room, in_vent=True)
+    players[victim] = replace(players[victim], room=room, in_vent=False)
+    players[corpse] = replace(players[corpse], room=room, alive=False, in_vent=False)
+    body = BodyState(
+        id=f"body-{corpse}-0",
+        player_id=corpse,
+        room=room,
+        position=(0.0, 0.0),
+        killed_by=impostor,
+        discovered_by=None,
+    )
+    vented = replace(
+        base,
+        players=players,
+        bodies={body.id: body},
+        cooldowns={**dict(base.cooldowns), impostor: 0},
+    )
+    standing = replace(
+        vented,
+        players={**players, impostor: replace(players[impostor], in_vent=False)},
+    )
+
+    def _mask(state: WorldState) -> ActionMask:
+        return build_action_mask(
+            _packet_for(state, impostor, game_map),
+            public_map,
+            sabotage_kinds=sabotage_kinds,
+            emergency_uses_remaining=game_map.emergency.uses_per_player,
+        )
+
+    kill = KillIntent.model_validate(
+        {"type": "kill", "actor": impostor, "payload": {"target": victim}}
+    )
+    report = ReportBodyIntent.model_validate(
+        {"type": "report", "actor": impostor, "payload": {"body_id": body.id}}
+    )
+    sabotage = SabotageIntent.model_validate(
+        {"type": "sabotage", "actor": impostor, "payload": {"kind": sabotage_kinds[0]}}
+    )
+
+    vented_mask = _mask(vented)
+    for intent in (kill, report, sabotage):
+        assert intent in vented_mask.illegal
+        assert not vented_mask.is_submission_legal(intent)
+        assert _engine_rejects(vented, intent, game_map)
+
+    standing_mask = _mask(standing)
+    for intent in (kill, report, sabotage):
+        assert intent in standing_mask.engine_legal
+        assert not _engine_rejects(standing, intent, game_map)
+
+    # And the ruling is TOTAL on this state: `vent` and `wait` are the only
+    # engine-legal intents left, with both mask directions still pinned against
+    # the engine.
+    assert {intent.type for intent in vented_mask.engine_legal} == {"vent", "wait"}
+    assert vent_id in {
+        intent.payload.vent_id
+        for intent in vented_mask.engine_legal
+        if isinstance(intent, VentIntent)
+    }
+    for legal_intent in vented_mask.engine_legal:
+        assert not _engine_rejects(vented, legal_intent, game_map)
+    for illegal_intent in vented_mask.illegal:
+        assert _engine_rejects(vented, illegal_intent, game_map)
 
 
 # --------------------------------------------------------------------------- #

@@ -331,6 +331,14 @@ deterministically with overlap allowed.
 
 ### 3.4 Rules
 
+> **Superseded in part (2026-08-19) — the in-vent ruling.** From inside a vent the only legal
+> actions are `vent` and `wait`. `engine/rules.py` rejects a kill, a body report and a sabotage by a
+> vented actor with `ActionRejectedError`, alongside the move, do-task, emergency-meeting and
+> repair-sabotage guards it already enforced; `engine/rules.py` (with `engine/tick.py` for move and
+> do-task) is the enforcing site, because the engine — not agent code — is the single source of
+> truth for legality (§3.6). The rule bullets below are the Phase-6-vintage text and do not carry
+> that precondition.
+
 - **Kill:** impostor-only; the target must be a CREWMATE — a fellow impostor is never a valid target, so `engine.rules.resolve_kill` rejects an IMPOSTOR target (Phase 7 Wave 0.5 friendly-fire guard). Impostor and target must be in the same room; cooldown must be 0. Kill cooldowns are seeded to `kill_cooldown_ticks` at round start (`orchestrator/seeder.py`), not 0 — a tick-1 spawn kill is impossible — and reset to `kill_cooldown_ticks` after each kill. Intra-tick simultaneity is canonically id-ordered: queued actions resolve in ascending actor-id order, so a lower-id target's same-tick move legitimately escapes a kill. This is the documented rule, not a race (2026-06-07 audit decision); revisit only if a future wave gates on per-seat fairness. Kill spawns a `Body` and emits `Killed` event. Witnesses are living non-vented players in the same room — used by ObservationService.
 - **Report:** any living player in a room containing a body can `ReportBody`. Triggers meeting.
 - **Vent:** impostor-only; vent network is per-map; entering and exiting are explicit actions. Vent use is observable to living non-vented players in the source/destination room.

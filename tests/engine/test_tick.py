@@ -502,21 +502,24 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
         cooldowns={"p-3": 2},
     )
 
+    # Sabotage FIRST, then vent: from inside a vent the only legal actions are
+    # `vent` and `wait`, so the impostor has to start the sabotage while still
+    # standing in the room (engine/rules.py::resolve_sabotage).
     next_state, events = advance_tick(
         state,
         [
             _action(
                 {
-                    "type": "vent",
+                    "type": "sabotage",
                     "actor": "p-3",
-                    "payload": {"vent_id": "ADMIN_VENT"},
+                    "payload": {"kind": "lights"},
                 }
             ),
             _action(
                 {
-                    "type": "sabotage",
+                    "type": "vent",
                     "actor": "p-3",
-                    "payload": {"kind": "lights"},
+                    "payload": {"vent_id": "ADMIN_VENT"},
                 }
             ),
         ],
@@ -528,10 +531,10 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     assert next_state.sabotage.kind == "lights"
     assert next_state.sabotage.remaining_ticks == 89
     assert next_state.cooldowns["p-3"] == 1
-    assert [event.type for event in events[:2]] == ["VentEntered", "SabotageStarted"]
-    assert event_to_dict(events[0])["details"]["witnesses"] == ("p-2",)
-    assert event_to_dict(events[0])["details"]["source_witnesses"] == ("p-2",)
-    assert event_to_dict(events[0])["details"]["destination_witnesses"] == ("p-2",)
+    assert [event.type for event in events[:2]] == ["SabotageStarted", "VentEntered"]
+    assert event_to_dict(events[1])["details"]["witnesses"] == ("p-2",)
+    assert event_to_dict(events[1])["details"]["source_witnesses"] == ("p-2",)
+    assert event_to_dict(events[1])["details"]["destination_witnesses"] == ("p-2",)
 
 
 def _active_lights_state(*, remaining_ticks: int = 5) -> WorldState:
