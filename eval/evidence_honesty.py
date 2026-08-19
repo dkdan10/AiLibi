@@ -527,10 +527,12 @@ class ImpostorTargetingCells(_FrozenModel):
     from; it does NOT measure whether the declined kill would have landed, because
     a lower-id target may dodge in the same tick.
 
-    ``decisions_reconstructed`` / ``reconstruction_mismatches`` are the precondition:
-    every cell here is emitted only after the rebuilt memory + real
-    ``ImpostorPolicy.decide`` reproduces the recorded action stream with zero
-    mismatches. ``ghost_top_ejected`` / ``ghost_top_unseen_death`` split the
+    ``decisions_reconstructed`` / ``reconstruction_mismatches`` are the
+    precondition's own witness: the walk RAISES on the first decision the rebuilt
+    memory + real ``ImpostorPolicy.decide`` does not reproduce, so a report that
+    exists at all carries ``reconstruction_mismatches == 0`` — the field is here
+    because the memo quotes the pair ("0 mismatches over N decisions") and the
+    denominator moves when the corpus does. ``ghost_top_ejected`` / ``ghost_top_unseen_death`` split the
     ghost-top population into the two sub-populations that cause it.
     """
 
@@ -722,13 +724,6 @@ def compute_evidence_honesty(sample_dir: Path) -> EvidenceHonestyReport:
             distances=distances,
             persona_phrase=persona_phrase,
             tallies=tallies,
-        )
-
-    if tallies.mismatches:
-        raise EvidenceHonestyReconstructionError(
-            f"{sample_dir}: {tallies.mismatches} impostor decisions did not "
-            "reproduce the recorded action stream — the targeting cells would "
-            "price a policy the recording never ran"
         )
 
     return _report(
