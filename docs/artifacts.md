@@ -68,6 +68,18 @@ a restore that dies half-way — a full disk, a killed process — still leaves
 nothing stageable behind. `--clean` removes the restored bytes and those files
 together.
 
+A `.gitignore` fences `git add`; it is not a fence against a tool that walks the
+working tree, and `mypy` is such a tool. So the untracked-by-design rule is
+enforced in **two** places, one per walker: the per-destination `.gitignore`
+above keeps the bytes out of the index, and `pyproject.toml`'s `[tool.mypy]
+exclude` keeps both destination roots out of the strict type gate. Without the
+second, restored operator-machine helper scripts — never written to this repo's
+bar — turn `bash scripts/check.sh` red on a checkout that has merely done what
+this page tells it to do. `tests/scripts/test_verify_ml_evidence.py` derives the
+excluded roots from `scripts/fetch_evidence.sh`'s own destination assignments, so
+the fence cannot drift away from the restore, and asserts the two added
+alternatives hide no tracked Python.
+
 ### (d) Disposable regenerated views — **not committed**
 
 Anything a command reproduces from class (a)/(b)/(c) bytes: local replay runs,
@@ -120,6 +132,12 @@ bash scripts/fetch_evidence.sh            # fetch by the pinned sha, restore, ve
 bash scripts/fetch_evidence.sh --verify   # verify what is already restored
 bash scripts/fetch_evidence.sh --clean    # remove the restored bytes again
 ```
+
+The restore and the gate compose in either direction: `bash scripts/check.sh` is
+green with these bytes restored and green after `--clean`, and `uv run mypy .`
+reports the same source-file count in both states because the two destination
+roots are outside its walk (the `[tool.mypy] exclude` above). You do not have to
+`--clean` before running the gate.
 
 **`coevo/` — the Phase-18 co-evolution prune (Task 19.22).** The 1,383 files
 under `training/artifacts/coevo/` that no test opens: the `realpath*` per-seed
