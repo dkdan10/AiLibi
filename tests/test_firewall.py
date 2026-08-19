@@ -49,6 +49,7 @@ from engine.events import KilledEvent
 from engine.tick import advance_tick
 from engine.world import Map, VisibilityMode, WorldState, load_canonical_map
 from eval.leak_scan import PacketContext, assert_packet_is_leak_clean
+from observation.packet import ObservationPacket
 from observation.service import ObservationService
 from tests._helpers.world_state import scripted_initial_world_state
 
@@ -854,6 +855,7 @@ _ENTITLEMENT_SCRIPT: tuple[tuple[dict[str, object], ...], ...] = (
 class _EntitlementScan:
     failures: tuple[str, ...]
     final_state: WorldState
+    records: tuple[tuple[ObservationPacket, PacketContext], ...]
 
 
 def _scan_entitlement_scenario(tmp_path: Path) -> _EntitlementScan:
@@ -869,6 +871,7 @@ def _scan_entitlement_scenario(tmp_path: Path) -> _EntitlementScan:
         game_map=game_map, audit_log_path=tmp_path / "entitlement_audit.jsonl"
     )
     failures: list[str] = []
+    records: list[tuple[ObservationPacket, PacketContext]] = []
     try:
         for raw_actions in _ENTITLEMENT_SCRIPT:
             state, events = advance_tick(
@@ -885,13 +888,16 @@ def _scan_entitlement_scenario(tmp_path: Path) -> _EntitlementScan:
                 packet = service.build_packet(
                     world_state=state, agent_id=player_id, engine_events=events
                 )
+                records.append((packet, context))
                 try:
                     assert_packet_is_leak_clean(packet, context)
                 except AssertionError as error:
                     failures.append(str(error))
     finally:
         service.close()
-    return _EntitlementScan(failures=tuple(failures), final_state=state)
+    return _EntitlementScan(
+        failures=tuple(failures), final_state=state, records=tuple(records)
+    )
 
 
 def _m6_bodies_everywhere(
@@ -1028,3 +1034,35 @@ def test_the_entitlement_scan_catches_a_broken_visibility_filter(
     assert any(re.search(expected, failure) for failure in scan.failures), (
         f"no failure matched {expected!r}; got {list(scan.failures)}"
     )
+
+
+def test_the_entitlement_scan_catches_a_DROPPED_witnessed_action(
+    tmp_path: Path,
+) -> None:
+    """The equality cuts both ways: losing first-hand evidence is a failure too.
+
+    The witness allowance is derived from the tick's EVENTS, not from the
+    packet — read off ``visible_players`` it would shrink in step with any
+    omission and see nothing. Here p-4 watches p-3 vent and the resulting
+    ``PlayerView`` is deleted; the scan must report it MISSING.
+    """
+
+    scan = _scan_entitlement_scenario(tmp_path)
+    vented = [
+        (packet, context)
+        for packet, context in scan.records
+        if packet.agent_id == "p-4"
+        and any(view.action == "vent" for view in packet.visible_players)
+    ]
+    assert len(vented) == 1, "the scenario stopped producing a witnessed vent"
+    packet, context = vented[0]
+
+    stripped = packet.model_copy(
+        update={
+            "visible_players": tuple(
+                view for view in packet.visible_players if view.action != "vent"
+            )
+        }
+    )
+    with pytest.raises(AssertionError, match=r"missing \['p-3'\]"):
+        assert_packet_is_leak_clean(stripped, context)

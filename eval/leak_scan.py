@@ -523,8 +523,8 @@ def assert_visible_entities_match_engine_truth(
        here even though the room set itself is read from the engine.
     2. **Players are an EQUALITY.** ``visible_players`` equals the alive,
        non-vented, in-visible-room others, PLUS the named witness allowance
-       below — never a superset, so an extra player is a leak and a missing one
-       is a regression.
+       below — never a superset, so an extra player is a leak, and never a
+       subset, so a dropped one is a regression.
     3. **Bodies are an equality with NO allowance.** ``visible_bodies`` equals
        the undiscovered bodies standing in visible rooms.
     4. **Rooms are entitled too.** Every ``PlayerView.room`` and
@@ -535,16 +535,21 @@ def assert_visible_entities_match_engine_truth(
        sequence and an observer can witness a kill and then walk away before the
        packet is built.
 
-    THE WITNESS ALLOWANCE is real and named, not a silent superset:
+    THE WITNESS ALLOWANCE is real, named, and REQUIRED:
     ``observation/service.py::_visible_players`` adds any actor carrying an
     observed ``kill`` or ``vent`` to the packet even when the actor is not in the
     engine's ``visible_player_ids`` — a vented killer surfaces as
-    ``('p-3', 'ADMIN', 'kill')``. That is intended kill attribution, so each
-    member must independently pass
-    :func:`_action_is_permitted_by_witness_event` for THIS observer, and the
-    allowance is spelled out in the failure message so a future widening reads
-    as a decision. A dead observer is entitled to nothing at all: its sets are
-    empty by rule here, not by reading the engine's empty room tuple back.
+    ``('p-3', 'ADMIN', 'kill')``. That is intended kill attribution. The set is
+    derived from the tick's events (every ``kill``/``vent`` actor whose event
+    names this observer as a witness), never from the packet: reading it off
+    ``visible_players`` would make the equality unable to see an OMISSION, since
+    dropping the view would shrink both sides at once. Each member is then
+    checked to carry the action the event justifies, to pass
+    :func:`_action_is_permitted_by_witness_event`, and to name a room it was
+    witnessed in — and the allowance is spelled out in the failure message so a
+    future widening reads as a decision. A dead observer is entitled to nothing
+    at all: its sets are empty by rule here, not by reading the engine's empty
+    room tuple back.
 
     Raises ``AssertionError`` naming the observer and the offending ids.
     """
@@ -588,17 +593,16 @@ def assert_visible_entities_match_engine_truth(
         }
 
     events = list(engine_events)
+    # The allowance is derived from the EVENTS, not from the packet. A
+    # packet-derived set would be blind in one direction: drop a witnessed
+    # actor's ``PlayerView`` and both sides of the equality shrink together, so
+    # the observer silently loses first-hand evidence and the gate says nothing.
     witness_allowance = {
-        view.id
-        for view in packet.visible_players
-        if view.action in {"kill", "vent"}
-        and _action_is_permitted_by_witness_event(
-            action=view.action,
-            actor_id=view.id,
-            agent_id=agent,
-            engine_events=events,
-        )
-    }
+        event.actor
+        for event in events
+        if isinstance(event, (KilledEvent, VentEnteredEvent, VentExitedEvent))
+        and agent in event.witnesses
+    } - {agent}
     seen_players = {view.id for view in packet.visible_players}
     permitted_players = entitled_players | witness_allowance
     assert seen_players == permitted_players, (
@@ -619,6 +623,19 @@ def assert_visible_entities_match_engine_truth(
 
     for view in packet.visible_players:
         if view.id in witness_allowance:
+            assert view.action in {"kill", "vent"}, (
+                f"{agent} witnessed a kill/vent by {view.id!r} but the packet "
+                f"stamps it {view.action!r} — the attribution is lost"
+            )
+            assert _action_is_permitted_by_witness_event(
+                action=view.action,
+                actor_id=view.id,
+                agent_id=agent,
+                engine_events=events,
+            ), (
+                f"{agent} allowance member {view.id!r} carries "
+                f"{view.action!r}, which no engine event permits it"
+            )
             witnessed_rooms = _witnessed_action_rooms(
                 action=view.action,
                 actor_id=view.id,
