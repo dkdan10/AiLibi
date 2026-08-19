@@ -112,9 +112,11 @@ from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.win_condition_selfcheck import WinConditionSelfCheck
 from meetings.schemas import AccusationClaim
 from orchestrator.replay import (
+    GameEndReplayEntry,
     ReplayLog,
     SUBSTRATE_FLAG_KEYS,
     WinnerSide,
+    read_all_entries,
     read_substrate_flags,
     substrate_flag_snapshot,
 )
@@ -250,6 +252,11 @@ class _GameReconstruction:
     # the recorded label).
     reconstructed_winner: WinnerSide | None
     reconstructed_reason: str | None
+    # Whether the ``game_over`` row is the recording's LAST physical record.
+    # The walk stops at the terminal state, so a row of ANY kind written after
+    # it is never replayed and never hash-verified — it would ride into the
+    # accepted corpus inside otherwise-verified bytes.
+    game_over_is_last_record: bool
 
 
 # --------------------------------------------------------------------------- #
@@ -434,12 +441,15 @@ def _reconstruct_game(
         first_zero_impostor_tick=first_zero_impostor_tick,
         game_over_tick=game_end.tick if game_end is not None else None,
     )
+    entries = read_all_entries(replay_path)
     return _GameReconstruction(
         seed=seed,
         win_check=win_check,
         kills=tuple(kills),
         reconstructed_winner=reconstructed_winner,
         reconstructed_reason=reconstructed_reason,
+        game_over_is_last_record=bool(entries)
+        and isinstance(entries[-1], GameEndReplayEntry),
     )
 
 
@@ -524,7 +534,10 @@ def check_all_games_reach_game_over(
     Dropping trailing tick rows shortens the walk without breaking the chain, so
     a truncated replay keeps its ``game_over`` row while the walk stops short —
     presence of the row is not entitlement to it, and both that shape and a row
-    naming no winner fail as ``truncated_replay``. The check cannot false-positive
+    naming no winner fail as ``truncated_replay``; symmetrically, the
+    ``game_over`` row must be the recording's LAST record, since the walk stops
+    at the terminal and anything after it is never replayed. The check cannot
+    false-positive
     on a legitimate short game: ``orchestrator.game.HeadlessGame`` writes the row
     only after the engine fires a ``GameOverEvent`` and returns without one when
     the tick budget caps the game, so a recorded terminal the walk never reaches
@@ -551,6 +564,11 @@ def check_all_games_reach_game_over(
             violations.append(
                 f"seed {game.seed}: {TRUNCATED_REPLAY_REASON} — the recorded "
                 "game_over row names no winner (partial recording)"
+            )
+        if recorded_terminal and not game.game_over_is_last_record:
+            violations.append(
+                f"seed {game.seed}: rows are recorded after the game_over row "
+                "(never replayed, never hash-verified)"
             )
         if recorded_terminal and not walked_terminal:
             violations.append(

@@ -250,6 +250,7 @@ def _synthetic_reconstruction(
             kills=(kill,),
             reconstructed_winner="CREWMATES",
             reconstructed_reason="CREWMATE_EJECT",
+            game_over_is_last_record=True,
         )
     ]
 

@@ -87,6 +87,7 @@ def _recon(
     kills: Sequence[_KillFact] = (),
     reconstructed_winner: str | None = "__match__",
     reconstructed_reason: str | None = "__match__",
+    game_over_is_last_record: bool = True,
 ) -> _GameReconstruction:
     check = win_check if win_check is not None else _win_check(seed)
     # Default the reconstructed outcome to MATCH the recorded one so a plain
@@ -99,6 +100,7 @@ def _recon(
         kills=tuple(kills),
         reconstructed_winner=rw,  # type: ignore[arg-type]
         reconstructed_reason=rr,
+        game_over_is_last_record=game_over_is_last_record,
     )
 
 
@@ -196,6 +198,16 @@ def test_all_games_reach_game_over_fails_on_a_winnerless_game_over_row() -> None
     assert any(
         TRUNCATED_REPLAY_REASON in v and "seed 5" in v and "names no winner" in v
         for v in check.violations
+    )
+
+
+def test_all_games_reach_game_over_fails_on_rows_after_the_game_over_row() -> None:
+    # Any record kind written after the terminal row rides into the corpus
+    # unreplayed, whatever tick number it claims.
+    check = check_all_games_reach_game_over([_recon(6, game_over_is_last_record=False)])
+    assert not check.passed
+    assert any(
+        "seed 6" in v and "after the game_over row" in v for v in check.violations
     )
 
 
@@ -870,6 +882,42 @@ def test_run_validity_gate_rejects_rows_after_the_terminal(tmp_path: Path) -> No
     assert "all_games_reach_game_over" in report.failing_checks()
     check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
     assert any("after the terminal GAME_OVER" in v for v in check.violations)
+
+
+def test_run_validity_gate_rejects_a_record_after_the_game_over_row(
+    tmp_path: Path,
+) -> None:
+    # A failed_call row appended after game_over: it names an already-resolved
+    # meeting, carries zero cost, and claims a tick the walk never reaches, so
+    # every other check reads it as inert. Physical record order is what
+    # catches it.
+    mini = _mini_set(tmp_path, seeds=(12,))
+    path = mini / "replay-seed-12.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    meeting = next(
+        json.loads(line) for line in lines if json.loads(line)["kind"] == "meeting"
+    )
+    appended = FailedCallReplayEntry(
+        game_id=meeting["game_id"],
+        meeting_id=meeting["meeting_id"],
+        tick=999,
+        model="Qwen/Qwen3.6-27B",
+        prompt_length=0,
+        raw_response="",
+        error_type="ValidationError",
+        error_message="planted",
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=0.0,
+    )
+    lines.append(appended.model_dump_json())
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = run_validity_gate(mini)
+    assert not report.passed
+    assert report.failing_checks() == ("all_games_reach_game_over",)
+    check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
+    assert any("after the game_over row" in v for v in check.violations)
 
 
 def test_run_validity_gate_passes_the_untruncated_fixture(tmp_path: Path) -> None:
