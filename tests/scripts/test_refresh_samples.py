@@ -1249,11 +1249,13 @@ def test_two_workers_lose_no_manifest_row(tmp_path: Path) -> None:
         assert (set_dir / f"replay-seed-{seed}.jsonl").is_file()
         # The claim counter is lock-guarded, so no seed is recorded twice.
         assert proc.stdout.count(f"recording seed {seed} ---") == 1
-    # Both workers drained from the shared queue (4 seeds at ~1s each).
-    assert set(re.findall(r"--- \[worker (\d+)\] recording seed", proc.stdout)) == {
-        "1",
-        "2",
-    }
+    # WHICH worker drains which seed is up to the scheduler, so asserting a
+    # particular split would be a timing assumption. What is pinned instead is
+    # what holds under every split: every seed was claimed by a worker of the
+    # spawned pool, exactly once, and the manifest kept a row for each.
+    claims = re.findall(r"--- \[worker (\d+)\] recording seed", proc.stdout)
+    assert len(claims) == 4
+    assert set(claims) <= {"1", "2"}
 
 
 def _update_manifest_row(sample_dir: Path, manifest: Path, seed: int) -> None:
