@@ -22,6 +22,7 @@ import type {
 } from "react";
 
 import { usePlayback } from "../hooks/usePlayback";
+import { TRANSPORT_COPY } from "../lib/copy";
 import {
   type KeyMomentKind,
   type TimelineKind,
@@ -583,7 +584,18 @@ export function ReplayControls() {
       </div>
 
       {/* Scrubber + tick label. `value` is the array index; the label reads the
-          engine tick number through the one selector. */}
+          engine tick number through the one selector.
+
+          TWO CLOCKS. This readout is the ENGINE clock. An agent's own
+          observation stamps sit one ahead of it, because a tick's packets are
+          built from pre-advance state and recorded against the pre-advance tick
+          (`orchestrator/game.py`, `input_tick` beside `advance_tick`). Measured
+          on the committed sets: 111,283/111,283 memory sighting lines match
+          world truth at Δ=−1 and 51.8% at Δ=0, while the meeting header's
+          "It is tick N" matches this readout exactly in 771/771 calls. Every
+          reviewer re-derived that by hand, so the note below states it on
+          screen. The counts stay here and in `lib/copy.test.ts`, never in the
+          copy; an engine-side re-stamp would delete the note outright. */}
       <div className="flex min-w-[12rem] flex-1 items-center gap-3">
         <input
           type="range"
@@ -613,6 +625,16 @@ export function ReplayControls() {
           )}
         </span>
       </div>
+
+      {/* A SIBLING of the scrubber, not a child of it: the transport row wraps,
+          so on a narrow bar the note drops to its own line instead of squeezing
+          the seek control. */}
+      <span
+        title={TRANSPORT_COPY.agentClockTitle}
+        className="whitespace-nowrap font-mono text-3xs text-ink-500"
+      >
+        {TRANSPORT_COPY.agentClockNote}
+      </span>
 
       {/* Next key moment — distinct from raw step / jump-event. */}
       <button

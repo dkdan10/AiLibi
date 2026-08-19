@@ -1,32 +1,25 @@
-// Tournament Dashboard view (Task 12.10; design/phase-12/stage-1-design.md §3.6,
-// slice 8; DESIGN.md §11.3). The "Tournament" top-level view the App.tsx route
-// mounts (`<TournamentDashboard/>`), refreshed onto the Playful cream/ink system.
+// The Tournament view: the merged `TournamentEvalReport` rendered as balance
+// outcome, vote correctness, the conversion + gate surface, the
+// proof-vs-inference deduction instrument, calibration, alibi fabrication, an
+// interestingness histogram (from `/eval/rubric`, whose buckets deep-link into
+// the Highlights reel through the SHARED `view` · `set` · `scoreBucket` filter
+// keys) and the cost roll-up.
 //
-// It renders the merged `TournamentEvalReport`: the balance outcome, the four
-// Phase 5 metrics (vote correctness, accusation calibration, alibi fabrication,
-// cost), and — newly surfaced — the typed `conversion` + `gate_metrics` blocks.
-// An interestingness histogram (from `/eval/rubric`) deep-links each score bucket
-// into the Highlights reel via the SHARED filter keys 12.9 reads
-// (`view=highlights` · `set` · `scoreBucket`), never an invented param.
+// BINDING HONESTY RULE ("no false precision"): an under-powered or
+// narrowly-scoped number is never shown bare — its caveat renders ATTACHED to
+// the tile it qualifies, not in a distant footnote. The "Proof vs inference"
+// panel is the same rule at panel scale: the meeting-flag and ejectee-proof
+// cuts of the same bytes have DIFFERENT denominators, so they render as two
+// labelled partitions and are never mixed into one row.
 //
-// Binding honesty rule ("no false precision", design/phase-12/claude-design-brief
-// .md): every under-powered / sentinel number renders its caveat ATTACHED — the
-// small-n vote-correctness flag (on the ejection count that powers it), the
-// low-power / populated-bins calibration badges, and the conversion / gate
-// sentinels each carry their qualifier in place, never as a bare metric. Task
-// 19.5 re-anchored what those sentinels SAY: the vote-correctness rate is a
-// bug-sentinel structurally pinned to 1.0 (not overall vote quality), threshold
-// inversions are sanctioned crew discretion at the advisory line (NOT a gate
-// bug), and the gate canary is supplied-channel conversion — the alibi-anchored
-// genuine-class cell is a starved historical column.
-//
-// Task 19.14 adds the "Proof vs inference" panel over the typed `deduction`
-// block: direct-proof vs non-direct ejection accuracy side by side, under BOTH
-// of the cross-tab's partitions, each in its own labelled group with its own
-// denominators. That separation is the honesty requirement, not decoration —
-// the meeting-flag and ejectee-proof cuts of the same bytes give different
-// splits, and a tile that divided one's numerator by the other's denominator
-// would be the exact error the phase's planning rounds caught in prose.
+// COPY LIVES IN `lib/copy.ts`. Every prose string this surface renders —
+// section titles and descriptions, tile labels, hints, caveat chips and their
+// tooltips — is a value there, and `lib/copy.test.ts` walks the whole tree
+// plus this file's stripped source, so a literal typed back into the JSX
+// fails the gate. Counted hints keep their WORDS there too, as `{n}`
+// templates filled by `fmt`. Only the report's own numbers are formatted
+// here. This is the tab the review found citing design-doc sections and task
+// numbers at a visitor.
 //
 // Split (mirrors the sibling chrome slices): `TournamentDashboard` is the
 // connected component (store + rubric fetch); `TournamentDashboardView` is the
@@ -36,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { apiUrl } from "../api/client";
+import { DASHBOARD_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
 import type {
@@ -85,14 +79,14 @@ function scoreBucketOf(score: number): ScoreBucket {
 
 const BUCKET_ORDER: readonly ScoreBucket[] = ["low", "med", "high"];
 const BUCKET_LABEL: Record<ScoreBucket, string> = {
-  low: "Low",
-  med: "Med",
-  high: "High",
+  low: DASHBOARD_COPY.bucketLabelLow,
+  med: DASHBOARD_COPY.bucketLabelMed,
+  high: DASHBOARD_COPY.bucketLabelHigh,
 };
 const BUCKET_RANGE: Record<ScoreBucket, string> = {
-  low: "0–33",
-  med: "33–67",
-  high: "67–100",
+  low: DASHBOARD_COPY.bucketRangeLow,
+  med: DASHBOARD_COPY.bucketRangeMed,
+  high: DASHBOARD_COPY.bucketRangeHigh,
 };
 
 // Deep-link to the Highlights reel built from the SHARED query keys 12.9 reads —
@@ -184,26 +178,31 @@ function BalanceSummary({
 
   return (
     <MetricSection
-      title="Balance outcome"
-      description="Crew / impostor / tick-budget split across the tournament's recorded games (DESIGN.md §11.3)."
+      title={DASHBOARD_COPY.balanceTitle}
+      description={DASHBOARD_COPY.balanceDescription}
     >
       <TileGrid>
         <StatTile
-          label="Games recorded"
+          label={DASHBOARD_COPY.balanceGames}
           value={formatInt(total)}
-          hint={
+          hint={fmt(
             seedsAttempted !== total
-              ? `${formatInt(seedsAttempted)} seeds attempted`
-              : `${formatInt(seedsAttempted)} seeds`
-          }
+              ? DASHBOARD_COPY.balanceSeedsAttempted
+              : DASHBOARD_COPY.balanceSeeds,
+            { n: formatInt(seedsAttempted) },
+          )}
         />
-        <StatTile label="Crew wins" value={formatInt(crewWins)} />
-        <StatTile label="Impostor wins" value={formatInt(impostorWins)} />
-        <StatTile label="Tick budget" value={formatInt(tickBudget)} hint="non-decisive" />
+        <StatTile label={DASHBOARD_COPY.balanceCrewWins} value={formatInt(crewWins)} />
+        <StatTile label={DASHBOARD_COPY.balanceImpostorWins} value={formatInt(impostorWins)} />
         <StatTile
-          label="Crew win rate"
+          label={DASHBOARD_COPY.balanceTickBudget}
+          value={formatInt(tickBudget)}
+          hint={DASHBOARD_COPY.balanceTickBudgetHint}
+        />
+        <StatTile
+          label={DASHBOARD_COPY.balanceCrewWinRate}
           value={formatPct(crewShare)}
-          hint="of decisive games"
+          hint={DASHBOARD_COPY.balanceCrewWinRateHint}
         />
       </TileGrid>
     </MetricSection>
@@ -211,7 +210,7 @@ function BalanceSummary({
 }
 
 // ---------------------------------------------------------------------------
-// Vote correctness — a BUG-SENTINEL rate, with its structural + small-n caveats
+// Vote correctness — a bug check on the recorded evidence, not a quality score
 // ---------------------------------------------------------------------------
 
 function VoteCorrectness({
@@ -223,56 +222,62 @@ function VoteCorrectness({
   // metric). StatTile takes ONE caveat node per tile, so they are placed where
   // they belong rather than stacked: the small-n flag rides on "Impostor
   // ejections" — that tile IS the denominator, so the n lives there — while the
-  // rate tile ALWAYS carries the sentinel note, because vote_correctness_rate is
-  // structurally pinned to 1.0 by the live §4.6 pipeline (eval/vote_correctness
-  // .py) and so measures the engine's own trigger, not voting quality.
+  // rate tile carries the scope note that says what the rate is for.
+  //
+  // The rate is NOT structurally 1.0, whatever this file used to tell a reader:
+  // the committed 9p2i report records 72 evidence-backed of 78 impostor
+  // ejections (0.923). So the copy says what a value below 1 means and stops
+  // short of naming a cause.
   const smallN = report.vote_correctness_small_n ? (
-    <MetricCaveat
-      tone="warn"
-      title="Under-powered: too few impostor ejections (n < 10) to trust this rate as a gate."
-    >
-      small-n
+    <MetricCaveat tone="warn" title={DASHBOARD_COPY.voteCorrectnessSmallNTitle}>
+      {DASHBOARD_COPY.voteCorrectnessSmallN}
     </MetricCaveat>
   ) : undefined;
 
   return (
     <MetricSection
-      title="Vote correctness"
-      description="The evidence-backed share of impostor ejections (a naming contradiction or kill-witness chain behind each one) — a bug-sentinel, not overall vote correctness: crewmate ejections sit outside its denominator, and the live §4.6 pipeline pins it to 1.0 by construction. 'n/a' when no impostors were ejected."
+      title={DASHBOARD_COPY.voteCorrectnessTitle}
+      description={DASHBOARD_COPY.voteCorrectnessDescription}
     >
       <TileGrid>
         <StatTile
-          label="Evidence-backed share"
+          label={DASHBOARD_COPY.voteCorrectnessRate}
           value={formatPct(report.vote_correctness_rate)}
-          hint={`${formatInt(report.evidence_backed_impostor_ejections)} / ${formatInt(report.impostor_ejections)} evidence-backed`}
+          hint={fmt(DASHBOARD_COPY.voteCorrectnessRateHint, {
+            backed: formatInt(report.evidence_backed_impostor_ejections),
+            total: formatInt(report.impostor_ejections),
+          })}
           caveat={
             <MetricCaveat
               tone="note"
-              title="Structurally 1.0 on recorded sets: the §4.6 gate only crosses when the detector already flagged the ejected player, so this measures the engine's own trigger, not voting quality. Below 1.0 means a detector/recording bug to chase — the precision lead is ejection accuracy in the Conversion section."
+              title={DASHBOARD_COPY.voteCorrectnessRateCaveatTitle}
             >
-              sentinel — not a KPI
+              {DASHBOARD_COPY.voteCorrectnessRateCaveat}
             </MetricCaveat>
           }
         />
-        <StatTile label="Total ejections" value={formatInt(report.total_ejections)} />
         <StatTile
-          label="Impostor ejections"
+          label={DASHBOARD_COPY.voteCorrectnessTotalEjections}
+          value={formatInt(report.total_ejections)}
+        />
+        <StatTile
+          label={DASHBOARD_COPY.voteCorrectnessImpostorEjections}
           value={formatInt(report.impostor_ejections)}
           caveat={smallN}
         />
         <StatTile
-          label="Crewmate ejections"
+          label={DASHBOARD_COPY.voteCorrectnessCrewmateEjections}
           value={formatInt(report.crewmate_ejections)}
         />
         <StatTile
-          label="Contradictions ignored"
+          label={DASHBOARD_COPY.voteCorrectnessIgnored}
           value={formatInt(report.contradictions_flagged_but_ignored)}
           caveat={
             <MetricCaveat
               tone="note"
-              title="Skipped meetings that carried ≥1 structured contradiction yet ejected no one — the deduction signal was present but unused."
+              title={DASHBOARD_COPY.voteCorrectnessIgnoredCaveatTitle}
             >
-              skipped w/ a flag
+              {DASHBOARD_COPY.voteCorrectnessIgnoredCaveat}
             </MetricCaveat>
           }
         />
@@ -286,61 +291,66 @@ function VoteCorrectness({
 // ---------------------------------------------------------------------------
 
 function ConversionSection({ report }: { report: TournamentEvalReport["conversion"] }) {
-  // `missed_skip_ballots` is a SENTINEL, not a down-is-good metric — it
-  // partitions into impostor-voter (sanctioned adversarial play) + invalid-target
-  // (normalized hallucinations) + threshold-inversions (crew discretion at the
-  // advisory line: since Task 13.13 de-imperatived the §4.6 verdict, declining a
-  // met threshold is sanctioned, so a nonzero count is INTENDED — not a gate
-  // bug). The caveat carries that "read the partition, not the total" note in
-  // place.
+  // `missed_skip_ballots` is not a down-is-good metric — it partitions into
+  // impostor voters (adversarial play, working as intended), invalid targets
+  // (normalized hallucinations) and threshold inversions (a crew voter
+  // declining a met bar, which the non-directive vote gate allows). The caveat
+  // carries that "read the partition, not the total" note in place.
   return (
     <MetricSection
-      title="Conversion"
-      description="Did accusations convert into impostor ejections, and were the SKIPs correct? (Task 9.6 / 10.x; typed on the wire by 12.2.)"
+      title={DASHBOARD_COPY.conversionTitle}
+      description={DASHBOARD_COPY.conversionDescription}
     >
       <TileGrid>
         <StatTile
-          label="Ejection accuracy"
+          label={DASHBOARD_COPY.conversionAccuracy}
           value={formatPct(report.ejection_accuracy)}
-          hint={`${formatInt(report.impostor_ejections)} / ${formatInt(report.total_ejections)} ejections hit an impostor`}
+          hint={fmt(DASHBOARD_COPY.conversionAccuracyHint, {
+            hit: formatInt(report.impostor_ejections),
+            total: formatInt(report.total_ejections),
+          })}
         />
         <StatTile
-          label="Accused → eject"
+          label={DASHBOARD_COPY.conversionAccused}
           value={formatPct(report.impostor_accused_conversion_rate)}
-          hint={`${formatInt(report.impostor_accused_conversions)} / ${formatInt(report.impostor_accused_meetings)} accused-impostor meetings`}
+          hint={fmt(DASHBOARD_COPY.conversionAccusedHint, {
+            converted: formatInt(report.impostor_accused_conversions),
+            meetings: formatInt(report.impostor_accused_meetings),
+          })}
         />
         <StatTile
-          label="Correct skips"
+          label={DASHBOARD_COPY.conversionCorrectSkips}
           value={`${formatInt(report.correct_skip_ballots)} / ${formatInt(report.skip_ballots)}`}
-          hint="below-threshold SKIPs"
+          hint={DASHBOARD_COPY.conversionCorrectSkipsHint}
         />
         <StatTile
-          label="Missed skips"
+          label={DASHBOARD_COPY.conversionMissedSkips}
           value={formatInt(report.missed_skip_ballots)}
-          hint={`imp-voter ${formatInt(report.missed_skip_impostor_voters)} · invalid ${formatInt(report.missed_skip_invalid_target)} · inversion ${formatInt(report.threshold_inversions)}`}
+          hint={fmt(DASHBOARD_COPY.conversionMissedSkipsHint, {
+            impostorVoters: formatInt(report.missed_skip_impostor_voters),
+            invalidTargets: formatInt(report.missed_skip_invalid_target),
+            crewDeclined: formatInt(report.threshold_inversions),
+          })}
           caveat={
-            <MetricCaveat
-              tone="note"
-              title="A sentinel, not a down-is-good metric: most missed skips are sanctioned impostor-voter play or normalized invalid targets; the remainder (threshold inversions) is crew discretion at the advisory line — see its tile. Read the partition, not the total."
-            >
-              sentinel — read the split
+            <MetricCaveat tone="note" title={DASHBOARD_COPY.conversionMissedSkipsCaveatTitle}>
+              {DASHBOARD_COPY.conversionMissedSkipsCaveat}
             </MetricCaveat>
           }
         />
         <StatTile
-          label="Threshold inversions"
+          label={DASHBOARD_COPY.conversionInversions}
           value={formatInt(report.threshold_inversions)}
-          hint="crew declines at the advisory line"
+          hint={DASHBOARD_COPY.conversionInversionsHint}
           caveat={
             report.threshold_inversions > 0 ? (
               <MetricCaveat
                 tone="note"
-                title="A crew voter whose rendered §4.6 max met the 0.60 reference yet SKIPped. Since Task 13.13 the vote gate is non-directive (the verdict is evidence, not a command), so declining is sanctioned discretion — a nonzero count is intended on recorded sets, not a gate bug. The 19.5 recount found every committed inversion marker-free and concentrated at the line; a marker-bearing ballot in this bucket would be the actual bug."
+                title={DASHBOARD_COPY.conversionInversionsCaveatTitle}
               >
-                discretionary — nonzero intended
+                {DASHBOARD_COPY.conversionInversionsCaveat}
               </MetricCaveat>
             ) : (
-              <MetricCaveat tone="note">no declines recorded</MetricCaveat>
+              <MetricCaveat tone="note">{DASHBOARD_COPY.conversionInversionsNone}</MetricCaveat>
             )
           }
         />
@@ -353,6 +363,11 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
 // Gate metrics — the Phase-10 A/B gate surface (typed by 12.2)
 // ---------------------------------------------------------------------------
 
+// The two cells' tooltips are OURS, not the report's. `supplied_channel
+// _conversion.note` / `.legacy_note` are maintainer notes — they cite task ids,
+// audit paths and internal channel names — and rendering them verbatim put that
+// dialect on the product surface through the back door. The eval package still
+// carries them for anyone reading the JSON.
 function GateMetricsSection({
   report,
 }: {
@@ -362,57 +377,64 @@ function GateMetricsSection({
   const scc = report.supplied_channel_conversion;
   return (
     <MetricSection
-      title="Gate metrics"
-      description="The Phase-10 gate surface (Task 10.4), re-anchored by 19.5: the canary cell is supplied-channel conversion (the Task-17.6 successor); the alibi-anchored genuine-class cell is historical — starved on this substrate and never a canary."
+      title={DASHBOARD_COPY.gateTitle}
+      description={DASHBOARD_COPY.gateDescription}
     >
       <TileGrid>
         <StatTile
           lead
-          label="Supplied-channel conversion"
+          label={DASHBOARD_COPY.gateSupplied}
           value={formatPct(scc.conversion_rate)}
-          hint={`${formatInt(scc.converted)} / ${formatInt(scc.supplied)} supplied impostors ejected · vent ${formatInt(scc.witnessed_vent_converted)}/${formatInt(scc.witnessed_vent_supplied)} · sighting ${formatInt(scc.sighting_contradiction_converted)}/${formatInt(scc.sighting_contradiction_supplied)} · whereabouts ${formatInt(scc.whereabouts_lie_converted)}/${formatInt(scc.whereabouts_lie_supplied)}`}
+          hint={fmt(DASHBOARD_COPY.gateSuppliedHint, {
+            converted: formatInt(scc.converted),
+            supplied: formatInt(scc.supplied),
+            ventConverted: formatInt(scc.witnessed_vent_converted),
+            ventSupplied: formatInt(scc.witnessed_vent_supplied),
+            sightingConverted: formatInt(scc.sighting_contradiction_converted),
+            sightingSupplied: formatInt(scc.sighting_contradiction_supplied),
+            whereaboutsConverted: formatInt(scc.whereabouts_lie_converted),
+            whereaboutsSupplied: formatInt(scc.whereabouts_lie_supplied),
+          })}
           caveat={
-            <MetricCaveat
-              tone="note"
-              title={scc.note}
-            >
-              canary — the successor cell
+            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateSuppliedCaveatTitle}>
+              {DASHBOARD_COPY.gateSuppliedCaveat}
             </MetricCaveat>
           }
         />
         <StatTile
-          label="Genuine-class conversion (historical)"
+          label={DASHBOARD_COPY.gateGenuine}
           value={formatPct(gcc.conversion_rate)}
-          hint={`${formatInt(gcc.converted)} / ${formatInt(gcc.supplied)} alibi-anchored flags — the Phase-10 cell`}
+          hint={fmt(DASHBOARD_COPY.gateGenuineHint, {
+            converted: formatInt(gcc.converted),
+            supplied: formatInt(gcc.supplied),
+          })}
           caveat={
-            <MetricCaveat
-              tone="note"
-              title={scc.legacy_note}
-            >
-              historical — starved, never a canary
+            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateGenuineCaveatTitle}>
+              {DASHBOARD_COPY.gateGenuineCaveat}
             </MetricCaveat>
           }
         />
         <StatTile
-          label="Lost opening accusations"
+          label={DASHBOARD_COPY.gateLostOpenings}
           value={formatInt(report.lost_opening_accusations)}
-          hint="chain died on turn 0"
+          hint={DASHBOARD_COPY.gateLostOpeningsHint}
         />
         <StatTile
-          label="Cap-defaulted turns"
+          label={DASHBOARD_COPY.gateCapDefaults}
           value={formatInt(report.cap_defaulted_turns)}
-          hint="deadline/token-cap truncations"
+          hint={DASHBOARD_COPY.gateCapDefaultsHint}
         />
         <StatTile
-          label="Accused-impostor survivals"
+          label={DASHBOARD_COPY.gateSurvivals}
           value={`${formatInt(report.accused_impostor_survivals)} / ${formatInt(report.accused_impostor_events)}`}
-          hint={`met ${formatInt(report.survivals_rendered_met)} · sheltered ${formatInt(report.survivals_sheltered_sub_gate)} · unevidenced ${formatInt(report.survivals_unevidenced)}`}
+          hint={fmt(DASHBOARD_COPY.gateSurvivalsHint, {
+            met: formatInt(report.survivals_rendered_met),
+            sheltered: formatInt(report.survivals_sheltered_sub_gate),
+            unevidenced: formatInt(report.survivals_unevidenced),
+          })}
           caveat={
-            <MetricCaveat
-              tone="note"
-              title="The survival partition is a deception-vs-under-conversion split. 'met' survivals are CREW-conversion failures (a voter was shown a met threshold yet the table failed to eject) — NOT impostor deception; only 'sheltered' counts conversion-controlled deception credit."
-            >
-              met ≠ deception
+            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateSurvivalsCaveatTitle}>
+              {DASHBOARD_COPY.gateSurvivalsCaveat}
             </MetricCaveat>
           }
         />
@@ -422,20 +444,24 @@ function GateMetricsSection({
 }
 
 // ---------------------------------------------------------------------------
-// Proof vs inference — the Task 19.14 deduction instrument
+// Proof vs inference — the deduction instrument
 // ---------------------------------------------------------------------------
 
-// `n/a` when the denominator is 0 (the None-not-0.0 sentinel the eval package
+// `n/a` when the denominator is 0 (the None-not-0.0 convention the eval package
 // uses); otherwise the rate with its Wilson 95% interval, because the honest
-// reading of a rare cell IS the interval (audits/audit-phase-19-triage.md §7
-// item 15).
+// reading of a rare cell IS the interval.
 function formatCellRate(cell: WilsonRateCell): string {
   return formatPct(cell.rate);
 }
 
 function formatCellInterval(cell: WilsonRateCell): string {
-  if (cell.wilson_low === null || cell.wilson_high === null) return "no data";
-  return `95% CI ${formatPct(cell.wilson_low)}–${formatPct(cell.wilson_high)}`;
+  if (cell.wilson_low === null || cell.wilson_high === null) {
+    return DASHBOARD_COPY.deductionIntervalMissing;
+  }
+  return fmt(DASHBOARD_COPY.deductionInterval, {
+    low: formatPct(cell.wilson_low),
+    high: formatPct(cell.wilson_high),
+  });
 }
 
 // The rare-cell badge. `advisory` is the eval module's own flag (numerator ≤ 7),
@@ -444,9 +470,12 @@ function advisoryCaveat(cell: WilsonRateCell) {
   return cell.advisory ? (
     <MetricCaveat
       tone="warn"
-      title={`Rare cell: the numerator is ${cell.numerator}. The point rate is statistically fragile at this scale — read the Wilson interval (${formatCellInterval(cell)}), not the percentage.`}
+      title={fmt(DASHBOARD_COPY.deductionRareCaveatTitle, {
+        numerator: formatInt(cell.numerator),
+        interval: formatCellInterval(cell),
+      })}
     >
-      rare — read the interval
+      {DASHBOARD_COPY.deductionRareCaveat}
     </MetricCaveat>
   ) : undefined;
 }
@@ -462,9 +491,11 @@ function nonCausationCaveat(cell: WilsonRateCell) {
   return (
     <MetricCaveat
       tone="note"
-      title={`Co-occurrence inside one meeting, not causation: the cell says no role-proof flag NAMED the ejected player, not that the vote ignored evidence. ${formatCellInterval(cell)}.`}
+      title={fmt(DASHBOARD_COPY.deductionNonCausationCaveatTitle, {
+        interval: formatCellInterval(cell),
+      })}
     >
-      proof-present ≠ proof-driven
+      {DASHBOARD_COPY.deductionNonCausationCaveat}
     </MetricCaveat>
   );
 }
@@ -514,48 +545,66 @@ function DeductionSection({
 
   return (
     <MetricSection
-      title="Proof vs inference"
-      description="How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT (Task 19.14; audits/audit-phase-19-triage.md §7 item 15). The same bytes are cut TWO different ways below — by whether the MEETING carried role proof, and by whether the proof named the EJECTED player. Both are correct; their denominators are different and are never mixed. Presence is co-occurrence, not causation: the split says what evidence was on the record, never that a vote followed it."
+      title={DASHBOARD_COPY.deductionTitle}
+      description={DASHBOARD_COPY.deductionDescription}
     >
       <div className="flex flex-col gap-4">
         <PartitionGroup
-          heading="Partition A · meeting-flag"
-          unit={`the unit is the MEETING (${formatInt(meetingFlag.meetings_total)} meetings)`}
+          heading={DASHBOARD_COPY.deductionPartitionA}
+          unit={fmt(DASHBOARD_COPY.deductionPartitionAUnit, {
+            meetings: formatInt(meetingFlag.meetings_total),
+          })}
         >
           <StatTile
-            label="Flagged-meeting accuracy"
+            label={DASHBOARD_COPY.deductionFlagged}
             value={formatCellRate(meetingFlag.flagged_meeting_accuracy)}
-            hint={`${formatInt(meetingFlag.flagged_ejections_impostor)} / ${formatInt(flaggedEjections)} ejections in the ${formatInt(meetingFlag.flagged_meetings)} meetings that carried role proof`}
+            hint={fmt(DASHBOARD_COPY.deductionFlaggedHint, {
+              impostor: formatInt(meetingFlag.flagged_ejections_impostor),
+              total: formatInt(flaggedEjections),
+              meetings: formatInt(meetingFlag.flagged_meetings),
+            })}
             caveat={advisoryCaveat(meetingFlag.flagged_meeting_accuracy)}
           />
           <StatTile
-            label="Unflagged-meeting accuracy"
+            label={DASHBOARD_COPY.deductionUnflagged}
             value={formatCellRate(meetingFlag.unflagged_meeting_accuracy)}
-            hint={`${formatInt(meetingFlag.unflagged_ejections_impostor)} / ${formatInt(unflaggedEjections)} ejections in the ${formatInt(meetingFlag.unflagged_meetings)} meetings with no role proof at all`}
+            hint={fmt(DASHBOARD_COPY.deductionUnflaggedHint, {
+              impostor: formatInt(meetingFlag.unflagged_ejections_impostor),
+              total: formatInt(unflaggedEjections),
+              meetings: formatInt(meetingFlag.unflagged_meetings),
+            })}
             lead
             caveat={advisoryCaveat(meetingFlag.unflagged_meeting_accuracy)}
           />
           <StatTile
-            label="Innocents ejected"
+            label={DASHBOARD_COPY.deductionInnocents}
             value={`${formatInt(meetingFlag.flagged_ejections_innocent)} / ${formatInt(meetingFlag.unflagged_ejections_innocent)}`}
-            hint="flagged / unflagged meetings"
+            hint={DASHBOARD_COPY.deductionInnocentsHint}
           />
         </PartitionGroup>
 
         <PartitionGroup
-          heading="Partition B · ejectee-specific proof"
-          unit={`the unit is the EJECTION (${formatInt(ejecteeProof.ejections_total)} ejections)`}
+          heading={DASHBOARD_COPY.deductionPartitionB}
+          unit={fmt(DASHBOARD_COPY.deductionPartitionBUnit, {
+            ejections: formatInt(ejecteeProof.ejections_total),
+          })}
         >
           <StatTile
-            label="Direct-proof accuracy"
+            label={DASHBOARD_COPY.deductionDirect}
             value={formatCellRate(ejecteeProof.direct_proof_accuracy)}
-            hint={`${formatInt(ejecteeProof.proof_present_impostor)} / ${formatInt(ejecteeProof.proof_present_ejections)} ejections where a vent sighting named the ejected player`}
+            hint={fmt(DASHBOARD_COPY.deductionDirectHint, {
+              impostor: formatInt(ejecteeProof.proof_present_impostor),
+              total: formatInt(ejecteeProof.proof_present_ejections),
+            })}
             caveat={advisoryCaveat(ejecteeProof.direct_proof_accuracy)}
           />
           <StatTile
-            label="Non-direct accuracy"
+            label={DASHBOARD_COPY.deductionNonDirect}
             value={formatCellRate(ejecteeProof.non_direct_accuracy)}
-            hint={`${formatInt(ejecteeProof.non_direct_impostor)} / ${formatInt(ejecteeProof.non_direct_ejections)} ejections with NO proof naming the ejected player`}
+            hint={fmt(DASHBOARD_COPY.deductionNonDirectHint, {
+              impostor: formatInt(ejecteeProof.non_direct_impostor),
+              total: formatInt(ejecteeProof.non_direct_ejections),
+            })}
             lead
             caveat={
               <>
@@ -565,59 +614,79 @@ function DeductionSection({
             }
           />
           <StatTile
-            label="Proof-present share"
+            label={DASHBOARD_COPY.deductionProofShare}
             value={formatPct(
               ejecteeProof.ejections_total > 0
                 ? ejecteeProof.proof_present_ejections / ejecteeProof.ejections_total
                 : null,
             )}
-            hint={`${formatInt(ejecteeProof.proof_present_ejections)} / ${formatInt(ejecteeProof.ejections_total)} ejections had ejectee-specific proof on the record`}
+            hint={fmt(DASHBOARD_COPY.deductionProofShareHint, {
+              present: formatInt(ejecteeProof.proof_present_ejections),
+              total: formatInt(ejecteeProof.ejections_total),
+            })}
           />
         </PartitionGroup>
 
         <PartitionGroup
-          heading="Supporting instrument"
-          unit="each cell carries its own denominator"
+          heading={DASHBOARD_COPY.deductionSupporting}
+          unit={DASHBOARD_COPY.deductionSupportingUnit}
         >
           <StatTile
-            label="Weak-flag-only convictions"
+            label={DASHBOARD_COPY.deductionWeakFlag}
             value={`${formatInt(weak.weak_flag_only_convictions)} / ${formatInt(weak.flag_named_ejections)}`}
-            hint={`${formatInt(weak.weak_flag_only_innocent)} of them ejected an innocent`}
+            hint={fmt(DASHBOARD_COPY.deductionWeakFlagHint, {
+              innocent: formatInt(weak.weak_flag_only_innocent),
+            })}
             caveat={advisoryCaveat(weak.weak_flag_only_rate)}
           />
           <StatTile
-            label="Turn → ballot consistency"
+            label={DASHBOARD_COPY.deductionConsistency}
             value={formatPct(report.turn_ballot_consistency.consistency_rate)}
-            hint={`${formatInt(report.turn_ballot_consistency.consistent_ballots)} / ${formatInt(report.turn_ballot_consistency.accusing_ballots)} accusing voters voted their accusation`}
+            hint={fmt(DASHBOARD_COPY.deductionConsistencyHint, {
+              consistent: formatInt(report.turn_ballot_consistency.consistent_ballots),
+              accusing: formatInt(report.turn_ballot_consistency.accusing_ballots),
+            })}
             caveat={
               <MetricCaveat
                 tone="note"
-                title="Follow-through, not virtue: an honest mid-meeting revision scores as an inconsistency, and a SKIP counts against the voter only when someone they accused was votable."
+                title={DASHBOARD_COPY.deductionConsistencyCaveatTitle}
               >
-                follow-through, not correctness
+                {DASHBOARD_COPY.deductionConsistencyCaveat}
               </MetricCaveat>
             }
           />
           <StatTile
-            label="Roll-call coverage"
+            label={DASHBOARD_COPY.deductionCoverage}
             value={`${formatPct(coverage.crew_pooled_coverage)} / ${formatPct(coverage.impostor_pooled_coverage)}`}
-            hint={`crew ${formatInt(coverage.crew_turns_with_whereabouts)}/${formatInt(coverage.crew_turns)} vs impostor ${formatInt(coverage.impostor_turns_with_whereabouts)}/${formatInt(coverage.impostor_turns)} turns (pooled)`}
+            hint={fmt(DASHBOARD_COPY.deductionCoverageHint, {
+              crewWith: formatInt(coverage.crew_turns_with_whereabouts),
+              crewTotal: formatInt(coverage.crew_turns),
+              impostorWith: formatInt(coverage.impostor_turns_with_whereabouts),
+              impostorTotal: formatInt(coverage.impostor_turns),
+            })}
             caveat={
               <MetricCaveat
                 tone="note"
-                title={`A behavioural tell from the templates' role-differentiated output contract — NOT an observation-firewall leak. Estimator matters: the per-meeting macro-average reads ${formatPct(coverage.impostor_macro_average_coverage)} for impostors against the pooled ${formatPct(coverage.impostor_pooled_coverage)}.`}
+                title={fmt(DASHBOARD_COPY.deductionCoverageCaveatTitle, {
+                  macro: formatPct(coverage.impostor_macro_average_coverage),
+                  pooled: formatPct(coverage.impostor_pooled_coverage),
+                })}
               >
-                pooled — macro differs
+                {DASHBOARD_COPY.deductionCoverageCaveat}
               </MetricCaveat>
             }
           />
           <StatTile
-            label="Engine-redirected ballots"
+            label={DASHBOARD_COPY.deductionRedirected}
             value={formatPct(report.redirected_ballots.redirected_ballot_share)}
-            hint={`${formatInt(report.redirected_ballots.redirected_ballots)} / ${formatInt(report.redirected_ballots.ballots_total)} ballots · ${formatInt(report.redirected_ballots.redirected_eject_ballots)} still ejected`}
+            hint={fmt(DASHBOARD_COPY.deductionRedirectedHint, {
+              redirected: formatInt(report.redirected_ballots.redirected_ballots),
+              total: formatInt(report.redirected_ballots.ballots_total),
+              ejected: formatInt(report.redirected_ballots.redirected_eject_ballots),
+            })}
           />
           <StatTile
-            label="Kill-scene evidence supply"
+            label={DASHBOARD_COPY.deductionSupply}
             value={
               supply === null
                 ? "n/a"
@@ -625,16 +694,18 @@ function DeductionSection({
             }
             hint={
               supply === null
-                ? "not supplied with this report"
-                : `crew-witnessed kills · ${formatInt(supply.co_present_crew_kills)} with a crewmate co-present`
+                ? DASHBOARD_COPY.deductionSupplyMissing
+                : fmt(DASHBOARD_COPY.deductionSupplyHint, {
+                    coPresent: formatInt(supply.co_present_crew_kills),
+                  })
             }
             caveat={
               supply === null ? (
                 <MetricCaveat
                   tone="note"
-                  title="The kill-craft fold needs a state-hash-verified walk over the committed replay directory, so a live tournament report carries no supply cells. Rebuild via scripts/build_sample_report.py to populate them."
+                  title={DASHBOARD_COPY.deductionSupplyMissingCaveatTitle}
                 >
-                  not supplied
+                  {DASHBOARD_COPY.deductionSupplyMissingCaveat}
                 </MetricCaveat>
               ) : (
                 advisoryCaveat(supply.crew_witnessed_kill_rate)
@@ -658,12 +729,12 @@ function AccusationCalibration({
 }) {
   return (
     <MetricSection
-      title="Accusation calibration"
-      description="Per-confidence-bin actual-impostor rate. A well-calibrated population tracks the dashed y=x diagonal. Mid-meeting accusation claims and final vote ballots are shown separately (they are different acts)."
+      title={DASHBOARD_COPY.calibrationTitle}
+      description={DASHBOARD_COPY.calibrationDescription}
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <CalibrationCurve
-          title="Accusation claims"
+          title={DASHBOARD_COPY.calibrationClaims}
           bins={report.accusation_claim_bins}
           total={report.accusation_claim_total}
           ece={report.accusation_claim_ece}
@@ -672,7 +743,7 @@ function AccusationCalibration({
           nBins={report.n_bins}
         />
         <CalibrationCurve
-          title="Vote ballots"
+          title={DASHBOARD_COPY.calibrationBallots}
           bins={report.vote_ballot_bins}
           total={report.vote_ballot_total}
           ece={report.vote_ballot_ece}
@@ -699,20 +770,23 @@ function AlibiFabrication({
   // covers the empty case — no frontend denominator special-case needed.
   return (
     <MetricSection
-      title="Alibi fabrication"
-      description="Share of impostor-authored alibis that survived §5.4 contradiction detection (a conservative lower bound). High = impostors getting away with fabricated cover; low = the detector catching it. 'n/a' when no impostor alibis were filed."
+      title={DASHBOARD_COPY.alibiTitle}
+      description={DASHBOARD_COPY.alibiDescription}
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile
-          label="Survival rate"
+          label={DASHBOARD_COPY.alibiSurvivalRate}
           value={formatPct(report.survival_rate)}
-          hint={`${formatInt(report.survived)} / ${formatInt(report.total_impostor_alibis)} survived`}
+          hint={fmt(DASHBOARD_COPY.alibiSurvivalRateHint, {
+            survived: formatInt(report.survived),
+            total: formatInt(report.total_impostor_alibis),
+          })}
         />
         <StatTile
-          label="Impostor alibis"
+          label={DASHBOARD_COPY.alibiTotal}
           value={formatInt(report.total_impostor_alibis)}
         />
-        <StatTile label="Survived" value={formatInt(report.survived)} />
+        <StatTile label={DASHBOARD_COPY.alibiSurvived} value={formatInt(report.survived)} />
       </div>
     </MetricSection>
   );
@@ -727,20 +801,20 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
     rubric.status === "ready" && rubric.view.stale ? (
       <MetricCaveat
         tone="warn"
-        title="The rubric's git_head no longer matches the served set's manifest — these scores may be stale. Re-run experiments/lab/rubric_score.py to refresh."
+        title={DASHBOARD_COPY.interestingnessStaleCaveatTitle}
       >
-        scores may be stale
+        {DASHBOARD_COPY.interestingnessStaleCaveat}
       </MetricCaveat>
     ) : undefined;
 
   return (
     <MetricSection
-      title="Interestingness"
-      description="Distribution of the rubric's 0–100 score (9p2i) — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel."
+      title={DASHBOARD_COPY.interestingnessTitle}
+      description={DASHBOARD_COPY.interestingnessDescription}
       action={staleAction}
     >
       {rubric.status === "loading" ? (
-        <p className="text-sm text-ink-500">Loading the interestingness rubric…</p>
+        <p className="text-sm text-ink-500">{DASHBOARD_COPY.interestingnessLoading}</p>
       ) : rubric.status === "absent" ? (
         // Post-flip copy (Task 19.13, sweeping what Task 19.9's default flip
         // falsified). This panel used to say the DEFAULT-served set was 4p1i and
@@ -749,20 +823,20 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
         // ONE-meeting (39 of 50 hold exactly one, 11 hold none). So this state is
         // reached by an explicit switch onto an unscored set, and it says which.
         <div className="rounded-lg border border-ink-200 bg-paper-1 px-4 py-6 text-center shadow-data">
-          <p className="font-semibold text-ink-900">No interestingness rubric.</p>
+          <p className="font-semibold text-ink-900">
+            {DASHBOARD_COPY.interestingnessAbsentTitle}
+          </p>
           <p className="mt-1 text-sm text-ink-500">
-            The selected set ships no rubric — expected for 4p1i, the fast
-            technical fixture (median 12 ticks, at most one meeting per game).
-            Switch back to the default 9p2i set, which ships one, or run{" "}
+            {DASHBOARD_COPY.interestingnessAbsentLead}{" "}
             <code className="font-mono text-xs">
               experiments/lab/rubric_score.py
             </code>{" "}
-            over this set to populate the histogram.
+            {DASHBOARD_COPY.interestingnessAbsentTail}
           </p>
         </div>
       ) : rubric.status === "error" ? (
         <p className="text-sm text-ink-500">
-          Couldn&apos;t load the rubric: {rubric.message}
+          {DASHBOARD_COPY.interestingnessError} {rubric.message}
         </p>
       ) : (
         <HistogramBars view={rubric.view} />
@@ -781,9 +855,7 @@ function HistogramBars({ view }: { view: RubricView }) {
 
   if (total === 0) {
     return (
-      <p className="text-sm text-ink-500">
-        The rubric is present but scored no games for this set.
-      </p>
+      <p className="text-sm text-ink-500">{DASHBOARD_COPY.interestingnessEmpty}</p>
     );
   }
 
@@ -797,7 +869,12 @@ function HistogramBars({ view }: { view: RubricView }) {
             <a
               key={bucket}
               href={highlightsHref(view.seedset, bucket)}
-              aria-label={`Open ${count} ${BUCKET_LABEL[bucket]}-interestingness game${count === 1 ? "" : "s"} (score ${BUCKET_RANGE[bucket]}) in the Highlights reel`}
+              aria-label={fmt(DASHBOARD_COPY.interestingnessBucketLink, {
+                count: formatInt(count),
+                bucket: BUCKET_LABEL[bucket],
+                plural: count === 1 ? "" : "s",
+                range: BUCKET_RANGE[bucket],
+              })}
               className="group flex flex-1 flex-col items-center gap-1 rounded-md p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
             >
               <span className="font-mono text-xs text-ink-500">{count}</span>
@@ -811,16 +888,17 @@ function HistogramBars({ view }: { view: RubricView }) {
                 {BUCKET_LABEL[bucket]}
               </span>
               <span className="font-mono text-3xs text-ink-500">
-                score {BUCKET_RANGE[bucket]}
+                {DASHBOARD_COPY.interestingnessScorePrefix} {BUCKET_RANGE[bucket]}
               </span>
             </a>
           );
         })}
       </div>
       <p className="mt-3 text-xs text-ink-500">
-        {formatInt(total)} games scored on{" "}
-        <span className="font-mono">{view.seedset}</span> · click a bucket to open
-        it in the Highlights reel →
+        {fmt(DASHBOARD_COPY.interestingnessFooter, {
+          games: formatInt(total),
+          set: view.seedset,
+        })}
       </p>
     </div>
   );
@@ -834,34 +912,34 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
   const byModel = Object.entries(dashboard.by_model);
   return (
     <MetricSection
-      title="Cost dashboard"
-      description="Tournament LLM spend roll-up (DESIGN.md §10.4). Per-(template, version) totals OVERLAP — the full game cost is attributed once per template a game ran — so they do not sum to the tournament total."
+      title={DASHBOARD_COPY.costTitle}
+      description={DASHBOARD_COPY.costDescription}
     >
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Total cost" value={formatUsd(dashboard.total_cost_usd)} />
+        <StatTile label={DASHBOARD_COPY.costTotal} value={formatUsd(dashboard.total_cost_usd)} />
         <StatTile
-          label="Mean / game"
+          label={DASHBOARD_COPY.costMean}
           value={formatUsd(dashboard.mean_cost_per_game)}
-          hint="target ≈ $0.20/game"
+          hint={DASHBOARD_COPY.costMeanHint}
         />
-        <StatTile label="Games" value={formatInt(dashboard.game_count)} />
+        <StatTile label={DASHBOARD_COPY.costGames} value={formatInt(dashboard.game_count)} />
         <StatTile
-          label="Tokens (in / out)"
+          label={DASHBOARD_COPY.costTokens}
           value={`${formatInt(dashboard.total_input_tokens)} / ${formatInt(dashboard.total_output_tokens)}`}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <h4 className="mb-1 text-ink-900">Per model</h4>
+          <h4 className="mb-1 text-ink-900">{DASHBOARD_COPY.costPerModel}</h4>
           {byModel.length === 0 ? (
-            <p className="text-sm text-ink-500">No model spend recorded.</p>
+            <p className="text-sm text-ink-500">{DASHBOARD_COPY.costPerModelEmpty}</p>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-ink-500">
                 <tr>
-                  <th className="py-1 pr-2 font-medium">Model</th>
-                  <th className="py-1 text-right font-medium">Cost</th>
+                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColModel}</th>
+                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColCost}</th>
                 </tr>
               </thead>
               <tbody className="font-mono text-ink-900">
@@ -877,17 +955,17 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
         </div>
 
         <div>
-          <h4 className="mb-1 text-ink-900">Per prompt (template · version)</h4>
+          <h4 className="mb-1 text-ink-900">{DASHBOARD_COPY.costPerPrompt}</h4>
           {dashboard.per_prompt_version.length === 0 ? (
-            <p className="text-sm text-ink-500">No prompt-version breakdown.</p>
+            <p className="text-sm text-ink-500">{DASHBOARD_COPY.costPerPromptEmpty}</p>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-ink-500">
                 <tr>
-                  <th className="py-1 pr-2 font-medium">Template</th>
-                  <th className="py-1 pr-2 font-medium">Version</th>
-                  <th className="py-1 text-right font-medium">Games</th>
-                  <th className="py-1 text-right font-medium">Cost</th>
+                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColTemplate}</th>
+                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColVersion}</th>
+                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColGames}</th>
+                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColCost}</th>
                 </tr>
               </thead>
               <tbody className="font-mono text-ink-900">
@@ -929,21 +1007,16 @@ export function TournamentDashboardView({
   rubric: RubricState;
 }) {
   return (
-    <main aria-label="Tournament dashboard" className="flex flex-col gap-4">
+    <main aria-label={DASHBOARD_COPY.ariaLabel} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-500">
-          The latest tournament eval report (DESIGN.md §11.3): balance outcome plus
-          the Phase 5 metrics, the typed conversion / gate surface, the
-          proof-vs-inference deduction instrument, and the interestingness
-          distribution.
-        </p>
+        <p className="text-sm text-ink-500">{DASHBOARD_COPY.intro}</p>
         <button
           type="button"
           onClick={onRefresh}
           disabled={isLoading}
           className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 text-sm font-semibold text-ink-900 shadow-chrome-1 transition-colors hover:bg-paper-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isLoading ? "Loading…" : "Refresh"}
+          {isLoading ? DASHBOARD_COPY.refreshBusy : DASHBOARD_COPY.refresh}
         </button>
       </div>
 
@@ -966,20 +1039,20 @@ export function TournamentDashboardView({
         // Loading: a fetch is in flight, or we are still initializing (no report,
         // no error yet) — never flash the no-report panel before the first fetch.
         <p role="status" aria-live="polite" className="text-ink-500">
-          Loading tournament report…
+          {DASHBOARD_COPY.loadingReport}
         </p>
       ) : (
         // No-report state: a definitive failure with no report. A 404 means no
         // tournament-eval-report.json exists in the configured eval dir yet; the
         // transport detail is surfaced beneath the guidance.
         <div className="rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-6 shadow-chrome-1">
-          <p className="font-semibold text-ink-900">No tournament report.</p>
+          <p className="font-semibold text-ink-900">{DASHBOARD_COPY.noReportTitle}</p>
           <p className="mt-1 text-sm text-ink-500">
-            A 404 means no{" "}
+            {DASHBOARD_COPY.noReportLead}{" "}
             <code className="font-mono text-xs">tournament-eval-report.json</code>{" "}
-            exists in the configured eval directory yet — run a tournament with{" "}
-            <code className="font-mono text-xs">scripts/run_tournament.py</code> to
-            produce one.
+            {DASHBOARD_COPY.noReportMiddle}{" "}
+            <code className="font-mono text-xs">scripts/run_tournament.py</code>{" "}
+            {DASHBOARD_COPY.noReportTail}
           </p>
           <p className="mt-2 font-mono text-xs text-ink-500">{error}</p>
         </div>

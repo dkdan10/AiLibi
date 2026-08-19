@@ -7,25 +7,29 @@
 //
 // Layout mirrors 05-meeting: a left "Accusation chain & transcript" panel (a
 // chain summary + the threaded TurnCard waterfall, indented by `reply_to`) and a
-// right column of "Ballots" + the dark "Resolution · §4.6" verdict.
+// right column of "Ballots" + the dark "Resolution" verdict card.
 //
-// THE §4.6 VERDICT renders from `GateView` — the REAL rule (plurality + at least
-// one leader ballot ≥ threshold 0.6; tie / SKIP-plurality → SKIP). The converge
-// mock's "simple majority of living voters" copy is WRONG and is NOT replicated.
+// THE VERDICT renders from `GateView` — the REAL vote-gate rule (plurality + at
+// least one leader ballot ≥ threshold 0.6; tie / SKIP-plurality → SKIP). The
+// converge mock's "simple majority of living voters" copy is WRONG and is NOT
+// replicated.
 //
-// FIREWALL: the outcome banner + vote correctness are ROLE-NEUTRAL (shape /
-// label, never red-vs-green); role-revealing extras (correctness, the post-hoc
-// impostor reveal) are Omniscient-only. The claim↔map cross-highlight (wired in
-// TurnCard → store → MapView) lights only the PUBLIC referent a sighting names.
+// FIREWALL: the outcome banner is ROLE-NEUTRAL (shape / label, never
+// red-vs-green); the post-hoc impostor reveal is Omniscient-only, and the
+// per-ballot correctness mark additionally waits for the outcome reveal (the
+// ballots panel threads `revealOutcome` down for it). The claim↔map
+// cross-highlight (wired in TurnCard → store → MapView) lights only the PUBLIC
+// referent a sighting names.
 //
-// THE EVIDENCE TAXONOMY (Task 19.11) governs the flag list at the bottom of the
-// transcript panel: role proof, cross-statement contradictions, and weak signals
-// are three different things and render as three different things. See
-// `EvidenceSection` below.
+// THE EVIDENCE TAXONOMY governs the flag list at the bottom of the transcript
+// panel: role proof, cross-statement contradictions, and weak signals are three
+// different things and render as three different things. See `EvidenceSection`
+// below.
 
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
+import { MEETING_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { tokens } from "../tokens";
@@ -181,7 +185,8 @@ function tallyBallots(ballots: readonly BallotView[]): { target: string; count: 
     });
 }
 
-// The REAL §4.6 readout from `GateView` (NEVER the mock's "simple majority"):
+// The REAL vote-gate readout from `GateView` (NEVER the mock's "simple
+// majority"):
 // plurality + at least one leader ballot ≥ threshold; tie / SKIP-plurality → SKIP.
 function gateReadout(gate: GateView): string {
   const conf = gate.leader_max_confidence.toFixed(2);
@@ -195,7 +200,7 @@ function gateReadout(gate: GateView): string {
   return `plurality leader ${gate.leader}, top ballot ${conf} < ${thr} threshold → SKIPPED`;
 }
 
-// The dark §4.6 resolution panel: tally, the real gate readout, a role-neutral
+// The dark resolution panel: tally, the real vote-gate readout, a role-neutral
 // outcome banner, and (Omniscient only) the post-hoc impostor reveal.
 function VerdictPanel({
   meeting,
@@ -221,7 +226,9 @@ function VerdictPanel({
     <section className="overflow-hidden rounded-lg border-2 border-ink-900 bg-ink-900 text-paper-0 shadow-chrome-1">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <h3 className="text-base text-paper-0">Resolution</h3>
-        <span className="font-mono text-3xs font-bold text-paper-2">§4.6</span>
+        <span className="font-mono text-3xs font-bold text-paper-2">
+          {MEETING_COPY.resolutionGateBadge}
+        </span>
       </div>
       <div className="space-y-3 p-4">
         <div className="flex flex-wrap items-baseline gap-2">
@@ -230,7 +237,7 @@ function VerdictPanel({
         </div>
 
         <p className="font-mono text-2xs leading-relaxed text-ink-300">
-          §4.6 — {gateReadout(meeting.gate)}
+          {MEETING_COPY.resolutionGateLead} — {gateReadout(meeting.gate)}
         </p>
 
         {/* Role-neutral outcome banner: never coloured by guilt. */}
@@ -525,10 +532,12 @@ function BallotsPanel({
   meeting,
   players,
   omniscient,
+  revealOutcome,
 }: {
   meeting: MeetingViewDTO;
   players: PlayerView[];
   omniscient: boolean;
+  revealOutcome: boolean;
 }) {
   return (
     <Panel title={`Ballots (${meeting.ballots.length})`}>
@@ -542,6 +551,7 @@ function BallotsPanel({
               ballot={ballot}
               players={players}
               omniscient={omniscient}
+              revealOutcome={revealOutcome}
             />
           ))}
         </div>
@@ -555,6 +565,9 @@ export function MeetingView() {
   const replay = useReplayStore((s) => s.currentReplay);
   const selectMeeting = useReplayStore((s) => s.selectMeeting);
   const perspective = useReplayStore((s) => s.perspective);
+  // The per-ballot correctness mark is outcome information, so it waits for the
+  // spectator's own reveal as well as for the omniscient perspective.
+  const revealOutcome = useReplayStore((s) => s.revealOutcome);
   const setHighlightedSighting = useReplayStore((s) => s.setHighlightedSighting);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -673,6 +686,7 @@ export function MeetingView() {
               meeting={meeting}
               players={replay.players}
               omniscient={omniscient}
+              revealOutcome={revealOutcome}
             />
             <VerdictPanel
               meeting={meeting}
