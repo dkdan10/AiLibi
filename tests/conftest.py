@@ -5,11 +5,12 @@ exports, which is none of it. The guard below clears the whole ``AILIBI_*``
 namespace plus the two provider keys and re-pins ``AILIBI_LLM_PROVIDER=fake``,
 so an ambient value on a developer box can neither red a test that CI passes
 nor -- the silent and worse direction -- make a test pass that would otherwise
-fail. It is applied twice over: once when this file is imported, which is
-before pytest imports any test module and therefore before collection-time
-reads, and again in :func:`_hermetic_ailibi_env`, which holds it for the run
-and restores the ambient environment at session end. Subprocess families that
-hand ``dict(os.environ)`` to a child inherit the cleaned parent for free.
+fail. It is applied twice over: in :func:`pytest_configure`, which runs before
+pytest imports any test module and so covers the reads that happen during
+collection, and again in :func:`_hermetic_ailibi_env` for the run itself. The
+ambient environment is given back in :func:`pytest_unconfigure`. Subprocess
+families that hand ``dict(os.environ)`` to a child inherit the cleaned parent
+for free.
 
 The provider pin is the load-bearing member of that set. Without it a suite
 run in a real-provider-configured environment (``AILIBI_LLM_PROVIDER=anthropic``
@@ -121,13 +122,31 @@ def _apply_hermetic_env(patch: pytest.MonkeyPatch) -> None:
     patch.setenv(ENV_PROVIDER, PROVIDER_FAKE)
 
 
-# Applied at conftest import — before pytest imports any test module, and therefore
-# before the module-level code that reads the environment during collection: the three
-# opt-in `skipif` gates directly, and tests/api/test_replay_loader.py through
-# `substrate_flag_snapshot()`. A fixture runs after collection and is too late for
-# those. The fixture below undoes this at session end.
-_COLLECTION_TIME_ENV: Final = pytest.MonkeyPatch()
-_apply_hermetic_env(_COLLECTION_TIME_ENV)
+#: Where the collection-time application parks its undo, on the Config that owns it.
+_COLLECTION_TIME_ENV: Final = pytest.StashKey[pytest.MonkeyPatch]()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Apply the guard before pytest imports any test module.
+
+    Registering this conftest runs ``pytest_configure`` immediately, which is ahead
+    of collecting the directory it governs -- and collection is where the too-late
+    reads live: the three opt-in ``skipif`` gates read the environment directly, and
+    tests/api/test_replay_loader.py reads it through ``substrate_flag_snapshot()`` at
+    module level. A fixture runs after all of that.
+    """
+
+    patch = pytest.MonkeyPatch()
+    _apply_hermetic_env(patch)
+    config.stash[_COLLECTION_TIME_ENV] = patch
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Give the ambient environment back, including after a collection error."""
+
+    patch = config.stash.get(_COLLECTION_TIME_ENV, None)
+    if patch is not None:
+        patch.undo()
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -156,7 +175,6 @@ def _hermetic_ailibi_env() -> Iterator[None]:
     with pytest.MonkeyPatch.context() as patch:
         _apply_hermetic_env(patch)
         yield
-    _COLLECTION_TIME_ENV.undo()
 
 
 @pytest.fixture(scope="session")

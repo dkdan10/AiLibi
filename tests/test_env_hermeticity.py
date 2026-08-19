@@ -1,6 +1,6 @@
 """The process environment the suite runs in.
 
-The root conftest's hermetic guard — applied when that file is imported and held by
+The root conftest's hermetic guard — applied in ``pytest_configure`` and held by
 ``_hermetic_ailibi_env`` — promises one thing: a test sees the environment CI
 exports, none of the ``AILIBI_*`` knobs and neither provider key, whatever the
 developer's shell exports. Checking that promise only from inside the suite would
@@ -17,7 +17,7 @@ import json
 import os
 import subprocess
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Final
 
@@ -109,7 +109,7 @@ def test_an_opt_in_gate_carries_its_credentials_and_endpoints() -> None:
 
 
 def test_a_gate_that_is_not_opted_in_carries_nothing() -> None:
-    """The gate itself survives (a skipif already read it); its payload does not."""
+    """The gate survives (it is the operator's switch); its payload does not."""
 
     dirty = {
         "AILIBI_RUN_REAL_PROVIDER_TESTS": _GATE_OFF,
@@ -155,20 +155,60 @@ def test_the_clear_is_derived_from_the_environment_not_from_a_known_list() -> No
 # --------------------------------------------------------------------------- #
 
 
-def _executed_at_import(source: str) -> Iterator[ast.AST]:
-    """Nodes reachable without entering a function body or a lambda.
+def _import_time_children(node: ast.AST) -> list[ast.AST]:
+    """The children of ``node`` that Python evaluates while importing the module.
 
-    Class bodies stay in: they run at import too. ``ast.walk`` cannot express this
-    because it has no way to prune a subtree.
+    Only a function's own body waits for a call; its decorators, its parameter
+    defaults and its annotations all run at definition time, and a lambda's defaults
+    do too. Class bodies run whole.
+    """
+
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        children: list[ast.AST] = [*node.decorator_list, node.args]
+        if node.returns is not None:
+            children.append(node.returns)
+        return children
+    if isinstance(node, ast.Lambda):
+        return [node.args]
+    return list(ast.iter_child_nodes(node))
+
+
+def _executed_at_import(source: str) -> Iterator[ast.AST]:
+    """Every node evaluated while Python imports ``source``.
+
+    ``ast.walk`` cannot express this: it has no way to keep a node's decorators and
+    drop its body.
     """
 
     stack: list[ast.AST] = list(ast.parse(source).body)
     while stack:
         node = stack.pop()
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
-            continue
         yield node
-        stack.extend(ast.iter_child_nodes(node))
+        stack.extend(_import_time_children(node))
+
+
+def _env_key_read(node: ast.AST) -> ast.expr | None:
+    """The key expression when ``node`` is an environment read, else ``None``.
+
+    Covers the three spellings this codebase and its dependencies use:
+    ``os.environ.get(name)``, ``os.environ[name]`` and ``os.getenv(name)``, each also
+    accepted through a ``from os import ...`` binding.
+    """
+
+    if isinstance(node, ast.Subscript) and _is_environ(node.value):
+        return node.slice
+    if not isinstance(node, ast.Call) or not node.args:
+        return None
+    func = node.func
+    if (
+        isinstance(func, ast.Attribute)
+        and func.attr == "get"
+        and _is_environ(func.value)
+    ):
+        return node.args[0]
+    if _is_named(func, "getenv"):
+        return node.args[0]
+    return None
 
 
 def _import_time_env_reads(source: str) -> set[str]:
@@ -181,17 +221,7 @@ def _import_time_env_reads(source: str) -> set[str]:
 
     found: set[str] = set()
     for node in _executed_at_import(source):
-        key: ast.expr | None = None
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "get"
-            and node.args
-            and _is_os_environ(node.func.value)
-        ):
-            key = node.args[0]
-        elif isinstance(node, ast.Subscript) and _is_os_environ(node.value):
-            key = node.slice
+        key = _env_key_read(node)
         if (
             isinstance(key, ast.Constant)
             and isinstance(key.value, str)
@@ -201,10 +231,18 @@ def _import_time_env_reads(source: str) -> set[str]:
     return found
 
 
-def _is_os_environ(node: ast.expr) -> bool:
+def _is_environ(node: ast.expr) -> bool:
+    return _is_named(node, "environ")
+
+
+def _is_named(node: ast.expr, attribute: str) -> bool:
+    """``os.<attribute>`` or a bare ``<attribute>`` imported from ``os``."""
+
+    if isinstance(node, ast.Name):
+        return node.id == attribute
     return (
         isinstance(node, ast.Attribute)
-        and node.attr == "environ"
+        and node.attr == attribute
         and isinstance(node.value, ast.Name)
         and node.value.id == "os"
     )
@@ -237,28 +275,49 @@ def test_every_import_time_env_read_is_an_allow_listed_gate() -> None:
     assert read_at_import == set(OPT_IN_GATES)
 
 
-def test_the_import_time_reader_sees_a_planted_gate_and_ignores_a_call_time_one() -> (
-    None
-):
-    """The extractor above bites: module level counts, function body does not."""
+def test_the_import_time_reader_sees_every_definition_time_spelling() -> None:
+    """The extractor bites on each read form, and only on definition-time positions.
+
+    A decorator and a parameter default both run while the ``def`` executes, so a
+    gate hidden in either is as import-time as a module-level assignment; a read in
+    the body is not.
+    """
 
     planted = (
         "import os\n"
+        "from os import environ, getenv\n"
         "import pytest\n"
-        'gate = pytest.mark.skipif(os.environ.get("AILIBI_PLANTED_GATE") != "1", "")\n'
-        'other = os.environ["AILIBI_PLANTED_SUBSCRIPT"]\n'
-        "def test_x() -> None:\n"
-        '    assert os.environ.get("AILIBI_READ_AT_CALL_TIME") is None\n'
+        'gate = pytest.mark.skipif(os.environ.get("AILIBI_PLANTED_GET") != "1", "")\n'
+        'subscript = os.environ["AILIBI_PLANTED_SUBSCRIPT"]\n'
+        'via_getenv = os.getenv("AILIBI_PLANTED_GETENV")\n'
+        'bare = environ.get("AILIBI_PLANTED_BARE_ENVIRON")\n'
+        'bare_getenv = getenv("AILIBI_PLANTED_BARE_GETENV")\n'
+        'inside_a_class = type("C", (), {"x": os.getenv("AILIBI_PLANTED_CLASS")})\n'
+        '@pytest.mark.skipif(os.getenv("AILIBI_PLANTED_DECORATOR") != "1", reason="")\n'
+        'def test_x(host: str = os.environ.get("AILIBI_PLANTED_DEFAULT", "")) -> None:\n'
+        '    assert os.environ.get("AILIBI_READ_IN_THE_BODY") is None\n'
+        '    assert getenv("AILIBI_ALSO_IN_THE_BODY") is None\n'
     )
     assert _import_time_env_reads(planted) == {
-        "AILIBI_PLANTED_GATE",
+        "AILIBI_PLANTED_GET",
         "AILIBI_PLANTED_SUBSCRIPT",
+        "AILIBI_PLANTED_GETENV",
+        "AILIBI_PLANTED_BARE_ENVIRON",
+        "AILIBI_PLANTED_BARE_GETENV",
+        "AILIBI_PLANTED_CLASS",
+        "AILIBI_PLANTED_DECORATOR",
+        "AILIBI_PLANTED_DEFAULT",
     }
 
 
 # --------------------------------------------------------------------------- #
-# 4. the fixture itself, perturbed from outside the process                    #
+# 4. the guard itself, perturbed from outside the process                      #
 # --------------------------------------------------------------------------- #
+
+
+def _node_id(test: Callable[..., None]) -> str:
+    module = Path(__file__).resolve().relative_to(_REPO_ROOT).as_posix()
+    return f"{module}::{test.__name__}"
 
 
 def test_the_fixture_bites_on_a_planted_ambient_environment() -> None:
@@ -294,15 +353,53 @@ def test_the_fixture_bites_on_a_planted_ambient_environment() -> None:
         "green for the wrong reason"
     )
 
-    node_id = (
-        f"{Path(__file__).resolve().relative_to(_REPO_ROOT).as_posix()}"
-        f"::{test_the_ailibi_surface_is_exactly_what_the_fixture_allows.__name__}"
-    )
+    # BOTH in-process checks: the AILIBI_* surface and the provider keys. Selecting
+    # only the first would leave the paid-path half of the guarantee unexercised
+    # under dirty input, since the parent already runs it on a clean environment.
+    node_ids = [
+        _node_id(test)
+        for test in (
+            test_the_ailibi_surface_is_exactly_what_the_fixture_allows,
+            test_provider_keys_survive_only_behind_the_real_provider_gate,
+        )
+    ]
     run = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", node_id],
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *node_ids],
         cwd=_REPO_ROOT,
         env=child_env,
         capture_output=True,
         text=True,
     )
     assert run.returncode == 0, run.stdout + run.stderr
+    assert "2 passed" in run.stdout, run.stdout + run.stderr
+
+
+def test_a_programmatic_run_gives_the_ambient_environment_back(tmp_path: Path) -> None:
+    """The guard is borrowed, not taken: a host process keeps its own environment.
+
+    ``pytest.main`` inside a live process is the case that would notice — the clear
+    is applied in ``pytest_configure`` and returned in ``pytest_unconfigure``, which
+    pytest runs even when the session ends early.
+    """
+
+    planted = {
+        "AILIBI_MAX_COST_USD": "0.001",
+        "ANTHROPIC_API_KEY": "planted-not-a-real-key",
+    }
+    recorded = tmp_path / "environment-after-the-run.json"
+    script = (
+        "import json, os, pathlib, pytest\n"
+        f"pytest.main([{_node_id(test_the_ailibi_surface_is_exactly_what_the_fixture_allows)!r},"
+        " '-q', '-p', 'no:cacheprovider'])\n"
+        f"pathlib.Path({str(recorded)!r}).write_text("
+        f"json.dumps({{name: os.environ.get(name) for name in {sorted(planted)!r}}}))\n"
+    )
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=_REPO_ROOT,
+        env={**os.environ, **planted},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(recorded.read_text()) == planted
