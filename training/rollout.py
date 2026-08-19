@@ -1,4 +1,4 @@
-"""Per-episode rollout records + behavioral descriptors (Task 15.8).
+"""Per-episode rollout records + behavioral descriptors.
 
 The training env (:mod:`training.env`) drives the REAL production loop
 (:class:`orchestrator.game.HeadlessGame`) and writes a replay. This module turns
@@ -20,16 +20,20 @@ so :class:`training.rewards.ShapedReward` scores from the TYPED log and a traine
 never re-derives rewards from replay bytes. Roles come from the re-seeded state
 (replays are role-free by firewall design), never from the replay.
 
-Episode horizon (Task 15.8 definition of done): a meeting runner is ALWAYS
-installed by the env, so ``meeting_runner=None`` truncation
-(``MEETING_PHASE_REACHED``) is structurally unreachable. ``full_game`` is the one
-episode boundary: such an episode is ``truncated`` only when the game never
-reached ``GAME_OVER`` (the tick budget capped it). Task 19.19 retired the
-``first_meeting`` opt-in — the 15.13 fallback-(b) seam it rode was never taken by
-a production caller. Silent
-truncation is structurally unreachable, and :func:`EpisodeRollout.complete`
-(``winner is not None and not truncated``) is the single gate the reward channel
-reads so no fitness term ever scores a truncated episode as a full game.
+Episode horizon: a meeting runner is ALWAYS installed by the env, so
+``meeting_runner=None`` truncation (``MEETING_PHASE_REACHED``) is structurally
+unreachable. ``full_game`` is the one episode boundary: such an episode is
+``truncated`` only when the game never reached ``GAME_OVER`` — the tick budget
+capped it, and a capped game writes no ``game_over`` row. Truncation is never
+SILENT, and the mechanism that enforces that is named: a replay recording a
+``game_over`` winner the reconstruction never reaches raises
+:class:`RolloutReconstructionError` rather than returning a ``TICK_BUDGET``
+episode, and :func:`EpisodeRollout.complete` (``winner is not None and not
+truncated``) is the single gate the reward channel reads, so no fitness term
+ever scores a truncated episode as a full game.
+
+Provenance: introduced by Task 15.8; Task 19.19 retired the ``first_meeting``
+boundary, leaving ``full_game`` alone.
 """
 
 from __future__ import annotations
@@ -649,18 +653,24 @@ def reconstruct_episode(
         outcome = "TICK_BUDGET"
         truncated = True
 
-    # Cross-check the winner against the recorded game_over row when present (the
-    # reconstruction is authoritative; a mismatch is a corrupted replay).
-    if (
-        game_end is not None
-        and not truncated
-        and game_end.winner is not None
-        and game_end.winner != winner
-    ):
-        raise RolloutReconstructionError(
-            f"seed {seed}: reconstructed winner {winner!r} != recorded "
-            f"game_over winner {game_end.winner!r}"
-        )
+    # The recorded game_over row is the producer's claim; the reconstruction is
+    # authoritative. A recorded terminal the walk never reaches means trailing
+    # tick rows are missing — dropping them shortens the walk without breaking
+    # the state-hash chain, so nothing upstream catches it. A legitimate
+    # tick-budget cap writes no game_over row at all
+    # (orchestrator.game.HeadlessGame), so neither clause can fire on one.
+    if game_end is not None and game_end.winner is not None:
+        if truncated:
+            raise RolloutReconstructionError(
+                f"seed {seed}: replay records game_over winner "
+                f"{game_end.winner!r} but the reconstructed walk never reached "
+                "GAME_OVER (truncated tick stream)"
+            )
+        if game_end.winner != winner:
+            raise RolloutReconstructionError(
+                f"seed {seed}: reconstructed winner {winner!r} != recorded "
+                f"game_over winner {game_end.winner!r}"
+            )
 
     descriptors = _build_descriptors(
         events=events,

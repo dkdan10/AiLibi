@@ -2,7 +2,7 @@
 
 Drives ``main`` directly (no subprocess). Confirms the committed 9p2i + 4p1i sets
 PASS (exit 0), that ``--json`` emits the machine-readable report, and that every
-one of the eight checks has a synthetic violation that flips the exit code to 1
+one of the ten checks has a synthetic violation that flips the exit code to 1
 and names the failing check. Byte-editable checks corrupt a copied mini-set; the
 two kill checks (which the engine cannot emit by construction) and the railroad
 check inject a synthetic reconstruction / report via monkeypatch.
@@ -455,6 +455,32 @@ def test_fails_on_forged_game_over_outcome(
     _rewrite_lines(mini / "replay-seed-0.jsonl", forge)
     payload = _fail_and_get_check(mini, capsys)
     assert "all_games_reach_game_over" in _failing_names(payload)
+
+
+def test_fails_on_truncated_tick_stream(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Seed 12 ends `tick, tick, tick, game_over`: dropping its last tick row
+    # keeps the game_over row AND the state-hash chain, so the gate's ONLY
+    # remaining lever is the reconstruction-reached-GAME_OVER clause.
+    mini = _mini(tmp_path, seeds=(12,))
+    assert validity_gate.main([str(mini)]) == 0  # green before the edit
+    capsys.readouterr()
+
+    path = mini / "replay-seed-12.jsonl"
+    lines = path.read_text().splitlines()
+    last_tick = max(
+        index
+        for index, line in enumerate(lines)
+        if json.loads(line).get("kind") == "tick"
+    )
+    del lines[last_tick]
+    path.write_text("\n".join(lines) + "\n")
+
+    assert validity_gate.main([str(mini)]) == 1
+    text = capsys.readouterr().out
+    assert "Validity gate FAILED: all_games_reach_game_over" in text
+    assert "truncated_replay" in text
 
 
 def test_require_zero_cost_flag(

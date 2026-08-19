@@ -2,10 +2,11 @@
 
 Pins: the episode record carries every named behavioral descriptor with values
 FIXED on a scripted (frozen-FSM, fake-provider) game; the reconstruction is
-state-hash-verified against the recorded replay and fails loud on drift; the
-descriptors + hash chain are byte-deterministic; and a completed full game is
-not truncated (Task 19.19 retired the first-meeting boundary, leaving the
-tick-budget cap as the only truncation source).
+state-hash-verified against the recorded replay and fails loud both on hash
+drift and on a truncated tick stream (a recorded ``game_over`` the walk never
+reaches); the descriptors + hash chain are byte-deterministic; and a completed
+full game is not truncated (Task 19.19 retired the first-meeting boundary,
+leaving the tick-budget cap as the only truncation source).
 """
 
 from __future__ import annotations
@@ -137,6 +138,41 @@ def test_reconstruction_fails_loud_on_state_hash_drift() -> None:
         replay_path.write_text("\n".join(tampered) + "\n", encoding="utf-8")
 
         with pytest.raises(RolloutReconstructionError):
+            reconstruct_episode(
+                replay_path,
+                game_map=game_map,
+                seed=4,
+                num_players=_NUM_PLAYERS,
+                num_impostors=_NUM_IMPOSTORS,
+                tasks_per_crewmate=_TASKS,
+            )
+
+
+def test_reconstruction_fails_loud_on_a_truncated_tick_stream() -> None:
+    """A recorded ``game_over`` the walk never reaches is corruption, not a cap.
+
+    Dropping trailing tick rows shortens the walk without breaking the
+    state-hash chain, so every per-tick hash still verifies and the terminal
+    cross-check is the only thing that can catch it. Without it the episode came
+    back as a silent ``outcome="TICK_BUDGET" truncated=True``.
+    """
+
+    game_map = load_canonical_map()
+    with tempfile.TemporaryDirectory(prefix="ailibi-truncate-") as tmp:
+        env = _env(output_dir=Path(tmp))
+        env.rollout(4)
+        replay_path = Path(tmp) / "replay-seed-4.jsonl"
+
+        lines = replay_path.read_text(encoding="utf-8").splitlines()
+        last_tick = max(
+            index
+            for index, line in enumerate(lines)
+            if json.loads(line).get("kind") == "tick"
+        )
+        del lines[last_tick]
+        replay_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with pytest.raises(RolloutReconstructionError, match="truncated tick stream"):
             reconstruct_episode(
                 replay_path,
                 game_map=game_map,

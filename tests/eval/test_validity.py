@@ -1,9 +1,10 @@
 """Unit tests for eval/validity.py (Task 15.1).
 
-Covers each of the eight gate checks with a PASS input and a synthetic VIOLATION
+Covers each of the ten gate checks with a PASS input and a synthetic VIOLATION
 that flips ``passed`` to ``False`` (a gate that cannot fail is not a gate), the
-reconstruction cross-check against the tested win-condition home, and the
-baseline-4 reproduction of ``run_validity_gate`` over the committed sets.
+reconstruction cross-check against the tested win-condition home, the
+truncated-replay rejection (a recorded ``game_over`` row the walk never earns),
+and the baseline-4 reproduction of ``run_validity_gate`` over the committed sets.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import pytest
 
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.validity import (
+    TRUNCATED_REPLAY_REASON,
     ValidityCheck,
     _GameReconstruction,
     _KillFact,
@@ -66,11 +68,12 @@ def _win_check(
     *,
     first_zero: int | None = None,
     game_over_tick: int | None = 7,
+    winner: str | None = "CREWMATES",
 ) -> WinConditionSelfCheck:
     return WinConditionSelfCheck(
         game_id=f"headless-seed-{seed}",
         seed=seed,
-        winner="CREWMATES",
+        winner=winner,  # type: ignore[arg-type]
         reason="CREWMATE_EJECT",
         first_zero_impostor_tick=first_zero,
         game_over_tick=game_over_tick,
@@ -121,6 +124,25 @@ def _mini_set(tmp_path: Path, *, seeds: Sequence[int] = (0, 1, 2)) -> Path:
     return tmp_path
 
 
+def _truncate_tick_stream(replay_path: Path) -> None:
+    """Drop the replay's LAST tick row, keeping its ``game_over`` row.
+
+    The corruption shape the gate must reject: the recorded terminal survives
+    while the reconstruction stops a tick short. The state-hash chain still
+    verifies (a shorter walk breaks no link), so only the game-over check can
+    catch it.
+    """
+
+    lines = replay_path.read_text(encoding="utf-8").splitlines()
+    for index in range(len(lines) - 1, -1, -1):
+        if json.loads(lines[index]).get("kind") == "tick":
+            del lines[index]
+            break
+    else:  # pragma: no cover - the committed fixture always has tick rows
+        raise AssertionError(f"{replay_path} carries no tick row to drop")
+    replay_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _replace_first_game(report: TournamentReport, game: GameReport) -> TournamentReport:
     return report.model_copy(update={"games": (game, *report.games[1:])})
 
@@ -149,6 +171,42 @@ def test_all_games_reach_game_over_fails_without_game_over() -> None:
     )
     assert not check.passed
     assert any("no game_over" in v for v in check.violations)
+
+
+def test_all_games_reach_game_over_fails_when_the_walk_stops_short() -> None:
+    # A game_over row is RECORDED but the reconstruction stopped short: trailing
+    # tick rows were dropped, which shortens the walk without breaking the chain.
+    check = check_all_games_reach_game_over(
+        [_recon(0), _recon(4, reconstructed_winner=None, reconstructed_reason=None)]
+    )
+    assert not check.passed
+    assert any(
+        TRUNCATED_REPLAY_REASON in v
+        and "seed 4" in v
+        and "never reached GAME_OVER" in v
+        for v in check.violations
+    )
+
+
+def test_all_games_reach_game_over_fails_on_a_winnerless_game_over_row() -> None:
+    check = check_all_games_reach_game_over(
+        [_recon(5, win_check=_win_check(5, winner=None))]
+    )
+    assert not check.passed
+    assert any(
+        TRUNCATED_REPLAY_REASON in v and "seed 5" in v and "names no winner" in v
+        for v in check.violations
+    )
+
+
+def test_all_games_reach_game_over_counts_only_reconstructed_terminals() -> None:
+    # The truncated game must never be summarised as one that reached game_over.
+    check = check_all_games_reach_game_over(
+        [_recon(0), _recon(1, reconstructed_winner=None, reconstructed_reason=None)]
+    )
+    assert check.facts["games_total"] == 2
+    assert check.facts["games_reached_game_over"] == 1
+    assert check.summary.startswith("1/2 games reached a reconstructed game_over")
 
 
 def test_all_games_reach_game_over_fails_on_win_condition_regression() -> None:
@@ -777,6 +835,26 @@ def test_run_validity_gate_reproduces_4p1i_close() -> None:
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 0.78
     assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 39
+
+
+def test_run_validity_gate_rejects_a_truncated_replay(tmp_path: Path) -> None:
+    # seed 12 ends `tick, tick, tick, game_over`, so dropping its last tick row
+    # leaves every OTHER check green — the gate-can-fail proof that this fixture
+    # isolates the truncation clause.
+    mini = _mini_set(tmp_path, seeds=(12,))
+    _truncate_tick_stream(mini / "replay-seed-12.jsonl")
+    report = run_validity_gate(mini)
+    assert not report.passed
+    assert report.failing_checks() == ("all_games_reach_game_over",)
+    check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
+    assert any(TRUNCATED_REPLAY_REASON in v for v in check.violations)
+    assert check.facts["games_reached_game_over"] == 0
+
+
+def test_run_validity_gate_passes_the_untruncated_fixture(tmp_path: Path) -> None:
+    # The same one-game set, unedited: the truncation rejection above is not the
+    # fixture merely being unacceptable to the gate.
+    assert run_validity_gate(_mini_set(tmp_path, seeds=(12,))).passed
 
 
 def test_run_validity_gate_never_crashes_on_corrupt_input(tmp_path: Path) -> None:

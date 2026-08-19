@@ -23,10 +23,12 @@ does not read the committed ``tournament-eval-report.json`` at all.
 The ten gate checks (each named + individually reported), per the Task-15.1
 Definition of Done plus the Phase-14-close §1 betrayal row:
 
-1. ``all_games_reach_game_over`` — every recorded game wrote a ``game_over`` row,
-   the §6.3 win-condition invariant holds (:mod:`eval.win_condition_selfcheck`),
-   and the recorded ``winner`` / ``reason`` match the engine's reconstructed
-   ``GameOverEvent`` (a forged outcome label survives byte-identity otherwise).
+1. ``all_games_reach_game_over`` — every recorded game wrote a ``game_over`` row
+   the reconstruction walk actually REACHES, the §6.3 win-condition invariant
+   holds (:mod:`eval.win_condition_selfcheck`), and the recorded ``winner`` /
+   ``reason`` match the engine's reconstructed ``GameOverEvent``. A forged
+   outcome label and a truncated tick stream both survive byte-identity; both
+   fail here (truncation under the ``truncated_replay`` reason token).
 2. ``meeting_rate_and_resolution`` — ``meeting_rate >= 0.60`` and every triggered
    meeting resolved (no failed call aborted a meeting without a resolved entry).
 3. ``no_duplicate_meeting_rows`` — no game records two meeting rows for the same
@@ -147,6 +149,12 @@ FactValue: TypeAlias = bool | int | float | str | None
 # The Stage-A meeting-enablement floor (audits/audit-phase-14-close.md §1;
 # eval.meeting_quality docstring): the HARD threshold this gate enforces.
 MEETING_RATE_FLOOR: Final[float] = 0.60
+# The reason token every truncated-replay violation carries. A recorded
+# ``game_over`` row the reconstruction never earns (the walk stopped short, or
+# the row names no winner) is corruption, not a legitimate short game: the
+# engine writes that row only after a ``GameOverEvent``, and a tick-budget cap
+# returns without writing one at all (orchestrator.game.HeadlessGame).
+TRUNCATED_REPLAY_REASON: Final[str] = "truncated_replay"
 # The audit's supporting statistical-power floor on resolved meetings. Reported
 # on the meeting check's facts but NOT hard-gated: the CLIs accept an arbitrary
 # (possibly small) replay set, whereas >= 30 is a power note about the canonical
@@ -491,20 +499,35 @@ def _reconstruct_set(sample_dir: Path) -> list[_GameReconstruction]:
 def check_all_games_reach_game_over(
     reconstructions: Sequence[_GameReconstruction],
 ) -> ValidityCheck:
-    """Every game wrote a ``game_over`` row, holds the §6.3 win invariant, and
-    records the outcome the engine actually reconstructs.
+    """Every game's terminal state is RECORDED, RECONSTRUCTED, and consistent.
 
-    The recorded ``game_over`` ``winner`` / ``reason`` are metadata NOT covered by
-    the state-hash chain, so a forged label survives byte-identity. This check
-    compares them against the engine's reconstructed :class:`GameOverEvent`
-    (which ``scripts/measure_baseline.py`` folds into the win split + R1), so a
-    tampered outcome fails here.
+    A game passes only when the recording and the engine agree it ended: the
+    replay carries a ``game_over`` row naming a winner, the reconstruction walk
+    reaches that terminal state, the two outcomes match, and the §6.3 win
+    invariant holds.
+
+    Three failure shapes, each of which byte-identity alone lets through. A
+    recorded ``game_over`` ``winner`` / ``reason`` is metadata NOT covered by the
+    state-hash chain, so a forged label survives reconstruction — comparing it
+    against the reconstructed :class:`GameOverEvent` (which
+    ``scripts/measure_baseline.py`` folds into the win split + R1) fails it here.
+    Dropping trailing tick rows shortens the walk without breaking the chain, so
+    a truncated replay keeps its ``game_over`` row while the walk stops short —
+    presence of the row is not entitlement to it, and both that shape and a row
+    naming no winner fail as ``truncated_replay``. The check cannot false-positive
+    on a legitimate short game: ``orchestrator.game.HeadlessGame`` writes the row
+    only after the engine fires a ``GameOverEvent`` and returns without one when
+    the tick budget caps the game, so a recorded terminal the walk never reaches
+    is unconditionally corruption. Mirrors the corpus walk's rejection in
+    :mod:`training.anchor_study`.
     """
 
     violations: list[str] = []
     for game in reconstructions:
         check = game.win_check
-        if check.game_over_tick is None:
+        recorded_terminal = check.game_over_tick is not None
+        walked_terminal = game.reconstructed_winner is not None
+        if not recorded_terminal:
             violations.append(
                 f"seed {game.seed}: no game_over row (game never reached game_over)"
             )
@@ -514,7 +537,18 @@ def check_all_games_reach_game_over(
                 f"tick {check.first_zero_impostor_tick} but game_over at tick "
                 f"{check.game_over_tick}"
             )
-        if game.reconstructed_winner is not None and (
+        if recorded_terminal and check.winner is None:
+            violations.append(
+                f"seed {game.seed}: {TRUNCATED_REPLAY_REASON} — the recorded "
+                "game_over row names no winner (partial recording)"
+            )
+        if recorded_terminal and not walked_terminal:
+            violations.append(
+                f"seed {game.seed}: {TRUNCATED_REPLAY_REASON} — game_over recorded "
+                f"at tick {check.game_over_tick} but the reconstructed walk never "
+                "reached GAME_OVER (truncated tick stream)"
+            )
+        elif walked_terminal and (
             check.winner != game.reconstructed_winner
             or check.reason != game.reconstructed_reason
         ):
@@ -524,12 +558,19 @@ def check_all_games_reach_game_over(
                 f"{game.reconstructed_reason} (forged game_over label)"
             )
     total = len(reconstructions)
-    reached = sum(1 for g in reconstructions if g.win_check.game_over_tick is not None)
+    # Reconstruction-confirmed terminals only: a recorded row the walk never
+    # earned must never be summarised as a game that reached game_over.
+    reached = sum(
+        1
+        for g in reconstructions
+        if g.win_check.game_over_tick is not None and g.reconstructed_winner is not None
+    )
     return ValidityCheck(
         name="all_games_reach_game_over",
         passed=not violations,
         summary=(
-            f"{reached}/{total} games reached game_over with a consistent win condition"
+            f"{reached}/{total} games reached a reconstructed game_over with a "
+            "consistent win condition"
         ),
         violations=tuple(violations),
         facts={"games_total": total, "games_reached_game_over": reached},
@@ -1217,6 +1258,7 @@ def _check_unavailable(name: str, error: str | None) -> ValidityCheck:
 __all__ = [
     "FactValue",
     "MEETING_RATE_FLOOR",
+    "TRUNCATED_REPLAY_REASON",
     "ValidityCheck",
     "ValidityGateReport",
     "assemble_tournament_report",
