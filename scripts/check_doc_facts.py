@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Four checks. Each accumulates precise errors; all of them are reported
+Eleven checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -70,6 +70,30 @@ together, so one run names every drifted fact rather than the first.
    (``meetings.manager.guard_ballot_citation``), so the pin would be prose the
    committed bytes refute. Frontend copy is deliberately NOT scanned — the
    spectator surface has its own owner.
+5. **Private dialect on the front door.** Nothing in README.md may require
+   another document to parse. Every term in :data:`_DIALECT_TERMS` either does
+   not appear in README.md at all, or its FIRST occurrence sits inside a link
+   to its own ``docs/glossary.md`` entry — and that entry must exist, as a
+   heading whose GitHub anchor the link names.
+6. **The phase table and the history account for every phase.** Every
+   ``tasks/phase-*.md`` must be linked from README.md or docs/history.md, so a
+   new phase document cannot appear without reaching the front door.
+7. **The audits index is complete.** ``audits/README.md`` must link every
+   top-level ``audits/*.md`` exactly once, link nothing that no longer exists,
+   and name every subdirectory of ``audits/`` as a unit.
+8. **The results table agrees with the reading guide.** The numbers are stated
+   once: every row of README.md's results table must appear in
+   docs/reading-guide.md's numbers table with the SAME figure, so a later edit
+   cannot drift one from the other.
+9. **Volatile counts carry an as-of stamp.** A count that changes without any
+   commit touching the prose (merged pull requests, commits, tests) must be
+   stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
+   and shape are checked, never its value: no doc check may reach the network.
+10. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
+    on the next edit; the guide cites heading anchors and symbols instead.
+11. **Every relative link resolves.** Across README.md, docs/history.md,
+    docs/glossary.md, audits/README.md and docs/reading-guide.md, each relative
+    markdown target (fragment stripped) must name a path that exists.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -83,9 +107,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -110,6 +136,24 @@ from orchestrator.replay import (  # noqa: E402
 _README: Final = "README.md"
 _ENV_EXAMPLE: Final = ".env.example"
 _LADDER_TIP_AUDIT: Final = "audits/audit-phase-18-close.md"
+_GLOSSARY: Final = "docs/glossary.md"
+_HISTORY: Final = "docs/history.md"
+_READING_GUIDE: Final = "docs/reading-guide.md"
+_AUDITS_INDEX: Final = "audits/README.md"
+_AUDITS_DIR: Final = "audits"
+_TASKS_DIR: Final = "tasks"
+_PHASE_GLOB: Final = "phase-*.md"
+# The front door, as a set of documents: every relative link in any of them must
+# resolve, and the phase/results/dialect checks read from this same set.
+_LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
+    _README,
+    _HISTORY,
+    _GLOSSARY,
+    _AUDITS_INDEX,
+    _READING_GUIDE,
+)
+# The documents that between them must account for every phase contract.
+_PHASE_DOCUMENTS: Final[tuple[str, ...]] = (_README, _HISTORY)
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
 
@@ -172,6 +216,119 @@ _ENV_ASSIGNMENT: Final = re.compile(r"^#?[ \t]*(AILIBI_[A-Z0-9_]+)=", re.MULTILI
 _GRADUATED_NOTE_MARKER: Final = "# GRADUATED LEVERS"
 _BLANK_LINE: Final = re.compile(r"\n[ \t]*\n")
 
+# Every private-dialect term the front door may not use without defining, as
+# (label, occurrence pattern, the glossary anchor its first use must link).
+# Adding a term is one line here plus its glossary heading. The first six were
+# counted in README.md by the 2026-08-19 portfolio review; the rest were
+# defined nowhere in the tree at all.
+_DIALECT_TERMS: Final[tuple[tuple[str, str, str], ...]] = (
+    ("baseline", r"\bbaselines?\b", "baseline-n-the-reference-recording"),
+    (
+        "adopting record",
+        r"\badopting record\b",
+        "adopting-record-the-recording-that-adopts-a-change",
+    ),
+    ("ladder tip", r"\bladder tip\b", "the-ladder-tip-the-newest-reference-recording"),
+    (
+        "graduated",
+        r"\bgraduat(?:e|es|ed|ing|ion)\b",
+        "graduated-lever-a-setting-deleted-into-the-default",
+    ),
+    (
+        "NO-FLIP",
+        r"\bNO-FLIP\b|\bno mover flip\b",
+        "no-flip-the-scripted-policy-stays-the-default",
+    ),
+    (
+        "canary denominator",
+        r"\bcanary denominator\b",
+        "canary-denominator-the-held-out-monitoring-corpus",
+    ),
+    ("referee", r"\breferees?\b", "referee-the-selection-gate"),
+    ("slate", r"\bslates?\b", "slate-the-set-of-arms-in-a-campaign"),
+    ("arm", r"\barms?\b", "arm-one-measured-configuration"),
+    ("mover", r"\bmovers?\b", "mover-the-tactical-policy"),
+    ("champion", r"\bchampions?\b", "champion-the-best-arm-kept-opt-in"),
+    (
+        "conviction economy",
+        r"\bconviction[- ]econom\w+",
+        "conviction-economy-what-a-meeting-does-with-evidence",
+    ),
+    (
+        "supply and conversion floors",
+        r"\b(?:supply|conversion) floors?\b",
+        "supply-and-conversion-floors",
+    ),
+    ("absence prior", r"\babsence prior\b", "absence-prior"),
+    (
+        "roll-call round",
+        r"\broll-call round\b",
+        "roll-call-round-the-whereabouts-round",
+    ),
+    (
+        "endpoint-band whereabouts exemption",
+        r"\bendpoint-band\b",
+        "endpoint-band-whereabouts-exemption",
+    ),
+    (
+        "flag-minting",
+        r"\bflag-mint\w*",
+        "flag-minting-stamping-a-contradiction-into-the-transcript",
+    ),
+    ("starved-economy shape", r"\bstarved-econom\w+", "starved-economy-shape"),
+    ("screening-tier shortlist", r"\bscreening-tier\b", "screening-tier-shortlist"),
+    ("two-axis owner ruling", r"\btwo-axis owner ruling\b", "two-axis-owner-ruling"),
+    (
+        "training-time-runner tier",
+        r"\btraining-time-runner\b",
+        "training-time-runner-tier",
+    ),
+    (
+        "evidence-gated default flip",
+        r"\bevidence-gated default flip\b",
+        "evidence-gated-default-flip",
+    ),
+)
+# A markdown link whose target is the glossary, with the anchor it names and the
+# span of its link TEXT — the only place a dialect term counts as defined.
+_GLOSSARY_LINK: Final = re.compile(rf"\[([^\]]*)\]\({re.escape(_GLOSSARY)}#([\w-]+)\)")
+# Any markdown (or image) link, with its target. Targets are checked for
+# resolution; absolute and in-page ones are skipped by :func:`relative_targets`.
+_MARKDOWN_LINK: Final = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+_ABSOLUTE_TARGET: Final = re.compile(r"\A(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
+# GitHub's heading-anchor rule, reduced to what this tree's headings need:
+# lowercase, drop everything but word characters, spaces and hyphens, then
+# spaces become hyphens.
+_ANCHOR_STRIP: Final = re.compile(r"[^\w\- ]")
+_HEADING: Final = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+
+# Counts that change without any commit touching the prose. Each must be stated
+# with an as-of stamp in its own sentence; the VALUE is never checked, because
+# no doc check may reach the network to learn the true one.
+_VOLATILE_COUNTS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    (
+        "merged pull requests",
+        re.compile(r"\d[\d,]*\+?\s+merged\s+(?:pull requests|PRs)\b", re.IGNORECASE),
+    ),
+    ("commits", re.compile(r"\d[\d,]*\+?\s+commits\b", re.IGNORECASE)),
+    ("tests", re.compile(r"\d[\d,]*\+?\s+tests\b", re.IGNORECASE)),
+)
+_AS_OF: Final = re.compile(r"as of (\d{4}-\d{2}-\d{2})")
+
+# A `path.ext:NN` citation — the shape that rots on the next edit of the file it
+# names. The extensions are the ones this tree's prose actually cites.
+_LINE_CITATION: Final = re.compile(
+    r"\b[\w./-]*\w\.(?:py|md|ts|tsx|js|json|jsonl|j2|sh|yml|yaml|toml|cfg|txt):\d+"
+)
+
+# The results tables, located by their header row rather than by heading text,
+# so a section rename does not silently disable the agreement check.
+_RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
+# Below this the README table is a stub, and row-by-row agreement would pass
+# vacuously — a check that cannot fail is not a gate.
+_MIN_RESULT_ROWS: Final = 4
+_TABLE_RULE_CELL: Final = re.compile(r"\A:?-{2,}:?\Z")
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -207,6 +364,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_VOTE_CORRECTNESS_MODULE} agrees with {len(_RECORDED_SETS)} "
         "recorded eval reports."
     )
+    print(
+        f"Front door verified: {len(_DIALECT_TERMS)} private-dialect terms are "
+        f"absent from {_README} or linked to {_GLOSSARY}; the phase table and "
+        f"{_HISTORY} account for every {_TASKS_DIR}/{_PHASE_GLOB}; "
+        f"{_AUDITS_INDEX} indexes every top-level {_AUDITS_DIR}/*.md once; the "
+        f"{_README} results figures equal {_READING_GUIDE}'s; every volatile "
+        f"count is as-of stamped; {_READING_GUIDE} carries no file:line "
+        f"citation; and every relative link in {len(_LINKED_DOCUMENTS)} "
+        "front-door documents resolves."
+    )
     return 0
 
 
@@ -218,8 +385,15 @@ def check_facts(repo_root: Path) -> list[str]:
     if readme is not None:
         check_sample_provenance(repo_root, readme, errors)
         check_ladder_tip(repo_root, readme, errors)
+        check_dialect_terms(repo_root, readme, errors)
+        check_results_agreement(repo_root, readme, errors)
+        check_volatile_stamps(readme, errors)
     check_lever_registry(repo_root, errors)
     check_vote_correctness_sentinel(repo_root, errors)
+    check_phase_coverage(repo_root, errors)
+    check_audits_index(repo_root, errors)
+    check_guide_line_citations(repo_root, errors)
+    check_relative_links(repo_root, errors)
     return errors
 
 
@@ -912,6 +1086,339 @@ def read_vote_correctness_block(
             )
         return None
     return decoded
+
+
+def check_dialect_terms(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """No private-dialect term may sit undefined on the front door.
+
+    The rule the portfolio review asked for: nothing in README.md may require
+    another document to parse. A term either does not appear at all, or its
+    FIRST occurrence is inside a link to its own glossary entry — first,
+    because that is where a reader meets it, and a definition offered after the
+    fact is a definition the reader has already needed.
+
+    Both halves bite. An occurrence outside a glossary link fails, and a link
+    to a glossary heading that does not exist fails, so the entry cannot be
+    deleted out from under the link either.
+    """
+
+    glossary = read_document(repo_root, _GLOSSARY, errors)
+    anchors = heading_anchors(glossary) if glossary is not None else set()
+    links = {
+        (match.start(1), match.end(1)): match.group(2)
+        for match in _GLOSSARY_LINK.finditer(readme)
+    }
+
+    for label, pattern, anchor in _DIALECT_TERMS:
+        first = re.search(pattern, readme, re.IGNORECASE)
+        if first is None:
+            continue
+        if glossary is not None and anchor not in anchors:
+            errors.append(
+                f"{_GLOSSARY}: no entry anchored '#{anchor}' for the "
+                f"private-dialect term {label!r}, which {_README} uses — the "
+                "link on the front door would land nowhere."
+            )
+        covering = [
+            named
+            for (start, end), named in links.items()
+            if start <= first.start() and first.end() <= end
+        ]
+        if anchor in covering:
+            continue
+        errors.append(
+            f"{_README}:{line_number(readme, first.start())}: the "
+            f"private-dialect term {label!r} first appears as "
+            f"{first.group(0)!r} outside a glossary link — its first "
+            f"occurrence must read [{label} …]({_GLOSSARY}#{anchor}), or the "
+            "term must not appear on the front door at all."
+        )
+
+
+def check_phase_coverage(repo_root: Path, errors: list[str]) -> None:
+    """Every phase contract is reachable from the front door.
+
+    The README's phase table and ``docs/history.md`` split the work — the table
+    links a close audit where one exists, the history always links the contract
+    — so neither alone accounts for the phases. Together they must: a phase
+    document nobody linked is a phase the front door silently forgot.
+    """
+
+    phase_files = sorted((repo_root / _TASKS_DIR).glob(_PHASE_GLOB))
+    if not phase_files:
+        errors.append(
+            f"{_TASKS_DIR}/{_PHASE_GLOB}: no phase contracts found — the phase "
+            "coverage check has nothing to check, which is drift rather than a "
+            "pass."
+        )
+        return
+
+    linked: set[Path] = set()
+    for document in _PHASE_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
+            continue
+        linked.update(
+            resolved for _, resolved in relative_targets(repo_root, document, text)
+        )
+
+    for path in phase_files:
+        if path in linked:
+            continue
+        errors.append(
+            f"{_TASKS_DIR}/{path.name}: linked from neither "
+            f"{' nor '.join(_PHASE_DOCUMENTS)} — every phase contract must be "
+            "reachable from the front door, its close audit or its own file."
+        )
+
+
+def check_audits_index(repo_root: Path, errors: list[str]) -> None:
+    """``audits/README.md`` indexes the audit corpus exactly, both ways.
+
+    An un-indexed audit is an orphan (the state this index was written to end);
+    an indexed audit that no longer exists is a dead link a reader follows. A
+    second row for the same file is drift too — two lines describing one record
+    are two lines to keep in step.
+
+    Directories under ``audits/`` are named as units rather than expanded: the
+    review directory alone holds dozens of files, and enumerating them here
+    would be a second index to rot.
+    """
+
+    index = read_document(repo_root, _AUDITS_INDEX, errors)
+    if index is None:
+        return
+    audits_dir = repo_root / _AUDITS_DIR
+    on_disk = {
+        path.name
+        for path in audits_dir.glob("*.md")
+        if path.name != Path(_AUDITS_INDEX).name
+    }
+    if not on_disk:
+        errors.append(
+            f"{_AUDITS_DIR}/*.md: no audits found beside {_AUDITS_INDEX} — the "
+            "index check has nothing to check."
+        )
+        return
+
+    indexed: dict[str, int] = {}
+    for target, _ in relative_targets(repo_root, _AUDITS_INDEX, index):
+        if "/" in target or not target.endswith(".md"):
+            continue
+        indexed[target] = indexed.get(target, 0) + 1
+
+    for name in sorted(on_disk - set(indexed)):
+        errors.append(
+            f"{_AUDITS_INDEX}: {name} is not indexed — every top-level audit "
+            "needs a row, or the corpus goes back to being unnavigable."
+        )
+    for name in sorted(set(indexed) - on_disk):
+        errors.append(
+            f"{_AUDITS_INDEX}: indexes {name}, which no longer exists in "
+            f"{_AUDITS_DIR}/."
+        )
+    for name, count in sorted(indexed.items()):
+        if count > 1:
+            errors.append(
+                f"{_AUDITS_INDEX}: {name} is indexed {count} times — one record, "
+                "one row, or the two descriptions drift apart."
+            )
+
+    for directory in sorted(
+        path.name for path in audits_dir.iterdir() if path.is_dir()
+    ):
+        if f"{directory}/" not in index:
+            errors.append(
+                f"{_AUDITS_INDEX}: does not name the {directory}/ directory — "
+                "sub-directories are indexed as units, but they are indexed."
+            )
+
+
+def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The results are stated once: two tables, one set of figures.
+
+    The reading guide's numbers table is canonical and the README quotes from
+    it. Matching row by row on the claim text means a figure edited in one file
+    and not the other fails here rather than shipping as two answers to the
+    same question.
+    """
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    if guide is None:
+        return
+    readme_rows = results_rows(readme)
+    guide_rows = results_rows(guide)
+    if readme_rows is None or guide_rows is None:
+        missing = _README if readme_rows is None else _READING_GUIDE
+        errors.append(
+            f"{missing}: no results table with a "
+            f"'{' | '.join(_RESULTS_TABLE_HEADER)}' header row — the two "
+            "tables cannot be compared, so the figures have no shared source."
+        )
+        return
+    if len(readme_rows) < _MIN_RESULT_ROWS:
+        errors.append(
+            f"{_README}: the results table holds {len(readme_rows)} rows, "
+            f"fewer than the {_MIN_RESULT_ROWS} this check needs to mean "
+            "anything — agreement over a stub is not agreement."
+        )
+    for claim, figure in readme_rows.items():
+        if claim not in guide_rows:
+            errors.append(
+                f"{_README}: the results row {claim!r} has no matching row in "
+                f"{_READING_GUIDE}'s numbers table, which owns the canonical "
+                "statement of every figure."
+            )
+        elif guide_rows[claim] != figure:
+            errors.append(
+                f"{_README}: the results row {claim!r} reads {figure!r}, but "
+                f"{_READING_GUIDE} records {guide_rows[claim]!r} for the same "
+                "claim."
+            )
+
+
+def check_volatile_stamps(readme: str, errors: list[str]) -> None:
+    """Every count that ages without an edit is stated with an as-of date.
+
+    "364 merged pull requests" is true on the day it is written and quietly
+    false afterwards. Requiring the stamp in the SAME sentence keeps the reader
+    from having to guess how old the number is, and keeps a later editor from
+    updating a count while leaving a two-month-old date beside it.
+
+    The stamp's shape is checked, never its value: reading the true count means
+    reaching the network, which no doc check may do.
+    """
+
+    for label, pattern in _VOLATILE_COUNTS:
+        for match in pattern.finditer(readme):
+            sentence = sentence_around(readme, match.start(), match.end())
+            stamps = _AS_OF.findall(sentence)
+            if not stamps:
+                errors.append(
+                    f"{_README}:{line_number(readme, match.start())}: the "
+                    f"{label} count {match.group(0)!r} carries no 'as of "
+                    "YYYY-MM-DD' stamp in its own sentence — a bare count of "
+                    "something that changes daily is stale the week after it "
+                    f"is written — “{sentence.strip()}”."
+                )
+                continue
+            for stamp in stamps:
+                try:
+                    date.fromisoformat(stamp)
+                except ValueError:
+                    errors.append(
+                        f"{_README}:{line_number(readme, match.start())}: the "
+                        f"{label} count is stamped 'as of {stamp}', which is "
+                        "not a calendar date."
+                    )
+
+
+def check_guide_line_citations(repo_root: Path, errors: list[str]) -> None:
+    """The reading guide cites anchors and symbols, never line numbers.
+
+    A ``file.ext:NN`` citation is correct only until the next edit of the file
+    it names, and the guide carried two dozen of them. The zero is pinned here
+    so they cannot come back one at a time.
+    """
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    if guide is None:
+        return
+    for match in _LINE_CITATION.finditer(guide):
+        errors.append(
+            f"{_READING_GUIDE}:{line_number(guide, match.start())}: the "
+            f"line-number citation {match.group(0)!r} — cite a heading anchor "
+            "or a symbol instead; a line number is wrong on the next edit of "
+            "the file it names."
+        )
+
+
+def check_relative_links(repo_root: Path, errors: list[str]) -> None:
+    """Every relative link on the front door resolves to a real path.
+
+    Offline by construction: the fragment is stripped and the path is stat-ed.
+    External URLs are not this check's business — nothing here reaches the
+    network — but a broken relative link is the front door telling a reader to
+    go somewhere that does not exist.
+    """
+
+    for document in _LINKED_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
+            continue
+        for target, resolved in relative_targets(repo_root, document, text):
+            if resolved.exists():
+                continue
+            errors.append(
+                f"{document}: the relative link {target!r} resolves to "
+                f"{resolved.relative_to(repo_root) if resolved.is_relative_to(repo_root) else resolved}"
+                ", which does not exist."
+            )
+
+
+def relative_targets(
+    repo_root: Path, document: str, text: str
+) -> Iterator[tuple[str, Path]]:
+    """Each relative markdown target in ``text``, with the path it names.
+
+    Absolute URLs and in-page anchors are skipped — neither names a file. The
+    fragment is dropped before resolution, so ``docs/glossary.md#term`` is the
+    glossary file; whether the anchor exists is
+    :func:`check_dialect_terms`'s question, not this one.
+    """
+
+    base = posixpath.dirname(document)
+    for match in _MARKDOWN_LINK.finditer(text):
+        target = match.group(1)
+        if target.startswith("#") or _ABSOLUTE_TARGET.match(target):
+            continue
+        path = target.split("#", 1)[0]
+        if not path:
+            continue
+        yield target, repo_root / posixpath.normpath(posixpath.join(base, path))
+
+
+def heading_anchors(markdown: str) -> set[str]:
+    """The GitHub anchor of every heading in ``markdown``."""
+
+    return {
+        _ANCHOR_STRIP.sub("", heading).strip().lower().replace(" ", "-")
+        for heading in _HEADING.findall(markdown)
+    }
+
+
+def results_rows(markdown: str) -> dict[str, str] | None:
+    """The ``What`` -> ``Figure`` rows of the document's results table.
+
+    Located by its header cells rather than by the heading above it, so
+    renaming the section does not silently disable the agreement check.
+    ``None`` when no such table exists (format drift the caller reports).
+    """
+
+    rows: dict[str, str] | None = None
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 2:
+            if rows is not None:
+                break
+            continue
+        if rows is None:
+            if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
+                rows = {}
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        rows[cells[0]] = cells[1]
+    return rows
+
+
+def table_cells(line: str) -> list[str] | None:
+    """The cells of one markdown table row, or ``None`` if it is not one."""
+
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return None
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
 
 
 def lever_section(text: str) -> str | None:
