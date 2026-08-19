@@ -280,11 +280,21 @@ function codeOnly(source: string): string {
 }
 
 /**
- * 1-based line numbers in `source` that call `fetch(` directly.
+ * A call to the GLOBAL fetch: bare, or reached through one of the three names
+ * that denote the global object. `window.fetch(…)` bypasses `getJson` exactly as
+ * a bare call does, so the gate has to see it.
+ *
+ * The lookbehind anchors the whole match, which is what keeps an unrelated
+ * method out: `store.prefetch(…)` and `client.fetch(…)` are not the global.
+ */
+const GLOBAL_FETCH_CALL =
+  /(?<![\w$.])(?:(?:window|globalThis|self)\.)?fetch\s*\(/;
+
+/**
+ * 1-based line numbers in `source` that call the global fetch directly.
  *
  * Pure — takes the path and the text, reads nothing — so the scan below can be
- * pointed at a planted fixture. The lookbehind is what keeps `store.prefetch(…)`
- * and `client.fetch(…)` out of it: only a bare `fetch(` counts.
+ * pointed at a planted fixture.
  */
 function rawFetchLines(relPath: string, source: string): number[] {
   if (relPath === FETCH_OWNER) {
@@ -292,7 +302,7 @@ function rawFetchLines(relPath: string, source: string): number[] {
   }
   return codeOnly(source)
     .split("\n")
-    .map((line, index) => (/(?<![\w$.])fetch\s*\(/.test(line) ? index + 1 : 0))
+    .map((line, index) => (GLOBAL_FETCH_CALL.test(line) ? index + 1 : 0))
     .filter((line) => line > 0);
 }
 
@@ -344,6 +354,24 @@ describe("no component reaches past the client", () => {
     ).toEqual([]);
     expect(
       rawFetchLines("components/Planted.tsx", "await client.fetch(url);"),
+    ).toEqual([]);
+  });
+
+  it("bites on the global reached by name, not only on a bare call", () => {
+    // `window.fetch(…)` skips `getJson` — the version gate, the static-bundle
+    // URL seam and `ApiError` — exactly as a bare call does.
+    expect(
+      rawFetchLines("components/Planted.tsx", "await window.fetch(url);"),
+    ).toEqual([1]);
+    expect(
+      rawFetchLines("components/Planted.tsx", "await globalThis.fetch(url);"),
+    ).toEqual([1]);
+    expect(
+      rawFetchLines("components/Planted.tsx", "await self.fetch(url);"),
+    ).toEqual([1]);
+    // …and still not an unrelated method that happens to be called `fetch`.
+    expect(
+      rawFetchLines("components/Planted.tsx", "await store.window.fetch(url);"),
     ).toEqual([]);
   });
 
