@@ -68,14 +68,25 @@ Every target in §4 is ratified as written, not recomputed from whatever the pin
 say. §3.2 lists the four cells where the pin and the review disagree, keeps both numbers, and
 names the cause.
 
-**Precedence over anything that still quotes a superseded cell.** This memo is the only
-normative source for the cells, the bars and the rule; where a contract, a generated prompt or
-an audit still quotes a review-measured figure that §3.2 has replaced — at ratification that is
-`tasks/phase-20.md`'s Task-20.36 read paragraph, which still names `148/723 = 20.5%`,
-`36.5% grounded` and `53/529 = 10.0%` — the memo governs and the contract is re-anchored to
-`152/723 = 21.0%`, `124/234 = 53.0%` at tick and `19/458` at its pre-dispatch review, the same
-coordination pass this phase already runs before every dispatch. A stale quotation downstream
-is a re-anchor, never a second baseline.
+**Precedence over anything that still states a superseded cell OR an older rule.** This memo is
+the only normative source for the cells, the bars and the decision rule. Where a contract, a
+generated prompt or an audit disagrees with it, the memo governs and the contract is re-anchored
+at its pre-dispatch review — the same coordination pass this phase already runs before every
+dispatch. At ratification the known divergences, so the pass has a written list rather than a
+search:
+
+* **Cells** — `tasks/phase-20.md`'s Task-20.36 read paragraph still names `148/723 = 20.5%`,
+  `36.5% grounded` and `53/529 = 10.0%`; the pins are `152/723 = 21.0%`, `124/234 = 53.0%` at
+  tick and `19/458` (§3.2).
+* **The partial-adoption rule** — Task 20.34's DoD (`tasks/phase-20.md:5533`) still asks which
+  levers "may graduate on their own cell even under a FINDING verdict", and Task 20.36's
+  (`:5800`) still says "a partial adoption graduates exactly the eligible subset". §6 rules
+  otherwise, for the mechanical reason stated there: partial adoption yields a published
+  per-lever verdict and graduates nothing, because a subset slate matches neither committed
+  record's substrate stamp. Both contracts are re-anchored to "publish the eligible list; the
+  gates stay" before their tasks dispatch.
+
+A stale statement downstream is a re-anchor, never a second baseline and never a second rule.
 
 ## 2. The instruments
 
@@ -301,11 +312,24 @@ Bar 3's "every set < 8%": on samples/4p1i the margin is |0.08 − 0.128| = 0.048
 of 1/78 = 0.013, and on ml_corpus/4p1i |0.08 − 0.203| = 0.123 against 1/79 = 0.013, so both are
 powered by a factor of 4 to 10 — but if the recorded denominator falls far enough that
 1/n exceeds the margin, that set's clause becomes advisory at the record and is reported that
-way, exactly like the n=3 cell. Bar 6's "0 on every set" and bar 5's "100% of surviving sides"
-are bright lines with no margin to shrink: any denominator decides them, including an empty one,
-which passes vacuously and is reported as such. Bars 4 and 7 are pooled and take no per-set
-clause. 20.36 applies the `1/n > |target − baseline|` test to each per-set clause on the numbers
-it recorded and labels the result before reading the verdict.
+way, exactly like the n=3 cell. Bars 4 and 7 are pooled and take no per-set clause. 20.36
+applies the `1/n > |target − baseline|` test to each per-set RATE clause on the numbers it
+recorded and labels the result before reading the verdict.
+
+**Bars 5 and 6 are COUNT bars, and the granularity test does not reach them — but a shrunken
+denominator is still reportable.** The granularity test compares a rate step against the
+distance between a rate baseline and a rate target; bar 5 ("no ungrounded surviving STRONG
+sighting side") and bar 6 ("no fabricated completion line") have a target of ZERO occurrences
+and are decided on the numerator, where there is no threshold for a step to straddle: one
+occurrence fails, none passes, at any denominator, and an empty denominator passes vacuously.
+Registering them under the rate test would say a cell of 1/10 is "advisory" for a
+zero-occurrence target, which is not a measurement statement. What IS a real risk is the one
+you can see in bar 5's own wording — a lever may pass the bar by shrinking the population
+rather than by grounding it — so both bars are reported WITH their denominators beside the
+verdict, and a pass whose denominator fell below 10% of its baseline-6 value (bar 5: under 24
+of 234 surviving sides; bar 6: under 46 of 458 rendered rows on samples/9p2i) is labelled
+**SUPPRESSED-NOT-FIXED** in the record audit. The verdict does not change — suppressing an
+ungrounded flag is the intended repair, not a dodge — but the mechanism is never left implicit.
 
 ## 5. Secondary cells (observed, reported, never gated)
 
@@ -336,10 +360,17 @@ Reported in the record audit beside the bars; none of them can decide the verdic
 ## 6. The decision rule [PROPOSED — ratified at merge]
 
 **ADOPTED (the levers graduate; the ladder tip moves to baseline 7)** iff bars 1, 2, 3, 5, 6
-and 7 are met AND at least three of the four fixtures flip AND bar 4 is met or the sole-flag
-meeting count has fallen below 20 pooled (a class too small to judge precision is a class that
-has closed). **FINDING (the levers stay toggles; the tip stays at baseline 6; the bytes and
-the read are committed as the finding record)** otherwise.
+and 7 are met AND at least three of the four fixtures flip AND bar 4 is met or **the pooled
+denominator of `sole_flag_precision.per_victim_precision` has fallen below 20** (a class too
+small to judge precision is a class that has closed). **FINDING (the levers stay toggles; the
+tip stays at baseline 6; the bytes and the read are committed as the finding record)**
+otherwise.
+
+The waiver names that field and no other. `SoleFlagPrecisionCells` also exposes
+`per_meeting_sole_flag_meetings`, which counts MEETINGS whose only STRONG flag kind is
+`alibi_vs_sighting` rather than EJECTIONS whose ejectee carried only that kind; the two
+increment under different predicates and merely both equal 82 on baseline 6. The waiver is
+"the class bar 4 measures has closed", so it reads bar 4's own denominator — 82 pooled today.
 
 **Partial adoption is a per-lever VERDICT, not a partial graduation.** A lever is ELIGIBLE
 when, conjunctively: (i) its named bar is met on the recorded bytes, (ii) 20.34's published
@@ -550,14 +581,17 @@ pin-over-review differences asserted still to carry BOTH numbers.
 It prints `0 mismatches` and **exits 0 only then** — a mismatch names the cell and exits 1, so
 a CI job or an operator cannot read drift as a pass. The interval check closes the CLASS, not
 the instance: every bracketed pair in the memo must belong to a claim the reader re-runs, so a
-value in a spelling the parser skips is a failure rather than a silent omission. Five
-perturbations, every one verified to bite: a changed cell digit (`7/76` → `8/76`) names the
+value in a spelling the parser skips is a failure rather than a silent omission — and every
+check records a mismatch rather than asserting, so `python -O`, which strips asserts, cannot
+disable a gate. Six perturbations, every one verified to bite (the last under `-O`): a changed cell digit (`7/76` → `8/76`) names the
 cell and exits 1; a changed interval (`[0.2886, 0.4553]` → `[1.0000, 1.0000]`) prints
 `interval 46/125: 0.3680 1.0000 1.0000 != (0.368, 0.2886, 0.4553)`; an interval re-spelled out
 of the parsed shape trips "20 intervals quoted but only 19 are in a shape this reader can
 re-run"; bumping a render-census figure by one prints `render census: the memo no longer states
 18,319`; and deleting the I-13 row prints both `I-13: the memo does not state 4 exhibits` and
-`table inventory changed`. Task 20.22's PR pastes its output.
+`table inventory changed`; and re-spelling an interval as `[0.2886,0.4553]` under
+`uv run python -O` still exits 1 with both `20 intervals quoted but only 19 are in a shape this
+reader can re-run` and `only 19 intervals parsed`. Task 20.22's PR pastes its output.
 
 ```bash
 uv run python - <<'EOF'
@@ -661,16 +695,21 @@ for label in CELLS:
     print(f"OK  {label}: " + "  ".join(str(c) for c in stated[label]))
 
 CLAIM = re.compile(r"(\d+)/(\d+) = (\d\.\d{4}) \[(\d\.\d{4}), (\d\.\d{4})\]")
-BRACKET = re.compile(r"\[\d\.\d{4}, \d\.\d{4}\]")
+BRACKET = re.compile(r"\[\s*\d\.\d{4}\s*,\s*\d\.\d{4}\s*\]")
 prose = FLAT.split("## 12.")[0]  # §12 quotes the helper's tuples, not intervals
 intervals = CLAIM.findall(prose)
 # Every bracketed pair in the memo must belong to a claim this reader re-runs:
 # equality closes the CLASS, so no new spelling can slip a value past the gate.
-assert len(BRACKET.findall(prose)) == len(intervals), (
-    f"{len(BRACKET.findall(prose))} intervals quoted but only {len(intervals)} are in a "
-    "shape this reader can re-run"
-)
-assert len(intervals) >= 20, f"only {len(intervals)} intervals parsed — a claim went missing"
+# Recorded as mismatches, never as asserts — `python -O` strips asserts, and a
+# gate that vanishes with an interpreter flag is not a gate.
+quoted_pairs = len(BRACKET.findall(prose))
+if quoted_pairs != len(intervals):
+    mismatches.append(
+        f"{quoted_pairs} intervals quoted but only {len(intervals)} are in a shape this "
+        "reader can re-run"
+    )
+if len(intervals) < 20:
+    mismatches.append(f"only {len(intervals)} intervals parsed — a claim went missing")
 for num, den, rate, low, high in intervals:
     want = tuple(round(value, 4) for value in _wilson_interval(int(num), int(den)))
     if want != (float(rate), float(low), float(high)):
