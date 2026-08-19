@@ -459,6 +459,45 @@ class ReplayPolicyMismatchError(RuntimeError):
         )
 
 
+class EmptyReplayError(ValueError):
+    """A replay file carries no replay records at all.
+
+    A zero-byte file — or one holding only blank lines — parses to zero entries,
+    which the summary reader would otherwise reduce to an ordinary 0-tick,
+    no-winner game: the picker would advertise it, and the cost summary would
+    count it and dilute the mean. It is not a game, it is an unusable file (a
+    half-created or truncated-to-nothing artifact), so the reader raises rather
+    than synthesizing one (AGENTS.md "no silent fallbacks"). The collection
+    views skip and log it; a direct :meth:`ReplayLoader.load_replay` of the same
+    game id still fails loud. Subclasses ``ValueError`` so it lands in the same
+    per-file guard as an unparseable row.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(f"replay file holds no replay records: {path}")
+
+
+def _log_skipped_replay(path: Path, exc: Exception) -> None:
+    """Log the one WARNING that records a replay the collection views skipped.
+
+    Names the path and which class of failure it hit, so an operator can tell
+    the three apart without opening the file: ``doubled write`` (the
+    :class:`ReplayLog.CorruptedFileError` pattern of two games concatenated),
+    ``no replay records`` (:class:`EmptyReplayError`), or ``unparseable row``
+    (any other ``ValueError`` — a truncated JSON line, a schema-invalid row via
+    pydantic's ``ValidationError``, or an unknown entry kind).
+    """
+
+    if isinstance(exc, EmptyReplayError):
+        reason = "no replay records"
+    elif isinstance(exc, ReplayLog.CorruptedFileError):
+        reason = "doubled write"
+    else:
+        reason = "unparseable row"
+    _LOGGER.warning("Skipping unreadable replay file %s (%s): %s", path, reason, exc)
+
+
 def _recorded_tactical_policy(
     entries: Sequence[object],
 ) -> TacticalPolicyStamp | None:
@@ -703,19 +742,25 @@ class ReplayLoader:
     def list_replays(
         self, *, limit: int | None = None, offset: int = 0
     ) -> list[ReplayMetadataView]:
-        """Return metadata for every replay in the dir, ordered by seed.
+        """Return metadata for every READABLE replay in the dir, ordered by seed.
 
         ``limit``/``offset`` page the (seed-sorted) path list *before* any
         metadata view is built, so a request's work is bounded by the page size
-        rather than the whole directory (Audit G-G-3). Absent params
-        (``limit=None, offset=0``) reproduce the original "every replay"
-        behavior.
+        rather than the whole directory; absent params (``limit=None,
+        offset=0``) list every replay.
 
-        A file that fails to parse — :class:`ReplayLog.CorruptedFileError`, the
-        doubled-write pattern Task 4.16 detects — is excluded from the listing
-        and logged at WARNING rather than aborting the whole request with a 500,
-        so one bad replay no longer blocks the picker (Audit K-K-8, backend
-        half).
+        A file the summary reader cannot use is excluded from the listing and
+        logged once at WARNING with its path and failure class, so no single bad
+        file can 500 the whole picker. Three classes are skipped here: the
+        doubled-write :class:`ReplayLog.CorruptedFileError`, any unparseable or
+        schema-invalid row (a ``ValueError``, which pydantic's
+        ``ValidationError`` subclasses — the shape an interrupted tournament
+        write leaves behind), and :class:`EmptyReplayError` (a file holding no
+        replay records). The degradation stops at this collection view:
+        :meth:`load_replay` of a skipped game id still raises, so a half-written
+        game is never served as if it were whole.
+
+        Audits G-G-3, K-K-8.
         """
 
         paths = self._replay_paths()
@@ -724,8 +769,8 @@ class ReplayLoader:
         for seed, path in window:
             try:
                 views.append(self._metadata_view(path, seed))
-            except ReplayLog.CorruptedFileError as exc:
-                _LOGGER.warning("Skipping corrupted replay file %s: %s", path, exc)
+            except (ReplayLog.CorruptedFileError, ValueError) as exc:
+                _log_skipped_replay(path, exc)
         return views
 
     def load_replay(self, game_id: str) -> ReplayView:
@@ -748,15 +793,25 @@ class ReplayLoader:
         )
 
     def cost_summary(self) -> EvalCostSummaryView:
-        """Aggregate LLM cost + decisive-outcome split across every replay.
+        """Aggregate LLM cost + decisive-outcome split across every readable replay.
 
         Reads each replay file exactly once: both the per-game cost and the
         decisive winner come from a single memoized :class:`_ReplaySummary`
-        rather than the two passes (``compute_cost_usd`` + ``read_game_outcome``)
-        the pre-6.6 loader did (Audit G-G-2).
+        rather than two passes (``compute_cost_usd`` + ``read_game_outcome``).
+        Unreadable files are skipped and logged on the same terms as
+        :meth:`list_replays`, so one corrupt file cannot 500 the eval dashboard;
+        ``total_replays`` counts only the files actually reduced, keeping
+        ``mean_cost_per_replay`` a mean over real games.
+
+        Audit G-G-2.
         """
 
-        summaries = [self._file_summary(path) for _, path in self._replay_paths()]
+        summaries: list[_ReplaySummary] = []
+        for _seed, path in self._replay_paths():
+            try:
+                summaries.append(self._file_summary(path))
+            except (ReplayLog.CorruptedFileError, ValueError) as exc:
+                _log_skipped_replay(path, exc)
         total_replays = len(summaries)
         costs = [summary.total_cost_usd for summary in summaries]
         total_cost = sum(costs)
@@ -1698,7 +1753,13 @@ class ReplayLoader:
         final_tick: int | None = None
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
-        for entry in read_all_entries(path):
+        entries = read_all_entries(path)
+        if not entries:
+            # A file that contributes no records is an unusable artifact, not a
+            # 0-tick game; reducing it would advertise it in the picker and
+            # count it in the cost mean.
+            raise EmptyReplayError(path)
+        for entry in entries:
             if isinstance(entry, ReplayEntry):
                 tick_count += 1
             elif isinstance(entry, MeetingReplayEntry):
@@ -3154,6 +3215,7 @@ def get_replay_loader(
 
 __all__ = [
     "DEFAULT_SET",
+    "EmptyReplayError",
     "ReplayLoader",
     "ReplayPolicyMismatchError",
     "ReplayStateMismatchError",
