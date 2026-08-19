@@ -21,10 +21,10 @@ plain helper functions and class bodies that cannot request a fixture, and under
 ``pytest-xdist`` a session fixture is session-scoped *per worker* anyway — so a
 process-level cache is the same lifetime with a wider reach.
 
-Three call sites deliberately walk a set WITHOUT this cache, because a second
-independent computation is what they assert;
-``tests/_helpers/test_committed_single_home.py`` holds that allow-list, with the
-reason for each, and pins every other call site to this module.
+Four call sites deliberately walk a set WITHOUT this cache — because a second
+independent computation is what they assert, or because the walker itself is the
+subject under test. ``tests/_helpers/test_committed_single_home.py`` holds that
+allow-list with the reason for each, and pins every other call site here.
 """
 
 from __future__ import annotations

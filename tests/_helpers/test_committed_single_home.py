@@ -35,10 +35,14 @@ from pydantic import BaseModel, ConfigDict
 
 from tests._helpers.committed import SAMPLES_4P1I, kill_craft_report, repo_root
 
-#: The instrument entry points whose cost the shared cache exists to pay once.
+#: The instrument entry points whose cost the shared cache exists to pay once,
+#: plus ``check_report`` — a wrapper whose first act is ``build_report(sample_dir)``
+#: (scripts/build_sample_report.py:423), so a call to it walks the set just as
+#: surely as a direct one.
 WALKERS: Final[frozenset[str]] = frozenset(
     {
         "build_report",
+        "check_report",
         "compute_deception_instruments",
         "compute_information_funnel",
         "compute_kill_craft_report",
@@ -66,6 +70,10 @@ UNCACHED_BY_DESIGN: Final[Mapping[str, Mapping[str, str]]] = {
             "it tests build_report itself — the subject under test cannot be "
             "replaced by a cached result of the subject under test"
         ),
+        "test_check_reports_consistent_on_committed_flat_4p1i": (
+            "same module, same reason one level up: check_report IS the subject, "
+            "and its whole job is to rebuild and diff"
+        ),
     },
 }
 
@@ -75,6 +83,22 @@ _SET_KEYWORDS: Final[frozenset[str]] = frozenset({"sample_dir", "replay_dir"})
 #: Importing a set constant from here is the other way a module names committed
 #: bytes without the word ``replays`` appearing in its own source.
 _HELPER_MODULE: Final = "tests._helpers.committed"
+
+
+def _walker_aliases(tree: ast.Module) -> Mapping[str, str]:
+    """Local names bound to a walker by an import, mapped to the walker.
+
+    ``from eval.solvability import compute_solvability_report as solve`` binds
+    the walk to ``solve``; matching on the literal name alone would miss it.
+    """
+
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in WALKERS:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
 
 
 @dataclass(frozen=True)
@@ -118,6 +142,32 @@ def _assignments_in_scope(
         yield from _assignments_in_scope(child)
 
 
+def _names_bound_locally(node: ast.AST) -> frozenset[str]:
+    """Names this scope binds itself: parameters, and its own assignment targets.
+
+    A name a scope binds is NOT the enclosing scope's name, so it must not
+    inherit the enclosing scope's provenance — otherwise a test whose parameter
+    happens to reuse a module constant's name would read as committed when
+    pytest hands it a ``tmp_path``.
+    """
+
+    bound: set[str] = set()
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        arguments = node.args
+        for argument in (
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+            arguments.vararg,
+            arguments.kwarg,
+        ):
+            if argument is not None:
+                bound.add(argument.arg)
+    for targets, _ in _assignments_in_scope(node):
+        bound.update(t.id for t in targets if isinstance(t, ast.Name))
+    return frozenset(bound)
+
+
 def _committed_names_in_scope(
     node: ast.AST, inherited: frozenset[str]
 ) -> frozenset[str]:
@@ -135,7 +185,7 @@ def _committed_names_in_scope(
     its caller's ``tmp_path`` argument still reads as the temp set it is.
     """
 
-    bound = set(inherited)
+    bound = set(inherited - _names_bound_locally(node))
     assignments = list(_assignments_in_scope(node))
     growing = True
     while growing:
@@ -181,11 +231,13 @@ def _calls_in_scope(
         yield from _calls_in_scope(child, enclosing, committed_names)
 
 
-def _walker_name(call: ast.Call) -> str | None:
-    """The walker this call invokes, whether bare or through a module alias."""
+def _walker_name(call: ast.Call, aliases: Mapping[str, str]) -> str | None:
+    """The walker this call invokes: bare, renamed on import, or module-qualified."""
 
     func = call.func
     if isinstance(func, ast.Name):
+        if func.id in aliases:
+            return aliases[func.id]
         return func.id if func.id in WALKERS else None
     if isinstance(func, ast.Attribute):
         return func.attr if func.attr in WALKERS else None
@@ -255,12 +307,13 @@ def committed_walk_calls(source: str) -> tuple[WalkCall, ...]:
     tree = ast.parse(source)
     imported = _set_constants_imported_from_the_helper(tree)
     module_names = _committed_names_in_scope(tree, imported)
+    aliases = _walker_aliases(tree)
 
     found: list[WalkCall] = []
     for enclosing, call, committed_names in _calls_in_scope(
         tree, "<module>", module_names
     ):
-        walker = _walker_name(call)
+        walker = _walker_name(call, aliases)
         if walker is None:
             continue
         argument = _set_argument(call)
@@ -453,7 +506,60 @@ def test_the_scanner_ignores_a_call_that_is_not_a_walker() -> None:
     planted = (
         "_SET = 'replays/samples/9p2i'\n"
         "def test_other() -> None:\n"
-        "    check_report(_SET)\n"
+        "    summarize_report(_SET)\n"
+    )
+    assert committed_walk_calls(planted) == ()
+
+
+def test_the_scanner_resolves_a_walker_renamed_on_import() -> None:
+    """A walk renamed at the import is still a walk."""
+
+    planted = (
+        "from eval.solvability import compute_solvability_report as solve\n"
+        "from tests._helpers.committed import SAMPLES_9P2I\n"
+        "def test_planted() -> None:\n"
+        "    solve(SAMPLES_9P2I)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("compute_solvability_report", "test_planted", 4),
+    )
+
+
+def test_the_scanner_flags_a_wrapper_that_walks() -> None:
+    """``check_report``'s first act is ``build_report(sample_dir)``."""
+
+    planted = (
+        "from pathlib import Path\n"
+        "_SET = Path('x') / 'replays' / 'samples' / '4p1i'\n"
+        "def test_planted() -> None:\n"
+        "    bsr.check_report(_SET)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("check_report", "test_planted", 4),
+    )
+
+
+def test_a_parameter_shadowing_a_committed_constant_is_not_committed() -> None:
+    """pytest hands the parameter a temp path; the module constant is irrelevant."""
+
+    planted = (
+        "from pathlib import Path\n"
+        "_SET = Path('x') / 'replays' / 'samples' / '9p2i'\n"
+        "def test_fail_loud(_SET: Path) -> None:\n"
+        "    compute_solvability_report(_SET)\n"
+    )
+    assert committed_walk_calls(planted) == ()
+
+
+def test_a_local_rebinding_a_committed_constant_to_a_temp_dir_is_not_committed() -> (
+    None
+):
+    planted = (
+        "from pathlib import Path\n"
+        "_SET = Path('x') / 'replays' / 'samples' / '9p2i'\n"
+        "def test_fail_loud(tmp_path: Path) -> None:\n"
+        "    _SET = tmp_path / 'built'\n"
+        "    compute_kill_craft_report(_SET)\n"
     )
     assert committed_walk_calls(planted) == ()
 
