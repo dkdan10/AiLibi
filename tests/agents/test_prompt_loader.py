@@ -27,9 +27,12 @@ env grid), and :class:`TestNoticeIsOncePerProcess` pins the de-duplication.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from functools import partial
 from pathlib import Path
+from typing import cast
 
 import pytest
+from jinja2 import Environment, FileSystemLoader
 
 from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
@@ -42,9 +45,11 @@ from agents.strategic.prompts import (
 from agents.strategic.prompts.loader import (
     ACCUSATION_ROUND_TEMPLATE,
     CREWMATE_REPORT_TEMPLATE,
+    ENV_IMPOSTOR_ROLL_CALL,
     IMPOSTOR_REPORT_TEMPLATE,
     OPERATIONAL_BASELINE_PROMPT_SET,
     VOTE_BALLOT_TEMPLATE,
+    PromptRenderers,
     _ENV,  # noqa: PLC2701
     _notify_bare_prompt_set_fallback,  # noqa: PLC2701
 )
@@ -556,3 +561,132 @@ class TestPerSetVersionRegistry:
     def test_default_lookup_returns_qwen_versions(self) -> None:
         assert prompt_versions_for_set(env={}) is DEFAULT_PROMPT_VERSIONS
         assert prompt_versions_for_set("qwen3_5_9b") is DEFAULT_PROMPT_VERSIONS
+
+
+def _set_directory(environment: Environment) -> Path:
+    """The template directory an environment is bound to."""
+
+    loader = environment.loader
+    assert isinstance(loader, FileSystemLoader)
+    return Path(loader.searchpath[0])
+
+
+def _bundle_environment(renderers: PromptRenderers) -> Environment:
+    """The environment a :class:`PromptRenderers` bundle bound its wrappers to."""
+
+    bound = cast("partial[str]", renderers.vote)
+    environment = bound.keywords["environment"]
+    assert isinstance(environment, Environment)
+    return environment
+
+
+class TestEnvironmentIsMemoizedPerSetAndRoot:
+    """One environment per (resolved set, templates root), shared by every caller.
+
+    An environment holds a set's template bytes and their compiled code and
+    nothing per-game, so building one per meeting runner re-lexed and
+    re-compiled the same templates once a game. These pin the memo's key — the
+    set and the root, and only those — and the identity every caller now shares.
+    """
+
+    def test_two_calls_for_one_set_return_the_same_object(self) -> None:
+        assert build_environment(DEFAULT_PROMPT_SET) is build_environment(
+            DEFAULT_PROMPT_SET
+        )
+
+    def test_a_different_set_returns_its_own_environment(self) -> None:
+        default_env = build_environment(DEFAULT_PROMPT_SET)
+        baseline_env = build_environment(OPERATIONAL_BASELINE_PROMPT_SET)
+        assert default_env is not baseline_env
+        # Not merely different objects: each is bound to its OWN set directory.
+        assert _set_directory(default_env).name == DEFAULT_PROMPT_SET
+        assert _set_directory(baseline_env).name == OPERATIONAL_BASELINE_PROMPT_SET
+
+    def test_a_different_root_returns_a_different_environment(
+        self, tmp_path: Path
+    ) -> None:
+        # Same set name under another root (the byte-golden perturbation leg's
+        # shape: a scratch copy of the template tree) must never be served the
+        # committed tree's environment.
+        (tmp_path / DEFAULT_PROMPT_SET).mkdir()
+        scratch = build_environment(DEFAULT_PROMPT_SET, root=tmp_path)
+        assert scratch is not build_environment(DEFAULT_PROMPT_SET)
+        assert _set_directory(scratch) == tmp_path / DEFAULT_PROMPT_SET
+        # ...and is itself stable for that root.
+        assert scratch is build_environment(DEFAULT_PROMPT_SET, root=tmp_path)
+
+    def test_two_bundles_for_one_set_carry_one_environment(self) -> None:
+        # The production shape: a meeting runner (and so a bundle) is built per
+        # game, and two bundles for one set now share the one environment.
+        first = build_prompt_renderers(DEFAULT_PROMPT_SET)
+        second = build_prompt_renderers(DEFAULT_PROMPT_SET)
+        assert _bundle_environment(first) is _bundle_environment(second)
+        assert _bundle_environment(first) is build_environment(DEFAULT_PROMPT_SET)
+
+    def test_the_roll_call_lever_is_not_part_of_the_key(self) -> None:
+        # The lever picks template FILENAMES in build_prompt_renderers; the
+        # environment those names are looked up in is the set's one environment
+        # either way, which is why the key does not carry the lever.
+        lever_on = build_prompt_renderers(
+            OPERATIONAL_BASELINE_PROMPT_SET, env={ENV_IMPOSTOR_ROLL_CALL: "1"}
+        )
+        lever_off = build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
+        assert _bundle_environment(lever_on) is _bundle_environment(lever_off)
+
+    def test_an_in_process_set_change_re_resolves(self) -> None:
+        # The memo sits beneath resolution, so a caller that changes
+        # AILIBI_PROMPT_SET mid-process gets the new set, not the cached one.
+        first = build_environment(env={ENV_PROMPT_SET: "qwen3_32b"})
+        second = build_environment(env={ENV_PROMPT_SET: DEFAULT_PROMPT_SET})
+        assert first is not second
+        assert _set_directory(first).name == "qwen3_32b"
+        assert _set_directory(second).name == DEFAULT_PROMPT_SET
+
+    def test_the_memo_caches_no_failure(self) -> None:
+        # An unknown set raises on the second call exactly as on the first: a
+        # lookup that raised stored nothing to serve back as success or silence.
+        for _ in range(3):
+            with pytest.raises(ValueError, match="Unknown prompt set 'no_such_set'"):
+                build_environment("no_such_set")
+
+    def test_a_set_that_appears_later_still_loads(self, tmp_path: Path) -> None:
+        # The other half of "no failure is cached": the failed lookup must not
+        # poison the key it failed on.
+        with pytest.raises(ValueError, match="Unknown prompt set 'late_set'"):
+            build_environment("late_set", root=tmp_path)
+        set_dir = tmp_path / "late_set"
+        set_dir.mkdir()
+        (set_dir / CREWMATE_REPORT_TEMPLATE).write_text(
+            "late {{ agent_id }}", encoding="utf-8"
+        )
+        environment = build_environment("late_set", root=tmp_path)
+        rendered = environment.get_template(CREWMATE_REPORT_TEMPLATE).render(
+            agent_id="p-9"
+        )
+        assert rendered == "late p-9"
+
+
+class TestResolutionStillRunsOnEveryBuild:
+    """The memo is beneath resolution, so the bare-fallback notice is unmoved.
+
+    Task 20.5 made the notice once per process by memoizing the emission itself
+    (:func:`_notify_bare_prompt_set_fallback`, which the autouse fixture above
+    clears around every test here), so the count a caller sees is ONE however
+    many bundles it builds. What the environment memo must not do is skip the
+    resolution that feeds the notice: clearing the notice memo between builds
+    re-arms the line, so a build that still resolves prints it again — and a
+    memo wrapped ABOVE resolution would print once and then fall silent.
+    """
+
+    def test_five_bundles_emit_one_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        for _ in range(5):
+            build_prompt_renderers(env=_REAL_PROVIDER_ENV)
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_every_build_resolves(self, capsys: pytest.CaptureFixture[str]) -> None:
+        for _ in range(5):
+            _notify_bare_prompt_set_fallback.cache_clear()
+            build_environment(env=_REAL_PROVIDER_ENV)
+        assert len(capsys.readouterr().err.strip().splitlines()) == 5

@@ -235,23 +235,23 @@ def resolve_prompt_set(
     return DEFAULT_PROMPT_SET
 
 
-def build_environment(
-    prompt_set: str | None = None,
-    *,
-    root: Path = _PROMPTS_ROOT,
-    env: Mapping[str, str] | None = None,
-) -> Environment:
-    """Build a strict-undefined :class:`jinja2.Environment` for a prompt set.
+@lru_cache(maxsize=None)
+def _environment_for_set(name: str, root: Path) -> Environment:
+    """The one strict-undefined environment serving a resolved set under ``root``.
 
-    Resolves ``prompt_set`` (via :func:`resolve_prompt_set`) to a subdirectory
-    of ``root`` and builds the loader against it. An unknown set — no matching
-    subdirectory — raises :class:`ValueError`; there is no silent fallback
-    (AGENTS.md §"No silent fallbacks"). The strict-undefined / trim / lstrip /
-    no-autoescape policy is identical across sets, so a content-preserving move
-    of the 9B templates renders byte-identically.
+    An environment is a pure function of these two arguments — it holds the set's
+    template bytes and their compiled code, no game state and nothing per-runner —
+    so one per (set, root) is shared rather than rebuilt. Building one and
+    compiling the meeting templates costs ~15 ms, and
+    :func:`orchestrator.game.build_default_meeting_runner` builds a runner per
+    game, so before this memo a ten-game tournament paid it eleven times.
+    Deliberately keyed on set and root ALONE: the Task-18.10 impostor-roll-call
+    lever chooses template FILENAMES in :func:`build_prompt_renderers`, nothing
+    the environment carries. An unknown set raises here, and
+    :func:`functools.lru_cache` does not memoize a raise, so the failure fires on
+    every call. Task 20.19 (finding C-42).
     """
 
-    name = resolve_prompt_set(prompt_set, env=env)
     directory = root / name
     if not directory.is_dir():
         raise ValueError(
@@ -264,6 +264,31 @@ def build_environment(
         trim_blocks=True,
         lstrip_blocks=True,
     )
+
+
+def build_environment(
+    prompt_set: str | None = None,
+    *,
+    root: Path = _PROMPTS_ROOT,
+    env: Mapping[str, str] | None = None,
+) -> Environment:
+    """Build a strict-undefined :class:`jinja2.Environment` for a prompt set.
+
+    Resolves ``prompt_set`` (via :func:`resolve_prompt_set`) to a subdirectory
+    of ``root`` and returns that set's environment. An unknown set — no matching
+    subdirectory — raises :class:`ValueError`; there is no silent fallback
+    (AGENTS.md §"No silent fallbacks"). The strict-undefined / trim / lstrip /
+    no-autoescape policy is identical across sets, so a content-preserving move
+    of the 9B templates renders byte-identically.
+
+    Resolution happens on every call and the memo
+    (:func:`_environment_for_set`) sits strictly beneath it, so a caller that
+    changes ``AILIBI_PROMPT_SET`` in-process still gets its new set's
+    environment, and the bare-fallback notice fires exactly as often as it did
+    when every call built a fresh environment.
+    """
+
+    return _environment_for_set(resolve_prompt_set(prompt_set, env=env), root)
 
 
 # The process-default environment, bound to the active set at import time. The

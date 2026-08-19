@@ -18,6 +18,7 @@ dangling-id validation can rely on it.
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, TypeAlias
@@ -79,10 +80,22 @@ class MemoryStore:
     Events are written by perception in monotonic tick order. The store
     rejects out-of-order writes so replay determinism is preserved and
     bugs in the perception layer surface immediately.
+
+    That order guarantee is what :meth:`recent` reads with: a tick window is
+    always a suffix of the log, so the store keeps the append-order tick
+    sequence beside the events and locates the window with one bisection
+    instead of scanning (Task 20.19, finding C-43).
     """
 
     def __init__(self) -> None:
         self._events: list[EpisodicEvent] = []
+        # The append-order tick sequence, non-decreasing by the guard in
+        # ``append`` and therefore the sorted key ``recent`` bisects.
+        self._ticks: list[int] = []
+        # The materialized whole-log view ``recent(since_tick=0)`` returns, held
+        # until the next append invalidates it. ``None`` means "not built since
+        # the last write"; the whole log is what 29 of the 32 call sites ask for.
+        self._full_log: tuple[EpisodicEvent, ...] | None = None
         # Task 16.5: the set of stable observation ids already written into this
         # agent's store, for the fail-loud duplicate guard below. Downstream
         # dangling-id validation (the ballot's ``primary_reason_observation_id``,
@@ -115,8 +128,26 @@ class MemoryStore:
                 )
             self._observation_ids.add(event.observation_id)
         self._events.append(event)
+        # Both derived views move with the log: the bisection key grows by one,
+        # and the cached whole-log tuple is dropped so the next read rebuilds it.
+        # Every guard above raises before this point, so a rejected append leaves
+        # events, ticks and cache consistent.
+        self._ticks.append(event.tick)
+        self._full_log = None
 
     def recent(self, *, since_tick: int) -> tuple[EpisodicEvent, ...]:
-        """Return events with ``tick >= since_tick`` in append order."""
+        """Return events with ``tick >= since_tick`` in append order.
 
-        return tuple(event for event in self._events if event.tick >= since_tick)
+        Ticks are non-decreasing, so the answer is the suffix beginning at the
+        first index whose tick reaches ``since_tick``: one :func:`bisect_left`
+        over the tick sequence locates it. A window starting at index 0 — the
+        whole log, which is what nearly every caller asks for — is served from a
+        tuple materialized once per write instead of rebuilt per call.
+        """
+
+        start = bisect_left(self._ticks, since_tick)
+        if start:
+            return tuple(self._events[start:])
+        if self._full_log is None:
+            self._full_log = tuple(self._events)
+        return self._full_log

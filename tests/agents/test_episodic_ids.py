@@ -15,16 +15,22 @@ The unit home for the C8 identity substrate
 
 This file also hosts the committed-set two-walk determinism pin (added by the
 second worker), which walks committed replays twice and asserts the two
-reconstructions assign byte-identical ids.
+reconstructions assign byte-identical ids, and the read-path pins for
+:meth:`agents.memory.episodic.MemoryStore.recent` — its equivalence to a linear
+filter over random legal logs, its single bisection, and the invalidation of its
+whole-log cache on write.
 """
 
 from __future__ import annotations
 
+import random
 import re
+from bisect import bisect_left
 from pathlib import Path
 
 import pytest
 
+from agents.memory import episodic
 from agents.memory.episodic import (
     EpisodicEvent,
     MemoryStore,
@@ -533,3 +539,210 @@ class TestObservationIdsAreReconstructionStable:
             assert len(observation_ids) == len(set(observation_ids)), (
                 f"{where}: duplicate ids in {observation_ids!r}"
             )
+
+
+# --------------------------------------------------------------------------- #
+# The read path: recent() locates its window by bisection                     #
+# --------------------------------------------------------------------------- #
+
+_WINDOW_TRIALS = 1_000
+
+
+def _row(*, tick: int, index: int = 0) -> EpisodicEvent:
+    """A minimal observed row; only its tick and identity matter to a window."""
+
+    return EpisodicEvent(
+        tick=tick,
+        type="saw_player",
+        payload={"index": index},
+        provenance=PROVENANCE_OBSERVED,
+    )
+
+
+def _linear_recent(
+    events: tuple[EpisodicEvent, ...], since_tick: int
+) -> tuple[EpisodicEvent, ...]:
+    """The reference answer: filter the whole log, the shape ``recent`` had."""
+
+    return tuple(event for event in events if event.tick >= since_tick)
+
+
+def _random_legal_log(rng: random.Random) -> tuple[EpisodicEvent, ...]:
+    """A legal append sequence — non-decreasing ticks, with duplicates and gaps."""
+
+    tick = rng.randint(0, 4)
+    events: list[EpisodicEvent] = []
+    for index in range(rng.randint(0, 24)):
+        tick += rng.choice((0, 0, 0, 1, 2, 7))
+        events.append(_row(tick=tick, index=index))
+    return tuple(events)
+
+
+def _probe_ticks(
+    events: tuple[EpisodicEvent, ...], rng: random.Random
+) -> tuple[int, ...]:
+    """Window bounds worth asking for: negative, boundary, interior, past-the-end."""
+
+    ticks = [event.tick for event in events]
+    probes = {-9, -1, 0}
+    if ticks:
+        probes.update(
+            {
+                ticks[0] - 1,
+                ticks[0],
+                ticks[0] + 1,
+                ticks[len(ticks) // 2],
+                ticks[-1],
+                ticks[-1] + 1,
+                ticks[-1] + 9,
+            }
+        )
+    probes.add(rng.randint(-9, (ticks[-1] if ticks else 0) + 9))
+    return tuple(sorted(probes))
+
+
+def _tick_index(store: MemoryStore) -> list[int]:
+    """The store's private bisection key, read to pin it against the log itself."""
+
+    return store._ticks  # noqa: SLF001
+
+
+class TestRecentMatchesTheLinearReference:
+    """The bisected window answers exactly what the full-log filter answered.
+
+    ``append`` keeps ticks non-decreasing, so ``tick >= since_tick`` always
+    selects a suffix — the invariant that lets one bisection replace the scan.
+    This walks 1,000 random legal logs (duplicate ticks, gaps, empty logs)
+    against the reference filter at probe bounds that include negative and
+    past-the-end values.
+    """
+
+    def test_a_thousand_random_logs_agree_event_for_event(self) -> None:
+        rng = random.Random(2019)
+        mismatches: list[str] = []
+        whole = partial = empty = 0
+        for trial in range(_WINDOW_TRIALS):
+            events = _random_legal_log(rng)
+            store = MemoryStore()
+            for event in events:
+                store.append(event)
+            for since_tick in _probe_ticks(events, rng):
+                observed = store.recent(since_tick=since_tick)
+                expected = _linear_recent(events, since_tick)
+                if observed != expected:
+                    mismatches.append(
+                        f"trial {trial} since_tick={since_tick}: "
+                        f"{observed!r} != {expected!r}"
+                    )
+                if not observed:
+                    empty += 1
+                elif len(observed) == len(events):
+                    whole += 1
+                else:
+                    partial += 1
+        assert mismatches == []
+        # The grid really exercised all three window shapes, so agreement above
+        # is not agreement on one trivial case.
+        assert whole and partial and empty, (whole, partial, empty)
+
+    def test_the_reference_disagrees_with_a_broken_window(self) -> None:
+        # The comparison bites: an off-by-one window (the failure mode a
+        # bisect_right / bisect_left slip would produce) is caught by it.
+        events = (_row(tick=1), _row(tick=4, index=1), _row(tick=4, index=2))
+        store = MemoryStore()
+        for event in events:
+            store.append(event)
+        assert store.recent(since_tick=4) == _linear_recent(events, 4)
+        assert store.recent(since_tick=4) != events[2:]
+
+
+class TestRecentBisectsExactlyOnce:
+    def test_one_bisect_left_call_per_read(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Structural: the window is located, not scanned — one bisection per
+        # call, whatever the window's shape, and none anywhere else.
+        calls: list[int] = []
+
+        def counting(sequence: list[int], value: int) -> int:
+            calls.append(value)
+            return bisect_left(sequence, value)
+
+        monkeypatch.setattr(episodic, "bisect_left", counting)
+        store = MemoryStore()
+        for tick in (0, 0, 3, 9):
+            store.append(_row(tick=tick))
+        assert calls == []  # appends bisect nothing
+        for index, since_tick in enumerate((0, 3, 99, -1)):
+            store.recent(since_tick=since_tick)
+            assert len(calls) == index + 1
+        assert calls == [0, 3, 99, -1]
+
+
+class TestWholeLogCacheIsInvalidatedOnWrite:
+    """The cached whole-log tuple never outlives the write that follows it."""
+
+    def test_a_write_between_reads_lengthens_the_window(self) -> None:
+        store = MemoryStore()
+        first = _row(tick=1)
+        store.append(first)
+        before = store.recent(since_tick=0)
+        second = _row(tick=4, index=1)
+        store.append(second)
+        after = store.recent(since_tick=0)
+        assert before == (first,)
+        assert after == (first, second)
+
+    def test_reads_without_a_write_reuse_one_tuple(self) -> None:
+        # It is a cache, not a rebuild: the same object until the next append,
+        # and a different one after it.
+        store = MemoryStore()
+        store.append(_row(tick=1))
+        cached = store.recent(since_tick=0)
+        assert store.recent(since_tick=0) is cached
+        store.append(_row(tick=2, index=1))
+        assert store.recent(since_tick=0) is not cached
+
+    def test_a_handed_out_window_is_a_snapshot(self) -> None:
+        # A caller holding an earlier window keeps the log as it was; the cache
+        # is replaced, never mutated.
+        store = MemoryStore()
+        first = _row(tick=1)
+        store.append(first)
+        held = store.recent(since_tick=0)
+        store.append(_row(tick=2, index=1))
+        assert held == (first,)
+
+    def test_a_rejected_out_of_order_append_changes_nothing(self) -> None:
+        store = MemoryStore()
+        rows = (_row(tick=3), _row(tick=7, index=1))
+        for row in rows:
+            store.append(row)
+        with pytest.raises(ValueError, match="non-decreasing"):
+            store.append(_row(tick=2, index=2))
+        assert len(store) == 2
+        assert store.recent(since_tick=0) == rows
+        assert _tick_index(store) == [3, 7]
+        # The index is still aligned with the log, so a later legal append
+        # windows correctly rather than off by the rejected row.
+        late = _row(tick=12, index=3)
+        store.append(late)
+        assert store.recent(since_tick=12) == (late,)
+        assert store.recent(since_tick=7) == (rows[1], late)
+
+    def test_a_rejected_duplicate_id_append_changes_nothing(self) -> None:
+        store = MemoryStore()
+        first = EpisodicEvent(
+            tick=2,
+            type="saw_player",
+            payload={"index": 0},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id=derive_observation_id(agent_id="p1", tick=2, seq=0),
+        )
+        store.append(first)
+        assert store.recent(since_tick=0) == (first,)
+        with pytest.raises(ValueError, match="duplicate observation id"):
+            store.append(first)
+        assert len(store) == 1
+        assert store.recent(since_tick=0) == (first,)
+        assert _tick_index(store) == [2]
