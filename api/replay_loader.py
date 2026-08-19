@@ -65,6 +65,7 @@ from api.schemas import (
     CompletedTaskObsView,
     ContradictionView,
     CorroborationClaimView,
+    CurrentAction,
     EdgeView,
     EvalCostSummaryView,
     FailedCallView,
@@ -105,6 +106,7 @@ from api.schemas import (
 )
 from engine.actions import Action
 from engine.events import (
+    ActionRejectedEvent,
     EngineEvent,
     KilledEvent,
     MeetingTriggeredEvent,
@@ -1189,6 +1191,9 @@ class ReplayLoader:
                 (),
                 None,
                 start_visibility,
+                # No agent has acted yet on the synthesized frame, so every agent
+                # reads IDLE — the spawn state, not an inherited label.
+                actions=(),
                 fixed_tasks_required_total=fixed_tasks_required_total,
             )
         ]
@@ -1249,6 +1254,7 @@ class ReplayLoader:
                         events,
                         meeting_id,
                         tick_visibility,
+                        actions=actions,
                         fixed_tasks_required_total=fixed_tasks_required_total,
                     )
                 )
@@ -1480,10 +1486,15 @@ class ReplayLoader:
         meeting_id: str | None,
         visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
         *,
+        actions: Sequence[Action],
         fixed_tasks_required_total: int,
     ) -> TickView:
+        # ``actions`` is this tick's recorded intents; with ``events`` it says what
+        # each agent TRIED and whether the engine carried it out, which is what
+        # ``current_action`` reports (see :func:`_current_action`).
+        intents = _tick_intents(actions, events)
         agent_states = tuple(
-            self._agent_tick_state(state, pid, visibility_by_agent)
+            self._agent_tick_state(state, pid, visibility_by_agent, intents)
             for pid in sorted(state.players)
         )
         sabotage = state.sabotage
@@ -1522,7 +1533,8 @@ class ReplayLoader:
         self,
         state: WorldState,
         pid: str,
-        visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
+        visibility_by_agent: Mapping[str, AgentVisibilityView] | None,
+        intents: _TickIntents,
     ) -> AgentTickStateView:
         player = state.players[pid]
         # ``visibility_by_agent`` only holds LIVING agents (the As-agent fog
@@ -1539,7 +1551,7 @@ class ReplayLoader:
             is_alive=player.alive,
             is_venting=player.in_vent,
             task_progress=self._task_progress(state, pid, player.role),
-            current_action=_current_action(player.last_action),
+            current_action=_current_action(intents, pid, player.role),
             visibility=visibility,
         )
 
@@ -2266,27 +2278,114 @@ def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
     )
 
 
-def _current_action(
-    last_action: Action | None,
-) -> Literal["IDLE", "MOVING", "TASK", "KILL", "VENT", "REPORT", "SABOTAGE"]:
-    if last_action is None:
+# The label an ACCEPTED intent of each action type carries. Total over
+# ``engine.actions.Action``; a new action type fails the ``KeyError`` in
+# :func:`_current_action` rather than defaulting to IDLE (AGENTS.md: no silent
+# fallbacks). ``wait`` is the one accepted intent that reads IDLE — waiting is
+# what idle looks like.
+_ACCEPTED_ACTION_LABEL: Final[Mapping[str, CurrentAction]] = {
+    "move": "MOVING",
+    "do_task": "TASK",
+    "kill": "KILL",
+    "vent": "VENT",
+    "report": "REPORT",
+    "emergency": "EMERGENCY",
+    "sabotage": "SABOTAGE",
+    "repair_sabotage": "REPAIR",
+    "wait": "IDLE",
+}
+
+
+@dataclass(frozen=True)
+class _TickIntents:
+    """One tick's submitted intents and what the engine did with each.
+
+    ``advance_tick`` applies the recorded actions in order and emits exactly one
+    event per action: the handler's event, or an :class:`ActionRejectedEvent`.
+    Two things end that walk early and are what ``preempted`` records:
+
+    * a handler flips the phase to ``MEETING`` and ``advance_tick`` returns, so
+      every action positioned after the trigger's was never attempted; and
+    * a kill lands, so the victim's own later action is rejected for being dead —
+      the tick foreclosed it, not the agent's choice.
+    """
+
+    #: The action each actor submitted this tick (one per alive agent).
+    by_actor: Mapping[str, Action]
+    #: Actors whose intent the engine attempted and refused.
+    rejected: frozenset[str]
+    #: Actors whose intent the tick foreclosed before it could be judged.
+    preempted: frozenset[str]
+
+
+def _tick_intents(
+    actions: Sequence[Action], events: Sequence[EngineEvent]
+) -> _TickIntents:
+    """Index one tick's recorded intents against the events they produced."""
+
+    index_by_actor = {action.actor: i for i, action in enumerate(actions)}
+    rejected = frozenset(
+        event.actor for event in events if isinstance(event, ActionRejectedEvent)
+    )
+
+    preempted: set[str] = set()
+    # A meeting cuts the tick off at the triggering actor's own action: nothing
+    # positioned after it in the recorded list was attempted (engine/tick.py's
+    # early return), so those actors emitted no event at all.
+    for event in events:
+        if isinstance(event, MeetingTriggeredEvent):
+            cutoff = index_by_actor.get(event.actor)
+            if cutoff is not None:
+                preempted.update(action.actor for action in actions[cutoff + 1 :])
+    # A victim killed earlier in the same tick is dead by the time its own action
+    # is reached, so the rejection says nothing about what it tried to do.
+    for event in events:
+        if isinstance(event, KilledEvent):
+            killed_at = index_by_actor.get(event.actor)
+            victim_at = index_by_actor.get(event.target)
+            if (
+                killed_at is not None
+                and victim_at is not None
+                and victim_at > killed_at
+            ):
+                preempted.add(event.target)
+
+    return _TickIntents(
+        by_actor={action.actor: action for action in actions},
+        rejected=rejected,
+        preempted=frozenset(preempted),
+    )
+
+
+def _current_action(intents: _TickIntents, pid: str, role: str) -> CurrentAction:
+    """The spectator label for what ``pid`` did on the tick ``intents`` describes.
+
+    Derived from THIS tick's recorded intent plus its outcome, in that order of
+    precedence:
+
+    1. no intent recorded (dead, or the synthesized Start frame) -> ``IDLE``;
+    2. the tick foreclosed the intent (a meeting opened first, or the actor was
+       already dead) -> ``BLOCKED``, because the intent was never judged;
+    3. an impostor ``do_task`` -> ``PRETEND_TASK``. The engine always rejects it
+       (an impostor owns no task instance) but a co-located crewmate sees an
+       agent working: ``observation/service.py`` derives that witnessed
+       ``action="task"`` from the SAME rejection event. One event, two
+       projections — change them together or the map and the fog will disagree
+       about the bluff;
+    4. any other rejected intent -> ``BLOCKED``;
+    5. otherwise the accepted intent's label.
+    """
+
+    intent = intents.by_actor.get(pid)
+    if intent is None:
         return "IDLE"
-    kind = last_action.type
-    if kind == "move":
-        return "MOVING"
-    if kind == "do_task":
-        return "TASK"
-    if kind == "kill":
-        return "KILL"
-    if kind == "vent":
-        return "VENT"
-    if kind in ("report", "emergency"):
-        return "REPORT"
-    if kind == "sabotage":
-        return "SABOTAGE"
-    if kind == "repair_sabotage":
-        return "TASK"
-    return "IDLE"
+    if pid in intents.preempted:
+        return "BLOCKED"
+    if intent.type == "do_task" and role == "IMPOSTOR":
+        return "PRETEND_TASK"
+    if pid in intents.rejected:
+        return "BLOCKED"
+    return _ACCEPTED_ACTION_LABEL[intent.type]
 
 
 def _observations_from_memory(

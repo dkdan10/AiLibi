@@ -14,39 +14,20 @@
 // MeetingView modal open (selecting a meeting does). The step control inside
 // walks the meetings locally.
 //
-// Data path note (scope): the store is NOT in this task's scope, so the
-// BeliefFrameView[] is fetched here directly (with the store's in-flight-replay
-// guard mirrored) rather than via a new store action — the shape is exactly the
-// served DTO, so a later store-backed fetch is a drop-in swap. The URL, however,
-// is NOT hand-built: it goes through `api/client`'s `apiUrl` seam (Task 19.13) so
-// this panel follows the same data source as every other call — the live API in a
-// normal build, the pre-baked JSON in the static demo bundle.
+// Data path: the frames are fetched here (with the store's in-flight-replay guard
+// mirrored) rather than through a store action — the shape is exactly the served
+// DTO, so a later store-backed fetch is a drop-in swap. The request itself goes
+// through `api/client`'s `getBeliefFrames`, which is the only place that knows
+// the endpoint's URL, applies the view-model version gate, and picks the data
+// source: the live API in a normal build, the pre-baked JSON in the static bundle.
 
 import { useEffect, useRef, useState } from "react";
 
-import { apiUrl, pathSegment } from "../api/client";
+import { getBeliefFrames } from "../api/client";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { BeliefFrameView } from "../types/api";
 import { BeliefPanel } from "./BeliefPanel";
-
-async function fetchBeliefFrames(
-  gameId: string,
-  set: string | null,
-): Promise<BeliefFrameView[]> {
-  // Thread the active set (Task 12.12): both committed sets reuse headless-seed-*
-  // ids, so omitting the set would fall back to the default — 9p2i since Task
-  // 19.9 flipped it off the 4p1i fixture — and show the wrong set's belief frames
-  // (or an empty state) against, e.g., a 4p1i replay.
-  const url = apiUrl(`/replays/${pathSegment(gameId)}/beliefs`, set);
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) {
-    throw new Error(`belief frames request failed (status ${res.status})`);
-  }
-  return (await res.json()) as BeliefFrameView[];
-}
 
 export function BeliefMatrix() {
   const replay = useReplayStore((s) => s.currentReplay);
@@ -84,7 +65,7 @@ export function BeliefMatrix() {
     }
     let cancelled = false;
     setError(null);
-    fetchBeliefFrames(gameId, seedSet)
+    getBeliefFrames(gameId, seedSet ?? undefined)
       .then((data) => {
         if (!cancelled) {
           setFrames(data);

@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { apiUrl } from "../api/client";
+import { ApiError, getRubric } from "../api/client";
 import { DASHBOARD_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
@@ -1104,9 +1104,11 @@ export function TournamentDashboard() {
   // the report) — a load-time projection served per set, 404 when the SELECTED
   // set ships none (4p1i and the ml_corpus sets; not the 9p2i default, which
   // ships one since Task 19.9's flip). `reloadNonce` re-triggers the fetch on
-  // Refresh; `seedSet` re-triggers it on a live set switch. The URL comes from
-  // `api/client`'s `apiUrl` seam (Task 19.13), so this panel reads the live API
-  // in a normal build and the pre-baked JSON in the static demo bundle.
+  // Refresh; `seedSet` re-triggers it on a live set switch. It goes through
+  // `api/client`'s `getRubric`, so this panel reads the live API in a normal
+  // build and the pre-baked JSON in the static demo bundle — and gets the
+  // view-model version gate, which a hand-rolled fetch of this stamped payload
+  // silently skipped.
   const [rubric, setRubric] = useState<RubricState>({ status: "loading" });
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -1119,34 +1121,24 @@ export function TournamentDashboard() {
   useEffect(() => {
     let cancelled = false;
     setRubric({ status: "loading" });
-    fetch(apiUrl("/eval/rubric", seedSet), {
-      headers: { Accept: "application/json" },
-    })
-      .then(async (response) => {
-        if (cancelled) {
-          return;
-        }
-        if (response.status === 404) {
-          setRubric({ status: "absent" });
-          return;
-        }
-        if (!response.ok) {
-          setRubric({
-            status: "error",
-            message: `rubric request failed (status ${response.status})`,
-          });
-          return;
-        }
-        const view = (await response.json()) as RubricView;
+    getRubric(seedSet ?? undefined)
+      .then((view: RubricView) => {
         if (!cancelled) {
           setRubric({ status: "ready", view });
         }
       })
       .catch((cause: unknown) => {
-        if (!cancelled) {
-          const message = cause instanceof Error ? cause.message : String(cause);
-          setRubric({ status: "error", message });
+        if (cancelled) {
+          return;
         }
+        // A set that ships no rubric is a first-class empty state, not an error
+        // — the same 404 read `ReplayPicker` uses for the Highlights reel.
+        if (cause instanceof ApiError && cause.status === 404) {
+          setRubric({ status: "absent" });
+          return;
+        }
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setRubric({ status: "error", message });
       });
     return () => {
       cancelled = true;

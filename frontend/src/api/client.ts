@@ -15,6 +15,7 @@
 import { VIEW_MODEL_VERSION } from "../types/api";
 import type {
   AgentMemoryView,
+  BeliefFrameView,
   EvalCostSummaryView,
   MeetingView,
   ReplayMetadataView,
@@ -289,6 +290,25 @@ export function getMemory(
         `/memory/${pathSegment(agentId)}`,
       set,
     ),
+  );
+}
+
+// The per-meeting belief snapshots the Belief × Truth matrix walks
+// (`GET /replays/{game_id}/beliefs`). Threading `set` matters: both committed
+// sets reuse `headless-seed-*` game ids, so omitting it would resolve the
+// server's default set and answer with another game's frames.
+//
+// The served payload is a bare array and so carries no `viewModelVersion` stamp;
+// the gate inside `getJson` is a no-op on that shape today and arms itself if the
+// route ever gains one. What routing through here buys now is the rest of the
+// seam: the static-bundle URL space, `ApiError` with its status intact, and one
+// place that knows this endpoint's path.
+export function getBeliefFrames(
+  gameId: string,
+  set?: string,
+): Promise<BeliefFrameView[]> {
+  return getJson<BeliefFrameView[]>(
+    apiUrl(`/replays/${pathSegment(gameId)}/beliefs`, set),
   );
 }
 

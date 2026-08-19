@@ -29,7 +29,13 @@ import { Application, extend, useTick } from "@pixi/react";
 import { Container, Graphics, Text } from "pixi.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ACTION_GLYPH, GLYPH_SVG, paintGlyph } from "../assets/map/glyphs";
+import {
+  ACTION_CHIP,
+  ACTION_GLYPH,
+  type ChipStyle,
+  GLYPH_SVG,
+  paintGlyph,
+} from "../assets/map/glyphs";
 import { usePlayback } from "../hooks/usePlayback";
 import {
   type BodySpec,
@@ -449,10 +455,19 @@ function KillFlash({
   );
 }
 
-// An agent's OWN action (uppercase AgentAction) → its glyph; IDLE shows none to
-// keep the map calm.
+// An agent's OWN action (uppercase CurrentAction) → its glyph; the actions the
+// registry gives no chip show none, to keep the map calm.
 function selfActionGlyph(action: AgentTickStateView["current_action"]): string | null {
-  return action === "IDLE" ? null : GLYPH_SVG[ACTION_GLYPH[action]];
+  return ACTION_CHIP[action] === null ? null : GLYPH_SVG[ACTION_GLYPH[action]];
+}
+
+// …and how that chip reads: a RESOLVED act (solid sticker) or an INTENT the tick
+// did not deliver (hollow — a fake task, a blocked move). `null` exactly where
+// `selfActionGlyph` is null, so no chip is drawn at all.
+function selfActionChip(
+  action: AgentTickStateView["current_action"],
+): ChipStyle | null {
+  return ACTION_CHIP[action];
 }
 
 // A witnessed action on an As-agent SIGHTING is the server's firewall-gated
@@ -615,6 +630,7 @@ export function MapView() {
     room: RoomView;
     color: string;
     actionGlyph: string | null;
+    actionChip: ChipStyle | null;
     showRoleBadge: boolean;
   }> = [];
 
@@ -631,6 +647,7 @@ export function MapView() {
         room,
         color: player.color,
         actionGlyph: selfActionGlyph(state.current_action),
+        actionChip: selfActionChip(state.current_action),
         showRoleBadge: player.role === "IMPOSTOR",
       });
     }
@@ -645,6 +662,7 @@ export function MapView() {
           room,
           color: player.color,
           actionGlyph: selfActionGlyph(selfState.current_action),
+          actionChip: selfActionChip(selfState.current_action),
           showRoleBadge: false,
         });
       }
@@ -660,6 +678,9 @@ export function MapView() {
         room,
         color: player.color,
         actionGlyph: witnessedActionGlyph(vp.action),
+        // A witnessed kill / vent is something this agent SAW happen, so it is
+        // always a resolved chip — the fog carries sightings, never intents.
+        actionChip: "solid",
         showRoleBadge: false,
       });
     }
@@ -676,6 +697,7 @@ export function MapView() {
         color={spec.color}
         label={spec.id}
         actionGlyph={actionGlyph}
+        actionChip={spec.actionChip}
         roleBadge={roleBadge}
         scale={scale}
         offsetX={offsetX}

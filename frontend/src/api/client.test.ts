@@ -17,10 +17,21 @@
 // here renders. `vitest.config.ts` runs `environment: "node"` for exactly this
 // reason.
 
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VIEW_MODEL_VERSION } from "../types/api";
-import { ApiError, ViewModelVersionError, getReplay, getSets } from "./client";
+import {
+  ApiError,
+  ViewModelVersionError,
+  getBeliefFrames,
+  getReplay,
+  getRubric,
+  getSets,
+} from "./client";
 
 /** A 200 carrying `body` as JSON — what a healthy API answers with. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -137,5 +148,213 @@ describe("the view-model version gate", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(404);
+  });
+});
+
+describe("the routes that used to build their own URL", () => {
+  it("runs the version gate on the rubric the dashboard reads", async () => {
+    // `RubricView` is one of only two stamped payloads. The Tournament
+    // dashboard re-implemented this call with a bare `fetch`, so on the first
+    // contract bump a stale build would have rendered a thousand lines of
+    // statistics from foreign bytes while the picker — same endpoint, one route
+    // away — threw. Both go through `getRubric` now.
+    stubFetch(
+      jsonResponse({ viewModelVersion: "99-from-the-future", per_game: [] }),
+    );
+
+    await expect(getRubric("9p2i")).rejects.toBeInstanceOf(
+      ViewModelVersionError,
+    );
+  });
+
+  it("keeps the rubric's 404 an ApiError so the absent state still reads it", async () => {
+    // The dashboard's "no rubric for this set" panel is a first-class state,
+    // selected on `err instanceof ApiError && err.status === 404`.
+    stubFetch(new Response("no rubric", { status: 404 }));
+
+    const error = await getRubric("4p1i").catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(404);
+  });
+
+  it("passes the belief frames through as the bare array the server sends", async () => {
+    // Stated rather than implied: `GET /replays/{id}/beliefs` answers a bare
+    // ARRAY, and `assertViewModelVersion` returns early on an array — so the
+    // version guard is a NO-OP on this payload today. What routing through the
+    // client buys here is the URL seam, the static-bundle data source and a
+    // typed `ApiError`; the guard arms itself if the route ever gains a stamp.
+    stubFetch(jsonResponse([{ meeting_id: "m-0", entries: [] }]));
+
+    await expect(
+      getBeliefFrames("headless-seed-0", "9p2i"),
+    ).resolves.toHaveLength(1);
+  });
+
+  it("runs the same gate on the belief route the moment it is stamped", async () => {
+    // Proves the ROUTING, which the array case cannot: `getBeliefFrames` is
+    // `getJson`, not a second hand-rolled fetch. A bare `fetch` would resolve
+    // this payload happily.
+    stubFetch(jsonResponse({ viewModelVersion: "99-from-the-future" }));
+
+    await expect(
+      getBeliefFrames("headless-seed-0", "9p2i"),
+    ).rejects.toBeInstanceOf(ViewModelVersionError);
+  });
+
+  it("surfaces a non-200 from the belief route as ApiError, not a bare Error", async () => {
+    // The hand-rolled version threw `new Error("belief frames request failed
+    // (status 500)")`, which no caller can branch on.
+    stubFetch(new Response("boom", { status: 500 }));
+
+    const error = await getBeliefFrames("headless-seed-0", "9p2i").catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(500);
+  });
+});
+
+// ── the client is the only place that calls fetch ────────────────────────────
+//
+// The version gate lives inside `getJson`, so a component that calls `fetch`
+// directly opts out of it — silently, and only visibly once the contract moves.
+// This scan is the standing guard: it ships as an executable test rather than a
+// lint rule so it can be aimed at a planted string and shown to bite.
+
+const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** The one file allowed to call `fetch`, by path relative to `src/`. */
+const FETCH_OWNER = "api/client.ts";
+
+/**
+ * `source` with the contents of comments and string literals blanked to spaces,
+ * line breaks kept.
+ *
+ * A scan of raw text is not a scan of code: this file's own prose says "fetch"
+ * a dozen times, and two components mention "the … fetch (…)" in a comment. This
+ * is what makes the scan below about calls rather than about the word.
+ */
+function codeOnly(source: string): string {
+  const out: string[] = [];
+  let quote: string | null = null;
+  let comment: "line" | "block" | null = null;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i]!;
+    const pair = source.slice(i, i + 2);
+    const blank = ch === "\n" ? "\n" : " ";
+    if (comment === "line") {
+      if (ch === "\n") comment = null;
+      out.push(blank);
+    } else if (comment === "block") {
+      if (pair === "*/") {
+        comment = null;
+        out.push("  ");
+        i += 1;
+      } else out.push(blank);
+    } else if (quote !== null) {
+      // Quoted text is not code — except a template literal, whose `${…}` holes
+      // are, so backticks suppress comment/quote parsing without blanking.
+      if (ch === "\\") {
+        out.push(quote === "`" ? "\\ " : "  ");
+        i += 1;
+      } else if (ch === quote) {
+        quote = null;
+        out.push(ch);
+      } else {
+        out.push(quote === "`" ? ch : blank);
+      }
+    } else if (pair === "//" || pair === "/*") {
+      comment = pair === "//" ? "line" : "block";
+      out.push("  ");
+      i += 1;
+    } else if (ch === "'" || ch === '"' || ch === "`") {
+      quote = ch;
+      out.push(ch);
+    } else {
+      out.push(ch);
+    }
+  }
+  return out.join("");
+}
+
+/**
+ * 1-based line numbers in `source` that call `fetch(` directly.
+ *
+ * Pure — takes the path and the text, reads nothing — so the scan below can be
+ * pointed at a planted fixture. The lookbehind is what keeps `store.prefetch(…)`
+ * and `client.fetch(…)` out of it: only a bare `fetch(` counts.
+ */
+function rawFetchLines(relPath: string, source: string): number[] {
+  if (relPath === FETCH_OWNER) {
+    return [];
+  }
+  return codeOnly(source)
+    .split("\n")
+    .map((line, index) => (/(?<![\w$.])fetch\s*\(/.test(line) ? index + 1 : 0))
+    .filter((line) => line > 0);
+}
+
+/** Every `.ts` / `.tsx` under `src/`, test files excluded, as `[relPath, text]`. */
+function sources(dir: string): Array<[string, string]> {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return sources(full);
+    }
+    // A test may stub `fetch` — that is exercising the client, not bypassing it.
+    if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) {
+      return [];
+    }
+    return [
+      [
+        relative(SRC_DIR, full).split(sep).join("/"),
+        readFileSync(full, "utf8"),
+      ],
+    ];
+  });
+}
+
+describe("no component reaches past the client", () => {
+  const SOURCES = sources(SRC_DIR);
+
+  it("scans a real set of files (the check is only as good as its input)", () => {
+    expect(SOURCES.length).toBeGreaterThan(30);
+    expect(SOURCES.map(([path]) => path)).toContain(FETCH_OWNER);
+  });
+
+  it("finds no direct fetch outside the client", () => {
+    const offenders = SOURCES.flatMap(([path, text]) =>
+      rawFetchLines(path, text).map((line) => `${path}:${line}`),
+    );
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("bites on a planted call, and only on a real one", () => {
+    expect(
+      rawFetchLines("components/Planted.tsx", "const r = await fetch(url);"),
+    ).toEqual([1]);
+    expect(rawFetchLines(FETCH_OWNER, "const r = await fetch(url);")).toEqual(
+      [],
+    );
+    expect(
+      rawFetchLines("components/Planted.tsx", "void store.prefetch(id);"),
+    ).toEqual([]);
+    expect(
+      rawFetchLines("components/Planted.tsx", "await client.fetch(url);"),
+    ).toEqual([]);
+  });
+
+  it("reads code, not prose — and still sees a call after one", () => {
+    const planted = [
+      "// gate the BODIES fetch (the verbatim text rides the gate)",
+      "/* a block comment mentioning fetch (x) */",
+      'const label = "call fetch(url) here";',
+      "await fetch(apiUrl(`/replays/${id}`));",
+    ].join("\n");
+
+    expect(rawFetchLines("components/Planted.tsx", planted)).toEqual([4]);
   });
 });

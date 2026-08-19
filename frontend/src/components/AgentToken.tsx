@@ -1,7 +1,8 @@
 // One agent on the map, in the Playful chunky-sticker style (Task 12.5;
 // design/phase-12/stage-1-design.md §3.2, the 02-map render). A filled disc in
 // the agent's role-neutral IDENTITY colour (never guilt — firewall) with the
-// p-id in mono, a small `current_action` glyph chip (cream sticker + ink glyph),
+// p-id in mono, a small `current_action` glyph chip (a cream sticker for an act
+// the engine carried out, a ghosted ring for one it did not),
 // and an OMNISCIENT-ONLY impostor role badge (ink disc + cream dagger). The
 // per-agent jitter spreads co-located tokens so they don't fully overlap.
 //
@@ -22,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Graphics } from "pixi.js";
 
-import { paintGlyph } from "../assets/map/glyphs";
+import { type ChipStyle, paintGlyph } from "../assets/map/glyphs";
 import { pixiHex, tokens } from "../tokens";
 import type { RoomView } from "../types/api";
 
@@ -32,6 +33,10 @@ interface AgentTokenProps {
   color: string;
   label: string;
   actionGlyph: string | null;
+  // How the action chip reads: `"solid"` for an act the engine carried out,
+  // `"hollow"` for an INTENT it did not (a fake task, a blocked move), `null`
+  // where no chip is drawn — which is exactly where `actionGlyph` is null too.
+  actionChip: ChipStyle | null;
   roleBadge: string | null;
   scale: number;
   offsetX: number;
@@ -56,6 +61,11 @@ export const TWEEN_DURATION_MS = 250;
 const TOKEN_RADIUS = 12;
 const INK_900 = pixiHex(tokens.ink[900]);
 const PAPER_0 = pixiHex(tokens.paper[0]);
+
+// Opacity of a HOLLOW action chip's ring and glyph — the "intent, not outcome"
+// treatment. Low enough to read as ghosted next to a solid chip, high enough to
+// stay identifiable at map scale.
+const INTENT_ALPHA = 0.55;
 
 const CHIP_RADIUS = 7.5;
 const CHIP_OFFSET = 12; // screen px from the token centre to the chip centre
@@ -114,8 +124,22 @@ function targetPoint(props: AgentTokenProps): Point {
 }
 
 export function AgentToken(props: AgentTokenProps) {
-  const { room, color, label, actionGlyph, roleBadge, animate, onSelect, selected } =
-    props;
+  const {
+    room,
+    color,
+    label,
+    actionGlyph,
+    actionChip,
+    roleBadge,
+    animate,
+    onSelect,
+    selected,
+  } = props;
+  // A hollow chip is the same sticker, ghosted: no cream fill and a faded ring +
+  // glyph. It has to stay legible over a cream room (`RoomRect` fills PAPER_0),
+  // so dropping the fill alone would read as no difference at all — the alpha is
+  // what carries "intended, not done".
+  const chipAlpha = actionChip === "hollow" ? INTENT_ALPHA : 1;
   const target = targetPoint(props);
 
   const [pos, setPos] = useState<Point>(target);
@@ -189,11 +213,14 @@ export function AgentToken(props: AgentTokenProps) {
           graphics.circle(pos.x, pos.y, TOKEN_RADIUS);
           graphics.fill(tokenColor);
           graphics.stroke({ width: 2.2, color: INK_900 });
-          // Action chip background (cream sticker), only when there is a glyph.
+          // Action chip background, only when there is a glyph: a cream sticker
+          // for a resolved act, a ghosted ring (no fill) for an intent.
           if (actionGlyph !== null) {
             graphics.circle(chipX, chipBottomY, CHIP_RADIUS);
-            graphics.fill(PAPER_0);
-            graphics.stroke({ width: 1.6, color: INK_900 });
+            if (actionChip === "solid") {
+              graphics.fill(PAPER_0);
+            }
+            graphics.stroke({ width: 1.6, color: INK_900, alpha: chipAlpha });
           }
           // Role badge background (ink disc), Omniscient-only via the texture gate.
           // Enlarged so the impostor reveal reads clearly (Task 12.13).
@@ -218,7 +245,9 @@ export function AgentToken(props: AgentTokenProps) {
       />
       {actionGlyph !== null && (
         <pixiGraphics
-          draw={(g: Graphics) => paintGlyph(g, actionGlyph, chipX, chipBottomY, GLYPH_SIZE, INK_900)}
+          draw={(g: Graphics) =>
+            paintGlyph(g, actionGlyph, chipX, chipBottomY, GLYPH_SIZE, INK_900, chipAlpha)
+          }
         />
       )}
       {roleBadge !== null && (
