@@ -170,6 +170,57 @@ if model not in names:
 PY
 }
 
+# Collapse `.` and `..` segments in an absolute path, textually. Used only on the
+# not-yet-created tail below, where the kernel cannot resolve them but `mkdir -p`
+# will: it creates each missing component in turn, so `a/../b` ends up at `b`.
+# Iterates with parameter expansion rather than word splitting, so a segment
+# containing a glob character is never expanded.
+normalize_path_segments() {
+  local rest="${1#/}" out="" segment
+  while [[ -n "$rest" ]]; do
+    segment="${rest%%/*}"
+    if [[ "$segment" == "$rest" ]]; then rest=""; else rest="${rest#*/}"; fi
+    case "$segment" in
+      '' | .) ;;
+      ..) out="${out%/*}" ;;
+      *) out="$out/$segment" ;;
+    esac
+  done
+  printf '%s' "${out:-/}"
+}
+
+# Echo the PHYSICAL absolute path of $1, which need not exist yet. Each pass
+# resolves the longest existing prefix through `cd` + `pwd -P` (collapsing
+# symlinks), appends the not-yet-created tail, and normalizes `.`/`..` out of it.
+# Normalizing can expose a prefix the previous pass could not see — `missing/../
+# link/new` only reveals `link` once `missing/..` is collapsed — so the two steps
+# run to a fixed point. Used by the fake provider's target guard, which must not
+# be defeatable by a symlink, a `..`, or the two combined. Fails loud rather than
+# returning a path it could not resolve.
+resolve_physical_path() {
+  local target="$1" suffix="" previous="" physical passes=0
+  [[ "$target" != /* ]] && target="$PWD/$target"
+  while [[ "$target" != "$previous" ]]; do
+    previous="$target"
+    suffix=""
+    while [[ ! -d "$target" ]]; do
+      suffix="/$(basename "$target")$suffix"
+      target="$(dirname "$target")"
+    done
+    if ! physical="$(cd "$target" 2>/dev/null && pwd -P)"; then
+      echo "Error: cannot resolve '$1' ('$target' is unreadable or loops)." >&2
+      return 1
+    fi
+    target="$(normalize_path_segments "$physical$suffix")"
+    passes=$((passes + 1))
+    if [[ "$passes" -ge 32 ]]; then
+      echo "Error: cannot resolve '$1' (symlink chain too deep)." >&2
+      return 1
+    fi
+  done
+  printf '%s' "$target"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --full) set_mode full ;;
@@ -252,34 +303,34 @@ done
 # so a wrong-roster refresh fails loud at that gate (or, for an existing committed
 # set, on the descriptor-disagreement check) rather than needing a path guard here.
 
-# Resolve the LLM provider for this refresh (Task 7.7). Historically this script
-# FORCED anthropic, overriding the ambient AILIBI_LLM_PROVIDER entirely so a
-# refresh recorded REAL samples regardless of the shell (the test suite pins
-# AILIBI_LLM_PROVIDER=fake; eval/dev sandboxes pin anthropic). It now
-# ADDITIONALLY honors an explicit `ollama` so a free local run is possible (Task
-# 7.8). Mirror llm.provider.build_default_client()'s lower-casing. Resolution:
-#   ollama                         -> ollama (explicit local provider)
-#   anthropic | fake | unset/empty -> anthropic (the real default; `fake` is the
-#                                     test/CI convention and a refresh records
-#                                     REAL samples, so it maps to the historical
-#                                     forced default rather than recording fake)
-#   anything else                  -> fail loud (a typo must not silently select a
-#                                     provider the user did not intend, AGENTS.md)
+# Resolve the LLM provider for this refresh, mirroring
+# llm.provider.build_default_client()'s lower-casing:
+#   anthropic | unset/empty -> anthropic (metered real spend; the DEFAULT, so a
+#                              refresh that forgot to set the var records REAL
+#                              samples instead of silently writing fake bytes
+#                              over a committed set)
+#   ollama                  -> ollama (free local server)
+#   featherless             -> featherless (hosted flat-rate; $0 provider-keyed
+#                              cost, key required, locked prompt set + model
+#                              enforced by the preflight below)
+#   fake                    -> fake (hermetic, $0, NO network: the only provider
+#                              a test can drive end to end. Accepted ONLY when
+#                              named explicitly, and only for a sample dir
+#                              OUTSIDE the repo's replays/ tree — the recording
+#                              path refuses that target below)
+#   anything else           -> fail loud (a typo must not silently select a
+#                              provider the user did not intend, AGENTS.md)
 # The resolved provider is echoed (dry-run + real path) and EXPORTED below, so it
 # is never silent and never falls through to build_default_client()'s fake default.
-#   featherless                    -> featherless (hosted flat-rate provider, Task
-#                                     14.7 / 14.12 baseline re-record; $0
-#                                     provider-keyed cost, key required, the locked
-#                                     Qwen/Qwen3.6-27B model + qwen3_32b prompt set
-#                                     exported by the operator — see the hint in
-#                                     tasks/phase-14.md Task 14.12. All five
-#                                     substrate levers are unconditionally ON —
-#                                     the four Phase-13.5 levers since Task 14.9,
-#                                     the Task-14.10 evidence_quality_lift lever
-#                                     since the 14.12 close — so no flag export is
-#                                     needed.)
+# Task 7.7 / 7.8 / 14.7 added the non-anthropic arms; Task 20.21 made `fake`
+# explicit so the worker pool has a hermetic end-to-end test path.
 DEFAULT_OLLAMA_HOST="localhost:11434"
 DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
+# The fake client's meeting-tier model id; mirrors
+# llm.fake_provider._FAKE_MEETING_MODEL. A fake refresh attributes its MANIFEST
+# rows to this id, so a hermetic recording can never render as a Sonnet or
+# Featherless row.
+DEFAULT_FAKE_MODEL="fake-meeting"
 # The locked production model (Task 16.2, audits/audit-phase-16-model-lock.md,
 # locked 2026-07-12); mirrors llm.featherless_client.DEFAULT_FEATHERLESS_MODEL.
 # Used for the no-meeting-seed MANIFEST attribution so a Featherless refresh
@@ -290,9 +341,10 @@ PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-anthropic}" | tr '[:upper:]' '[:
 case "$PROVIDER" in
   ollama) ;;
   featherless) ;;
-  anthropic | fake) PROVIDER="anthropic" ;;
+  fake) ;;
+  anthropic) ;;
   *)
-    echo "Error: unknown AILIBI_LLM_PROVIDER='$PROVIDER'; expected 'anthropic', 'ollama', or 'featherless'." >&2
+    echo "Error: unknown AILIBI_LLM_PROVIDER='$PROVIDER'; expected 'anthropic', 'ollama', 'featherless', or 'fake'." >&2
     exit 1
     ;;
 esac
@@ -367,6 +419,8 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
     echo "[dry-run] model-set coupling: would require the effective featherless meeting model (AILIBI_LLM_MEETING_MODEL, else the script default) to be 'Qwen/Qwen3.6-27B' — the qwen3_6_27b set's locked owner model (Task 16.13)"
     echo "[dry-run] model registry: would require 'Qwen/Qwen3.6-27B' registered in llm/featherless_client._THINKING_KWARG_BY_MODEL (Task 16.12's entry — the client fails loud on an unregistered id)"
+  elif [[ "$PROVIDER" == "fake" ]]; then
+    echo "[dry-run] preflight: would require no API key (hermetic \$0 provider) and would refuse a sample dir or manifest inside $REPO_ROOT/replays"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
@@ -486,6 +540,31 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Model registry OK: $REQUIRED_SET_OWNER_MODEL is registered in the production client."
+elif [[ "$PROVIDER" == "fake" ]]; then
+  # The fake provider is hermetic and $0, so there is no key to preflight — what
+  # must be checked instead is where it WRITES. Fake bytes in a committed set are
+  # indistinguishable from a real recording at a glance and would poison every
+  # metric derived from it, so refuse when EITHER output lands in the repo's
+  # replays/ tree. Both are checked because they are independently configurable:
+  # a scratch AILIBI_SAMPLE_DIR with AILIBI_MANIFEST left pointing at a committed
+  # MANIFEST.md would otherwise rewrite that manifest's rows from fake replays.
+  # Compare PHYSICAL paths (neither need exist yet), so a symlink or a `..`
+  # cannot smuggle a target back under replays/. Runs before mkdir/staging, so a
+  # refused run leaves nothing behind.
+  _replays_root="$(cd "$REPO_ROOT/replays" && pwd -P)"
+  for _target_var in SAMPLE_DIR MANIFEST; do
+    _target_phys="$(resolve_physical_path "${!_target_var}")"
+    if [[ "$_target_phys" == "$_replays_root" || "$_target_phys" == "$_replays_root"/* ]]; then
+      echo "Error: a fake-provider refresh may not write into the repository's replays/ tree." >&2
+      echo "       Offending path: $_target_phys (from AILIBI_${_target_var})" >&2
+      echo "       Rule:     the committed sample sets are REAL recordings; the fake provider" >&2
+      echo "                 records hermetic \$0 bytes, so both its sample dir and its manifest" >&2
+      echo "                 must lie outside $_replays_root." >&2
+      echo "       Point AILIBI_SAMPLE_DIR and AILIBI_MANIFEST at a scratch dir; nothing was staged." >&2
+      exit 1
+    fi
+  done
+  echo "Fake-provider targets OK: sample dir + manifest are outside $_replays_root (hermetic \$0 recording, no API key)."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
@@ -561,10 +640,15 @@ uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
 # is present. Without an explicit export a refresh that left the var unset would
 # silently re-record fake-provider output (zero spend, fake model) over the real
 # samples and corrupt MANIFEST provenance + every Phase 5 metric derived from it.
-# $PROVIDER is anthropic by default (and only ever anthropic|ollama -- the case
-# guard above rejected fake/unknown), so this still never selects fake.
+# An UNSET or empty var still resolves to anthropic above, so that silent-fake
+# path remains closed. `fake` is reachable only by naming it explicitly, and the
+# preflight above already confined such a run to a scratch dir outside replays/.
 export AILIBI_LLM_PROVIDER="$PROVIDER"
-echo "Using LLM provider: $AILIBI_LLM_PROVIDER (real-provider refresh)"
+if [[ "$PROVIDER" == "fake" ]]; then
+  echo "Using LLM provider: $AILIBI_LLM_PROVIDER (hermetic refresh — \$0, no network, scratch dir only)"
+else
+  echo "Using LLM provider: $AILIBI_LLM_PROVIDER (real-provider refresh)"
+fi
 echo "Refreshing seeds: $seeds_csv"
 
 # Compute provenance once so every seed in this refresh shares one sha + date.
@@ -578,7 +662,12 @@ refreshed_at="$(date -u +%F)"
 # DEFAULT_MEETING_MODEL (Sonnet), ollama's is the local DEFAULT_OLLAMA_MODEL.
 # Attributing an ollama no-meeting seed to Sonnet would misrecord provenance.
 active_model="${AILIBI_LLM_MEETING_MODEL:-}"
-if [[ -z "$active_model" ]]; then
+if [[ "$PROVIDER" == "fake" ]]; then
+  # Ignore AILIBI_LLM_MEETING_MODEL here: the fake client answers with its own
+  # tier id whatever the env says, so honoring the override would attribute
+  # fake rows to a model that never ran.
+  active_model="$DEFAULT_FAKE_MODEL"
+elif [[ -z "$active_model" ]]; then
   if [[ "$PROVIDER" == "ollama" ]]; then
     active_model="$DEFAULT_OLLAMA_MODEL"
   elif [[ "$PROVIDER" == "featherless" ]]; then
@@ -636,6 +725,15 @@ _lockdir="$stage_dir/.lock"
 # `.failed` check fails loud. A waiter also bails the instant any worker flags a
 # failure. Returns non-zero when the lock was NOT acquired -- callers must not
 # enter the critical section on a non-zero return.
+# The owner PID uses $BASHPID (the WORKER subshell's own PID) when available, and
+# falls back to $$ on macOS's stock Bash 3.2, which predates $BASHPID (the ${:-}
+# form is exempt from `set -u`, so an undefined $BASHPID never fatally aborts the
+# worker there). On 3.2 every worker shares $$ (the main shell), so dead-owner
+# detection degrades to a no-op — the mkdir mutex + release still serialize
+# correctly; only the rare "a worker was SIGKILLed mid-critical-section" safety
+# net is lost. Install a newer bash (`brew install bash`) to restore it. The same
+# degradation is ledgered for the sibling corpus recorder in
+# audits/audit-phase-18-close.md §7 row 5 and training/README.md §6 row 5.
 _acquire_lock() {
   local owner
   # Give up the moment any worker has flagged a failure -- even if the lock is
@@ -654,7 +752,7 @@ _acquire_lock() {
     fi
     sleep 0.1
   done
-  printf '%s' "$BASHPID" >"$_lockdir/owner"
+  printf '%s' "${BASHPID:-$$}" >"$_lockdir/owner"
   return 0
 }
 # rm -rf (not rmdir): the lock dir now holds the owner-pid file.

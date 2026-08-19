@@ -1,9 +1,14 @@
-"""Tests for scripts/refresh_samples.sh argument handling (Task 4.17).
+"""Tests for scripts/refresh_samples.sh via subprocess.
 
-Exercises mode parsing, mutual exclusion, seed validation, and --dry-run via
-subprocess. Every case is hermetic: --dry-run makes no API call, runs no
-tournament, and writes nothing, so no real-provider spend or sample mutation
-happens here.
+Two families, both hermetic — no real provider is ever reached and no committed
+byte is ever written:
+
+* argument handling, provider resolution and the pre-spend preflights, driven
+  with ``--dry-run`` or with a real mode that must abort at a gate;
+* the RECORDING path, driven with ``AILIBI_LLM_PROVIDER=fake`` into a scratch
+  dir under ``tmp_path``. That is the only provider the worker pool can be run
+  end to end on, so it is what covers ``run_worker`` / ``claim_next_seed`` /
+  ``_acquire_lock`` / ``record_one_seed`` and the lock-guarded MANIFEST merge.
 """
 
 from __future__ import annotations
@@ -156,10 +161,15 @@ def test_dry_run_writes_nothing() -> None:
 
 
 def test_preflight_requires_api_key_before_spend() -> None:
-    # A real (non-dry-run) mode with no key must fail at preflight, before any
-    # tournament invocation -- so this test never spends, even with a key
-    # configured in the ambient environment (it is stripped here).
-    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    # A real (non-dry-run) anthropic mode with no key must fail at preflight,
+    # before any tournament invocation -- so this test never spends, even with a
+    # key configured in the ambient environment (it is stripped here). The
+    # provider is named explicitly because the ambient test env pins
+    # AILIBI_LLM_PROVIDER=fake (tests/conftest.py) and `fake` now resolves to the
+    # hermetic provider, which has no key to preflight.
+    env = _clean_env()
+    env.pop("ANTHROPIC_API_KEY", None)
+    env["AILIBI_LLM_PROVIDER"] = "anthropic"
     proc = _run("--seeds", "0", env=env)
     assert proc.returncode != 0
     assert "ANTHROPIC_API_KEY must be set" in proc.stdout + proc.stderr
@@ -807,23 +817,45 @@ def test_dry_run_provider_is_case_insensitive() -> None:
     assert "[dry-run] provider: ollama" in proc.stdout
 
 
-def test_dry_run_fake_provider_maps_to_anthropic() -> None:
-    # A refresh records REAL samples, so the fake provider is meaningless here.
-    # `fake` is the test/CI ambient convention (tests/conftest.py pins it), so it
-    # maps to the historical forced default (anthropic) rather than recording
-    # fake output -- preserving the original "works regardless of ambient shell".
+def test_dry_run_explicit_fake_provider_resolves_fake() -> None:
+    # An EXPLICIT `fake` selects the hermetic provider (Task 20.21): it is the
+    # only provider the recording path can be tested on end to end. It no longer
+    # maps to anthropic; what confines it is the recording path's refusal to
+    # write into the repo's replays/ tree, which the dry-run also describes.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "fake"
     proc = _run("--seeds", "22", "--dry-run", env=env)
     assert proc.returncode == 0
+    assert "[dry-run] provider: fake" in proc.stdout
+    assert "would require no API key" in proc.stdout
+    assert (
+        f"would refuse a sample dir or manifest inside {_REPO_ROOT}/replays"
+        in proc.stdout
+    )
+
+
+def test_dry_run_inherited_fake_provider_resolves_fake() -> None:
+    # The inherited test env pins AILIBI_LLM_PROVIDER=fake (tests/conftest.py),
+    # so it resolves to fake here too. An ambient `fake` is stopped from
+    # recording over a committed set by the replays/ refusal on the RECORDING
+    # path (test_fake_refresh_refuses_a_replays_target), not by a remap.
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "[dry-run] provider: fake" in proc.stdout
+
+
+def test_dry_run_unset_or_empty_provider_resolves_anthropic() -> None:
+    # The anti-silent-fake guard, unchanged: a refresh that never set the var --
+    # or set it empty -- records REAL samples. Only an explicit `fake` selects
+    # the hermetic provider, so no forgotten export can write fake bytes over a
+    # committed set.
+    env = _clean_env()
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode == 0
     assert "[dry-run] provider: anthropic" in proc.stdout
 
-
-def test_dry_run_inherited_fake_provider_still_resolves_anthropic() -> None:
-    # The common real case: the ambient env (here, the inherited test env, which
-    # tests/conftest.py pins to fake) must not break the refresh -- it resolves to
-    # anthropic exactly as the historical forced-anthropic behavior did.
-    proc = _run("--seeds", "22", "--dry-run")
+    env["AILIBI_LLM_PROVIDER"] = ""
+    proc = _run("--seeds", "22", "--dry-run", env=env)
     assert proc.returncode == 0
     assert "[dry-run] provider: anthropic" in proc.stdout
 
@@ -913,3 +945,562 @@ def test_default_featherless_model_pins_the_locked_served_id() -> None:
     assert match is not None, "DEFAULT_FEATHERLESS_MODEL constant missing from script"
     assert match.group(1) == "Qwen/Qwen3.6-27B"
     assert match.group(1) == DEFAULT_FEATHERLESS_MODEL
+
+
+# -- the hermetic recording path (Task 20.21) ---------------------------------
+#
+# `fake` is the only provider that can drive the worker pool without spending,
+# so these cases are what cover run_worker / claim_next_seed / _acquire_lock /
+# record_one_seed and the lock-guarded MANIFEST merge. Every one records into a
+# scratch dir under tmp_path; the script refuses a replays/ target outright.
+
+_VERIFY_SH = _REPO_ROOT / "scripts" / "verify_samples.sh"
+_WRITER_PY = _REPO_ROOT / "scripts" / "_manifest_writer.py"
+_COMMITTED_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
+
+
+def _fake_set(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A scratch set dir + env for a real (non-dry-run) fake-provider refresh.
+
+    The dir is a subdir of ``tmp_path`` so the per-run staging dir (created in
+    its PARENT) also lands in the temp tree. It is left uncreated: the script
+    writes its own ``roster.json`` at the default 4p/1i/1-task roster, and the
+    loader reconstructs from that descriptor, so a roster override passed here
+    that disagreed with the run would surface as a tick-0 hash divergence.
+    """
+
+    set_dir = tmp_path / "scratch-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+    )
+    return set_dir, env
+
+
+def _manifest_data_rows(manifest: Path) -> list[list[str]]:
+    """Every data row of a rendered MANIFEST, as its stripped cells.
+
+    A list (not a seed-keyed dict) so a duplicated seed row stays visible
+    instead of collapsing.
+    """
+
+    rows: list[list[str]] = []
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and cells[0].isdigit():
+            rows.append(cells)
+    return rows
+
+
+def test_fake_refresh_records_seeds_end_to_end(tmp_path: Path) -> None:
+    # The whole recording path, hermetically: two seeds are claimed, recorded,
+    # moved into the set dir and manifested, the staging dir is discarded by the
+    # EXIT trap, and the result reconstructs byte-identically under the engine.
+    set_dir, env = _fake_set(tmp_path)
+    proc = _run("--seeds", "0,1", env=env, timeout=600)
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode == 0, combined
+    # The abort this path used to die on under macOS's stock Bash 3.2, before the
+    # lock owner PID was written as ${BASHPID:-$$}.
+    assert "unbound variable" not in combined
+
+    assert (set_dir / "replay-seed-0.jsonl").is_file()
+    assert (set_dir / "replay-seed-1.jsonl").is_file()
+
+    manifest = set_dir / "MANIFEST.md"
+    rows = _manifest_data_rows(manifest)
+    assert [int(cells[0]) for cells in rows] == [0, 1]
+    for cells in rows:
+        assert cells[1] == "fake-meeting"  # never a Sonnet/Featherless id
+        assert cells[-2] == "0.0000"  # cost_usd
+    assert manifest.read_text(encoding="utf-8").count("# Sample Replay Manifest") == 1
+
+    # The EXIT trap discarded the per-run stage (created in the set dir's parent).
+    assert list(tmp_path.glob(".ailibi-refresh-stage-*")) == []
+
+    verify = subprocess.run(
+        ["bash", str(_VERIFY_SH), str(set_dir)],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=600,
+    )
+    assert verify.returncode == 0, verify.stdout + verify.stderr
+
+
+def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
+    tmp_path: Path,
+) -> None:
+    # No spend is possible on the fake provider, so there is no key to preflight
+    # -- but the substrate-lever slate is a property of the GAME, not of the LLM
+    # backend, so its preflight still runs unchanged. Both keys are stripped to
+    # prove the run does not need them.
+    set_dir, env = _fake_set(tmp_path)
+    env.pop("ANTHROPIC_API_KEY", None)
+    env.pop("FEATHERLESS_API_KEY", None)
+    proc = _run("--seeds", "0", env=env, timeout=600)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "ANTHROPIC_API_KEY must be set" not in out
+    assert "Using API key prefix" not in out
+    assert (
+        "Substrate slate OK: four meeting-layer levers ON, impostor_roll_call OFF"
+        in out
+    )
+    assert "Attributing no-meeting seeds to model: fake-meeting" in out
+    assert (set_dir / "replay-seed-0.jsonl").is_file()
+
+
+# The only names a `--seeds 0` refresh writes into its target dir: the replay,
+# the roster descriptor, the manifest, the rebuilt eval report and (9p2i only)
+# the rubric. Restoring exactly these keeps the guard below honest without
+# reading every committed replay on every case.
+_REFRESH_OUTPUT_NAMES = (
+    "replay-seed-0.jsonl",
+    "roster.json",
+    "MANIFEST.md",
+    "tournament-eval-report.json",
+    "results-rubric-score.json",
+)
+# A refused run must never create this; the `..` cases point through it.
+_STRAY_TARGET_ROOT = _REPO_ROOT / "not-a-real-dir"
+
+
+@contextlib.contextmanager
+def _replays_tree_restored() -> Iterator[None]:
+    """Put the committed tree back if a refused run turns out not to be refused.
+
+    The refusal cases below aim a REAL recording run at the committed tree,
+    which is the only way to prove the guard refuses it. Their assertions report
+    a regression; this undoes the damage, so a regressed guard cannot also leave
+    the repository dirty. It takes a recursive inventory of ``replays/`` and
+    removes anything new (files and directories alike, deepest first), and keeps
+    the bytes of the files a refresh would overwrite in any of the directories
+    these cases name.
+    """
+
+    replays = _REPO_ROOT / "replays"
+    targets = [replays, replays / "samples" / "4p1i", replays / "samples" / "9p2i"]
+    inventory = set(replays.rglob("*"))
+    contents: dict[Path, bytes] = {}
+    for directory in targets:
+        for name in _REFRESH_OUTPUT_NAMES:
+            path = directory / name
+            if path.is_file():
+                contents[path] = path.read_bytes()
+    try:
+        yield
+    finally:
+        strays = sorted(
+            (path for path in replays.rglob("*") if path not in inventory),
+            key=lambda path: len(path.parts),
+            reverse=True,  # children before their parents
+        )
+        for path in strays:
+            if path.is_dir() and not path.is_symlink():
+                path.rmdir()
+            else:
+                path.unlink()
+        for path, data in contents.items():
+            if not path.is_file() or path.read_bytes() != data:
+                path.write_bytes(data)
+        if _STRAY_TARGET_ROOT.exists():
+            shutil.rmtree(_STRAY_TARGET_ROOT)
+
+
+@pytest.mark.parametrize(
+    "relative_target",
+    [
+        "replays",
+        "replays/samples/4p1i",
+        "replays/samples/9p2i",
+        # A `..` that leaves the tree textually and re-enters it physically: the
+        # case a string-prefix form of the guard would wave through.
+        "scripts/../replays/samples/4p1i",
+        # The same trick behind a component that does not exist yet, which the
+        # kernel cannot resolve but `mkdir -p` would create on the way in.
+        "not-a-real-dir/../replays/samples/new-set",
+    ],
+)
+def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
+    # The guard that makes an explicit `fake` safe: committed sets are REAL
+    # recordings, so fake bytes may never land in the repo's replays/ tree. The
+    # refusal fires before mkdir/staging and names the path and the rule.
+    target = f"{_REPO_ROOT}/{relative_target}"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=target,
+        AILIBI_MANIFEST=f"{target}/MANIFEST.md",
+    )
+    with _replays_tree_restored():
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert f"{_REPO_ROOT}/replays" in out  # the rule's root, physically resolved
+        assert "nothing was staged" in out
+        # It aborted at the provider gate: the later pre-spend gates never ran,
+        # so no directory, descriptor or stage was created.
+        assert "Substrate slate OK" not in out
+        samples_root = _REPO_ROOT / "replays" / "samples"
+        assert list(samples_root.glob(".ailibi-refresh-stage-*")) == []
+        # The `..` cases must not create their leading component on the way in
+        # (asserted inside the block, before the cleanup would remove it).
+        assert not _STRAY_TARGET_ROOT.exists()
+
+
+def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
+    # AILIBI_MANIFEST is configurable independently of AILIBI_SAMPLE_DIR, so a
+    # scratch sample dir alone does not make a fake run safe: the manifest writer
+    # would rewrite a committed MANIFEST's rows from the scratch replays. Both
+    # outputs are guarded, and the error names which one offended.
+    set_dir = tmp_path / "scratch-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(_COMMITTED_4P1I / "MANIFEST.md"),
+    )
+    with _replays_tree_restored():
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert "(from AILIBI_MANIFEST)" in out
+        assert "nothing was staged" in out
+        assert not set_dir.exists()  # refused before the target dir was created
+
+
+def test_fake_refresh_refuses_a_symlink_into_replays(tmp_path: Path) -> None:
+    # The other way a string-prefix form of this guard is defeated: a sample dir
+    # that only LOOKS outside replays/. The guard compares physical paths, so the
+    # symlink resolves back into the tree and the run is refused. The link points
+    # at a scratch subdir of replays/samples (not a committed set), so a regressed
+    # guard would record into a throwaway dir rather than over real bytes.
+    decoy = _REPO_ROOT / "replays" / "samples" / ".test-symlink-decoy"
+    link = tmp_path / "looks-like-scratch"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=str(link),
+        AILIBI_MANIFEST=str(link / "MANIFEST.md"),
+    )
+    decoy.mkdir()
+    link.symlink_to(decoy)
+    try:
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert list(decoy.iterdir()) == []
+    finally:
+        shutil.rmtree(decoy)
+
+
+def test_fake_refresh_refuses_a_symlink_revealed_by_normalization(
+    tmp_path: Path,
+) -> None:
+    # The two evasions COMPOSED, which each one alone does not catch: a `..`
+    # behind a component that does not exist yet, collapsing onto a symlink that
+    # points into replays/. Resolving once and normalizing once leaves the
+    # symlink unresolved, so the guard has to run both steps to a fixed point.
+    # Again aimed at a throwaway subdir, so a regression costs nothing.
+    decoy = _REPO_ROOT / "replays" / "samples" / ".test-composed-decoy"
+    link = tmp_path / "samples-link"
+    target = f"{tmp_path}/not-there/../samples-link/new-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_SAMPLE_DIR=target,
+        AILIBI_MANIFEST=f"{target}/MANIFEST.md",
+    )
+    decoy.mkdir()
+    link.symlink_to(decoy)
+    try:
+        proc = _run("--seeds", "0", env=env, timeout=300)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert str(decoy) in out  # resolved all the way through the symlink
+        assert list(decoy.iterdir()) == []
+        assert not (tmp_path / "not-there").exists()
+    finally:
+        shutil.rmtree(decoy)
+
+
+def test_fake_refresh_bash_trace_names_the_worker_pool(tmp_path: Path) -> None:
+    # Coverage proof that survives a reworded progress string: the xtrace of a
+    # real run must show the four pool functions actually invoked.
+    set_dir, env = _fake_set(tmp_path)
+    proc = subprocess.run(
+        ["bash", "-x", str(_REFRESH_SH), "--seeds", "0"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=600,
+    )
+    assert proc.returncode == 0, proc.stderr[-4000:]
+    assert (set_dir / "replay-seed-0.jsonl").is_file()
+    for function in (
+        "run_worker",
+        "claim_next_seed",
+        "record_one_seed",
+        "_acquire_lock",
+    ):
+        assert re.search(rf"^\++ {function}\b", proc.stderr, re.MULTILINE), function
+
+
+def test_two_workers_lose_no_manifest_row(tmp_path: Path) -> None:
+    # MANIFEST.md is a whole-file read-modify-write
+    # (_manifest_writer.update_manifest), so two workers updating different seeds
+    # concurrently would leave one row silently missing -- and a missing row is
+    # fatal at the next verify gate. The mutex around the update is what prevents
+    # it; this pins that it holds. (Replays are staged per-seed and land via an
+    # atomic `mv -f`, so the race could never TRUNCATE a replay: the exposure is
+    # the lost row.)
+    set_dir, env = _fake_set(tmp_path)
+    env["AILIBI_REFRESH_WORKERS"] = "2"
+    proc = _run("--seeds", "0,1,2,3", env=env, timeout=900)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "Recording 4 seeds with 2 parallel workers" in proc.stdout
+
+    manifest = set_dir / "MANIFEST.md"
+    rows = _manifest_data_rows(manifest)
+    assert [int(cells[0]) for cells in rows] == [0, 1, 2, 3]  # none lost, none doubled
+    assert manifest.read_text(encoding="utf-8").count("# Sample Replay Manifest") == 1
+    for seed in range(4):
+        assert (set_dir / f"replay-seed-{seed}.jsonl").is_file()
+        # The claim counter is lock-guarded, so no seed is recorded twice.
+        assert proc.stdout.count(f"recording seed {seed} ---") == 1
+    # WHICH worker drains which seed is up to the scheduler, so asserting a
+    # particular split would be a timing assumption. What is pinned instead is
+    # what holds under every split: every seed was claimed by a worker of the
+    # spawned pool, exactly once, and the manifest kept a row for each.
+    claims = re.findall(r"--- \[worker (\d+)\] recording seed", proc.stdout)
+    assert len(claims) == 4
+    assert set(claims) <= {"1", "2"}
+
+
+def _update_manifest_row(sample_dir: Path, manifest: Path, seed: int) -> None:
+    """One worker's lock-held MANIFEST update, exactly as the script issues it."""
+
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            str(_WRITER_PY),
+            "update",
+            "--seeds",
+            str(seed),
+            "--git-sha",
+            "deadbeef",
+            "--refreshed-at",
+            "2026-08-19",
+            "--model",
+            "fake-meeting",
+            "--sample-dir",
+            str(sample_dir),
+            "--manifest",
+            str(manifest),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+# Two real processes calling the real ``update_manifest`` with their critical
+# sections deliberately overlapped: each reads the manifest, then waits until
+# BOTH have read and merged, and only then writes. Two handshakes, no sleeps —
+# `late` additionally waits for `early`'s write to have COMPLETED, so the write
+# order is established by observation rather than by timing and a descheduled
+# process cannot reorder them. This is what the refresh script's mutex prevents,
+# expressed without it.
+_RACE_DRIVER = """
+import sys
+import time
+from pathlib import Path
+
+scripts_dir, role, manifest, sample_dir, seed, barrier_dir = sys.argv[1:]
+sys.path.insert(0, scripts_dir)
+import _manifest_writer as mw
+
+barrier = Path(barrier_dir)
+render_merged = mw.render_manifest
+
+
+def await_signal(predicate, what):
+    deadline = time.monotonic() + 60
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise SystemExit("timed out waiting for " + what + " in role " + role)
+        time.sleep(0.01)
+
+
+def signal(name):
+    (barrier / name).write_text("1", encoding="utf-8")
+
+
+def gated_render(rows):
+    # Reached after update_manifest has read the manifest and merged this seed,
+    # and evaluated before _atomic_write_text runs -- exactly the seam the lock
+    # covers in the recorder.
+    text = render_merged(rows)
+    signal(role + ".read")
+    await_signal(lambda: len(list(barrier.glob("*.read"))) == 2, "both reads")
+    if role == "late":
+        await_signal(lambda: (barrier / "early.wrote").exists(), "early's write")
+    return text
+
+
+mw.render_manifest = gated_render
+mw.update_manifest(
+    Path(manifest),
+    Path(sample_dir),
+    [int(seed)],
+    git_sha="deadbeef",
+    refreshed_at="2026-08-19",
+    model_override="fake-meeting",
+)
+signal(role + ".wrote")
+"""
+
+
+def test_unserialized_manifest_updates_lose_a_row(tmp_path: Path) -> None:
+    # The perturbation proving the concurrency gate above bites. `update_manifest`
+    # parses the whole manifest, merges one seed and atomically replaces the file,
+    # so two processes whose read-merge-write windows overlap keep only the later
+    # writer's row. Run for real, in two processes, with the overlap forced by a
+    # barrier at the read/write seam and the write order established by waiting
+    # for the first write to land -- so the outcome is fixed by observation, not
+    # by timing, while the race itself is genuine.
+    sample_dir = tmp_path / "rows"
+    sample_dir.mkdir()
+    for seed in (0, 12, 22):
+        shutil.copy2(
+            _COMMITTED_4P1I / f"replay-seed-{seed}.jsonl",
+            sample_dir / f"replay-seed-{seed}.jsonl",
+        )
+    manifest = sample_dir / "MANIFEST.md"
+
+    # A row already in the manifest when both workers read it.
+    _update_manifest_row(sample_dir, manifest, 0)
+    serialized_start = manifest.read_text(encoding="utf-8")
+
+    # Serialized (what the lock guarantees): both new rows land.
+    _update_manifest_row(sample_dir, manifest, 12)
+    _update_manifest_row(sample_dir, manifest, 22)
+    assert [int(cells[0]) for cells in _manifest_data_rows(manifest)] == [0, 12, 22]
+
+    # Unserialized: the same two updates, run concurrently with overlapping
+    # critical sections.
+    manifest.write_text(serialized_start, encoding="utf-8")
+    driver = tmp_path / "race_driver.py"
+    driver.write_text(_RACE_DRIVER, encoding="utf-8")
+    barrier = tmp_path / "barrier"
+    barrier.mkdir()
+    processes = [
+        subprocess.Popen(
+            [
+                "uv",
+                "run",
+                "python",
+                str(driver),
+                str(_REPO_ROOT / "scripts"),
+                role,
+                str(manifest),
+                str(sample_dir),
+                str(seed),
+                str(barrier),
+            ],
+            cwd=_REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for role, seed in (("early", 12), ("late", 22))
+    ]
+    for process in processes:
+        _, stderr = process.communicate(timeout=300)
+        assert process.returncode == 0, stderr
+
+    # Both readers saw {0}; the later writer's file is what survives, so the row
+    # the earlier writer added is gone while the row both of them read remains.
+    assert [int(cells[0]) for cells in _manifest_data_rows(manifest)] == [0, 22]
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="mode 0555 does not block a write as root",
+)
+def test_fake_refresh_fails_loud_when_a_replay_cannot_land(tmp_path: Path) -> None:
+    # record_one_seed's fail-loud branch, driven by a deterministic injected
+    # failure: the set dir is read-only, so the game records into the writable
+    # stage and the atomic `mv -f` into the set dir fails. The refresh must exit
+    # non-zero with the "must NOT be committed" verdict rather than reporting a
+    # partial baseline as complete. The descriptor is pre-written and AGREES, so
+    # the roster gate no-ops and the failure lands where it is aimed.
+    set_dir, env = _fake_set(tmp_path)
+    set_dir.mkdir()
+    (set_dir / "roster.json").write_text(
+        '{"num_players": 4, "num_impostors": 1, "tasks_per_crewmate": 1}',
+        encoding="utf-8",
+    )
+    set_dir.chmod(0o555)
+    try:
+        proc = _run("--seeds", "0", env=env, timeout=600)
+    finally:
+        set_dir.chmod(0o755)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 1, out
+    assert "seed 0 replay move failed" in out
+    assert "the baseline is INCOMPLETE and must NOT be committed" in out
+    assert not (set_dir / "replay-seed-0.jsonl").exists()
+    # No row is written for a seed that never landed.
+    assert not (set_dir / "MANIFEST.md").exists()
+    assert list(tmp_path.glob(".ailibi-refresh-stage-*")) == []
+
+
+def test_lock_owner_pid_tolerates_an_undefined_bashpid() -> None:
+    # macOS ships Bash 3.2, which predates $BASHPID, and the script runs under
+    # `set -u`: a bare "$BASHPID" aborts the FIRST seed claim with
+    # "BASHPID: unbound variable", before any provider call -- so every refresh on
+    # the stock host interpreter died there. ${BASHPID:-$$} is exempt from set -u;
+    # on 3.2 every worker then shares $$, so dead-owner detection degrades to a
+    # no-op while the mkdir mutex still serializes correctly (the same accepted
+    # limitation the corpus recorder records; audits/audit-phase-18-close.md §7
+    # row 5, training/README.md §6 row 5). The end-to-end cases above run this
+    # path under the host bash, which is what bites on 3.2; this source pin bites
+    # on every interpreter, including the Bash 5 CI runs where a bare $BASHPID
+    # would be perfectly defined.
+    script = _REFRESH_SH.read_text(encoding="utf-8")
+    assert 'printf \'%s\' "${BASHPID:-$$}" >"$_lockdir/owner"' in script
+    code = "\n".join(
+        line
+        for line in script.splitlines()
+        if not line.lstrip().startswith("#")  # the comment above names $BASHPID
+    )
+    assert "$BASHPID" not in code.replace("${BASHPID:-$$}", "")
+
+
+def test_default_fake_model_mirrors_the_fake_client() -> None:
+    # A fake row must be attributable as a fake row: the shell constant used for
+    # MANIFEST attribution is pinned against the id the fake client actually
+    # reports, so a hermetic recording can never render as a real-model row.
+    from llm.fake_provider import _FAKE_MEETING_MODEL
+
+    script = _REFRESH_SH.read_text(encoding="utf-8")
+    match = re.search(r'^DEFAULT_FAKE_MODEL="([^"]+)"$', script, re.MULTILINE)
+    assert match is not None, "DEFAULT_FAKE_MODEL constant missing from script"
+    assert match.group(1) == _FAKE_MEETING_MODEL
