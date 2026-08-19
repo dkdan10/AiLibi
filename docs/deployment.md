@@ -82,7 +82,17 @@ pre-rendered ANSWERS, not a query surface. It ships:
   `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
 * the per-set rubric rows for exactly those games;
 * no `tournament-eval-report.json` (the 9p2i one is 29 MB — that is the corpus,
-  not a demo), so the Dashboard tab renders its first-class "no report" state.
+  not a demo), so the Dashboard tab renders a card written for this artifact:
+  what the demo ships, and where the eval report lives. That card renders no
+  part of the failed request. It has to be said explicitly, because the natural
+  implementation gets it wrong: `ApiError` folds the response BODY into its
+  message, and a file server answers a missing file with its own HTML error
+  page, so a panel that printed the error printed a raw
+  `<!DOCTYPE HTML PUBLIC …>` document at the visitor. The copy is
+  `noReportBundle` in `frontend/src/lib/copy.ts`, and
+  `scripts/build_demo_bundle.py` fails the build unless the emitted JS both
+  carries it and has dropped the local-checkout arm — so no bundle ships with
+  that card deleted, or with the arm that tells a visitor to run a tournament.
 
 It carries the same **post-game GM view** of those specific games that the local
 spectator shows — roles, kill attribution, vent usage — because that is what the
@@ -100,6 +110,76 @@ untouched by this document's addition: no `StaticFiles` mount was added to
 previous section stand exactly as written. If you find yourself wanting to expose
 the API because the bundle is missing something, the answer is to bake more into
 the bundle — not to move the bind.
+
+## Publishing the bundle: the GitHub Pages route
+
+`.github/workflows/pages.yml` is the sanctioned way to put the artifact above in
+front of the world. On every push to `main` — and on manual dispatch, never on a
+pull request, which would hand a fork's head commit a deployment of the
+project's public face — it runs the builder's tests, builds
+`frontend/dist/demo-bundle`, uploads it as the Pages artifact, and deploys it.
+Because Pages rebuilds on push, re-recording the featured games refreshes the
+live demo with no further work.
+
+Least privilege is `ci.yml`'s rule: the workflow's token is `contents: read`,
+and `pages: write` + `id-token: write` are granted to the deploy job alone.
+Deployments run in a `pages` concurrency group with `cancel-in-progress: false`,
+because each run publishes a whole site and cancelling one mid-flight can leave
+the live site half-swapped.
+
+**This changes nothing about the live API.** No `StaticFiles` mount was added to
+`api/`, the compose publish stays loopback-scoped, and every prohibition above
+stands as written. What Pages hosts is a directory of files; no AiLibi process
+runs anywhere in it.
+
+### The one-time setup (owner)
+
+These are repository settings, so the workflow cannot do them itself — and its
+"Configure Pages" step fails until step 1 is done.
+
+1. **Enable Pages with the workflow as its source**: Settings → Pages → Build
+   and deployment → Source: *GitHub Actions*.
+2. **Set the repository description** (≤ 350 characters):
+
+   > Deterministic social-deduction sim (Among-Us-style) with LLM agents behind
+   > an enforced observation firewall — built by directing AI coding agents
+   > against written contracts: 350 PRs, 19 phases, byte-identical replays,
+   > honest negative ML results.
+
+3. **Set the topics**: `multi-agent`, `llm-agents`, `social-deduction`,
+   `deterministic-simulation`, `agentic-coding`, `claude-code`, `evaluation`,
+   `among-us`, `python`, `fastapi`, `react`, `pixijs`.
+4. **Set the homepage** to the Pages URL the first successful deployment prints.
+
+### Re-verifying a deployment
+
+Two checks, answering two different questions.
+
+* **Is the deployed site up?** The workflow asks on every run: its last step
+  requests the deployment's own `page_url` and fails on anything other than HTTP
+  200, so a green Pages run *is* that answer, and the URL is in that step's log
+  and on the run's `github-pages` environment. By hand:
+
+  ```bash
+  curl -sSL -o /dev/null -w '%{http_code}\n' <the Pages URL>
+  ```
+
+* **Does the artifact still play with no API?** `frontend/e2e/bundle.spec.ts`
+  drives the BUILT bundle in a browser with every `/api` request aborted at the
+  network layer. Point it at a directory you built rather than letting it build
+  its own:
+
+  ```bash
+  uv run python scripts/build_demo_bundle.py     # → frontend/dist/demo-bundle
+  cd frontend
+  AILIBI_DEMO_BUNDLE_DIR="$PWD/dist/demo-bundle" \
+    npx playwright test e2e/bundle.spec.ts
+  ```
+
+  Read that plainly: the spec starts its own file server over that DIRECTORY. It
+  never fetches the Pages URL and says nothing about the remote host. What it
+  proves is that the bytes the workflow uploads are bytes that work — the
+  `curl` above is what says they arrived.
 
 ## CORS posture (audit C-C-2)
 

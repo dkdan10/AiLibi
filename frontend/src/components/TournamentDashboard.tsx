@@ -44,6 +44,22 @@ import { MetricCaveat } from "./MetricCaveat";
 import { SetSelector } from "./ReplayPicker";
 import { StatTile } from "./StatTile";
 
+/**
+ * True in a build produced by `scripts/build_demo_bundle.py`.
+ *
+ * The same read `api/client.ts` makes for its `STATIC_DATA_MODE` seam, kept
+ * local rather than imported so a rendering decision on this surface does not
+ * become part of the client's public shape. `import.meta.env.VITE_*` is
+ * substituted at BUILD time, so this is a literal `true` or `false` and only one
+ * arm of the branch below is emitted. (The copy strings themselves live in one
+ * frozen object and ship in both builds; it is the markup that is dropped.)
+ *
+ * The bundle has no eval directory and no tournament runner to point a reader
+ * at, so the guidance that fits a local checkout is wrong there; the demo says
+ * what it ships and where the rest lives instead.
+ */
+const STATIC_BUNDLE_BUILD: boolean = import.meta.env.VITE_AILIBI_STATIC_DATA === "1";
+
 // ---------------------------------------------------------------------------
 // Formatting helpers (null-safe: a missing/undefined rate is "n/a", never NaN)
 // ---------------------------------------------------------------------------
@@ -1042,19 +1058,24 @@ export function TournamentDashboardView({
           {DASHBOARD_COPY.loadingReport}
         </p>
       ) : (
-        // No-report state: a definitive failure with no report. A 404 means no
-        // tournament-eval-report.json exists in the configured eval dir yet; the
-        // transport detail is surfaced beneath the guidance.
+        // No-report state: a definitive failure with no report. Every word here
+        // is app-authored. The transport error is deliberately NOT rendered:
+        // `ApiError` folds the RESPONSE BODY into its message, and a file server
+        // answers a missing file with its own HTML error page — so printing the
+        // message put a raw `<!DOCTYPE HTML PUBLIC …>` document inside the card.
         <div className="rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-6 shadow-chrome-1">
           <p className="font-semibold text-ink-900">{DASHBOARD_COPY.noReportTitle}</p>
-          <p className="mt-1 text-sm text-ink-500">
-            {DASHBOARD_COPY.noReportLead}{" "}
-            <code className="font-mono text-xs">tournament-eval-report.json</code>{" "}
-            {DASHBOARD_COPY.noReportMiddle}{" "}
-            <code className="font-mono text-xs">scripts/run_tournament.py</code>{" "}
-            {DASHBOARD_COPY.noReportTail}
-          </p>
-          <p className="mt-2 font-mono text-xs text-ink-500">{error}</p>
+          {STATIC_BUNDLE_BUILD ? (
+            <p className="mt-1 text-sm text-ink-500">{DASHBOARD_COPY.noReportBundle}</p>
+          ) : (
+            <p className="mt-1 text-sm text-ink-500">
+              {DASHBOARD_COPY.noReportLead}{" "}
+              <code className="font-mono text-xs">tournament-eval-report.json</code>{" "}
+              {DASHBOARD_COPY.noReportMiddle}{" "}
+              <code className="font-mono text-xs">scripts/run_tournament.py</code>{" "}
+              {DASHBOARD_COPY.noReportTail}
+            </p>
+          )}
         </div>
       )}
     </main>
