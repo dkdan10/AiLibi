@@ -319,13 +319,47 @@ describe("the in-scope surfaces on disk", () => {
 // scopes `TurnCard.tsx` to a single string, and the transport's button titles
 // are not this task's), and none of them claims otherwise in its header.
 
-const COPY_BEARING_PROP = /\b(?:label|title|hint|description|heading|unit|aria-label)\s*=\s*"/;
+// Every literal form JSX accepts for a prop: `x="…"`, `x='…'`, and the braced
+// `x={"…"}` / `x={'…'}` / x={`…`}. Only a real expression passes.
+const COPY_BEARING_PROP =
+  /\b(?:label|title|hint|description|heading|unit|aria-label)\s*=\s*(?:["']|\{\s*["'`])/;
+
+/**
+ * Literal JSX text: what sits between a `>` and a closing `</`, containing no
+ * braces.
+ *
+ * Two deliberate narrowings keep this honest without a JSX parser. Anchoring on
+ * a CLOSING tag means TypeScript's own angle brackets (`Record<K, V>`, a
+ * comparison) can never be mistaken for markup — they are never followed by
+ * `</`. Excluding braces means every `{expression}` child drops out on its own,
+ * with no brace-matching pass to get wrong.
+ */
+function literalJsxText(source: string): readonly string[] {
+  return [...source.matchAll(/>([^<>{}]+)<\//g)]
+    .map((match) => (match[1] ?? "").trim())
+    .filter((text) => text !== "");
+}
+
+// Two alphabetic words in a row is the signature of PROSE. A bare identifier —
+// `tournament-eval-report.json`, `scripts/run_tournament.py`, the paths this
+// surface prints inside <code> — has no space in it and is not copy.
+const PROSE_RUN = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/;
+
+function dashboardSource(): string {
+  return stripComments(
+    readFileSync(resolve(LIB_DIR, "../components/TournamentDashboard.tsx"), "utf8"),
+  );
+}
 
 describe("the dashboard's copy-ownership claim", () => {
-  it("catches a copy-bearing prop written as a literal (the planted case)", () => {
-    expect(COPY_BEARING_PROP.test('<StatTile label="Crew wins" value={x} />')).toBe(true);
-    expect(COPY_BEARING_PROP.test('<MetricSection title="Balance outcome">')).toBe(true);
-    expect(COPY_BEARING_PROP.test('<main aria-label="Tournament dashboard">')).toBe(true);
+  it.each([
+    ["double-quoted prop", '<StatTile label="Crew wins" value={x} />'],
+    ["single-quoted prop", "<StatTile label='Crew wins' value={x} />"],
+    ["braced string prop", '<MetricSection title={"Balance outcome"}>'],
+    ["braced template prop", "<MetricSection title={`Balance outcome`}>"],
+    ["aria-label", '<main aria-label="Tournament dashboard">'],
+  ])("catches a %s (the planted cases)", (_name, planted) => {
+    expect(COPY_BEARING_PROP.test(planted)).toBe(true);
   });
 
   it("passes the same props written as copy-tree expressions", () => {
@@ -337,14 +371,36 @@ describe("the dashboard's copy-ownership claim", () => {
     ).toBe(false);
   });
 
-  it("finds none in TournamentDashboard.tsx", () => {
-    const source = stripComments(
-      readFileSync(resolve(LIB_DIR, "../components/TournamentDashboard.tsx"), "utf8"),
-    );
-    const offenders = source
+  it("catches a prose text node, and lets an identifier through", () => {
+    expect(literalJsxText("<p>Crew wins</p>").some((t) => PROSE_RUN.test(t))).toBe(true);
+    expect(
+      literalJsxText("<p>{DASHBOARD_COPY.intro}</p>").some((t) => PROSE_RUN.test(t)),
+    ).toBe(false);
+    expect(
+      literalJsxText("<code>tournament-eval-report.json</code>").some((t) =>
+        PROSE_RUN.test(t),
+      ),
+    ).toBe(false);
+    expect(
+      literalJsxText('<p>{fmt(T, { a: "}" })}</p>').some((t) => PROSE_RUN.test(t)),
+    ).toBe(false);
+    // TypeScript's angle brackets are not markup and must not be read as text.
+    expect(literalJsxText("const x: Record<ScoreBucket, string> = y;")).toEqual([]);
+  });
+
+  it("finds no literal copy-bearing prop in TournamentDashboard.tsx", () => {
+    const offenders = dashboardSource()
       .split("\n")
       .map((line, index) => ({ line: line.trim(), number: index + 1 }))
-      .filter((entry) => COPY_BEARING_PROP.test(entry.line));
+      .filter((entry) => COPY_BEARING_PROP.test(entry.line))
+      .map((entry) => `${entry.number}: ${entry.line}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("finds no literal prose text node in TournamentDashboard.tsx", () => {
+    const offenders = literalJsxText(dashboardSource()).filter((text) =>
+      PROSE_RUN.test(text),
+    );
     expect(offenders).toEqual([]);
   });
 });

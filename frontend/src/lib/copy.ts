@@ -95,14 +95,20 @@ export function fmt<S extends string>(
 // The served sets a visitor can currently pick. `/sets` grows as new sets are
 // recorded, so an unknown id is a NORMAL case, not an error: it falls back to
 // the raw id rather than inventing an expansion.
-const SET_NAMES: Readonly<Record<string, string | undefined>> = Object.freeze({
-  "9p2i": "9 players, 2 impostors",
-  "4p1i": "4 players, 1 impostor",
-});
+//
+// A `Map`, not an object literal: the backend's set-name pattern admits ids like
+// `constructor` and `toString`, and a plain object would answer those from
+// `Object.prototype` — the lookup would "succeed" and the selector would render
+// a function body instead of the id. A Map has no inherited keys, so every
+// unrecognised id takes the documented fallback.
+const SET_NAMES: ReadonlyMap<string, string> = new Map([
+  ["9p2i", "9 players, 2 impostors"],
+  ["4p1i", "4 players, 1 impostor"],
+]);
 
 /** A set id in words, or the id itself when it is not one we can expand. */
 export function expandSetName(setId: string): string {
-  return SET_NAMES[setId] ?? setId;
+  return SET_NAMES.get(setId) ?? setId;
 }
 
 /**
@@ -243,18 +249,19 @@ export const SPECTATOR_COPY = Object.freeze({
     conversionAccused: "Accused → eject",
     conversionAccusedHint: "{converted} / {meetings} accused-impostor meetings",
     conversionCorrectSkips: "Correct skips",
-    conversionCorrectSkipsHint: "skips with nobody still ejectable above the suspicion line",
+    conversionCorrectSkipsHint:
+      "skips where nobody still ejectable had reached the suspicion line",
     conversionMissedSkips: "Missed skips",
     conversionMissedSkipsHint:
       "impostor voters {impostorVoters} · invalid targets {invalidTargets} · crew declined {crewDeclined}",
     conversionMissedSkipsCaveat: "read the split, not the total",
     conversionMissedSkipsCaveatTitle:
-      "Read the split, not the total: most missed skips are impostors voting their own side, or targets the parser had to normalize away. What is left is a crew voter who was shown someone above the suspicion line and skipped anyway — see its own tile.",
+      "Read the split, not the total: most missed skips are impostors voting their own side, or targets the parser had to normalize away. What is left is a crew voter who was shown someone who had reached the suspicion line and skipped anyway — see its own tile.",
     conversionInversions: "Threshold inversions",
-    conversionInversionsHint: "crew voters who skipped above the line",
+    conversionInversionsHint: "crew voters who skipped at or over the line",
     conversionInversionsCaveat: "discretionary — nonzero intended",
     conversionInversionsCaveatTitle:
-      "A crew voter whose own suspicion of a still-ejectable player was shown to them above the line, who skipped anyway. The vote gate is advice, not an order, so declining is allowed play: a nonzero count is expected on recorded sets, not a bug.",
+      "A crew voter who was shown a still-ejectable player whose suspicion had reached the line — most of them sit exactly on it — and who skipped anyway. The vote gate is advice, not an order, so declining is allowed play: a nonzero count is expected on recorded sets, not a bug.",
     conversionInversionsNone: "no declines recorded",
 
     gateTitle: "Gate metrics",

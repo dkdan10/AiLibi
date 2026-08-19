@@ -460,18 +460,21 @@ export function ReplayBrowserView({
             audits found its ordering inverts the human-interest tails. The
             FEATURED strip is the human ordering.
 
-            The score-bar legend rides the same condition: it explains the four
-            bars the cards draw, so it renders exactly where those bars do — on
-            BOTH tabs, which is the gap a first-time viewer hit on Replays. */}
+            The score-bar legend is gated on the RUBRIC, not on the tab: it
+            explains the four bars the cards draw, so it renders wherever those
+            bars do — on both tabs when the set is scored (the gap a first-time
+            viewer hit on Replays), and on neither when the set ships no rubric,
+            where it would sit above an empty state explaining four bars that
+            are not on the page. */}
         {(isHighlights || !rubricMissing) && (
-          <>
-            <p className="font-mono text-xs text-ink-500">
-              The 0–100 score is an internal pacing/structure heuristic — not a
-              human rating, and not a watchability ranking. For games worth
-              watching, see Featured below.
-            </p>
-            <p className="font-mono text-xs text-ink-500">{rubricLegendLine()}</p>
-          </>
+          <p className="font-mono text-xs text-ink-500">
+            The 0–100 score is an internal pacing/structure heuristic — not a
+            human rating, and not a watchability ranking. For games worth
+            watching, see Featured below.
+          </p>
+        )}
+        {!rubricMissing && (
+          <p className="font-mono text-xs text-ink-500">{rubricLegendLine()}</p>
         )}
       </header>
 
