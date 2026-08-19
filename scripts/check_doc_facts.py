@@ -57,10 +57,12 @@ together, so one run names every drifted fact rather than the first.
    module must carry exactly one line naming that set, stamped with the
    recomputed ``"<numerator>/<denominator> = <rate>"``. A report whose own
    ``vote_correctness_rate`` field disagrees with its counts fails too. The
-   substrate those rates are attributed to is checked with them: the model and
-   the prompt-set token come from the four ``MANIFEST.md`` files, the sets must
-   agree on one substrate, and the module must name it. And
-   while any recorded set reads below 1.0, the module may not call the rate
+   substrate those rates are attributed to is checked with them: the model, the
+   prompt-set token and the substrate-flag stamp come from the four
+   ``MANIFEST.md`` files, the sets must agree on all three, and the module must
+   name the first two (the flag stamp is thirteen keys wide — held to agreement,
+   not copied into prose). Finally, while any recorded set reads below 1.0 the
+   module may not call the rate
    structurally pinned: a zero-flag EJECT that cites a transcript turn or a
    private observation id is legal by design
    (``meetings.manager.guard_ballot_citation``), so the pin would be prose the
@@ -664,16 +666,20 @@ def check_vote_correctness_provenance(
 ) -> None:
     """The substrate the vote-correctness stamps are attributed to.
 
-    A rate means nothing without the recording it came from, so the model and
-    the prompt-set token (``<family>.<version>``) are re-derived from every
-    recorded set's ``MANIFEST.md`` and must be named in the module. The sets
-    must agree: one provenance line cannot describe two substrates, so a split
-    fails here rather than silently describing whichever set happened to be
-    read first.
+    A rate means nothing without the recording it came from. Three columns of
+    every recorded set's ``MANIFEST.md`` own that recording — ``model``,
+    ``prompt_versions`` and the substrate ``flags`` — and all three must agree
+    across the sets: one provenance line cannot describe two substrates, so a
+    split fails here rather than silently describing whichever set happened to
+    be read first. The model and the prompt-set token (``<family>.<version>``)
+    are short enough to be named in the module and are required there; the
+    flags stamp is thirteen keys wide, so it is held to agreement only —
+    naming it in prose would be a second copy to rot.
     """
 
     models: set[str] = set()
     prompt_tokens: set[str] = set()
+    flag_stamps: set[str] = set()
     for set_dir in _RECORDED_SETS:
         relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
         text = read_document(repo_root, relative_path, errors)
@@ -694,15 +700,30 @@ def check_vote_correctness_provenance(
                 segments = entry.strip().split(".")
                 if len(segments) >= 3:
                     prompt_tokens.add(f"{segments[-2]}.{segments[-1]}")
+            # Order-insensitive: the stamp is the SET of flags a row was
+            # recorded under, not the order the writer happened to render.
+            flag_stamps.add(
+                ", ".join(
+                    sorted(
+                        flag.strip() for flag in row.flags.split(",") if flag.strip()
+                    )
+                )
+            )
 
-    for label, tokens in (("recording model", models), ("prompt set", prompt_tokens)):
+    for label, tokens, name_in_module in (
+        ("recording model", models, True),
+        ("prompt set", prompt_tokens, True),
+        ("substrate flags", flag_stamps, False),
+    ):
         if len(tokens) > 1:
             errors.append(
                 f"{_VOTE_CORRECTNESS_MODULE}: the recorded sets disagree on the "
-                f"{label} ({', '.join(sorted(tokens))}) — one provenance line "
+                f"{label} ({' | '.join(sorted(tokens))}) — one provenance line "
                 f"cannot describe them; {', '.join(_RECORDED_SETS)} should share "
                 "one substrate."
             )
+            continue
+        if not name_in_module:
             continue
         for token in tokens:
             if token not in module:

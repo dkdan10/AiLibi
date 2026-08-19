@@ -555,6 +555,19 @@ def test_recorded_sets_disagreeing_on_the_substrate_fails_loud(
     assert "Qwen/Qwen3.5-9B" in errors[0]
 
 
+def test_recorded_sets_disagreeing_on_substrate_flags_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # The flag stamp is part of the substrate the rates are attributed to: a
+    # set recorded without one baseline-6 lever is a different substrate, even
+    # when its model and prompt token still match.
+    _substitute(doc_tree, _ML_CORPUS_MANIFEST_9P2I, "absence_prior, ", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the substrate flags" in errors[0]
+    assert "absence_prior" in errors[0]
+
+
 def test_eval_report_without_vote_correctness_block_fails_loud(
     doc_tree: Path,
 ) -> None:
