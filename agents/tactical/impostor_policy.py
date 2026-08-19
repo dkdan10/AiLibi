@@ -155,6 +155,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final
 
+from pydantic import BaseModel, ConfigDict
+
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
@@ -244,14 +246,16 @@ class _ScoredTarget:
     score: float
 
 
-@dataclass(frozen=True)
-class RankedTarget:
+class RankedTarget(BaseModel):
     """One entry of the kill/stalk ranking, exposed read-only for measurement.
 
-    The same four fields the FSM's own snapshot carries, in the same order the
-    FSM sorts them, as a public type an offline instrument can name without
-    reaching into policy internals.
+    The same four fields the FSM's own snapshot carries, in the order the FSM
+    sorts them. A frozen Pydantic model rather than a dataclass because it is the
+    one type on this module's public surface that crosses a package boundary
+    (``eval`` reads it), which is where AGENTS.md puts validation.
     """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     player_id: PlayerId
     room: RoomId

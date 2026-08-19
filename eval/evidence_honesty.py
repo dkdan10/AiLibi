@@ -203,6 +203,9 @@ _PERSONA_TEMPLATES: Final[tuple[str, ...]] = (
     "vote_ballot.j2",
 )
 _SINGULAR_PERSONA_PATTERN: Final[re.Pattern[str]] = re.compile(r"a hidden impostor")
+# The phrase the committed baseline-6 prompts carry, kept so the cell stays
+# countable once the templates are reworded.
+_RECORDED_SINGULAR_PERSONA_PHRASE: Final[str] = "a hidden impostor"
 
 # One rendered self-location row, the only "You" shape that places the speaker.
 _COMPLETED_LINE: Final[re.Pattern[str]] = re.compile(
@@ -210,8 +213,10 @@ _COMPLETED_LINE: Final[re.Pattern[str]] = re.compile(
     r"You completed (?P<task>\S+) \(you were in (?P<room>[^)]+)\)\.$",
     re.MULTILINE,
 )
-# Any rendered episodic row, for the render-budget cells.
-_RENDERED_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[obs [^\]]+\] ", re.MULTILINE)
+# Any rendered memory row, for the render-budget cells: first-hand observations
+# carry an ``[obs …]`` handle and heard testimony carries a ``[tick N] [meeting]``
+# stamp, so the budget counts both rather than only the citable half.
+_RENDERED_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[", re.MULTILINE)
 # The reported-testimony row shape (``agents.memory.store`` renders heard claims).
 _TESTIMONY_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[.*\[meeting\] CLAIM by ")
 
@@ -352,6 +357,13 @@ class SoleFlagPrecisionCells(_FrozenModel):
     meetings whose only STRONG flag was alibi_vs_sighting; it does NOT measure
     whether the flag's content was true.
 
+    ``per_victim_precision`` reads "only" as ONLY THAT KIND — a victim carrying
+    two ``alibi_vs_sighting`` STRONG flags and nothing else was still convicted on
+    that class alone — and it is the reading that reproduces the review's 12 right
+    / 70 wrong. ``per_victim_single_flag_precision`` is the stricter
+    exactly-one-flag reading of the same population, carried so the choice stays a
+    measured difference rather than an argument.
+
     The pre-registration's bar 4 is measured on ``per_victim_precision``. The two
     conventions are never averaged: ``per_meeting_ejections`` /
     ``per_meeting_crewmate_ejections`` answer a different question (what the
@@ -363,6 +375,7 @@ class SoleFlagPrecisionCells(_FrozenModel):
     """
 
     per_victim_precision: WilsonRateCell
+    per_victim_single_flag_precision: WilsonRateCell
     per_meeting_sole_flag_meetings: int
     per_meeting_ejections: int
     per_meeting_crewmate_ejections: WilsonRateCell
@@ -571,8 +584,10 @@ class EvidenceHonestyReport(_FrozenModel):
     """One replay set's evidence-honesty cells — counts and rate cells only.
 
     ``clock_alignment_checked`` is the number of discriminating sightings the +1
-    agent-clock assertion passed on; it is zero only for a set with no sighting
-    that discriminates, which no committed set is.
+    agent-clock assertion passed on, and ``clock_alignment_action_stamped`` the
+    subset of those whose row carried a perceived action and was therefore checked
+    against the two-frame rule. Both are zero only for a set with no sighting that
+    discriminates, which no committed set is.
     """
 
     replay_set_dir: str
@@ -581,6 +596,7 @@ class EvidenceHonestyReport(_FrozenModel):
     tasks_per_crewmate: int
     games_total: int
     clock_alignment_checked: int
+    clock_alignment_action_stamped: int
     false_whereabouts: FalseWhereaboutsCells
     sole_flag_precision: SoleFlagPrecisionCells
     grounded_sighting: GroundedSightingCells
@@ -604,6 +620,7 @@ class _Tallies:
     """Every cell's raw counters, accumulated across a replay set's games."""
 
     clock_checked: int = 0
+    clock_checked_action_stamped: int = 0
     crew_claims: int = 0
     crew_false: int = 0
     crew_false_agent_frame: int = 0
@@ -613,6 +630,8 @@ class _Tallies:
 
     sole_victim_total: int = 0
     sole_victim_impostor: int = 0
+    single_flag_victim_total: int = 0
+    single_flag_victim_impostor: int = 0
     sole_meetings: int = 0
     sole_meeting_ejections: int = 0
     sole_meeting_crewmate_ejections: int = 0
@@ -754,6 +773,7 @@ def _report(
         tasks_per_crewmate=tasks_per_crewmate,
         games_total=games_total,
         clock_alignment_checked=tallies.clock_checked,
+        clock_alignment_action_stamped=tallies.clock_checked_action_stamped,
         false_whereabouts=FalseWhereaboutsCells(
             crew_claims=tallies.crew_claims,
             crew_false=cell(tallies.crew_false, tallies.crew_claims),
@@ -768,6 +788,9 @@ def _report(
         sole_flag_precision=SoleFlagPrecisionCells(
             per_victim_precision=cell(
                 tallies.sole_victim_impostor, tallies.sole_victim_total
+            ),
+            per_victim_single_flag_precision=cell(
+                tallies.single_flag_victim_impostor, tallies.single_flag_victim_total
             ),
             per_meeting_sole_flag_meetings=tallies.sole_meetings,
             per_meeting_ejections=tallies.sole_meeting_ejections,
@@ -902,11 +925,15 @@ def _room_distances(game_map: Map) -> Mapping[RoomId, Mapping[RoomId, int]]:
 
 
 def _singular_persona_phrase() -> str:
-    """The singular hidden-impostor phrase, read from the committed templates.
+    """The singular hidden-impostor phrase the I-9 cell counts.
 
-    Extracted rather than re-typed so a Task-20.31 template edit moves the cell
-    instead of leaving it silently stale; a template that stops carrying the phrase
-    fails loud here.
+    Read out of the committed templates while they still carry it, so a template
+    edit that rewords the persona moves the cell instead of leaving it silently
+    stale. Once every template has dropped the singular wording the cell must
+    still be countable — a fresh tournament reads 0/N and the committed bytes keep
+    reading 1956/1956 — so the literal falls back to the recorded phrase rather
+    than raising and taking the instrument down with the fix. Templates that
+    disagree with each other DO raise: that is drift, not a graduation.
     """
 
     root = Path(__file__).resolve().parent.parent / "agents" / "strategic" / "prompts"
@@ -914,17 +941,14 @@ def _singular_persona_phrase() -> str:
     for name in _PERSONA_TEMPLATES:
         text = (root / _RECORDED_PROMPT_SET / name).read_text(encoding="utf-8")
         match = _SINGULAR_PERSONA_PATTERN.search(text)
-        if match is None:
-            raise EvidenceHonestyReconstructionError(
-                f"{name}: no singular hidden-impostor persona phrase — the "
-                "prompt set moved and the I-9 cell can no longer be counted "
-                "against it"
-            )
-        phrases.add(match.group(0))
+        if match is not None:
+            phrases.add(match.group(0))
+    if not phrases:
+        return _RECORDED_SINGULAR_PERSONA_PHRASE
     if len(phrases) != 1:
         raise EvidenceHonestyReconstructionError(
-            f"the {len(_PERSONA_TEMPLATES)} persona templates carry "
-            f"{len(phrases)} different singular phrases: {sorted(phrases)}"
+            f"the persona templates carry {len(phrases)} different singular "
+            f"phrases: {sorted(phrases)}"
         )
     return phrases.pop()
 
@@ -1063,8 +1087,8 @@ def _fold_game(
                     ejected_at.setdefault(entry.ejected_player_id, entry.tick)
                     death_tick.setdefault(entry.ejected_player_id, entry.tick)
     finally:
-        audit_dir.cleanup()
         service.close()
+        audit_dir.cleanup()
 
     _assert_clock_alignment(
         game_id=game_id, memories=memories, room_at=room_at, tallies=tallies
@@ -1271,23 +1295,24 @@ def _assert_clock_alignment(
     """Prove the +1 agent clock on this game's discriminating sightings.
 
     A sighting DISCRIMINATES when the subject's engine room differs between the
-    two candidate ticks; for those the recorded room must be the room at
-    ``obs.tick - 1``, with no exception. The module asserts the offset rather than
-    assuming it so a future clock change fails here first.
+    two candidate ticks. EVERY discriminating sighting is checked, under the rule
+    its own row was stamped by:
 
-    The population is the state-read sightings — those carrying no perceived
-    ACTION. A sighting that carries one is stamped with that action's OWN room
-    out of the previous tick's event list rather than read off the world state
-    (``observation.service.ObservationService._visible_players``), so it can name
-    a departure room the state no longer holds; those rows are a different
-    mechanism and are deliberately outside this assertion.
+    * a STATE-READ row (no perceived ``action``) must name the subject's room at
+      ``obs.tick - 1`` exactly — the +1 offset;
+    * an ACTION-BEARING row is stamped with that action's OWN room out of the
+      previous tick's event list rather than read off the world state
+      (``observation.service.ObservationService._visible_players`` prefers
+      ``observed_action.room``), so it names the room at ``obs.tick - 1`` or the
+      room the action resolved in at ``obs.tick - 2``.
+
+    Neither branch tolerates anything else, so a clock change fails here first
+    instead of silently re-pricing every bar.
     """
 
     for observer in sorted(memories):
         for event in memories[observer].recent(since_tick=0):
             if event.type != EVENT_SAW_PLAYER:
-                continue
-            if event.payload.get("action") is not None:
                 continue
             subject = event.payload.get("player_id")
             room = event.payload.get("room")
@@ -1299,12 +1324,18 @@ def _assert_clock_alignment(
             if here is None or there is None or here == there:
                 continue
             tallies.clock_checked += 1
-            if room != here:
+            allowed = [here]
+            if event.payload.get("action") is not None:
+                tallies.clock_checked_action_stamped += 1
+                acted_in = room_at.get(engine_tick - 1, {}).get(subject)
+                if acted_in is not None:
+                    allowed.append(acted_in)
+            if room not in allowed:
                 raise EvidenceHonestyReconstructionError(
                     f"{game_id}: {observer} recorded seeing {subject} in {room} at "
-                    f"agent tick {event.tick}, but the engine frame "
-                    f"{engine_tick} holds {here} — the +1 agent clock moved and "
-                    "every cell below would be re-priced by one tick"
+                    f"agent tick {event.tick}, but the engine frame allows only "
+                    f"{sorted(set(allowed))} — the +1 agent clock moved and every "
+                    "cell below would be re-priced by one tick"
                 )
 
 
@@ -1596,6 +1627,10 @@ def _fold_flags(
             tallies.sole_victim_total += 1
             if roles.get(victim) == "IMPOSTOR":
                 tallies.sole_victim_impostor += 1
+            if len(on_victim) == 1:
+                tallies.single_flag_victim_total += 1
+                if roles.get(victim) == "IMPOSTOR":
+                    tallies.single_flag_victim_impostor += 1
 
     # I-3, the class base rate: the living roster at meetings carrying the class.
     class_subjects = {

@@ -20,7 +20,9 @@ The impostor-targeting pins (free kills declined; ghost-top decisions) live in
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -106,25 +108,42 @@ def test_every_instrument_row_has_a_definition() -> None:
     assert sorted(CELL_DEFINITIONS) == sorted(_CELL_OWNERS)
 
 
+def _definition_drift(cell_id: str, definition: str) -> list[str]:
+    """Where ``definition`` fails to appear verbatim, as the memo would copy it.
+
+    The one validation path: the real test feeds the module's own sentence and
+    expects nothing back, the perturbation test feeds a drifted one through the
+    SAME function and expects both surfaces to reject it.
+    """
+
+    module_doc = evidence_honesty.__doc__
+    owner_doc = _CELL_OWNERS[cell_id].__doc__
+    assert module_doc is not None and owner_doc is not None
+    sentence = _flat(definition)
+    missing: list[str] = []
+    if sentence not in _flat(module_doc):
+        missing.append("module docstring")
+    if sentence not in _flat(owner_doc):
+        missing.append(f"{_CELL_OWNERS[cell_id].__name__} docstring")
+    return missing
+
+
 @pytest.mark.parametrize("cell_id", sorted(_CELL_OWNERS))
 def test_definition_sentence_is_verbatim_in_module_and_cell_docstrings(
     cell_id: str,
 ) -> None:
-    sentence = _flat(CELL_DEFINITIONS[cell_id])
-    module_doc = evidence_honesty.__doc__
-    owner_doc = _CELL_OWNERS[cell_id].__doc__
-    assert module_doc is not None and owner_doc is not None
-    assert sentence in _flat(module_doc)
-    assert sentence in _flat(owner_doc)
+    assert _definition_drift(cell_id, CELL_DEFINITIONS[cell_id]) == []
 
 
-def test_a_drifted_definition_is_caught() -> None:
-    """The gate bites: a sentence the docstrings do not carry is not present."""
+@pytest.mark.parametrize("cell_id", sorted(_CELL_OWNERS))
+def test_a_drifted_definition_is_rejected_by_the_same_path(cell_id: str) -> None:
+    """The gate bites: a memo sentence that drifted is rejected on both surfaces."""
 
-    drifted = _flat(CELL_DEFINITIONS["I-2"]).replace("CREWMATE", "IMPOSTOR")
-    module_doc = evidence_honesty.__doc__
-    assert module_doc is not None
-    assert drifted not in _flat(module_doc)
+    drifted = CELL_DEFINITIONS[cell_id].replace("numerator", "count")
+    assert _definition_drift(cell_id, drifted) == [
+        "module docstring",
+        f"{_CELL_OWNERS[cell_id].__name__} docstring",
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -554,7 +573,7 @@ def test_declined_kill_is_attributed_to_the_branch_that_swallowed_it() -> None:
         state=state,  # type: ignore[arg-type]
         impostor_ids=impostors,
         memory=_memory_with(_self_state(7, "LABS")),
-        targets=(RankedTarget("p-9", "ADMIN", 0, 1.0),),
+        targets=(RankedTarget(player_id="p-9", room="ADMIN", co_present=0, score=1.0),),
         tallies=ranking_defect,
     )
     assert ranking_defect.decline_ranking == 1
@@ -566,7 +585,7 @@ def test_declined_kill_is_attributed_to_the_branch_that_swallowed_it() -> None:
         state=state,  # type: ignore[arg-type]
         impostor_ids=impostors,
         memory=_memory_with(_self_state(7, "LABS")),
-        targets=(RankedTarget("p-1", "LABS", 0, 1.0),),
+        targets=(RankedTarget(player_id="p-1", room="LABS", co_present=0, score=1.0),),
         tallies=fellow_defer,
     )
     assert fellow_defer.decline_fellow == 1
@@ -578,7 +597,7 @@ def test_declined_kill_is_attributed_to_the_branch_that_swallowed_it() -> None:
         state=state,  # type: ignore[arg-type]
         impostor_ids=impostors,
         memory=_memory_with(_self_state(7, "LABS"), _saw_body(7, "LABS")),
-        targets=(RankedTarget("p-1", "LABS", 0, 1.0),),
+        targets=(RankedTarget(player_id="p-1", room="LABS", co_present=0, score=1.0),),
         tallies=cover,
     )
     assert cover.decline_cover == 1
@@ -638,17 +657,25 @@ def test_a_truncated_recording_fails_the_walk(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-_REPORT_CACHE: dict[Path, EvidenceHonestyReport] = {}
-
-
 @pytest.fixture(scope="module")
-def reports() -> dict[Path, EvidenceHonestyReport]:
-    """One cached report per committed set (tests/conftest.py is out of scope)."""
+def reports() -> Mapping[Path, EvidenceHonestyReport]:
+    """One report per committed set, computed once for the module.
 
-    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
-        if sample_dir not in _REPORT_CACHE:
-            _REPORT_CACHE[sample_dir] = compute_evidence_honesty(sample_dir)
-    return _REPORT_CACHE
+    The module scope IS the cache (tests/conftest.py is out of scope and module
+    state is not); the mapping is read-only so one test cannot re-price another.
+    """
+
+    return MappingProxyType(
+        {
+            sample_dir: compute_evidence_honesty(sample_dir)
+            for sample_dir in (
+                _SAMPLES_9P2I,
+                _CORPUS_9P2I,
+                _SAMPLES_4P1I,
+                _CORPUS_4P1I,
+            )
+        }
+    )
 
 
 def _counts(cell_value: object) -> tuple[int, int]:
@@ -660,7 +687,7 @@ def _counts(cell_value: object) -> tuple[int, int]:
 
 @pytest.mark.slow
 def test_i2_false_crew_self_placement_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/verdicts.md G-1]: 148/723, 402/2038, 7/78, 11/79. Every DENOMINATOR
     # reproduces exactly; the numerators run 3-7 higher per set because this
@@ -691,7 +718,7 @@ def test_i2_false_crew_self_placement_pins(
 
 @pytest.mark.slow
 def test_i3_sole_flag_precision_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Both conventions reproduce the review [A/verdicts.md G-2] EXACTLY when
     # pooled over the four sets: per-victim 12 right / 70 wrong = 12/82, and
@@ -737,6 +764,16 @@ def test_i3_sole_flag_precision_pins(
         33,
         192,
     )
+    # The stricter exactly-one-flag reading of the same population, emitted so
+    # the choice of "only" stays a measured difference: it returns 8/58 pooled,
+    # which is NOT the review's 12/70 wrong split — the kind-sole reading above is.
+    single = [
+        _counts(reports[d].sole_flag_precision.per_victim_single_flag_precision)
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    ]
+    assert single == [(1, 14), (6, 42), (1, 2), (0, 0)]
+    assert (sum(n for n, _ in single), sum(d for _, d in single)) == (8, 58)
+
     base = reports[_SAMPLES_9P2I].sole_flag_precision.living_voter_base_rate
     assert _counts(base) == (65, 260)
     assert base.rate == pytest.approx(0.25)
@@ -744,7 +781,7 @@ def test_i3_sole_flag_precision_pins(
 
 @pytest.mark.slow
 def test_i4_grounded_sighting_side_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # The three tolerances side by side, so no bar is stated on an unnamed one.
     # The review [G-2] reports 36.5% grounded at-tick over 170 RESOLVABLE sides
@@ -784,7 +821,7 @@ def test_i4_grounded_sighting_side_pins(
 
 @pytest.mark.slow
 def test_i5_fabricated_completion_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/verdicts.md G-3]: 53/529, 140/1528, 15/65, 14/64. This instrument
     # counts the rendered rows that actually REACHED a model — the recorded
@@ -823,7 +860,7 @@ def test_i5_fabricated_completion_pins(
 
 @pytest.mark.slow
 def test_i6_adjacent_room_strong_share_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/ideas-multi-agent-researcher.md D2]: 148/234 = 63.2% pooled,
     # distance 2 = 71, distance >=3 = 15, single-tick window = 187. Adjacency and
@@ -859,7 +896,7 @@ def test_i6_adjacent_room_strong_share_pins(
 
 @pytest.mark.slow
 def test_i7_movement_origin_flag_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/verdicts.md G-9]: 7/76, 30/233, 0/3, 1/1 (38/313 pooled), and
     # 38/38 of them memory-truthful and spoken-false. Every cell reproduces
@@ -881,7 +918,7 @@ def test_i7_movement_origin_flag_pins(
 
 @pytest.mark.slow
 def test_i8_marker_contamination_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/verdicts.md G-25 (a)]: 53/971 turns and 246/1956 prompts
     # (samples/9p2i), 139/2726 and 671/5502 (ml_corpus/9p2i), zero on both 4p1i
@@ -917,7 +954,9 @@ def test_i8_marker_contamination_pins(
 
 
 @pytest.mark.slow
-def test_i9_singular_persona_pins(reports: dict[Path, EvidenceHonestyReport]) -> None:
+def test_i9_singular_persona_pins(
+    reports: Mapping[Path, EvidenceHonestyReport],
+) -> None:
     # Review [G-25 (b)]: 1956/1956 and 5502/5502 — total coverage. The 4p1i sets
     # report NOT-APPLICABLE rather than a zero that would read as "clean": with
     # one impostor the singular persona is TRUE, so the same 100% coverage is not
@@ -939,7 +978,7 @@ def test_i9_singular_persona_pins(reports: dict[Path, EvidenceHonestyReport]) ->
 
 @pytest.mark.slow
 def test_i10_meeting_physicality_pins(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # Review [A/verdicts.md G-5]: venting participants 16/165, 50/463, 1/39, 2/40
     # (69/707 pooled) and reporters killed within 3 ticks 27/165, 75/463, 5/39,
@@ -961,7 +1000,7 @@ def test_i10_meeting_physicality_pins(
 
 @pytest.mark.slow
 def test_the_agent_clock_is_proved_on_every_committed_set(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     # The +1 offset is asserted before any cell is emitted; these are the counts
     # of discriminating state-read sightings it held on, with zero exceptions.
@@ -969,16 +1008,26 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
         reports[d].clock_alignment_checked
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert checked == [4408, 12338, 397, 416]
-    assert all(count > 0 for count in checked)
+    assert checked == [5199, 14747, 455, 477]
+    assert sum(checked) == 20_878
+    # The action-bearing subset, checked under the two-frame rule rather than
+    # dropped: it is where the +1 offset and the action's own room can differ.
+    stamped = [
+        reports[d].clock_alignment_action_stamped
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    ]
+    assert stamped == [791, 2409, 58, 61]
+    assert all(count > 0 for count in stamped)
 
 
 @pytest.mark.slow
-def test_render_budget_pins(reports: dict[Path, EvidenceHonestyReport]) -> None:
+def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> None:
     budget = reports[_SAMPLES_9P2I].render_budget
     assert budget.snapshots == 1956
-    assert budget.rendered_lines_total == 81640
-    assert budget.rendered_lines_mean == pytest.approx(41.7382, abs=1e-4)
+    # Every rendered memory row, not only the citable ``[obs …]`` half: heard
+    # testimony is rendered budget too and a compression lever spends against it.
+    assert budget.rendered_lines_total == 117_385
+    assert budget.rendered_lines_mean == pytest.approx(60.0128, abs=1e-4)
     assert budget.testimony_rows_total == 18319
     assert dict(budget.testimony_rows_by_candidate_bucket) == {
         "<=4": 2794,
@@ -994,7 +1043,7 @@ def test_render_budget_pins(reports: dict[Path, EvidenceHonestyReport]) -> None:
 
 @pytest.mark.slow
 def test_the_report_is_json_stable_and_leaks_no_identifiers(
-    reports: dict[Path, EvidenceHonestyReport],
+    reports: Mapping[Path, EvidenceHonestyReport],
 ) -> None:
     payload = reports[_SAMPLES_4P1I].model_dump()
     assert payload["replay_set_dir"].endswith("4p1i")
