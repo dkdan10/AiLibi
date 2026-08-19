@@ -349,6 +349,19 @@ class TestNoticeIsOncePerProcess:
             assert resolve_prompt_set(env=_REAL_PROVIDER_ENV) == DEFAULT_PROMPT_SET
         assert len(capsys.readouterr().err.strip().splitlines()) == 1
 
+    def test_switching_real_providers_does_not_repeat_it(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # "Once per process" means once, full stop -- the memo is keyed on the
+        # resolved SET, not the provider, so a process that resolves under
+        # three different real providers still gets one line. The notice says
+        # nothing about the provider, so a second copy would be noise.
+        for provider in (PROVIDER_FEATHERLESS, PROVIDER_OLLAMA, PROVIDER_ANTHROPIC):
+            assert resolve_prompt_set(env={ENV_PROVIDER: provider}) == (
+                DEFAULT_PROMPT_SET
+            )
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
     def test_the_first_resolution_still_emits(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

@@ -50,10 +50,9 @@ default VALUE stays — moving it would move committed prompt bytes — so
 :func:`resolve_prompt_set` says so instead: under a REAL provider a bare
 fallback emits one stderr line, once per process, naming
 ``AILIBI_PROMPT_SET`` and the baseline set. Under the fake provider it is
-silent, because the fake answers from the response schema and never reads the
-prompt's wording, so the family that rendered cannot change its output — and a
-first-run warning that describes no risk is noise (Task 19.6 introduced the
-notice, Task 20.5 aimed it).
+silent: the fake runs no model, so nothing there can be a generation behind
+anything, and a first-run warning that describes no risk is noise (Task 19.6
+introduced the notice, Task 20.5 aimed it).
 
 The module-level wrapper callables render through the import-time process
 default :data:`_ENV` (selected by ``AILIBI_PROMPT_SET`` at import). Each also
@@ -147,31 +146,34 @@ OPERATIONAL_BASELINE_PROMPT_SET: Final[str] = "qwen3_6_27b"
 
 
 @lru_cache(maxsize=None)
-def _notify_bare_prompt_set_fallback(prompt_set: str, provider: str) -> None:
+def _notify_bare_prompt_set_fallback(prompt_set: str) -> None:
     """Emit the bare-environment prompt-set notice on stderr, once per process.
 
     The rule, in two halves. Under a REAL provider the notice is worth saying:
     the bare default is :data:`DEFAULT_PROMPT_SET`, a different prompt family
     from the :data:`OPERATIONAL_BASELINE_PROMPT_SET` every report and every
-    committed sample set was recorded against, and a different prompt family
-    is a different model behaviour. Under the deterministic FAKE provider it
-    says nothing true: the fake answers by introspecting the response schema
-    rather than reading the prompt's wording, so which family rendered cannot
-    change what comes back. :func:`resolve_prompt_set` owns that provider gate
-    and never reaches this function on the fake path; this function owns the
-    once-per-process half.
+    committed sample set was recorded against, and a prompt family written for
+    another model is a real difference in how that model behaves. Under the
+    deterministic FAKE provider the sentence has nothing to be about: the fake
+    fills the response schema with placeholder fields (their filler strings
+    seeded by a hash of the prompt, so the bytes do move) and runs no model at
+    all, so no generation exists for the prompt family to lag two behind. The
+    notice also fires only where the DEFAULT set was taken — under the fake,
+    the exact configuration the committed goldens reproduce.
+    :func:`resolve_prompt_set` owns that provider gate and never reaches this
+    function on the fake path; this function owns the once-per-process half.
 
     The :func:`functools.lru_cache` memo is what collapses the repeats — the
     resolution points are per-process and per-runner (the import-time
     :data:`_ENV`, ``build_prompt_renderers``,
     ``orchestrator.game.build_default_meeting_runner``), so a five-game
-    tournament used to print the same line six times. It is unbounded, so
-    nothing is ever evicted back into loudness, and keyed on the resolved set
-    and provider, so a process that switches to a different real provider is
-    told again (``provider`` is a key, not printed). Its ``cache_clear()`` is
-    the reset seam tests drive. A de-duplication memo for a diagnostic is not
-    the module-level mutable state AGENTS.md §"No global state" forbids: no
-    caller reads a value back out of it, it changes no return value, and it is
+    tournament used to print the same line six times. It is keyed on the
+    resolved set alone, so switching real providers mid-process does not repeat
+    a line that says nothing about the provider, and unbounded, so nothing is
+    ever evicted back into loudness. Its ``cache_clear()`` is the reset seam
+    tests drive. A de-duplication memo for a diagnostic is not the
+    module-level mutable state AGENTS.md §"No global state" forbids: no caller
+    reads a value back out of it, it changes no return value, and it is
     resettable. stderr, never stdout, keeps the machine-readable stdout the CLI
     surfaces emit uncontaminated.
 
@@ -209,10 +211,10 @@ def resolve_prompt_set(
     because that run is sending a prompt family two generations behind the one
     every report was recorded against. Three paths are silent, each because it
     is not that situation: an explicit ``prompt_set`` argument and a non-empty
-    ``AILIBI_PROMPT_SET`` are choices rather than fallbacks, and the
-    deterministic fake provider (the default, and everything CI runs) cannot
-    read the prompt's wording at all, so the family it rendered changes
-    nothing. The provider is read from the SAME mapping the set is — a test or
+    ``AILIBI_PROMPT_SET`` are choices rather than fallbacks, and under the
+    deterministic fake provider (the default, and everything CI runs) there is
+    no model for the rendered family to be a generation behind. The provider is
+    read from the SAME mapping the set is — a test or
     a caller passing ``env=`` is never second-guessed against the ambient
     shell — using ``llm.provider``'s own constants and resolution expression so
     the two cannot drift apart. The notice itself is once per process
@@ -229,7 +231,7 @@ def resolve_prompt_set(
     # a later real-provider resolution in the same process still gets its line.
     provider = environment.get(ENV_PROVIDER, PROVIDER_FAKE).strip().lower()
     if provider != PROVIDER_FAKE:
-        _notify_bare_prompt_set_fallback(DEFAULT_PROMPT_SET, provider)
+        _notify_bare_prompt_set_fallback(DEFAULT_PROMPT_SET)
     return DEFAULT_PROMPT_SET
 
 
