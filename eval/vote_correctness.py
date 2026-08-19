@@ -8,10 +8,12 @@ not evidence-backed is a worse signal than a lower rate that is; this metric
 separates the two so the impostor-ejection rate alone cannot be mistaken for
 *correct* voting.
 
-**``vote_correctness_rate`` is a diagnostic, NOT a KPI.** It reports how much
-of the table's impostor-conviction rested on structured evidence -- the share
-of impostor ejections one of the two disjuncts above accounts for -- and a
-value below 1.0 is a legal reading of this substrate, not a bug to chase. A
+**``vote_correctness_rate`` is a diagnostic, NOT a KPI.** It reports the share
+of impostor ejections whose meeting ALSO carried one of the two structured
+signals above naming the ejected player. Co-occurrence, not attribution: the
+predicate never reads a ballot, so it cannot say the evidence is what
+convicted -- only that the table had it on the record. A value below 1.0 is a
+legal reading of this substrate, not a bug to chase. A
 zero-flag EJECT is convictable by design: the citation gate
 (:func:`meetings.manager.guard_ballot_citation`, unconditional) coerces an
 eject ballot against an unflagged target to ``SKIP`` only when it cites
@@ -239,13 +241,14 @@ class VoteCorrectnessReport(BaseModel):
     ``impostor_ejections`` satisfying the "real evidence" predicate
     (:func:`_has_real_evidence`). ``vote_correctness_rate`` is
     ``evidence_backed_impostor_ejections / impostor_ejections`` -- the share of
-    impostor ejections actually driven by evidence -- and is ``None`` (undefined,
-    not ``0.0``) when there were no impostor ejections. **It is a diagnostic,
-    NOT a KPI:** a value below ``1.0`` is legal on this substrate, because the
-    citation gate lets an eject ballot convict a target the detector never
-    flagged whenever the ballot cites a transcript turn or a private observation
-    id -- so the rate reads how much of the conviction was structured, never
-    "how many bugs". Its denominator also excludes the wrong crewmate ejections,
+    impostor ejections whose meeting ALSO carried structured evidence naming the
+    ejectee -- and is ``None`` (undefined, not ``0.0``) when there were no
+    impostor ejections. **It is a diagnostic, NOT a KPI:** the predicate reads
+    no ballot, so the rate is co-occurrence, never attribution; and a value
+    below ``1.0`` is legal on this substrate, because the citation gate lets an
+    eject ballot convict a target the detector never flagged whenever the ballot
+    cites a transcript turn or a private observation id. Its denominator also
+    excludes the wrong crewmate ejections,
     so even a ``1.0`` cannot be read as full ejection accuracy. The recorded
     values per sample set, and the census of the six samples/9p2i ejections the
     predicate does not account for, are in the module docstring.

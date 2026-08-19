@@ -54,6 +54,7 @@ _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _VOTE_CORRECTNESS = "eval/vote_correctness.py"
 _EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
+_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json"
 _ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 
 
@@ -566,6 +567,39 @@ def test_recorded_sets_disagreeing_on_substrate_flags_fails_loud(
     assert len(errors) == 1
     assert "disagree on the substrate flags" in errors[0]
     assert "absence_prior" in errors[0]
+
+
+def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) -> None:
+    # The baseline the stamps are attributed to has a committed source too: a
+    # rate hung on the wrong baseline is a wrong claim even when its
+    # arithmetic checks out.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-6", "baseline-5")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "'baseline-6'" in errors[0]
+
+
+def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
+    doc_tree: Path,
+) -> None:
+    # A set that ejected no impostor has an UNDEFINED rate, not a zero one.
+    # The checker must accept the recording and demand the "n/a" stamp rather
+    # than reject the set outright — a re-record could legitimately produce it.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_4P1I,
+        '"impostor_ejections": 10,\n    "crewmate_ejections": 2,\n'
+        '    "evidence_backed_impostor_ejections": 10,\n'
+        '    "vote_correctness_rate": 1.0,',
+        '"impostor_ejections": 0,\n    "crewmate_ejections": 2,\n'
+        '    "evidence_backed_impostor_ejections": 0,\n'
+        '    "vote_correctness_rate": null,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "replays/samples/4p1i" in errors[0]
+    assert "0/0 = n/a" in errors[0]
 
 
 def test_eval_report_without_vote_correctness_block_fails_loud(

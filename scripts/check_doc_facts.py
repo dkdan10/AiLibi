@@ -55,14 +55,16 @@ together, so one run names every drifted fact rather than the first.
    ``evidence_backed_impostor_ejections / impostor_ejections`` — never a
    literal in this file, so a re-record only re-stamps the module — and the
    module must carry exactly one line naming that set, stamped with the
-   recomputed ``"<numerator>/<denominator> = <rate>"``. A report whose own
-   ``vote_correctness_rate`` field disagrees with its counts fails too. The
-   substrate those rates are attributed to is checked with them: the model, the
-   prompt-set token and the substrate-flag stamp come from the four
-   ``MANIFEST.md`` files, the sets must agree on all three, and the module must
-   name the first two (the flag stamp is thirteen keys wide — held to agreement,
-   not copied into prose). Finally, while any recorded set reads below 1.0 the
-   module may not call the rate
+   recomputed ``"<numerator>/<denominator> = <rate>"`` — or ``"0/0 = n/a"``
+   for a set that ejected no impostor, whose rate is undefined rather than
+   zero. A report whose own ``vote_correctness_rate`` field disagrees with its
+   counts fails too. The substrate those rates are attributed to is checked
+   with them: the baseline comes from the ladder-tip audit above, the model,
+   the prompt-set token and the substrate-flag stamp from the four
+   ``MANIFEST.md`` files; the sets must agree on all three, and the module must
+   name the baseline, the model and the prompt set (the flag stamp is thirteen
+   keys wide — held to agreement, not copied into prose). Finally, while any
+   recorded set reads below 1.0 the module may not call the rate
    structurally pinned: a zero-flag EJECT that cites a transcript turn or a
    private observation id is legal by design
    (``meetings.manager.guard_ballot_citation``), so the pin would be prose the
@@ -125,6 +127,10 @@ _RECORDED_SETS: Final[tuple[str, ...]] = (
 _EVAL_REPORT_PATH: Final = "{set_dir}/tournament-eval-report.json"
 _SET_MANIFEST_PATH: Final = "{set_dir}/MANIFEST.md"
 _VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
+# The stamp a set with no impostor ejections carries: the rate is undefined
+# there, and printing a number for it would be the drift this check exists
+# to catch.
+_NO_RATE: Final = "0/0 = n/a"
 # The reports run to tens of megabytes; the block is eight scalar fields, so a
 # runaway scan means the report format drifted rather than a bigger block.
 _VOTE_CORRECTNESS_BLOCK_MAX_LINES: Final = 64
@@ -413,25 +419,9 @@ def check_ladder_tip(repo_root: Path, readme: str, errors: list[str]) -> None:
     audit wraps its prose mid-sentence.
     """
 
-    audit = read_document(repo_root, _LADDER_TIP_AUDIT, errors)
-    if audit is None:
+    tip = recorded_ladder_tip(repo_root, errors)
+    if tip is None:
         return
-    recorded = _AUDIT_LADDER_TIP.findall(re.sub(r"\s+", " ", audit))
-    if not recorded:
-        errors.append(
-            f"{_LADDER_TIP_AUDIT}: no 'the ladder tip stands at baseline N' "
-            "sentence — the ladder tip has no committed source to check against."
-        )
-        return
-    if len(set(recorded)) > 1:
-        named = ", ".join(f"baseline {tip}" for tip in sorted(set(recorded)))
-        errors.append(
-            f"{_LADDER_TIP_AUDIT}: disagreeing ladder-tip records ({named}); "
-            "the audit must record one tip."
-        )
-        return
-
-    tip = recorded[0]
     for phrase in _LADDER_TIP_PHRASE.finditer(readme):
         sentence = sentence_around(readme, phrase.start(), phrase.end())
         mentions = _BASELINE_MENTION.findall(sentence)
@@ -452,6 +442,35 @@ def check_ladder_tip(repo_root: Path, readme: str, errors: list[str]) -> None:
                 f"{_LADDER_TIP_AUDIT} records the ladder tip at baseline "
                 f"{tip} — “{sentence.strip()}”."
             )
+
+
+def recorded_ladder_tip(repo_root: Path, errors: list[str]) -> str | None:
+    """The baseline the substrate ladder stands at, per the close audit.
+
+    The one committed source for "which baseline is this". ``None`` with an
+    error recorded when the audit names none or names several — both are drift
+    the callers report rather than guess through. Whitespace is collapsed
+    first because the audit wraps its prose mid-sentence.
+    """
+
+    audit = read_document(repo_root, _LADDER_TIP_AUDIT, errors)
+    if audit is None:
+        return None
+    recorded = _AUDIT_LADDER_TIP.findall(re.sub(r"\s+", " ", audit))
+    if not recorded:
+        errors.append(
+            f"{_LADDER_TIP_AUDIT}: no 'the ladder tip stands at baseline N' "
+            "sentence — the ladder tip has no committed source to check against."
+        )
+        return None
+    if len(set(recorded)) > 1:
+        named = ", ".join(f"baseline {tip}" for tip in sorted(set(recorded)))
+        errors.append(
+            f"{_LADDER_TIP_AUDIT}: disagreeing ladder-tip records ({named}); "
+            "the audit must record one tip."
+        )
+        return None
+    return str(recorded[0])
 
 
 def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
@@ -609,14 +628,28 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
             or not isinstance(denominator, int)
             or isinstance(numerator, bool)
             or isinstance(denominator, bool)
-            or denominator <= 0
+            or numerator < 0
+            or denominator < 0
         ):
             errors.append(
-                f"{relative_path}: the vote_correctness block does not carry a "
-                "positive impostor_ejections beside an integer "
-                f"evidence_backed_impostor_ejections (read {numerator!r} of "
-                f"{denominator!r}), so the rate cannot be re-derived."
+                f"{relative_path}: the vote_correctness block does not carry "
+                "non-negative integer counts (read "
+                f"{numerator!r} of {denominator!r}), so the rate cannot be "
+                "re-derived."
             )
+            continue
+
+        if denominator == 0:
+            # A set that ejected no impostor has an UNDEFINED rate, not a zero
+            # one — the analyzer records ``None``. Stamp it as such so the
+            # module cannot quietly print a number for it.
+            if numerator != 0 or recorded is not None:
+                errors.append(
+                    f"{relative_path}: no impostor ejections, so the rate is "
+                    f"undefined — but the block records {numerator} "
+                    f"evidence-backed and a rate of {recorded!r}."
+                )
+            check_stamp(stamp_lines, set_dir, relative_path, _NO_RATE, errors)
             continue
 
         rate = numerator / denominator
@@ -635,18 +668,7 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
             sets_below_one.append(f"{set_dir} ({numerator}/{denominator})")
 
         claim = f"{numerator}/{denominator} = {rate:.4f}"
-        stamped = [line for line in stamp_lines if set_dir in line]
-        if len(stamped) != 1:
-            errors.append(
-                f"{_VOTE_CORRECTNESS_MODULE}: expected exactly one line naming "
-                f"{set_dir!r} (its vote-correctness stamp), found "
-                f"{len(stamped)} — the checked claim has no unambiguous home."
-            )
-        elif claim not in stamped[0]:
-            errors.append(
-                f"{_VOTE_CORRECTNESS_MODULE}: the {set_dir} stamp reads "
-                f"{stamped[0].strip()!r}, but {relative_path} records {claim}."
-            )
+        check_stamp(stamp_lines, set_dir, relative_path, claim, errors)
 
     if not sets_below_one:
         return
@@ -659,6 +681,34 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
                 "legal (meetings.manager.guard_ballot_citation), so the pin is "
                 "prose the committed bytes refute."
             )
+
+
+def check_stamp(
+    stamp_lines: Sequence[str],
+    set_dir: str,
+    relative_path: str,
+    claim: str,
+    errors: list[str],
+) -> None:
+    """One recorded set's stamp line in the module, bound to its own report.
+
+    Exactly one module line may name the set: a second would let a stale
+    duplicate hide beside the correct value, the drift class this whole file
+    exists to catch.
+    """
+
+    stamped = [line for line in stamp_lines if set_dir in line]
+    if len(stamped) != 1:
+        errors.append(
+            f"{_VOTE_CORRECTNESS_MODULE}: expected exactly one line naming "
+            f"{set_dir!r} (its vote-correctness stamp), found {len(stamped)} — "
+            "the checked claim has no unambiguous home."
+        )
+    elif claim not in stamped[0]:
+        errors.append(
+            f"{_VOTE_CORRECTNESS_MODULE}: the {set_dir} stamp reads "
+            f"{stamped[0].strip()!r}, but {relative_path} records {claim}."
+        )
 
 
 def check_vote_correctness_provenance(
@@ -709,6 +759,15 @@ def check_vote_correctness_provenance(
                     )
                 )
             )
+
+    tip = recorded_ladder_tip(repo_root, errors)
+    if tip is not None and f"baseline-{tip}" not in module:
+        errors.append(
+            f"{_VOTE_CORRECTNESS_MODULE}: the vote-correctness stamps do not "
+            f"name 'baseline-{tip}', the baseline {_LADDER_TIP_AUDIT} records "
+            "the substrate ladder standing at — a rate attributed to the wrong "
+            "baseline is a wrong claim even when its arithmetic checks out."
+        )
 
     for label, tokens, name_in_module in (
         ("recording model", models, True),

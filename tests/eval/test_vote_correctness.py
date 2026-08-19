@@ -1989,77 +1989,70 @@ def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
     The classification rule's left half, decidable from recorded bytes alone.
     Material against ``subject`` is either:
 
-    * a spoken :class:`~meetings.schemas.SawVentObservation` naming them (the
-      one kind the proxy guard below deliberately does not touch); or
-    * a public placement of them (their own
-      :class:`~meetings.schemas.WhereaboutsClaim`, or an
-      :class:`~meetings.schemas.AlibiClaim` naming them) contradicted by a
+    * a spoken :class:`~meetings.schemas.SawVentObservation` naming them; or
+    * an account ``subject`` gave of THEMSELVES — their own
+      :class:`~meetings.schemas.WhereaboutsClaim` (self-placement by
+      construction) or an :class:`~meetings.schemas.AlibiClaim` they spoke
+      about themselves — contradicted by a
       :class:`~meetings.schemas.SawPlayerObservation` of them inside the
-      claimed window, or by a second such placement over an overlapping one.
+      claimed window, or by a second self-account over an overlapping one.
+      Rooms are compared as canonical sets, the detector's own rule:
+      contradictory only when both sets are non-empty and disjoint.
 
-    Two of the detector's own rules are honoured. Rooms are compared as
-    canonical sets — contradictory only when both sets are non-empty and
-    disjoint. And a pair whose two events share ONE speaker who is not the
-    subject is NOT material: ``meetings.transcript`` re-targets a single
-    narrator's proxy pair WEAK at the narrator, so the flag stops naming the
-    subject. A speaker contradicting themselves still counts, and every
-    cross-speaker pairing counts.
+    **Proxy testimony is deliberately out of scope.** An alibi one player
+    states about ANOTHER runs through re-targeting rules this predicate does
+    not model — a single narrator's conflicting pair is re-aimed at the
+    narrator, a proxy account the subject's own account agrees with is re-aimed
+    at the proxy, and an echoed account is deduped before pairing — so counting
+    proxy claims would mean reimplementing ``detect_contradictions`` inside a
+    test and getting it subtly wrong. Excluding them makes the rule
+    CONSERVATIVE: it can only under-report "detector miss", never invent one.
+    The census below does not lean on that margin — none of the six ejectees is
+    placed by any alibi or whereabouts claim at all, proxy or self, which the
+    census asserts directly.
 
-    The vent half is deliberately generous: the ``vent_sighting`` flag fires
-    only when the spoken observation is GROUNDED against the speaker's own
-    private witness channel, which no report carries — so a spoken vent claim
-    can only push a row toward "detector miss", never away from it.
+    The vent half leans the other way and says so: the ``vent_sighting`` flag
+    fires only when the spoken observation is GROUNDED against the speaker's
+    own private witness channel, which no report carries — so a spoken vent
+    claim can only push a row toward "detector miss", never away from it.
     """
 
-    # (speaker, room, from_tick, to_tick) and (speaker, room, tick).
-    placements: list[tuple[PlayerId, str, int, int]] = []
-    sightings: list[tuple[PlayerId, str, int]] = []
+    self_accounts: list[tuple[str, int, int]] = []  # room, from_tick, to_tick
+    sightings: list[tuple[str, int]] = []  # room, tick
     for turn in meeting.transcript.turns:
         for observation in turn.observations:
             if isinstance(observation, SawVentObservation):
                 if observation.subject == subject:
                     return True
             elif isinstance(observation, WhereaboutsClaim):
-                # Self-placement by construction: the claim has no subject
-                # field because the subject IS the speaker.
+                # No subject field by construction: the subject IS the speaker.
                 if turn.speaker == subject:
-                    placements.append(
-                        (
-                            turn.speaker,
-                            observation.room,
-                            observation.tick,
-                            observation.tick,
-                        )
+                    self_accounts.append(
+                        (observation.room, observation.tick, observation.tick)
                     )
             elif (
                 isinstance(observation, SawPlayerObservation)
                 and observation.subject == subject
             ):
-                sightings.append((turn.speaker, observation.room, observation.tick))
+                sightings.append((observation.room, observation.tick))
         for claim in turn.claims:
-            if isinstance(claim, AlibiClaim) and claim.subject == subject:
-                placements.append(
-                    (turn.speaker, claim.room, claim.from_tick, claim.to_tick)
-                )
-
-    def _survives_proxy_guard(left: PlayerId, right: PlayerId) -> bool:
-        return left != right or left == subject
+            if (
+                isinstance(claim, AlibiClaim)
+                and claim.subject == subject
+                and turn.speaker == subject
+            ):
+                self_accounts.append((claim.room, claim.from_tick, claim.to_tick))
 
     if any(
-        start <= tick <= end
-        and _survives_proxy_guard(claimant, witness)
-        and _rooms_disjoint(room, seen_room)
-        for claimant, room, start, end in placements
-        for witness, seen_room, tick in sightings
+        start <= tick <= end and _rooms_disjoint(room, seen_room)
+        for room, start, end in self_accounts
+        for seen_room, tick in sightings
     ):
         return True
     return any(
-        start_a <= end_b
-        and start_b <= end_a
-        and _survives_proxy_guard(speaker_a, speaker_b)
-        and _rooms_disjoint(room_a, room_b)
-        for index, (speaker_a, room_a, start_a, end_a) in enumerate(placements)
-        for speaker_b, room_b, start_b, end_b in placements[index + 1 :]
+        start_a <= end_b and start_b <= end_a and _rooms_disjoint(room_a, room_b)
+        for index, (room_a, start_a, end_a) in enumerate(self_accounts)
+        for room_b, start_b, end_b in self_accounts[index + 1 :]
     )
 
 
@@ -2125,13 +2118,19 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
 
     **Detector miss** iff the meeting's transcript carries the structured
     material the contradiction detector is specified to prosecute against the
-    ejectee — a vent sighting naming them, or a self-placement of theirs
-    (whereabouts answer or alibi) contradicted by another speaker's sighting
-    inside the claimed window, or by a second self-placement over an
-    overlapping one (:func:`_has_detector_material`) — while the meeting's
-    ``contradictions`` mint nothing naming them. **Rhetoric-only conviction**
-    otherwise: there was nothing flaggable to miss, and the table convicted on
-    argument.
+    ejectee — a vent sighting naming them, or an account they gave of
+    themselves contradicted by a sighting inside the claimed window or by a
+    second self-account over an overlapping one
+    (:func:`_has_detector_material`, which states what it excludes and why) —
+    while the meeting's ``contradictions`` mint nothing naming them.
+    **Rhetoric-only conviction** otherwise: there was nothing flaggable to
+    miss, and the table convicted on argument.
+
+    The verdict does not rest on the rule's edges. The assertion below is the
+    blunt one: not one of the six ejectees is placed by ANY alibi or
+    whereabouts claim in their meeting — nobody, themselves included, put them
+    anywhere on the public record — so there is no placement for any detector
+    rule to prosecute, however the proxy cases are resolved.
 
     All six fall on the rhetoric-only side, for one recorded reason: in every
     one of them the ejectee's single reply turn carries no observations and no
@@ -2159,6 +2158,29 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
         (seed, meeting_id): "rhetoric-only conviction"
         for seed, meeting_id, _, _ in _UNBACKED_9P2I
     }
+
+    # The blunt fact the verdict rests on, independent of any proxy-retargeting
+    # subtlety: nobody placed these six anywhere on the public record, so there
+    # was no placement for the detector to prosecute.
+    for seed, meeting, ejected in _impostor_ejections(report):
+        if _has_real_evidence(meeting, ejected):
+            continue
+        placements = [
+            claim
+            for turn in meeting.transcript.turns
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim) and claim.subject == ejected
+        ] + [
+            observation
+            for turn in meeting.transcript.turns
+            if turn.speaker == ejected
+            for observation in turn.observations
+            if isinstance(observation, WhereaboutsClaim)
+        ]
+        assert not placements, (
+            f"seed {seed}: {ejected} IS placed on the record "
+            f"({len(placements)} claims) — re-read the classification"
+        )
 
     # The other half of "legal, not a bug": every eject ballot behind these six
     # cites something. An uncited zero-flag eject would have been coerced to
@@ -2216,16 +2238,16 @@ def _census_turn(
 def test_detector_material_rule_separates_a_miss_from_pure_rhetoric() -> None:
     """The classifier bites: a planted detector-miss reads as one.
 
-    Four planted meetings, each ejecting the impostor with an empty
-    ``contradictions`` tuple, so all four are unbacked. The first hands the
-    detector a whereabouts answer the ejectee gave, contradicted by another
-    speaker's sighting at the same tick — material a working detector would
-    have flagged. The second carries a vent sighting naming them, the rule's
-    other half. The third carries only an accusation. The fourth is the proxy
-    shape: ONE other speaker states two conflicting alibis about the ejectee,
-    which the detector re-targets WEAK at that narrator rather than flagging
-    the ejectee — so it is not material against them, and reading it as a
-    detector miss would blame the detector for behaving as designed.
+    Five planted meetings, each ejecting the impostor with an empty
+    ``contradictions`` tuple, so all five are unbacked. Two must read as
+    material: a whereabouts answer the ejectee gave contradicted by another
+    speaker's sighting at the same tick, and a vent sighting naming them. Three
+    must not: a meeting carrying only an accusation, and the two proxy shapes
+    the rule excludes on purpose — one narrator stating two conflicting alibis
+    about the ejectee (the detector re-aims that at the narrator), and the same
+    two claims split across two narrators (the detector's re-targeting rules
+    decide that case on the ejectee's own account, which this predicate does
+    not model).
 
     Without this set the "all six are rhetoric-only" census above could be a
     rule that never fires, or one that fires on everything.
@@ -2309,9 +2331,10 @@ def test_detector_material_rule_separates_a_miss_from_pure_rhetoric() -> None:
             ),
         ),
     )
-    # The same two claims split across two narrators: a genuine two-witness
-    # disagreement, which the proxy guard passes through still naming the
-    # ejectee.
+    # The same two claims split across two narrators: still proxy testimony,
+    # still out of scope — whether the detector names the ejectee or one of the
+    # narrators depends on the ejectee's own account, which this predicate
+    # deliberately does not model.
     cross_speaker = _meeting(
         outcome="EJECTED",
         ejected=_IMPOSTOR,
@@ -2332,9 +2355,9 @@ def test_detector_material_rule_separates_a_miss_from_pure_rhetoric() -> None:
         assert not _has_real_evidence(meeting, _IMPOSTOR)
     assert _has_detector_material(flaggable, _IMPOSTOR)
     assert _has_detector_material(vented, _IMPOSTOR)
-    assert _has_detector_material(cross_speaker, _IMPOSTOR)
     assert not _has_detector_material(rhetoric, _IMPOSTOR)
     assert not _has_detector_material(proxy, _IMPOSTOR)
+    assert not _has_detector_material(cross_speaker, _IMPOSTOR)
 
 
 # ---------------------------------------------------------------------------
