@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Three checks. Each accumulates precise errors; all of them are reported
+Four checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -48,6 +48,21 @@ together, so one run names every drifted fact rather than the first.
    read. The belief-substrate section may not advertise any ``AILIBI_*=``
    assignment whose key is absent from the registry either: a misspelled or
    never-registered knob is as much a no-op as a graduated one.
+4. **Vote-correctness stamps vs the committed reports.**
+   ``eval/vote_correctness.py`` documents what ``vote_correctness_rate`` reads
+   on each recorded set. Every ``<set>/tournament-eval-report.json`` owns those
+   numbers: the rate is re-derived here as
+   ``evidence_backed_impostor_ejections / impostor_ejections`` — never a
+   literal in this file, so a re-record only re-stamps the module — and the
+   module must carry exactly one line naming that set, stamped with the
+   recomputed ``"<numerator>/<denominator> = <rate>"``. A report whose own
+   ``vote_correctness_rate`` field disagrees with its counts fails too. And
+   while any recorded set reads below 1.0, the module may not call the rate
+   structurally pinned: a zero-flag EJECT that cites a transcript turn or a
+   private observation id is legal by design
+   (``meetings.manager.guard_ballot_citation``), so the pin would be prose the
+   committed bytes refute. Frontend copy is deliberately NOT scanned — the
+   spectator surface has its own owner.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -60,6 +75,7 @@ Exit 0 when every checked fact matches, 1 with every failure printed.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections.abc import Sequence
@@ -89,6 +105,29 @@ _ENV_EXAMPLE: Final = ".env.example"
 _LADDER_TIP_AUDIT: Final = "audits/audit-phase-18-close.md"
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
+
+# The module whose prose owns what ``vote_correctness_rate`` reads, and the
+# recorded sets that own the numbers. The set directory doubles as the stamp
+# token, so "replays/samples/9p2i" and "replays/ml_corpus/9p2i" cannot be
+# confused for each other.
+_VOTE_CORRECTNESS_MODULE: Final = "eval/vote_correctness.py"
+_RECORDED_SETS: Final[tuple[str, ...]] = (
+    "replays/samples/4p1i",
+    "replays/samples/9p2i",
+    "replays/ml_corpus/4p1i",
+    "replays/ml_corpus/9p2i",
+)
+_EVAL_REPORT_PATH: Final = "{set_dir}/tournament-eval-report.json"
+_VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
+# The reports run to tens of megabytes; the block is eight scalar fields, so a
+# runaway scan means the report format drifted rather than a bigger block.
+_VOTE_CORRECTNESS_BLOCK_MAX_LINES: Final = 64
+# Prose that would reassert the pin the committed rates refute.
+_STRUCTURAL_PIN_PHRASES: Final[tuple[str, ...]] = (
+    "structurally pinned",
+    "pinned to 1.0",
+    "pins it to 1.0",
+)
 
 # The ``winner`` cell a manifest row carries when the impostors took the game.
 _IMPOSTOR_WINNER: Final = "IMPOSTORS"
@@ -152,7 +191,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Doc facts verified: {_README} and {_ENV_EXAMPLE} agree with "
         f"{len(_SAMPLE_SETS)} sample manifests, {_LADDER_TIP_AUDIT}, and the "
-        f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry."
+        f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry; "
+        f"{_VOTE_CORRECTNESS_MODULE} agrees with {len(_RECORDED_SETS)} "
+        "recorded eval reports."
     )
     return 0
 
@@ -166,6 +207,7 @@ def check_facts(repo_root: Path) -> list[str]:
         check_sample_provenance(repo_root, readme, errors)
         check_ladder_tip(repo_root, readme, errors)
     check_lever_registry(repo_root, errors)
+    check_vote_correctness_sentinel(repo_root, errors)
     return errors
 
 
@@ -518,6 +560,146 @@ def check_lever_registry(repo_root: Path, errors: list[str]) -> None:
             "registry — a misspelled or never-registered knob this build does "
             "not read."
         )
+
+
+def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
+    """``eval/vote_correctness.py``'s stamps, re-derived from the eval reports.
+
+    Each recorded set owns one stamp line in the module: the line naming that
+    set must carry ``"<evidence_backed>/<impostor_ejections> = <rate>"`` with
+    the rate re-derived here, so a re-record re-stamps the module instead of
+    rotting it. A report whose own ``vote_correctness_rate`` disagrees with its
+    two counts fails as well — the drift would otherwise hide behind a stamp
+    that still matched the counts.
+
+    While any set reads below 1.0 the module may not call the rate structurally
+    pinned. That claim was true of a substrate where the only eject path ran
+    through the contradiction detector; since the citation gate it is not, and
+    the committed reports are what say so.
+    """
+
+    module = read_document(repo_root, _VOTE_CORRECTNESS_MODULE, errors)
+    if module is None:
+        return
+
+    stamp_lines = module.splitlines()
+    sets_below_one: list[str] = []
+    for set_dir in _RECORDED_SETS:
+        relative_path = _EVAL_REPORT_PATH.format(set_dir=set_dir)
+        block = read_vote_correctness_block(repo_root, relative_path, errors)
+        if block is None:
+            continue
+        numerator = block.get("evidence_backed_impostor_ejections")
+        denominator = block.get("impostor_ejections")
+        recorded = block.get("vote_correctness_rate")
+        if (
+            not isinstance(numerator, int)
+            or not isinstance(denominator, int)
+            or isinstance(numerator, bool)
+            or isinstance(denominator, bool)
+            or denominator <= 0
+        ):
+            errors.append(
+                f"{relative_path}: the vote_correctness block does not carry a "
+                "positive impostor_ejections beside an integer "
+                f"evidence_backed_impostor_ejections (read {numerator!r} of "
+                f"{denominator!r}), so the rate cannot be re-derived."
+            )
+            continue
+
+        rate = numerator / denominator
+        if not isinstance(recorded, (int, float)) or isinstance(recorded, bool):
+            errors.append(
+                f"{relative_path}: vote_correctness_rate is {recorded!r}, not a "
+                f"number — its own counts read {numerator}/{denominator}."
+            )
+        elif abs(float(recorded) - rate) > 1e-9:
+            errors.append(
+                f"{relative_path}: the recorded vote_correctness_rate "
+                f"{recorded!r} disagrees with its own counts "
+                f"({numerator}/{denominator} = {rate:.4f})."
+            )
+        if rate < 1.0:
+            sets_below_one.append(f"{set_dir} ({numerator}/{denominator})")
+
+        claim = f"{numerator}/{denominator} = {rate:.4f}"
+        stamped = [line for line in stamp_lines if set_dir in line]
+        if len(stamped) != 1:
+            errors.append(
+                f"{_VOTE_CORRECTNESS_MODULE}: expected exactly one line naming "
+                f"{set_dir!r} (its vote-correctness stamp), found "
+                f"{len(stamped)} — the checked claim has no unambiguous home."
+            )
+        elif claim not in stamped[0]:
+            errors.append(
+                f"{_VOTE_CORRECTNESS_MODULE}: the {set_dir} stamp reads "
+                f"{stamped[0].strip()!r}, but {relative_path} records {claim}."
+            )
+
+    if not sets_below_one:
+        return
+    for phrase in _STRUCTURAL_PIN_PHRASES:
+        if phrase in module:
+            errors.append(
+                f"{_VOTE_CORRECTNESS_MODULE}: still claims {phrase!r}, but "
+                f"{', '.join(sets_below_one)} records a rate below 1.0 — a "
+                "zero-flag eject that cites a turn or an observation id is "
+                "legal (meetings.manager.guard_ballot_citation), so the pin is "
+                "prose the committed bytes refute."
+            )
+
+
+def read_vote_correctness_block(
+    repo_root: Path, relative_path: str, errors: list[str]
+) -> dict[str, object] | None:
+    """The report's ``vote_correctness`` object, without parsing the document.
+
+    The committed reports reach tens of megabytes, so the block is decoded from
+    its own key rather than by loading the whole file. Format drift (no such
+    key, or a block that never closes) is reported, never papered over.
+    """
+
+    path = repo_root / relative_path
+    block: list[str] = []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            depth = 0
+            for line in handle:
+                if not block:
+                    if not line.strip().startswith(_VOTE_CORRECTNESS_KEY):
+                        continue
+                    block.append("{")
+                    depth = 1
+                    continue
+                depth += line.count("{") - line.count("}")
+                block.append(line)
+                if depth <= 0 or len(block) > _VOTE_CORRECTNESS_BLOCK_MAX_LINES:
+                    break
+    except OSError as exc:
+        errors.append(f"{relative_path}: unreadable ({exc}).")
+        return None
+
+    if not block:
+        errors.append(
+            f"{relative_path}: no {_VOTE_CORRECTNESS_KEY} key — the eval-report "
+            "format drifted, so the vote-correctness stamps have no source."
+        )
+        return None
+    try:
+        decoded, _ = json.JSONDecoder().raw_decode("".join(block))
+    except ValueError as exc:
+        decoded = None
+        errors.append(
+            f"{relative_path}: the {_VOTE_CORRECTNESS_KEY} block does not parse "
+            f"as one JSON object ({exc})."
+        )
+    if not isinstance(decoded, dict):
+        if decoded is not None:
+            errors.append(
+                f"{relative_path}: {_VOTE_CORRECTNESS_KEY} is not a JSON object."
+            )
+        return None
+    return decoded
 
 
 def lever_section(text: str) -> str | None:

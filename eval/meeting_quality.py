@@ -33,9 +33,10 @@ analyzer defined in this module:
   see the Phase 19 Wave 1 block below)
   (:func:`compute_conversion_report`; DESIGN.md §11.3, §5.5; audit
   audit-2026-06-09-0347 gp-2). This is the ruler fix that BLOCKS the Wave-1
-  A/B: the old headline ``vote_correctness_rate`` is structurally pinned to
-  1.0 (see :mod:`eval.vote_correctness`) and measures nothing, so the real
-  leads are published beside it on the shipped report surface.
+  A/B: the old headline ``vote_correctness_rate`` reads only the
+  evidence-backed share of impostor ejections (see
+  :mod:`eval.vote_correctness`) and cannot rank tables, so the real leads are
+  published beside it on the shipped report surface.
 
 Phase 10 Wave 0 (Task 10.4, gate metrics) adds a seventh, the Phase-10 A/B
 ruler defined in this module:

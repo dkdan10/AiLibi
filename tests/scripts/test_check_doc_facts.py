@@ -2,10 +2,10 @@
 
 The checker's contract is two-sided: it must pass on the committed front door
 (so it can sit in a gate) and it must fail, naming the drifted fact, on every
-drift class the 19.1 sweep cleaned. The fixture copies the five files the
-checker reads into a tmp tree, and one test per perturbation asserts both the
-failure and that the message names the right fact — a checker that fails for
-the wrong reason is as useless as one that passes.
+drift class it guards. The fixture stands up a tmp tree holding exactly the
+files the checker reads, and one test per perturbation asserts both the failure
+and that the message names the right fact — a checker that fails for the wrong
+reason is as useless as one that passes.
 
 The substrate-lever registry is never copied: ``check_doc_facts`` always reads
 it from the live ``orchestrator.replay`` import, so a perturbed .env.example is
@@ -25,20 +25,33 @@ import check_doc_facts
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_doc_facts.py"
 
-# Exactly the files the checker reads. Copied preserving relative layout so the
-# tmp tree is a faithful (and perturbable) stand-in for a checkout.
+# Exactly the files the checker reads, in their relative layout so the tmp tree
+# is a faithful (and perturbable) stand-in for a checkout.
 _COPIED = (
     "README.md",
     ".env.example",
     "replays/samples/4p1i/MANIFEST.md",
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
+    "eval/vote_correctness.py",
+    "replays/samples/4p1i/tournament-eval-report.json",
+    "replays/samples/9p2i/tournament-eval-report.json",
+    "replays/ml_corpus/4p1i/tournament-eval-report.json",
+    "replays/ml_corpus/9p2i/tournament-eval-report.json",
 )
+
+# Above this size a fixture entry is symlinked rather than copied: the four
+# committed eval reports total >100 MB, and every test gets its own tree. Every
+# writer here REPLACES a fixture file (``_write`` unlinks first), so a link is
+# never followed back into the checkout.
+_LINK_ABOVE_BYTES = 1_000_000
 
 _README = "README.md"
 _ENV_EXAMPLE = ".env.example"
 _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
+_VOTE_CORRECTNESS = "eval/vote_correctness.py"
+_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
 
 
 @pytest.fixture
@@ -46,9 +59,13 @@ def doc_tree(tmp_path: Path) -> Path:
     """A tmp checkout holding only the documents the checker reads."""
 
     for relative in _COPIED:
+        source = _REPO_ROOT / relative
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes((_REPO_ROOT / relative).read_bytes())
+        if source.stat().st_size > _LINK_ABOVE_BYTES:
+            destination.symlink_to(source)
+        else:
+            destination.write_bytes(source.read_bytes())
     return tmp_path
 
 
@@ -57,7 +74,11 @@ def _read(root: Path, relative: str) -> str:
 
 
 def _write(root: Path, relative: str, text: str) -> None:
-    (root / relative).write_text(text, encoding="utf-8")
+    # Replace, never open in place: a large fixture entry is a symlink into the
+    # checkout, and an in-place write would perturb the committed file.
+    path = root / relative
+    path.unlink(missing_ok=True)
+    path.write_text(text, encoding="utf-8")
 
 
 def _substitute(root: Path, relative: str, old: str, new: str) -> None:
@@ -457,6 +478,63 @@ def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "parsed zero table rows" in errors[0]
     assert _MANIFEST_4P1I in errors[0]
+
+
+def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
+    # The module's per-set stamp is bound to that set's committed report: a
+    # numerator drifting away from the recorded one is named on both sides.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "72/78 = 0.9231", "71/78 = 0.9103")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "replays/samples/9p2i" in errors[0]
+    assert "71/78 = 0.9103" in errors[0]
+    assert "records 72/78 = 0.9231" in errors[0]
+
+
+def test_structural_pin_prose_detected(doc_tree: Path) -> None:
+    # The claim this check exists to keep dead: a recorded set reading below
+    # 1.0 refutes "structurally pinned", so reinstating the phrase must fail
+    # with the phrase quoted back.
+    _substitute(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        "**``vote_correctness_rate`` is a diagnostic, NOT a KPI.**",
+        "**``vote_correctness_rate`` is structurally pinned by the vote gate.**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'structurally pinned'" in errors[0]
+    assert "replays/samples/9p2i (72/78)" in errors[0]
+
+
+def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
+    # The rate is never a literal in the checker: it is re-derived from the
+    # report's own two counts, so a rate field drifting away from them fails
+    # with the set and both values named.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"vote_correctness_rate": 0.9230769230769231',
+        '"vote_correctness_rate": 0.99',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert "0.99" in errors[0]
+    assert "72/78 = 0.9231" in errors[0]
+
+
+def test_eval_report_without_vote_correctness_block_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # Format drift must not read as "nothing to check": a report with no
+    # vote_correctness block leaves the stamps sourceless.
+    _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert '"vote_correctness":' in errors[0]
 
 
 def test_missing_document_reported(doc_tree: Path) -> None:
