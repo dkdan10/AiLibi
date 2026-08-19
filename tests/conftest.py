@@ -37,21 +37,22 @@ henceforth the DEFAULT gate — runs everything not marked ``campaign``
 (``-m campaign``), and the phase close runs BOTH tiers — the 19.28
 phase-close contract pins that.
 
-The session-scoped committed-replay fixture below exists because the
-committed ``replays/samples/9p2i`` set was independently re-walked by every
-pin that needed the assembled report — six ``build_report`` calls per suite
-run at the Task-19.27 baseline, each a state-hash-verified engine walk of
-all 50 recordings. One session-scoped walk serves them all; the walk itself
-is pure and deterministic over the committed bytes, so sharing the result
-cannot couple tests.
+Committed-replay walks: every walk over a committed sample set — the assembled
+9p2i report below included — is computed once per worker by
+``tests/_helpers/committed.py`` and shared from there. The walks are
+state-hash-verified engine replays of whole directories, the suite's most
+expensive fixtures, and pure functions of frozen bytes, so sharing a result
+cannot couple the tests that read it.
+
+Parallelism: ``scripts/check.sh`` runs this tier across ``pytest-xdist``
+workers. Session scope is therefore per worker, which is what the shared cache
+above is scoped to as well.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 from collections.abc import Iterator, Mapping
-from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 import pytest
@@ -60,9 +61,6 @@ from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 
 if TYPE_CHECKING:
     from eval.meeting_quality import TournamentEvalReport
-
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_COMMITTED_9P2I_DIR = _REPO_ROOT / "replays" / "samples" / "9p2i"
 
 #: The namespace the hermetic guard owns. Every name under it is cleared unless the
 #: allow-list below keeps it.
@@ -179,26 +177,16 @@ def _hermetic_ailibi_env() -> Iterator[None]:
 
 @pytest.fixture(scope="session")
 def committed_9p2i_report() -> "TournamentEvalReport":
-    """The committed 9p2i set's eval report, rebuilt ONCE per suite run.
+    """The committed 9p2i set's eval report — fixture-shaped access to the walk.
 
-    ``build_report`` re-derives roles from the seeds, folds the 50 recorded
-    replays through the one operator assembly
-    (``scripts/build_sample_report.py``), and runs the state-hash-verified
-    kill-craft walk over the whole directory — the expensive part. The result
-    is a frozen-input pure function of the committed bytes, so a single
-    session-scoped instance serves every consumer without coupling them.
-
-    Imports lazily: ``build_sample_report`` pulls in the api/engine/eval
-    stack, which does not belong in conftest import time for the tests that
-    never use this fixture.
+    The walk itself, and the cache that pays for it once per worker, live in
+    :func:`tests._helpers.committed.report_9p2i`; consumers that cannot request a
+    fixture call it directly.
     """
 
-    scripts_dir = _REPO_ROOT / "scripts"
-    if str(scripts_dir) not in sys.path:
-        sys.path.insert(0, str(scripts_dir))
-    from build_sample_report import build_report
+    from tests._helpers.committed import report_9p2i
 
-    return build_report(_COMMITTED_9P2I_DIR)
+    return report_9p2i()
 
 
 # The Task-14.10 evidence-quality lift lever is UNCONDITIONAL since the Task-14.12

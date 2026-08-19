@@ -37,6 +37,7 @@ from eval.solvability import (
     compute_solvability_report,
 )
 from eval.validity import resolve_roster_knobs, roles_by_seed
+from tests._helpers.committed import solvability_report
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -432,28 +433,28 @@ def test_emergency_meetings_are_excluded_from_the_census() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Census pins over the four committed sets (module-scoped: one walk each).      #
+# Census pins over the four committed sets — one walk each, per worker.       #
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def samples_9p2i() -> SolvabilityReport:
-    return compute_solvability_report(_SAMPLES_9P2I)
+    return solvability_report(_SAMPLES_9P2I)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def samples_4p1i() -> SolvabilityReport:
-    return compute_solvability_report(_SAMPLES_4P1I)
+    return solvability_report(_SAMPLES_4P1I)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def corpus_9p2i() -> SolvabilityReport:
-    return compute_solvability_report(_CORPUS_9P2I)
+    return solvability_report(_CORPUS_9P2I)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def corpus_4p1i() -> SolvabilityReport:
-    return compute_solvability_report(_CORPUS_4P1I)
+    return solvability_report(_CORPUS_4P1I)
 
 
 def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:

@@ -3668,9 +3668,9 @@ class TestReporterExculpationOnCommittedBytes:
 
     @pytest.fixture(scope="class")
     def funnel(self) -> InformationFunnelReport:
-        from eval.funnel import compute_information_funnel
+        from tests._helpers.committed import funnel_9p2i
 
-        return compute_information_funnel(self._SET_DIR)
+        return funnel_9p2i()
 
     @pytest.fixture(scope="class")
     def roles_by_seed(self) -> dict[int, dict[str, str]]:
