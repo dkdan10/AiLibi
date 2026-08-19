@@ -2129,6 +2129,34 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
         (seed, meeting_id): "rhetoric-only conviction"
         for seed, meeting_id, _, _ in _UNBACKED_9P2I
     }
+
+    # The other half of "legal, not a bug": every eject ballot behind these six
+    # cites something. An uncited zero-flag eject would have been coerced to
+    # SKIP, so a recording that loses a citation — or carries a dangling turn
+    # id — must fail here rather than pass as the expected rhetoric-only
+    # finding.
+    for seed, meeting, ejected in _impostor_ejections(report):
+        if _has_real_evidence(meeting, ejected):
+            continue
+        turn_ids = {turn.turn_id for turn in meeting.transcript.turns}
+        eject_ballots = [
+            ballot for ballot in meeting.ballots if ballot.target == ejected
+        ]
+        assert eject_ballots, f"seed {seed}: nobody voted to eject {ejected}"
+        for ballot in eject_ballots:
+            if ballot.primary_reason_id is not None:
+                assert ballot.primary_reason_id in turn_ids, (
+                    f"seed {seed}: {ballot.voter} cites "
+                    f"{ballot.primary_reason_id!r}, which is not a turn of "
+                    f"{meeting.meeting_id}"
+                )
+            assert (
+                ballot.primary_reason_id is not None
+                or ballot.primary_reason_observation_id is not None
+            ), (
+                f"seed {seed}: {ballot.voter}'s eject ballot against {ejected} "
+                "cites neither a transcript turn nor an observation id"
+            )
     counts = Counter(classified.values())
     assert counts["rhetoric-only conviction"] == 6
     assert counts["detector miss"] == 0

@@ -38,6 +38,8 @@ _COPIED = (
     "replays/samples/9p2i/tournament-eval-report.json",
     "replays/ml_corpus/4p1i/tournament-eval-report.json",
     "replays/ml_corpus/9p2i/tournament-eval-report.json",
+    "replays/ml_corpus/4p1i/MANIFEST.md",
+    "replays/ml_corpus/9p2i/MANIFEST.md",
 )
 
 # Above this size a fixture entry is symlinked rather than copied: the four
@@ -52,6 +54,7 @@ _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _VOTE_CORRECTNESS = "eval/vote_correctness.py"
 _EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
+_ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 
 
 @pytest.fixture
@@ -473,11 +476,13 @@ def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
     # Format drift must not read as "no impostor wins recorded": a manifest
     # with no parseable rows is a hard failure, not a vacuous pass.
+    # Both the win-rate check and the vote-correctness provenance check read
+    # this manifest, so both lose their source and both must say so.
     _write(doc_tree, _MANIFEST_4P1I, "# Sample Replay Manifest\n\nno table here.\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "parsed zero table rows" in errors[0]
-    assert _MANIFEST_4P1I in errors[0]
+    assert len(errors) == 2
+    assert all("parsed zero table rows" in error for error in errors)
+    assert all(_MANIFEST_4P1I in error for error in errors)
 
 
 def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
@@ -523,6 +528,31 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     assert _EVAL_REPORT_9P2I in errors[0]
     assert "0.99" in errors[0]
     assert "72/78 = 0.9231" in errors[0]
+
+
+def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
+    # A rate is only meaningful beside the substrate that produced it, so the
+    # model the stamps are attributed to is the manifests' model, not prose.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "Qwen/Qwen3.6-27B", "Qwen/Qwen3.5-9B")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "recording model 'Qwen/Qwen3.6-27B'" in errors[0]
+
+
+def test_recorded_sets_disagreeing_on_the_substrate_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # One provenance line cannot describe two substrates: a set recorded on a
+    # different model must fail rather than be papered over by whichever
+    # manifest happened to be read first.
+    _substitute(
+        doc_tree, _ML_CORPUS_MANIFEST_9P2I, "Qwen/Qwen3.6-27B", "Qwen/Qwen3.5-9B"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the recording model" in errors[0]
+    assert "Qwen/Qwen3.5-9B" in errors[0]
 
 
 def test_eval_report_without_vote_correctness_block_fails_loud(

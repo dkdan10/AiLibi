@@ -22,20 +22,22 @@ prompt A/B on this rate: the published conversion leads live on
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
-What the recorded sets read (evidence-backed / impostor ejections), each on the
-baseline-6 record -- model ``Qwen/Qwen3.6-27B``, prompt set ``qwen3_6_27b`` v3:
+What the recorded sets read (evidence-backed / impostor ejections). All four
+were recorded on the baseline-6 substrate -- model ``Qwen/Qwen3.6-27B``, every
+template at ``qwen3_6_27b.v3`` -- as each set's ``MANIFEST.md`` records:
 
 * ``replays/samples/9p2i``: 72/78 = 0.9231
 * ``replays/samples/4p1i``: 10/10 = 1.0000
 * ``replays/ml_corpus/9p2i``: 235/248 = 0.9476
 * ``replays/ml_corpus/4p1i``: 20/20 = 1.0000
 
-``scripts/check_doc_facts.py`` re-derives all four from the committed reports
-and fails when a stamp drifts or when this module claims a structural pin the
-data contradicts, so a re-record re-stamps these lines rather than rotting
-them. The six samples/9p2i ejections behind the shortfall are censused seed by
-seed -- and classified -- in ``tests/eval/test_vote_correctness.py``. Mind the
-two populations: **8** of those 78 ejections carry no naming
+``scripts/check_doc_facts.py`` re-derives all four rates from the committed
+reports and the model and prompt-set tokens from the four manifests, and fails
+when a stamp or the provenance drifts, or when this module claims a structural
+pin the data contradicts -- so a re-record re-stamps these lines rather than
+rotting them. The six samples/9p2i ejections behind the shortfall are censused
+seed by seed -- and classified -- in ``tests/eval/test_vote_correctness.py``.
+Mind the two populations: **8** of those 78 ejections carry no naming
 ``ContradictionRef`` at all, and 2 of the 8 are evidence-backed anyway through
 the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
 evidence-backed".

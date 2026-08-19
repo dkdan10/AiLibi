@@ -56,7 +56,10 @@ together, so one run names every drifted fact rather than the first.
    literal in this file, so a re-record only re-stamps the module — and the
    module must carry exactly one line naming that set, stamped with the
    recomputed ``"<numerator>/<denominator> = <rate>"``. A report whose own
-   ``vote_correctness_rate`` field disagrees with its counts fails too. And
+   ``vote_correctness_rate`` field disagrees with its counts fails too. The
+   substrate those rates are attributed to is checked with them: the model and
+   the prompt-set token come from the four ``MANIFEST.md`` files, the sets must
+   agree on one substrate, and the module must name it. And
    while any recorded set reads below 1.0, the module may not call the rate
    structurally pinned: a zero-flag EJECT that cites a transcript turn or a
    private observation id is legal by design
@@ -118,6 +121,7 @@ _RECORDED_SETS: Final[tuple[str, ...]] = (
     "replays/ml_corpus/9p2i",
 )
 _EVAL_REPORT_PATH: Final = "{set_dir}/tournament-eval-report.json"
+_SET_MANIFEST_PATH: Final = "{set_dir}/MANIFEST.md"
 _VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
 # The reports run to tens of megabytes; the block is eight scalar fields, so a
 # runaway scan means the report format drifted rather than a bigger block.
@@ -572,6 +576,11 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
     two counts fails as well — the drift would otherwise hide behind a stamp
     that still matched the counts.
 
+    The provenance the stamps are attributed to is checked with them
+    (:func:`check_vote_correctness_provenance`): a rate is only meaningful
+    beside the substrate that produced it, so the model and prompt-set tokens
+    come from the four ``MANIFEST.md`` files, never from this file.
+
     While any set reads below 1.0 the module may not call the rate structurally
     pinned. That claim was true of a substrate where the only eject path ran
     through the contradiction detector; since the citation gate it is not, and
@@ -582,6 +591,7 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
     if module is None:
         return
 
+    check_vote_correctness_provenance(repo_root, module, errors)
     stamp_lines = module.splitlines()
     sets_below_one: list[str] = []
     for set_dir in _RECORDED_SETS:
@@ -647,6 +657,61 @@ def check_vote_correctness_sentinel(repo_root: Path, errors: list[str]) -> None:
                 "legal (meetings.manager.guard_ballot_citation), so the pin is "
                 "prose the committed bytes refute."
             )
+
+
+def check_vote_correctness_provenance(
+    repo_root: Path, module: str, errors: list[str]
+) -> None:
+    """The substrate the vote-correctness stamps are attributed to.
+
+    A rate means nothing without the recording it came from, so the model and
+    the prompt-set token (``<family>.<version>``) are re-derived from every
+    recorded set's ``MANIFEST.md`` and must be named in the module. The sets
+    must agree: one provenance line cannot describe two substrates, so a split
+    fails here rather than silently describing whichever set happened to be
+    read first.
+    """
+
+    models: set[str] = set()
+    prompt_tokens: set[str] = set()
+    for set_dir in _RECORDED_SETS:
+        relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
+        text = read_document(repo_root, relative_path, errors)
+        if text is None:
+            continue
+        rows = list(parse_manifest(text).values())
+        if not rows:
+            errors.append(
+                f"{relative_path}: parsed zero table rows — the manifest format "
+                "drifted, so the recorded substrate cannot be re-derived."
+            )
+            continue
+        models.update(row.model.strip() for row in rows)
+        for row in rows:
+            # Entries are ``template.family.version``; the no-meetings sentinel
+            # and empty cells have no dotted shape and are skipped.
+            for entry in row.prompt_versions.split(","):
+                segments = entry.strip().split(".")
+                if len(segments) >= 3:
+                    prompt_tokens.add(f"{segments[-2]}.{segments[-1]}")
+
+    for label, tokens in (("recording model", models), ("prompt set", prompt_tokens)):
+        if len(tokens) > 1:
+            errors.append(
+                f"{_VOTE_CORRECTNESS_MODULE}: the recorded sets disagree on the "
+                f"{label} ({', '.join(sorted(tokens))}) — one provenance line "
+                f"cannot describe them; {', '.join(_RECORDED_SETS)} should share "
+                "one substrate."
+            )
+            continue
+        for token in tokens:
+            if token not in module:
+                errors.append(
+                    f"{_VOTE_CORRECTNESS_MODULE}: the vote-correctness stamps do "
+                    f"not name the {label} {token!r} they were recorded on — "
+                    f"{_SET_MANIFEST_PATH.format(set_dir=_RECORDED_SETS[0])} and "
+                    "its siblings record it on every row."
+                )
 
 
 def read_vote_correctness_block(
