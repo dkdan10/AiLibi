@@ -2,10 +2,10 @@
 
 The checker's contract is two-sided: it must pass on the committed front door
 (so it can sit in a gate) and it must fail, naming the drifted fact, on every
-drift class the 19.1 sweep cleaned. The fixture copies the five files the
-checker reads into a tmp tree, and one test per perturbation asserts both the
-failure and that the message names the right fact — a checker that fails for
-the wrong reason is as useless as one that passes.
+drift class it guards. The fixture stands up a tmp tree holding exactly the
+files the checker reads, and one test per perturbation asserts both the failure
+and that the message names the right fact — a checker that fails for the wrong
+reason is as useless as one that passes.
 
 The substrate-lever registry is never copied: ``check_doc_facts`` always reads
 it from the live ``orchestrator.replay`` import, so a perturbed .env.example is
@@ -14,6 +14,7 @@ checked against the levers this build actually ships.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -25,20 +26,37 @@ import check_doc_facts
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_doc_facts.py"
 
-# Exactly the files the checker reads. Copied preserving relative layout so the
-# tmp tree is a faithful (and perturbable) stand-in for a checkout.
+# Exactly the files the checker reads, in their relative layout so the tmp tree
+# is a faithful (and perturbable) stand-in for a checkout.
 _COPIED = (
     "README.md",
     ".env.example",
     "replays/samples/4p1i/MANIFEST.md",
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
+    "eval/vote_correctness.py",
+    "replays/samples/4p1i/tournament-eval-report.json",
+    "replays/samples/9p2i/tournament-eval-report.json",
+    "replays/ml_corpus/4p1i/tournament-eval-report.json",
+    "replays/ml_corpus/9p2i/tournament-eval-report.json",
+    "replays/ml_corpus/4p1i/MANIFEST.md",
+    "replays/ml_corpus/9p2i/MANIFEST.md",
 )
+
+# Above this size a fixture entry is symlinked rather than copied: the four
+# committed eval reports total >100 MB, and every test gets its own tree. Every
+# writer here REPLACES a fixture file (``_write`` unlinks first), so a link is
+# never followed back into the checkout.
+_LINK_ABOVE_BYTES = 1_000_000
 
 _README = "README.md"
 _ENV_EXAMPLE = ".env.example"
 _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
+_VOTE_CORRECTNESS = "eval/vote_correctness.py"
+_EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
+_EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json"
+_ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 
 
 @pytest.fixture
@@ -46,9 +64,13 @@ def doc_tree(tmp_path: Path) -> Path:
     """A tmp checkout holding only the documents the checker reads."""
 
     for relative in _COPIED:
+        source = _REPO_ROOT / relative
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes((_REPO_ROOT / relative).read_bytes())
+        if source.stat().st_size > _LINK_ABOVE_BYTES:
+            destination.symlink_to(source)
+        else:
+            destination.write_bytes(source.read_bytes())
     return tmp_path
 
 
@@ -57,7 +79,11 @@ def _read(root: Path, relative: str) -> str:
 
 
 def _write(root: Path, relative: str, text: str) -> None:
-    (root / relative).write_text(text, encoding="utf-8")
+    # Replace, never open in place: a large fixture entry is a symlink into the
+    # checkout, and an in-place write would perturb the committed file.
+    path = root / relative
+    path.unlink(missing_ok=True)
+    path.write_text(text, encoding="utf-8")
 
 
 def _substitute(root: Path, relative: str, old: str, new: str) -> None:
@@ -452,11 +478,199 @@ def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
     # Format drift must not read as "no impostor wins recorded": a manifest
     # with no parseable rows is a hard failure, not a vacuous pass.
+    # Both the win-rate check and the vote-correctness provenance check read
+    # this manifest, so both lose their source and both must say so.
     _write(doc_tree, _MANIFEST_4P1I, "# Sample Replay Manifest\n\nno table here.\n")
     errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert all("parsed zero table rows" in error for error in errors)
+    assert all(_MANIFEST_4P1I in error for error in errors)
+
+
+def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
+    # The module's per-set stamp is bound to that set's committed report: a
+    # numerator drifting away from the recorded one is named on both sides.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "72/78 = 0.9231", "71/78 = 0.9103")
+    errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "parsed zero table rows" in errors[0]
-    assert _MANIFEST_4P1I in errors[0]
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "replays/samples/9p2i" in errors[0]
+    assert "71/78 = 0.9103" in errors[0]
+    assert "records 72/78 = 0.9231" in errors[0]
+
+
+def test_structural_pin_prose_detected(doc_tree: Path) -> None:
+    # The claim this check exists to keep dead: a recorded set reading below
+    # 1.0 refutes "structurally pinned", so reinstating the phrase must fail
+    # with the phrase quoted back.
+    _substitute(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        "**``vote_correctness_rate`` is a diagnostic, NOT a KPI.**",
+        "**``vote_correctness_rate`` is structurally pinned by the vote gate.**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'structurally pinned'" in errors[0]
+    assert "replays/samples/9p2i (72/78)" in errors[0]
+
+
+def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
+    # The rate is never a literal in the checker: it is re-derived from the
+    # report's own two counts, so a rate field drifting away from them fails
+    # with the set and both values named.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"vote_correctness_rate": 0.9230769230769231',
+        '"vote_correctness_rate": 0.99',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert "0.99" in errors[0]
+    assert "72/78 = 0.9231" in errors[0]
+
+
+def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
+    # A rate is only meaningful beside the substrate that produced it, so the
+    # model the stamps are attributed to is the manifests' model, not prose.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "Qwen/Qwen3.6-27B", "Qwen/Qwen3.5-9B")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "recording model 'Qwen/Qwen3.6-27B'" in errors[0]
+
+
+def test_recorded_sets_disagreeing_on_the_substrate_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # One provenance line cannot describe two substrates: a set recorded on a
+    # different model must fail rather than be papered over by whichever
+    # manifest happened to be read first.
+    _substitute(
+        doc_tree, _ML_CORPUS_MANIFEST_9P2I, "Qwen/Qwen3.6-27B", "Qwen/Qwen3.5-9B"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the recording model" in errors[0]
+    assert "Qwen/Qwen3.5-9B" in errors[0]
+
+
+def test_recorded_sets_disagreeing_on_substrate_flags_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # The flag stamp is part of the substrate the rates are attributed to: a
+    # set recorded without one baseline-6 lever is a different substrate, even
+    # when its model and prompt token still match.
+    _substitute(doc_tree, _ML_CORPUS_MANIFEST_9P2I, "absence_prior, ", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "disagree on the substrate flags" in errors[0]
+    assert "absence_prior" in errors[0]
+
+
+def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) -> None:
+    # The baseline the stamps are attributed to has a committed source too: a
+    # rate hung on the wrong baseline is a wrong claim even when its
+    # arithmetic checks out.
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-6", "baseline-5")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _VOTE_CORRECTNESS in errors[0]
+    assert "'baseline-6'" in errors[0]
+
+
+def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
+    doc_tree: Path,
+) -> None:
+    # A set that ejected no impostor has an UNDEFINED rate, not a zero one.
+    # The checker must accept the recording and demand the "n/a" stamp rather
+    # than reject the set outright — a re-record could legitimately produce it.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_4P1I,
+        '"impostor_ejections": 10,\n    "crewmate_ejections": 2,\n'
+        '    "evidence_backed_impostor_ejections": 10,\n'
+        '    "vote_correctness_rate": 1.0,',
+        '"impostor_ejections": 0,\n    "crewmate_ejections": 2,\n'
+        '    "evidence_backed_impostor_ejections": 0,\n'
+        '    "vote_correctness_rate": null,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "replays/samples/4p1i" in errors[0]
+    assert "0/0 = n/a" in errors[0]
+
+
+def test_provenance_token_elsewhere_does_not_alibi_the_lead_in(
+    doc_tree: Path,
+) -> None:
+    # The substrate claims are bound to the paragraph directly above the
+    # stamps: a correct model token surviving in an unrelated comment must not
+    # satisfy a lead-in that names the wrong one.
+    _substitute(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        "model ``Qwen/Qwen3.6-27B``",
+        "model ``Qwen/Qwen3.5-9B``",
+    )
+    _write(
+        doc_tree,
+        _VOTE_CORRECTNESS,
+        _read(doc_tree, _VOTE_CORRECTNESS)
+        + "\n# An unrelated note mentioning Qwen/Qwen3.6-27B.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "provenance lead-in" in errors[0]
+    assert "recording model 'Qwen/Qwen3.6-27B'" in errors[0]
+
+
+def test_set_supplying_no_prompt_provenance_fails_loud(doc_tree: Path) -> None:
+    # A sibling manifest must not vouch for a set that records nothing: a
+    # manifest whose prompt cells carry no dotted entry establishes no prompt
+    # set, and the claim covers all four sets.
+    text = _read(doc_tree, _ML_CORPUS_MANIFEST_9P2I)
+    lines = [
+        re.sub(r"\| [^|]*qwen3_6_27b[^|]*\|", "| no-meetings |", line)
+        if "qwen3_6_27b" in line
+        else line
+        for line in text.splitlines(keepends=True)
+    ]
+    _write(doc_tree, _ML_CORPUS_MANIFEST_9P2I, "".join(lines))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _ML_CORPUS_MANIFEST_9P2I in errors[0]
+    assert "records no prompt set on any row" in errors[0]
+
+
+def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None:
+    # More evidence-backed ejections than impostor ejections is the impossible
+    # state VoteCorrectnessReport rejects; a corrupted report must fail here
+    # rather than be documented as a valid measurement.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"evidence_backed_impostor_ejections": 72,',
+        '"evidence_backed_impostor_ejections": 79,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert "no larger than impostor_ejections" in errors[0]
+
+
+def test_eval_report_without_vote_correctness_block_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # Format drift must not read as "nothing to check": a report with no
+    # vote_correctness block leaves the stamps sourceless.
+    _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _EVAL_REPORT_9P2I in errors[0]
+    assert '"vote_correctness":' in errors[0]
 
 
 def test_missing_document_reported(doc_tree: Path) -> None:

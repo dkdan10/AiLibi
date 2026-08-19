@@ -128,10 +128,11 @@ class PromptRegressionMetrics(_FrozenModel):
     * ``vote_correctness_rate`` —
       :attr:`eval.vote_correctness.VoteCorrectnessReport.vote_correctness_rate`
       (``None`` when there were no impostor ejections). Kept as a
-      **bug-sentinel only** (Task 9.6; audit gp-2): it is structurally pinned
-      to 1.0 on recorded sets, so a baseline delta on it means a
-      detector/recording bug, never a prompt-quality move — the Wave-1 leads
-      are the two conversion fields below.
+      **diagnostic only**: it reads the evidence-backed share of impostor
+      ejections, which a zero-flag conviction legally lowers (see
+      :mod:`eval.vote_correctness`), so a baseline delta on it is not a
+      prompt-quality move — the Wave-1 leads are the two conversion fields
+      below.
     * ``ejection_accuracy`` / ``impostor_accused_conversion_rate`` /
       ``missed_skip_ballots`` — the Task 9.6 Wave-1 conversion leads
       (precision and recall) plus the missed-SKIP sentinel count from

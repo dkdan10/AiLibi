@@ -10,17 +10,18 @@ The predicate is exercised adversarially: an impostor ejected on *no* evidence
 (or on an accusation/ballot alone) must score as incorrect, or the metric would
 collapse into the impostor-ejection rate it exists to refine.
 
-Task 9.6 (metric hygiene; DESIGN.md §11.3, §5.5; audit gp-2) adds two suites
-here per the task contract: the ``vote_correctness_rate`` bug-sentinel
-semantics (the rate is structurally pinned to 1.0 on production-shaped data
-and must never be read as the lead), and the
+Two further suites pin the metric's meaning rather than its arithmetic: that
+``vote_correctness_rate`` is a diagnostic and never the lead (it cannot rank
+tables, and a value below 1.0 is legal on this substrate), and the
 :class:`eval.meeting_quality.ConversionReport` conversion leads + SKIP
-sentinels, including the committed 9p/2i report's audited regression pins.
+sentinels, including the committed 9p/2i report's regression pins and the
+census of the six impostor ejections that set's predicate cannot account for.
 """
 
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -51,6 +52,8 @@ from eval.vote_correctness import (
     VOTE_CORRECTNESS_MIN_SAMPLE,
     SuppliedChannelConversionReport,
     VoteCorrectnessReport,
+    _has_naming_contradiction,
+    _has_real_evidence,
     compute_genuine_class_conversion,
     compute_supplied_channel_conversion,
     compute_vote_correctness,
@@ -66,13 +69,16 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    Claim,
     ContradictionRef,
     FoundBodyObservation,
     MeetingOutcome,
     MeetingTranscript,
     MeetingTurn,
+    ObservationClaim,
     PlayerId,
     SawPlayerObservation,
+    SawVentObservation,
     VoteBallot,
     WhereaboutsClaim,
 )
@@ -80,6 +86,7 @@ from meetings.transcript import (
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
+    canonical_rooms,
 )
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 
@@ -838,38 +845,38 @@ def test_result_model_rejects_negative_contradictions_ignored() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_vote_correctness_rate_is_documented_as_a_bug_sentinel() -> None:
-    """The sentinel demotion is load-bearing documentation (Task 9.6 / F-F-1).
+def test_vote_correctness_rate_is_documented_as_a_diagnostic() -> None:
+    """The demotion is load-bearing documentation, and so is its reason.
 
-    A future reader deciding what to gate a Wave-1 A/B on reads the module and
-    the result model. Both must label ``vote_correctness_rate`` a bug-sentinel
-    that is structurally pinned to 1.0 — never the lead/KPI — so this asserts
-    the labels outlive any docstring rewrite.
+    A reader deciding what to gate a prompt A/B on reads the module and the
+    result model. Both must call the rate a diagnostic and NOT a KPI, and both
+    must carry the reason a sub-1.0 value is legal here — the citation gate
+    convicts an unflagged target whose ballot cites a turn or an observation
+    id — so nobody re-files the recorded shortfall as a bug.
     """
 
     import eval.vote_correctness as vote_correctness_module
 
     for doc in (vote_correctness_module.__doc__, VoteCorrectnessReport.__doc__):
         assert doc is not None
-        assert "bug-sentinel" in doc
+        assert "diagnostic" in doc
         assert "NOT a KPI" in doc
-        assert "structurally pinned" in doc
+        assert "citation gate" in doc
+        assert "structurally pinned" not in doc
 
 
-def test_rate_is_pinned_to_one_on_production_shaped_data() -> None:
-    """The F-F-1 tautology, pinned as semantics: the rate cannot rank tables.
+def test_rate_cannot_rank_tables_when_every_ejection_is_flagged() -> None:
+    """The rate's blind spot, pinned as semantics: it cannot rank tables.
 
-    In the live pipeline an ejection only happens when the detector flagged
-    the ejected player, so every impostor ejection arrives WITH the naming
-    contradiction that satisfies ``_has_real_evidence``. Two tables of very
-    different quality — one all-impostor ejections, one mostly-wrong
-    ejections — therefore BOTH read ``vote_correctness_rate == 1.0``; the
-    published precision lead (``ejection_accuracy``) is what separates them.
+    Over a table where the detector flagged every ejected player, the rate
+    reads 1.0 no matter how many of those ejections took a crewmate — its
+    denominator is impostor ejections alone. Two tables of very different
+    quality therefore BOTH read ``1.0``; the published precision lead
+    (``ejection_accuracy``) is what separates them.
     """
 
     def _detector_backed_table(crewmate_ejections: int) -> TournamentReport:
-        # Every ejection carries a contradiction naming the ejected player —
-        # the production §4.6 trigger shape, for impostor and crewmate alike.
+        # Every ejection carries a contradiction naming the ejected player.
         impostor = _meeting(
             outcome="EJECTED",
             ejected=_IMPOSTOR,
@@ -890,9 +897,8 @@ def test_rate_is_pinned_to_one_on_production_shaped_data() -> None:
     clean_table = compute_vote_correctness(_detector_backed_table(0))
     railroaded_table = compute_vote_correctness(_detector_backed_table(3))
 
-    # The sentinel reads 1.0 on BOTH tables: it measures the engine's own
-    # trigger, not voting quality. A drop below 1.0 would mean an ejection
-    # without its own triggering evidence — a bug, not a metric move.
+    # 1.0 on BOTH tables: the rate says the convictions were structured, not
+    # that they were right.
     assert clean_table.vote_correctness_rate == 1.0
     assert railroaded_table.vote_correctness_rate == 1.0
     # The published lead is what actually separates the tables.
@@ -1922,6 +1928,436 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
     assert raw["conversion"]["ejection_accuracy"] == pytest.approx(78 / 101, abs=1e-4)
     assert raw["conversion"]["missed_skip_ballots"] == 129
+
+
+# ---------------------------------------------------------------------------
+# The committed 9p/2i census: which impostor ejections the predicate cannot
+# account for, and why each one is not a bug
+# ---------------------------------------------------------------------------
+
+# The impostor ejections on the committed 9p2i set that fail
+# ``_has_real_evidence``: (seed, meeting id, tick, ejected player).
+_UNBACKED_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
+    (4, "headless-seed-4:meeting-2", 17, "p-3"),
+    (17, "headless-seed-17:meeting-4", 61, "p-2"),
+    (18, "headless-seed-18:meeting-4", 43, "p-7"),
+    (22, "headless-seed-22:meeting-2", 34, "p-7"),
+    (29, "headless-seed-29:meeting-2", 20, "p-8"),
+    (40, "headless-seed-40:meeting-2", 25, "p-9"),
+)
+
+# The impostor ejections carrying no naming ``ContradictionRef`` that the
+# kill-witness disjunct nevertheless backs — the gap between the two
+# populations.
+_KILL_WITNESS_ONLY_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
+    (26, "headless-seed-26:meeting-0", 6, "p-3"),
+    (38, "headless-seed-38:meeting-0", 8, "p-4"),
+)
+
+
+def _impostor_ejections(
+    report: TournamentEvalReport,
+) -> tuple[tuple[int, MeetingReport, PlayerId], ...]:
+    """Every well-formed ``EJECTED`` meeting whose ejectee was a true impostor.
+
+    The same walk :func:`compute_vote_correctness` makes over the rate's
+    denominator, seed-ordered so a census reads deterministically.
+    """
+
+    rows: list[tuple[int, MeetingReport, PlayerId]] = []
+    for game in sorted(report.report.games, key=lambda game: game.seed):
+        for meeting in game.meetings:
+            if meeting.outcome != "EJECTED":
+                continue
+            ejected = meeting.ejected_player_id
+            if ejected is None or game.roles[ejected] != "IMPOSTOR":
+                continue
+            rows.append((game.seed, meeting, ejected))
+    return tuple(rows)
+
+
+def _rooms_disjoint(left: str, right: str) -> bool:
+    """Whether two room labels are contradictory under the detector's rule."""
+
+    left_rooms, right_rooms = canonical_rooms(left), canonical_rooms(right)
+    return bool(left_rooms) and bool(right_rooms) and not (left_rooms & right_rooms)
+
+
+def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
+    """Whether the transcript holds a pair the detector is specified to flag.
+
+    The classification rule's left half, decidable from recorded bytes alone.
+    Material against ``subject`` is either:
+
+    * a spoken :class:`~meetings.schemas.SawVentObservation` naming them; or
+    * an account ``subject`` gave of THEMSELVES — their own
+      :class:`~meetings.schemas.WhereaboutsClaim` (self-placement by
+      construction) or an :class:`~meetings.schemas.AlibiClaim` they spoke
+      about themselves — contradicted by a
+      :class:`~meetings.schemas.SawPlayerObservation` of them inside the
+      claimed window, or by a second self-account over an overlapping one.
+      Rooms are compared as canonical sets, the detector's own rule:
+      contradictory only when both sets are non-empty and disjoint.
+
+    **Proxy testimony is deliberately out of scope.** An alibi one player
+    states about ANOTHER runs through re-targeting rules this predicate does
+    not model — a single narrator's conflicting pair is re-aimed at the
+    narrator, a proxy account the subject's own account agrees with is re-aimed
+    at the proxy, and an echoed account is deduped before pairing — so counting
+    proxy claims would mean reimplementing ``detect_contradictions`` inside a
+    test and getting it subtly wrong. Excluding them makes the rule
+    CONSERVATIVE: it can only under-report "detector miss", never invent one.
+    The census below does not lean on that margin — none of the six ejectees is
+    placed by any alibi or whereabouts claim at all, proxy or self, which the
+    census asserts directly.
+
+    The vent half leans the other way and says so: the ``vent_sighting`` flag
+    fires only when the spoken observation is GROUNDED against the speaker's
+    own private witness channel, which no report carries — so a spoken vent
+    claim can only push a row toward "detector miss", never away from it.
+    """
+
+    self_accounts: list[tuple[str, int, int]] = []  # room, from_tick, to_tick
+    sightings: list[tuple[str, int]] = []  # room, tick
+    for turn in meeting.transcript.turns:
+        for observation in turn.observations:
+            if isinstance(observation, SawVentObservation):
+                if observation.subject == subject:
+                    return True
+            elif isinstance(observation, WhereaboutsClaim):
+                # No subject field by construction: the subject IS the speaker.
+                if turn.speaker == subject:
+                    self_accounts.append(
+                        (observation.room, observation.tick, observation.tick)
+                    )
+            elif (
+                isinstance(observation, SawPlayerObservation)
+                and observation.subject == subject
+            ):
+                sightings.append((observation.room, observation.tick))
+        for claim in turn.claims:
+            if (
+                isinstance(claim, AlibiClaim)
+                and claim.subject == subject
+                and turn.speaker == subject
+            ):
+                self_accounts.append((claim.room, claim.from_tick, claim.to_tick))
+
+    if any(
+        start <= tick <= end and _rooms_disjoint(room, seen_room)
+        for room, start, end in self_accounts
+        for seen_room, tick in sightings
+    ):
+        return True
+    return any(
+        start_a <= end_b and start_b <= end_a and _rooms_disjoint(room_a, room_b)
+        for index, (room_a, start_a, end_a) in enumerate(self_accounts)
+        for room_b, start_b, end_b in self_accounts[index + 1 :]
+    )
+
+
+def test_committed_9p2i_censuses_the_six_unbacked_impostor_ejections() -> None:
+    """Which of the 78 impostor ejections the predicate cannot account for.
+
+    ``vote_correctness_rate`` reads 72/78 on the committed set. These are the
+    other six, seed by seed, so the shortfall is an inventory a reader can
+    open rather than an anomaly they must re-derive. Each is a real ejection
+    of a real impostor; none is a recording fault.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+    )
+    rows = _impostor_ejections(report)
+    assert len(rows) == report.vote_correctness.impostor_ejections == 78
+
+    unbacked = tuple(
+        (seed, meeting.meeting_id, meeting.tick, ejected)
+        for seed, meeting, ejected in rows
+        if not _has_real_evidence(meeting, ejected)
+    )
+    assert unbacked == _UNBACKED_9P2I
+    assert len(rows) - len(unbacked) == 72
+
+
+def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> None:
+    """Zero-flag and not-evidence-backed are different populations.
+
+    ``_has_real_evidence`` is a disjunction, so an ejection the contradiction
+    detector never flagged can still be evidence-backed through the second
+    disjunct — a kill-witness chain. Eight of the 78 impostor ejections carry
+    no naming ``ContradictionRef``; two of those eight (seeds 26 and 38) are
+    rescued by the chain, leaving the six above. Conflating the two counts is
+    the confusion this census exists to prevent.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+    )
+    rows = _impostor_ejections(report)
+
+    zero_flag = tuple(
+        (seed, meeting.meeting_id, meeting.tick, ejected)
+        for seed, meeting, ejected in rows
+        if not _has_naming_contradiction(meeting, ejected)
+    )
+    assert len(zero_flag) == 8
+    assert set(zero_flag) == set(_UNBACKED_9P2I) | set(_KILL_WITNESS_ONLY_9P2I)
+
+    kill_witness_only = tuple(
+        (seed, meeting.meeting_id, meeting.tick, ejected)
+        for seed, meeting, ejected in rows
+        if not _has_naming_contradiction(meeting, ejected)
+        and _has_real_evidence(meeting, ejected)
+    )
+    assert kill_witness_only == _KILL_WITNESS_ONLY_9P2I
+
+
+def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
+    """Each of the six, classified under one rule decidable from the bytes.
+
+    **Detector miss** iff the meeting's transcript carries the structured
+    material the contradiction detector is specified to prosecute against the
+    ejectee — a vent sighting naming them, or an account they gave of
+    themselves contradicted by a sighting inside the claimed window or by a
+    second self-account over an overlapping one
+    (:func:`_has_detector_material`, which states what it excludes and why) —
+    while the meeting's ``contradictions`` mint nothing naming them.
+    **Rhetoric-only conviction** otherwise: there was nothing flaggable to
+    miss, and the table convicted on argument.
+
+    The verdict does not rest on the rule's edges. The assertion below is the
+    blunt one: not one of the six ejectees is placed by ANY alibi or
+    whereabouts claim in their meeting — nobody, themselves included, put them
+    anywhere on the public record — so there is no placement for any detector
+    rule to prosecute, however the proxy cases are resolved.
+
+    All six fall on the rhetoric-only side, for one recorded reason: in every
+    one of them the ejectee's single reply turn carries no observations and no
+    whereabouts claim, so they volunteered nothing the detector could
+    prosecute. The citation gate still passed the eject ballots because each
+    cites a transcript turn or a private observation id. Whichever way a
+    re-record splits them, the split is a finding — this test is the place it
+    is recorded.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+    )
+    classified = {
+        (seed, meeting.meeting_id): (
+            "detector miss"
+            if _has_detector_material(meeting, ejected)
+            else "rhetoric-only conviction"
+        )
+        for seed, meeting, ejected in _impostor_ejections(report)
+        if not _has_real_evidence(meeting, ejected)
+    }
+
+    assert classified == {
+        (seed, meeting_id): "rhetoric-only conviction"
+        for seed, meeting_id, _, _ in _UNBACKED_9P2I
+    }
+
+    # The blunt fact the verdict rests on, independent of any proxy-retargeting
+    # subtlety: nobody placed these six anywhere on the public record, so there
+    # was no placement for the detector to prosecute.
+    for seed, meeting, ejected in _impostor_ejections(report):
+        if _has_real_evidence(meeting, ejected):
+            continue
+        placements = [
+            claim
+            for turn in meeting.transcript.turns
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim) and claim.subject == ejected
+        ] + [
+            observation
+            for turn in meeting.transcript.turns
+            if turn.speaker == ejected
+            for observation in turn.observations
+            if isinstance(observation, WhereaboutsClaim)
+        ]
+        assert not placements, (
+            f"seed {seed}: {ejected} IS placed on the record "
+            f"({len(placements)} claims) — re-read the classification"
+        )
+
+    # The other half of "legal, not a bug": every eject ballot behind these six
+    # cites something. An uncited zero-flag eject would have been coerced to
+    # SKIP, so a recording that loses a citation — or carries a dangling turn
+    # id — must fail here rather than pass as the expected rhetoric-only
+    # finding.
+    for seed, meeting, ejected in _impostor_ejections(report):
+        if _has_real_evidence(meeting, ejected):
+            continue
+        turn_ids = {turn.turn_id for turn in meeting.transcript.turns}
+        eject_ballots = [
+            ballot for ballot in meeting.ballots if ballot.target == ejected
+        ]
+        assert eject_ballots, f"seed {seed}: nobody voted to eject {ejected}"
+        for ballot in eject_ballots:
+            if ballot.primary_reason_id is not None:
+                assert ballot.primary_reason_id in turn_ids, (
+                    f"seed {seed}: {ballot.voter} cites "
+                    f"{ballot.primary_reason_id!r}, which is not a turn of "
+                    f"{meeting.meeting_id}"
+                )
+            assert (
+                ballot.primary_reason_id is not None
+                or ballot.primary_reason_observation_id is not None
+            ), (
+                f"seed {seed}: {ballot.voter}'s eject ballot against {ejected} "
+                "cites neither a transcript turn nor an observation id"
+            )
+    counts = Counter(classified.values())
+    assert counts["rhetoric-only conviction"] == 6
+    assert counts["detector miss"] == 0
+
+
+def _census_turn(
+    *,
+    speaker: PlayerId,
+    turn_index: int,
+    observations: tuple[ObservationClaim, ...] = (),
+    claims: tuple[Claim, ...] = (),
+) -> MeetingTurn:
+    """One chain turn carrying arbitrary structured content."""
+
+    return MeetingTurn(
+        turn_id=f"m:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="opening" if turn_index == 0 else "opt_in",
+        reply_to=None,
+        observations=observations,
+        claims=claims,
+        free_text="",
+    )
+
+
+def test_detector_material_rule_separates_a_miss_from_pure_rhetoric() -> None:
+    """The classifier bites: a planted detector-miss reads as one.
+
+    Five planted meetings, each ejecting the impostor with an empty
+    ``contradictions`` tuple, so all five are unbacked. Two must read as
+    material: a whereabouts answer the ejectee gave contradicted by another
+    speaker's sighting at the same tick, and a vent sighting naming them. Three
+    must not: a meeting carrying only an accusation, and the two proxy shapes
+    the rule excludes on purpose — one narrator stating two conflicting alibis
+    about the ejectee (the detector re-aims that at the narrator), and the same
+    two claims split across two narrators (the detector's re-targeting rules
+    decide that case on the ejectee's own account, which this predicate does
+    not model).
+
+    Without this set the "all six are rhetoric-only" census above could be a
+    rule that never fires, or one that fires on everything.
+    """
+
+    flaggable = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-miss",
+        reports=(
+            _census_turn(
+                speaker=_IMPOSTOR,
+                turn_index=0,
+                observations=(
+                    WhereaboutsClaim(type="whereabouts", tick=7, room="CAFETERIA"),
+                ),
+            ),
+        ),
+        statements=(
+            _census_turn(
+                speaker=_CREWMATE,
+                turn_index=1,
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player", tick=7, subject=_IMPOSTOR, room="REACTOR"
+                    ),
+                ),
+            ),
+        ),
+    )
+    vented = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-vent",
+        reports=(
+            _census_turn(
+                speaker=_CREWMATE,
+                turn_index=0,
+                observations=(
+                    SawVentObservation(
+                        type="saw_vent", tick=9, subject=_IMPOSTOR, room="ADMIN"
+                    ),
+                ),
+            ),
+        ),
+    )
+    rhetoric = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-rhetoric",
+        reports=(
+            _census_turn(
+                speaker=_CREWMATE,
+                turn_index=0,
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against=_IMPOSTOR,
+                        confidence=0.8,
+                        reason="a feeling",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    def _proxy_alibi(room: str) -> AlibiClaim:
+        return AlibiClaim(
+            type="alibi", subject=_IMPOSTOR, from_tick=5, to_tick=9, room=room
+        )
+
+    proxy = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-proxy",
+        reports=(
+            _census_turn(
+                speaker=_CREWMATE,
+                turn_index=0,
+                claims=(_proxy_alibi("CAFETERIA"), _proxy_alibi("REACTOR")),
+            ),
+        ),
+    )
+    # The same two claims split across two narrators: still proxy testimony,
+    # still out of scope — whether the detector names the ejectee or one of the
+    # narrators depends on the ejectee's own account, which this predicate
+    # deliberately does not model.
+    cross_speaker = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-cross",
+        reports=(
+            _census_turn(
+                speaker=_CREWMATE, turn_index=0, claims=(_proxy_alibi("CAFETERIA"),)
+            ),
+        ),
+        statements=(
+            _census_turn(
+                speaker="p-2", turn_index=1, claims=(_proxy_alibi("REACTOR"),)
+            ),
+        ),
+    )
+
+    for meeting in (flaggable, vented, rhetoric, proxy, cross_speaker):
+        assert not _has_real_evidence(meeting, _IMPOSTOR)
+    assert _has_detector_material(flaggable, _IMPOSTOR)
+    assert _has_detector_material(vented, _IMPOSTOR)
+    assert not _has_detector_material(rhetoric, _IMPOSTOR)
+    assert not _has_detector_material(proxy, _IMPOSTOR)
+    assert not _has_detector_material(cross_speaker, _IMPOSTOR)
 
 
 # ---------------------------------------------------------------------------
