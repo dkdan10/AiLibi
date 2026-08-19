@@ -235,6 +235,34 @@ def resolve_prompt_set(
     return DEFAULT_PROMPT_SET
 
 
+# How many distinct (prompt set, templates root) environments are held at once.
+# A run serves one root and a handful of sets, so the bound never evicts a live
+# one; it caps what a caller building against scratch roots (a test tree, the
+# byte-golden perturbation leg) can retain for the life of the process.
+_ENVIRONMENT_CACHE_SIZE: Final[int] = 32
+
+
+@lru_cache(maxsize=_ENVIRONMENT_CACHE_SIZE)
+def _environment_for_set(name: str, root: Path) -> Environment:
+    """The one strict-undefined environment serving set ``name`` under ``root``.
+
+    Keyed on the set and the root and nothing else: an environment holds that
+    set's template bytes and their compiled code — no game state, nothing
+    per-runner — and the Task-18.10 roll-call lever selects template FILENAMES
+    in :func:`build_prompt_renderers`, not anything the environment carries.
+    Reached only through :func:`build_environment`, which resolves the set name
+    and validates its directory first. Task 20.19 (finding C-42).
+    """
+
+    return Environment(
+        loader=FileSystemLoader(root / name),
+        autoescape=False,
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
 def build_environment(
     prompt_set: str | None = None,
     *,
@@ -244,11 +272,18 @@ def build_environment(
     """Build a strict-undefined :class:`jinja2.Environment` for a prompt set.
 
     Resolves ``prompt_set`` (via :func:`resolve_prompt_set`) to a subdirectory
-    of ``root`` and builds the loader against it. An unknown set — no matching
+    of ``root`` and returns that set's environment. An unknown set — no matching
     subdirectory — raises :class:`ValueError`; there is no silent fallback
     (AGENTS.md §"No silent fallbacks"). The strict-undefined / trim / lstrip /
     no-autoescape policy is identical across sets, so a content-preserving move
     of the 9B templates renders byte-identically.
+
+    Both the resolution and the directory check run on every call, above the
+    memo that :func:`_environment_for_set` holds: a caller that changes
+    ``AILIBI_PROMPT_SET`` in-process still gets its new set, a set whose
+    directory is absent still fails loud however often it was built before, and
+    the bare-fallback notice fires exactly as often as it did when every call
+    built a fresh environment.
     """
 
     name = resolve_prompt_set(prompt_set, env=env)
@@ -257,13 +292,7 @@ def build_environment(
         raise ValueError(
             f"Unknown prompt set {name!r}: no template directory at {directory}"
         )
-    return Environment(
-        loader=FileSystemLoader(directory),
-        autoescape=False,
-        undefined=StrictUndefined,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
+    return _environment_for_set(name, root)
 
 
 # The process-default environment, bound to the active set at import time. The
