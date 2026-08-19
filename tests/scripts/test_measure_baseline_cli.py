@@ -133,3 +133,60 @@ def test_missing_dir_is_usage_error(tmp_path: Path) -> None:
 
 def test_empty_dir_is_usage_error(tmp_path: Path) -> None:
     assert measure_baseline.main([str(tmp_path)]) == 2
+
+
+# ---------------------------------------------------------------------------
+# --solvability: the candidate-set ceiling from the crew's own perception.
+# ---------------------------------------------------------------------------
+
+
+def test_solvability_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
+    assert measure_baseline.main(["--solvability", str(_NINE)]) == 0
+    out = capsys.readouterr().out
+    assert "50 games, 151 body meetings, 87 ejections at them" in out
+    assert "killer in candidate set: 0.8742  (132/151)  95% CI [0.8118, 0.9179]" in out
+    assert "one candidate: 0.2715  (41/151)" in out
+    assert "... and it is the killer: 0.9024  (37/41)" in out
+    assert "at most two candidates: 0.4437  (67/151)" in out
+    assert "ejected a player the crew had already cleared: 0.2414  (21/87)" in out
+    assert "killer in candidate set, last-kill anchor: 0.9073  (137/151)" in out
+
+
+def test_solvability_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
+    assert measure_baseline.main(["--solvability", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload) == 2
+    nine, four = payload
+    assert nine["replay_set_dir"].endswith("9p2i")
+    assert nine["body_meetings"] == 151
+    assert nine["ejections_at_body_meetings"] == 87
+    assert nine["killer_in_set"]["numerator"] == 132
+    assert nine["singleton_correct"] == {
+        "numerator": 37,
+        "denominator": 41,
+        "rate": pytest.approx(37 / 41),
+        "wilson_low": pytest.approx(0.7745202448096945),
+        "wilson_high": pytest.approx(0.9614035402470386),
+        "advisory": False,
+    }
+    # The rare-count flag rides on the small set's cells (numerator 6 of 35).
+    assert four["body_meetings"] == 35
+    assert four["singleton_sets"]["numerator"] == 6
+    assert four["singleton_sets"]["advisory"] is True
+
+
+def test_solvability_rare_cells_render_their_advisory(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert measure_baseline.main(["--solvability", str(_FOUR)]) == 0
+    out = capsys.readouterr().out
+    assert "one candidate: 0.1714  (6/35)" in out
+    assert "(rare count — read the interval)" in out
+
+
+def test_solvability_missing_dir_is_usage_error(tmp_path: Path) -> None:
+    assert measure_baseline.main(["--solvability", str(tmp_path / "nope")]) == 2
+
+
+def test_solvability_empty_dir_is_usage_error(tmp_path: Path) -> None:
+    assert measure_baseline.main(["--solvability", str(tmp_path)]) == 2
