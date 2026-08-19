@@ -1056,37 +1056,61 @@ def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
     assert (set_dir / "replay-seed-0.jsonl").is_file()
 
 
+# The only names a `--seeds 0` refresh writes into its target dir: the replay,
+# the roster descriptor, the manifest, the rebuilt eval report and (9p2i only)
+# the rubric. Restoring exactly these keeps the guard below honest without
+# reading every committed replay on every case.
+_REFRESH_OUTPUT_NAMES = (
+    "replay-seed-0.jsonl",
+    "roster.json",
+    "MANIFEST.md",
+    "tournament-eval-report.json",
+    "results-rubric-score.json",
+)
+# A refused run must never create this; the `..` cases point through it.
+_STRAY_TARGET_ROOT = _REPO_ROOT / "not-a-real-dir"
+
+
 @contextlib.contextmanager
 def _replays_tree_restored() -> Iterator[None]:
-    """Put every directory a refused run could have written back as it was.
+    """Put the committed tree back if a refused run turns out not to be refused.
 
     The refusal cases below aim a REAL recording run at the committed tree,
     which is the only way to prove the guard refuses it. Their assertions report
-    a regression; this restores the bytes so a regressed guard cannot also leave
-    committed replays corrupted. Covers every directory those cases name — the
-    ``replays/`` root and both committed sets — because a run that got past the
-    guard writes its replay, roster descriptor, manifest and eval report into
-    whichever one it was pointed at.
+    a regression; this undoes the damage, so a regressed guard cannot also leave
+    the repository dirty. It takes a recursive inventory of ``replays/`` and
+    removes anything new (files and directories alike, deepest first), and keeps
+    the bytes of the files a refresh would overwrite in any of the directories
+    these cases name.
     """
 
     replays = _REPO_ROOT / "replays"
-    guarded = [replays, replays / "samples" / "4p1i", replays / "samples" / "9p2i"]
-    before = {
-        path: path.read_bytes()
-        for directory in guarded
-        for path in directory.iterdir()
-        if path.is_file()
-    }
+    targets = [replays, replays / "samples" / "4p1i", replays / "samples" / "9p2i"]
+    inventory = set(replays.rglob("*"))
+    contents: dict[Path, bytes] = {}
+    for directory in targets:
+        for name in _REFRESH_OUTPUT_NAMES:
+            path = directory / name
+            if path.is_file():
+                contents[path] = path.read_bytes()
     try:
         yield
     finally:
-        for directory in guarded:
-            for path in directory.iterdir():
-                if path.is_file() and path not in before:
-                    path.unlink()
-        for path, data in before.items():
+        strays = sorted(
+            (path for path in replays.rglob("*") if path not in inventory),
+            key=lambda path: len(path.parts),
+            reverse=True,  # children before their parents
+        )
+        for path in strays:
+            if path.is_dir() and not path.is_symlink():
+                path.rmdir()
+            else:
+                path.unlink()
+        for path, data in contents.items():
             if not path.is_file() or path.read_bytes() != data:
                 path.write_bytes(data)
+        if _STRAY_TARGET_ROOT.exists():
+            shutil.rmtree(_STRAY_TARGET_ROOT)
 
 
 @pytest.mark.parametrize(
@@ -1126,8 +1150,9 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         assert "Substrate slate OK" not in out
         samples_root = _REPO_ROOT / "replays" / "samples"
         assert list(samples_root.glob(".ailibi-refresh-stage-*")) == []
-    # The `..` cases must not have created their leading component on the way in.
-    assert not (_REPO_ROOT / "not-a-real-dir").exists()
+        # The `..` cases must not create their leading component on the way in
+        # (asserted inside the block, before the cleanup would remove it).
+        assert not _STRAY_TARGET_ROOT.exists()
 
 
 def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
@@ -1263,10 +1288,12 @@ def _update_manifest_row(sample_dir: Path, manifest: Path, seed: int) -> None:
 
 
 # Two real processes calling the real ``update_manifest`` with their critical
-# sections deliberately overlapped: each reads the manifest, then waits at a
-# barrier until BOTH have read and merged, and only then writes. The `late` role
-# writes last by a wide margin, so the outcome is fixed rather than raced. This
-# is what the refresh script's mutex prevents, expressed without it.
+# sections deliberately overlapped: each reads the manifest, then waits until
+# BOTH have read and merged, and only then writes. Two handshakes, no sleeps —
+# `late` additionally waits for `early`'s write to have COMPLETED, so the write
+# order is established by observation rather than by timing and a descheduled
+# process cannot reorder them. This is what the refresh script's mutex prevents,
+# expressed without it.
 _RACE_DRIVER = """
 import sys
 import time
@@ -1280,19 +1307,27 @@ barrier = Path(barrier_dir)
 render_merged = mw.render_manifest
 
 
+def await_signal(predicate, what):
+    deadline = time.monotonic() + 60
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise SystemExit("timed out waiting for " + what + " in role " + role)
+        time.sleep(0.01)
+
+
+def signal(name):
+    (barrier / name).write_text("1", encoding="utf-8")
+
+
 def gated_render(rows):
     # Reached after update_manifest has read the manifest and merged this seed,
     # and evaluated before _atomic_write_text runs -- exactly the seam the lock
     # covers in the recorder.
     text = render_merged(rows)
-    (barrier / (role + ".read")).write_text("1", encoding="utf-8")
-    deadline = time.monotonic() + 60
-    while len(list(barrier.glob("*.read"))) < 2:
-        if time.monotonic() > deadline:
-            raise SystemExit("barrier timeout in role " + role)
-        time.sleep(0.01)
+    signal(role + ".read")
+    await_signal(lambda: len(list(barrier.glob("*.read"))) == 2, "both reads")
     if role == "late":
-        time.sleep(0.5)
+        await_signal(lambda: (barrier / "early.wrote").exists(), "early's write")
     return text
 
 
@@ -1305,6 +1340,7 @@ mw.update_manifest(
     refreshed_at="2026-08-19",
     model_override="fake-meeting",
 )
+signal(role + ".wrote")
 """
 
 
@@ -1313,8 +1349,9 @@ def test_unserialized_manifest_updates_lose_a_row(tmp_path: Path) -> None:
     # parses the whole manifest, merges one seed and atomically replaces the file,
     # so two processes whose read-merge-write windows overlap keep only the later
     # writer's row. Run for real, in two processes, with the overlap forced by a
-    # barrier at the read/write seam and a fixed write order -- so the outcome is
-    # deterministic while the race itself is genuine.
+    # barrier at the read/write seam and the write order established by waiting
+    # for the first write to land -- so the outcome is fixed by observation, not
+    # by timing, while the race itself is genuine.
     sample_dir = tmp_path / "rows"
     sample_dir.mkdir()
     for seed in (0, 12, 22):
