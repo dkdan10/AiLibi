@@ -7,6 +7,12 @@ __pycache__/
 *.py[cod]
 .claude/
 
+# Residue insurance, not a licence to plant in-tree: tests/test_firewall.py
+# writes its synthetic bad imports into a temp copy of the tree. This only
+# catches leftovers from an older checkout, where an interrupted run could
+# strand one and `git add -A` would commit an `import engine` under agents/.
+_firewall*
+
 # Local environment files
 .env
 .env.local

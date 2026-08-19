@@ -1,4 +1,4 @@
-"""Per-episode rollout records + behavioral descriptors (Task 15.8).
+"""Per-episode rollout records + behavioral descriptors.
 
 The training env (:mod:`training.env`) drives the REAL production loop
 (:class:`orchestrator.game.HeadlessGame`) and writes a replay. This module turns
@@ -20,16 +20,21 @@ so :class:`training.rewards.ShapedReward` scores from the TYPED log and a traine
 never re-derives rewards from replay bytes. Roles come from the re-seeded state
 (replays are role-free by firewall design), never from the replay.
 
-Episode horizon (Task 15.8 definition of done): a meeting runner is ALWAYS
-installed by the env, so ``meeting_runner=None`` truncation
-(``MEETING_PHASE_REACHED``) is structurally unreachable. ``full_game`` is the one
-episode boundary: such an episode is ``truncated`` only when the game never
-reached ``GAME_OVER`` (the tick budget capped it). Task 19.19 retired the
-``first_meeting`` opt-in — the 15.13 fallback-(b) seam it rode was never taken by
-a production caller. Silent
-truncation is structurally unreachable, and :func:`EpisodeRollout.complete`
+Episode horizon: a meeting runner is ALWAYS installed by the env, so
+``meeting_runner=None`` truncation (``MEETING_PHASE_REACHED``) is structurally
+unreachable. ``full_game`` is the one episode boundary: such an episode is
+``truncated`` only when the game never reached ``GAME_OVER`` — the tick budget
+capped it, and a capped game writes no ``game_over`` row. Truncation is never
+SILENT, and the mechanism that enforces that is named: the recording and the
+reconstruction must agree about the terminal, so a ``game_over`` winner the walk
+never reaches, a reconstructed terminal the recording never names, and a
+winner mismatch each raise :class:`RolloutReconstructionError` rather than
+returning a ``TICK_BUDGET`` episode; and :func:`EpisodeRollout.complete`
 (``winner is not None and not truncated``) is the single gate the reward channel
-reads so no fitness term ever scores a truncated episode as a full game.
+reads, so no fitness term ever scores a truncated episode as a full game.
+
+Provenance: introduced by Task 15.8; Task 19.19 retired the ``first_meeting``
+boundary, leaving ``full_game`` alone.
 """
 
 from __future__ import annotations
@@ -649,14 +654,29 @@ def reconstruct_episode(
         outcome = "TICK_BUDGET"
         truncated = True
 
-    # Cross-check the winner against the recorded game_over row when present (the
-    # reconstruction is authoritative; a mismatch is a corrupted replay).
-    if (
-        game_end is not None
-        and not truncated
-        and game_end.winner is not None
-        and game_end.winner != winner
-    ):
+    # The recorded game_over row is the producer's claim; the reconstruction is
+    # authoritative, and the two must agree about the terminal. A recorded
+    # terminal the walk never reaches means tick rows are missing — dropping
+    # them shortens the walk without breaking the state-hash chain, so nothing
+    # upstream catches it, and the row's own winner field is not evidence of
+    # anything (a winnerless row is corruption too). A reconstructed terminal
+    # the recording never names is the same disagreement from the other side.
+    # Only the tick-budget cap legitimately reaches neither, because it writes
+    # no game_over row at all (orchestrator.game.HeadlessGame).
+    if truncated:
+        if game_end is not None:
+            raise RolloutReconstructionError(
+                f"seed {seed}: replay carries a game_over row (winner "
+                f"{game_end.winner!r}) but the reconstructed walk never reached "
+                "GAME_OVER (truncated tick stream)"
+            )
+    elif game_end is None or game_end.winner is None:
+        raise RolloutReconstructionError(
+            f"seed {seed}: the reconstructed walk reached GAME_OVER with winner "
+            f"{winner!r} but the replay records no game_over winner (partial or "
+            "corrupted recording)"
+        )
+    elif game_end.winner != winner:
         raise RolloutReconstructionError(
             f"seed {seed}: reconstructed winner {winner!r} != recorded "
             f"game_over winner {game_end.winner!r}"

@@ -1,9 +1,9 @@
-"""The HARD validity gate CLI — pass/fail over a replay-set directory (Task 15.1).
+"""The HARD validity gate CLI — pass/fail over a replay-set directory.
 
-Runs the eight composed checks of :func:`eval.validity.run_validity_gate` over
-ANY replay-set directory (``replays/samples/9p2i``, the 15.7 Wave-0 close set, the
-15.12 corpus, a Wave-2 candidate recording — any dir of ``replay-seed-*.jsonl``
-plus ``roster.json``). The gate is the HARD acceptance the Phase-14 close audit
+Runs the ten composed checks of :func:`eval.validity.run_validity_gate` over
+ANY replay-set directory (``replays/samples/9p2i``, the committed ML corpus, a
+candidate recording — any dir of ``replay-seed-*.jsonl`` plus ``roster.json``).
+The gate is the HARD acceptance the Phase-14 close audit
 (audits/audit-phase-14-close.md §1) grounds every number in; a failure exits
 non-zero and NAMES the failing checks.
 
@@ -17,8 +17,13 @@ machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume
 (schema documented in the ``eval.validity`` module docstring).
 
 Exit codes: ``0`` gate PASSED, ``1`` gate FAILED (>= 1 check failed), ``2`` usage
-error (directory missing or no replays). Pure + offline: no network, no
-``AILIBI_*`` env.
+error (directory missing or no replays). A truncated replay — a recorded
+``game_over`` row the engine reconstruction never reaches — is a FAILED gate
+(exit ``1``) under ``all_games_reach_game_over``, its violations tagged
+``truncated_replay``; it is not a usage error and never a PASS. Pure + offline:
+no network, no ``AILIBI_*`` env.
+
+Provenance: Task 15.1.
 """
 
 from __future__ import annotations

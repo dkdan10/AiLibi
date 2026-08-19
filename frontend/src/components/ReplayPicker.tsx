@@ -56,6 +56,7 @@ import {
 } from "./ReplayFilters";
 
 import { ApiError, getRubric } from "../api/client";
+import { PICKER_COPY, rubricLegendLine, setOptionLabel } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import type {
   ReplayMetadataView,
@@ -372,9 +373,9 @@ export function ReplayBrowserView({
     body = (
       <EmptyState title="No interestingness rubric for this set">
         <p>
-          The served set{set !== null ? ` (${set})` : ""} ships no rubric —
-          expected for 4p1i, the fast technical fixture: median 12 ticks, at most
-          one meeting (39 of its 50 games hold exactly one, 11 hold none)
+          The served set{set !== null ? ` (${setOptionLabel(set)})` : ""} ships no
+          rubric — expected for 4p1i, the fast technical fixture: median 12 ticks,
+          at most one meeting (39 of its 50 games hold exactly one, 11 hold none)
           {/* The ending-mechanism count is OUTCOME data — "23 of 50 decided by
               the task timer rather than by an ejection" states, in aggregate,
               how the set's games end — so it renders only behind the same
@@ -420,10 +421,10 @@ export function ReplayBrowserView({
             scored" note (the 4p1i case) up to a single line. */}
         {!isHighlights && rubricMissing && (
           <Banner tone="caveat">
-            This set{set !== null ? ` (${set})` : ""} ships no interestingness
-            rubric — its games are unscored. 4p1i is a fast technical fixture
-            (median 12 ticks, at most one meeting per game), not the spectator
-            set.
+            This set{set !== null ? ` (${setOptionLabel(set)})` : ""} ships no
+            interestingness rubric — its games are unscored. 4p1i is a fast
+            technical fixture (median 12 ticks, at most one meeting per game), not
+            the spectator set.
           </Banner>
         )}
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -452,20 +453,28 @@ export function ReplayBrowserView({
           {isHighlights ? "Highlights" : "Replays"}
         </h2>
         <p className="font-mono text-xs text-ink-500">
-          {isHighlights
-            ? "Ordered by the interestingness rubric — deduction (R1), deception (R2), suspicion arcs (R3), legibility (R7)."
-            : "Every recorded replay in the served set. Click a card to open it."}
+          {isHighlights ? PICKER_COPY.highlightsIntro : PICKER_COPY.replaysIntro}
         </p>
-        {/* The narrow label on the rubric scalar (Task 19.9), shown wherever this
-            surface renders a score: it measures pacing/structure, and both
-            Phase-19 audits found its ordering inverts the human-interest tails.
-            The FEATURED strip is the human ordering. */}
+        {/* The narrow label on the rubric scalar, shown wherever this surface
+            renders a score: it measures pacing/structure, and both Phase-19
+            audits found its ordering inverts the human-interest tails. The
+            FEATURED strip is the human ordering.
+
+            The score-bar legend is gated on the RUBRIC, not on the tab: it
+            explains the four bars the cards draw, so it renders wherever those
+            bars do — on both tabs when the set is scored (the gap a first-time
+            viewer hit on Replays), and on neither when the set ships no rubric,
+            where it would sit above an empty state explaining four bars that
+            are not on the page. */}
         {(isHighlights || !rubricMissing) && (
           <p className="font-mono text-xs text-ink-500">
             The 0–100 score is an internal pacing/structure heuristic — not a
             human rating, and not a watchability ranking. For games worth
             watching, see Featured below.
           </p>
+        )}
+        {!rubricMissing && (
+          <p className="font-mono text-xs text-ink-500">{rubricLegendLine()}</p>
         )}
       </header>
 
@@ -534,7 +543,7 @@ export function SetSelector({
         {value === null && <option value="">…</option>}
         {sets.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {setOptionLabel(s)}
           </option>
         ))}
       </select>

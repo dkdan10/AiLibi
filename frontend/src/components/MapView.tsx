@@ -31,6 +31,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ACTION_GLYPH, GLYPH_SVG, paintGlyph } from "../assets/map/glyphs";
 import { usePlayback } from "../hooks/usePlayback";
+import {
+  type BodySpec,
+  NO_BODIES,
+  bodyStatesByTick,
+  visibleBodiesForTick,
+} from "../lib/bodies";
 import { useReplayStore } from "../store/replayStore";
 import { pixiHex, tokens } from "../tokens";
 import type {
@@ -81,15 +87,6 @@ interface VentSegment {
   fromRoomId: string;
   toRoomId: string;
 }
-
-interface BodySpec {
-  victimId: string;
-  roomId: string;
-  isDiscovered: boolean;
-  killedBy: string | null; // spectator-only attribution; null under fog
-}
-
-const NO_BODIES: readonly BodySpec[] = [];
 
 // A meeting sighting's room label is model-authored, so its casing/spacing is not
 // guaranteed canonical (the committed replays carry values like `admin` /
@@ -221,46 +218,6 @@ function buildVentSegments(ticks: readonly TickView[]): VentSegment[] {
     });
   }
   return segments;
-}
-
-// One forward pass yields the cumulative body set as of each tick index
-// (Omniscient ground truth): one per victim killed at/before the tick, flagged
-// discovered once a report_body fires. Shared by reference across unchanged runs.
-function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
-  const result: BodySpec[][] = new Array<BodySpec[]>(ticks.length);
-  const killRoomByVictim = new Map<string, string>();
-  // The kill event carries the killer; persist it so the body keeps its
-  // attribution after the kill event scrolls off the current tick (the role the
-  // `killed_by` view-model field plays — re-derived here from the kill event).
-  const killerByVictim = new Map<string, string>();
-  const discovered = new Set<string>();
-  let current: BodySpec[] = [];
-  for (let t = 0; t < ticks.length; t++) {
-    const tick = ticks[t];
-    let changed = false;
-    if (tick !== undefined) {
-      for (const event of tick.events) {
-        if (event.type === "kill") {
-          killRoomByVictim.set(event.victim_id, event.room_id);
-          killerByVictim.set(event.victim_id, event.killer_id);
-          changed = true;
-        } else if (event.type === "report_body" && !discovered.has(event.body_of)) {
-          discovered.add(event.body_of);
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
-      current = [...killRoomByVictim.entries()].map(([victimId, roomId]) => ({
-        victimId,
-        roomId,
-        isDiscovered: discovered.has(victimId),
-        killedBy: killerByVictim.get(victimId) ?? null,
-      }));
-    }
-    result[t] = current;
-  }
-  return result;
 }
 
 // ── one vent-escape traveller: a capsule gliding the dive→emerge route ──
@@ -566,8 +523,12 @@ export function MapView() {
     () => buildVentSegments(currentReplay?.ticks ?? []),
     [currentReplay],
   );
-  const bodyStatesByTick = useMemo<BodySpec[][]>(
-    () => buildBodyStatesByTick(currentReplay?.ticks ?? []),
+  // The Omniscient body layer for every frame, walked once per replay and
+  // indexed by frame below. Presence and attribution come from each frame's
+  // served `TickView.bodies` (see `lib/bodies.ts`); only the `report_body` set
+  // is threaded forward.
+  const bodiesByTick = useMemo<BodySpec[][]>(
+    () => bodyStatesByTick(currentReplay?.ticks ?? []),
     [currentReplay],
   );
 
@@ -588,7 +549,7 @@ export function MapView() {
   const tick = currentReplay.ticks[currentTick];
   const { scale, offsetX, offsetY } = transform;
   const bodyIndex = Math.min(currentTick, currentReplay.ticks.length - 1);
-  const omniscientBodies = bodyStatesByTick[bodyIndex] ?? NO_BODIES;
+  const omniscientBodies = bodiesByTick[bodyIndex] ?? NO_BODIES;
   const agentStates = tick?.agent_states ?? [];
   // Reduced motion (Task 12.11 a11y; design §8): gate the single-step tween at
   // the source so EVERY mover snaps — the agent tokens AND the vent-escape
@@ -733,14 +694,7 @@ export function MapView() {
   // ── bodies ──
   const bodySpecs: BodySpec[] = omniscient
     ? [...omniscientBodies]
-    : visibility === null
-      ? []
-      : visibility.visible_bodies.map((vb) => ({
-          victimId: vb.victim_id,
-          roomId: vb.room,
-          isDiscovered: false, // fog: "a body the agent sees", not the global report state
-          killedBy: null, // firewall: the As-agent view never exposes the killer
-        }));
+    : visibleBodiesForTick(visibility);
 
   // Group bodies by room so multiple bodies in one room lay out in a per-room
   // grid (Task 12.13 admin-cluster fix) rather than each scattering off a global

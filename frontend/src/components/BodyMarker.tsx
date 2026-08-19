@@ -10,12 +10,17 @@
 // `BODY_CAP` the whole pile collapses to a single "✕ ×N" marker
 // (`collapsedCount`) so a mass grave stays legible.
 //
+// PRESENCE: a marker is drawn only for a body the engine still has on the floor
+// — the served `TickView.bodies` rows for that tick (`lib/bodies.ts`). A corpse
+// consumed by its body-report meeting stops being drawn on that frame.
+//
 // Two states, by the truth grammar: an UNDISCOVERED body is GHOSTED (dashed disc,
 // muted ink tint) — present but not yet officially found; a DISCOVERED body is
-// SOLID (kill-tinted glyph + a kill ring) once a `report_body` has fired. The
-// victim id is shown (the agent who sees a body knows whose it is); the killer
-// (`killed_by`) is shown only for a lone body — kill attribution is privileged
-// and, under fog, MapView only ever feeds this component bodies the agent saw.
+// SOLID (kill-tinted glyph + a kill ring) once a `report_body` has fired for it.
+// The victim id is shown (the agent who sees a body knows whose it is); the
+// killer (`killed_by`) is shown only for a lone body — kill attribution is
+// privileged and, under fog, MapView only ever feeds this component bodies the
+// agent saw.
 
 import type { Graphics } from "pixi.js";
 
@@ -122,7 +127,8 @@ export function BodyMarker({
           graphics.fill(isDiscovered ? PAPER_2 : PAPER_3);
           if (isDiscovered) {
             graphics.stroke({ width: 2.4, color: KILL });
-            // Outer kill ring marks a freshly reported body.
+            // Outer kill ring: this body has been reported and is still on the
+            // floor.
             graphics.circle(x, y, DISC_RADIUS + 4);
             graphics.stroke({ width: 1.6, color: KILL, alpha: 0.7 });
           } else {

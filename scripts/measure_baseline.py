@@ -30,6 +30,7 @@ Usage::
     uv run python scripts/measure_baseline.py --json
     uv run python scripts/measure_baseline.py --funnel --json   # Task-15.3 funnel
     uv run python scripts/measure_baseline.py --vj --json       # Task-16.10 V&J
+    uv run python scripts/measure_baseline.py --solvability     # the 20.14 ceiling
 
 ``--json`` emits a JSON array of :class:`BaselineMeasurementReport` (schema below),
 the machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume.
@@ -42,7 +43,11 @@ Task-16.10 V&J instruments — a JSON array of
 :class:`eval.vj_instruments.VJInstrumentReport` (judgment metrics + deterministic
 voice tier + the embedded ``eval.funnel`` pooling census; schema in that module's
 docstring), the machine-readable before/after report the Task 16.17 close
-consumes.
+consumes. ``--solvability`` selects the solvability ceiling — a JSON array of
+:class:`eval.solvability.SolvabilityReport` (schema in that module's docstring):
+per body-triggered meeting, how much of the killer's identity the crew's own
+pooled sightings could have resolved, and how often an ejection landed on a
+player that pooling had already cleared.
 
 JSON report schema (one object per measured set) — STABLE::
 
@@ -85,6 +90,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from eval.accusation_calibration import compute_accusation_calibration  # noqa: E402
 from eval.balance_eval import _balance_report_from_tournament  # noqa: E402
+from eval.deduction_metrics import WilsonRateCell  # noqa: E402
 
 # Task-15.3 information-funnel fold region (disjoint from the 15.1 core folds and
 # the 15.2 watchability folds): the oracle / possession / transmission diagnostics,
@@ -95,6 +101,15 @@ from eval.funnel import (  # noqa: E402
 )
 from eval.meeting_quality import compute_meeting_rate  # noqa: E402
 from eval.report_schema import TournamentReport  # noqa: E402
+
+# Task-20.14 solvability fold region (disjoint from the 15.1 core folds, the 15.2
+# watchability folds, the 15.3 funnel folds and the 16.10 V&J folds): the
+# candidate-set ceiling computed from living crewmates' own perception, emitted
+# under ``--solvability``.
+from eval.solvability import (  # noqa: E402
+    SolvabilityReport,
+    compute_solvability_report,
+)
 from eval.validity import assemble_tournament_report, seeds_on_disk  # noqa: E402
 
 # Task-16.10 V&J fold region (disjoint from the 15.1 core folds, the 15.2
@@ -446,6 +461,58 @@ def _emit_vj_json(reports: Sequence[VJInstrumentReport]) -> str:
     return json.dumps([report.model_dump() for report in reports], indent=2)
 
 
+# --------------------------------------------------------------------------- #
+# Task-20.14 --solvability fold region (disjoint from the 15.1 core folds, the #
+# 15.2 watchability folds, the 15.3 funnel folds and the 16.10 V&J folds): the #
+# solvability ceiling — at each body-triggered meeting, who the crew's own     #
+# pooled sightings could not rule out, and where the ejection landed.          #
+# --------------------------------------------------------------------------- #
+
+
+def _solvability_line(label: str, cell: WilsonRateCell) -> str:
+    interval = (
+        "undefined"
+        if cell.wilson_low is None or cell.wilson_high is None
+        else f"[{round(cell.wilson_low, 4)}, {round(cell.wilson_high, 4)}]"
+    )
+    advisory = "  (rare count — read the interval)" if cell.advisory else ""
+    return (
+        f"  {label}: {_round(cell.rate)}"
+        f"  ({cell.numerator}/{cell.denominator})  95% CI {interval}{advisory}"
+    )
+
+
+def _render_solvability_human(report: SolvabilityReport) -> str:
+    return "\n".join(
+        [
+            f"Solvability ceiling over {report.replay_set_dir} "
+            f"({report.games_total} games, {report.body_meetings} body meetings, "
+            f"{report.ejections_at_body_meetings} ejections at them):",
+            _solvability_line("killer in candidate set", report.killer_in_set),
+            _solvability_line("one candidate", report.singleton_sets),
+            _solvability_line("  ... and it is the killer", report.singleton_correct),
+            _solvability_line("at most two candidates", report.at_most_two_sets),
+            _solvability_line(
+                "  ... containing the killer", report.at_most_two_contains_killer
+            ),
+            _solvability_line(
+                "ejected a player the crew had already cleared",
+                report.cleared_player_ejections,
+            ),
+            _solvability_line(
+                "killer in candidate set, last-kill anchor",
+                report.killer_in_set_last_kill_anchor,
+            ),
+        ]
+    )
+
+
+def _emit_solvability_json(reports: Sequence[SolvabilityReport]) -> str:
+    import json
+
+    return json.dumps([report.model_dump() for report in reports], indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -505,6 +572,16 @@ def main(argv: list[str] | None = None) -> int:
             "finding"
         ),
     )
+    parser.add_argument(
+        "--solvability",
+        action="store_true",
+        help=(
+            "emit the solvability ceiling (killer-in-candidate-set containment, "
+            "singleton rate and correctness, and ejections landing on a player "
+            "the crew's own pooled perception had already cleared) instead of "
+            "the core R-gate folds"
+        ),
+    )
     args = parser.parse_args(argv)
     explicit_dir: Path | None = args.replay_set_dir
     emit_json: bool = args.json
@@ -552,6 +629,16 @@ def main(argv: list[str] | None = None) -> int:
             print(_emit_vj_json(vj_reports))
         else:
             print("\n\n".join(_render_vj_human(r) for r in vj_reports))
+        return 0
+
+    if args.solvability:
+        solvability_reports = [compute_solvability_report(d) for d in targets]
+        if emit_json:
+            print(_emit_solvability_json(solvability_reports))
+        else:
+            print(
+                "\n\n".join(_render_solvability_human(r) for r in solvability_reports)
+            )
         return 0
 
     reports = [measure_baseline(sample_dir) for sample_dir in targets]

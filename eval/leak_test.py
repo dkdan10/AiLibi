@@ -32,6 +32,8 @@ from eval.leak_scan import (
     _FORBIDDEN_VISIBLE_PLAYER_ACTIONS,
     _FORBIDDEN_VISIBLE_PLAYER_FIELDS,
     JsonValue,
+    PacketContext,
+    PacketRecord,
     _action_is_permitted_by_witness_event,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
@@ -41,6 +43,7 @@ from eval.leak_scan import (
     _walk_json,
     assert_moved_players_are_witness_gated,
     assert_no_factory_packet_leaks,
+    assert_visible_entities_match_engine_truth,
     scan_factory_packets,
 )
 from observation.action_intent import ActionIntent, MoveIntent, WaitIntent
@@ -67,12 +70,14 @@ from tests._helpers.world_state import scripted_initial_world_state
 # while the definitions live in the pytest-free library.
 __all__ = [
     "JsonValue",
+    "PacketContext",
     "_assert_no_recursive_hidden_fields",
     "_assert_no_role_bearing_values",
     "_format_json_path",
     "_walk_json",
     "assert_moved_players_are_witness_gated",
     "assert_no_factory_packet_leaks",
+    "assert_visible_entities_match_engine_truth",
     "scan_factory_packets",
 ]
 
@@ -112,7 +117,7 @@ def _fixture_actions(script: _ScriptedGame) -> dict[int, list[Action]]:
 def _run_scripted_game(
     fixture_name: str,
     tmp_path: Path,
-) -> list[tuple[ObservationPacket, list[EngineEvent]]]:
+) -> list[PacketRecord]:
     fixture_path = Path("tests/fixtures") / fixture_name
     script = _ScriptedGame.model_validate_json(fixture_path.read_text(encoding="utf-8"))
 
@@ -124,13 +129,18 @@ def _run_scripted_game(
     )
     actions_by_tick = _fixture_actions(script)
 
-    packet_records: list[tuple[ObservationPacket, list[EngineEvent]]] = []
+    packet_records: list[PacketRecord] = []
     for tick in range(max(actions_by_tick, default=-1) + 1):
         assert state.tick == tick
         state, events = advance_tick(
             state,
             actions_by_tick.get(tick, []),
             game_map=game_map,
+        )
+        # The tick the packets below are built on, carried alongside them so the
+        # sweep can ask the entitlement question as well as the shape ones.
+        context = PacketContext(
+            engine_events=events, world_state=state, game_map=game_map
         )
         for player_id, player in state.players.items():
             if player.alive:
@@ -145,7 +155,7 @@ def _run_scripted_game(
                 _assert_owned_tasks_match_engine_truth(
                     packet, state=state, game_map=game_map
                 )
-                packet_records.append((packet, events))
+                packet_records.append((packet, context))
         if state.phase == "GAME_OVER":
             break
 
@@ -231,11 +241,20 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
         packet_records = _run_scripted_game(fixture_name, tmp_path)
         assert packet_records, f"no packets captured for {fixture_name}"
 
-        for packet, engine_events in packet_records:
+        for packet, context in packet_records:
             packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
             _assert_no_recursive_hidden_fields(packet_dump)
             _assert_no_role_bearing_values(packet_dump)
             _assert_owned_task_discipline(packet)
+            # Entitlement: the recipient saw exactly the players and bodies the
+            # tick's world state allows it to -- the presence question the shape
+            # scanners below cannot ask.
+            assert_visible_entities_match_engine_truth(
+                packet,
+                state=context.world_state,
+                game_map=context.game_map,
+                engine_events=context.engine_events,
+            )
             for visible_player in packet.visible_players:
                 visible_player_dump = visible_player.model_dump(mode="json")
                 assert set(visible_player_dump.keys()) == {"id", "room", "action"}
@@ -248,7 +267,7 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
                         action=visible_player.action,
                         actor_id=visible_player.id,
                         agent_id=packet.agent_id,
-                        engine_events=engine_events,
+                        engine_events=list(context.engine_events),
                     )
             for visible_body in packet.visible_bodies:
                 visible_body_dump = visible_body.model_dump(mode="json")
@@ -363,6 +382,23 @@ def test_leak_factory_mode_learned_wrapper_factory_is_clean() -> None:
     assert scanned > 0, "learned-wrapper factory mode captured no packets"
 
 
+def _planted_context(engine_events: list[EngineEvent]) -> PacketContext:
+    """The tick a HAND-PLANTED packet is scanned against.
+
+    A poisoned packet is minted by hand, so it has no game behind it; the
+    scanner still needs a world to state entitlement against. The scripted
+    fixtures' opening state (p-1..p-4 in the spawn room, p-3 the impostor) is
+    that world, which also keeps the plant honest -- each test below trips on
+    the channel it poisons, not on a context mismatch.
+    """
+
+    return PacketContext(
+        engine_events=engine_events,
+        world_state=scripted_initial_world_state(seed=0),
+        game_map=load_canonical_map(),
+    )
+
+
 def test_leak_factory_mode_planted_role_leak_trips() -> None:
     # The scanner still bites: a factory-consumed packet carrying the impostor's
     # role inside a visible-player id (the class the recursive value scanner
@@ -387,7 +423,7 @@ def test_leak_factory_mode_planted_role_leak_trips() -> None:
         cooldown=None,
     )
     with pytest.raises(AssertionError, match=r"\$\.visible_players\[0\]\.id"):
-        assert_no_factory_packet_leaks([(poisoned, [])])
+        assert_no_factory_packet_leaks([(poisoned, _planted_context([]))])
 
 
 def test_leak_factory_mode_witness_check_trips_on_unwitnessed_kill() -> None:
@@ -421,7 +457,7 @@ def test_leak_factory_mode_witness_check_trips_on_unwitnessed_kill() -> None:
         witnesses=("p-4",),
     )
     with pytest.raises(AssertionError, match="unwitnessed 'kill'"):
-        assert_no_factory_packet_leaks([(poisoned, [kill_event])])
+        assert_no_factory_packet_leaks([(poisoned, _planted_context([kill_event]))])
 
 
 def test_owned_task_discipline_trips_on_composite_instance_id() -> None:

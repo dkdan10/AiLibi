@@ -20,6 +20,7 @@ import {
   turnClaimEventId,
   turnObsEventId,
 } from "../lib/contradictions";
+import { TURN_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 import type {
@@ -288,7 +289,7 @@ export function TurnCard({
           // was stripped (the dev-jargon marker is dropped server-side). Ink/paper
           // only — no reserved hue — paired with the label (firewall: not hue-only).
           <span
-            title="This emergency opening fabricated a found body; it was stripped (DESIGN.md §5.2)."
+            title={TURN_COPY.fabricatedOpeningTitle}
             className="inline-flex items-center rounded-md border border-ink-300 bg-paper-2 px-1.5 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-ink-700"
           >
             fabricated

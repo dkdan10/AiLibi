@@ -8,21 +8,41 @@ not evidence-backed is a worse signal than a lower rate that is; this metric
 separates the two so the impostor-ejection rate alone cannot be mistaken for
 *correct* voting.
 
-**``vote_correctness_rate`` is a bug-sentinel, NOT a KPI (Task 9.6; audit
-audit-2026-06-09-0347 F-F-1 / gp-2).** In the live pipeline the §4.6 vote gate
-only crosses the eject threshold when the contradiction detector flagged the
-ejected player, so every impostor ejection arrives already carrying the naming
-``ContradictionRef`` that :func:`_has_real_evidence`'s first disjunct counts:
-``evidence_backed_impostor_ejections == impostor_ejections`` by construction
-and the rate is **structurally pinned to 1.0**. It measures the engine's own
-trigger, not voting quality -- a Wave-1 A/B run on it is blind. It stays
-computed (removing it would churn the schema) and is kept as a sentinel: any
-value below 1.0 on a recorded set means an impostor ejection happened WITHOUT
-its own triggering evidence -- a detector/recording bug to chase, never a
-conversion metric to optimize. The published conversion leads live on
-:class:`eval.meeting_quality.ConversionReport`: ``ejection_accuracy`` (the
+**``vote_correctness_rate`` is a diagnostic, NOT a KPI.** It reports the share
+of impostor ejections whose meeting ALSO carried one of the two structured
+signals above naming the ejected player. Co-occurrence, not attribution: the
+predicate never reads a ballot, so it cannot say the evidence is what
+convicted -- only that the table had it on the record. A value below 1.0 is a
+legal reading of this substrate, not a bug to chase. A
+zero-flag EJECT is convictable by design: the citation gate
+(:func:`meetings.manager.guard_ballot_citation`, unconditional) coerces an
+eject ballot against an unflagged target to ``SKIP`` only when it cites
+NOTHING, so a target the contradiction detector never flagged still converts on
+a ballot citing a transcript turn or a private observation id. Never gate a
+prompt A/B on this rate: the published conversion leads live on
+:class:`eval.meeting_quality.ConversionReport` -- ``ejection_accuracy`` (the
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
+
+What the recorded sets read (evidence-backed / impostor ejections). All four
+were recorded on the baseline-6 substrate -- model ``Qwen/Qwen3.6-27B``, every
+template at ``qwen3_6_27b.v3`` -- as each set's ``MANIFEST.md`` records:
+
+* ``replays/samples/9p2i``: 72/78 = 0.9231
+* ``replays/samples/4p1i``: 10/10 = 1.0000
+* ``replays/ml_corpus/9p2i``: 235/248 = 0.9476
+* ``replays/ml_corpus/4p1i``: 20/20 = 1.0000
+
+``scripts/check_doc_facts.py`` re-derives all four rates from the committed
+reports and the model and prompt-set tokens from the four manifests, and fails
+when a stamp or the provenance drifts, or when this module claims a structural
+pin the data contradicts -- so a re-record re-stamps these lines rather than
+rotting them. The six samples/9p2i ejections behind the shortfall are censused
+seed by seed -- and classified -- in ``tests/eval/test_vote_correctness.py``.
+Mind the two populations: **8** of those 78 ejections carry no naming
+``ContradictionRef`` at all, and 2 of the 8 are evidence-backed anyway through
+the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
+evidence-backed".
 
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on
@@ -90,8 +110,9 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   ``vote_correctness_rate`` was ``1.0`` (3/3 evidence-backed impostor
   ejections) while ``ejection_accuracy`` was ``0.5`` (3 impostor / 6 total
   ejections), because the rate silently dropped the 3 wrong crewmate
-  ejections -- and on the 9.5 baseline the rate is *structurally* 1.0 (see the
-  bug-sentinel note above) while ``ejection_accuracy`` reads 22/35 = 0.6286.
+  ejections. The gap survives on the recorded sets: samples/9p2i reads
+  ``vote_correctness_rate`` 0.9231 beside ``ejection_accuracy`` 78/101 =
+  0.7723, because 23 of those 101 ejections took a crewmate.
   Like the rate it is :data:`None` (undefined, not ``0.0``) when there were
   zero ejections at all. :class:`eval.meeting_quality.ConversionReport`
   mirrors it (same fold, never recomputed) so both Wave-1 leads read from one
@@ -220,15 +241,17 @@ class VoteCorrectnessReport(BaseModel):
     ``impostor_ejections`` satisfying the "real evidence" predicate
     (:func:`_has_real_evidence`). ``vote_correctness_rate`` is
     ``evidence_backed_impostor_ejections / impostor_ejections`` -- the share of
-    impostor ejections actually driven by evidence -- and is ``None`` (undefined,
-    not ``0.0``) when there were no impostor ejections. **It is a bug-sentinel,
-    NOT a KPI (Task 9.6; audit F-F-1 / gp-2):** the live §4.6 gate only ejects
-    when the detector flagged the target, so on recorded sets the rate is
-    structurally pinned to ``1.0`` and a drop below ``1.0`` signals an ejection
-    not backed by its own triggering evidence (a bug to chase), never a
-    conversion improvement to claim. Its denominator also excludes the wrong
-    crewmate ejections, so even read naively a ``1.0`` cannot be mistaken for
-    full ejection accuracy (audit C-C-4 / gp-7).
+    impostor ejections whose meeting ALSO carried structured evidence naming the
+    ejectee -- and is ``None`` (undefined, not ``0.0``) when there were no
+    impostor ejections. **It is a diagnostic, NOT a KPI:** the predicate reads
+    no ballot, so the rate is co-occurrence, never attribution; and a value
+    below ``1.0`` is legal on this substrate, because the citation gate lets an
+    eject ballot convict a target the detector never flagged whenever the ballot
+    cites a transcript turn or a private observation id. Its denominator also
+    excludes the wrong crewmate ejections,
+    so even a ``1.0`` cannot be read as full ejection accuracy. The recorded
+    values per sample set, and the census of the six samples/9p2i ejections the
+    predicate does not account for, are in the module docstring.
 
     ``ejection_accuracy`` is ``impostor_ejections / total_ejections`` -- the
     share of *all* ejections that hit an impostor (the full-denominator accuracy

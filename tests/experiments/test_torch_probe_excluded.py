@@ -165,16 +165,17 @@ def test_no_production_package_imports_the_probe() -> None:
     )
 
 
-def test_probe_import_scan_rejects_a_planted_import() -> None:
-    """A gate that cannot fail is not a gate (the firewall-test idiom)."""
+def test_probe_import_scan_rejects_a_planted_import(tmp_path: Path) -> None:
+    """A gate that cannot fail is not a gate (the firewall-test idiom).
 
-    planted = _REPO_ROOT / "training" / "_torch_probe_planted_import.py"
+    The plant goes under ``tmp_path``, never into the checkout: an in-tree plant
+    is visible to any concurrent gate and survives an interrupted run.
+    """
+
+    planted = tmp_path / "_torch_probe_planted_import.py"
     planted.write_text("from torch_probe.entrant import TorchProbeEntrant\n")
-    try:
-        offenders = _probe_imports(planted)
-        assert offenders, "the AST scan missed a planted torch_probe import"
-    finally:
-        planted.unlink()
+    offenders = _probe_imports(planted)
+    assert offenders, "the AST scan missed a planted torch_probe import"
 
 
 # --------------------------------------------------------------------------- #

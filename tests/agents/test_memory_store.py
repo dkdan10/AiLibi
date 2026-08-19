@@ -895,3 +895,75 @@ class TestWithinVisionTransitionRender:
 
         # The (4, 5) pair does not span the boundary (which sits at tick 4).
         assert "[tick 5] p-3 left STORAGE." in view
+
+
+def _byte_fixture_memory() -> AgentMemory:
+    """A fixed store exercising the render's channels: roster, movement, a body.
+
+    Deterministic and hand-built — no RNG, no replay walk — so the rendered
+    Markdown below is a constant a reader can diff, not a number to re-derive.
+    """
+
+    memory = _memory_for()
+    memory.episodic.append(
+        _self_state_event(
+            tick=3, agent_id="p-1", room="ELECTRICAL", pending_task_id="swipe_card"
+        )
+    )
+    memory.episodic.append(
+        _saw_player_event(tick=3, player_id="p-2", room="ELECTRICAL")
+    )
+    memory.episodic.append(_self_state_event(tick=5, agent_id="p-1", room="ELECTRICAL"))
+    memory.episodic.append(
+        _saw_body_event(tick=5, body_id="b-1", victim_id="p-3", room="ELECTRICAL")
+    )
+    absorb_meeting_evidence(memory, accused=("p-2",))
+    return memory
+
+
+# The bytes :func:`_byte_fixture_memory` renders to. Committed, not recomputed:
+# an expected value derived at assert time from the code under test would agree
+# with any change it made.
+_EXPECTED_FIXTURE_RENDER = """\
+## Your role: CREWMATE
+
+## Recent observations (most salient first):
+- [tick 5] You discovered p-3's body in ELECTRICAL.
+- [tick 3] You saw p-2 in ELECTRICAL (moved from CAFETERIA, last seen there at tick 0).
+- [tick 0] You saw p-2 in CAFETERIA (with p-3, p-4, p-5).
+- [tick 0] You saw p-3 in CAFETERIA (with p-2, p-4, p-5).
+- [tick 0] You saw p-4 in CAFETERIA (with p-2, p-3, p-5).
+- [tick 0] You saw p-5 in CAFETERIA (with p-2, p-3, p-4).
+- [tick 5] You completed swipe_card (you were in ELECTRICAL).
+
+## Your current beliefs:
+- p-2: suspicion 0.55
+"""
+
+
+class TestRenderIsByteIdenticalOverAFixture:
+    """The §6.6 rendered view is untouched by how ``recent()`` finds its window.
+
+    ``render_for_prompt`` reads the episodic log through ``recent(since_tick=0)``
+    a dozen times per call; the window is now bisected and its whole-log answer
+    cached. This is the render-side proof that nothing about the prompt bytes
+    moved with it (the recorded-replay proof is scripts/verify_samples.sh).
+    """
+
+    def test_render_matches_the_committed_bytes(self) -> None:
+        assert render_for_prompt(_byte_fixture_memory()) == _EXPECTED_FIXTURE_RENDER
+
+    def test_the_committed_bytes_discriminate(self) -> None:
+        # The constant is a gate, not decoration: one more observed row in the
+        # fixture store must break it.
+        memory = _byte_fixture_memory()
+        memory.episodic.append(
+            _saw_player_event(tick=6, player_id="p-4", room="ELECTRICAL")
+        )
+        assert render_for_prompt(memory) != _EXPECTED_FIXTURE_RENDER
+
+    def test_repeated_renders_of_one_store_are_stable(self) -> None:
+        # The cached whole-log tuple is shared across reads within one render
+        # and across renders; neither may make the second call differ.
+        memory = _byte_fixture_memory()
+        assert render_for_prompt(memory) == render_for_prompt(memory)

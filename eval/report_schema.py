@@ -349,6 +349,18 @@ class TournamentReport(_FrozenModel):
     enforcing a recompute would reject such a report (a defaulted ``None`` mean
     can never equal a recomputed ``0.0`` over the present-but-defaulted task
     wins), which is exactly the backward-compat load Task 8.17 must preserve.
+
+    Instrument blocks live in their own modules, not here. The solvability
+    ceiling is :class:`eval.solvability.SolvabilityReport`, reached through
+    ``scripts/measure_baseline.py --solvability``, because this model is mirrored
+    twice and a new field must be added to both mirrors in the same change: a
+    defaulted field is dumped as ``null`` by ``model_dump(mode="json")`` and the
+    ``extra="forbid"`` view at ``api/routes/eval.py::_TournamentReportEvalView``
+    rejects it on the re-validation that serves ``/eval/tournament-report``,
+    while an ``exclude=True`` field still appears in ``model_json_schema()`` and
+    so still trips ``tests/api/test_leak.py::EXPECTED_EVAL_REPORT_FIELDS``. The
+    field-set tripwire in ``tests/eval/test_report_schema.py`` is what makes that
+    obligation loud instead of a 500 in production.
     """
 
     format_version: int

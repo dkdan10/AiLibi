@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 # Task 8.7 reshaped ``MeetingTranscript`` to the ordered ``turns`` list and
 # removed ``ReportDocument`` / ``Statement`` from ``meetings.schemas``; Task 8.10
@@ -24,11 +25,14 @@ import pytest
 # committed-set meeting reconstruction stays skipped per-test until Task 8.12
 # re-records it (idempotent with Task 8.1's state_hash-driven skip).
 from api import replay_loader
+from api.main import create_app
 from api.replay_loader import (
+    EmptyReplayError,
     ReplayLoader,
     ReplayStateMismatchError,
     ReplaySubstrateMismatchError,
     RosterConfig,
+    get_replay_loader,
 )
 from api.schemas import (
     FoundBodyObsView,
@@ -54,6 +58,7 @@ from orchestrator.replay import (
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 from tests.api.fixtures.sample_replay import (
+    MeetingReplayExpectations,
     corrupt_tick_hash,
     strip_llm_call_agent_ids,
     write_meeting_replay,
@@ -554,9 +559,175 @@ def test_list_replays_skips_corrupted_file_and_logs(
 
     # Healthy replays still list; the corrupted one is excluded, not a 500.
     assert [m.seed for m in metas] == [0, 2]
-    # The corruption is recorded, not silently swallowed.
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("replay-seed-1.jsonl" in r.getMessage() for r in warnings)
+    # The corruption is recorded, not silently swallowed, and names its class so
+    # an operator can tell a doubled write from the other skip reasons.
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    (message,) = [m for m in warnings if "replay-seed-1.jsonl" in m]
+    assert "doubled write" in message
+
+
+# -- corrupt / empty replay resilience (Task 20.4) ----------------------------
+#
+# The listing and the cost summary must degrade per file, not per directory: a
+# truncated write, a zero-byte file and a schema-invalid row each take out only
+# themselves. A DIRECT fetch of the same game id keeps failing loud, so the skip
+# is degradation on the collection view and never silence on the item view.
+
+_TRUNCATION_BYTES = 40
+
+
+def _write_broken_replay_dir(tmp_path: Path) -> MeetingReplayExpectations:
+    """Populate ``tmp_path`` with two healthy replays and three broken ones.
+
+    Seeds 0 and 1 are healthy (seed 1 is the meeting fixture, the only replay
+    carrying LLM cost, and its expectations are returned). Seed 2 is truncated
+    mid-line — what a Ctrl-C'd or OOM-killed tournament leaves, since the runner
+    writes incrementally; seed 3 is zero-byte; seed 4 carries a row whose
+    ``tick`` is a string. All three are corruptions of genuine ``ReplayLog``
+    output rather than hand-authored blobs, so they match what a broken run
+    actually produces.
+    """
+
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    expected = write_meeting_replay(tmp_path / "replay-seed-1.jsonl", seed=1)
+
+    truncated = tmp_path / "replay-seed-2.jsonl"
+    write_sample_replay(truncated, seed=2)
+    truncated.write_bytes(truncated.read_bytes()[:-_TRUNCATION_BYTES])
+
+    (tmp_path / "replay-seed-3.jsonl").write_bytes(b"")
+
+    invalid = tmp_path / "replay-seed-4.jsonl"
+    write_sample_replay(invalid, seed=4)
+    rows = invalid.read_text(encoding="utf-8").splitlines()
+    rows[0] = json.dumps({**json.loads(rows[0]), "tick": "not-an-int"})
+    invalid.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    return expected
+
+
+def _broken_dir_client(
+    replay_dir: Path, *, raise_server_exceptions: bool = True
+) -> TestClient:
+    test_app = create_app()
+    loader = ReplayLoader(replay_dir=replay_dir)
+    test_app.dependency_overrides[get_replay_loader] = lambda: loader
+    return TestClient(test_app, raise_server_exceptions=raise_server_exceptions)
+
+
+def test_broken_fixtures_are_broken_at_the_reader(tmp_path: Path) -> None:
+    # The three fixtures must really be broken at the reader — two unreadable,
+    # one yielding no entries at all — otherwise the resilience assertions below
+    # would be passing against healthy files.
+    _write_broken_replay_dir(tmp_path)
+
+    with pytest.raises(ValueError):  # truncated last line -> invalid JSON
+        read_all_entries(tmp_path / "replay-seed-2.jsonl")
+    assert read_all_entries(tmp_path / "replay-seed-3.jsonl") == ()
+    with pytest.raises(ValueError):  # "tick": "not-an-int" -> ValidationError
+        read_all_entries(tmp_path / "replay-seed-4.jsonl")
+
+
+def test_list_replays_survives_truncated_empty_and_invalid_files(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # C-5: only the doubled-write shape was tolerated before; a truncated write,
+    # a zero-byte file or a schema-invalid row 500'd the whole picker.
+    _write_broken_replay_dir(tmp_path)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
+        metas = loader.list_replays()
+
+    assert [m.seed for m in metas] == [0, 1]
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 3  # nothing swallowed, and nothing logged twice
+
+    def _sole_warning(filename: str) -> str:
+        (message,) = [m for m in warnings if filename in m]
+        return message
+
+    # Each skipped file names its own path and its failure class.
+    assert "unparseable row" in _sole_warning("replay-seed-2.jsonl")
+    assert "no replay records" in _sole_warning("replay-seed-3.jsonl")
+    assert "unparseable row" in _sole_warning("replay-seed-4.jsonl")
+
+
+def test_cost_summary_survives_and_excludes_broken_files(tmp_path: Path) -> None:
+    # The eval dashboard degrades with the picker, and the mean is a mean over
+    # the games actually reduced — a skipped file must not dilute it.
+    expected = _write_broken_replay_dir(tmp_path)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    summary = loader.cost_summary()
+
+    assert summary.total_replays == 2  # not 5
+    assert summary.total_cost_usd == pytest.approx(expected.total_cost_usd)
+    assert summary.max_cost_per_replay == pytest.approx(expected.total_cost_usd)
+    assert summary.mean_cost_per_replay == pytest.approx(expected.total_cost_usd / 2)
+    assert summary.decisive_split == {"CREWMATES": 1.0, "IMPOSTORS": 0.0}
+
+
+def test_broken_replay_dir_still_serves_200_over_http(tmp_path: Path) -> None:
+    # Both collection endpoints returned 500 for this directory before C-5.
+    expected = _write_broken_replay_dir(tmp_path)
+
+    with _broken_dir_client(tmp_path) as client:
+        listing = client.get("/replays")
+        costs = client.get("/eval/cost-summary")
+
+    assert listing.status_code == 200
+    assert [item["seed"] for item in listing.json()] == [0, 1]
+    assert costs.status_code == 200
+    assert costs.json()["total_replays"] == 2
+    assert costs.json()["mean_cost_per_replay"] == pytest.approx(
+        expected.total_cost_usd / 2
+    )
+
+
+def test_direct_fetch_of_a_broken_replay_still_fails_loud(tmp_path: Path) -> None:
+    # The listing's skip is degradation, never silence: fetching a skipped game
+    # id raises out of the loader (a 500 through the route) rather than serving a
+    # half-written game — including the no-record file, which must not be
+    # synthesized into a 0-tick game.
+    _write_broken_replay_dir(tmp_path)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with pytest.raises(ValueError):
+        loader.load_replay("headless-seed-2")
+    with pytest.raises(EmptyReplayError):
+        loader.load_replay("headless-seed-3")
+    with pytest.raises(ValueError):
+        loader.load_replay("headless-seed-4")
+
+    with _broken_dir_client(tmp_path, raise_server_exceptions=False) as client:
+        assert client.get("/replays/headless-seed-1").status_code == 200
+        assert client.get("/replays/headless-seed-2").status_code == 500
+        assert client.get("/replays/headless-seed-3").status_code == 500
+
+
+def test_blank_line_only_replay_is_never_served_as_a_zero_tick_game(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A file of blank lines contributes no records for the same reason a
+    # zero-byte one does, and is treated identically on every path.
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    (tmp_path / "replay-seed-1.jsonl").write_text("\n\n\n", encoding="utf-8")
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
+        metas = loader.list_replays()
+
+    assert [m.seed for m in metas] == [0]
+    assert loader.cost_summary().total_replays == 1
+    assert any(
+        "replay-seed-1.jsonl" in r.getMessage()
+        and "no replay records" in r.getMessage()
+        for r in caplog.records
+    )
+    with pytest.raises(EmptyReplayError):
+        loader.load_replay("headless-seed-1")
 
 
 # -- roster-aware loader / two-committed-set layout (Task 7.4) -----------------

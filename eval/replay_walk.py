@@ -99,6 +99,8 @@ selfcheck)
                                                                          winner/reason
 ``kill-craft``             ON     ON    violation     ON    off    ON    terminal + trailing rows +
 (eval/kill_craft)                                                        game_over row
+``solvability``            ON     ON    violation     ON    off    ON    terminal + trailing rows +
+(eval/solvability)                                                       game_over row
 ``funnel-instrument``      ON     off   violation     ON    off    ON    none
 (eval/funnel, both walks)
 ``leak-scan-factory``      off    off   violation     off   off    off   none
@@ -134,6 +136,10 @@ What each profile deliberately relaxes, and why:
   reconstructed-outcome, and forged-outcome checks (its folds never read
   ballots or the recorded winner), each violation carrying its own
   fail-loud message.
+* ``solvability`` — the same check set as ``kill-craft`` and for the same
+  reason: the fold reads only meeting trigger bodies and per-tick states, never
+  ballots or the recorded winner, and a truncated recording would silently
+  under-count the body meetings its whole denominator is made of.
 * ``leak-scan-factory`` — NO checks at all, deliberately: the factory walk
   scans packets reconstructed from replays the harness itself recorded moments
   earlier in the same process, and it performed neither hash verification nor

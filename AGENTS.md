@@ -143,6 +143,11 @@ them.
   `FEATHERLESS_API_KEY`; `tests/llm/test_real_provider.py`), and
   `AILIBI_RUN_OLLAMA_TESTS=1` the local Ollama round-trip. The Featherless
   client's CI coverage is unit tests against a mock transport (no network).
+  A second variable, `AILIBI_PROMPT_SET`, selects which per-model prompt
+  family renders — unset means the frozen `qwen3_5_9b` reference set, whose
+  bytes and recorded stamp never move, while the baseline-6 record above was
+  recorded with `qwen3_6_27b`; `.env.example` documents both, and a
+  real-provider run with it unset says so once on stderr.
 
 ## Definition of done (always)
 
