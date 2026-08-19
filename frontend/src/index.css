@@ -154,6 +154,20 @@
   }
 }
 
+/* How tall the viewport must be before the bottom transport dock opens with its
+   timeline half (the advantage graph + the event timeline) showing. Shorter than
+   this and the dock buries the map it exists to scrub: at 1000×640 the dock's top
+   edge sat ABOVE the map canvas's, covering the map entirely, and no scroll
+   position could fit the whole map into the room left above it.
+
+   This is the ONE home for the threshold — the shell reads it back through
+   `getComputedStyle` and builds its `(min-height: …)` media query from it, so the
+   sheet and the default cannot drift apart. It sits below `tokens:end` because
+   everything above that marker is regenerated from src/tokens.ts. */
+:root {
+  --transport-expanded-min-height: 860px;
+}
+
 /* Map fills its stage (Task 12.11). The Pixi canvas renders at a fixed
    content-matched resolution; scale it to the stage width (preserving its aspect
    from the width/height attributes) so there is no empty horizontal gutter. The
