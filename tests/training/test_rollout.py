@@ -148,13 +148,18 @@ def test_reconstruction_fails_loud_on_state_hash_drift() -> None:
             )
 
 
-def test_reconstruction_fails_loud_on_a_truncated_tick_stream() -> None:
-    """A recorded ``game_over`` the walk never reaches is corruption, not a cap.
+@pytest.mark.parametrize("keep_recorded_winner", [True, False])
+def test_reconstruction_fails_loud_on_a_truncated_tick_stream(
+    keep_recorded_winner: bool,
+) -> None:
+    """A surviving ``game_over`` row the walk never reaches is corruption.
 
     Dropping trailing tick rows shortens the walk without breaking the
     state-hash chain, so every per-tick hash still verifies and the terminal
     cross-check is the only thing that can catch it. Without it the episode came
-    back as a silent ``outcome="TICK_BUDGET" truncated=True``.
+    back as a silent ``outcome="TICK_BUDGET" truncated=True``. A capped game
+    writes no ``game_over`` row at all, so the row's own winner field is not
+    evidence of anything — a winnerless row is rejected on the same terms.
     """
 
     game_map = load_canonical_map()
@@ -170,6 +175,13 @@ def test_reconstruction_fails_loud_on_a_truncated_tick_stream() -> None:
             if json.loads(line).get("kind") == "tick"
         )
         del lines[last_tick]
+        if not keep_recorded_winner:
+            lines = [
+                json.dumps({**json.loads(line), "winner": None})
+                if json.loads(line).get("kind") == "game_over"
+                else line
+                for line in lines
+            ]
         replay_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         with pytest.raises(RolloutReconstructionError, match="truncated tick stream"):

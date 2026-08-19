@@ -658,15 +658,16 @@ def reconstruct_episode(
     # authoritative, and the two must agree about the terminal. A recorded
     # terminal the walk never reaches means tick rows are missing — dropping
     # them shortens the walk without breaking the state-hash chain, so nothing
-    # upstream catches it. A reconstructed terminal with no recorded winner is
-    # the same corruption seen from the other side. Only the tick-budget cap
-    # legitimately produces neither, because it writes no game_over row at all
-    # (orchestrator.game.HeadlessGame).
+    # upstream catches it, and the row's own winner field is not evidence of
+    # anything (a winnerless row is corruption too). A reconstructed terminal
+    # the recording never names is the same disagreement from the other side.
+    # Only the tick-budget cap legitimately reaches neither, because it writes
+    # no game_over row at all (orchestrator.game.HeadlessGame).
     if truncated:
-        if game_end is not None and game_end.winner is not None:
+        if game_end is not None:
             raise RolloutReconstructionError(
-                f"seed {seed}: replay records game_over winner "
-                f"{game_end.winner!r} but the reconstructed walk never reached "
+                f"seed {seed}: replay carries a game_over row (winner "
+                f"{game_end.winner!r}) but the reconstructed walk never reached "
                 "GAME_OVER (truncated tick stream)"
             )
     elif game_end is None or game_end.winner is None:
